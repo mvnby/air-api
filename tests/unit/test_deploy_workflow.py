@@ -63,10 +63,7 @@ def test_deploy_runs_only_after_successful_ci_for_the_exact_sha():
 def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     workflow = _workflow(".github/workflows/deploy.yml")
     jobs = workflow["jobs"]
-    expected_environments = {
-        "deploy-backend": "production-api",
-        "deploy-frontend": "production-web",
-    }
+    expected_environments = {"deploy-backend": "production-api"}
 
     for job_name, environment in expected_environments.items():
         job = jobs[job_name]
@@ -84,6 +81,16 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert standby_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
     assert standby_call["with"]["backend_image"] == "${{ needs.deploy-backend.outputs.backend_image }}"
     assert standby_call["secrets"] == "inherit"
+
+    web_workflow = _workflow(".github/workflows/deploy-web.yml")
+    web_job = web_workflow["jobs"]["production-web"]
+    assert web_job["environment"] == "production-web"
+    web_checkout = next(step for step in web_job["steps"] if step.get("uses") == "actions/checkout@v6")
+    assert web_checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
+    web_call = jobs["deploy-frontend"]
+    assert web_call["uses"] == "./.github/workflows/deploy-web.yml"
+    assert web_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
+    assert web_call["secrets"] == "inherit"
 
     workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
     assert "backend:latest" not in workflow_text

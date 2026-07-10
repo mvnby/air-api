@@ -122,7 +122,7 @@ jobs:
           else
             after="${{ needs.release-gate.outputs.deploy_sha }}"
             if before="$(git rev-parse "${after}^" 2>/dev/null)"; then
-              if git diff --name-only "${before}" "${after}" | grep -E '^(web/|\.github/workflows/(deploy|rebuild-web|check-web-ssh)\.yml$)' >/dev/null; then
+              if git diff --name-only "${before}" "${after}" | grep -E '^(web/|\.github/workflows/(deploy|deploy-web|rebuild-web|check-web-ssh)\.yml$|scripts/(check_web_dist\.py|deploy_cloudflare_pages\.sh|deploy_web_atomic\.sh|promote_web_release\.sh)$)' >/dev/null; then
                 web_changed=true
                 reason="storefront-relevant files changed"
               fi
@@ -536,160 +536,18 @@ jobs:
       backend_image: ${{ needs.deploy-backend.outputs.backend_image }}
     secrets: inherit
 
-  # ======================================================
-  # 3. FRONTEND DEPLOYMENT (Static -> mvn-web)
-  # ======================================================
+  # Web release is isolated in one reusable workflow so automatic releases and
+  # manual catalog rebuilds use the same immutable artifact and promotion path.
   deploy-frontend:
     if: ${{ needs.detect-frontend-changes.outputs.web_changed == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: production-web
+    needs:
+      - deploy-backend
+      - detect-frontend-changes
+      - release-gate
     permissions:
       contents: read
       deployments: write
-    needs:
-      - deploy-backend # Wait for API to be ready
-      - detect-frontend-changes
-      - release-gate
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.release-gate.outputs.deploy_sha }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install Dependencies
-        working-directory: ./web
-        run: npm ci
-
-      - name: Build Astro Site
-        working-directory: ./web
-        env:
-           # SSR Build: bypass public CDN/WAF checks via SSH tunnel to the API host.
-           API_TUNNEL_LOCAL_PORT: ${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}
-           API_TUNNEL_REMOTE_PORT: ${{ vars.API_TUNNEL_REMOTE_PORT || '18080' }}
-           INTERNAL_API_URL: http://127.0.0.1:${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}/api/v1
-           # Client-side: Use production API  
-           # CRITICAL: API Router prefix is /api, full path: https://api.mvn.by/api/v1
-           PUBLIC_API_URL: https://api.mvn.by/api/v1
-           # Google Tag Manager ID
-           PUBLIC_GTM_ID: GTM-5CR6WBBC
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
-          ssh -f -N \
-            -L "${API_TUNNEL_LOCAL_PORT}:127.0.0.1:${API_TUNNEL_REMOTE_PORT}" \
-            -i ~/.ssh/deploy_key \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ExitOnForwardFailure=yes \
-            -o ConnectTimeout=20 \
-            ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}
-          curl -fsS --retry 10 --retry-delay 3 "http://127.0.0.1:${API_TUNNEL_LOCAL_PORT}/api/v1/config" >/dev/null
-          npm run build
-
-      - name: Setup SSH Key for Web Server
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_WEB }} >> ~/.ssh/known_hosts || true
-
-      - name: Deploy to Web Server
-        run: |
-          set -euo pipefail
-
-          WEB_HOST="${{ secrets.SSH_HOST_WEB }}"
-          WEB_USER="${{ secrets.SSH_USER_WEB }}"
-          WEB_TARGET="${{ secrets.SSH_WEB_TARGET }}"
-          if [ -z "${WEB_TARGET}" ]; then
-            WEB_TARGET="/var/www/${{ secrets.SSH_USER_WEB }}/data/www/mvn.by/"
-          fi
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-          MAX_ATTEMPTS=5
-          PORT_FAILURES=0
-          LOGIN_FAILURES=0
-          RSYNC_FAILURES=0
-
-          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
-            echo "🚀 Frontend deploy attempt ${attempt}/${MAX_ATTEMPTS}"
-
-            if nc -z -w 10 "${WEB_HOST}" 22; then
-              echo "✅ Web SSH port is reachable"
-            else
-              PORT_FAILURES=$((PORT_FAILURES + 1))
-              echo "::warning::Web SSH port 22 is not reachable before rsync attempt ${attempt}"
-            fi
-
-            if ssh ${SSH_OPTS} "${WEB_USER}@${WEB_HOST}" "true"; then
-              if rsync -avz --delete \
-                -e "ssh ${SSH_OPTS}" \
-                web/dist/ \
-                "${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"; then
-                echo "✅ Frontend deployment completed on attempt ${attempt}!"
-                {
-                  echo "## Frontend Deploy Summary"
-                  echo "- job: deploy-frontend"
-                  echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
-                  echo "- attempts_used: ${attempt}"
-                  echo "- status: success"
-                  echo "- backend_dependency: deploy-backend completed before frontend deploy"
-                  echo "- build_status: success"
-                  echo "- failure_kind: n/a"
-                  echo "- ssh_port_failures: ${PORT_FAILURES}"
-                  echo "- ssh_login_failures: ${LOGIN_FAILURES}"
-                  echo "- rsync_failures: ${RSYNC_FAILURES}"
-                } >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
-
-              RSYNC_FAILURES=$((RSYNC_FAILURES + 1))
-              echo "::warning::rsync failed on attempt ${attempt}"
-            else
-              LOGIN_FAILURES=$((LOGIN_FAILURES + 1))
-              echo "::warning::SSH login preflight failed on attempt ${attempt}"
-            fi
-
-            if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
-              sleep_seconds=$((attempt * 20))
-              echo "⏳ Waiting ${sleep_seconds}s before retry..."
-              sleep "${sleep_seconds}"
-            fi
-          done
-
-          if [ "${PORT_FAILURES}" -gt 0 ] || [ "${LOGIN_FAILURES}" -gt 0 ]; then
-            FAILURE_KIND="web_ssh_connectivity"
-          elif [ "${RSYNC_FAILURES}" -gt 0 ]; then
-            FAILURE_KIND="rsync_transfer"
-          else
-            FAILURE_KIND="unknown"
-          fi
-
-          {
-            echo "## Frontend Deploy Summary"
-            echo "- job: deploy-frontend"
-            echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
-            echo "- attempts_used: ${MAX_ATTEMPTS}"
-            echo "- status: failed"
-            echo "- backend_dependency: deploy-backend completed before frontend deploy"
-            echo "- build_status: success"
-            echo "- failure_kind: ${FAILURE_KIND}"
-            echo "- ssh_port_failures: ${PORT_FAILURES}"
-            echo "- ssh_login_failures: ${LOGIN_FAILURES}"
-            echo "- rsync_failures: ${RSYNC_FAILURES}"
-            echo "- next_step: run the manual Web SSH Connectivity Check workflow or choose a more reliable web deploy architecture"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          echo "::error::Frontend deployment failed after ${MAX_ATTEMPTS} attempts (${FAILURE_KIND}). Backend deploy/smoke already completed; this failure is scoped to the web deploy path."
-          exit 1
+    uses: ./.github/workflows/deploy-web.yml
+    with:
+      deploy_sha: ${{ needs.release-gate.outputs.deploy_sha }}
+    secrets: inherit

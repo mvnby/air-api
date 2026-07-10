@@ -1,4 +1,4 @@
-name: Turbo Rebuild Web ⚡
+name: Turbo Rebuild Web
 
 on:
   workflow_dispatch:
@@ -8,157 +8,46 @@ on:
         required: false
         type: string
 
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-  SSH_HOST_WEB: ${{ secrets.SSH_HOST_WEB }}
-  SSH_USER_WEB: ${{ secrets.SSH_USER_WEB }}
-  SSH_WEB_TARGET: ${{ secrets.SSH_WEB_TARGET }}
-  API_TUNNEL_LOCAL_PORT: ${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}
-  API_TUNNEL_REMOTE_PORT: ${{ vars.API_TUNNEL_REMOTE_PORT || '18080' }}
 
 jobs:
-  rebuild:
+  main-branch-guard:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install Dependencies
-        working-directory: ./web
-        run: npm ci
-
-      - name: Build Astro Site
-        working-directory: ./web
-        env:
-           # SSR Build: bypass public CDN/WAF checks via SSH tunnel to the API host.
-           INTERNAL_API_URL: http://127.0.0.1:${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}/api/v1
-           # Client-side: Use production API  
-           PUBLIC_API_URL: https://api.mvn.by/api/v1
-           # Google Tag Manager ID
-           PUBLIC_GTM_ID: GTM-5CR6WBBC
+      - name: Require main branch
         run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
-          ssh -f -N \
-            -L "${API_TUNNEL_LOCAL_PORT}:127.0.0.1:${API_TUNNEL_REMOTE_PORT}" \
-            -i ~/.ssh/deploy_key \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ExitOnForwardFailure=yes \
-            -o ConnectTimeout=20 \
-            ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}
-          curl -fsS --retry 10 --retry-delay 3 "http://127.0.0.1:${API_TUNNEL_LOCAL_PORT}/api/v1/config" >/dev/null
-          npm run build
-
-      - name: Setup SSH Key for Web Server
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -H ${{ env.SSH_HOST_WEB }} >> ~/.ssh/known_hosts || true
-
-      - name: Deploy to Web Server
-        run: |
-          set -euo pipefail
-
-          WEB_HOST="${SSH_HOST_WEB}"
-          WEB_USER="${SSH_USER_WEB}"
-          WEB_TARGET="${SSH_WEB_TARGET}"
-          if [ -z "${WEB_TARGET}" ]; then
-            WEB_TARGET="/var/www/${SSH_USER_WEB}/data/www/mvn.by/"
-          fi
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-          MAX_ATTEMPTS=5
-          PORT_FAILURES=0
-          LOGIN_FAILURES=0
-          RSYNC_FAILURES=0
-
-          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
-            echo "Frontend rebuild deploy attempt ${attempt}/${MAX_ATTEMPTS}"
-
-            if nc -z -w 10 "${WEB_HOST}" 22; then
-              echo "Web SSH port is reachable"
-            else
-              PORT_FAILURES=$((PORT_FAILURES + 1))
-              echo "::warning::Web SSH port 22 is not reachable before rsync attempt ${attempt}"
-            fi
-
-            if ssh ${SSH_OPTS} "${WEB_USER}@${WEB_HOST}" "true"; then
-              if rsync -avz --delete \
-                -e "ssh ${SSH_OPTS}" \
-                web/dist/ \
-                "${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"; then
-                echo "Manual web rebuild completed on attempt ${attempt}."
-                {
-                  echo "## Manual Web Rebuild Summary"
-                  echo "- job: rebuild-web"
-                  echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
-                  echo "- attempts_used: ${attempt}"
-                  echo "- status: success"
-                  echo "- build_status: success"
-                  echo "- failure_kind: n/a"
-                  echo "- ssh_port_failures: ${PORT_FAILURES}"
-                  echo "- ssh_login_failures: ${LOGIN_FAILURES}"
-                  echo "- rsync_failures: ${RSYNC_FAILURES}"
-                } >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
-
-              RSYNC_FAILURES=$((RSYNC_FAILURES + 1))
-              echo "::warning::rsync failed on attempt ${attempt}"
-            else
-              LOGIN_FAILURES=$((LOGIN_FAILURES + 1))
-              echo "::warning::SSH login preflight failed on attempt ${attempt}"
-            fi
-
-            if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
-              sleep_seconds=$((attempt * 20))
-              echo "Waiting ${sleep_seconds}s before retry..."
-              sleep "${sleep_seconds}"
-            fi
-          done
-
-          if [ "${PORT_FAILURES}" -gt 0 ] || [ "${LOGIN_FAILURES}" -gt 0 ]; then
-            FAILURE_KIND="web_ssh_connectivity"
-          elif [ "${RSYNC_FAILURES}" -gt 0 ]; then
-            FAILURE_KIND="rsync_transfer"
-          else
-            FAILURE_KIND="unknown"
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "::error::Production web rebuilds are allowed only from main"
+            exit 1
           fi
 
-          {
-            echo "## Manual Web Rebuild Summary"
-            echo "- job: rebuild-web"
-            echo "- target: ${WEB_USER}@${WEB_HOST}:${WEB_TARGET}"
-            echo "- attempts_used: ${MAX_ATTEMPTS}"
-            echo "- status: failed"
-            echo "- build_status: success"
-            echo "- failure_kind: ${FAILURE_KIND}"
-            echo "- ssh_port_failures: ${PORT_FAILURES}"
-            echo "- ssh_login_failures: ${LOGIN_FAILURES}"
-            echo "- rsync_failures: ${RSYNC_FAILURES}"
-            echo "- next_step: run the manual Web SSH Connectivity Check workflow or choose a more reliable web deploy architecture"
-          } >> "$GITHUB_STEP_SUMMARY"
+  rebuild:
+    needs: main-branch-guard
+    permissions:
+      contents: read
+      deployments: write
+    uses: ./.github/workflows/deploy-web.yml
+    with:
+      deploy_sha: ${{ github.sha }}
+    secrets: inherit
 
-          echo "::error::Manual web rebuild failed after ${MAX_ATTEMPTS} attempts (${FAILURE_KIND})."
-          exit 1
-
-      - name: Mark catalog static revision published
-        if: ${{ success() }}
+  callback:
+    if: ${{ always() }}
+    needs:
+      - main-branch-guard
+      - rebuild
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report catalog rebuild result
         env:
           CATALOG_REVISION: ${{ inputs.catalog_revision }}
+          REBUILD_RESULT: ${{ needs.rebuild.result }}
+          GUARD_RESULT: ${{ needs.main-branch-guard.result }}
           WEB_REBUILD_CALLBACK_TOKEN: ${{ secrets.WEB_REBUILD_CALLBACK_TOKEN }}
           WEB_REBUILD_CALLBACK_URL: ${{ vars.WEB_REBUILD_CALLBACK_URL }}
         run: |
@@ -168,33 +57,21 @@ jobs:
             exit 0
           fi
 
-          CATALOG_REVISION="${CATALOG_REVISION:-0}"
-          CALLBACK_URL="${WEB_REBUILD_CALLBACK_URL:-https://api.mvn.by/api/system/rebuild-web/complete}"
-          if ! curl -fsS -X POST "${CALLBACK_URL}" \
-            -H "Content-Type: application/json" \
-            -H "X-Web-Rebuild-Token: ${WEB_REBUILD_CALLBACK_TOKEN}" \
-            --data "{\"catalog_revision\":${CATALOG_REVISION},\"status\":\"success\"}"; then
-            echo "::warning::Static revision was deployed, but API callback failed."
+          catalog_revision="${CATALOG_REVISION:-0}"
+          if [[ ! "${catalog_revision}" =~ ^[0-9]+$ ]]; then
+            echo "::warning::Invalid catalog_revision; reporting revision 0"
+            catalog_revision=0
+          fi
+          callback_url="${WEB_REBUILD_CALLBACK_URL:-https://api.mvn.by/api/system/rebuild-web/complete}"
+          if [ "${GUARD_RESULT}" = "success" ] && [ "${REBUILD_RESULT}" = "success" ]; then
+            payload="{\"catalog_revision\":${catalog_revision},\"status\":\"success\"}"
+          else
+            payload="{\"catalog_revision\":${catalog_revision},\"status\":\"failed\",\"error\":\"GitHub Actions rebuild-web failed\"}"
           fi
 
-      - name: Mark catalog static rebuild failed
-        if: ${{ failure() }}
-        env:
-          CATALOG_REVISION: ${{ inputs.catalog_revision }}
-          WEB_REBUILD_CALLBACK_TOKEN: ${{ secrets.WEB_REBUILD_CALLBACK_TOKEN }}
-          WEB_REBUILD_CALLBACK_URL: ${{ vars.WEB_REBUILD_CALLBACK_URL }}
-        run: |
-          set -euo pipefail
-          if [ -z "${WEB_REBUILD_CALLBACK_TOKEN:-}" ]; then
-            echo "No callback token configured; skipping failure callback."
-            exit 0
-          fi
-
-          CATALOG_REVISION="${CATALOG_REVISION:-0}"
-          CALLBACK_URL="${WEB_REBUILD_CALLBACK_URL:-https://api.mvn.by/api/system/rebuild-web/complete}"
-          if ! curl -fsS -X POST "${CALLBACK_URL}" \
+          if ! curl -fsS -X POST "${callback_url}" \
             -H "Content-Type: application/json" \
             -H "X-Web-Rebuild-Token: ${WEB_REBUILD_CALLBACK_TOKEN}" \
-            --data "{\"catalog_revision\":${CATALOG_REVISION},\"status\":\"failed\",\"error\":\"GitHub Actions rebuild-web failed\"}"; then
-            echo "::warning::Static rebuild failed, and API failure callback also failed."
+            --data "${payload}"; then
+            echo "::warning::Web rebuild callback failed."
           fi

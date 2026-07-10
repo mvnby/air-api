@@ -16,13 +16,14 @@
 - **User:** `deploy` for static deploys, `root` for server administration only
 - **IP:** `153.80.244.78`
 - **Hostname:** `www.mvn.by`
-- **Production path:** `/var/www/mvn.by/current`
+- **Production path:** `/var/www/mvn.by/live` (atomic symlink)
 - **Nginx site:** `/etc/nginx/sites-available/mvn.by`
-- **Role:** current public Astro storefront target for `mvn.by` and `www.mvn.by`.
+- **Role:** Astro storefront origin and independent fallback for Cloudflare Pages.
 
 Prepared server baseline:
 - Ubuntu 24.04 LTS
-- nginx serving `/var/www/mvn.by/current`
+- nginx serving `/var/www/mvn.by/live`, initially linked to the legacy
+  `/var/www/mvn.by/current` tree
 - UFW active with inbound `22/tcp`, `80/tcp`, and `443/tcp` allowed; other inbound traffic denied
 - `deploy` user with SSH key auth and write access to the static root
 - SSH password authentication disabled after root and deploy key login were verified
@@ -52,16 +53,16 @@ curl -I -H 'Host: mvn.by' http://153.80.244.78/
 curl -I --resolve mvn.by:443:153.80.244.78 https://mvn.by/
 ```
 
-Cloudflare DNS state after the 2026-06-05 cutover:
+Cloudflare DNS state before the Pages custom-domain cutover:
 
 ```text
 mvn.by      A 153.80.244.78 proxied
 www.mvn.by  A 153.80.244.78 proxied
 ```
 
-Rollback keeps using the legacy `mvn-web` server: restore the Cloudflare A records
-to `178.159.240.174`, restore the legacy web deploy secrets if needed, and run the
-manual web rebuild workflow.
+The current VPS remains the primary Pages rollback origin. Restore the Cloudflare
+A records to `153.80.244.78` and verify the retained atomic release before using
+the older `mvn-web` host at `178.159.240.174` as the last-resort fallback.
 
 ### API Server
 - **Host alias:** `mvn-api` for the original API VPS; `zakup` for the emergency API primary.
@@ -266,8 +267,8 @@ The workflow requires these env vars in the build step:
 ```yaml
 - name: Build Astro Site
   env:
-    # Static generation: Production API for prerendered pages
-    INTERNAL_API_URL: https://api.mvn.by/api/v1
+    # Static generation: stable private API listener through an SSH tunnel
+    INTERNAL_API_URL: http://127.0.0.1:18000/api/v1
     # Client-side: Production API
     PUBLIC_API_URL: https://api.mvn.by/api/v1
     # Google Tag Manager
@@ -287,7 +288,9 @@ The workflow requires these env vars in the build step:
 3. **deploy-api-standby:** Installs the same image on the fenced app-only standby
    through the `standby-api` environment.
 4. **deploy-frontend:** When web files changed (or manual rebuild was requested),
-   builds Astro and deploys through the `production-web` environment.
+   builds Astro once, validates the static artifact and release marker, deploys
+   a Cloudflare Pages canary, atomically promotes the same artifact on the VPS,
+   and finally promotes it to the Pages production branch.
 
 The three GitHub environments are deployment audit boundaries. They contain no
 new secrets by default; existing repository secrets remain the credential source.
@@ -333,33 +336,61 @@ ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh /tmp/rollback_backend.sh
   bash /tmp/rollback_backend.sh'
 ```
 
-### Web VPS Deploy Target
+### Web Release Safety
 
-The web workflows deploy to the current VPS when these GitHub secrets are set:
+Both automatic releases and `rebuild-web.yml` call
+`.github/workflows/deploy-web.yml`. They share the `production-release`
+concurrency group, so a catalog rebuild cannot race a normal production release.
+
+Required GitHub secrets:
 
 ```text
 SSH_HOST_WEB=153.80.244.78
 SSH_USER_WEB=deploy
-SSH_WEB_TARGET=/var/www/mvn.by/current/
+CLOUDFLARE_API_TOKEN_PAGES=<Cloudflare Pages Edit token>
 ```
 
-Legacy fallback values:
+Required GitHub variables:
 
 ```text
-SSH_HOST_WEB=178.159.240.174
-SSH_USER_WEB=user2154318
-SSH_WEB_TARGET=
+CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+CLOUDFLARE_PAGES_PROJECT=mvn-by
+WEB_ROOT=/var/www/mvn.by
 ```
 
-Post-cutover verification:
+`CLOUDFLARE_PAGES_PROJECT` and `WEB_ROOT` have the values above as safe
+defaults. The workflow never writes into the live document root. It uploads to
+`/var/www/mvn.by/releases/.<sha>.incoming`, validates the candidate, moves it to
+the immutable release directory, and atomically replaces the `live` symlink.
+The previous release remains present for rollback, and the newest five releases
+are retained.
 
-1. Confirm `check-web-ssh.yml` succeeds against `deploy@153.80.244.78`.
-2. Run `rebuild-web.yml` manually against the current VPS.
-3. Verify the origin by IP with Host header:
+The VPS nginx site must use `/var/www/mvn.by/live` as its root. One-time setup:
+
+```bash
+scp scripts/bootstrap_web_atomic_nginx.sh mvn:/tmp/
+ssh mvn 'chmod +x /tmp/bootstrap_web_atomic_nginx.sh && \
+  CONFIRM_WEB_NGINX_BOOTSTRAP=true bash /tmp/bootstrap_web_atomic_nginx.sh'
+```
+
+The bootstrap backs up the nginx site, validates nginx before reload, preserves
+the currently served files, and restores the previous config on error.
+
+Release verification:
+
+1. Confirm the workflow summary contains successful Pages canary, VPS, and Pages
+   production steps for the same full Git SHA.
+2. Verify the Pages production marker:
 
    ```bash
-   curl -I -H 'Host: mvn.by' http://153.80.244.78/
-   curl -fsS -H 'Host: mvn.by' http://153.80.244.78/catalog/ | head
+   curl -fsS https://mvn-by.pages.dev/release.json
+   ```
+
+3. Verify the VPS origin while bypassing public DNS:
+
+   ```bash
+   curl -fsS --resolve mvn.by:443:153.80.244.78 https://mvn.by/
+   curl -fsS --resolve mvn.by:443:153.80.244.78 https://mvn.by/catalog/
    ```
 
 4. Verify public Cloudflare paths:
@@ -370,8 +401,38 @@ Post-cutover verification:
    curl -I https://www.mvn.by/
    ```
 
-5. Roll back by restoring DNS and/or GitHub secrets to the legacy `mvn-web`
-   values and running the manual rebuild workflow.
+Manual VPS rollback does not rebuild anything. Point `live` at a retained
+release and verify the origin:
+
+```bash
+ssh mvn
+cd /var/www/mvn.by
+ls -1t releases
+ln -s /var/www/mvn.by/releases/<previous-sha> live.next
+python3 - <<'PY'
+import os
+os.replace('live.next', 'live')
+PY
+curl -fsS --resolve mvn.by:443:127.0.0.1 https://mvn.by/ >/dev/null
+```
+
+### Cloudflare Pages Cutover
+
+Do not replace the `mvn.by` DNS records before the first Pages production
+release is green. Cloudflare Pages must associate both custom domains with the
+project before DNS cutover:
+
+1. Open **Workers & Pages -> mvn-by -> Custom domains**.
+2. Add `mvn.by`, wait for it to become active, then add `www.mvn.by`.
+3. Confirm both certificates are active and the public `release.json` matches
+   the expected production SHA.
+4. Keep the VPS, atomic releases, and origin smoke checks as the independent
+   rollback path.
+
+For an apex domain in a Cloudflare-managed zone, use the Pages custom-domain
+flow and let Cloudflare create the required DNS record. Creating only a manual
+CNAME without associating the domain with Pages can route traffic to an
+unconfigured Pages origin.
 
 ### Storefront Media Proxy
 
@@ -412,15 +473,10 @@ curl -I https://mvn.by/media/library/crop/<file>.webp
 
 ### Web SSH Reliability
 
-`deploy-frontend` and the manual `rebuild-web.yml` workflow use bounded SSH port/login preflight checks before rsync. They retry 5 times with backoff and write a summary with separate `ssh_port_failures`, `ssh_login_failures`, `rsync_failures`, and `failure_kind` fields.
-
-If `deploy-backend` and backend smoke-check are green but `deploy-frontend` fails with `failure_kind: web_ssh_connectivity`, treat it as web-host SSH/network instability from GitHub-hosted runners, not an Astro/backend build failure.
-
-Use the manual **Web SSH Connectivity Check** workflow to probe `SSH_HOST_WEB` from GitHub Actions without building or deploying files. If the probe is flaky too, the next decision should be architectural rather than adding more retries:
-
-- move the static site to a managed static hosting/CDN deploy path;
-- move web hosting to infrastructure with stable SSH from GitHub Actions;
-- switch to a pull-based deploy where the web host fetches a release artifact instead of GitHub Actions opening inbound SSH to the host.
+The VPS is now a fallback target rather than the only copy of the storefront.
+Remote preparation and upload use bounded retries, but a failed VPS promotion
+stops the release before Pages production is changed. The existing **Web SSH
+Connectivity Check** workflow remains the direct network diagnostic.
 
 ## Manager Frontend Env Model
 

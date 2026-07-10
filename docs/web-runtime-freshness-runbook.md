@@ -1,5 +1,9 @@
 # Production Web Runtime Freshness Runbook
 
+> Historical design record. The current static release path uses Cloudflare
+> Pages plus atomic VPS releases; see `docs/deployment.md`. The SSR staging
+> sections below remain relevant only to a future runtime migration.
+
 Related issue: #471
 
 This is the production design and runbook for moving the storefront from a
