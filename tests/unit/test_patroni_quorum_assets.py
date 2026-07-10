@@ -95,6 +95,10 @@ def test_patroni_image_and_entrypoint_are_versioned_and_adoption_safe():
     assert "PGDATA is empty" in entrypoint
     assert 'chmod 0700 "${PGDATA}"' in entrypoint
     assert "chown -R" not in entrypoint
+    assert "runtime_dir=/run/patroni-etcd-pki" in entrypoint
+    assert 'cp "${key_source}" "${runtime_dir}/node.key"' in entrypoint
+    assert "chmod 0400" in entrypoint
+    assert 'export PATRONI_ETCD3_KEY="${runtime_dir}/node.key"' in entrypoint
     assert "su-exec postgres" in entrypoint
 
 
