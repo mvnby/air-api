@@ -31,6 +31,7 @@ def test_ha_status_report_workflow_runs_scheduled_operator_rollup():
     run = report_step["run"]
     assert env["GH_TOKEN"] == "${{ github.token }}"
     assert env["HA_EXTERNAL_METADATA_SOURCE"] == "env"
+    assert "vars.API_DB_HA_MODE" in env["API_DB_HA_MODE"]
     assert "secrets.CLOUDFLARE_LB_READ_TOKEN" in env["CLOUDFLARE_LB_READ_TOKEN"]
     assert "vars.CLOUDFLARE_ACCOUNT_ID" in env["CLOUDFLARE_ACCOUNT_ID"]
     assert "vars.POSTGRES_PITR_REQUIRED" in env["POSTGRES_PITR_REQUIRED"]

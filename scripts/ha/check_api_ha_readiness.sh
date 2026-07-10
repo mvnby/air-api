@@ -18,6 +18,17 @@ PRIMARY_PROJECT_DIR="${PRIMARY_PROJECT_DIR:-${API_PROJECT_DIR:-/opt/air-api}}"
 PRIMARY_COMPOSE_FILE="${PRIMARY_COMPOSE_FILE:-${API_COMPOSE_FILE:-docker-compose.prod.yml}}"
 STANDBY_PROJECT_DIR="${STANDBY_PROJECT_DIR:-${API_STANDBY_PROJECT_DIR:-/opt/mvn-reserve}}"
 STANDBY_COMPOSE_FILE="${STANDBY_COMPOSE_FILE:-${API_STANDBY_COMPOSE_FILE:-docker-compose.reserve.yml}}"
+API_DB_HA_MODE="${API_DB_HA_MODE:-physical}"
+
+# Preserve node identity for Patroni checks before role-based variables are swapped.
+API_NODE_SSH="${API_NODE_SSH:-${PRIMARY_SSH}}"
+RESERVE_NODE_SSH="${RESERVE_NODE_SSH:-${STANDBY_SSH}}"
+API_NODE_PROJECT_DIR="${API_NODE_PROJECT_DIR:-${PRIMARY_PROJECT_DIR}}"
+RESERVE_NODE_PROJECT_DIR="${RESERVE_NODE_PROJECT_DIR:-${STANDBY_PROJECT_DIR}}"
+API_NODE_COMPOSE_FILE="${API_NODE_COMPOSE_FILE:-${PRIMARY_COMPOSE_FILE}}"
+RESERVE_NODE_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE:-${STANDBY_COMPOSE_FILE}}"
+CONFIGURED_PRIMARY_ORIGIN="${PRIMARY_ORIGIN}"
+CONFIGURED_STANDBY_ORIGIN="${STANDBY_ORIGIN}"
 
 EXPECTED_CDN_BASE="${EXPECTED_CDN_BASE:-https://cdn.mvn.by}"
 MIN_DB_CDN_URLS="${MIN_DB_CDN_URLS:-3}"
@@ -102,13 +113,23 @@ run_active_passive() {
 }
 
 run_postgres_replication() {
-  PRIMARY_SSH="${PRIMARY_SSH}" \
-    STANDBY_SSH="${STANDBY_SSH}" \
-    PRIMARY_PROJECT_DIR="${PRIMARY_PROJECT_DIR}" \
-    PRIMARY_COMPOSE_FILE="${PRIMARY_COMPOSE_FILE}" \
-    STANDBY_PROJECT_DIR="${STANDBY_PROJECT_DIR}" \
-    STANDBY_COMPOSE_FILE="${STANDBY_COMPOSE_FILE}" \
-    bash scripts/ha/check_postgres_replication.sh
+  if [[ "${API_DB_HA_MODE}" == "patroni" ]]; then
+    API_NODE_SSH="${API_NODE_SSH}" \
+      RESERVE_NODE_SSH="${RESERVE_NODE_SSH}" \
+      API_NODE_PROJECT_DIR="${API_NODE_PROJECT_DIR}" \
+      RESERVE_NODE_PROJECT_DIR="${RESERVE_NODE_PROJECT_DIR}" \
+      API_NODE_COMPOSE_FILE="${API_NODE_COMPOSE_FILE}" \
+      RESERVE_NODE_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE}" \
+      python3 scripts/ha/check_patroni_production.py
+  else
+    PRIMARY_SSH="${PRIMARY_SSH}" \
+      STANDBY_SSH="${STANDBY_SSH}" \
+      PRIMARY_PROJECT_DIR="${PRIMARY_PROJECT_DIR}" \
+      PRIMARY_COMPOSE_FILE="${PRIMARY_COMPOSE_FILE}" \
+      STANDBY_PROJECT_DIR="${STANDBY_PROJECT_DIR}" \
+      STANDBY_COMPOSE_FILE="${STANDBY_COMPOSE_FILE}" \
+      bash scripts/ha/check_postgres_replication.sh
+  fi
 }
 
 run_media_cdn_db() {
@@ -149,8 +170,8 @@ run_cloudflare_lb() {
   fi
 
   CF_LB_HOSTNAME="${CF_LB_HOSTNAME:-${API_HOST}}" \
-    CF_LB_PRIMARY_ORIGIN="${CF_LB_PRIMARY_ORIGIN:-${PRIMARY_ORIGIN}}" \
-    CF_LB_STANDBY_ORIGIN="${CF_LB_STANDBY_ORIGIN:-${STANDBY_ORIGIN}}" \
+    CF_LB_PRIMARY_ORIGIN="${CF_LB_PRIMARY_ORIGIN:-${CONFIGURED_PRIMARY_ORIGIN}}" \
+    CF_LB_STANDBY_ORIGIN="${CF_LB_STANDBY_ORIGIN:-${CONFIGURED_STANDBY_ORIGIN}}" \
     CF_LB_HOST_HEADER="${CF_LB_HOST_HEADER:-${API_HOST}}" \
     CF_LB_MONITOR_PATH="${CF_LB_MONITOR_PATH:-/api/ready}" \
     CF_LB_MONITOR_METHOD="${CF_LB_MONITOR_METHOD:-GET}" \
@@ -160,7 +181,40 @@ run_cloudflare_lb() {
     python3 scripts/ha/check_cloudflare_lb_config.py
 }
 
-log info "strict=${HA_READINESS_STRICT} primary=${PRIMARY_ORIGIN} standby=${STANDBY_ORIGIN} primary_ssh=${PRIMARY_SSH} standby_ssh=${STANDBY_SSH}"
+case "${API_DB_HA_MODE}" in
+  patroni)
+    if ! patroni_primary_label="$(
+      API_NODE_SSH="${API_NODE_SSH}" \
+        RESERVE_NODE_SSH="${RESERVE_NODE_SSH}" \
+        API_NODE_PROJECT_DIR="${API_NODE_PROJECT_DIR}" \
+        RESERVE_NODE_PROJECT_DIR="${RESERVE_NODE_PROJECT_DIR}" \
+        API_NODE_COMPOSE_FILE="${API_NODE_COMPOSE_FILE}" \
+        RESERVE_NODE_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE}" \
+        python3 scripts/ha/check_patroni_production.py --resolve-primary
+    )"; then
+      log fail "could not resolve current Patroni primary"
+      exit 1
+    fi
+    if [[ "${patroni_primary_label}" == "reserve" ]]; then
+      swap="${PRIMARY_SSH}"; PRIMARY_SSH="${STANDBY_SSH}"; STANDBY_SSH="${swap}"
+      swap="${PRIMARY_PROJECT_DIR}"; PRIMARY_PROJECT_DIR="${STANDBY_PROJECT_DIR}"; STANDBY_PROJECT_DIR="${swap}"
+      swap="${PRIMARY_COMPOSE_FILE}"; PRIMARY_COMPOSE_FILE="${STANDBY_COMPOSE_FILE}"; STANDBY_COMPOSE_FILE="${swap}"
+      swap="${PRIMARY_ORIGIN}"; PRIMARY_ORIGIN="${STANDBY_ORIGIN}"; STANDBY_ORIGIN="${swap}"
+    elif [[ "${patroni_primary_label}" != "api" ]]; then
+      log fail "unexpected Patroni primary label: ${patroni_primary_label:-<empty>}"
+      exit 1
+    fi
+    ;;
+  physical)
+    patroni_primary_label=physical
+    ;;
+  *)
+    log fail "API_DB_HA_MODE must be physical or patroni"
+    exit 1
+    ;;
+esac
+
+log info "strict=${HA_READINESS_STRICT} ha_mode=${API_DB_HA_MODE} primary_label=${patroni_primary_label} primary=${PRIMARY_ORIGIN} standby=${STANDBY_ORIGIN} primary_ssh=${PRIMARY_SSH} standby_ssh=${STANDBY_SSH}"
 
 if is_true "${CHECK_ACTIVE_PASSIVE}"; then
   run_required "active_passive_invariant" run_active_passive

@@ -357,7 +357,7 @@ def _check_postgres(
     replication_sql = """
 select
   coalesce(application_name, ''),
-  coalesce(client_addr::text, ''),
+  coalesce(host(client_addr), ''),
   coalesce(state, ''),
   coalesce(sync_state, ''),
   coalesce(pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn)::bigint, -1)
