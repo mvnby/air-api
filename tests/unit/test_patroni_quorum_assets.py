@@ -12,6 +12,10 @@ ENTRYPOINT = REPO_ROOT / "deploy/ha/patroni/patroni-entrypoint.sh"
 REHEARSAL_COMPOSE = REPO_ROOT / "deploy/ha/patroni/rehearsal/docker-compose.yml"
 REHEARSAL = REPO_ROOT / "scripts/ha/rehearse_patroni_failover.sh"
 REHEARSAL_WORKFLOW = REPO_ROOT / ".github/workflows/patroni-failover-rehearsal.yml"
+PUBLISH_WORKFLOW = REPO_ROOT / ".github/workflows/publish-patroni-image.yml"
+PRIMARY_COMPOSE = REPO_ROOT / "deploy/ha/mvn-api/docker-compose.patroni.yml"
+RESERVE_COMPOSE = REPO_ROOT / "deploy/ha/zakup/docker-compose.patroni.yml"
+PROXY_CONFIG = REPO_ROOT / "deploy/ha/proxy/nginx.conf"
 
 
 @pytest.fixture
@@ -105,3 +109,40 @@ def test_rehearsal_workflow_is_scheduled_and_keeps_logs():
     assert "rehearse_patroni_failover.sh" in steps["Run isolated Patroni failover rehearsal"]["run"]
     assert steps["Upload rehearsal log"]["if"] == "${{ always() }}"
     assert "production_data_touched: false" in steps["Rehearsal summary"]["run"]
+
+
+def test_production_patroni_composes_are_role_driven_and_private():
+    primary = yaml.safe_load(PRIMARY_COMPOSE.read_text(encoding="utf-8"))
+    reserve = yaml.safe_load(RESERVE_COMPOSE.read_text(encoding="utf-8"))
+
+    for compose, address in ((primary, "10.77.0.2"), (reserve, "10.77.0.1")):
+        db = compose["services"]["db"]
+        assert db["image"] == "${PATRONI_IMAGE:?set immutable PATRONI_IMAGE in .env}"
+        assert db["environment"]["PATRONI_ALLOW_BOOTSTRAP"] == "false"
+        assert db["environment"]["PATRONI_SYNCHRONOUS_MODE"] == "true"
+        assert db["environment"]["PATRONI_SYNCHRONOUS_MODE_STRICT"] == "false"
+        assert db["environment"]["PATRONI_ETCD3_PROTOCOL"] == "https"
+        assert f"{address}:5432:5432" in db["ports"]
+        assert f"{address}:8008:8008" in db["ports"]
+        assert "0.0.0.0:5432:5432" not in db["ports"]
+        assert compose["services"]["app-blue"]["env_file"][-1] == ".ha-app-role.env"
+        assert compose["services"]["bot"]["env_file"][-1] == ".ha-bot-role.env"
+
+    assert reserve["services"]["api-proxy"]["ports"] == ["127.0.0.1:18080:8000"]
+    assert "proxy_set_header Host api.mvn.by" in PROXY_CONFIG.read_text(encoding="utf-8")
+
+
+def test_patroni_image_publish_is_manual_sha_gated_and_digest_pinned():
+    workflow = yaml.load(PUBLISH_WORKFLOW.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    job = workflow["jobs"]["publish"]
+    steps = {step["name"]: step for step in job["steps"]}
+
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+    assert "No successful CI run found" in steps["Require tested main SHA"]["run"]
+    assert steps["Checkout exact tested SHA"]["with"]["ref"] == "${{ github.sha }}"
+    build = steps["Build and push Patroni"]["with"]
+    assert build["file"] == "deploy/ha/patroni/Dockerfile"
+    assert build["platforms"] == "linux/amd64"
+    assert build["provenance"] == "mode=max"
+    assert build["sbom"] == "true"
+    assert "patroni@${digest}" in steps["Resolve immutable image"]["run"]

@@ -31,6 +31,7 @@ class AgentConfig:
     deploy_lock: Path
     active_slot_file: Path
     app_service: str
+    primary_systemd_units: tuple[str, ...]
     poll_seconds: int
     promotion_delay_seconds: int
     ready_attempts: int
@@ -61,6 +62,7 @@ def load_config() -> AgentConfig:
         deploy_lock=project_dir / ".deploy.lock",
         active_slot_file=project_dir / ".active-api-slot",
         app_service=os.getenv("HA_APP_SERVICE", "").strip(),
+        primary_systemd_units=tuple(os.getenv("HA_PRIMARY_SYSTEMD_UNITS", "").split()),
         poll_seconds=_integer("HA_ROLE_POLL_SECONDS", 3),
         promotion_delay_seconds=_integer("HA_PROMOTION_DELAY_SECONDS", 8, minimum=0),
         ready_attempts=_integer("HA_READY_ATTEMPTS", 30),
@@ -97,6 +99,15 @@ def role_env(role: str, *, bot_process: bool) -> str:
         "DB_BOOTSTRAP_ENABLED": "false",
         "SCHEDULER_ENABLED": str(primary and not bot_process).lower(),
     }
+    if not primary:
+        values.update(
+            {
+                "MAIL_IMAP_AUTO_IMPORT_ENABLED": "false",
+                "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED": "false",
+                "CLOUDFLARE_PURGE_ENABLED": "false",
+                "CLOUDFLARE_PURGE_DRY_RUN": "true",
+            }
+        )
     return "".join(f"{name}={value}\n" for name, value in values.items())
 
 
@@ -138,6 +149,38 @@ def _runtime_matches(config: AgentConfig, role: str, service: str) -> bool:
     return ("bot" in running) == (role == "primary")
 
 
+def _systemd_units_match(config: AgentConfig, role: str) -> bool:
+    expected_active = role == "primary"
+    for unit in config.primary_systemd_units:
+        result = subprocess.run(
+            ["systemctl", "is-active", "--quiet", unit],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if (result.returncode == 0) != expected_active:
+            return False
+    return True
+
+
+def _reconcile_primary_systemd_units(config: AgentConfig, role: str) -> None:
+    action = "start" if role == "primary" else "stop"
+    for unit in config.primary_systemd_units:
+        result = subprocess.run(
+            ["systemctl", action, unit],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            error = (result.stderr or result.stdout).strip().replace("\n", " ")
+            print(
+                f"patroni_role_agent_status=warning systemd_unit={unit} "
+                f"action={action} error={error or result.returncode}",
+                flush=True,
+            )
+
+
 def _wait_ready(config: AgentConfig) -> None:
     for _ in range(config.ready_attempts):
         try:
@@ -168,6 +211,8 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         and bot_matches
         and _runtime_matches(config, role, service)
     ):
+        if not _systemd_units_match(config, role):
+            _reconcile_primary_systemd_units(config, role)
         return False
 
     config.deploy_lock.parent.mkdir(parents=True, exist_ok=True)
@@ -187,12 +232,14 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         _atomic_write(config.app_role_env, desired_app)
         _atomic_write(config.bot_role_env, desired_bot)
         if role == "standby":
+            _reconcile_primary_systemd_units(config, role)
             _run_compose(config, "stop", "bot", check=False)
             _run_compose(config, "up", "-d", "--no-deps", "--force-recreate", service)
         else:
             _run_compose(config, "up", "-d", "--no-deps", "--force-recreate", service)
             _wait_ready(config)
             _run_compose(config, "up", "-d", "--no-deps", "--force-recreate", "bot")
+            _reconcile_primary_systemd_units(config, role)
 
         _atomic_write(config.state_file, f"{role}\n")
         print(f"patroni_role_agent_status=reconciled role={role} app_service={service}", flush=True)

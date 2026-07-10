@@ -40,6 +40,13 @@ networking so it can bind directly to each node's WireGuard address.
 - `scripts/ha/patroni_role_agent.py`: local API/scheduler/bot role reconciler.
 - `.github/workflows/patroni-failover-rehearsal.yml`: weekly isolated drill and
   retained diagnostic log.
+- `.github/workflows/publish-patroni-image.yml`: manual, CI-gated publication of
+  the production Patroni image with provenance, SBOM, and immutable digest.
+- `deploy/ha/mvn-api/docker-compose.patroni.yml` and
+  `deploy/ha/zakup/docker-compose.patroni.yml`: host-specific adoption compose
+  files. Normal API deploys must never recreate their `db` service.
+- `deploy/ha/proxy/`: the stable internal Nginx hop used only on `zakup`, so
+  belzakupki Caddy never needs to follow blue/green container names.
 
 ## PKI
 
@@ -140,6 +147,48 @@ are present on both database hosts. If the replica is unavailable, the service
 may continue writing, but Patroni must refuse a loss-unsafe automatic promotion.
 PITR remains the final recovery layer.
 
+## Immutable Patroni Image
+
+Publish only a CI-tested `main` revision:
+
+```bash
+gh workflow run publish-patroni-image.yml --ref main
+```
+
+Copy the resulting `ghcr.io/.../patroni@sha256:...` reference into the protected
+`.env` on both database hosts as `PATRONI_IMAGE`. Never use a mutable Patroni
+tag in production. Publishing the image does not restart or alter PostgreSQL.
+
+Before any Compose validation, both hosts must also have:
+
+```text
+PATRONI_REPLICATION_USERNAME=<existing replication role>
+PATRONI_REPLICATION_PASSWORD=<matching password>
+PATRONI_IMAGE=ghcr.io/.../patroni@sha256:...
+```
+
+The node certificate bundle belongs in `<project>/patroni-pki` with directory
+mode `0700`, key mode `0600`, and certificate mode `0644`. The CA private key
+must not be present on either server.
+
+## Reserve Proxy Gate
+
+`zakup` shares Caddy with belzakupki. Do not make release jobs rewrite that
+Caddyfile. Before the PostgreSQL window:
+
+1. Install `deploy/ha/proxy/nginx.conf` and `upstream.conf` under
+   `/opt/mvn-reserve/api-proxy`.
+2. Start only `api-proxy` from `docker-compose.patroni.yml`; do not start `db`.
+3. Verify `http://127.0.0.1:18080/api/health` reaches the existing fenced app.
+4. Back up `/opt/belzakupki/Caddyfile`, replace only the MVN upstream
+   `mvn_reserve-app-1:8000` with `mvn_reserve-api-proxy-1:8000`, run
+   `caddy validate`, reload Caddy, and smoke-check both MVN and maxikor.fun.
+5. Keep `upstream.conf` as runtime state. Normal releases switch it between
+   `app-blue:8000` and `app-green:8000`; they never edit the Caddyfile.
+
+Rollback for this gate is the single backed-up Caddyfile plus a validated Caddy
+reload. The existing app remains running throughout the gate.
+
 ## Runtime Role Handoff
 
 Patroni controls only PostgreSQL. The role agent maps the local Patroni role to
@@ -155,6 +204,12 @@ On a replica, it stops the bot, disables scheduler/bootstrap, and keeps
 delay, recreates only the active API slot with scheduler enabled, requires
 writable `/api/ready=200`, and then starts the bot. It never runs `compose up`
 for `db` and shares the existing `.deploy.lock` with application releases.
+
+The same role transition disables IMAP imports and Cloudflare purge on a
+replica. `mvn-postgres-wal-upload.timer` and
+`mvn-postgres-basebackup.timer` are stopped on a replica and started only after
+the promoted primary API becomes writable. Timer failures are visible in the
+agent log but do not hold customer traffic offline.
 
 This ordering prevents Cloudflare from routing to a promoted database before
 the singleton processes have moved, and prevents two Telegram pollers from
@@ -174,3 +229,33 @@ install -m 0600 deploy/ha/patroni/role-agent.env.example \
 
 Edit the non-secret host paths/ports in `/etc/default/mvn-patroni-role-agent`,
 run `--once`, verify the generated role files, and only then enable the unit.
+
+## Production Cutover
+
+The following steps require one approved 2-5 minute write window. Do not begin
+while a GitHub production release is running.
+
+1. Confirm etcd has three healthy members and no existing MVN Patroni DCS keys.
+2. Confirm PITR, both restore drills, physical replication lag, and the latest
+   API/Cloudflare report are green.
+3. Disable both PITR timers temporarily, stop the role agent if installed, and
+   create a deployment maintenance marker on both database hosts.
+4. Stop app, scheduler, and bot processes on both hosts; verify no new writes.
+5. Re-check zero replication lag, stop both PostgreSQL containers, and create a
+   compressed, checksummed PGDATA rollback copy on each host.
+6. Start only the current primary `db` with its Patroni compose. Require local
+   `/primary=200`, writable SQL, the expected system identifier, and one DCS
+   leader before continuing.
+7. Start only the reserve `db` with its Patroni compose. Require `/replica=200`,
+   streaming state, matching timeline/system identifier, zero replay lag, and
+   registration as the synchronous standby.
+8. Run the role agent once on both nodes. Require exactly one public
+   `/api/ready=200`, one bot, one scheduler, and PITR timers only on the primary.
+9. Enable the role-agent units, remove maintenance markers, then run an
+   operator-controlled switchover and switchback drill before declaring the
+   migration complete.
+
+If any gate before step 8 fails, stop both Patroni containers, restore the old
+compose files and PGDATA copies, start the former primary first, then restore
+physical replication. Do not delete rollback copies or Patroni DCS state until
+the old topology is verified; DCS cleanup is a separate, explicit retry step.
