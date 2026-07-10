@@ -47,6 +47,8 @@ networking so it can bind directly to each node's WireGuard address.
   files. Normal API deploys must never recreate their `db` service.
 - `deploy/ha/proxy/`: the stable internal Nginx hop used only on `zakup`, so
   belzakupki Caddy never needs to follow blue/green container names.
+- `docs/infrastructure-security-runbook.md`: tracked SSH/fail2ban policy and
+  scheduled private-listener/public-port auditing for all three quorum hosts.
 
 ## PKI
 
