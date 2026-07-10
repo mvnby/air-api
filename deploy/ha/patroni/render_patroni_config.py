@@ -41,6 +41,19 @@ def integer(name: str, default: int, *, minimum: int = 0) -> int:
     return value
 
 
+def seconds(name: str, default: int, *, minimum: int = 0) -> int:
+    raw = os.getenv(name, str(default)).strip().lower()
+    if raw.endswith("s"):
+        raw = raw[:-1].strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be integer seconds, optionally suffixed with s") from exc
+    if value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return value
+
+
 def csv(name: str) -> list[str]:
     values = [item.strip() for item in required(name).split(",") if item.strip()]
     if not values:
@@ -98,7 +111,7 @@ def render_config() -> dict[str, Any]:
         raise ValueError("PATRONI_ARCHIVE_MODE must be on or off")
     postgres_parameters["archive_mode"] = archive_mode
     if archive_mode == "on":
-        postgres_parameters["archive_timeout"] = integer(
+        postgres_parameters["archive_timeout"] = seconds(
             "PATRONI_ARCHIVE_TIMEOUT", 300, minimum=1
         )
         postgres_parameters["archive_command"] = required("PATRONI_ARCHIVE_COMMAND")

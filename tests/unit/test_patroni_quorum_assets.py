@@ -64,6 +64,26 @@ def test_renderer_rejects_unsafe_timing_budget(patroni_env, monkeypatch):
         render_config()
 
 
+def test_renderer_normalizes_postgres_archive_timeout_seconds(patroni_env, monkeypatch):
+    monkeypatch.setenv("PATRONI_ARCHIVE_MODE", "on")
+    monkeypatch.setenv("PATRONI_ARCHIVE_TIMEOUT", "300s")
+    monkeypatch.setenv("PATRONI_ARCHIVE_COMMAND", "cp %p /archive/%f")
+
+    config = render_config()
+
+    parameters = config["bootstrap"]["dcs"]["postgresql"]["parameters"]
+    assert parameters["archive_timeout"] == 300
+
+
+def test_renderer_rejects_non_second_archive_timeout(patroni_env, monkeypatch):
+    monkeypatch.setenv("PATRONI_ARCHIVE_MODE", "on")
+    monkeypatch.setenv("PATRONI_ARCHIVE_TIMEOUT", "5min")
+    monkeypatch.setenv("PATRONI_ARCHIVE_COMMAND", "cp %p /archive/%f")
+
+    with pytest.raises(ValueError, match="integer seconds"):
+        render_config()
+
+
 def test_patroni_image_and_entrypoint_are_versioned_and_adoption_safe():
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     entrypoint = ENTRYPOINT.read_text(encoding="utf-8")
