@@ -91,6 +91,38 @@ export const prerender = true;
                 </ul>
             </div>
 
+            <section
+                class="repair-notice mb-8"
+                aria-labelledby="repair-notice-title"
+            >
+                <div class="repair-notice__icon" aria-hidden="true">
+                    <span class="material-icons-round">build</span>
+                </div>
+                <div class="repair-notice__content">
+                    <p class="repair-notice__eyebrow">Обслуживание или ремонт?</p>
+                    <h2 id="repair-notice-title">
+                        Есть неисправность? Нужна диагностика и ремонт
+                    </h2>
+                    <p>
+                        Если кондиционер не включается, не охлаждает, течёт,
+                        издаёт посторонние звуки, показывает ошибку или у него
+                        есть другая поломка, плановое обслуживание не устранит
+                        причину неисправности.
+                    </p>
+                    <p>
+                        Перейдите на страницу ремонта и ответьте на несколько
+                        вопросов: это поможет мастеру предварительно оценить
+                        ситуацию и подготовиться к выезду.
+                    </p>
+                    <a class="btn btn-primary repair-notice__cta" href="/services/repair/">
+                        Перейти к ремонту кондиционера
+                        <span class="material-icons-round" aria-hidden="true"
+                            >arrow_forward</span
+                        >
+                    </a>
+                </div>
+            </section>
+
             <section class="filter-link-card mb-8" aria-labelledby="service-filter-options-title">
                 <div class="filter-link-card__icon" aria-hidden="true">
                     <span class="material-icons-round">filter_air</span>
@@ -329,6 +361,68 @@ export const prerender = true;
         font-weight: 900;
     }
 
+    .repair-notice {
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 1.25rem;
+        align-items: flex-start;
+        max-width: 100%;
+        padding: 1.5rem;
+        border: 1px solid var(--warning);
+        border-left-width: 5px;
+        border-radius: 8px;
+        background: var(--warning-bg);
+    }
+    .repair-notice__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        border: 1px solid var(--warning);
+        border-radius: 8px;
+        color: var(--warning-text);
+    }
+    .repair-notice__icon .material-icons-round {
+        font-size: 28px;
+    }
+    .repair-notice__content {
+        display: grid;
+        gap: 0.75rem;
+        min-width: 0;
+    }
+    .repair-notice__eyebrow,
+    .repair-notice h2,
+    .repair-notice p {
+        margin: 0;
+    }
+    .repair-notice__eyebrow {
+        color: var(--warning-text);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .repair-notice h2 {
+        color: var(--text);
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1.25;
+    }
+    .repair-notice p {
+        color: var(--text-muted);
+        line-height: 1.6;
+    }
+    .repair-notice__cta {
+        width: fit-content;
+        max-width: 100%;
+        margin-top: 0.25rem;
+    }
+    .repair-notice__cta .material-icons-round {
+        font-size: 18px;
+    }
+
     .filter-link-card {
         box-sizing: border-box;
         display: grid;
@@ -461,6 +555,12 @@ export const prerender = true;
         }
         .filter-link-card {
             grid-template-columns: 1fr;
+        }
+        .repair-notice {
+            grid-template-columns: 1fr;
+        }
+        .repair-notice__cta {
+            width: 100%;
         }
     }
 </style>
