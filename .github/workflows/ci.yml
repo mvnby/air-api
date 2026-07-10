@@ -6,12 +6,20 @@ on:
   pull_request:
     branches: [ main, master ]
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 
@@ -78,3 +86,7 @@ jobs:
       - name: Run Pytest
         # using the 'app' service where the code lives
         run: docker compose exec -T app pytest -v
+
+      - name: Stop CI Services
+        if: always()
+        run: docker compose down -v --remove-orphans

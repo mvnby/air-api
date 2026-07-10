@@ -236,12 +236,21 @@ Local API/data scripts default to `root@185.250.45.54`. Override with `REMOTE_HO
 
 ## GitHub Actions Deployment
 
-### Manual Trigger
+### Release Trigger
 
-1. Go to: https://github.com/mvnby/air-api/actions/workflows/deploy.yml
-2. Click "Run workflow"
-3. **IMPORTANT:** Select correct branch (e.g., `filter-by-specs-and-bulk-update`)
-4. Click green "Run workflow" button
+The normal path is automatic: a successful `CI (Test & Lint)` run on `main`
+starts `deploy.yml` for that exact commit. Failed or cancelled CI never starts a
+production release.
+
+For a manual replay:
+
+1. Open https://github.com/mvnby/air-api/actions/workflows/deploy.yml.
+2. Click **Run workflow**.
+3. Select `main` only.
+4. Choose whether to rebuild the storefront and run the workflow.
+
+The release gate rejects a manual commit unless that exact SHA already has a
+successful CI run.
 
 ### Environment Variables
 
@@ -263,8 +272,45 @@ The workflow requires these env vars in the build step:
 
 ### Deployment Steps
 
-1. **deploy-backend:** Builds and pushes Docker image, deploys to API server
-2. **deploy-frontend:** Builds Astro site, uploads to web server via rsync over SSH
+1. **release-gate:** Resolves the tested `main` SHA and serializes production
+   releases through the `production-release` concurrency group.
+2. **deploy-backend:** Publishes `backend:<commit-sha>`, deploys its resolved
+   `backend@sha256:<digest>` through the `production-api` environment, and runs
+   smoke checks.
+3. **deploy-api-standby:** Installs the same image on the fenced app-only standby
+   through the `standby-api` environment.
+4. **deploy-frontend:** When web files changed (or manual rebuild was requested),
+   builds Astro and deploys through the `production-web` environment.
+
+The three GitHub environments are deployment audit boundaries. They contain no
+new secrets by default; existing repository secrets remain the credential source.
+
+### Backend Release Safety
+
+Application release and database maintenance are separate lifecycles:
+
+- `scripts/deploy.sh` pulls only `app`/`bot` and uses `--no-deps` for one-off
+  migration/default commands and service recreation;
+- the compose PostgreSQL image is pinned to an explicit version and digest;
+- changing `POSTGRES_IMAGE` requires a planned database maintenance window,
+  backup/replication checks, and its own rollback plan;
+- production backend tags must end in a 40-character Git SHA (or a sha256
+  digest); mutable `latest` tags are rejected;
+- the server deployment lock prevents overlapping releases;
+- cleanup retains three backend releases and never runs a global
+  `docker system prune -af`.
+
+Automatic rollback restores the previous application image only when the failed
+candidate was actually activated. It never downgrades the database schema. Use
+expand/contract migrations so both the new image and retained rollback images
+can run against the current schema.
+
+Manual code rollback on the active API host:
+
+```bash
+cat scripts/rollback_backend.sh | ssh mvn-api \
+  'CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api bash -s'
+```
 
 ### Web VPS Deploy Target
 

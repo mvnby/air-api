@@ -43,18 +43,23 @@ Known hosts from current docs:
 | --- | --- | --- |
 | Current API | `mvn-api`, `185.250.45.54` | Current API origin and deploy target. |
 | Current web | `mvn`, `153.80.244.78` | Public Astro storefront for `mvn.by` and `www.mvn.by`. |
-| Legacy web fallback | `mvn-web`, `178.159.240.174` | Static storefront reserve. Keep as web rollback target. |
-| New API VPS | owner-selected Belarus VPS | Provider/IP/spec are owner-side decisions. |
+| API standby | `zakup`, `193.47.42.213` | Warm application and PostgreSQL standby; remains fenced until promotion. |
+| Legacy web host | `mvn-web`, `178.159.240.174` | Stale historical copy; do not treat as a verified rollback target. |
 
 Deploy path constraints:
 
-- The backend workflow builds and pushes `ghcr.io/mvnby/air-api/backend:latest`
-  and `:<commit-sha>`, then deploys to exactly one `SSH_HOST_API`.
-- `scripts/deploy.sh` pulls the compose images, runs Alembic and global config
-  defaults, stops `app`/`bot`, and recreates only `app`/`bot`.
-- The deploy workflow is not multi-origin aware today. Any standby or failover
-  procedure must avoid assuming that GitHub Actions can safely update two API
-  hosts without new workflow work.
+- A production release starts only after successful CI on `main` (or a manual
+  dispatch that proves the same commit already passed CI).
+- The backend workflow publishes
+  `ghcr.io/mvnby/air-api/backend:<commit-sha>` and deploys the resolved
+  `backend@sha256:<digest>` artifact.
+- `scripts/deploy.sh` pulls only application images, runs Alembic/defaults in a
+  one-off `--no-deps` container, and recreates only `app`/`bot` with
+  `--no-deps`; PostgreSQL is not touched by application deployment.
+- The same tested image is then installed on the fenced `zakup` app-only
+  standby, followed by an active-passive invariant check.
+- Failed activation/smoke triggers a guarded code rollback. Database migrations
+  remain forward-only and must be expand/contract compatible.
 
 Runtime single-active controls:
 
@@ -482,10 +487,11 @@ risk:
   and smoke result without touching production.
 - Decide whether product originals should move to R2/S3 or whether standby media
   sync is enough.
-- Decide whether backend deploys should support SHA-pinned production releases
-  instead of always pulling `latest`.
-- If active failover becomes a real target, design DB replication/promotion and
-  Cloudflare Load Balancing as a separate project.
+- Continue evolving the current recreate step into a blue-green application
+  switch after the release gate and rollback baseline is proven in production.
+- Continue from the implemented streaming-replication/Cloudflare active-passive
+  baseline toward quorum-based automatic PostgreSQL failover only after fencing
+  and failure drills are automated.
 
 ## Owner Decisions Still Needed
 

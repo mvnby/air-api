@@ -1,9 +1,13 @@
 name: Deploy to Production 🚀
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI (Test & Lint)
     branches:
       - main
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       deploy_frontend:
@@ -11,6 +15,13 @@ on:
         type: boolean
         required: false
         default: false
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -44,9 +55,66 @@ env:
 
 jobs:
   # ======================================================
-  # 0. FRONTEND CHANGE DETECTION
+  # 0. RELEASE GATE AND FRONTEND CHANGE DETECTION
   # ======================================================
+  release-gate:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      deploy_sha: ${{ steps.resolve.outputs.deploy_sha }}
+
+    steps:
+      - name: Resolve tested release SHA
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            deploy_sha="${{ github.event.workflow_run.head_sha }}"
+            head_branch="${{ github.event.workflow_run.head_branch }}"
+            conclusion="${{ github.event.workflow_run.conclusion }}"
+            if [ "${head_branch}" != "main" ] || [ "${conclusion}" != "success" ]; then
+              echo "::error::Refusing release: branch=${head_branch} conclusion=${conclusion}"
+              exit 1
+            fi
+          else
+            if [ "${GITHUB_REF_NAME}" != "main" ]; then
+              echo "::error::Manual production deploys are allowed only from main"
+              exit 1
+            fi
+            deploy_sha="${GITHUB_SHA}"
+            successful_run_count="$(
+              gh run list \
+                --repo "${GITHUB_REPOSITORY}" \
+                --workflow ci.yml \
+                --branch main \
+                --commit "${deploy_sha}" \
+                --status success \
+                --limit 1 \
+                --json databaseId \
+                --jq 'length'
+            )"
+            if [ "${successful_run_count}" != "1" ]; then
+              echo "::error::No successful CI run found for ${deploy_sha}"
+              exit 1
+            fi
+          fi
+
+          echo "deploy_sha=${deploy_sha}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release Gate"
+            echo "- event: ${{ github.event_name }}"
+            echo "- tested_sha: ${deploy_sha}"
+            echo "- result: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   detect-frontend-changes:
+    needs: release-gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,6 +126,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          ref: ${{ needs.release-gate.outputs.deploy_sha }}
           fetch-depth: 0
 
       - name: Detect storefront-relevant changes
@@ -76,25 +145,15 @@ jobs:
               reason="manual dispatch did not request frontend deploy"
             fi
           else
-            before="${{ github.event.before }}"
-            after="${{ github.sha }}"
-            zero_sha="0000000000000000000000000000000000000000"
-
-            if [ "${before}" = "${zero_sha}" ]; then
-              web_changed=true
-              reason="first push has no reliable before SHA; deploying frontend conservatively"
-            else
-              if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
-                git fetch --no-tags --depth=1 origin "${before}" || true
-              fi
-
-              if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
-                web_changed=true
-                reason="before SHA is unavailable locally; deploying frontend conservatively"
-              elif git diff --name-only "${before}" "${after}" | grep -E '^(web/|\.github/workflows/(deploy|rebuild-web|check-web-ssh)\.yml$)' >/dev/null; then
+            after="${{ needs.release-gate.outputs.deploy_sha }}"
+            if before="$(git rev-parse "${after}^" 2>/dev/null)"; then
+              if git diff --name-only "${before}" "${after}" | grep -E '^(web/|\.github/workflows/(deploy|rebuild-web|check-web-ssh)\.yml$)' >/dev/null; then
                 web_changed=true
                 reason="storefront-relevant files changed"
               fi
+            else
+              web_changed=true
+              reason="release parent is unavailable; deploying frontend conservatively"
             fi
           fi
 
@@ -128,9 +187,15 @@ jobs:
   # 1. BACKEND DEPLOYMENT (Docker -> mvn-api)
   # ======================================================
   deploy-backend:
+    needs: release-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-api
+    outputs:
+      backend_image: ${{ steps.resolve_backend_image.outputs.reference }}
     permissions:
       contents: read
+      deployments: write
       packages: write
     env:
       API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
@@ -149,6 +214,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release-gate.outputs.deploy_sha }}
 
       - name: Log in to the Container registry
         uses: docker/login-action@v4
@@ -172,7 +239,7 @@ jobs:
 
       - name: Lowercase Repo Name
         id: prep
-        run: echo "repo=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+        run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Backend (App + Bot) [Attempt 1]
         id: backend_push_1
@@ -181,9 +248,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-             ghcr.io/${{ steps.prep.outputs.repo }}/backend:latest
-             ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}
+          tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}
 
       - name: Build and push Backend (App + Bot) [Attempt 2]
         id: backend_push_2
@@ -193,9 +258,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-             ghcr.io/${{ steps.prep.outputs.repo }}/backend:latest
-             ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}
+          tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}
 
       - name: Build and push Backend (App + Bot) [Attempt 3]
         id: backend_push_3
@@ -204,9 +267,26 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-             ghcr.io/${{ steps.prep.outputs.repo }}/backend:latest
-             ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}
+          tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}
+
+      - name: Resolve Immutable Backend Image
+        id: resolve_backend_image
+        run: |
+          set -euo pipefail
+          digest="${{ steps.backend_push_1.outputs.digest }}"
+          if [ -z "${digest}" ] && [ "${{ steps.backend_push_2.outcome }}" = "success" ]; then
+            digest="${{ steps.backend_push_2.outputs.digest }}"
+          fi
+          if [ -z "${digest}" ] && [ "${{ steps.backend_push_3.outcome }}" = "success" ]; then
+            digest="${{ steps.backend_push_3.outputs.digest }}"
+          fi
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Build did not produce a valid image digest: ${digest:-empty}"
+            exit 1
+          fi
+          reference="ghcr.io/${{ steps.prep.outputs.repo }}/backend@${digest}"
+          echo "reference=${reference}" >> "$GITHUB_OUTPUT"
+          echo "Deploying immutable image ${reference}"
 
       # Diagnostic step: Check if API server is reachable
       - name: Test API Server Connectivity
@@ -291,7 +371,7 @@ jobs:
             API_MIGRATION_SERVICE='${API_MIGRATION_SERVICE}' \
             API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
             API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
-            BACKEND_IMAGE='ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}' \
+            BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
             bash /tmp/deploy.sh"
 
       - name: Optional Post-Deploy Backend Ops
@@ -334,7 +414,7 @@ jobs:
             DRY_RUN='${DRY_RUN}' \
             API_PROJECT_DIR='${API_PROJECT_DIR}' \
             API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
-            BACKEND_IMAGE='ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}' \
+            BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
             OPS_SUMMARY_FILE='/tmp/ops_summary.txt' \
             bash /tmp/ops_post_deploy.sh && cat /tmp/ops_summary.txt" | tee backend_ops.log
 
@@ -351,19 +431,37 @@ jobs:
             COMPOSE_FILE='${API_PROJECT_DIR}/${API_COMPOSE_FILE}' \
             COMPOSE_SERVICE_CHECKS='${API_SMOKE_COMPOSE_SERVICE_CHECKS}' \
             BOT_EXPECT_ENABLED='${API_BOT_EXPECT_ENABLED}' \
-            BACKEND_IMAGE='ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}' \
+            BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
             SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
             bash /tmp/post_deploy_smoke_check.sh && cat /tmp/smoke_summary.txt" | tee backend_smoke.log
 
+      - name: Roll Back Backend After Failed Activation
+        id: rollback_backend
+        if: ${{ always() && (steps.deploy_backend.outcome == 'failure' || steps.post_deploy_smoke.outcome == 'failure') }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          cat scripts/rollback_backend.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/rollback_backend.sh"
+          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+            chmod +x /tmp/rollback_backend.sh && \
+            CONFIRM_ROLLBACK=true \
+            API_PROJECT_DIR='${API_PROJECT_DIR}' \
+            API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
+            API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
+            API_READY_URL='${API_READY_URL}' \
+            EXPECTED_CURRENT_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
+            bash /tmp/rollback_backend.sh" | tee backend_rollback.log
+
       - name: Prune Unused Backend Docker Images
         id: prune_backend_images
+        continue-on-error: true
         run: |
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
           cat scripts/prune_unused_docker_images.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/prune_unused_docker_images.sh"
           ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/prune_unused_docker_images.sh && \
-            bash /tmp/prune_unused_docker_images.sh" | tee backend_docker_prune.log
+            KEEP_BACKEND_IMAGES=3 bash /tmp/prune_unused_docker_images.sh" | tee backend_docker_prune.log
 
       - name: Upload Backend Ops Logs
         if: always()
@@ -373,6 +471,7 @@ jobs:
           path: |
             backend_ops.log
             backend_smoke.log
+            backend_rollback.log
             backend_docker_prune.log
           if-no-files-found: warn
 
@@ -392,15 +491,16 @@ jobs:
           {
             echo "## Backend Deploy Summary"
             echo "- image: ghcr.io/${{ steps.prep.outputs.repo }}/backend"
-            echo "- backend_image: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ github.sha }}"
+            echo "- backend_image: ${{ steps.resolve_backend_image.outputs.reference }}"
             echo "- digest: ${digest}"
-            echo "- commit_sha: ${{ github.sha }}"
+            echo "- commit_sha: ${{ needs.release-gate.outputs.deploy_sha }}"
             echo "- api_project_dir: ${API_PROJECT_DIR}"
             echo "- api_compose_file: ${API_COMPOSE_FILE}"
             echo "- api_deploy_services: ${API_DEPLOY_SERVICES}"
             echo "- deploy_status: ${{ steps.deploy_backend.outcome }}"
             echo "- ops_status: ${{ steps.post_deploy_ops.outcome }}"
             echo "- smoke_status: ${{ steps.post_deploy_smoke.outcome }}"
+            echo "- rollback_status: ${{ steps.rollback_backend.outcome }}"
             echo "- docker_prune_status: ${{ steps.prune_backend_images.outcome }}"
             if [ -f backend_ops.log ]; then
               echo "- ops_log: collected"
@@ -420,10 +520,13 @@ jobs:
     if: ${{ vars.API_STANDBY_HOST != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: standby-api
     needs:
       - deploy-backend
+      - release-gate
     permissions:
       contents: read
+      deployments: write
       packages: read
     env:
       API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST }}
@@ -439,6 +542,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release-gate.outputs.deploy_sha }}
 
       - name: Setup SSH Key
         run: |
@@ -449,12 +554,12 @@ jobs:
           ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
 
       - name: Deploy standby API app image
+        id: deploy_standby
         run: |
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
           SCP_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
-          repo="${GITHUB_REPOSITORY,,}"
-          BACKEND_IMAGE="ghcr.io/${repo}/backend:${GITHUB_SHA}"
+          BACKEND_IMAGE="${{ needs.deploy-backend.outputs.backend_image }}"
           echo "📌 Deploying standby backend image: ${BACKEND_IMAGE}"
 
           if [ "${API_STANDBY_COPY_COMPOSE}" = "true" ]; then
@@ -471,20 +576,21 @@ jobs:
 
           cat scripts/ha/promote_local_standby.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-promote-local-standby"
           cat scripts/ha/mvn-standby-status.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-standby-status"
+          cat scripts/deploy.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/deploy.sh"
 
           ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
-            set -euo pipefail && \
+            chmod +x /tmp/deploy.sh && \
+            GHCR_PAT='${{ secrets.GHCR_PAT }}' \
+            GITHUB_ACTOR='${{ github.actor }}' \
+            API_PROJECT_DIR='${API_STANDBY_PROJECT_DIR}' \
+            API_COMPOSE_FILE='${API_STANDBY_COMPOSE_FILE}' \
+            API_DEPLOY_SERVICES='app' \
+            API_MIGRATION_SERVICE='app' \
+            API_RUN_MIGRATIONS='false' \
+            API_RUN_DEFAULTS='false' \
+            BACKEND_IMAGE='${BACKEND_IMAGE}' \
+            bash /tmp/deploy.sh && \
             cd '${API_STANDBY_PROJECT_DIR}' && \
-            export BACKEND_IMAGE='${BACKEND_IMAGE}' && \
-            tmp=\$(mktemp) && \
-            touch .env && \
-            { grep -v '^BACKEND_IMAGE=' .env > \"\${tmp}\" || true; } && \
-            printf 'BACKEND_IMAGE=%s\n' \"\${BACKEND_IMAGE}\" >> \"\${tmp}\" && \
-            mv \"\${tmp}\" .env && \
-            echo '💾 Persisted immutable standby backend image in .env' && \
-            echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null && \
-            docker compose -f '${API_STANDBY_COMPOSE_FILE}' pull app && \
-            docker compose -f '${API_STANDBY_COMPOSE_FILE}' up -d --force-recreate app && \
             (docker compose -f '${API_STANDBY_COMPOSE_FILE}' stop bot >/dev/null 2>&1 || true) && \
             for i in \$(seq 1 30); do \
               if curl -fsS '${API_STANDBY_HEALTH_URL}' >/tmp/mvn-standby-health.out; then \
@@ -495,6 +601,23 @@ jobs:
             done; \
             docker compose -f '${API_STANDBY_COMPOSE_FILE}' logs --tail=120 app; \
             exit 1"
+
+      - name: Roll Back Standby After Failed Activation
+        id: rollback_standby
+        if: ${{ always() && steps.deploy_standby.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          cat scripts/rollback_backend.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/rollback_backend.sh"
+          ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
+            chmod +x /tmp/rollback_backend.sh && \
+            CONFIRM_ROLLBACK=true \
+            API_PROJECT_DIR='${API_STANDBY_PROJECT_DIR}' \
+            API_COMPOSE_FILE='${API_STANDBY_COMPOSE_FILE}' \
+            API_DEPLOY_SERVICES='app' \
+            API_READY_URL='${API_STANDBY_HEALTH_URL}' \
+            EXPECTED_CURRENT_IMAGE='${{ needs.deploy-backend.outputs.backend_image }}' \
+            bash /tmp/rollback_backend.sh" | tee standby_rollback.log
 
       - name: Post-Standby Active-Passive Invariant Check
         id: standby_active_passive
@@ -507,13 +630,14 @@ jobs:
 
       - name: Prune Unused Standby Docker Images
         id: prune_standby_images
+        continue-on-error: true
         run: |
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
           cat scripts/prune_unused_docker_images.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/prune_unused_docker_images.sh"
           ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
             chmod +x /tmp/prune_unused_docker_images.sh && \
-            bash /tmp/prune_unused_docker_images.sh" | tee standby_docker_prune.log
+            KEEP_BACKEND_IMAGES=3 bash /tmp/prune_unused_docker_images.sh" | tee standby_docker_prune.log
 
       - name: Upload Standby Deploy Logs
         if: always()
@@ -522,6 +646,7 @@ jobs:
           name: standby-deploy-logs-${{ github.run_id }}
           path: |
             standby_active_passive.log
+            standby_rollback.log
             standby_docker_prune.log
           if-no-files-found: warn
 
@@ -535,11 +660,12 @@ jobs:
             echo "- standby_compose_file: ${API_STANDBY_COMPOSE_FILE}"
             echo "- standby_copy_compose: ${API_STANDBY_COPY_COMPOSE}"
             echo "- standby_compose_source_file: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
-            echo "- backend_image: ghcr.io/${GITHUB_REPOSITORY,,}/backend:${GITHUB_SHA}"
+            echo "- backend_image: ${{ needs.deploy-backend.outputs.backend_image }}"
             echo "- health_url: ${API_STANDBY_HEALTH_URL}"
             echo "- primary_origin: ${API_PRIMARY_ORIGIN}"
             echo "- standby_origin: ${API_STANDBY_ORIGIN}"
             echo "- active_passive_status: ${{ steps.standby_active_passive.outcome }}"
+            echo "- rollback_status: ${{ steps.rollback_standby.outcome }}"
             echo "- docker_prune_status: ${{ steps.prune_standby_images.outcome }}"
             if [ -f standby_active_passive.log ]; then
               echo "- active_passive_log: collected"
@@ -557,13 +683,20 @@ jobs:
     if: ${{ needs.detect-frontend-changes.outputs.web_changed == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: production-web
+    permissions:
+      contents: read
+      deployments: write
     needs:
       - deploy-backend # Wait for API to be ready
       - detect-frontend-changes
+      - release-gate
     
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release-gate.outputs.deploy_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

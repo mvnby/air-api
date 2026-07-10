@@ -1,6 +1,5 @@
-#!/bin/bash
-set -e
-set -o pipefail
+#!/usr/bin/env bash
+set -euo pipefail
 
 echo "🚀 Starting deployment script on server..."
 
@@ -11,13 +10,14 @@ MIGRATION_SERVICE="${API_MIGRATION_SERVICE:-app}"
 RUN_MIGRATIONS="${API_RUN_MIGRATIONS:-true}"
 RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
+DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 
-if [[ -n "${BACKEND_IMAGE}" ]]; then
-    export BACKEND_IMAGE
-    echo "📌 Using immutable backend image: ${BACKEND_IMAGE}"
-else
-    echo "⚠️ BACKEND_IMAGE is not set; compose will use its fallback image tag"
+if [[ ! "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]]; then
+    echo "❌ BACKEND_IMAGE must use a 40-character Git SHA tag or sha256 digest" >&2
+    exit 1
 fi
+export BACKEND_IMAGE
+echo "📌 Using immutable backend image: ${BACKEND_IMAGE}"
 
 if [[ ! -d "${PROJECT_DIR}" ]]; then
     echo "❌ Project dir not found: ${PROJECT_DIR}"
@@ -31,18 +31,30 @@ if [[ ! -f "${COMPOSE_FILE}" ]]; then
     exit 1
 fi
 
-if [[ -n "${BACKEND_IMAGE}" ]]; then
-    ENV_FILE="${PROJECT_DIR}/.env"
-    touch "${ENV_FILE}"
-    if grep -q '^BACKEND_IMAGE=' "${ENV_FILE}"; then
-        sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=${BACKEND_IMAGE}|" "${ENV_FILE}"
-    else
-        printf '\nBACKEND_IMAGE=%s\n' "${BACKEND_IMAGE}" >> "${ENV_FILE}"
-    fi
-    echo "💾 Persisted immutable backend image in ${ENV_FILE}"
+exec 9>"${DEPLOY_LOCK_FILE}"
+if ! flock -n 9; then
+    echo "❌ Another deployment holds ${DEPLOY_LOCK_FILE}; refusing to overlap" >&2
+    exit 1
 fi
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}")
+read -r -a deploy_services <<<"${DEPLOY_SERVICES}"
+if [[ "${#deploy_services[@]}" -eq 0 ]]; then
+    echo "❌ API_DEPLOY_SERVICES resolved to an empty list" >&2
+    exit 1
+fi
+
+pull_services=("${deploy_services[@]}")
+migration_service_included=false
+for service in "${pull_services[@]}"; do
+    if [[ "${service}" == "${MIGRATION_SERVICE}" ]]; then
+        migration_service_included=true
+        break
+    fi
+done
+if [[ "${migration_service_included}" != "true" ]]; then
+    pull_services+=("${MIGRATION_SERVICE}")
+fi
 
 mkdir -p media model-cache/u2net
 
@@ -50,15 +62,14 @@ mkdir -p media model-cache/u2net
 echo "🔑 Logging into GHCR..."
 echo "$GHCR_PAT" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-# 2. Pull images
-echo "📥 Pulling Docker images..."
-"${COMPOSE[@]}" pull
+# 2. Pull only application images. PostgreSQL has a separate maintenance lifecycle.
+echo "📥 Pulling application images: ${pull_services[*]}"
+"${COMPOSE[@]}" pull "${pull_services[@]}"
 
 # 3. Migrations
 if [[ "${RUN_MIGRATIONS}" == "true" ]]; then
     echo "📦 Running database migrations..."
-    # Use -T to avoid TTY issues
-    "${COMPOSE[@]}" run -T --rm "${MIGRATION_SERVICE}" alembic upgrade head
+    "${COMPOSE[@]}" run -T --rm --no-deps "${MIGRATION_SERVICE}" alembic upgrade head
 else
     echo "⏭️ Skipping database migrations (API_RUN_MIGRATIONS=${RUN_MIGRATIONS})"
 fi
@@ -66,21 +77,34 @@ fi
 # 3.1 Ensure required global settings exist (idempotent).
 if [[ "${RUN_DEFAULTS}" == "true" ]]; then
     echo "⚙️ Ensuring default global settings..."
-    "${COMPOSE[@]}" run -T --rm "${MIGRATION_SERVICE}" python3 scripts/ensure_global_config_defaults.py
+    "${COMPOSE[@]}" run -T --rm --no-deps "${MIGRATION_SERVICE}" python3 scripts/ensure_global_config_defaults.py
 else
     echo "⏭️ Skipping default global settings (API_RUN_DEFAULTS=${RUN_DEFAULTS})"
 fi
 
-# 4. Stop old containers
-echo "🛑 Stopping old containers..."
-"${COMPOSE[@]}" stop ${DEPLOY_SERVICES} || true
+# Persist the candidate only after pre-deploy work succeeds. Keep the previous
+# image reference for an immediate code rollback.
+ENV_FILE="${PROJECT_DIR}/.env"
+PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
+touch "${ENV_FILE}"
+previous_image="$(sed -n 's/^BACKEND_IMAGE=//p' "${ENV_FILE}" | tail -n 1)"
+if [[ -n "${previous_image}" && "${previous_image}" != "${BACKEND_IMAGE}" ]]; then
+    printf '%s\n' "${previous_image}" > "${PREVIOUS_IMAGE_FILE}"
+    chmod 600 "${PREVIOUS_IMAGE_FILE}"
+    echo "↩️ Recorded previous backend image in ${PREVIOUS_IMAGE_FILE}"
+fi
 
-# 5. Start new containers
-echo "🔄 Starting services..."
-"${COMPOSE[@]}" up -d --force-recreate ${DEPLOY_SERVICES}
+env_tmp="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
+grep -v '^BACKEND_IMAGE=' "${ENV_FILE}" > "${env_tmp}" || true
+printf 'BACKEND_IMAGE=%s\n' "${BACKEND_IMAGE}" >> "${env_tmp}"
+chmod --reference="${ENV_FILE}" "${env_tmp}" 2>/dev/null || chmod 600 "${env_tmp}"
+chown --reference="${ENV_FILE}" "${env_tmp}" 2>/dev/null || true
+mv "${env_tmp}" "${ENV_FILE}"
+echo "💾 Persisted immutable backend image in ${ENV_FILE}"
 
-# 6. Cleanup
-echo "🧹 Cleaning up unused Docker objects (images, containers, networks)..."
-docker system prune -af
+# 4. Recreate only application services. Blue-green switching is introduced in
+# the next phase; --no-deps already guarantees that DB is not recreated here.
+echo "🔄 Recreating application services: ${deploy_services[*]}"
+"${COMPOSE[@]}" up -d --no-deps --force-recreate "${deploy_services[@]}"
 
 echo "✅ Deployment completed successfully!"
