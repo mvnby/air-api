@@ -36,7 +36,7 @@ printf '%s\n' "$*" >> "$DOCKER_LOG"
 if [[ -n "${DOCKER_FAIL_MATCH:-}" && "$*" == *"${DOCKER_FAIL_MATCH}"* ]]; then
   exit 42
 fi
-if [[ "$*" == *"compose -f docker-compose.prod.yml ps --status running --services"* ]]; then
+if [[ "$*" == *"compose -f docker-compose.prod.yml"* && "$*" == *"ps --status running --services"* ]]; then
   printf '%s\n' "${DOCKER_PS_SERVICES:-app}"
 elif [[ "$1 $2" == "image ls" ]]; then
   cat "${IMAGE_IDS_FILE:-/dev/null}"
@@ -154,6 +154,27 @@ def test_post_deploy_ops_fails_if_app_is_not_running(tmp_path):
     assert " up " not in docker_log.read_text(encoding="utf-8")
 
 
+def test_post_deploy_ops_executes_in_active_blue_green_slot(tmp_path):
+    _, env, docker_log = _fake_environment(tmp_path)
+    project = _project(tmp_path)
+    (project / ".active-api-slot").write_text("green\n", encoding="utf-8")
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "RUN_POST_DEPLOY_OPS": "true",
+            "OPS_MODE": "report_only",
+            "DOCKER_PS_SERVICES": "app-green",
+        }
+    )
+
+    result = _run("scripts/ops_post_deploy.sh", env)
+
+    assert result.returncode == 0, result.stderr
+    calls = docker_log.read_text(encoding="utf-8")
+    assert "exec -T app-green sh -lc" in calls
+    assert " up " not in calls
+
+
 def test_deploy_rejects_mutable_image_tag_before_docker_calls(tmp_path):
     _, env, docker_log = _fake_environment(tmp_path)
     project = _project(tmp_path)
@@ -209,6 +230,34 @@ def test_rollback_restores_previous_immutable_image(tmp_path):
     assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
     assert (project / ".previous-backend-image").read_text(encoding="utf-8").strip() == NEW_IMAGE
     assert "up -d --no-deps --force-recreate app bot" in docker_log.read_text(encoding="utf-8")
+
+
+def test_rollback_delegates_to_blue_green_when_active_slot_exists(tmp_path):
+    _, env, docker_log = _fake_environment(tmp_path)
+    project = _project(tmp_path, image=NEW_IMAGE)
+    (project / ".previous-backend-image").write_text(OLD_IMAGE + "\n", encoding="utf-8")
+    (project / ".active-api-slot").write_text("blue\n", encoding="utf-8")
+    delegate_log = tmp_path / "delegate.log"
+    delegate = tmp_path / "blue-green.sh"
+    _executable(
+        delegate,
+        "#!/usr/bin/env bash\nprintf '%s|%s|%s\\n' \"$BACKEND_IMAGE\" \"$API_RUN_MIGRATIONS\" \"$API_DEPLOY_LOCK_ALREADY_HELD\" > \"$DELEGATE_LOG\"\n",
+    )
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "CONFIRM_ROLLBACK": "true",
+            "EXPECTED_CURRENT_IMAGE": NEW_IMAGE,
+            "API_BLUE_GREEN_SCRIPT": str(delegate),
+            "DELEGATE_LOG": str(delegate_log),
+        }
+    )
+
+    result = _run("scripts/rollback_backend.sh", env)
+
+    assert result.returncode == 0, result.stderr
+    assert delegate_log.read_text(encoding="utf-8").strip() == f"{OLD_IMAGE}|false|true"
+    assert docker_log.read_text(encoding="utf-8") == ""
 
 
 def test_prune_keeps_three_newest_and_every_container_image(tmp_path):

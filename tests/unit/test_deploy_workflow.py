@@ -15,7 +15,7 @@ def _step(job: dict, step_name: str) -> dict:
 
 
 def test_deploy_workflow_checks_active_passive_after_standby_deploy():
-    workflow = _workflow(".github/workflows/deploy.yml")
+    workflow = _workflow(".github/workflows/deploy-api-standby.yml")
     standby_job = workflow["jobs"]["deploy-api-standby"]
     step_names = [step.get("name") for step in standby_job["steps"]]
     invariant_step = _step(standby_job, "Post-Standby Active-Passive Invariant Check")
@@ -65,7 +65,6 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     jobs = workflow["jobs"]
     expected_environments = {
         "deploy-backend": "production-api",
-        "deploy-api-standby": "standby-api",
         "deploy-frontend": "production-web",
     }
 
@@ -75,22 +74,34 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
         checkout = next(step for step in job["steps"] if step.get("uses") == "actions/checkout@v6")
         assert checkout["with"]["ref"] == "${{ needs.release-gate.outputs.deploy_sha }}"
 
+    standby_workflow = _workflow(".github/workflows/deploy-api-standby.yml")
+    standby = standby_workflow["jobs"]["deploy-api-standby"]
+    assert standby["environment"] == "standby-api"
+    checkout = next(step for step in standby["steps"] if step.get("uses") == "actions/checkout@v6")
+    assert checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
+    standby_call = jobs["deploy-api-standby"]
+    assert standby_call["uses"] == "./.github/workflows/deploy-api-standby.yml"
+    assert standby_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
+    assert standby_call["with"]["backend_image"] == "${{ needs.deploy-backend.outputs.backend_image }}"
+    assert standby_call["secrets"] == "inherit"
+
     workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
     assert "backend:latest" not in workflow_text
     assert "backend:${{ github.sha }}" not in workflow_text
     assert "backend:${GITHUB_SHA}" not in workflow_text
     assert "tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}" in workflow_text
     assert "BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}'" in workflow_text
-    assert 'BACKEND_IMAGE="${{ needs.deploy-backend.outputs.backend_image }}"' in workflow_text
     assert 'reference="ghcr.io/${{ steps.prep.outputs.repo }}/backend@${digest}"' in workflow_text
 
 
 def test_backend_release_is_scoped_and_has_guarded_rollback():
     workflow = _workflow(".github/workflows/deploy.yml")
+    standby_workflow = _workflow(".github/workflows/deploy-api-standby.yml")
     jobs = workflow["jobs"]
     backend = jobs["deploy-backend"]
-    standby = jobs["deploy-api-standby"]
+    standby = standby_workflow["jobs"]["deploy-api-standby"]
     rollback = _step(backend, "Roll Back Backend After Failed Activation")
+    primary_deploy = _step(backend, "Execute Deployment Script")
     standby_deploy = _step(standby, "Deploy standby API app image")
     standby_rollback = _step(standby, "Roll Back Standby After Failed Activation")
     primary_prune = _step(backend, "Prune Unused Backend Docker Images")
@@ -100,6 +111,12 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "steps.post_deploy_smoke.outcome == 'failure'" in rollback["if"]
     assert "EXPECTED_CURRENT_IMAGE=" in rollback["run"]
     assert "scripts/rollback_backend.sh" in rollback["run"]
+    assert "scripts/deploy_backend_blue_green.sh" in primary_deploy["run"]
+    assert 'case "${API_DEPLOY_STRATEGY}" in' in primary_deploy["run"]
+    assert "blue_green)" in primary_deploy["run"]
+    assert "in_place)" in primary_deploy["run"]
+    assert "API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}'" in primary_deploy["run"]
+    assert "scripts/deploy_backend_blue_green.sh" in rollback["run"]
     assert "scripts/deploy.sh" in standby_deploy["run"]
     assert "API_DEPLOY_SERVICES='app'" in standby_deploy["run"]
     assert "API_RUN_MIGRATIONS='false'" in standby_deploy["run"]
@@ -107,6 +124,12 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "API_DEPLOY_SERVICES='app'" in standby_rollback["run"]
     assert primary_prune["continue-on-error"] == "true"
     assert standby_prune["continue-on-error"] == "true"
+    workflow_text = "\n".join(
+        (REPO_ROOT / path).read_text(encoding="utf-8")
+        for path in (".github/workflows/deploy.yml", ".github/workflows/deploy-api-standby.yml")
+    )
+    assert "GHCR_PAT='${{ secrets.GHCR_PAT }}'" not in workflow_text
+    assert "IFS= read -r GHCR_PAT" in workflow_text
 
 
 def test_production_compose_requires_backend_release_and_pins_postgres_digest():
@@ -123,3 +146,16 @@ def test_production_compose_requires_backend_release_and_pins_postgres_digest():
         assert "backend:latest" not in text
         assert "${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}" in text
         assert "postgres:15.18-alpine@sha256:" in text
+
+
+def test_production_compose_has_private_profiled_api_slots():
+    for path in (
+        "docker-compose.prod.yml",
+        "deploy/ha/mvn-api/docker-compose.primary.yml",
+    ):
+        text = (REPO_ROOT / path).read_text(encoding="utf-8")
+        assert "app-blue:" in text
+        assert "app-green:" in text
+        assert text.count("profiles: [bluegreen]") == 2
+        assert '"127.0.0.1:18001:8000"' in text
+        assert '"127.0.0.1:18002:8000"' in text

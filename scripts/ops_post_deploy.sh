@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
 OPS_SUMMARY_FILE="${OPS_SUMMARY_FILE:-/tmp/ops_summary.txt}"
+ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 
 OPS_MODE="${OPS_MODE:-report_only}" # report_only | normalize_report | full
 RUN_NORMALIZE_LEGACY="${RUN_NORMALIZE_LEGACY:-false}"
@@ -79,10 +80,21 @@ if [[ ! -f "${COMPOSE_FILE}" ]]; then
   log preflight "${COMPOSE_FILE} not found in ${PROJECT_DIR}"
   exit 1
 fi
-COMPOSE=(docker compose -f "${COMPOSE_FILE}")
+COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
+APP_SERVICE="app"
+if [[ -f "${ACTIVE_SLOT_FILE}" ]]; then
+  active_slot="$(tr -d '\r\n' < "${ACTIVE_SLOT_FILE}")"
+  case "${active_slot}" in
+    blue|green) APP_SERVICE="app-${active_slot}" ;;
+    *)
+      log preflight "invalid active API slot: ${active_slot}"
+      exit 1
+      ;;
+  esac
+fi
 
 run_in_app() {
-  "${COMPOSE[@]}" exec -T app sh -lc "$1"
+  "${COMPOSE[@]}" exec -T "${APP_SERVICE}" sh -lc "$1"
 }
 
 script_exists() {
@@ -125,10 +137,10 @@ if [[ "${RUN_REPORT_LEGACY_LINKS}" == "false" ]]; then
   report_enabled="false"
 fi
 
-log preflight "Verifying app is already running..."
+log preflight "Verifying ${APP_SERVICE} is already running..."
 running_services="$("${COMPOSE[@]}" ps --status running --services)"
-if ! grep -Fxq "app" <<<"${running_services}"; then
-  log preflight "app is not running; deployment must activate it before post-deploy ops"
+if ! grep -Fxq "${APP_SERVICE}" <<<"${running_services}"; then
+  log preflight "${APP_SERVICE} is not running; deployment must activate it before post-deploy ops"
   exit 1
 fi
 

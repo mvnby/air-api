@@ -14,7 +14,7 @@ API_SSH_CONNECT_TIMEOUT="${API_SSH_CONNECT_TIMEOUT:-10}"
 API_PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 API_COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
 API_COMPOSE_SERVICE_CHECKS="${API_COMPOSE_SERVICE_CHECKS:-app bot db}"
-API_LOCAL_HEALTH_URL="${API_LOCAL_HEALTH_URL:-http://127.0.0.1:8000/api/health}"
+API_LOCAL_HEALTH_URL="${API_LOCAL_HEALTH_URL:-http://127.0.0.1:18080/api/health}"
 API_TLS_HOST="${API_TLS_HOST:-api.mvn.by}"
 
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
@@ -56,7 +56,7 @@ Common env:
   API_PROJECT_DIR=/opt/air-api
   API_COMPOSE_FILE=docker-compose.prod.yml
   API_COMPOSE_SERVICE_CHECKS="app bot db"
-  API_LOCAL_HEALTH_URL=http://127.0.0.1:8000/api/health
+  API_LOCAL_HEALTH_URL=http://127.0.0.1:18080/api/health
   BACKUP_MAX_AGE_HOURS=36
   CHECK_BACKUPS=true
   SKIP_PUBLIC_CHECKS=false
@@ -132,7 +132,7 @@ for arg in "$@"; do
 done
 
 BASE_URL="${BASE_URL%/}"
-if [[ "${API_SSH_KEY_PATH}" == "~/"* && -n "${HOME:-}" ]]; then
+if [[ "${API_SSH_KEY_PATH}" == \~/* && -n "${HOME:-}" ]]; then
   API_SSH_KEY_PATH="${HOME}/${API_SSH_KEY_PATH#~/}"
 fi
 if [[ -z "${BASE_URL}" ]]; then
@@ -404,7 +404,28 @@ elif ! docker compose version >/dev/null 2>&1; then
   remote_fail "docker compose is not available"
 elif [[ -d "${PROJECT_DIR}" && -f "${PROJECT_DIR}/${COMPOSE_FILE}" ]]; then
   cd "${PROJECT_DIR}"
-  COMPOSE=(docker compose -f "${COMPOSE_FILE}")
+  COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
+  APP_SERVICE="app"
+  ACTIVE_SLOT_FILE="${PROJECT_DIR}/.active-api-slot"
+  if [[ -f "${ACTIVE_SLOT_FILE}" ]]; then
+    active_slot="$(tr -d '\r\n' < "${ACTIVE_SLOT_FILE}")"
+    case "${active_slot}" in
+      blue|green) APP_SERVICE="app-${active_slot}" ;;
+      *)
+        remote_fail "invalid active API slot: ${active_slot}"
+        APP_SERVICE="app-invalid"
+        ;;
+    esac
+  fi
+  resolved_service_checks=()
+  for service in ${API_COMPOSE_SERVICE_CHECKS}; do
+    if [[ "${service}" == "app" ]]; then
+      resolved_service_checks+=("${APP_SERVICE}")
+    else
+      resolved_service_checks+=("${service}")
+    fi
+  done
+  API_COMPOSE_SERVICE_CHECKS="${resolved_service_checks[*]}"
 
   if compose_ps_output="$("${COMPOSE[@]}" ps 2>&1)"; then
     remote_ok "docker compose ps succeeded"
@@ -454,7 +475,7 @@ PY
     remote_warn "curl is not installed on host; localhost app health skipped"
   fi
 
-  if media_storage_output="$("${COMPOSE[@]}" exec -T app python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by 2>&1)"; then
+  if media_storage_output="$("${COMPOSE[@]}" exec -T "${APP_SERVICE}" python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by 2>&1)"; then
     print_prefixed media "${media_storage_output}"
     remote_ok "media storage config uses object storage for all runtime media classes"
   else
@@ -493,7 +514,7 @@ PY
   fi
 
   if [[ "${CHECK_BACKUPS}" == "true" ]]; then
-    if backup_output="$("${COMPOSE[@]}" exec -T app python3 - "${BACKUP_MAX_AGE_HOURS}" <<'PY'
+    if backup_output="$("${COMPOSE[@]}" exec -T "${APP_SERVICE}" python3 - "${BACKUP_MAX_AGE_HOURS}" <<'PY'
 import logging
 import sys
 from datetime import datetime, timezone

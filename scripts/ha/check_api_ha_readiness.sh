@@ -3,7 +3,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-cd "${REPO_ROOT}"
+cd "${REPO_ROOT}" || exit 1
 
 HA_READINESS_STRICT="${HA_READINESS_STRICT:-false}"
 
@@ -113,8 +113,8 @@ run_postgres_replication() {
 
 run_media_cdn_db() {
   local remote_cmd
-  remote_cmd="cd $(quote_remote "${PRIMARY_PROJECT_DIR}") && docker compose -f $(quote_remote "${PRIMARY_COMPOSE_FILE}") exec -T app python3 scripts/check_media_cdn_db_urls.py --expected-cdn-base $(quote_remote "${EXPECTED_CDN_BASE}") --min-db-cdn-urls $(quote_remote "${MIN_DB_CDN_URLS}") --max-fetches 10"
-  # shellcheck disable=SC2086
+  remote_cmd="cd $(quote_remote "${PRIMARY_PROJECT_DIR}") && active_service=app && if [ -f .active-api-slot ]; then active_slot=\$(tr -d '\\r\\n' < .active-api-slot); case \"\${active_slot}\" in blue|green) active_service=app-\${active_slot} ;; *) echo invalid active API slot >&2; exit 1 ;; esac; fi && docker compose -f $(quote_remote "${PRIMARY_COMPOSE_FILE}") --profile bluegreen exec -T \"\${active_service}\" python3 scripts/check_media_cdn_db_urls.py --expected-cdn-base $(quote_remote "${EXPECTED_CDN_BASE}") --min-db-cdn-urls $(quote_remote "${MIN_DB_CDN_URLS}") --max-fetches 10"
+  # shellcheck disable=SC2029,SC2086
   ssh ${SSH_OPTS:-} "${PRIMARY_SSH}" "${remote_cmd}"
 }
 
@@ -128,7 +128,7 @@ run_postgres_pitr() {
 
   local remote_cmd
   remote_cmd="PROJECT_DIR=$(quote_remote "${PRIMARY_PROJECT_DIR}") COMPOSE_FILE=$(quote_remote "${PRIMARY_COMPOSE_FILE}") PITR_REQUIRED=$(quote_remote "${pitr_required}") /usr/local/sbin/mvn-postgres-pitr-status"
-  # shellcheck disable=SC2086
+  # shellcheck disable=SC2029,SC2086
   ssh ${SSH_OPTS:-} "${PRIMARY_SSH}" "${remote_cmd}"
 }
 

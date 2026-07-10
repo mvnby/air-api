@@ -13,6 +13,7 @@ printf 'containers:\n'
 "${COMPOSE[@]}" ps
 
 printf '\npostgres:\n'
+# shellcheck disable=SC2016
 "${COMPOSE[@]}" exec -T db sh -lc 'psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -v ON_ERROR_STOP=1' <<'SQL'
 SELECT pg_is_in_recovery() AS in_recovery, pg_last_wal_receive_lsn() AS receive_lsn, pg_last_wal_replay_lsn() AS replay_lsn;
 SELECT status, sender_host, sender_port, slot_name, latest_end_lsn FROM pg_stat_wal_receiver;

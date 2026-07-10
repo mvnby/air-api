@@ -13,6 +13,8 @@ env:
   SSH_HOST_WEB: ${{ secrets.SSH_HOST_WEB }}
   SSH_USER_WEB: ${{ secrets.SSH_USER_WEB }}
   SSH_WEB_TARGET: ${{ secrets.SSH_WEB_TARGET }}
+  API_TUNNEL_LOCAL_PORT: ${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}
+  API_TUNNEL_REMOTE_PORT: ${{ vars.API_TUNNEL_REMOTE_PORT || '18080' }}
 
 jobs:
   rebuild:
@@ -37,7 +39,7 @@ jobs:
         working-directory: ./web
         env:
            # SSR Build: bypass public CDN/WAF checks via SSH tunnel to the API host.
-           INTERNAL_API_URL: http://127.0.0.1:18000/api/v1
+           INTERNAL_API_URL: http://127.0.0.1:${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}/api/v1
            # Client-side: Use production API  
            PUBLIC_API_URL: https://api.mvn.by/api/v1
            # Google Tag Manager ID
@@ -49,14 +51,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
           ssh -f -N \
-            -L 18000:127.0.0.1:8000 \
+            -L "${API_TUNNEL_LOCAL_PORT}:127.0.0.1:${API_TUNNEL_REMOTE_PORT}" \
             -i ~/.ssh/deploy_key \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o ExitOnForwardFailure=yes \
             -o ConnectTimeout=20 \
             ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}
-          curl -fsS --retry 10 --retry-delay 3 http://127.0.0.1:18000/api/v1/config >/dev/null
+          curl -fsS --retry 10 --retry-delay 3 "http://127.0.0.1:${API_TUNNEL_LOCAL_PORT}/api/v1/config" >/dev/null
           npm run build
 
       - name: Setup SSH Key for Web Server

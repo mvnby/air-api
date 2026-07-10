@@ -3,10 +3,32 @@ set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
-LOCAL_READY_URL="${LOCAL_READY_URL:-http://127.0.0.1:8000/api/ready}"
+ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 
 cd "${PROJECT_DIR}"
-COMPOSE=(docker compose -f "${COMPOSE_FILE}")
+COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
+APP_SERVICE="app"
+APP_PORT="8000"
+if [[ -f "${ACTIVE_SLOT_FILE}" ]]; then
+  active_slot="$(tr -d '\r\n' < "${ACTIVE_SLOT_FILE}")"
+  case "${active_slot}" in
+    blue)
+      APP_SERVICE="app-blue"
+      APP_PORT="18001"
+      ;;
+    green)
+      APP_SERVICE="app-green"
+      APP_PORT="18002"
+      ;;
+    *)
+      echo "invalid active API slot: ${active_slot}" >&2
+      exit 1
+      ;;
+  esac
+fi
+LOCAL_READY_URL="${LOCAL_READY_URL:-http://127.0.0.1:${APP_PORT}/api/ready}"
+
+echo "active_api_service=${APP_SERVICE} port=${APP_PORT}"
 
 echo "containers:"
 "${COMPOSE[@]}" ps
@@ -18,7 +40,7 @@ printf '\n'
 
 echo
 echo "runtime:"
-"${COMPOSE[@]}" exec -T app python - <<'PY'
+"${COMPOSE[@]}" exec -T "${APP_SERVICE}" python - <<'PY'
 from core.config import settings
 
 print("APP_ROLE", settings.APP_ROLE)
@@ -41,6 +63,7 @@ PY
 
 echo
 echo "postgres_primary_and_replication:"
+# shellcheck disable=SC2016
 "${COMPOSE[@]}" exec -T db sh -lc 'psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -v ON_ERROR_STOP=1' <<'SQL'
 SELECT pg_is_in_recovery() AS in_recovery, pg_current_wal_lsn() AS current_lsn;
 SELECT slot_name, active, active_pid, restart_lsn FROM pg_replication_slots;
@@ -63,7 +86,7 @@ fi
 
 echo
 echo "backups:"
-"${COMPOSE[@]}" exec -T app python - <<'PY'
+"${COMPOSE[@]}" exec -T "${APP_SERVICE}" python - <<'PY'
 from datetime import datetime, timezone
 from services.backup_service import backup_service
 
