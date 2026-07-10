@@ -22,6 +22,7 @@ def test_reusable_web_release_promotes_one_immutable_artifact_in_safe_order():
     assert workflow["on"]["workflow_call"]["inputs"]["deploy_sha"]["required"] == "true"
     assert job["environment"] == "production-web"
     assert _step(job, "Checkout immutable release")["with"]["ref"] == "${{ inputs.deploy_sha }}"
+    assert _step(job, "Setup Node.js")["with"]["node-version"] == "22"
     assert 'printf \'{"sha":"%s"}\\n\'' in _step(job, "Build Astro site from production API")["run"]
     assert "--expected-release" in _step(job, "Validate static release")["run"]
     assert names.index("Deploy Cloudflare Pages canary") < names.index("Deploy atomic VPS fallback")
