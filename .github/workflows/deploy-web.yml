@@ -1,0 +1,203 @@
+name: Deploy Web Release
+
+on:
+  workflow_call:
+    inputs:
+      deploy_sha:
+        description: Full immutable Git SHA to build and deploy
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN_PAGES:
+        required: true
+      SSH_KEY:
+        required: true
+      SSH_HOST_API:
+        required: true
+      SSH_USER_API:
+        required: true
+      SSH_HOST_WEB:
+        required: true
+      SSH_USER_WEB:
+        required: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  API_TUNNEL_LOCAL_PORT: ${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}
+  API_TUNNEL_REMOTE_PORT: ${{ vars.API_TUNNEL_REMOTE_PORT || '18080' }}
+  CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'mvn-by' }}
+
+jobs:
+  production-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production-web
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Checkout immutable release
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Verify immutable release SHA
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          [[ "${DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::deploy_sha must be a full Git SHA"
+            exit 1
+          }
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [ "${checked_out_sha}" != "${DEPLOY_SHA}" ]; then
+            echo "::error::Checked out ${checked_out_sha}, expected ${DEPLOY_SHA}"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_HOST_WEB: ${{ secrets.SSH_HOST_WEB }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          : > ~/.ssh/known_hosts
+
+          for host in "${SSH_HOST_API}" "${SSH_HOST_WEB}"; do
+            scanned=false
+            for attempt in 1 2 3 4 5; do
+              if ssh-keyscan -T 10 -H "${host}" >> ~/.ssh/known_hosts 2>/dev/null; then
+                scanned=true
+                break
+              fi
+              sleep $((attempt * 3))
+            done
+            if [ "${scanned}" != "true" ]; then
+              echo "::error::Could not obtain SSH host key for ${host}"
+              exit 1
+            fi
+          done
+          sort -u -o ~/.ssh/known_hosts ~/.ssh/known_hosts
+
+      - name: Build Astro site from production API
+        working-directory: web
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          INTERNAL_API_URL: http://127.0.0.1:${{ vars.API_TUNNEL_LOCAL_PORT || '18000' }}/api/v1
+          PUBLIC_API_URL: https://api.mvn.by/api/v1
+          PUBLIC_GTM_ID: GTM-5CR6WBBC
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+        run: |
+          set -euo pipefail
+          ssh -f -N \
+            -L "${API_TUNNEL_LOCAL_PORT}:127.0.0.1:${API_TUNNEL_REMOTE_PORT}" \
+            -i ~/.ssh/deploy_key \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ExitOnForwardFailure=yes \
+            -o ConnectTimeout=20 \
+            "${SSH_USER_API}@${SSH_HOST_API}"
+          curl -fsS --retry 10 --retry-delay 3 \
+            "http://127.0.0.1:${API_TUNNEL_LOCAL_PORT}/api/v1/config" >/dev/null
+          npm run build
+          printf '{"sha":"%s"}\n' "${DEPLOY_SHA}" > dist/release.json
+
+      - name: Validate static release
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+        run: python3 scripts/check_web_dist.py web/dist --expected-release "${DEPLOY_SHA}" | tee web_dist_check.log
+
+      - name: Deploy Cloudflare Pages canary
+        id: pages_canary
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PAGES }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          PAGES_COMMIT_SHA: ${{ inputs.deploy_sha }}
+          PAGES_DEPLOY_OUTPUT_FILE: /tmp/cloudflare-pages-canary.log
+        run: |
+          set -euo pipefail
+          export CLOUDFLARE_PAGES_BRANCH="candidate-${DEPLOY_SHA:0:12}"
+          bash scripts/deploy_cloudflare_pages.sh
+
+      - name: Deploy atomic VPS fallback
+        env:
+          WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
+          WEB_USER: ${{ secrets.SSH_USER_WEB }}
+          WEB_ROOT: ${{ vars.WEB_ROOT || '/var/www/mvn.by' }}
+          WEB_RELEASE_ID: ${{ inputs.deploy_sha }}
+          SSH_KEY_PATH: /home/runner/.ssh/deploy_key
+        run: bash scripts/deploy_web_atomic.sh | tee web_vps_deploy.log
+
+      - name: Deploy Cloudflare Pages production
+        id: pages_production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PAGES }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_BRANCH: ${{ vars.CLOUDFLARE_PAGES_PRODUCTION_BRANCH || 'main' }}
+          PAGES_COMMIT_SHA: ${{ inputs.deploy_sha }}
+          PAGES_DEPLOY_OUTPUT_FILE: /tmp/cloudflare-pages-production.log
+        run: bash scripts/deploy_cloudflare_pages.sh
+
+      - name: Smoke stable web endpoints
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          for base_url in "https://${CLOUDFLARE_PAGES_PROJECT}.pages.dev" "https://mvn.by"; do
+            curl -fsSL --retry 10 --retry-delay 3 "${base_url}/" >/dev/null
+            curl -fsSL --retry 10 --retry-delay 3 "${base_url}/catalog/" >/dev/null
+            release_sha="$(curl -fsSL --retry 10 --retry-delay 3 \
+              "${base_url}/release.json?sha=${DEPLOY_SHA}" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+            if [ "${release_sha}" != "${DEPLOY_SHA}" ]; then
+              echo "::error::${base_url} release ${release_sha} does not match ${DEPLOY_SHA}"
+              exit 1
+            fi
+          done
+
+      - name: Upload web release logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-release-${{ inputs.deploy_sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            web_dist_check.log
+            web_vps_deploy.log
+            /tmp/cloudflare-pages-canary.log
+            /tmp/cloudflare-pages-production.log
+
+      - name: Web release summary
+        if: ${{ always() }}
+        env:
+          CANARY_URL: ${{ steps.pages_canary.outputs.deployment_url }}
+          PRODUCTION_URL: ${{ steps.pages_production.outputs.deployment_url }}
+        run: |
+          {
+            echo "## Web Release"
+            echo "- immutable_sha: ${{ inputs.deploy_sha }}"
+            echo "- pages_canary: ${CANARY_URL:-not-created}"
+            echo "- vps_fallback: atomic release under /var/www/mvn.by/releases"
+            echo "- pages_production: ${PRODUCTION_URL:-not-created}"
+            echo "- public_hostname: https://mvn.by"
+          } >> "${GITHUB_STEP_SUMMARY}"
