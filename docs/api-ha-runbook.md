@@ -69,7 +69,7 @@ unreviewed host-local compose edits:
 | Cloudflare LB GitHub prerequisite apply helper | `scripts/ha/apply_cloudflare_lb_github_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
-| PostgreSQL quorum preparation | `docs/postgres-quorum-runbook.md`, `deploy/ha/quorum/`, `scripts/ha/generate_etcd_pki.sh`, `scripts/ha/check_etcd_quorum.sh` |
+| PostgreSQL quorum preparation | `docs/postgres-quorum-runbook.md`, `deploy/ha/quorum/`, `deploy/ha/patroni/`, `scripts/ha/generate_etcd_pki.sh`, `scripts/ha/check_etcd_quorum.sh`, `scripts/ha/patroni_role_agent.py` |
 
 ## Daily Status Checks
 

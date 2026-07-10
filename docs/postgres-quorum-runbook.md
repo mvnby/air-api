@@ -34,6 +34,10 @@ networking so it can bind directly to each node's WireGuard address.
 - `deploy/ha/quorum/mvn-etcd-quorum.service`: boot ordering and lifecycle;
 - `scripts/ha/generate_etcd_pki.sh`: private CA and certificate generator;
 - `scripts/ha/check_etcd_quorum.sh`: member, leader, Raft lag, and health check.
+- `deploy/ha/patroni/`: pinned PostgreSQL/Patroni image, validated config renderer,
+  role-agent unit, and isolated rehearsal cluster;
+- `scripts/ha/rehearse_patroni_failover.sh`: disposable failover/rejoin drill;
+- `scripts/ha/patroni_role_agent.py`: local API/scheduler/bot role reconciler.
 
 ## PKI
 
@@ -133,3 +137,38 @@ blocking. When the synchronous replica is healthy, acknowledged transactions
 are present on both database hosts. If the replica is unavailable, the service
 may continue writing, but Patroni must refuse a loss-unsafe automatic promotion.
 PITR remains the final recovery layer.
+
+## Runtime Role Handoff
+
+Patroni controls only PostgreSQL. The role agent maps the local Patroni role to
+two non-secret env files consumed by the app and bot containers:
+
+```text
+.ha-app-role.env
+.ha-bot-role.env
+```
+
+On a replica, it stops the bot, disables scheduler/bootstrap, and keeps
+`API_READY_ENABLED=false`. On a stable primary, it waits for the promotion
+delay, recreates only the active API slot with scheduler enabled, requires
+writable `/api/ready=200`, and then starts the bot. It never runs `compose up`
+for `db` and shares the existing `.deploy.lock` with application releases.
+
+This ordering prevents Cloudflare from routing to a promoted database before
+the singleton processes have moved, and prevents two Telegram pollers from
+running intentionally. PostgreSQL read-only checks remain an independent fence
+on the former primary.
+
+Install the agent only during the Patroni migration window:
+
+```bash
+install -m 0755 scripts/ha/patroni_role_agent.py \
+  /usr/local/sbin/mvn-patroni-role-agent
+install -m 0644 deploy/ha/patroni/mvn-patroni-role-agent.service \
+  /etc/systemd/system/mvn-patroni-role-agent.service
+install -m 0600 deploy/ha/patroni/role-agent.env.example \
+  /etc/default/mvn-patroni-role-agent
+```
+
+Edit the non-secret host paths/ports in `/etc/default/mvn-patroni-role-agent`,
+run `--once`, verify the generated role files, and only then enable the unit.
