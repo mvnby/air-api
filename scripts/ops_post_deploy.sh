@@ -125,8 +125,12 @@ if [[ "${RUN_REPORT_LEGACY_LINKS}" == "false" ]]; then
   report_enabled="false"
 fi
 
-log preflight "Ensuring app is running..."
-"${COMPOSE[@]}" up -d app >/dev/null
+log preflight "Verifying app is already running..."
+running_services="$("${COMPOSE[@]}" ps --status running --services)"
+if ! grep -Fxq "app" <<<"${running_services}"; then
+  log preflight "app is not running; deployment must activate it before post-deploy ops"
+  exit 1
+fi
 
 ops_actions=()
 ops_skipped=()
@@ -253,4 +257,4 @@ summary "dry_run=${DRY_RUN}"
 log summary "mode=${OPS_MODE}"
 log summary "actions_run=${ops_actions[*]:-none}"
 log summary "actions_skipped=${ops_skipped[*]:-none}"
-log done "completed"
+log "done" "completed"

@@ -36,7 +36,9 @@ printf '%s\n' "$*" >> "$DOCKER_LOG"
 if [[ -n "${DOCKER_FAIL_MATCH:-}" && "$*" == *"${DOCKER_FAIL_MATCH}"* ]]; then
   exit 42
 fi
-if [[ "$1 $2" == "image ls" ]]; then
+if [[ "$*" == *"compose -f docker-compose.prod.yml ps --status running --services"* ]]; then
+  printf '%s\n' "${DOCKER_PS_SERVICES:-app}"
+elif [[ "$1 $2" == "image ls" ]]; then
   cat "${IMAGE_IDS_FILE:-/dev/null}"
 elif [[ "$1 $2" == "ps -aq" && "$*" == *"ancestor=${RUNNING_IMAGE_ID:-__none__}"* ]]; then
   printf 'container-id\n'
@@ -110,6 +112,46 @@ def test_failed_migration_does_not_activate_candidate(tmp_path):
     assert result.returncode == 42
     assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
     assert " up -d " not in docker_log.read_text(encoding="utf-8")
+
+
+def test_post_deploy_ops_never_changes_service_lifecycle(tmp_path):
+    _, env, docker_log = _fake_environment(tmp_path)
+    project = _project(tmp_path)
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "RUN_POST_DEPLOY_OPS": "true",
+            "OPS_MODE": "report_only",
+            "RUN_REPORT_LEGACY_LINKS": "false",
+        }
+    )
+
+    result = _run("scripts/ops_post_deploy.sh", env)
+
+    assert result.returncode == 0, result.stderr
+    calls = docker_log.read_text(encoding="utf-8")
+    assert "ps --status running --services" in calls
+    assert " up " not in calls
+    assert " pull " not in calls
+    assert " stop " not in calls
+
+
+def test_post_deploy_ops_fails_if_app_is_not_running(tmp_path):
+    _, env, docker_log = _fake_environment(tmp_path)
+    project = _project(tmp_path)
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "RUN_POST_DEPLOY_OPS": "true",
+            "DOCKER_PS_SERVICES": "db",
+        }
+    )
+
+    result = _run("scripts/ops_post_deploy.sh", env)
+
+    assert result.returncode == 1
+    assert "app is not running" in result.stdout
+    assert " up " not in docker_log.read_text(encoding="utf-8")
 
 
 def test_deploy_rejects_mutable_image_tag_before_docker_calls(tmp_path):
