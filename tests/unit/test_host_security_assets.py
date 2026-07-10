@@ -46,6 +46,8 @@ def test_security_workflow_checks_three_hosts_and_alerts():
     assert "labels=(mvn-api zakup mvn-web)" in audit
     assert "scripts/ha/check_host_security.sh" in audit
     assert "API_DB_HA_MODE" in audit
+    audit_env = steps["Audit host hardening and private listeners"]["env"]
+    assert "INFRA_SECURITY_WEB_USER" in audit_env["WEB_USER"]
     public_scan = steps["Verify sensitive ports are closed publicly"]["run"]
     assert "2379 2380 5432 8008 18000 18001 18002 18080" in public_scan
     assert steps["Upload security audit log"]["if"] == "always()"
