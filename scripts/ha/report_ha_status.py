@@ -78,6 +78,7 @@ EXPECTED_WORKFLOWS = (
     ExpectedWorkflow("API HA Invariant Check", max_age_hours=8),
     ExpectedWorkflow("API HA Readiness Audit", max_age_hours=8),
     ExpectedWorkflow("API VPS Health Check", max_age_hours=8),
+    ExpectedWorkflow("Infrastructure Security Check", max_age_hours=8),
     ExpectedWorkflow("Media CDN Check", max_age_hours=8),
     ExpectedWorkflow("PostgreSQL Replication Check", max_age_hours=8),
     ExpectedWorkflow("Cloudflare LB Config Check", max_age_hours=8),
