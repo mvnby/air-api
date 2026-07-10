@@ -16140,6 +16140,33 @@
         }
       }
     },
+    "/api/system/rebuild-web/status": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Rebuild Web Status",
+        "description": "Return whether the static Astro storefront is behind catalog data.",
+        "operationId": "get_rebuild_web_status_api_system_rebuild_web_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebRebuildStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/system/rebuild-web": {
       "post": {
         "tags": [
@@ -16153,7 +16180,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WebRebuildTriggerResponse"
+                }
               }
             }
           }
@@ -16163,6 +16192,66 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/system/rebuild-web/complete": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Complete Rebuild Web",
+        "description": "Callback for GitHub Actions after the static storefront deploy completes.",
+        "operationId": "complete_rebuild_web_api_system_rebuild_web_complete_post",
+        "parameters": [
+          {
+            "name": "X-Web-Rebuild-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Web-Rebuild-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebRebuildCompletePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebRebuildStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -41815,6 +41904,200 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WebRebuildCompletePayload": {
+        "properties": {
+          "catalog_revision": {
+            "type": "integer",
+            "title": "Catalog Revision"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "success"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog_revision"
+        ],
+        "title": "WebRebuildCompletePayload"
+      },
+      "WebRebuildStatusResponse": {
+        "properties": {
+          "current_revision": {
+            "type": "integer",
+            "title": "Current Revision"
+          },
+          "current_revision_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Current Revision Updated At"
+          },
+          "published_revision": {
+            "type": "integer",
+            "title": "Published Revision"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "requested_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Revision"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          },
+          "needs_rebuild": {
+            "type": "boolean",
+            "title": "Needs Rebuild"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_revision",
+          "current_revision_updated_at",
+          "published_revision",
+          "needs_rebuild",
+          "state"
+        ],
+        "title": "WebRebuildStatusResponse"
+      },
+      "WebRebuildTriggerResponse": {
+        "properties": {
+          "current_revision": {
+            "type": "integer",
+            "title": "Current Revision"
+          },
+          "current_revision_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Current Revision Updated At"
+          },
+          "published_revision": {
+            "type": "integer",
+            "title": "Published Revision"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "requested_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Revision"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          },
+          "needs_rebuild": {
+            "type": "boolean",
+            "title": "Needs Rebuild"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_revision",
+          "current_revision_updated_at",
+          "published_revision",
+          "needs_rebuild",
+          "state",
+          "message"
+        ],
+        "title": "WebRebuildTriggerResponse"
       }
     },
     "securitySchemes": {

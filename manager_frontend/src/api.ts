@@ -1063,6 +1063,10 @@ export const api = {
         return await SystemService.triggerRebuildWebApiSystemRebuildWebPost();
     },
 
+    async getWebRebuildStatus() {
+        return await SystemService.getRebuildWebStatusApiSystemRebuildWebStatusGet();
+    },
+
     async importProducts(urls: string[], withRelated: boolean, updateExisting: boolean): Promise<{
         success_count: number;
         error_count: number;
