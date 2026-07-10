@@ -160,19 +160,42 @@ jobs:
       - name: Smoke stable web endpoints
         env:
           DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
         run: |
           set -euo pipefail
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "${SSH_USER_API}@${SSH_HOST_API}" \
+            "DEPLOY_SHA='${DEPLOY_SHA}' CLOUDFLARE_PAGES_PROJECT='${CLOUDFLARE_PAGES_PROJECT}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          smoke_stable() {
+            local base_url="$1"
+            local release_sha=""
+            for attempt in $(seq 1 20); do
+              if curl -fsSL --max-time 20 --retry 2 --retry-delay 1 "${base_url}/" >/dev/null \
+                && curl -fsSL --max-time 20 --retry 2 --retry-delay 1 "${base_url}/catalog/" >/dev/null \
+                && release_sha="$(curl -fsSL --max-time 20 --retry 2 --retry-delay 1 \
+                  "${base_url}/release.json?sha=${DEPLOY_SHA}" \
+                  | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')" \
+                && [ "${release_sha}" = "${DEPLOY_SHA}" ]; then
+                echo "Stable release ${DEPLOY_SHA} confirmed at ${base_url} on attempt ${attempt}"
+                return 0
+              fi
+              sleep 3
+            done
+            echo "::error::${base_url} did not converge to release ${DEPLOY_SHA}; last=${release_sha:-unavailable}"
+            return 1
+          }
+
           for base_url in "https://${CLOUDFLARE_PAGES_PROJECT}.pages.dev" "https://mvn.by"; do
-            curl -fsSL --retry 10 --retry-delay 3 "${base_url}/" >/dev/null
-            curl -fsSL --retry 10 --retry-delay 3 "${base_url}/catalog/" >/dev/null
-            release_sha="$(curl -fsSL --retry 10 --retry-delay 3 \
-              "${base_url}/release.json?sha=${DEPLOY_SHA}" \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
-            if [ "${release_sha}" != "${DEPLOY_SHA}" ]; then
-              echo "::error::${base_url} release ${release_sha} does not match ${DEPLOY_SHA}"
-              exit 1
-            fi
+            smoke_stable "${base_url}"
           done
+          REMOTE
 
       - name: Upload web release logs
         if: ${{ always() }}

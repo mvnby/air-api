@@ -33,7 +33,13 @@ def test_reusable_web_release_promotes_one_immutable_artifact_in_safe_order():
     )
     assert 'candidate-${DEPLOY_SHA:0:12}' in _step(job, "Deploy Cloudflare Pages canary")["run"]
     assert "scripts/deploy_web_atomic.sh" in _step(job, "Deploy atomic VPS fallback")["run"]
-    assert '"${base_url}/release.json?sha=${DEPLOY_SHA}"' in _step(job, "Smoke stable web endpoints")["run"]
+    stable_smoke = _step(job, "Smoke stable web endpoints")["run"]
+    assert '"${base_url}/release.json?sha=${DEPLOY_SHA}"' in stable_smoke
+    assert "for attempt in $(seq 1 20)" in stable_smoke
+    assert 'sleep 3' in stable_smoke
+    assert "did not converge to release" in stable_smoke
+    assert '"${SSH_USER_API}@${SSH_HOST_API}"' in stable_smoke
+    assert "CLOUDFLARE_PAGES_PROJECT='${CLOUDFLARE_PAGES_PROJECT}' bash -s" in stable_smoke
 
 
 def test_release_and_manual_rebuild_call_the_same_web_workflow():
