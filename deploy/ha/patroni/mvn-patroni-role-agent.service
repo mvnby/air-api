@@ -1,0 +1,20 @@
+[Unit]
+Description=MVN Patroni API role reconciler
+Wants=network-online.target mvn-etcd-quorum.service
+After=network-online.target docker.service mvn-etcd-quorum.service
+Requires=docker.service
+ConditionPathExists=/usr/local/sbin/mvn-patroni-role-agent
+ConditionPathExists=/etc/default/mvn-patroni-role-agent
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/mvn-patroni-role-agent
+ExecStart=/usr/bin/python3 /usr/local/sbin/mvn-patroni-role-agent
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

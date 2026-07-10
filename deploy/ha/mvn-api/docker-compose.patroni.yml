@@ -1,0 +1,102 @@
+x-api-app: &api-app
+  image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+  env_file:
+    - .env
+    - .ha-app-role.env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+  volumes:
+    - ./media:/app/media
+    - ./postgres-wal-archive:/postgres-wal-archive
+    - ./model-cache/u2net:/root/.u2net
+    - ./token.json:/app/token.json
+    - ./client_secret.json:/app/client_secret.json
+    - ./credentials.json:/app/credentials.json
+    - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
+
+services:
+  db:
+    image: ${PATRONI_IMAGE:?set immutable PATRONI_IMAGE in .env}
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      PATRONI_SCOPE: mvn-postgres
+      PATRONI_NAMESPACE: /mvn/
+      PATRONI_NAME: mvn-api
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: 10.77.0.2:5432
+      PATRONI_RESTAPI_CONNECT_ADDRESS: 10.77.0.2:8008
+      PATRONI_ETCD3_HOSTS: 10.77.0.1:2379,10.77.0.2:2379,10.77.0.3:2379
+      PATRONI_ETCD3_PROTOCOL: https
+      PATRONI_ETCD3_CACERT: /etc/etcd/pki/ca.crt
+      PATRONI_ETCD3_CERT: /etc/etcd/pki/node.crt
+      PATRONI_ETCD3_KEY: /etc/etcd/pki/node.key
+      PATRONI_ALLOW_BOOTSTRAP: "false"
+      PATRONI_SYNCHRONOUS_MODE: "true"
+      PATRONI_SYNCHRONOUS_MODE_STRICT: "false"
+      PATRONI_FAILSAFE_MODE: "true"
+      PATRONI_WATCHDOG_MODE: "off"
+      PATRONI_MAXIMUM_LAG_ON_FAILOVER: "1048576"
+      PATRONI_ARCHIVE_MODE: ${POSTGRES_PITR_ARCHIVE_MODE:-off}
+      PATRONI_ARCHIVE_TIMEOUT: ${POSTGRES_PITR_ARCHIVE_TIMEOUT:-300}
+      PATRONI_ARCHIVE_COMMAND: test ! -f /postgres-wal-archive/%f && cp %p /postgres-wal-archive/%f || test -f /postgres-wal-archive/%f
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-air_conditioners}
+      PATRONI_REPLICATION_USERNAME: ${PATRONI_REPLICATION_USERNAME:?set PATRONI_REPLICATION_USERNAME in .env}
+      PATRONI_REPLICATION_PASSWORD: ${PATRONI_REPLICATION_PASSWORD:?set PATRONI_REPLICATION_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+      - "10.77.0.2:5432:5432"
+      - "127.0.0.1:8008:8008"
+      - "10.77.0.2:8008:8008"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-wal-archive:/postgres-wal-archive
+      - ./patroni-pki:/etc/etcd/pki:ro
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8008/health]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+    mem_limit: ${MVN_PATRONI_DB_MEMORY:-512m}
+
+  app:
+    <<: *api-app
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  app-blue:
+    <<: *api-app
+    profiles: [bluegreen]
+    ports:
+      - "127.0.0.1:18001:8000"
+
+  app-green:
+    <<: *api-app
+    profiles: [bluegreen]
+    ports:
+      - "127.0.0.1:18002:8000"
+
+  bot:
+    image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+      - .ha-bot-role.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    volumes:
+      - ./media:/app/media
+      - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
+    command: python -m bot_app.main
+
+volumes:
+  postgres_data:

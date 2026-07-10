@@ -43,7 +43,7 @@ def _environment(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
 set -u
 printf 'docker %s\n' "$*" >> "$COMMAND_LOG"
 if [[ "$*" == *"ps --status running --services"* ]]; then
-  printf 'app\napp-blue\napp-green\nbot\n'
+  printf 'app\napp-blue\napp-green\nbot\napi-proxy\n'
 fi
 exit 0
 """,
@@ -183,6 +183,32 @@ def test_next_deploy_uses_green_and_stops_blue(tmp_path):
     assert "rm -f app-blue" in commands
     assert (project / ".active-api-slot").read_text(encoding="utf-8").strip() == "green"
     assert "proxy_pass http://127.0.0.1:18002;" in upstream.read_text(encoding="utf-8")
+
+
+def test_container_proxy_switches_by_service_name_without_host_nginx(tmp_path):
+    env, project, _, command_log = _environment(tmp_path)
+    proxy_dir = project / "api-proxy"
+    proxy_dir.mkdir()
+    (proxy_dir / "nginx.conf").write_text("events {}\nhttp {}\n", encoding="utf-8")
+    upstream = proxy_dir / "upstream.conf"
+    upstream.write_text("proxy_pass http://app:8000;\n", encoding="utf-8")
+    env.update(
+        {
+            "API_PROXY_MODE": "container_nginx",
+            "API_PROXY_CONFIG_FILE": str(proxy_dir / "nginx.conf"),
+            "API_NGINX_UPSTREAM_FILE": str(upstream),
+        }
+    )
+
+    result = _run(env)
+
+    assert result.returncode == 0, result.stderr
+    commands = command_log.read_text(encoding="utf-8")
+    assert "up -d --no-deps api-proxy" in commands
+    assert "exec -T api-proxy nginx -t" in commands
+    assert "exec -T api-proxy nginx -s reload" in commands
+    assert "proxy_pass http://app-blue:8000;" in upstream.read_text(encoding="utf-8")
+    assert (project / ".active-api-slot").read_text(encoding="utf-8").strip() == "blue"
 
 
 def test_failed_candidate_keeps_legacy_active(tmp_path):

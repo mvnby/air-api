@@ -19,6 +19,9 @@ LEGACY_PORT="${API_LEGACY_PORT:-8000}"
 NGINX_SITE_FILE="${API_NGINX_SITE_FILE:-/etc/nginx/sites-available/air-api}"
 NGINX_UPSTREAM_FILE="${API_NGINX_UPSTREAM_FILE:-/etc/nginx/snippets/mvn-api-upstream.conf}"
 NGINX_INTERNAL_FILE="${API_NGINX_INTERNAL_FILE:-/etc/nginx/conf.d/mvn-api-internal.conf}"
+PROXY_MODE="${API_PROXY_MODE:-host_nginx}"
+PROXY_SERVICE="${API_PROXY_SERVICE:-api-proxy}"
+PROXY_CONFIG_FILE="${API_PROXY_CONFIG_FILE:-${PROJECT_DIR}/api-proxy/nginx.conf}"
 INTERNAL_PROXY_PORT="${API_INTERNAL_PROXY_PORT:-18080}"
 API_HOST="${API_HOST:-api.mvn.by}"
 PUBLIC_READY_URL="${API_PUBLIC_READY_URL:-https://${API_HOST}/api/ready}"
@@ -106,38 +109,88 @@ write_backend_image() {
   mv "${tmp}" "${ENV_FILE}"
 }
 
-write_upstream() {
-  local port="$1"
-  atomic_write_line "${NGINX_UPSTREAM_FILE}" "proxy_pass http://127.0.0.1:${port};" 644
+upstream_target_for_slot() {
+  local slot="$1"
+
+  case "${PROXY_MODE}" in
+    host_nginx)
+      printf '127.0.0.1:%s\n' "$(port_for_slot "${slot}")"
+      ;;
+    container_nginx)
+      printf '%s:8000\n' "$(service_for_slot "${slot}")"
+      ;;
+    *)
+      log error "unsupported API_PROXY_MODE=${PROXY_MODE}"
+      return 1
+      ;;
+  esac
 }
 
-parse_upstream_port() {
-  sed -nE 's/^[[:space:]]*proxy_pass[[:space:]]+http:\/\/127\.0\.0\.1:([0-9]+);[[:space:]]*$/\1/p' \
-    "${NGINX_UPSTREAM_FILE}" | tail -n 1
+write_upstream() {
+  local slot="$1"
+  local target
+  target="$(upstream_target_for_slot "${slot}")"
+  atomic_write_line "${NGINX_UPSTREAM_FILE}" "proxy_pass http://${target};" 644
+}
+
+parse_upstream_slot() {
+  local target
+  target="$(
+    sed -nE 's/^[[:space:]]*proxy_pass[[:space:]]+http:\/\/([^;]+);[[:space:]]*$/\1/p' \
+      "${NGINX_UPSTREAM_FILE}" | tail -n 1
+  )"
+
+  case "${PROXY_MODE}" in
+    host_nginx)
+      [[ "${target}" =~ ^127\.0\.0\.1:([0-9]+)$ ]] || return 1
+      slot_for_port "${BASH_REMATCH[1]}"
+      ;;
+    container_nginx)
+      case "${target}" in
+        app:8000) printf 'legacy\n' ;;
+        app-blue:8000) printf 'blue\n' ;;
+        app-green:8000) printf 'green\n' ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 resolve_active_slot() {
   local include_line="include ${NGINX_UPSTREAM_FILE};"
   local configured_slot=""
-  local upstream_port=""
 
-  if grep -Fq "${include_line}" "${NGINX_SITE_FILE}"; then
-    [[ -f "${NGINX_UPSTREAM_FILE}" ]] || {
-      log error "managed nginx include exists but ${NGINX_UPSTREAM_FILE} is missing"
+  case "${PROXY_MODE}" in
+    host_nginx)
+      if grep -Fq "${include_line}" "${NGINX_SITE_FILE}"; then
+        [[ -f "${NGINX_UPSTREAM_FILE}" ]] || {
+          log error "managed nginx include exists but ${NGINX_UPSTREAM_FILE} is missing"
+          return 1
+        }
+        active_slot="$(parse_upstream_slot)" || {
+          log error "cannot parse active slot from ${NGINX_UPSTREAM_FILE}"
+          return 1
+        }
+      else
+        active_slot="legacy"
+      fi
+      ;;
+    container_nginx)
+      if [[ -f "${NGINX_UPSTREAM_FILE}" ]]; then
+        active_slot="$(parse_upstream_slot)" || {
+          log error "cannot parse active slot from ${NGINX_UPSTREAM_FILE}"
+          return 1
+        }
+      else
+        active_slot="legacy"
+      fi
+      ;;
+    *)
+      log error "unsupported API_PROXY_MODE=${PROXY_MODE}"
       return 1
-    }
-    upstream_port="$(parse_upstream_port)"
-    [[ -n "${upstream_port}" ]] || {
-      log error "cannot parse active port from ${NGINX_UPSTREAM_FILE}"
-      return 1
-    }
-    active_slot="$(slot_for_port "${upstream_port}")" || {
-      log error "nginx points to unmanaged API port ${upstream_port}"
-      return 1
-    }
-  else
-    active_slot="legacy"
-  fi
+      ;;
+  esac
 
   if [[ -f "${ACTIVE_SLOT_FILE}" ]]; then
     configured_slot="$(tr -d '\r\n' < "${ACTIVE_SLOT_FILE}")"
@@ -166,7 +219,7 @@ ensure_managed_nginx_upstream() {
     return 0
   fi
 
-  write_upstream "${active_port}"
+  write_upstream "${active_slot}"
   backup="${NGINX_SITE_FILE}.pre-blue-green-$(date -u +%Y%m%dT%H%M%SZ)"
   cp -a "${NGINX_SITE_FILE}" "${backup}"
 
@@ -198,6 +251,52 @@ PY
   fi
   systemctl reload nginx
   log nginx "installed managed upstream include; legacy port remains active"
+}
+
+reload_proxy() {
+  case "${PROXY_MODE}" in
+    host_nginx)
+      nginx -t
+      systemctl reload nginx
+      ;;
+    container_nginx)
+      "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t
+      "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -s reload
+      ;;
+    *)
+      log error "unsupported API_PROXY_MODE=${PROXY_MODE}"
+      return 1
+      ;;
+  esac
+}
+
+ensure_container_proxy() {
+  [[ -f "${PROXY_CONFIG_FILE}" ]] || {
+    log error "container proxy config is missing: ${PROXY_CONFIG_FILE}"
+    return 1
+  }
+  if [[ ! -f "${NGINX_UPSTREAM_FILE}" ]]; then
+    write_upstream "${active_slot}"
+  fi
+  "${COMPOSE[@]}" up -d --no-deps "${PROXY_SERVICE}"
+  reload_proxy
+  log nginx "container proxy ${PROXY_SERVICE} routes ${active_slot} through 127.0.0.1:${INTERNAL_PROXY_PORT}"
+}
+
+ensure_proxy() {
+  case "${PROXY_MODE}" in
+    host_nginx)
+      ensure_managed_nginx_upstream
+      ensure_internal_proxy
+      ;;
+    container_nginx)
+      ensure_container_proxy
+      ;;
+    *)
+      log error "unsupported API_PROXY_MODE=${PROXY_MODE}"
+      return 1
+      ;;
+  esac
 }
 
 ensure_internal_proxy() {
@@ -344,8 +443,8 @@ rollback_on_error() {
   fi
 
   if [[ "${nginx_switch_attempted}" == "true" && -f "${NGINX_UPSTREAM_FILE}" ]]; then
-    write_upstream "${active_port}"
-    nginx -t && systemctl reload nginx
+    write_upstream "${active_slot}"
+    reload_proxy
   fi
 
   if [[ "${bot_update_attempted}" == "true" ]] && is_immutable_image "${previous_image}"; then
@@ -370,7 +469,11 @@ rollback_on_error() {
   exit "${exit_code}"
 }
 
-for command in docker curl python3 nginx systemctl flock; do
+required_commands=(docker curl python3 flock)
+if [[ "${PROXY_MODE}" == "host_nginx" ]]; then
+  required_commands+=(nginx systemctl)
+fi
+for command in "${required_commands[@]}"; do
   command -v "${command}" >/dev/null 2>&1 || {
     log error "required command is missing: ${command}"
     exit 1
@@ -390,10 +493,15 @@ is_immutable_image "${BACKEND_IMAGE}" || {
   log error "compose file is missing: ${PROJECT_DIR}/${COMPOSE_FILE}"
   exit 1
 }
-[[ -f "${NGINX_SITE_FILE}" ]] || {
-  log error "nginx site is missing: ${NGINX_SITE_FILE}"
+if [[ "${PROXY_MODE}" == "host_nginx" ]]; then
+  [[ -f "${NGINX_SITE_FILE}" ]] || {
+    log error "nginx site is missing: ${NGINX_SITE_FILE}"
+    exit 1
+  }
+elif [[ "${PROXY_MODE}" != "container_nginx" ]]; then
+  log error "unsupported API_PROXY_MODE=${PROXY_MODE}"
   exit 1
-}
+fi
 
 cd "${PROJECT_DIR}"
 if [[ "${DEPLOY_LOCK_ALREADY_HELD}" != "true" ]]; then
@@ -411,8 +519,7 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
 
 resolve_active_slot
-ensure_managed_nginx_upstream
-ensure_internal_proxy
+ensure_proxy
 previous_image="$(sed -n 's/^BACKEND_IMAGE=//p' "${ENV_FILE}" | tail -n 1)"
 is_immutable_image "${previous_image}" || {
   log error "current BACKEND_IMAGE in ${ENV_FILE} is not immutable"
@@ -478,9 +585,8 @@ bot_update_attempted=true
 wait_service_running bot
 
 nginx_switch_attempted=true
-write_upstream "${candidate_port}"
-nginx -t
-systemctl reload nginx
+write_upstream "${candidate_slot}"
+reload_proxy
 log switch "nginx now routes to ${candidate_slot} on ${candidate_port}"
 
 wait_ready_url "origin" "https://${API_HOST}/api/ready" --resolve "${API_HOST}:443:127.0.0.1"
