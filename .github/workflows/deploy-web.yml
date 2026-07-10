@@ -107,14 +107,27 @@ jobs:
           SSH_USER_API: ${{ secrets.SSH_USER_API }}
         run: |
           set -euo pipefail
-          ssh -f -N \
-            -L "${API_TUNNEL_LOCAL_PORT}:127.0.0.1:${API_TUNNEL_REMOTE_PORT}" \
-            -i ~/.ssh/deploy_key \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ExitOnForwardFailure=yes \
-            -o ConnectTimeout=20 \
-            "${SSH_USER_API}@${SSH_HOST_API}"
+          tunnel_started=false
+          for attempt in 1 2 3 4 5; do
+            if ssh -f -N \
+              -L "${API_TUNNEL_LOCAL_PORT}:127.0.0.1:${API_TUNNEL_REMOTE_PORT}" \
+              -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ExitOnForwardFailure=yes \
+              -o ConnectTimeout=20 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=3 \
+              "${SSH_USER_API}@${SSH_HOST_API}"; then
+              tunnel_started=true
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          if [ "${tunnel_started}" != "true" ]; then
+            echo "::error::Could not establish API SSH tunnel after 5 attempts"
+            exit 1
+          fi
           curl -fsS --retry 10 --retry-delay 3 \
             "http://127.0.0.1:${API_TUNNEL_LOCAL_PORT}/api/v1/config" >/dev/null
           npm run build

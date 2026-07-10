@@ -23,7 +23,12 @@ def test_reusable_web_release_promotes_one_immutable_artifact_in_safe_order():
     assert job["environment"] == "production-web"
     assert _step(job, "Checkout immutable release")["with"]["ref"] == "${{ inputs.deploy_sha }}"
     assert _step(job, "Setup Node.js")["with"]["node-version"] == "22"
-    assert 'printf \'{"sha":"%s"}\\n\'' in _step(job, "Build Astro site from production API")["run"]
+    build_step = _step(job, "Build Astro site from production API")["run"]
+    assert 'printf \'{"sha":"%s"}\\n\'' in build_step
+    assert "for attempt in 1 2 3 4 5" in build_step
+    assert "sleep $((attempt * 5))" in build_step
+    assert "ServerAliveInterval=15" in build_step
+    assert "Could not establish API SSH tunnel after 5 attempts" in build_step
     assert "--expected-release" in _step(job, "Validate static release")["run"]
     assert names.index("Deploy Cloudflare Pages canary") < names.index("Deploy atomic VPS fallback")
     assert names.index("Deploy atomic VPS fallback") < names.index("Deploy Cloudflare Pages production")
