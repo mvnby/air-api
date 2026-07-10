@@ -130,6 +130,8 @@ services:
 
 volumes:
   postgres_data:
+    name: mvn_reserve_postgres_data
+    external: true
 
 networks:
   reserve:
