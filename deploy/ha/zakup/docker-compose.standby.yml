@@ -2,7 +2,7 @@ name: mvn_reserve
 
 services:
   db:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-postgres:15.18-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f}
     restart: unless-stopped
     shm_size: 128mb
     command:
@@ -29,7 +29,7 @@ services:
       - reserve
 
   app:
-    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
+    image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: unless-stopped
     depends_on:
       db:
@@ -66,7 +66,7 @@ services:
       - reserve
 
   bot:
-    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
+    image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: unless-stopped
     depends_on:
       db:

@@ -86,14 +86,15 @@ COMMIT_SHA=<deployed-backend-commit-sha>
 IMAGE="ghcr.io/mvnby/air-api/backend:${COMMIT_SHA}"
 ```
 
-Use a commit SHA that has already been built and pushed by GitHub Actions. The deploy workflow publishes both:
+Use a commit SHA that has already passed CI and was built by GitHub Actions. The
+deploy workflow publishes only:
 
 ```text
-ghcr.io/mvnby/air-api/backend:latest
 ghcr.io/mvnby/air-api/backend:<commit-sha>
 ```
 
-Prefer the SHA tag for migration cutover so the old and new hosts run the same known image rather than whatever `latest` points to at the moment of migration.
+The immutable SHA tag is mandatory so the old and new hosts run the same known
+image.
 
 ## Phase 1: Preflight Inventory
 
@@ -293,15 +294,22 @@ ssh "${API_USER}@${NEW_API_HOST}" '
 '
 ```
 
-Create a SHA-pinned compose file on the new VPS:
+Persist the SHA-pinned application release on the new VPS and keep a separate
+cutover compose filename for the migration commands:
 
 ```bash
 ssh "${API_USER}@${NEW_API_HOST}" "cd /opt/air-api && COMMIT_SHA='${COMMIT_SHA}' sh -s" <<'SH'
 set -euo pipefail
 test -n "${COMMIT_SHA}"
-sed "s#ghcr.io/mvnby/air-api/backend:latest#ghcr.io/mvnby/air-api/backend:${COMMIT_SHA}#g" \
-  docker-compose.prod.yml > docker-compose.cutover.yml
-grep -n 'image: ghcr.io/mvnby/air-api/backend:' docker-compose.cutover.yml
+cp docker-compose.prod.yml docker-compose.cutover.yml
+touch .env
+tmp="$(mktemp .env.tmp.XXXXXX)"
+grep -v '^BACKEND_IMAGE=' .env > "${tmp}" || true
+printf 'BACKEND_IMAGE=ghcr.io/mvnby/air-api/backend:%s\n' "${COMMIT_SHA}" >> "${tmp}"
+chmod --reference=.env "${tmp}" 2>/dev/null || chmod 600 "${tmp}"
+chown --reference=.env "${tmp}" 2>/dev/null || true
+mv "${tmp}" .env
+docker compose -f docker-compose.cutover.yml config | grep 'image: ghcr.io/mvnby/air-api/backend:'
 SH
 ```
 
@@ -528,9 +536,11 @@ curl -fsS https://api.mvn.by/api/v1/filters/config
 The migration used `docker-compose.cutover.yml` with a SHA-pinned image. After the owner confirms the migration is stable, choose one of these paths:
 
 - Keep using the SHA-pinned cutover compose until the next planned backend deploy.
-- Run the GitHub backend deploy workflow from the approved branch/commit after `SSH_HOST_API` is updated. The workflow copies `docker-compose.prod.yml`, pulls images, runs migrations/defaults, recreates `app` and `bot`, and runs `scripts/post_deploy_smoke_check.sh`.
-
-Before running GitHub deploy, remember that the repository compose currently uses `backend:latest`. If the goal is to keep production pinned longer, update the deployment model first or continue using the manual cutover compose.
+- Run the GitHub backend deploy workflow from `main` after `SSH_HOST_API` is
+  updated. The exact commit must already have successful CI. The workflow copies
+  `docker-compose.prod.yml`, pulls only application images, runs
+  migrations/defaults with `--no-deps`, recreates `app` and `bot` without
+  touching PostgreSQL, and runs `scripts/post_deploy_smoke_check.sh`.
 
 Cleanup after the rollback window:
 

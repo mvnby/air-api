@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
-POSTGRES_IMAGE="${POSTGRES_IMAGE:-postgres:15-alpine}"
+POSTGRES_IMAGE="${POSTGRES_IMAGE:-postgres:15.18-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f}"
 ENABLE_TIMERS="${ENABLE_TIMERS:-false}"
 
 if [[ "$(id -u)" -ne 0 ]]; then

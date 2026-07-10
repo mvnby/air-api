@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-postgres:15.18-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f}
     restart: always
     command:
       - postgres
@@ -24,7 +24,7 @@ services:
       - ./postgres-wal-archive:/postgres-wal-archive
 
   app:
-    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
+    image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: always
     depends_on:
       - db
@@ -49,7 +49,7 @@ services:
       - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
 
   bot:
-    image: ${BACKEND_IMAGE:-ghcr.io/mvnby/air-api/backend:latest}
+    image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: always
     depends_on:
       - db

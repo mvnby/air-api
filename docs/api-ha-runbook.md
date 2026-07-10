@@ -473,21 +473,35 @@ Manual deploy verification:
 gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
 ```
 
-The workflow builds and pushes both `backend:latest` and
-`backend:<commit_sha>`, but production deploys must run the immutable
-`backend:<commit_sha>` tag through `BACKEND_IMAGE`. This keeps primary and
-standby on the same image for the same deployment.
+The command is accepted only for `main` commits that already have a successful
+`CI (Test & Lint)` run. Normal releases start automatically from that successful
+CI run. The workflow publishes `backend:<commit_sha>` for traceability, resolves
+the build result to `backend@sha256:<digest>`, and deploys that digest to both
+hosts. Primary and standby therefore receive the exact artifact built from the
+source revision that passed CI; `backend:latest` is not part of production
+releases.
 
 Expected deploy behavior:
 
-- primary `mvn-api`: recreate `app` and `bot`;
-- standby `zakup`: recreate only `app`, then stop `bot`;
+- primary `mvn-api`: pull only application images, run migrations/defaults in a
+  one-off `--no-deps` container, then recreate `app` and `bot` with `--no-deps`;
+- standby `zakup`: pull and recreate only `app` with `--no-deps`, then stop
+  `bot`; the same deployment lock and guarded code rollback apply there;
+- PostgreSQL is never pulled or recreated by an application release. Its image
+  is digest-pinned and changes only in a separate database maintenance window;
 - after standby deploy: run the active-passive invariant check with public
   Cloudflare readiness skipped, proving the direct primary origin is ready and
   writable while the direct standby origin remains fenced;
-- both API hosts: prune unused Docker images after successful deploy; this does
-  not remove volumes or images used by running containers;
+- both API hosts: retain the three newest backend images plus every image used
+  by a container, then remove only older backend images and dangling images
+  older than seven days;
 - frontend deploy is skipped unless explicitly requested.
+
+If primary activation or smoke checks fail, the workflow runs a guarded
+code-only rollback to `.previous-backend-image`. The guard verifies that the
+failed candidate was actually persisted before changing anything. Rollback does
+not downgrade Alembic, so every production migration must follow the
+expand/contract compatibility policy.
 
 Manual disk pressure check:
 
@@ -496,11 +510,21 @@ ssh mvn-api 'df -h / && docker system df'
 ssh zakup 'df -h / && docker system df'
 ```
 
-Manual emergency image cleanup, safe for databases and media volumes:
+Manual scoped image cleanup, safe for databases, media volumes, and the last
+three backend releases:
 
 ```bash
-ssh mvn-api 'docker image prune -af && df -h /'
-ssh zakup 'docker image prune -af && df -h /'
+cat scripts/prune_unused_docker_images.sh | ssh mvn-api \
+  'KEEP_BACKEND_IMAGES=3 bash -s'
+cat scripts/prune_unused_docker_images.sh | ssh zakup \
+  'KEEP_BACKEND_IMAGES=3 bash -s'
+```
+
+Manual code rollback on the current primary:
+
+```bash
+cat scripts/rollback_backend.sh | ssh mvn-api \
+  'CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api bash -s'
 ```
 
 ## Cloudflare Load Balancer
@@ -825,6 +849,10 @@ gh workflow run api-restore-drill.yml --repo mvnby/air-api --ref main
 - Never run two writable PostgreSQL primaries.
 - Never run Telegram polling on two hosts with the same token.
 - Never run scheduler/import/payment jobs on standby.
+- Never deploy a mutable backend image tag to production.
+- Never update or recreate PostgreSQL as part of an application deploy.
+- Never add a destructive Alembic change until all running and rollback-capable
+  application versions tolerate the expanded schema.
 - Never use bidirectional media sync.
 - Never fail back by simply starting the old primary. Rebuild it as standby
   first, then promote intentionally if needed.
