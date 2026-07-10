@@ -6,6 +6,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATE = REPO_ROOT / "scripts/ha/run_patroni_migrations.sh"
 DEPLOY = REPO_ROOT / "scripts/ha/deploy_patroni_api_node.sh"
+CONFIGURE_ENV = REPO_ROOT / "scripts/ha/configure_patroni_replication_env.sh"
 IMAGE = "ghcr.io/mvnby/air-api/backend@sha256:" + "4" * 64
 
 
@@ -65,3 +66,33 @@ def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fenc
     assert "alembic upgrade head" not in text
     assert 'up -d --no-deps --force-recreate "${active_service}"' in text
     assert "up -d db" not in text
+
+
+def test_replication_env_updater_replaces_keys_atomically_and_preserves_mode(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "POSTGRES_USER=postgres\n"
+        "PATRONI_REPLICATION_USERNAME=old\n"
+        "PATRONI_REPLICATION_PASSWORD=${invalid}\n",
+        encoding="utf-8",
+    )
+    env_file.chmod(0o600)
+
+    result = subprocess.run(
+        ["bash", str(CONFIGURE_ENV)],
+        env={**os.environ, "PATRONI_ENV_FILE": str(env_file)},
+        input="a-secure-replication-password\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    text = env_file.read_text(encoding="utf-8")
+    assert text.count("PATRONI_REPLICATION_USERNAME=") == 1
+    assert text.count("PATRONI_REPLICATION_PASSWORD=") == 1
+    assert "PATRONI_REPLICATION_USERNAME=mvn_replicator" in text
+    assert "PATRONI_REPLICATION_PASSWORD=a-secure-replication-password" in text
+    assert "${invalid}" not in text
+    assert env_file.stat().st_mode & 0o777 == 0o600
+    assert len(list(tmp_path.glob(".env.bak-patroni-*"))) == 1
