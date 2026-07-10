@@ -1,5 +1,10 @@
 # API HA Runbook
 
+This document remains the rollback/reference runbook for the physical
+active-passive topology. Once repository variable `API_DB_HA_MODE=patroni`, use
+`docs/postgres-quorum-runbook.md` for database role changes and do not run the
+manual physical promotion helpers below against a Patroni-managed node.
+
 This runbook describes the current active-passive API setup for `api.mvn.by`.
 The system intentionally has one writable PostgreSQL primary and one warm
 standby. Do not make both origins public-writable.

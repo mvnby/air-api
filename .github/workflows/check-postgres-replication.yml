@@ -2,14 +2,14 @@ name: PostgreSQL Replication Check
 
 on:
   schedule:
-    - cron: "17,47 * * * *"
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
     inputs:
       max_replay_lag_bytes:
         description: "Max allowed primary-to-standby replay lag in bytes"
         type: string
         required: false
-        default: "16777216"
+        default: "1048576"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -46,6 +46,7 @@ jobs:
 
       - name: Run PostgreSQL replication check
         env:
+          API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
           SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
           SSH_USER_API: ${{ secrets.SSH_USER_API }}
           API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
@@ -54,28 +55,50 @@ jobs:
           PRIMARY_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
           STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
           STANDBY_COMPOSE_FILE: ${{ vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.reserve.yml' }}
+          PATRONI_API_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          PATRONI_RESERVE_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
           EXPECTED_SLOT: ${{ vars.POSTGRES_STANDBY_SLOT || 'zakup_standby' }}
           EXPECTED_PRIMARY_WG_IP: ${{ vars.POSTGRES_PRIMARY_WG_IP || '10.77.0.2' }}
           EXPECTED_STANDBY_WG_IP: ${{ vars.POSTGRES_STANDBY_WG_IP || '10.77.0.1' }}
-          MAX_REPLAY_LAG_BYTES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_replay_lag_bytes || vars.POSTGRES_REPLICATION_MAX_LAG_BYTES || '16777216' }}
+          MAX_REPLAY_LAG_BYTES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_replay_lag_bytes || vars.POSTGRES_REPLICATION_MAX_LAG_BYTES || '1048576' }}
         run: |
           set -euo pipefail
           export SSH_OPTS="-i ~/.ssh/postgres_replication_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
-          export PRIMARY_SSH="${SSH_USER_API}@${SSH_HOST_API}"
-          export STANDBY_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
-          bash scripts/ha/check_postgres_replication.sh | tee postgres-replication-check.log
+          case "${API_DB_HA_MODE}" in
+            patroni)
+              export API_NODE_SSH="${SSH_USER_API}@${SSH_HOST_API}"
+              export RESERVE_NODE_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
+              export API_NODE_PROJECT_DIR="${PATRONI_API_PROJECT_DIR}"
+              export RESERVE_NODE_PROJECT_DIR="${PATRONI_RESERVE_PROJECT_DIR}"
+              export API_NODE_COMPOSE_FILE=docker-compose.patroni.yml
+              export RESERVE_NODE_COMPOSE_FILE=docker-compose.patroni.yml
+              export API_NODE_WG_IP="${EXPECTED_PRIMARY_WG_IP}"
+              export RESERVE_NODE_WG_IP="${EXPECTED_STANDBY_WG_IP}"
+              python3 scripts/ha/check_patroni_production.py | tee postgres-replication-check.log
+              ;;
+            physical)
+              export PRIMARY_SSH="${SSH_USER_API}@${SSH_HOST_API}"
+              export STANDBY_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
+              bash scripts/ha/check_postgres_replication.sh | tee postgres-replication-check.log
+              ;;
+            *)
+              echo "::error::API_DB_HA_MODE must be physical or patroni"
+              exit 1
+              ;;
+          esac
 
       - name: Write Summary
         if: always()
         run: |
           {
             echo "## PostgreSQL Replication Check"
+            echo "- ha_mode: ${{ vars.API_DB_HA_MODE || 'physical' }}"
             echo "- primary_host: configured via SSH_HOST_API secret"
             echo "- standby_host: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}"
             echo "- primary_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
             echo "- standby_project_dir: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}"
             echo "- expected_slot: ${{ vars.POSTGRES_STANDBY_SLOT || 'zakup_standby' }}"
-            echo "- max_replay_lag_bytes: ${{ github.event_name == 'workflow_dispatch' && inputs.max_replay_lag_bytes || vars.POSTGRES_REPLICATION_MAX_LAG_BYTES || '16777216' }}"
+            echo "- max_replay_lag_bytes: ${{ github.event_name == 'workflow_dispatch' && inputs.max_replay_lag_bytes || vars.POSTGRES_REPLICATION_MAX_LAG_BYTES || '1048576' }}"
             echo "- log_artifact: postgres-replication-check-log-${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
 

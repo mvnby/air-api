@@ -152,6 +152,15 @@ def test_production_patroni_composes_are_role_driven_and_private():
         assert compose["services"]["app-blue"]["env_file"][-1] == ".ha-app-role.env"
         assert compose["services"]["bot"]["env_file"][-1] == ".ha-bot-role.env"
 
+    assert primary["volumes"]["postgres_data"] == {
+        "name": "air-api_postgres_data",
+        "external": True,
+    }
+    assert reserve["volumes"]["postgres_data"] == {
+        "name": "mvn_reserve_postgres_data",
+        "external": True,
+    }
+
     assert reserve["services"]["api-proxy"]["ports"] == ["127.0.0.1:18080:8000"]
     assert "proxy_set_header Host api.mvn.by" in PROXY_CONFIG.read_text(encoding="utf-8")
 
