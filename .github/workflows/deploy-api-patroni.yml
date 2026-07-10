@@ -1,0 +1,361 @@
+name: Deploy API with Patroni
+
+on:
+  workflow_call:
+    inputs:
+      deploy_sha:
+        description: Exact CI-tested commit to build and deploy
+        required: true
+        type: string
+    outputs:
+      backend_image:
+        description: Immutable backend image deployed to both nodes
+        value: ${{ jobs.build-backend.outputs.backend_image }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_image: ${{ steps.image.outputs.reference }}
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Verify immutable release SHA
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          [[ "${DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${DEPLOY_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: manager_frontend/package-lock.json
+
+      - name: Build manager frontend
+        working-directory: manager_frontend
+        env:
+          WEBSITE_URL: https://mvn.by
+        run: |
+          npm ci
+          npm run build
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image tag
+        id: tag
+        run: echo "tag=ghcr.io/${GITHUB_REPOSITORY,,}/backend:${{ inputs.deploy_sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=patroni-backend
+          cache-to: type=gha,mode=max,scope=patroni-backend
+
+      - name: Resolve immutable backend image
+        id: image
+        run: |
+          set -euo pipefail
+          digest="${{ steps.build.outputs.digest }}"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::Invalid backend digest: ${digest:-empty}"
+            exit 1
+          }
+          reference="ghcr.io/${GITHUB_REPOSITORY,,}/backend@${digest}"
+          echo "reference=${reference}" >> "$GITHUB_OUTPUT"
+
+  probe-api-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-api
+    permissions:
+      contents: read
+    outputs:
+      role: ${{ steps.probe.outputs.role }}
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Probe API node Patroni role
+        id: probe
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+        run: bash scripts/ha/run_patroni_node_remote.sh probe
+
+  probe-reserve-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: standby-api
+    permissions:
+      contents: read
+    outputs:
+      role: ${{ steps.probe.outputs.role }}
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Probe reserve node Patroni role
+        id: probe
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+        run: bash scripts/ha/run_patroni_node_remote.sh probe
+
+  validate-topology:
+    runs-on: ubuntu-latest
+    needs: [probe-api-node, probe-reserve-node]
+    outputs:
+      primary_node: ${{ steps.topology.outputs.primary_node }}
+
+    steps:
+      - name: Require exactly one Patroni primary
+        id: topology
+        env:
+          API_ROLE: ${{ needs.probe-api-node.outputs.role }}
+          RESERVE_ROLE: ${{ needs.probe-reserve-node.outputs.role }}
+        run: |
+          set -euo pipefail
+          if [ "${API_ROLE}" = "primary" ] && [ "${RESERVE_ROLE}" = "standby" ]; then
+            primary_node=api
+          elif [ "${API_ROLE}" = "standby" ] && [ "${RESERVE_ROLE}" = "primary" ]; then
+            primary_node=reserve
+          else
+            echo "::error::Unsafe Patroni topology: api=${API_ROLE} reserve=${RESERVE_ROLE}"
+            exit 1
+          fi
+          echo "primary_node=${primary_node}" >> "$GITHUB_OUTPUT"
+          echo "Patroni primary node: ${primary_node}"
+
+  migrate-api-node:
+    if: ${{ needs.validate-topology.outputs.primary_node == 'api' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-api
+    needs: [build-backend, validate-topology]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Run migrations on API primary
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
+          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          API_NODE_COMPOSE_SOURCE: deploy/ha/mvn-api/docker-compose.patroni.yml
+          API_NODE_PROXY_MODE: host_nginx
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
+        run: bash scripts/ha/run_patroni_node_remote.sh migrate
+
+  migrate-reserve-node:
+    if: ${{ needs.validate-topology.outputs.primary_node == 'reserve' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: standby-api
+    needs: [build-backend, validate-topology]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Run migrations on reserve primary
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
+          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/mvn-reserve' }}
+          API_NODE_COMPOSE_SOURCE: deploy/ha/zakup/docker-compose.patroni.yml
+          API_NODE_PROXY_MODE: container_nginx
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
+        run: bash scripts/ha/run_patroni_node_remote.sh migrate
+
+  deploy-replica-reserve:
+    if: ${{ needs.validate-topology.outputs.primary_node == 'api' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: standby-api
+    needs: [build-backend, validate-topology, migrate-api-node]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Deploy fenced reserve replica
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
+          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/mvn-reserve' }}
+          API_NODE_COMPOSE_SOURCE: deploy/ha/zakup/docker-compose.patroni.yml
+          API_NODE_PROXY_MODE: container_nginx
+          API_EXPECTED_PATRONI_ROLE: standby
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+
+  deploy-replica-api:
+    if: ${{ needs.validate-topology.outputs.primary_node == 'reserve' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-api
+    needs: [build-backend, validate-topology, migrate-reserve-node]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Deploy fenced API replica
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
+          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          API_NODE_COMPOSE_SOURCE: deploy/ha/mvn-api/docker-compose.patroni.yml
+          API_NODE_PROXY_MODE: host_nginx
+          API_EXPECTED_PATRONI_ROLE: standby
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+
+  deploy-primary-api:
+    if: ${{ needs.validate-topology.outputs.primary_node == 'api' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-api
+    needs: [build-backend, validate-topology, migrate-api-node, deploy-replica-reserve]
+    permissions:
+      contents: read
+      packages: read
+      deployments: write
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Blue-green deploy API primary
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
+          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          API_NODE_COMPOSE_SOURCE: deploy/ha/mvn-api/docker-compose.patroni.yml
+          API_NODE_PROXY_MODE: host_nginx
+          API_EXPECTED_PATRONI_ROLE: primary
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+
+  deploy-primary-reserve:
+    if: ${{ needs.validate-topology.outputs.primary_node == 'reserve' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: standby-api
+    needs: [build-backend, validate-topology, migrate-reserve-node, deploy-replica-api]
+    permissions:
+      contents: read
+      packages: read
+      deployments: write
+
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Blue-green deploy reserve primary
+        env:
+          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
+          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/mvn-reserve' }}
+          API_NODE_COMPOSE_SOURCE: deploy/ha/zakup/docker-compose.patroni.yml
+          API_NODE_PROXY_MODE: container_nginx
+          API_EXPECTED_PATRONI_ROLE: primary
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+
+  deployment-complete:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    needs: [validate-topology, deploy-primary-api, deploy-primary-reserve]
+
+    steps:
+      - name: Require the selected primary branch to succeed
+        env:
+          PRIMARY_NODE: ${{ needs.validate-topology.outputs.primary_node }}
+          API_RESULT: ${{ needs.deploy-primary-api.result }}
+          RESERVE_RESULT: ${{ needs.deploy-primary-reserve.result }}
+        run: |
+          set -euo pipefail
+          if [ "${PRIMARY_NODE}" = "api" ]; then
+            test "${API_RESULT}" = "success"
+            test "${RESERVE_RESULT}" = "skipped"
+          elif [ "${PRIMARY_NODE}" = "reserve" ]; then
+            test "${API_RESULT}" = "skipped"
+            test "${RESERVE_RESULT}" = "success"
+          else
+            echo "::error::No validated Patroni primary branch completed"
+            exit 1
+          fi
+          echo "Patroni-aware API release completed through ${PRIMARY_NODE}"

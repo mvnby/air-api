@@ -79,7 +79,7 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     standby_call = jobs["deploy-api-standby"]
     assert standby_call["uses"] == "./.github/workflows/deploy-api-standby.yml"
     assert standby_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
-    assert standby_call["with"]["backend_image"] == "${{ needs.deploy-backend.outputs.backend_image }}"
+    assert standby_call["with"]["backend_image"] == "${{ needs.backend-release.outputs.backend_image }}"
     assert standby_call["secrets"] == "inherit"
 
     web_workflow = _workflow(".github/workflows/deploy-web.yml")
@@ -91,6 +91,7 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert web_call["uses"] == "./.github/workflows/deploy-web.yml"
     assert web_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
     assert web_call["secrets"] == "inherit"
+    assert "backend-release" in web_call["needs"]
 
     workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
     assert "backend:latest" not in workflow_text

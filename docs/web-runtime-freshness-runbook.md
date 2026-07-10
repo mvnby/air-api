@@ -16,9 +16,10 @@ DNS, or VPS state by itself.
 
 Public production:
 
-- `mvn.by` and `www.mvn.by` are proxied through Cloudflare to the new web VPS
-  `153.80.244.78`.
-- nginx serves the public static Astro build from `/var/www/mvn.by/current`.
+- `mvn.by` and `www.mvn.by` are Cloudflare Pages custom domains for the static
+  Astro production branch.
+- nginx on `153.80.244.78` serves the matching atomic release from
+  `/var/www/mvn.by/live` as the independent rollback origin.
 - The legacy `mvn-web` host at `178.159.240.174` remains the static storefront
   reserve/fallback target.
 - API traffic stays separate at `https://api.mvn.by`.

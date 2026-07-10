@@ -24,7 +24,6 @@ docker inspect "${CONTAINER}" >/dev/null 2>&1 || {
 
 status_json="$({
   docker exec \
-    -e ETCDCTL_API=3 \
     "${CONTAINER}" \
     etcdctl \
     --endpoints="${ENDPOINTS}" \
@@ -69,7 +68,6 @@ print(
 PY
 
 docker exec \
-  -e ETCDCTL_API=3 \
   "${CONTAINER}" \
   etcdctl \
   --endpoints="${ENDPOINTS}" \

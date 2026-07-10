@@ -32,6 +32,10 @@ def test_etcd_compose_is_three_member_tls_only_and_digest_pinned():
     assert "mvn-web=https://10.77.0.3:2380" in text
     assert service["mem_limit"] == "${ETCD_MEMORY_LIMIT:-192m}"
     assert service["logging"]["options"]["max-file"] == "5"
+    assert service["healthcheck"]["test"][0] == "CMD"
+    assert service["healthcheck"]["test"][1] == "/usr/local/bin/etcdctl"
+    assert "CMD-SHELL" not in service["healthcheck"]["test"]
+    assert "ETCDCTL_API" not in text
 
 
 def test_etcd_systemd_unit_waits_for_wireguard_and_docker():
@@ -80,6 +84,7 @@ def test_quorum_check_requires_three_members_and_one_leader():
     assert "members disagree on leader" in text
     assert "raft index lag" in text
     assert "endpoint health --cluster" in text
+    assert "ETCDCTL_API" not in text
 
 
 def test_quorum_check_accepts_consistent_healthy_cluster(tmp_path):

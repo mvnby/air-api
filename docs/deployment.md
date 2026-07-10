@@ -32,8 +32,9 @@ Prepared server baseline:
 - Let's Encrypt certificate for `mvn.by` and `www.mvn.by` issued via Cloudflare DNS-01
 - certbot renewal hook reloads nginx after certificate renewal
 
-The production storefront is still static. The hybrid runtime/cache/freshness
-design for the new VPS is documented in
+The production storefront is static and served by Cloudflare Pages. The web
+VPS retains the same immutable artifacts as an independent origin rollback.
+The hybrid runtime/cache/freshness design for the new VPS is documented in
 [`web-runtime-freshness-runbook.md`](web-runtime-freshness-runbook.md). Do not
 switch public `mvn.by` to Astro runtime without following that runbook's
 staging, shadow, cutover, and rollback gates.
@@ -53,11 +54,11 @@ curl -I -H 'Host: mvn.by' http://153.80.244.78/
 curl -I --resolve mvn.by:443:153.80.244.78 https://mvn.by/
 ```
 
-Cloudflare DNS state before the Pages custom-domain cutover:
+Current Cloudflare DNS state after the Pages custom-domain cutover:
 
 ```text
-mvn.by      A 153.80.244.78 proxied
-www.mvn.by  A 153.80.244.78 proxied
+mvn.by      CNAME mvn-by.pages.dev proxied
+www.mvn.by  CNAME mvn-by.pages.dev proxied
 ```
 
 The current VPS remains the primary Pages rollback origin. Restore the Cloudflare
@@ -70,8 +71,10 @@ the older `mvn-web` host at `178.159.240.174` as the last-resort fallback.
 - **Original API IP:** `185.250.45.54`
 - **Emergency `zakup` IP:** `193.47.42.213`
 - **SSH Key:** `~/.ssh/id_ed25519`
-- **DNS:** `api.mvn.by` A-record must point to the current API primary.
-- **GitHub secret:** `SSH_HOST_API` must point to the current API primary.
+- **Routing:** `api.mvn.by` is managed by Cloudflare Load Balancing; `/api/ready`
+  controls which origin receives traffic.
+- **GitHub secret:** `SSH_HOST_API` identifies the physical-mode deployment host.
+  Patroni mode probes both protected deployment environments instead.
 - **Public entrypoint:** reverse proxy on `80/443`, proxying `api.mvn.by` to the current API app port.
 - **Health endpoint:** `/api/health`
 - **Load balancer readiness endpoint:** `/api/ready`
@@ -282,11 +285,12 @@ The workflow requires these env vars in the build step:
 
 1. **release-gate:** Resolves the tested `main` SHA and serializes production
    releases through the `production-release` concurrency group.
-2. **deploy-backend:** Publishes `backend:<commit-sha>`, deploys its resolved
-   `backend@sha256:<digest>` through the `production-api` environment, activates
-   it through the inactive blue-green slot, and runs smoke checks.
-3. **deploy-api-standby:** Installs the same image on the fenced app-only standby
-   through the `standby-api` environment.
+2. **backend deployment:** Publishes one immutable `backend@sha256:<digest>`.
+   Physical mode deploys `production-api` then the fenced standby. After the
+   guarded Patroni cutover, role-aware mode probes both nodes, migrates only on
+   the current primary, updates the fenced replica, then blue-greens the primary.
+3. **backend-release:** Requires exactly one physical or Patroni deployment path
+   to succeed before the web release may continue.
 4. **deploy-frontend:** When web files changed (or manual rebuild was requested),
    builds Astro once, validates the static artifact and release marker, deploys
    a Cloudflare Pages canary, atomically promotes the same artifact on the VPS,
@@ -418,16 +422,15 @@ curl -fsS --resolve mvn.by:443:127.0.0.1 https://mvn.by/ >/dev/null
 
 ### Cloudflare Pages Cutover
 
-Do not replace the `mvn.by` DNS records before the first Pages production
-release is green. Cloudflare Pages must associate both custom domains with the
-project before DNS cutover:
+The cutover is complete. Both custom domains are associated with `mvn-by`, have
+active Pages certificates, and point to `mvn-by.pages.dev`. For a future zone or
+project migration, preserve this order:
 
-1. Open **Workers & Pages -> mvn-by -> Custom domains**.
-2. Add `mvn.by`, wait for it to become active, then add `www.mvn.by`.
-3. Confirm both certificates are active and the public `release.json` matches
-   the expected production SHA.
-4. Keep the VPS, atomic releases, and origin smoke checks as the independent
-   rollback path.
+1. Produce a green Pages production release and matching atomic VPS release.
+2. Associate the custom domain with Pages before changing its DNS record.
+3. Change one hostname at a time, wait for `active`, and require exact-SHA smoke.
+4. Keep the VPS, DNS backup, atomic releases, and direct-origin checks as the
+   independent rollback path.
 
 For an apex domain in a Cloudflare-managed zone, use the Pages custom-domain
 flow and let Cloudflare create the required DNS record. Creating only a manual

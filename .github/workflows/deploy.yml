@@ -162,6 +162,7 @@ jobs:
   # 1. BACKEND DEPLOYMENT (Docker -> mvn-api)
   # ======================================================
   deploy-backend:
+    if: ${{ vars.API_DB_HA_MODE != 'patroni' }}
     needs: release-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -519,12 +520,63 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+  deploy-backend-patroni:
+    if: ${{ vars.API_DB_HA_MODE == 'patroni' }}
+    needs: release-gate
+    permissions:
+      contents: read
+      deployments: write
+      packages: write
+    uses: ./.github/workflows/deploy-api-patroni.yml
+    with:
+      deploy_sha: ${{ needs.release-gate.outputs.deploy_sha }}
+    secrets: inherit
+
+  backend-release:
+    if: ${{ always() && needs.release-gate.result == 'success' }}
+    runs-on: ubuntu-latest
+    needs:
+      - release-gate
+      - deploy-backend
+      - deploy-backend-patroni
+    outputs:
+      backend_image: ${{ steps.resolve.outputs.backend_image }}
+      mode: ${{ steps.resolve.outputs.mode }}
+
+    steps:
+      - name: Require exactly one backend deployment path
+        id: resolve
+        env:
+          PHYSICAL_RESULT: ${{ needs.deploy-backend.result }}
+          PHYSICAL_IMAGE: ${{ needs.deploy-backend.outputs.backend_image }}
+          PATRONI_RESULT: ${{ needs.deploy-backend-patroni.result }}
+          PATRONI_IMAGE: ${{ needs.deploy-backend-patroni.outputs.backend_image }}
+        run: |
+          set -euo pipefail
+          if [ "${PHYSICAL_RESULT}" = "success" ] && [ "${PATRONI_RESULT}" = "skipped" ]; then
+            mode=physical
+            backend_image="${PHYSICAL_IMAGE}"
+          elif [ "${PHYSICAL_RESULT}" = "skipped" ] && [ "${PATRONI_RESULT}" = "success" ]; then
+            mode=patroni
+            backend_image="${PATRONI_IMAGE}"
+          else
+            echo "::error::Invalid backend paths: physical=${PHYSICAL_RESULT} patroni=${PATRONI_RESULT}"
+            exit 1
+          fi
+          [[ "${backend_image}" =~ @sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::Backend path did not produce an immutable digest"
+            exit 1
+          }
+          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
+          echo "Backend release mode: ${mode}"
+
   # Standby deployment is isolated in a reusable workflow so the main release
   # file remains an orchestration surface.
   deploy-api-standby:
-    if: ${{ vars.API_STANDBY_HOST != '' }}
+    if: ${{ needs.backend-release.outputs.mode == 'physical' && vars.API_STANDBY_HOST != '' }}
     needs:
-      - deploy-backend
+      - backend-release
       - release-gate
     permissions:
       contents: read
@@ -533,7 +585,7 @@ jobs:
     uses: ./.github/workflows/deploy-api-standby.yml
     with:
       deploy_sha: ${{ needs.release-gate.outputs.deploy_sha }}
-      backend_image: ${{ needs.deploy-backend.outputs.backend_image }}
+      backend_image: ${{ needs.backend-release.outputs.backend_image }}
     secrets: inherit
 
   # Web release is isolated in one reusable workflow so automatic releases and
@@ -541,7 +593,7 @@ jobs:
   deploy-frontend:
     if: ${{ needs.detect-frontend-changes.outputs.web_changed == 'true' }}
     needs:
-      - deploy-backend
+      - backend-release
       - detect-frontend-changes
       - release-gate
     permissions:
