@@ -8,7 +8,9 @@ MIGRATE = REPO_ROOT / "scripts/ha/run_patroni_migrations.sh"
 DEPLOY = REPO_ROOT / "scripts/ha/deploy_patroni_api_node.sh"
 CONFIGURE_ENV = REPO_ROOT / "scripts/ha/configure_patroni_replication_env.sh"
 CONFIGURE_PITR = REPO_ROOT / "scripts/ha/configure_patroni_pitr_env.sh"
+CONFIGURE_IMAGE = REPO_ROOT / "scripts/ha/configure_patroni_image_env.sh"
 IMAGE = "ghcr.io/mvnby/air-api/backend@sha256:" + "4" * 64
+PATRONI_IMAGE = "ghcr.io/mvnby/air-api/patroni@sha256:" + "5" * 64
 
 
 def _executable(path: Path, content: str) -> None:
@@ -97,6 +99,48 @@ def test_replication_env_updater_replaces_keys_atomically_and_preserves_mode(tmp
     assert "${invalid}" not in text
     assert env_file.stat().st_mode & 0o777 == 0o600
     assert len(list(tmp_path.glob(".env.bak-patroni-*"))) == 1
+
+
+def test_patroni_image_updater_requires_digest_and_preserves_env_file(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("POSTGRES_USER=postgres\nPATRONI_IMAGE=invalid\n", encoding="utf-8")
+    env_file.chmod(0o600)
+
+    result = subprocess.run(
+        ["bash", str(CONFIGURE_IMAGE)],
+        env={**os.environ, "PATRONI_ENV_FILE": str(env_file)},
+        input=f"{PATRONI_IMAGE}\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert env_file.read_text(encoding="utf-8").count("PATRONI_IMAGE=") == 1
+    assert f"PATRONI_IMAGE={PATRONI_IMAGE}" in env_file.read_text(encoding="utf-8")
+    assert env_file.stat().st_mode & 0o777 == 0o600
+    assert len(list(tmp_path.glob(".env.bak-patroni-image-*"))) == 1
+
+
+def test_patroni_image_updater_rejects_mutable_or_foreign_images(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("POSTGRES_USER=postgres\n", encoding="utf-8")
+
+    for image in (
+        "ghcr.io/mvnby/air-api/patroni:latest",
+        "ghcr.io/other/air-api/patroni@sha256:" + "5" * 64,
+    ):
+        result = subprocess.run(
+            ["bash", str(CONFIGURE_IMAGE)],
+            env={**os.environ, "PATRONI_ENV_FILE": str(env_file)},
+            input=f"{image}\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        assert result.returncode != 0
+        assert "immutable MVN Patroni GHCR digest" in result.stderr
 
 
 def test_pitr_env_updater_allows_only_backup_keys_and_prepares_role_target(tmp_path):
