@@ -259,3 +259,38 @@ If any gate before step 8 fails, stop both Patroni containers, restore the old
 compose files and PGDATA copies, start the former primary first, then restore
 physical replication. Do not delete rollback copies or Patroni DCS state until
 the old topology is verified; DCS cleanup is a separate, explicit retry step.
+
+## CI/CD Role Switch
+
+Keep repository variable `API_DB_HA_MODE` unset during preparation and the
+database cutover. The existing physical primary/standby release path remains
+active while it is unset.
+
+After Patroni, both role agents, the reserve proxy, and the switchover drill are
+green, define these environment variables:
+
+| Environment | `API_NODE_HOST` | `API_NODE_USER` | `API_NODE_PROJECT_DIR` |
+| --- | --- | --- | --- |
+| `production-api` | API VPS address | `root` | `/opt/air-api` |
+| `standby-api` | reserve VPS address | `root` | `/opt/mvn-reserve` |
+
+Both environments must retain `SSH_KEY` and `GHCR_PAT`. Then set the repository
+variable:
+
+```bash
+gh variable set API_DB_HA_MODE --body patroni
+```
+
+The next release will:
+
+1. build one immutable backend image from the exact CI-tested SHA;
+2. probe both local Patroni APIs and require exactly one primary;
+3. run migrations only on that primary while holding the deployment lock;
+4. update and smoke-check the fenced replica first;
+5. blue-green the current primary through its host-specific proxy;
+6. fail the release if the database role changes mid-operation.
+
+The Patroni deploy scripts never start, recreate, or pull `db`. For a full
+rollback to the former physical topology, restore PostgreSQL first under the
+cutover rollback procedure, then delete `API_DB_HA_MODE`; do not switch the
+variable while Patroni is still managing either database node.
