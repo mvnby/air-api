@@ -38,6 +38,8 @@ networking so it can bind directly to each node's WireGuard address.
   role-agent unit, and isolated rehearsal cluster;
 - `scripts/ha/rehearse_patroni_failover.sh`: disposable failover/rejoin drill;
 - `scripts/ha/patroni_role_agent.py`: local API/scheduler/bot role reconciler.
+- `.github/workflows/patroni-failover-rehearsal.yml`: weekly isolated drill and
+  retained diagnostic log.
 
 ## PKI
 

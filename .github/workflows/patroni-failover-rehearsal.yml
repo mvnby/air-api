@@ -1,0 +1,50 @@
+name: Patroni Failover Rehearsal
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '35 3 * * 1'
+
+concurrency:
+  group: patroni-failover-rehearsal
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run isolated Patroni failover rehearsal
+        run: |
+          set -euo pipefail
+          PATRONI_REHEARSAL_TIMEOUT=150 \
+            bash scripts/ha/rehearse_patroni_failover.sh | tee patroni_rehearsal.log
+
+      - name: Upload rehearsal log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: patroni-failover-rehearsal-${{ github.run_id }}
+          path: patroni_rehearsal.log
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Rehearsal summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo '## Patroni Failover Rehearsal'
+            echo '- run_id: ${{ github.run_id }}'
+            echo '- result: ${{ job.status }}'
+            echo '- topology: 3 isolated etcd members, 2 isolated PostgreSQL nodes'
+            echo '- production_data_touched: false'
+          } >> "${GITHUB_STEP_SUMMARY}"

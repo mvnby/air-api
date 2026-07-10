@@ -11,6 +11,7 @@ DOCKERFILE = REPO_ROOT / "deploy/ha/patroni/Dockerfile"
 ENTRYPOINT = REPO_ROOT / "deploy/ha/patroni/patroni-entrypoint.sh"
 REHEARSAL_COMPOSE = REPO_ROOT / "deploy/ha/patroni/rehearsal/docker-compose.yml"
 REHEARSAL = REPO_ROOT / "scripts/ha/rehearse_patroni_failover.sh"
+REHEARSAL_WORKFLOW = REPO_ROOT / ".github/workflows/patroni-failover-rehearsal.yml"
 
 
 @pytest.fixture
@@ -83,3 +84,15 @@ def test_rehearsal_is_isolated_and_exercises_failover_and_rejoin():
     assert 'stop "${leader}"' in text
     assert "former leader did not rejoin" in text
     assert "stop etcd3" in text
+
+
+def test_rehearsal_workflow_is_scheduled_and_keeps_logs():
+    workflow = yaml.load(REHEARSAL_WORKFLOW.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    job = workflow["jobs"]["rehearse"]
+    steps = {step["name"]: step for step in job["steps"]}
+
+    assert "schedule" in workflow["on"]
+    assert workflow["concurrency"]["cancel-in-progress"] == "false"
+    assert "rehearse_patroni_failover.sh" in steps["Run isolated Patroni failover rehearsal"]["run"]
+    assert steps["Upload rehearsal log"]["if"] == "${{ always() }}"
+    assert "production_data_touched: false" in steps["Rehearsal summary"]["run"]
