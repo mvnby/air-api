@@ -59,6 +59,12 @@ def test_release_and_manual_rebuild_call_the_same_web_workflow():
     assert manual["with"]["deploy_sha"] == "${{ github.sha }}"
     assert manual["needs"] == "main-branch-guard"
     assert rebuild["jobs"]["callback"]["if"] == "${{ always() }}"
+    callback = _step(rebuild["jobs"]["callback"], "Report catalog rebuild result")["run"]
+    assert "for attempt in 1 2 3 4 5" in callback
+    assert 'printf \'%s\\n%s\\n%s\\n\'' in callback
+    assert "| ssh \\" in callback
+    assert '"${SSH_USER_API}@${SSH_HOST_API}"' in callback
+    assert "X-Web-Rebuild-Token: ${callback_token}" in callback
 
     workflow_text = "\n".join(
         (REPO_ROOT / path).read_text(encoding="utf-8")

@@ -50,6 +50,9 @@ jobs:
           GUARD_RESULT: ${{ needs.main-branch-guard.result }}
           WEB_REBUILD_CALLBACK_TOKEN: ${{ secrets.WEB_REBUILD_CALLBACK_TOKEN }}
           WEB_REBUILD_CALLBACK_URL: ${{ vars.WEB_REBUILD_CALLBACK_URL }}
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${WEB_REBUILD_CALLBACK_TOKEN:-}" ]; then
@@ -69,9 +72,41 @@ jobs:
             payload="{\"catalog_revision\":${catalog_revision},\"status\":\"failed\",\"error\":\"GitHub Actions rebuild-web failed\"}"
           fi
 
-          if ! curl -fsS -X POST "${callback_url}" \
-            -H "Content-Type: application/json" \
-            -H "X-Web-Rebuild-Token: ${WEB_REBUILD_CALLBACK_TOKEN}" \
-            --data "${payload}"; then
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          : > ~/.ssh/known_hosts
+          scanned=false
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts 2>/dev/null; then
+              scanned=true
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          if [ "${scanned}" != "true" ]; then
+            echo "::warning::Could not obtain API SSH host key for web rebuild callback."
+            exit 0
+          fi
+
+          callback_sent=false
+          for attempt in 1 2 3 4 5; do
+            if printf '%s\n%s\n%s\n' \
+              "${WEB_REBUILD_CALLBACK_TOKEN}" "${payload}" "${callback_url}" \
+              | ssh \
+                -i ~/.ssh/deploy_key \
+                -o BatchMode=yes \
+                -o StrictHostKeyChecking=yes \
+                -o ConnectTimeout=20 \
+                -o ServerAliveInterval=15 \
+                -o ServerAliveCountMax=3 \
+                "${SSH_USER_API}@${SSH_HOST_API}" \
+                'IFS= read -r callback_token; IFS= read -r payload; IFS= read -r callback_url; curl -fsS -X POST "${callback_url}" -H "Content-Type: application/json" -H "X-Web-Rebuild-Token: ${callback_token}" --data "${payload}"'; then
+              callback_sent=true
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          if [ "${callback_sent}" != "true" ]; then
             echo "::warning::Web rebuild callback failed."
           fi
