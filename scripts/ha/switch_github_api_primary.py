@@ -28,23 +28,29 @@ class ApiHostProfile:
     compose_file: str
     primary_compose_source: str
     standby_compose_source: str
-    local_port: int
+    primary_local_port: int
+    standby_local_port: int
+    deploy_strategy: str
 
     @property
     def base_url(self) -> str:
-        return f"http://localhost:{self.local_port}"
+        return f"http://localhost:{self.primary_local_port}"
 
     @property
     def local_health_url(self) -> str:
-        return f"http://127.0.0.1:{self.local_port}/api/health"
+        return f"http://127.0.0.1:{self.primary_local_port}/api/health"
 
     @property
     def ready_url(self) -> str:
-        return f"http://localhost:{self.local_port}/api/ready"
+        return f"http://localhost:{self.primary_local_port}/api/ready"
 
     @property
     def health_url(self) -> str:
-        return f"http://localhost:{self.local_port}/api/health"
+        return f"http://localhost:{self.primary_local_port}/api/health"
+
+    @property
+    def standby_health_url(self) -> str:
+        return f"http://localhost:{self.standby_local_port}/api/health"
 
 
 HOSTS = {
@@ -55,7 +61,9 @@ HOSTS = {
         compose_file="docker-compose.prod.yml",
         primary_compose_source="deploy/ha/mvn-api/docker-compose.primary.yml",
         standby_compose_source="deploy/ha/mvn-api/docker-compose.standby.yml",
-        local_port=8000,
+        primary_local_port=18080,
+        standby_local_port=8000,
+        deploy_strategy="blue_green",
     ),
     "zakup": ApiHostProfile(
         name="zakup",
@@ -64,7 +72,9 @@ HOSTS = {
         compose_file="docker-compose.reserve.yml",
         primary_compose_source="deploy/ha/zakup/docker-compose.primary.yml",
         standby_compose_source="deploy/ha/zakup/docker-compose.standby.yml",
-        local_port=18000,
+        primary_local_port=18000,
+        standby_local_port=18000,
+        deploy_strategy="in_place",
     ),
 }
 
@@ -110,10 +120,11 @@ def build_routing(primary_name: str) -> tuple[str, Mapping[str, str]]:
         "API_COMPOSE_FILE": primary.compose_file,
         "API_COMPOSE_SOURCE_FILE": primary.primary_compose_source,
         "API_COPY_COMPOSE": "true",
+        "API_DEPLOY_STRATEGY": primary.deploy_strategy,
         "API_BASE_URL": primary.base_url,
         "API_READY_URL": primary.ready_url,
         "API_LOCAL_HEALTH_URL": primary.local_health_url,
-        "API_TUNNEL_REMOTE_PORT": str(primary.local_port),
+        "API_TUNNEL_REMOTE_PORT": str(primary.primary_local_port),
         "API_DEPLOY_SERVICES": "app bot",
         "API_SMOKE_COMPOSE_SERVICE_CHECKS": "app bot db",
         "API_COMPOSE_SERVICE_CHECKS": "app bot db",
@@ -123,7 +134,7 @@ def build_routing(primary_name: str) -> tuple[str, Mapping[str, str]]:
         "API_STANDBY_COMPOSE_FILE": standby.compose_file,
         "API_STANDBY_COPY_COMPOSE": "true",
         "API_STANDBY_COMPOSE_SOURCE_FILE": standby.standby_compose_source,
-        "API_STANDBY_HEALTH_URL": standby.health_url,
+        "API_STANDBY_HEALTH_URL": standby.standby_health_url,
     }
     return primary.origin, variables
 

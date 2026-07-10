@@ -98,14 +98,15 @@ Optional API variables:
 | `API_PROJECT_DIR` | `/opt/air-api` | Directory containing `.env`, compose file, media, and runtime files. |
 | `API_COMPOSE_FILE` | `docker-compose.prod.yml` | Compose file name inside `API_PROJECT_DIR`. |
 | `API_COPY_COMPOSE` | `true` | Copy repo `docker-compose.prod.yml` to the host before deploy. Set `false` for host-local emergency compose. |
+| `API_DEPLOY_STRATEGY` | `blue_green` | `blue_green` on `mvn-api`; use `in_place` on the shared `zakup` fallback. |
 | `API_DEPLOY_SERVICES` | `app bot` | Compose services to recreate after pulling images. |
-| `API_BASE_URL` | `http://localhost:8000` | Local base URL used by post-deploy smoke. |
-| `API_READY_URL` | unset | Optional full readiness URL used by post-deploy smoke, for example `http://localhost:18000/api/ready`. |
+| `API_BASE_URL` | `http://localhost:18080` | Stable nginx-local base URL used by post-deploy smoke. |
+| `API_READY_URL` | `http://localhost:18080/api/ready` | Stable nginx-local readiness URL. |
 | `API_SMOKE_COMPOSE_SERVICE_CHECKS` | `app bot` | Services expected to be running during smoke. |
 | `API_BOT_EXPECT_ENABLED` | `true` | Whether smoke requires bot runtime controls to be enabled. |
-| `API_TUNNEL_REMOTE_PORT` | `8000` | Remote localhost API port used by frontend build SSH tunnel. |
+| `API_TUNNEL_REMOTE_PORT` | `18080` | Stable nginx-local API port used by the frontend build SSH tunnel. |
 | `API_COMPOSE_SERVICE_CHECKS` | `app bot db` | Services expected by the manual API VPS health workflow. |
-| `API_LOCAL_HEALTH_URL` | `http://127.0.0.1:8000/api/health` | Host-local health URL for the manual API VPS health workflow. |
+| `API_LOCAL_HEALTH_URL` | `http://127.0.0.1:18080/api/health` | Host-local health URL for the manual API VPS health workflow. |
 
 Current emergency `zakup` values:
 
@@ -114,6 +115,7 @@ SSH_HOST_API=193.47.42.213
 SSH_USER_API=root
 API_PROJECT_DIR=/opt/mvn-reserve
 API_COMPOSE_FILE=docker-compose.reserve.yml
+API_DEPLOY_STRATEGY=in_place
 API_COPY_COMPOSE=false
 API_DEPLOY_SERVICES=app
 API_BASE_URL=http://localhost:18000
@@ -137,13 +139,18 @@ db:
 app:
   ports:
     - "127.0.0.1:8000:8000"
+app-blue:
+  ports:
+    - "127.0.0.1:18001:8000"
+app-green:
+  ports:
+    - "127.0.0.1:18002:8000"
 ```
 
-This keeps nginx and SSH-tunnel workflows working while preventing direct
-internet access to Postgres and the raw FastAPI port. The normal backend deploy
-recreates `app` and `bot`, so the app binding change is applied by the deploy.
-The `db` container is intentionally not force-recreated on every deploy; apply
-the DB port binding during a short maintenance window.
+This prevents direct internet access to Postgres and every raw FastAPI port.
+Nginx exposes a stable private proxy on `127.0.0.1:18080`; deploys alternate the
+two profiled slots and never recreate `db`. The legacy `app` service is removed
+after the first successful blue-green activation.
 
 ### API Runtime Roles
 
@@ -197,7 +204,7 @@ ssh mvn-api
 cd /opt/air-api
 docker compose -f docker-compose.prod.yml up -d db
 curl -fsS https://api.mvn.by/api/health
-curl -fsS http://127.0.0.1:8000/api/health
+curl -fsS http://127.0.0.1:18080/api/health
 nc -vz 185.250.45.54 5432 # should fail from outside
 nc -vz 185.250.45.54 8000 # should fail from outside
 ```
@@ -275,8 +282,8 @@ The workflow requires these env vars in the build step:
 1. **release-gate:** Resolves the tested `main` SHA and serializes production
    releases through the `production-release` concurrency group.
 2. **deploy-backend:** Publishes `backend:<commit-sha>`, deploys its resolved
-   `backend@sha256:<digest>` through the `production-api` environment, and runs
-   smoke checks.
+   `backend@sha256:<digest>` through the `production-api` environment, activates
+   it through the inactive blue-green slot, and runs smoke checks.
 3. **deploy-api-standby:** Installs the same image on the fenced app-only standby
    through the `standby-api` environment.
 4. **deploy-frontend:** When web files changed (or manual rebuild was requested),
@@ -289,8 +296,13 @@ new secrets by default; existing repository secrets remain the credential source
 
 Application release and database maintenance are separate lifecycles:
 
-- `scripts/deploy.sh` pulls only `app`/`bot` and uses `--no-deps` for one-off
-  migration/default commands and service recreation;
+- `scripts/deploy_backend_blue_green.sh` starts the candidate on private port
+  `18001` or `18002`, validates readiness/products/filters, and only then
+  atomically reloads nginx to the candidate;
+- the previous API slot remains available during validation and is stopped only
+  after origin and public readiness pass; `.active-api-slot` records the result;
+- `scripts/deploy.sh` remains the app-only standby deploy path; both scripts use
+  `--no-deps`, and post-deploy ops never call `compose up`;
 - the compose PostgreSQL image is pinned to an explicit version and digest;
 - changing `POSTGRES_IMAGE` requires a planned database maintenance window,
   backup/replication checks, and its own rollback plan;
@@ -305,11 +317,20 @@ candidate was actually activated. It never downgrades the database schema. Use
 expand/contract migrations so both the new image and retained rollback images
 can run against the current schema.
 
+The primary compose keeps the legacy `app` service on port `8000` only for the
+first migration and emergency compatibility. Normal releases alternate between
+profiled services `app-blue` and `app-green`. Nginx reads its active target from
+`/etc/nginx/snippets/mvn-api-upstream.conf`; reload is graceful, so established
+requests continue on the old worker while new requests move to the candidate.
+
 Manual code rollback on the active API host:
 
 ```bash
-cat scripts/rollback_backend.sh | ssh mvn-api \
-  'CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api bash -s'
+scp scripts/deploy_backend_blue_green.sh scripts/rollback_backend.sh mvn-api:/tmp/
+ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh /tmp/rollback_backend.sh && \
+  CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
+  API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
+  bash /tmp/rollback_backend.sh'
 ```
 
 ### Web VPS Deploy Target
@@ -449,11 +470,12 @@ When release includes normalization or brand/category sync changes, run data ops
 
 ```bash
 # 1) Dry-run backfill + safe cleanup (no commit)
-docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app \
+APP_SERVICE="app-$(cat /opt/air-api/.active-api-slot)"
+docker compose -f /opt/air-api/docker-compose.prod.yml --profile bluegreen exec -T "${APP_SERVICE}" \
   python3 scripts/backfill_brand_series.py --dry-run --safe-brand-cleanup
 
 # 2) Apply only after dry-run review
-docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app \
+docker compose -f /opt/air-api/docker-compose.prod.yml --profile bluegreen exec -T "${APP_SERVICE}" \
   python3 scripts/backfill_brand_series.py --safe-brand-cleanup
 ```
 

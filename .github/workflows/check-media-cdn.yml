@@ -96,7 +96,15 @@ jobs:
           ssh ${SSH_OPTS} "${SSH_USER_API}@${SSH_HOST_API}" "\
             set -euo pipefail && \
             cd $(quote "${API_PROJECT_DIR}") && \
-            docker compose -f $(quote "${API_COMPOSE_FILE}") exec -T app \
+            active_service=app && \
+            if [ -f .active-api-slot ]; then \
+              active_slot=\$(tr -d '\\r\\n' < .active-api-slot); \
+              case \"\${active_slot}\" in \
+                blue|green) active_service=app-\${active_slot} ;; \
+                *) echo 'invalid active API slot' >&2; exit 1 ;; \
+              esac; \
+            fi && \
+            docker compose -f $(quote "${API_COMPOSE_FILE}") --profile bluegreen exec -T \"\${active_service}\" \
               python3 scripts/check_media_cdn_db_urls.py \
                 --expected-cdn-base $(quote "${EXPECTED_CDN_BASE}") \
                 --min-db-cdn-urls $(quote "${MIN_DB_CDN_URLS}") \

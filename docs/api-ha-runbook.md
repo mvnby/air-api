@@ -10,7 +10,7 @@ Last verified state: 2026-07-03.
 
 | Host | SSH alias | Current role | API path | API port |
 | --- | --- | --- | --- | --- |
-| Original API VPS | `mvn-api` | Active primary | `/opt/air-api` | `127.0.0.1:8000` |
+| Original API VPS | `mvn-api` | Active primary | `/opt/air-api` | nginx `127.0.0.1:18080` -> slot `18001/18002` |
 | Belarus reserve VPS | `zakup` | Warm standby | `/opt/mvn-reserve` | `127.0.0.1:18000` |
 | Web VPS | `mvn` | Storefront only | n/a | n/a |
 
@@ -52,6 +52,7 @@ unreviewed host-local compose edits:
 | `zakup` as primary after promotion | `deploy/ha/zakup/docker-compose.primary.yml` |
 | `zakup` as standby | `deploy/ha/zakup/docker-compose.standby.yml` |
 | Active-passive invariant check | `scripts/ha/check_active_passive.sh` |
+| Zero-downtime primary API deploy | `scripts/deploy_backend_blue_green.sh` |
 | Local standby promotion helper | `scripts/ha/promote_local_standby.sh` |
 | GitHub Actions primary switch helper | `scripts/ha/switch_github_api_primary.py` |
 | Disposable DB restore drill | `scripts/ha/restore_drill_latest_db.sh` |
@@ -106,7 +107,7 @@ bash scripts/ha/check_active_passive.sh
 Media storage config check:
 
 ```bash
-ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T app python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
+ssh mvn-api 'cd /opt/air-api && app_service=app; if test -f .active-api-slot; then app_service="app-$(cat .active-api-slot)"; fi; docker compose -f docker-compose.prod.yml --profile bluegreen exec -T "$app_service" python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
 ```
 
 GitHub health check:
@@ -429,10 +430,11 @@ API_PROJECT_DIR=/opt/air-api
 API_COMPOSE_FILE=docker-compose.prod.yml
 API_COMPOSE_SOURCE_FILE=deploy/ha/mvn-api/docker-compose.primary.yml
 API_COPY_COMPOSE=true
-API_BASE_URL=http://localhost:8000
-API_READY_URL=http://localhost:8000/api/ready
-API_LOCAL_HEALTH_URL=http://127.0.0.1:8000/api/health
-API_TUNNEL_REMOTE_PORT=8000
+API_DEPLOY_STRATEGY=blue_green
+API_BASE_URL=http://localhost:18080
+API_READY_URL=http://localhost:18080/api/ready
+API_LOCAL_HEALTH_URL=http://127.0.0.1:18080/api/health
+API_TUNNEL_REMOTE_PORT=18080
 API_DEPLOY_SERVICES=app bot
 API_SMOKE_COMPOSE_SERVICE_CHECKS=app bot db
 API_COMPOSE_SERVICE_CHECKS=app bot db
@@ -520,11 +522,14 @@ cat scripts/prune_unused_docker_images.sh | ssh zakup \
   'KEEP_BACKEND_IMAGES=3 bash -s'
 ```
 
-Manual code rollback on the current primary:
+Manual zero-downtime code rollback on the current primary:
 
 ```bash
-cat scripts/rollback_backend.sh | ssh mvn-api \
-  'CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api bash -s'
+scp scripts/deploy_backend_blue_green.sh scripts/rollback_backend.sh mvn-api:/tmp/
+ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh /tmp/rollback_backend.sh && \
+  CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
+  API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
+  bash /tmp/rollback_backend.sh'
 ```
 
 ## Cloudflare Load Balancer
@@ -781,6 +786,7 @@ API_PROJECT_DIR=/opt/mvn-reserve
 API_COMPOSE_FILE=docker-compose.reserve.yml
 API_COMPOSE_SOURCE_FILE=deploy/ha/zakup/docker-compose.primary.yml
 API_COPY_COMPOSE=true
+API_DEPLOY_STRATEGY=in_place
 API_BASE_URL=http://localhost:18000
 API_READY_URL=http://localhost:18000/api/ready
 API_LOCAL_HEALTH_URL=http://127.0.0.1:18000/api/health

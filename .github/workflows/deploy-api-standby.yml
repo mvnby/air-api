@@ -1,0 +1,173 @@
+name: Deploy API Standby
+
+on:
+  workflow_call:
+    inputs:
+      deploy_sha:
+        description: Exact CI-tested commit to check out
+        required: true
+        type: string
+      backend_image:
+        description: Immutable backend digest deployed on the primary
+        required: true
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  deploy-api-standby:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: standby-api
+    permissions:
+      contents: read
+      deployments: write
+      packages: read
+    env:
+      API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST }}
+      API_STANDBY_USER: ${{ vars.API_STANDBY_USER || 'root' }}
+      API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/air-api' }}
+      API_STANDBY_COMPOSE_FILE: ${{ vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+      API_STANDBY_COPY_COMPOSE: ${{ vars.API_STANDBY_COPY_COMPOSE || 'false' }}
+      API_STANDBY_COMPOSE_SOURCE_FILE: ${{ vars.API_STANDBY_COMPOSE_SOURCE_FILE || vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.prod.yml' }}
+      API_STANDBY_HEALTH_URL: ${{ vars.API_STANDBY_HEALTH_URL || 'http://localhost:8000/api/health' }}
+      API_PRIMARY_ORIGIN: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}
+      API_STANDBY_ORIGIN: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Setup SSH Key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Deploy standby API app image
+        id: deploy_standby
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BACKEND_IMAGE: ${{ inputs.backend_image }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          SCP_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          echo "Deploying standby backend image: ${BACKEND_IMAGE}"
+
+          if [ "${API_STANDBY_COPY_COMPOSE}" = "true" ]; then
+            if [ ! -f "${API_STANDBY_COMPOSE_SOURCE_FILE}" ]; then
+              echo "::error::API_STANDBY_COMPOSE_SOURCE_FILE not found: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
+              exit 1
+            fi
+            ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "mkdir -p '${API_STANDBY_PROJECT_DIR}'"
+            scp ${SCP_OPTS} "${API_STANDBY_COMPOSE_SOURCE_FILE}" \
+              "${API_STANDBY_USER}@${API_STANDBY_HOST}:${API_STANDBY_PROJECT_DIR}/${API_STANDBY_COMPOSE_FILE}"
+          fi
+
+          cat scripts/ha/promote_local_standby.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-promote-local-standby"
+          cat scripts/ha/mvn-standby-status.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-standby-status"
+          cat scripts/deploy.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/deploy.sh"
+
+          printf '%s\n' "${GHCR_PAT}" | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
+            chmod +x /tmp/deploy.sh && \
+            IFS= read -r GHCR_PAT && export GHCR_PAT && \
+            GITHUB_ACTOR='${{ github.actor }}' \
+            API_PROJECT_DIR='${API_STANDBY_PROJECT_DIR}' \
+            API_COMPOSE_FILE='${API_STANDBY_COMPOSE_FILE}' \
+            API_DEPLOY_SERVICES='app' \
+            API_MIGRATION_SERVICE='app' \
+            API_RUN_MIGRATIONS='false' \
+            API_RUN_DEFAULTS='false' \
+            BACKEND_IMAGE='${BACKEND_IMAGE}' \
+            bash /tmp/deploy.sh && \
+            cd '${API_STANDBY_PROJECT_DIR}' && \
+            (docker compose -f '${API_STANDBY_COMPOSE_FILE}' stop bot >/dev/null 2>&1 || true) && \
+            for i in \$(seq 1 30); do \
+              if curl -fsS '${API_STANDBY_HEALTH_URL}' >/tmp/mvn-standby-health.out; then \
+                cat /tmp/mvn-standby-health.out; \
+                exit 0; \
+              fi; \
+              sleep 2; \
+            done; \
+            docker compose -f '${API_STANDBY_COMPOSE_FILE}' logs --tail=120 app; \
+            exit 1"
+
+      - name: Roll Back Standby After Failed Activation
+        id: rollback_standby
+        if: ${{ always() && steps.deploy_standby.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          cat scripts/rollback_backend.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/rollback_backend.sh"
+          ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
+            chmod +x /tmp/rollback_backend.sh && \
+            CONFIRM_ROLLBACK=true \
+            API_PROJECT_DIR='${API_STANDBY_PROJECT_DIR}' \
+            API_COMPOSE_FILE='${API_STANDBY_COMPOSE_FILE}' \
+            API_DEPLOY_SERVICES='app' \
+            API_READY_URL='${API_STANDBY_HEALTH_URL}' \
+            EXPECTED_CURRENT_IMAGE='${{ inputs.backend_image }}' \
+            bash /tmp/rollback_backend.sh" | tee standby_rollback.log
+
+      - name: Post-Standby Active-Passive Invariant Check
+        id: standby_active_passive
+        run: |
+          set -euo pipefail
+          CHECK_PUBLIC_READY=false \
+          PRIMARY_ORIGIN="${API_PRIMARY_ORIGIN}" \
+          STANDBY_ORIGIN="${API_STANDBY_ORIGIN}" \
+          bash scripts/ha/check_active_passive.sh 2>&1 | tee standby_active_passive.log
+
+      - name: Prune Unused Standby Docker Images
+        id: prune_standby_images
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          cat scripts/prune_unused_docker_images.sh | ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/prune_unused_docker_images.sh"
+          ssh ${SSH_OPTS} "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
+            chmod +x /tmp/prune_unused_docker_images.sh && \
+            KEEP_BACKEND_IMAGES=3 bash /tmp/prune_unused_docker_images.sh" | tee standby_docker_prune.log
+
+      - name: Upload Standby Deploy Logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: standby-deploy-logs-${{ github.run_id }}
+          path: |
+            standby_active_passive.log
+            standby_rollback.log
+            standby_docker_prune.log
+          if-no-files-found: warn
+
+      - name: Standby Deploy Summary
+        if: always()
+        run: |
+          {
+            echo "## Standby API Deploy Summary"
+            echo "- standby_host: ${API_STANDBY_HOST}"
+            echo "- standby_project_dir: ${API_STANDBY_PROJECT_DIR}"
+            echo "- standby_compose_file: ${API_STANDBY_COMPOSE_FILE}"
+            echo "- standby_copy_compose: ${API_STANDBY_COPY_COMPOSE}"
+            echo "- standby_compose_source_file: ${API_STANDBY_COMPOSE_SOURCE_FILE}"
+            echo "- backend_image: ${{ inputs.backend_image }}"
+            echo "- health_url: ${API_STANDBY_HEALTH_URL}"
+            echo "- primary_origin: ${API_PRIMARY_ORIGIN}"
+            echo "- standby_origin: ${API_STANDBY_ORIGIN}"
+            echo "- active_passive_status: ${{ steps.standby_active_passive.outcome }}"
+            echo "- rollback_status: ${{ steps.rollback_standby.outcome }}"
+            echo "- docker_prune_status: ${{ steps.prune_standby_images.outcome }}"
+            if [ -f standby_active_passive.log ]; then
+              echo "- active_passive_log: collected"
+            fi
+            if [ -f standby_docker_prune.log ]; then
+              echo "- docker_prune_log: collected"
+            fi
+            echo "- status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"

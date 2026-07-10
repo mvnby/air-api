@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:8000}"
+BASE_URL="${BASE_URL:-http://localhost:18080}"
 SMOKE_SUMMARY_FILE="${SMOKE_SUMMARY_FILE:-/tmp/smoke_summary.txt}"
 COMPOSE_FILE="${COMPOSE_FILE:-/opt/air-api/docker-compose.prod.yml}"
 COMPOSE_SERVICE_CHECKS="${COMPOSE_SERVICE_CHECKS:-app bot}"
+ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-$(dirname "${COMPOSE_FILE}")/.active-api-slot}"
 BOT_RUNTIME_CHECK_SERVICE="${BOT_RUNTIME_CHECK_SERVICE:-bot}"
 BOT_EXPECT_ENABLED="${BOT_EXPECT_ENABLED:-true}"
 READY_URL="${READY_URL:-}"
@@ -44,6 +45,29 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
+ACTIVE_APP_SERVICE="app"
+if [[ -f "${ACTIVE_SLOT_FILE}" ]]; then
+  active_slot="$(tr -d '\r\n' < "${ACTIVE_SLOT_FILE}")"
+  case "${active_slot}" in
+    blue|green) ACTIVE_APP_SERVICE="app-${active_slot}" ;;
+    *)
+      log preflight "invalid active API slot: ${active_slot}"
+      exit 1
+      ;;
+  esac
+fi
+
+resolved_service_checks=()
+for service in ${COMPOSE_SERVICE_CHECKS}; do
+  if [[ "${service}" == "app" ]]; then
+    resolved_service_checks+=("${ACTIVE_APP_SERVICE}")
+  else
+    resolved_service_checks+=("${service}")
+  fi
+done
+COMPOSE_SERVICE_CHECKS="${resolved_service_checks[*]}"
+
 HEALTH_URL_PRIMARY="${BASE_URL}/health"
 HEALTH_URL_FALLBACK="${BASE_URL}/api/health"
 PRODUCTS_URL="${BASE_URL}/api/v1/products?limit=5"
@@ -54,7 +78,7 @@ HEALTH_URL_USED=""
 log wait "Waiting for application to be ready (max ${MAX_RETRIES} attempts, ${RETRY_DELAY}s between retries)..."
 
 health_payload=""
-for attempt in $(seq 1 $MAX_RETRIES); do
+for attempt in $(seq 1 "${MAX_RETRIES}"); do
   log attempt "Health check attempt $attempt/$MAX_RETRIES"
   health_payload="$(curl -fsS "${HEALTH_URL_PRIMARY}" 2>/dev/null || true)"
   
@@ -72,9 +96,9 @@ for attempt in $(seq 1 $MAX_RETRIES); do
     break
   fi
   
-  if [ $attempt -lt $MAX_RETRIES ]; then
+  if [ "${attempt}" -lt "${MAX_RETRIES}" ]; then
     log retry "Waiting ${RETRY_DELAY}s before retry..."
-    sleep $RETRY_DELAY
+    sleep "${RETRY_DELAY}"
   fi
 done
 
@@ -140,14 +164,14 @@ PY
 fi
 
 log request "docker compose ps --status running --services"
-running_services="$(docker compose -f "${COMPOSE_FILE}" ps --status running --services 2>/dev/null || true)"
+running_services="$("${COMPOSE[@]}" ps --status running --services 2>/dev/null || true)"
 for service in ${COMPOSE_SERVICE_CHECKS}; do
   if ! printf '%s\n' "${running_services}" | grep -Fxq "${service}"; then
     log error "❌ Compose service is not running: ${service}"
     summary "smoke_status=failed"
     summary "base_url=${BASE_URL}"
     summary "failure_reason=compose_service_not_running:${service}"
-    docker compose -f "${COMPOSE_FILE}" ps || true
+    "${COMPOSE[@]}" ps || true
     exit 1
   fi
 done
@@ -156,7 +180,7 @@ log success "✅ Compose services running: ${COMPOSE_SERVICE_CHECKS}"
 checks_done="${checks_done},compose_services"
 if [[ "${BOT_EXPECT_ENABLED}" == "true" ]]; then
   log request "docker compose exec ${BOT_RUNTIME_CHECK_SERVICE} python3 - read bot runtime decision"
-  bot_runtime_payload="$(docker compose -f "${COMPOSE_FILE}" exec -T "${BOT_RUNTIME_CHECK_SERVICE}" python3 - <<'PY'
+  bot_runtime_payload="$("${COMPOSE[@]}" exec -T "${BOT_RUNTIME_CHECK_SERVICE}" python3 - <<'PY'
 from core.config import settings
 
 decision = settings.bot_control_decision
@@ -182,4 +206,4 @@ summary "base_url=${BASE_URL}"
 summary "health_url_used=${HEALTH_URL_USED}"
 summary "checks=${checks_done}"
 log info "health_url_used=${HEALTH_URL_USED}"
-log done "smoke checks passed"
+log "done" "smoke checks passed"

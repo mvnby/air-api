@@ -1,3 +1,26 @@
+x-api-app: &api-app
+  image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
+  restart: always
+  depends_on:
+    - db
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    APP_ROLE: primary
+    SCHEDULER_ENABLED: "true"
+    BOT_ENABLED: "false"
+    API_READY_ENABLED: "true"
+    DB_BOOTSTRAP_ENABLED: "true"
+  volumes:
+    - ./media:/app/media
+    - ./postgres-wal-archive:/postgres-wal-archive
+    - ./model-cache/u2net:/root/.u2net
+    - ./token.json:/app/token.json
+    - ./client_secret.json:/app/client_secret.json
+    - ./credentials.json:/app/credentials.json
+    - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
+
 services:
   db:
     image: ${POSTGRES_IMAGE:-postgres:15.18-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f}
@@ -24,29 +47,23 @@ services:
       - ./postgres-wal-archive:/postgres-wal-archive
 
   app:
-    image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
-    restart: always
-    depends_on:
-      - db
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
-      APP_ROLE: primary
-      SCHEDULER_ENABLED: "true"
-      BOT_ENABLED: "false"
-      API_READY_ENABLED: "true"
-      DB_BOOTSTRAP_ENABLED: "true"
+    <<: *api-app
     ports:
       - "127.0.0.1:8000:8000"
-    volumes:
-      - ./media:/app/media
-      - ./postgres-wal-archive:/postgres-wal-archive
-      - ./model-cache/u2net:/root/.u2net
-      - ./token.json:/app/token.json
-      - ./client_secret.json:/app/client_secret.json
-      - ./credentials.json:/app/credentials.json
-      - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
+
+  app-blue:
+    <<: *api-app
+    restart: unless-stopped
+    profiles: [bluegreen]
+    ports:
+      - "127.0.0.1:18001:8000"
+
+  app-green:
+    <<: *api-app
+    restart: unless-stopped
+    profiles: [bluegreen]
+    ports:
+      - "127.0.0.1:18002:8000"
 
   bot:
     image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}

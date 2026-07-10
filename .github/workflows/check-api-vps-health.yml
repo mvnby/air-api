@@ -67,7 +67,7 @@ jobs:
           API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
           API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
           API_COMPOSE_SERVICE_CHECKS: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot db' }}
-          API_LOCAL_HEALTH_URL: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:8000/api/health' }}
+          API_LOCAL_HEALTH_URL: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:18080/api/health' }}
         run: |
           set -euo pipefail
 
@@ -89,7 +89,7 @@ jobs:
             echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
             echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
             echo "- api_compose_service_checks: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot db' }}"
-            echo "- api_local_health_url: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:8000/api/health' }}"
+            echo "- api_local_health_url: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:18080/api/health' }}"
             echo "- backup_max_age_hours: ${{ github.event_name == 'workflow_dispatch' && inputs.backup_max_age_hours || '36' }}"
             echo "- check_backups: ${{ github.event_name != 'workflow_dispatch' || inputs.check_backups }}"
             echo "- skip_public_checks: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'ssh' }}"

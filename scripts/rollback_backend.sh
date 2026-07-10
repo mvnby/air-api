@@ -9,6 +9,8 @@ ROLLBACK_TARGET="${BACKEND_ROLLBACK_TARGET:-}"
 EXPECTED_CURRENT_IMAGE="${EXPECTED_CURRENT_IMAGE:-}"
 CONFIRM_ROLLBACK="${CONFIRM_ROLLBACK:-false}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
+ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
+BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-/tmp/deploy_backend_blue_green.sh}"
 
 usage() {
   cat <<'USAGE'
@@ -79,6 +81,21 @@ if [[ ! "${ROLLBACK_TARGET}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]]; then
 fi
 if [[ "${ROLLBACK_TARGET}" == "${current_image}" ]]; then
   echo "Rollback target is already active: ${ROLLBACK_TARGET}"
+  exit 0
+fi
+
+if [[ -f "${ACTIVE_SLOT_FILE}" ]]; then
+  if [[ ! -x "${BLUE_GREEN_SCRIPT}" ]]; then
+    echo "Blue-green rollback requires executable ${BLUE_GREEN_SCRIPT}" >&2
+    exit 1
+  fi
+  echo "Deploying rollback target through the inactive API slot: ${ROLLBACK_TARGET}"
+  BACKEND_IMAGE="${ROLLBACK_TARGET}" \
+    API_RUN_MIGRATIONS=false \
+    API_RUN_DEFAULTS=false \
+    API_DRAIN_SECONDS=0 \
+    API_DEPLOY_LOCK_ALREADY_HELD=true \
+    bash "${BLUE_GREEN_SCRIPT}"
   exit 0
 fi
 
