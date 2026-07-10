@@ -54,6 +54,16 @@ def test_pki_generator_creates_distinct_valid_certificates(tmp_path):
     result = subprocess.run(["bash", str(GENERATE)], env=env, text=True, capture_output=True, check=False)
 
     assert result.returncode == 0, result.stderr
+    ca_text = subprocess.run(
+        ["openssl", "x509", "-in", str(output / "ca.crt"), "-noout", "-text"],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+    assert "X509v3 Basic Constraints: critical" in ca_text
+    assert "CA:TRUE" in ca_text
+    assert "X509v3 Key Usage: critical" in ca_text
+    assert "Certificate Sign, CRL Sign" in ca_text
     for node in ("mvn-api", "zakup", "mvn-web"):
         node_dir = output / "nodes" / node
         assert (node_dir / "ca.crt").is_file()

@@ -53,13 +53,32 @@ umask 077
 mkdir -p "${OUTPUT_DIR}/ca-private" "${OUTPUT_DIR}/nodes" "${OUTPUT_DIR}/operator"
 ca_key="${OUTPUT_DIR}/ca-private/ca.key"
 ca_cert="${OUTPUT_DIR}/ca.crt"
+ca_config="${OUTPUT_DIR}/.ca.cnf"
+
+cat > "${ca_config}" <<'EOF'
+[req]
+distinguished_name = dn
+prompt = no
+x509_extensions = ca_ext
+
+[dn]
+CN = MVN PostgreSQL HA etcd CA
+
+[ca_ext]
+basicConstraints = critical,CA:TRUE
+keyUsage = critical,keyCertSign,cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+EOF
 
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out "${ca_key}" >/dev/null 2>&1
 openssl req -x509 -new -sha256 \
   -key "${ca_key}" \
   -out "${ca_cert}" \
   -days "${VALID_DAYS}" \
-  -subj "/CN=MVN PostgreSQL HA etcd CA" >/dev/null 2>&1
+  -config "${ca_config}" \
+  -extensions ca_ext >/dev/null 2>&1
+rm -f "${ca_config}"
 
 issue_certificate() {
   local name="$1"

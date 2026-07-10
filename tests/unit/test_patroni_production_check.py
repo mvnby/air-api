@@ -114,6 +114,15 @@ def test_sql_row_parser_is_strict():
         _parse_rows("too|few", 5)
 
 
+def test_patroni_monitor_strips_inet_netmask_in_sql():
+    source = (REPO_ROOT / "scripts/ha/check_patroni_production.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "host(client_addr)" in source
+    assert "client_addr::text" not in source
+
+
 def test_cluster_view_accepts_replica_role_but_requires_sync_endpoint():
     api, reserve = _nodes()
     config = CheckerConfig(
@@ -202,3 +211,22 @@ def test_pitr_workflow_resolves_the_current_patroni_primary():
     assert "target_label=reserve" in run
     assert "target_compose_file=docker-compose.patroni.yml" in run
     assert "API_DB_HA_MODE must be physical or patroni" in run
+
+
+def test_api_vps_health_workflow_targets_current_patroni_primary():
+    workflow = yaml.load(
+        (REPO_ROOT / ".github/workflows/check-api-vps-health.yml").read_text(
+            encoding="utf-8"
+        ),
+        Loader=yaml.BaseLoader,
+    )
+    steps = workflow["jobs"]["check"]["steps"]
+    setup = next(step for step in steps if step.get("name") == "Setup API SSH Key")
+    check = next(step for step in steps if step.get("name") == "Run API VPS Health Check")
+
+    assert "API_STANDBY_HOST" in setup["env"]
+    assert '"${API_STANDBY_HOST}"' in setup["run"]
+    assert "API_DB_HA_MODE" in check["env"]
+    assert "check_patroni_production.py --resolve-primary" in check["run"]
+    assert 'target_host="${API_STANDBY_HOST}"' in check["run"]
+    assert "API_DB_HA_MODE must be physical or patroni" in check["run"]

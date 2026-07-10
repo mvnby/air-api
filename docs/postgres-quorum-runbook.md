@@ -73,6 +73,13 @@ Never copy `ca-private/ca.key` to a server. Keep it offline after the three node
 certificates are installed. A lost node key can then be replaced without
 replacing the cluster CA.
 
+Before distribution, inspect `ca.crt` and require both critical extensions:
+`Basic Constraints: CA:TRUE` and `Key Usage: Certificate Sign, CRL Sign`.
+Validate the exact production Patroni image against every live etcd endpoint
+with this CA before opening the PostgreSQL cutover window. `etcdctl` accepting a
+certificate is not sufficient because Patroni's Python/OpenSSL client applies
+stricter CA validation.
+
 ## Installation Gate
 
 Before installation:

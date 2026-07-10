@@ -247,6 +247,9 @@ def run_live_active_passive(
             "CHECK_PUBLIC_READY": "false",
             "PRIMARY_ORIGIN": primary_origin,
             "STANDBY_ORIGIN": standby_origin,
+            "DISCOVER_PRIMARY_FROM_READY": (
+                "true" if os.getenv("API_DB_HA_MODE", "physical") == "patroni" else "false"
+            ),
         }
     )
     actual_runner = runner
