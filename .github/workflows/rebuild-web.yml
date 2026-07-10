@@ -159,6 +159,7 @@ jobs:
           CATALOG_REVISION: ${{ inputs.catalog_revision }}
           WEB_REBUILD_CALLBACK_TOKEN: ${{ secrets.WEB_REBUILD_CALLBACK_TOKEN }}
           WEB_REBUILD_CALLBACK_URL: ${{ vars.WEB_REBUILD_CALLBACK_URL }}
+          WEB_REBUILD_CALLBACK_RESOLVE_IP: ${{ vars.WEB_REBUILD_CALLBACK_RESOLVE_IP }}
         run: |
           set -euo pipefail
           if [ -z "${WEB_REBUILD_CALLBACK_TOKEN:-}" ]; then
@@ -168,7 +169,21 @@ jobs:
 
           CATALOG_REVISION="${CATALOG_REVISION:-0}"
           CALLBACK_URL="${WEB_REBUILD_CALLBACK_URL:-https://api.mvn.by/api/system/rebuild-web/complete}"
-          if ! curl -fsS -X POST "${CALLBACK_URL}" \
+          CURL_RESOLVE_ARGS=()
+          if [ -n "${WEB_REBUILD_CALLBACK_RESOLVE_IP:-}" ]; then
+            CALLBACK_HOST="$(python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+
+print(urlparse(os.environ["CALLBACK_URL"]).hostname or "")
+PY
+)"
+            if [ -n "${CALLBACK_HOST}" ]; then
+              CURL_RESOLVE_ARGS=(--resolve "${CALLBACK_HOST}:443:${WEB_REBUILD_CALLBACK_RESOLVE_IP}")
+            fi
+          fi
+
+          if ! curl -fsS "${CURL_RESOLVE_ARGS[@]}" -X POST "${CALLBACK_URL}" \
             -H "Content-Type: application/json" \
             -H "X-Web-Rebuild-Token: ${WEB_REBUILD_CALLBACK_TOKEN}" \
             --data "{\"catalog_revision\":${CATALOG_REVISION},\"status\":\"success\"}"; then
@@ -181,6 +196,7 @@ jobs:
           CATALOG_REVISION: ${{ inputs.catalog_revision }}
           WEB_REBUILD_CALLBACK_TOKEN: ${{ secrets.WEB_REBUILD_CALLBACK_TOKEN }}
           WEB_REBUILD_CALLBACK_URL: ${{ vars.WEB_REBUILD_CALLBACK_URL }}
+          WEB_REBUILD_CALLBACK_RESOLVE_IP: ${{ vars.WEB_REBUILD_CALLBACK_RESOLVE_IP }}
         run: |
           set -euo pipefail
           if [ -z "${WEB_REBUILD_CALLBACK_TOKEN:-}" ]; then
@@ -190,7 +206,21 @@ jobs:
 
           CATALOG_REVISION="${CATALOG_REVISION:-0}"
           CALLBACK_URL="${WEB_REBUILD_CALLBACK_URL:-https://api.mvn.by/api/system/rebuild-web/complete}"
-          if ! curl -fsS -X POST "${CALLBACK_URL}" \
+          CURL_RESOLVE_ARGS=()
+          if [ -n "${WEB_REBUILD_CALLBACK_RESOLVE_IP:-}" ]; then
+            CALLBACK_HOST="$(python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+
+print(urlparse(os.environ["CALLBACK_URL"]).hostname or "")
+PY
+)"
+            if [ -n "${CALLBACK_HOST}" ]; then
+              CURL_RESOLVE_ARGS=(--resolve "${CALLBACK_HOST}:443:${WEB_REBUILD_CALLBACK_RESOLVE_IP}")
+            fi
+          fi
+
+          if ! curl -fsS "${CURL_RESOLVE_ARGS[@]}" -X POST "${CALLBACK_URL}" \
             -H "Content-Type: application/json" \
             -H "X-Web-Rebuild-Token: ${WEB_REBUILD_CALLBACK_TOKEN}" \
             --data "{\"catalog_revision\":${CATALOG_REVISION},\"status\":\"failed\",\"error\":\"GitHub Actions rebuild-web failed\"}"; then
