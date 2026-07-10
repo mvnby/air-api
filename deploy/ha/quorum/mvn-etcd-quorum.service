@@ -1,0 +1,21 @@
+[Unit]
+Description=MVN three-node etcd quorum
+Wants=network-online.target
+After=network-online.target docker.service wg-quick@wg-mvn.service
+Requires=docker.service wg-quick@wg-mvn.service
+ConditionPathExists=/opt/mvn-quorum/docker-compose.etcd.yml
+ConditionPathExists=/opt/mvn-quorum/.env
+ConditionPathExists=/opt/mvn-quorum/pki/node.key
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/mvn-quorum
+ExecStart=/usr/bin/docker compose --env-file .env -f docker-compose.etcd.yml up -d --wait
+ExecReload=/usr/bin/docker compose --env-file .env -f docker-compose.etcd.yml up -d --wait
+ExecStop=/usr/bin/docker compose --env-file .env -f docker-compose.etcd.yml stop
+TimeoutStartSec=180
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

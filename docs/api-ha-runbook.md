@@ -69,6 +69,7 @@ unreviewed host-local compose edits:
 | Cloudflare LB GitHub prerequisite apply helper | `scripts/ha/apply_cloudflare_lb_github_prerequisites.py` |
 | Status helpers | `scripts/ha/mvn-primary-status.sh`, `scripts/ha/mvn-standby-status.sh` |
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
+| PostgreSQL quorum preparation | `docs/postgres-quorum-runbook.md`, `deploy/ha/quorum/`, `scripts/ha/generate_etcd_pki.sh`, `scripts/ha/check_etcd_quorum.sh` |
 
 ## Daily Status Checks
 
@@ -866,5 +867,6 @@ gh workflow run api-restore-drill.yml --repo mvnby/air-api --ref main
 
 ## Next Improvements
 
-- Add Cloudflare-native origin health alerts if GitHub Actions alerting is not
-  fast enough for operational needs.
+- Complete the staged Patroni migration described in
+  `docs/postgres-quorum-runbook.md`; etcd installation alone must not be treated
+  as automatic PostgreSQL failover.

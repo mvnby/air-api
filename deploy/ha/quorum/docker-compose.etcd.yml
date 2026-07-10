@@ -1,0 +1,55 @@
+name: mvn_quorum
+
+services:
+  etcd:
+    image: ${ETCD_IMAGE:-quay.io/coreos/etcd:v3.6.11@sha256:6ae247c7666ceec554c51ba1f9bc8dd2212f975370dbd65710c9ca0e36ae1fff}
+    container_name: mvn-etcd
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - /usr/local/bin/etcd
+      - --name=${ETCD_NAME:?set ETCD_NAME}
+      - --data-dir=/etcd-data
+      - --listen-client-urls=https://127.0.0.1:2379,https://${ETCD_WG_IP:?set ETCD_WG_IP}:2379
+      - --advertise-client-urls=https://${ETCD_WG_IP:?set ETCD_WG_IP}:2379
+      - --listen-peer-urls=https://${ETCD_WG_IP:?set ETCD_WG_IP}:2380
+      - --initial-advertise-peer-urls=https://${ETCD_WG_IP:?set ETCD_WG_IP}:2380
+      - --initial-cluster=mvn-api=https://10.77.0.2:2380,zakup=https://10.77.0.1:2380,mvn-web=https://10.77.0.3:2380
+      - --initial-cluster-token=${ETCD_CLUSTER_TOKEN:-mvn-postgres-ha-v1}
+      - --initial-cluster-state=${ETCD_INITIAL_CLUSTER_STATE:-new}
+      - --cert-file=/etc/etcd/pki/node.crt
+      - --key-file=/etc/etcd/pki/node.key
+      - --client-cert-auth=true
+      - --trusted-ca-file=/etc/etcd/pki/ca.crt
+      - --peer-cert-file=/etc/etcd/pki/node.crt
+      - --peer-key-file=/etc/etcd/pki/node.key
+      - --peer-client-cert-auth=true
+      - --peer-trusted-ca-file=/etc/etcd/pki/ca.crt
+      - --auto-compaction-mode=periodic
+      - --auto-compaction-retention=1h
+      - --quota-backend-bytes=1073741824
+      - --snapshot-count=10000
+    environment:
+      ETCDCTL_API: "3"
+    volumes:
+      - ./data:/etcd-data
+      - ./pki:/etc/etcd/pki:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          etcdctl --endpoints=https://127.0.0.1:2379
+          --cacert=/etc/etcd/pki/ca.crt
+          --cert=/etc/etcd/pki/node.crt
+          --key=/etc/etcd/pki/node.key endpoint health
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    mem_limit: ${ETCD_MEMORY_LIMIT:-192m}
+    cpus: ${ETCD_CPU_LIMIT:-0.35}
