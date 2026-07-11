@@ -285,6 +285,21 @@ const address = config["address"] || SITE_CONFIG.address;
 		</footer>
 
 		<script>
+			const analyticsWindow = window as Window & {
+				dataLayer?: Array<Record<string, string>>;
+				trackHomeConversion?: (element: HTMLAnchorElement) => void;
+			};
+
+			analyticsWindow.trackHomeConversion = (element) => {
+				analyticsWindow.dataLayer = analyticsWindow.dataLayer || [];
+				analyticsWindow.dataLayer.push({
+					event: element.dataset.homeEvent || "home_click",
+					action: element.dataset.homeAction || "open",
+					item: element.dataset.homeItem || "",
+					destination: element.getAttribute("href") || "",
+				});
+			};
+
 			const themeToggle = document.getElementById("theme-toggle");
 			themeToggle?.addEventListener("click", () => {
 				const isDark =

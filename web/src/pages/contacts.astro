@@ -70,7 +70,7 @@ const workHours = config["work_hours"] || "Пн-Пт: 9:00 - 18:00";
                 </div>
             </div>
 
-            <div class="contact-form-wrapper">
+            <div id="contact-form" class="contact-form-wrapper">
                 <ContactForm client:visible />
             </div>
         </div>
@@ -97,6 +97,10 @@ const workHours = config["work_hours"] || "Пн-Пт: 9:00 - 18:00";
 
     .contact-section {
         margin-bottom: 6rem;
+    }
+
+    #contact-form {
+        scroll-margin-top: 100px;
     }
 
     .contact-grid {

@@ -16,9 +16,23 @@ interface Props {
         indoor_types?: string[];
     };
     limit?: number;
+    subtitle?: string;
+    headingLevel?: 2 | 3;
+    fitCheckHref?: string;
+    fitCheckAnalyticsEvent?: string;
 }
 
-const { title, tags = [], vitebskFeatured = false, filters = {}, limit = 4 } = Astro.props;
+const {
+    title,
+    tags = [],
+    vitebskFeatured = false,
+    filters = {},
+    limit = 4,
+    subtitle = "",
+    headingLevel = 3,
+    fitCheckHref = "",
+    fitCheckAnalyticsEvent = "",
+} = Astro.props;
 
 let products: any[] = [];
 
@@ -69,7 +83,10 @@ if (vitebskFeatured) {
         <section class="product-group-section">
             {title && (
                 <div class="group-header">
-                    <h3>{title}</h3>
+                    <div class="group-heading-copy">
+                        {headingLevel === 2 ? <h2>{title}</h2> : <h3>{title}</h3>}
+                        {subtitle && <p>{subtitle}</p>}
+                    </div>
                     <a
                         href={viewAllHref}
                         class="view-all"
@@ -87,6 +104,8 @@ if (vitebskFeatured) {
                         variant="default"
                         showInstallation={true}
                         refreshProductOnMount={false}
+                        fitCheckHref={fitCheckHref}
+                        fitCheckAnalyticsEvent={fitCheckAnalyticsEvent}
                     />
                 ))}
             </div>
@@ -106,9 +125,22 @@ if (vitebskFeatured) {
         margin-bottom: 2rem;
     }
 
+    .group-header h2,
     .group-header h3 {
         font-size: 1.75rem;
         font-weight: 800;
+    }
+
+    .group-heading-copy {
+        min-width: 0;
+    }
+
+    .group-heading-copy p {
+        max-width: 720px;
+        margin-top: 0.45rem;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+        line-height: 1.55;
     }
 
     .view-all {
@@ -152,6 +184,7 @@ if (vitebskFeatured) {
             gap: 1rem;
         }
 
+        .group-header h2,
         .group-header h3 {
             font-size: 1.6rem;
         }
@@ -179,6 +212,7 @@ if (vitebskFeatured) {
             margin-bottom: 1.25rem;
         }
 
+        .group-header h2,
         .group-header h3 {
             font-size: 1.5rem;
         }
