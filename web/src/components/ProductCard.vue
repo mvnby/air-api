@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import PriceWithToggle from './PriceWithToggle.vue';
 import { resolveImageUrl } from '../utils/api';
+import { buildProductCompareSnapshot } from '../utils/product-compare';
 
 const props = defineProps({
   product: {
@@ -109,6 +110,7 @@ const displayFeatureTags = computed(() => {
 // Fallback for legacy props if no tags present
 const showAreaBadge = computed(() => Boolean(props.product.area));
 const productCardImage = computed(() => props.product.card_image || props.product.main_image);
+const comparePayload = computed(() => JSON.stringify(buildProductCompareSnapshot(props.product)));
 </script>
 
 <template>
@@ -167,6 +169,18 @@ const productCardImage = computed(() => props.product.card_image || props.produc
           :refreshProductOnMount="refreshProductOnMount"
         />
     </div>
+    <button
+      type="button"
+      class="product-compare-toggle"
+      data-compare-product
+      :data-compare-slug="product.slug"
+      :data-compare-title="product.title"
+      :data-compare-payload="comparePayload"
+      aria-pressed="false"
+    >
+      <span class="material-icons-round" aria-hidden="true">compare_arrows</span>
+      <span data-compare-label>Сравнить</span>
+    </button>
   </div>
 
   <!-- Implement minimal/hero variants only if needed by Catalog (Catalog mostly uses default) -->
@@ -186,6 +200,33 @@ const productCardImage = computed(() => props.product.card_image || props.produc
   .product-item:hover {
     transform: translateY(-4px);
   }
+
+  .product-compare-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: calc(100% - 2rem);
+    min-height: 42px;
+    margin: 0 1rem 1rem;
+    border: 1px solid var(--panel-chip-border);
+    border-radius: 8px;
+    background: var(--panel-chip-bg);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .product-compare-toggle:hover:not(:disabled),
+  .product-compare-toggle[aria-pressed="true"] {
+    border-color: var(--panel-chip-hover-border);
+    color: var(--primary);
+  }
+
+  .product-compare-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+  .product-compare-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .product-compare-toggle .material-icons-round { font-size: 1.1rem; }
 
   .p-img-box {
     height: 200px;
