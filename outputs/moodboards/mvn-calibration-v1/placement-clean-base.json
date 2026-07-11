@@ -1,0 +1,13 @@
+{
+  "id": "placement-bedroom-clean-base",
+  "title": "Placement bedroom — clean architectural base",
+  "caption": "Generated architectural base reserved for deterministic MVN AirFlow overlay.",
+  "source": "Production correction after AirFlow QA",
+  "tone": "calm, precise, trustworthy",
+  "motif": "clean bedroom, side-wall split system, empty wall space for exact overlay",
+  "palette": "warm white, pale ice, light oak, mist gray",
+  "parentItemId": "placement-bedroom-calibration-v3",
+  "editMode": "generated-base-for-deterministic-overlay",
+  "annotation": "Remove all generated technical graphics. AirFlow, wrong-position marker and measurement point will be composed as exact deterministic layers.",
+  "prompt": "One self-contained 16:9 clean architectural 3D illustration serving as a background plate for a technical editorial overlay. Calm modern bedroom with matte warm-white walls, pale-ice accents, light-oak floor and bed, mist-gray neutral textiles. Three-quarter view with straight verticals, restrained 38 mm lens, camera height 1.65 m, slight downward angle. Soft daylight only from a large window outside the frame at upper left, gentle short shadows, quiet premium engineering mood. One physical fictional MVN Reference Split 01 installed high on the right-side wall just beside the headboard: matte warm-white rectangular body, softly rounded corners, one graphite lower seam, one continuous dark louver, no logo, no display. Bed in the lower-right. Leave the central and left wall deliberately blank and uncluttered so exact technical airflow graphics can be added later. One minimal bedside table and one small neutral vase. 2400 by 1350. Absolutely no colored lines, no airflow, no arrows, no chevrons, no ghost unit, no measurement dot, no X, no diagrams, no technical overlays, no text, no letters, no numbers, no logo, no watermark, no second air conditioner, no person, no wall artwork, no collage, no split screen, no watercolor, no flat clipart, no stock-photo look, no glossy advertising render, no dark room, no clutter, no floating UI. This is a clean background plate only."
+}
