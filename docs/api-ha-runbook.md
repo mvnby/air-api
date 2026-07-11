@@ -302,6 +302,13 @@ to `on` only after the private bucket/token are configured and the upload helper
 has passed a dry run. This prevents WAL files from accumulating locally before
 remote archive upload is ready.
 
+The strict PITR check verifies that R2 contains PostgreSQL's exact
+`last_archived_wal`. An old latest-WAL timestamp is reported as an `idle`
+warning, rather than a failure, only when that expected segment is present and
+there are no completed WAL files waiting for local upload. A missing expected
+segment, uploader backlog, archiver failure, or stale basebackup remains a hard
+failure.
+
 Enable on the current primary after the private bucket/token exist:
 
 ```bash

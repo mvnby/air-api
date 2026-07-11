@@ -66,6 +66,13 @@ print_prefixed() {
   done <<< "${content}"
 }
 
+is_uploadable_wal_name() {
+  local filename="$1"
+  [[ "${filename}" =~ ^[0-9A-F]{24}$ \
+    || "${filename}" =~ ^[0-9A-F]{24}\.[0-9A-F]{8}\.backup$ \
+    || "${filename}" =~ ^[0-9A-F]{8}\.history$ ]]
+}
+
 if ! PITR_REQUIRED="$(normalize_bool "${PITR_REQUIRED}")"; then
   fail "PITR_REQUIRED must be true or false"
 fi
@@ -189,10 +196,20 @@ archive_path="${ARCHIVE_DIR}"
 if [[ "${archive_path}" != /* ]]; then
   archive_path="${PROJECT_DIR}/${archive_path}"
 fi
+wal_count=0
+wal_bytes=0
+ignored_wal_count=0
 if [[ -d "${archive_path}" ]]; then
-  wal_count="$(find "${archive_path}" -maxdepth 1 -type f | wc -l | tr -d ' ')"
-  wal_bytes="$(find "${archive_path}" -maxdepth 1 -type f -printf '%s\n' | awk '{sum += $1} END {print sum + 0}')"
-  log info "local_archive_dir=${archive_path} files=${wal_count} bytes=${wal_bytes}"
+  while IFS= read -r -d '' wal_path; do
+    filename="${wal_path##*/}"
+    if is_uploadable_wal_name "${filename}"; then
+      wal_count=$((wal_count + 1))
+      wal_bytes=$((wal_bytes + $(stat -c '%s' "${wal_path}")))
+    else
+      ignored_wal_count=$((ignored_wal_count + 1))
+    fi
+  done < <(find "${archive_path}" -maxdepth 1 -type f -print0)
+  log info "local_archive_dir=${archive_path} files=${wal_count} bytes=${wal_bytes} ignored_files=${ignored_wal_count}"
   if [[ "${PITR_REQUIRED}" == "true" ]]; then
     if (( wal_count > PITR_MAX_LOCAL_WAL_FILES )); then
       fail "local WAL backlog files=${wal_count} exceeds ${PITR_MAX_LOCAL_WAL_FILES}"
@@ -244,11 +261,22 @@ elif [[ "${PITR_CHECK_REMOTE}" == "auto" && "${PITR_REQUIRED}" == "true" ]]; the
 fi
 
 if [[ "${remote_check}" == "true" ]]; then
-  if remote_output="$("${COMPOSE[@]}" run -T --rm "${APP_SERVICE}" python scripts/ha/check_postgres_pitr_remote.py \
-    --max-wal-age-minutes "${PITR_MAX_WAL_AGE_MINUTES}" \
-    --max-basebackup-age-hours "${PITR_MAX_BASEBACKUP_AGE_HOURS}" 2>&1)"; then
+  remote_args=(
+    python scripts/ha/check_postgres_pitr_remote.py
+    --max-wal-age-minutes "${PITR_MAX_WAL_AGE_MINUTES}"
+    --max-basebackup-age-hours "${PITR_MAX_BASEBACKUP_AGE_HOURS}"
+    --local-pending-wal-count "${wal_count}"
+  )
+  if [[ "${last_archived_wal}" =~ ^[0-9A-F]{24}$ ]]; then
+    remote_args+=(--expected-wal "${last_archived_wal}")
+  fi
+  if remote_output="$("${COMPOSE[@]}" run -T --rm "${APP_SERVICE}" "${remote_args[@]}" 2>&1)"; then
     print_prefixed remote "${remote_output}"
-    ok "remote PITR object freshness passed"
+    if grep -q 'pitr_remote_wal status=idle' <<< "${remote_output}"; then
+      warn "remote WAL is older than the threshold, but no uploadable WAL is pending locally"
+    else
+      ok "remote PITR object freshness passed"
+    fi
   else
     print_prefixed remote "${remote_output}"
     fail "remote PITR object freshness failed"
