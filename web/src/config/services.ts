@@ -38,7 +38,7 @@ export const services: ServiceDefinition[] = [
         cue: "Ремонт ещё идёт",
         href: "/services/zakladka-kommunikaciy-kondicionera/",
         icon: "cable",
-        image: "/img/services/v2/preinstallation.svg",
+        image: "/img/services/v3/preinstallation.webp",
     },
     {
         id: "installation",
@@ -49,7 +49,7 @@ export const services: ServiceDefinition[] = [
         cue: "Нужна новая система",
         href: "/montaj-konditionerov/",
         icon: "construction",
-        image: "/img/services/v2/installation.svg",
+        image: "/img/services/v3/installation.webp",
     },
     {
         id: "dismantling",
@@ -60,7 +60,7 @@ export const services: ServiceDefinition[] = [
         cue: "Переезд или замена",
         href: "/services/demontazh-kondicionera/",
         icon: "move_down",
-        image: "/img/services/v2/dismantling.svg",
+        image: "/img/services/v3/dismantling.webp",
     },
     {
         id: "maintenance",
@@ -71,7 +71,7 @@ export const services: ServiceDefinition[] = [
         cue: "Пахнет или слабо дует",
         href: "/obslujivanie-kondicionerov/",
         icon: "cleaning_services",
-        image: "/img/services/v2/maintenance.svg",
+        image: "/img/services/v3/maintenance.webp",
     },
     {
         id: "repair",
@@ -82,7 +82,7 @@ export const services: ServiceDefinition[] = [
         cue: "Не охлаждает или течёт",
         href: "/services/repair/",
         icon: "engineering",
-        image: "/img/services/v2/repair.svg",
+        image: "/img/services/v3/repair.webp",
     },
     {
         id: "vrf",
@@ -93,7 +93,7 @@ export const services: ServiceDefinition[] = [
         cue: "Много зон и длинные трассы",
         href: "/services/vrf-sistemy/",
         icon: "settings_ethernet",
-        image: "/img/services/v2/vrf.svg",
+        image: "/img/services/v3/vrf.webp",
     },
     {
         id: "server-room",
@@ -104,7 +104,7 @@ export const services: ServiceDefinition[] = [
         cue: "Оборудование работает 24/7",
         href: "/services/kondicionery-dlya-servernoy/",
         icon: "dns",
-        image: "/img/services/v2/server-room.svg",
+        image: "/img/services/v3/server-room.webp",
     },
 ];
 
