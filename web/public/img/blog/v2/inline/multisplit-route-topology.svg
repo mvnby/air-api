@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Как внутренние блоки подключаются к мультисплиту</title>
+  <desc id="desc">Общий наружный блок не означает одну общую трубу внутри квартиры</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#24343A" flood-opacity=".10"/></filter>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF7F6"/></linearGradient>
+    <style>
+      .title{font:700 34px Inter,Arial,sans-serif;fill:#24343A}
+      .subtitle{font:400 20px Inter,Arial,sans-serif;fill:#607277}
+      .label{font:700 25px Inter,Arial,sans-serif;fill:#24343A}
+      .note{font:500 18px Inter,Arial,sans-serif;fill:#607277}
+      .small{font:600 16px Inter,Arial,sans-serif;fill:#24343A}
+      .line{fill:none;stroke-linecap:round;stroke-linejoin:round}
+    </style>
+  </defs>
+  <rect width="1200" height="760" rx="40" fill="#F7F5F0"/>
+  <text x="600" y="58" text-anchor="middle" class="title">Как внутренние блоки подключаются к мультисплиту</text>
+  <text x="600" y="96" text-anchor="middle" class="subtitle">Общий наружный блок не означает одну общую трубу внутри квартиры</text>
+  <rect x="45" y="150" width="350" height="500" rx="32" fill="url(#panel)" stroke="#11B8B2" stroke-width="4"/>
+      <rect x="455" y="150" width="700" height="500" rx="32" fill="url(#panel)" stroke="#C9D5D5" stroke-width="3"/>
+      <text x="220" y="205" text-anchor="middle" class="label">Один наружный блок</text>
+      <text x="805" y="205" text-anchor="middle" class="label">Три отдельные трассы</text>
+      <g opacity="1" filter="url(#shadow)">
+      <rect x="155" y="300" width="135" height="135" rx="18" fill="#F2F4F3" stroke="#C9D5D5" stroke-width="3"/>
+      <circle cx="222.5" cy="367.5" r="41.85" fill="none" stroke="#075E63" stroke-width="7"/>
+      <circle cx="222.5" cy="367.5" r="8" fill="#075E63"/>
+      <path d="M222.5 331.05 Q252.2 356.7 222.5 367.5 Q192.8 378.3 222.5 403.95" fill="none" stroke="#075E63" stroke-width="5"/>
+    </g>
+      <path d="M300 326 H490 V263 H880" class="line" stroke="#11B8B2" stroke-width="7"/><circle cx="300" cy="326" r="7" fill="#11B8B2"/><path d="M300 350 H560 V418 H880" class="line" stroke="#075E63" stroke-width="7"/><circle cx="300" cy="350" r="7" fill="#075E63"/><path d="M300 374 H630 V573 H880" class="line" stroke="#4B9FA2" stroke-width="7"/><circle cx="300" cy="374" r="7" fill="#4B9FA2"/><g filter="url(#shadow)">
+      <rect x="895" y="235" width="175" height="60" rx="22" fill="#FFFFFF" stroke="#C9D5D5" stroke-width="3"/>
+      <path d="M913 280 H1052" stroke="#24343A" stroke-width="7" stroke-linecap="round"/>
+    </g><g filter="url(#shadow)">
+      <rect x="895" y="390" width="175" height="60" rx="22" fill="#FFFFFF" stroke="#C9D5D5" stroke-width="3"/>
+      <path d="M913 435 H1052" stroke="#24343A" stroke-width="7" stroke-linecap="round"/>
+    </g><g filter="url(#shadow)">
+      <rect x="895" y="545" width="175" height="60" rx="22" fill="#FFFFFF" stroke="#C9D5D5" stroke-width="3"/>
+      <path d="M913 590 H1052" stroke="#24343A" stroke-width="7" stroke-linecap="round"/>
+    </g>
+      <path d="M470 300 H1130 M470 455 H1130" stroke="#C9D5D5" stroke-width="3" stroke-dasharray="10 10"/>
+      <text x="220" y="555" text-anchor="middle" class="note"><tspan x="220" dy="0">У каждого порта</tspan><tspan x="220" dy="27">своё подключение</tspan></text>
+      <text x="610" y="245" class="small">Комната 1</text>
+      <text x="610" y="400" class="small">Комната 2</text>
+      <text x="610" y="555" class="small">Комната 3</text>
+      <text x="805" y="625" text-anchor="middle" class="note">Длину и перепад высот считают для каждой трассы</text>
+</svg>
