@@ -1,5 +1,6 @@
 ---
 import PriceWithToggle from "./PriceWithToggle.vue";
+import ProductFitLink from "./product/ProductFitLink.astro";
 import { resolveImageUrl } from "../utils/api";
 import { formatProductPrice, hasKnownProductPrice } from "../utils/product-display";
 
@@ -36,6 +37,8 @@ interface Props {
   installationRates?: any[] | null;
   installDiscount?: number | null;
   refreshProductOnMount?: boolean;
+  fitCheckHref?: string;
+  fitCheckAnalyticsEvent?: string;
 }
 
 const {
@@ -46,6 +49,8 @@ const {
   installationRates = null,
   installDiscount = null,
   refreshProductOnMount = false,
+  fitCheckHref = "",
+  fitCheckAnalyticsEvent = "",
 } = Astro.props;
 
 const pricingProps = {
@@ -211,6 +216,13 @@ const showAreaBadge = !!product.area;
             {...pricingProps}
           />
         </div>
+        {fitCheckHref && (
+          <ProductFitLink
+            href={fitCheckHref}
+            productSlug={product.slug}
+            analyticsEvent={fitCheckAnalyticsEvent}
+          />
+        )}
       </div>
     </div>
   )
