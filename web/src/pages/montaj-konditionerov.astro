@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import ContactForm from "../components/ContactForm.vue";
 import InstallationCalculator from "../components/InstallationCalculator.vue";
+import TechnicalFigure from "../components/TechnicalFigure.astro";
 import { getInstallationPricingInfo } from "../utils/api";
 
 export const prerender = true;
@@ -87,6 +88,12 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                             </p>
                         </div>
                     </div>
+
+                    <TechnicalFigure
+                        src="/img/blog/v2/inline/installation-connection-node.svg"
+                        alt="Схема правильного подхода трассы, дренажа и кабеля к внутреннему блоку кондиционера"
+                        caption="Даже в обычном монтаже точка ввода и уклон дренажа должны совпадать с выбранным блоком — это влияет на внешний вид и нормальный отвод конденсата."
+                    />
                 </section>
 
                 <section class="mb-12">
