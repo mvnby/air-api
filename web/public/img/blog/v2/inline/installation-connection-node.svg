@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Как трасса подходит к внутреннему блоку</title>
+  <desc id="desc">Точка выхода привязана к корпусу, а дренажу нужен постоянный уклон</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#24343A" flood-opacity=".10"/></filter>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF7F6"/></linearGradient>
+    <style>
+      .title{font:700 34px Inter,Arial,sans-serif;fill:#24343A}
+      .subtitle{font:400 20px Inter,Arial,sans-serif;fill:#607277}
+      .label{font:700 25px Inter,Arial,sans-serif;fill:#24343A}
+      .note{font:500 18px Inter,Arial,sans-serif;fill:#607277}
+      .small{font:600 16px Inter,Arial,sans-serif;fill:#24343A}
+      .line{fill:none;stroke-linecap:round;stroke-linejoin:round}
+    </style>
+  </defs>
+  <rect width="1200" height="760" rx="40" fill="#F7F5F0"/>
+  <text x="600" y="58" text-anchor="middle" class="title">Как трасса подходит к внутреннему блоку</text>
+  <text x="600" y="96" text-anchor="middle" class="subtitle">Точка выхода привязана к корпусу, а дренажу нужен постоянный уклон</text>
+  <rect x="70" y="145" width="1060" height="520" rx="34" fill="url(#panel)" stroke="#C9D5D5" stroke-width="3"/>
+      <path d="M100 185 H1100" stroke="#24343A" stroke-width="5"/>
+      <text x="105" y="175" class="small">Потолок</text>
+      <path d="M1045 185 V225 M1032 185 H1058 M1032 225 H1058" stroke="#075E63" stroke-width="4"/>
+      <text x="1070" y="211" class="small">10–15 см</text>
+      <g filter="url(#shadow)">
+      <rect x="720" y="225" width="310" height="105" rx="22" fill="#FFFFFF" stroke="#C9D5D5" stroke-width="3"/>
+      <path d="M738 315 H1012" stroke="#24343A" stroke-width="7" stroke-linecap="round"/>
+    </g>
+      <circle cx="720" cy="315" r="12" fill="#11B8B2" stroke="#FFFFFF" stroke-width="4"/>
+      <text x="740" y="355" class="small">Нижний левый ввод блока</text>
+      <path d="M235 610 V300 H720" fill="none" stroke="#C9D5D5" stroke-width="58" stroke-linejoin="round" opacity=".45"/>
+      <path d="M220 610 V292 H720" fill="none" stroke="#075E63" stroke-width="9" stroke-linejoin="round"/>
+      <path d="M245 610 V315 H720" fill="none" stroke="#11B8B2" stroke-width="9" stroke-linejoin="round"/>
+      <path d="M270 610 V338 L720 315" fill="none" stroke="#F2A93B" stroke-width="8" stroke-linejoin="round"/>
+      <path d="M290 610 V355 L720 330" fill="none" stroke="#24343A" stroke-width="5" stroke-linejoin="round" stroke-dasharray="14 10"/>
+      <path d="M500 326 l18-12 M500 326 l19 10" stroke="#F2A93B" stroke-width="5" stroke-linecap="round"/>
+      <text x="325" y="275" class="small">Поворот трассы на 90° к блоку</text>
+      <text x="305" y="390" class="small">Дренаж идёт от блока с уклоном</text>
+      <circle cx="420" cy="500" r="7" fill="#075E63"/><text x="440" y="507" class="note">медные трубы</text>
+      <circle cx="420" cy="540" r="7" fill="#F2A93B"/><text x="440" y="547" class="note">дренаж: поток от блока</text>
+      <circle cx="420" cy="580" r="7" fill="#24343A"/><text x="440" y="587" class="note">кабель</text>
+</svg>
