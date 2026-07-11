@@ -1,6 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import ContactForm from "../../components/ContactForm.vue";
+import TechnicalFigure from "../../components/TechnicalFigure.astro";
 
 export const prerender = true;
 ---
@@ -52,6 +53,12 @@ export const prerender = true;
                 </div>
                 <span class="material-icons-round" aria-hidden="true">settings_ethernet</span>
             </section>
+
+            <TechnicalFigure
+                src="/img/blog/v2/inline/vrf-system-architecture.svg"
+                alt="Схема VRF-системы: один наружный модуль, разветвлённые трассы, внутренние блоки в нескольких зонах и центральное управление"
+                caption="VRF проектируют как единую систему здания: учитывают каждую зону, длины трасс, перепады высот, дренажи и централизованное управление."
+            />
 
             <section class="info-grid" aria-label="Что учитываем при подборе VRF">
                 <div class="info-card">
