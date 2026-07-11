@@ -17,8 +17,8 @@ const { service } = Astro.props;
         <img
             src={service.image}
             alt=""
-            width="1200"
-            height="760"
+            width="1672"
+            height="941"
             loading="lazy"
             decoding="async"
         />
@@ -73,7 +73,7 @@ const { service } = Astro.props;
 
     .service-visual {
         min-width: 0;
-        aspect-ratio: 1200 / 760;
+        aspect-ratio: 16 / 9;
         overflow: hidden;
         background: var(--panel-chip-bg);
         border-bottom: 1px solid var(--panel-chip-border);
@@ -159,21 +159,11 @@ const { service } = Astro.props;
 
     @media (max-width: 680px) {
         .service-card {
-            grid-template-columns: 124px minmax(0, 1fr);
-            grid-template-rows: 1fr;
             border-radius: 18px;
         }
 
         .service-visual {
-            height: 100%;
-            min-height: 196px;
-            aspect-ratio: auto;
-            border-right: 1px solid var(--panel-chip-border);
-            border-bottom: 0;
-        }
-
-        .service-visual img {
-            object-fit: contain;
+            aspect-ratio: 16 / 9;
         }
 
         .service-content {
