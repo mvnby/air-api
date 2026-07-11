@@ -37,6 +37,18 @@ def test_postgres_pitr_check_workflow_preserves_strict_remote_gate():
     assert artifact_step["with"]["path"] == "postgres-pitr-check.log"
 
 
+def test_postgres_pitr_status_uses_activity_aware_remote_wal_gate():
+    script = (REPO_ROOT / "scripts/ha/check_postgres_pitr_status.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "is_uploadable_wal_name" in script
+    assert '--local-pending-wal-count "${wal_count}"' in script
+    assert '--expected-wal "${last_archived_wal}"' in script
+    assert "pitr_remote_wal status=idle" in script
+    assert "no uploadable WAL is pending locally" in script
+
+
 def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_proof():
     workflow = _workflow(".github/workflows/postgres-pitr-restore-drill.yml")
     env = workflow["env"]
