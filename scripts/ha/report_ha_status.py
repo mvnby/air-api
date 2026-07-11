@@ -78,6 +78,7 @@ EXPECTED_WORKFLOWS = (
     ExpectedWorkflow("API HA Invariant Check", max_age_hours=8),
     ExpectedWorkflow("API HA Readiness Audit", max_age_hours=8),
     ExpectedWorkflow("API VPS Health Check", max_age_hours=8),
+    ExpectedWorkflow("Infrastructure Security Check", max_age_hours=8),
     ExpectedWorkflow("Media CDN Check", max_age_hours=8),
     ExpectedWorkflow("PostgreSQL Replication Check", max_age_hours=8),
     ExpectedWorkflow("Cloudflare LB Config Check", max_age_hours=8),
@@ -246,6 +247,9 @@ def run_live_active_passive(
             "CHECK_PUBLIC_READY": "false",
             "PRIMARY_ORIGIN": primary_origin,
             "STANDBY_ORIGIN": standby_origin,
+            "DISCOVER_PRIMARY_FROM_READY": (
+                "true" if os.getenv("API_DB_HA_MODE", "physical") == "patroni" else "false"
+            ),
         }
     )
     actual_runner = runner

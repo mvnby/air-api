@@ -28,9 +28,9 @@ def test_postgres_pitr_check_workflow_preserves_strict_remote_gate():
     assert "POSTGRES_PITR_MAX_WAL_AGE_MINUTES" in check_step["env"]["PITR_MAX_WAL_AGE_MINUTES"]
     assert "POSTGRES_PITR_MAX_BASEBACKUP_AGE_HOURS" in check_step["env"]["PITR_MAX_BASEBACKUP_AGE_HOURS"]
     assert "scripts/ha/check_postgres_pitr_status.sh" in check_step["run"]
-    assert "PITR_REQUIRED='${PITR_REQUIRED}'" in check_step["run"]
-    assert "PITR_MAX_WAL_AGE_MINUTES='${PITR_MAX_WAL_AGE_MINUTES}'" in check_step["run"]
-    assert "PITR_MAX_BASEBACKUP_AGE_HOURS='${PITR_MAX_BASEBACKUP_AGE_HOURS}'" in check_step["run"]
+    assert 'PITR_REQUIRED=$(quote "${PITR_REQUIRED}")' in check_step["run"]
+    assert 'PITR_MAX_WAL_AGE_MINUTES=$(quote "${PITR_MAX_WAL_AGE_MINUTES}")' in check_step["run"]
+    assert 'PITR_MAX_BASEBACKUP_AGE_HOURS=$(quote "${PITR_MAX_BASEBACKUP_AGE_HOURS}")' in check_step["run"]
     assert "postgres-pitr-check.log" in check_step["run"]
     assert "pitr_required:" in summary_step["run"]
     assert artifact_step["if"] == "always()"

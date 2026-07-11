@@ -47,6 +47,8 @@ networking so it can bind directly to each node's WireGuard address.
   files. Normal API deploys must never recreate their `db` service.
 - `deploy/ha/proxy/`: the stable internal Nginx hop used only on `zakup`, so
   belzakupki Caddy never needs to follow blue/green container names.
+- `docs/infrastructure-security-runbook.md`: tracked SSH/fail2ban policy and
+  scheduled private-listener/public-port auditing for all three quorum hosts.
 
 ## PKI
 
@@ -70,6 +72,13 @@ operator/{operator.crt,operator.key}
 Never copy `ca-private/ca.key` to a server. Keep it offline after the three node
 certificates are installed. A lost node key can then be replaced without
 replacing the cluster CA.
+
+Before distribution, inspect `ca.crt` and require both critical extensions:
+`Basic Constraints: CA:TRUE` and `Key Usage: Certificate Sign, CRL Sign`.
+Validate the exact production Patroni image against every live etcd endpoint
+with this CA before opening the PostgreSQL cutover window. `etcdctl` accepting a
+certificate is not sufficient because Patroni's Python/OpenSSL client applies
+stricter CA validation.
 
 ## Installation Gate
 
@@ -171,6 +180,19 @@ The node certificate bundle belongs in `<project>/patroni-pki` with directory
 mode `0700`, key mode `0600`, and certificate mode `0644`. The CA private key
 must not be present on either server.
 
+Both production Patroni compose files declare the existing PGDATA volumes as
+external state:
+
+```text
+mvn-api: air-api_postgres_data
+zakup:   mvn_reserve_postgres_data
+```
+
+This makes `docker compose down -v` unable to delete production PGDATA. Confirm
+both volumes with `docker volume inspect` before staging the compose files. A
+new database host must create or restore the named external volume explicitly;
+Compose must fail closed instead of silently creating an empty database.
+
 ## Reserve Proxy Gate
 
 `zakup` shares Caddy with belzakupki. Do not make release jobs rewrite that
@@ -242,7 +264,9 @@ while a GitHub production release is running.
    create a deployment maintenance marker on both database hosts.
 4. Stop app, scheduler, and bot processes on both hosts; verify no new writes.
 5. Re-check zero replication lag, stop both PostgreSQL containers, and create a
-   compressed, checksummed PGDATA rollback copy on each host.
+   compressed, checksummed PGDATA rollback copy on each host. Verify the
+   external volume names are still `air-api_postgres_data` and
+   `mvn_reserve_postgres_data` before either Patroni container starts.
 6. Start only the current primary `db` with its Patroni compose. Require local
    `/primary=200`, writable SQL, the expected system identifier, and one DCS
    leader before continuing.
@@ -294,3 +318,37 @@ The Patroni deploy scripts never start, recreate, or pull `db`. For a full
 rollback to the former physical topology, restore PostgreSQL first under the
 cutover rollback procedure, then delete `API_DB_HA_MODE`; do not switch the
 variable while Patroni is still managing either database node.
+
+## Production Monitoring
+
+After `API_DB_HA_MODE=patroni`, the existing scheduled workflows become
+role-aware instead of treating the API VPS as a permanent primary:
+
+- `PostgreSQL Replication Check` runs every ten minutes and invokes
+  `scripts/ha/check_patroni_production.py`;
+- `PostgreSQL PITR Check` probes both Patroni REST APIs and executes the local
+  archive/timer/R2 freshness check on whichever node is currently primary;
+- both workflows retain the existing Telegram failure action and diagnostic
+  artifacts.
+
+The production checker requires all of these invariants at the same time:
+
+1. exactly one Patroni primary and one running replica;
+2. both DCS views identify the same leader and synchronous standby;
+3. matching PostgreSQL system identifiers, synchronous streaming, and replay
+   lag within `POSTGRES_REPLICATION_MAX_LAG_BYTES`;
+4. healthy three-member etcd quorum;
+5. active role agents, one bot, one traffic-enabled API, and the standby API
+   fenced with HTTP 503;
+6. PITR timers active only on the current primary.
+
+Manual operator check from a machine with both SSH aliases:
+
+```bash
+python3 scripts/ha/check_patroni_production.py
+```
+
+The first required scheduled runs must pass after the switchover and switchback
+drill. Keep `watchdog.mode=off` until a real fencing device is installed and a
+separate destructive-node rehearsal proves it; etcd quorum alone is not a
+substitute for watchdog fencing.

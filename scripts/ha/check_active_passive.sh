@@ -8,6 +8,7 @@ STANDBY_ORIGIN="${STANDBY_ORIGIN:-193.47.42.213}"
 PRIMARY_ROLE="${PRIMARY_ROLE:-primary}"
 STANDBY_ROLE="${STANDBY_ROLE:-standby}"
 CHECK_PUBLIC_READY="${CHECK_PUBLIC_READY:-true}"
+DISCOVER_PRIMARY_FROM_READY="${DISCOVER_PRIMARY_FROM_READY:-false}"
 CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-15}"
 READY_RETRIES="${READY_RETRIES:-3}"
@@ -139,9 +140,61 @@ check_ready_with_retries() {
   return 1
 }
 
+discover_primary_origin() {
+  local configured_primary_file="$1"
+  local configured_standby_file="$2"
+  local attempt primary_code standby_code swap
+
+  for attempt in $(seq 1 "${READY_RETRIES}"); do
+    primary_code="$(
+      curl_json \
+        "configured primary origin discovery" \
+        "https://${API_HOST}/api/ready" \
+        "${configured_primary_file}" \
+        --resolve "${API_HOST}:443:${PRIMARY_ORIGIN}" \
+        || true
+    )"
+    standby_code="$(
+      curl_json \
+        "configured standby origin discovery" \
+        "https://${API_HOST}/api/ready" \
+        "${configured_standby_file}" \
+        --resolve "${API_HOST}:443:${STANDBY_ORIGIN}" \
+        || true
+    )"
+
+    if [[ "${primary_code}" == "200" && "${standby_code}" == "200" ]]; then
+      log "both origins returned HTTP 200 during discovery; split-brain risk"
+      return 1
+    fi
+    if [[ "${primary_code}" == "200" && "${standby_code}" != "200" ]]; then
+      log "discovered active origin=${PRIMARY_ORIGIN} standby=${STANDBY_ORIGIN}"
+      return 0
+    fi
+    if [[ "${primary_code}" != "200" && "${standby_code}" == "200" ]]; then
+      swap="${PRIMARY_ORIGIN}"
+      PRIMARY_ORIGIN="${STANDBY_ORIGIN}"
+      STANDBY_ORIGIN="${swap}"
+      log "discovered active origin=${PRIMARY_ORIGIN} standby=${STANDBY_ORIGIN}"
+      return 0
+    fi
+
+    log "origin discovery attempt ${attempt}/${READY_RETRIES} found no ready origin: configured_primary=${primary_code:-curl_failed} configured_standby=${standby_code:-curl_failed}"
+    if (( attempt < READY_RETRIES )); then
+      sleep "${READY_RETRY_SLEEP}"
+    fi
+  done
+
+  return 1
+}
+
 public_file="${TMP_DIR}/public-ready.json"
 primary_file="${TMP_DIR}/primary-ready.json"
 standby_file="${TMP_DIR}/standby-ready.json"
+
+if is_true "${DISCOVER_PRIMARY_FROM_READY}"; then
+  discover_primary_origin "${primary_file}" "${standby_file}"
+fi
 
 if is_true "${CHECK_PUBLIC_READY}"; then
   check_ready_with_retries "public ready" "${PUBLIC_BASE_URL%/}/api/ready" "${public_file}" "${PRIMARY_ROLE}" ready

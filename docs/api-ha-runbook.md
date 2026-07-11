@@ -1,5 +1,10 @@
 # API HA Runbook
 
+This document remains the rollback/reference runbook for the physical
+active-passive topology. Once repository variable `API_DB_HA_MODE=patroni`, use
+`docs/postgres-quorum-runbook.md` for database role changes and do not run the
+manual physical promotion helpers below against a Patroni-managed node.
+
 This runbook describes the current active-passive API setup for `api.mvn.by`.
 The system intentionally has one writable PostgreSQL primary and one warm
 standby. Do not make both origins public-writable.
@@ -207,7 +212,9 @@ Scheduled monitors:
 | `check-api-vps-health.yml` | every 6 hours | primary host, containers, DB, backups, media storage config |
 | `check-api-ha-readiness.yml` | every 6 hours | whole-system HA readiness rollup; direct-origin core checks fail, Cloudflare/PITR are soft blockers until strict |
 | `check-api-ha-invariants.yml` | every 30 minutes | direct primary ready and standby fenced; public Cloudflare routing is covered by the LB monitor/config checks |
+| `check-postgres-replication.yml` | every 10 minutes | physical replication before migration; role-aware Patroni/DCS/runtime ownership after `API_DB_HA_MODE=patroni` |
 | `check-cloudflare-lb-config.yml` | every 6 hours | Cloudflare LB pool order, fallback, host header, and monitor config |
+| `check-infrastructure-security.yml` | every 6 hours | effective SSH/fail2ban/WireGuard policy and private/public listener boundaries on all three hosts |
 | `api-restore-drill.yml` | daily after the 03:00 UTC backup | disposable DB restore drill |
 | `check-postgres-pitr.yml` | every 6 hours | PITR archive/timer/backlog and remote R2 freshness |
 | `postgres-pitr-restore-drill.yml` | daily when `POSTGRES_PITR_REQUIRED=true` | disposable physical restore from PITR basebackup + WAL |

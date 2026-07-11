@@ -1,0 +1,156 @@
+name: Infrastructure Security Check
+
+on:
+  schedule:
+    - cron: "37 */6 * * *"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          API_HOST: ${{ secrets.SSH_HOST_API }}
+          RESERVE_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
+        run: |
+          set -euo pipefail
+          for value_name in SSH_KEY API_HOST RESERVE_HOST WEB_HOST; do
+            [[ -n "${!value_name}" ]] || {
+              echo "::error::Missing ${value_name}"
+              exit 1
+            }
+          done
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/infrastructure_security_key
+          chmod 600 ~/.ssh/infrastructure_security_key
+          : > ~/.ssh/known_hosts
+          for host in "${API_HOST}" "${RESERVE_HOST}" "${WEB_HOST}"; do
+            scanned=false
+            for attempt in 1 2 3 4 5; do
+              if ssh-keyscan -T 10 -H "${host}" >> ~/.ssh/known_hosts 2>/dev/null; then
+                scanned=true
+                break
+              fi
+              sleep $((attempt * 2))
+            done
+            [[ "${scanned}" == "true" ]] || {
+              echo "::error::Could not obtain SSH host key"
+              exit 1
+            }
+          done
+
+      - name: Audit host hardening and private listeners
+        env:
+          API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
+          API_HOST: ${{ secrets.SSH_HOST_API }}
+          API_USER: ${{ secrets.SSH_USER_API }}
+          RESERVE_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          RESERVE_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
+          WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
+          WEB_USER: ${{ vars.INFRA_SECURITY_WEB_USER || 'root' }}
+        run: |
+          set -euo pipefail
+          SSH_OPTIONS=(
+            -i ~/.ssh/infrastructure_security_key
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=20
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+          labels=(mvn-api zakup mvn-web)
+          hosts=("${API_HOST}" "${RESERVE_HOST}" "${WEB_HOST}")
+          users=("${API_USER}" "${RESERVE_USER}" "${WEB_USER}")
+          wireguard_ips=(10.77.0.2 10.77.0.1 10.77.0.3)
+          required_ports=("2379,2380,5432" "2379,2380,5432" "2379,2380")
+
+          for user in "${users[@]}"; do
+            [[ -n "${user}" ]] || {
+              echo "::error::Missing SSH user for infrastructure security check"
+              exit 1
+            }
+          done
+
+          if [[ "${API_DB_HA_MODE}" == "patroni" ]]; then
+            required_ports[0]="${required_ports[0]},8008"
+            required_ports[1]="${required_ports[1]},8008"
+          elif [[ "${API_DB_HA_MODE}" != "physical" ]]; then
+            echo "::error::API_DB_HA_MODE must be physical or patroni"
+            exit 1
+          fi
+
+          : > infrastructure-security-check.log
+          for index in 0 1 2; do
+            target="${users[$index]}@${hosts[$index]}"
+            ssh "${SSH_OPTIONS[@]}" "${target}" \
+              bash -s -- "${wireguard_ips[$index]}" "${labels[$index]}" "${required_ports[$index]}" \
+              < scripts/ha/check_host_security.sh | tee -a infrastructure-security-check.log
+          done
+
+      - name: Verify sensitive ports are closed publicly
+        env:
+          API_HOST: ${{ secrets.SSH_HOST_API }}
+          RESERVE_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
+        run: |
+          set -euo pipefail
+          labels=(mvn-api zakup mvn-web)
+          hosts=("${API_HOST}" "${RESERVE_HOST}" "${WEB_HOST}")
+          ports=(2379 2380 5432 8008 18000 18001 18002 18080)
+          failures=0
+
+          for index in 0 1 2; do
+            for port in "${ports[@]}"; do
+              if nc -z -w 2 "${hosts[$index]}" "${port}" >/dev/null 2>&1; then
+                echo "[host-security][fail] host=${labels[$index]} public_port=${port} is open" | tee -a infrastructure-security-check.log
+                failures=$((failures + 1))
+              fi
+            done
+          done
+          if (( failures > 0 )); then
+            echo "::error::Found ${failures} public sensitive listeners"
+            exit 1
+          fi
+          echo "[host-security][ok] all sensitive public ports are closed" | tee -a infrastructure-security-check.log
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Infrastructure Security Check"
+            echo "- hosts: mvn-api, zakup, mvn-web"
+            echo "- checks: effective sshd, fail2ban, WireGuard, private listeners, public port scan"
+            echo "- artifact: infrastructure-security-check-${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload security audit log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: infrastructure-security-check-${{ github.run_id }}
+          path: infrastructure-security-check.log
+          if-no-files-found: warn
+
+      - name: Notify HA failure
+        if: failure()
+        uses: ./.github/actions/notify-ha-failure
+        with:
+          bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
+          chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
+          thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
+          title: "MVN infrastructure security check failed"
+          details: "Artifact: infrastructure-security-check-${{ github.run_id }}"

@@ -100,3 +100,5 @@ services:
 
 volumes:
   postgres_data:
+    name: air-api_postgres_data
+    external: true

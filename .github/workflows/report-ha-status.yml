@@ -37,6 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HA_EXTERNAL_METADATA_SOURCE: env
+          API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
           API_PRIMARY_ORIGIN: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}
           API_STANDBY_ORIGIN: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}
           API_HA_READINESS_STRICT: ${{ vars.API_HA_READINESS_STRICT || 'false' }}
