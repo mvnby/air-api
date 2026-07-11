@@ -92,4 +92,7 @@
 - `home_intent_click` — выбор одной из четырёх задач;
 - `home_quick_pick_click` — переход в поддерживаемую виртуальную категорию;
 - `home_product_fit_click` — проверка подходящей модели из блока наличия;
-- `home_mobile_action_click` — `call`, `write` или `select` в мобильной панели.
+- `home_mobile_action_click` — `call`, `write` или `select` в мобильной панели;
+- `home_selector_complete` — завершение четырёхшагового подбора, payload: `rooms`, `area`, `priority`, `inverter`, `destination`;
+- `product_compare_toggle` — `add`, `remove` или `clear`, payload не содержит PII;
+- `product_compare_open` — переход к сравнению, `item` содержит только количество моделей.

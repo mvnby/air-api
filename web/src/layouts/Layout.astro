@@ -6,6 +6,7 @@ import HeaderCart from "../components/cart/HeaderCart.vue";
 import MobileMenu from "../components/ui/MobileMenu.vue";
 import ToastContainer from "../components/ui/ToastContainer.vue";
 import SEOHead from "../components/seo/SEOHead.astro";
+import ProductCompareBar from "../components/product/ProductCompareBar.astro";
 
 interface Props {
 	title: string;
@@ -201,6 +202,7 @@ const address = config["address"] || SITE_CONFIG.address;
 			<slot />
 			<ToastContainer client:idle />
 		</main>
+		<ProductCompareBar />
 
 		<footer class="footer">
 			<div class="container footer-grid">

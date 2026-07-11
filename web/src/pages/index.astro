@@ -8,6 +8,7 @@ import HomeInstallationOffer from "../components/home/HomeInstallationOffer.astr
 import HomeIntentGrid from "../components/home/HomeIntentGrid.astro";
 import HomeMobileActions from "../components/home/HomeMobileActions.astro";
 import HomeQuickPick from "../components/home/HomeQuickPick.astro";
+import HomeSelector from "../components/home/HomeSelector.vue";
 import HomeTrust from "../components/home/HomeTrust.astro";
 import ProductGroup from "../components/ProductGroup.astro";
 import { HOMEPAGE_ANALYTICS_EVENTS } from "../config/homepage";
@@ -59,6 +60,7 @@ const homepageBrands = publicBrands
 >
     <HomeHero />
     <HomeIntentGrid />
+    <HomeSelector client:idle />
     <HomeQuickPick />
 
     <section class="home-products" aria-label="Кондиционеры в наличии">

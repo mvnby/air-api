@@ -17,6 +17,12 @@ const importTypeScriptModule = async (relativePath) => {
 };
 
 const homepage = await importTypeScriptModule("../src/config/homepage.ts");
+const homeSelection = await importTypeScriptModule(
+    "../src/config/home-selection.ts",
+);
+const productCompare = await importTypeScriptModule(
+    "../src/utils/product-compare.ts",
+);
 const virtualCategories = await importTypeScriptModule(
     "../src/config/virtual-categories.ts",
 );
@@ -68,5 +74,53 @@ describe("homepage conversion routes", () => {
 
     it("does not restore unverified homepage proof claims", () => {
         assert.doesNotMatch(homepageSource, /500\+|20\+ лет|гарантией/iu);
+    });
+
+    it("maps selector answers to supported catalog filters", () => {
+        const result = homeSelection.buildHomeSelectionResult({
+            rooms: "single",
+            area: 25,
+            priority: "silent",
+            inverter: true,
+        });
+        const url = new URL(result.href, "https://mvn.by");
+
+        assert.equal(url.pathname, "/catalog/");
+        assert.equal(url.searchParams.get("area_max"), "25");
+        assert.equal(url.searchParams.get("tag_slugs"), "noise-silent");
+        assert.equal(url.searchParams.get("is_inverter"), "true");
+    });
+
+    it("routes multi-room selection to the existing multi-split category", () => {
+        const result = homeSelection.buildHomeSelectionResult({
+            rooms: "multiple",
+            area: 50,
+            priority: "wifi",
+            inverter: false,
+        });
+
+        assert.equal(result.href, "/catalog/multi-split/");
+    });
+
+    it("normalizes comparison state and enforces the three-product limit", () => {
+        const items = productCompare.normalizeCompareItems([
+            {
+                slug: "one",
+                title: "One",
+                snapshot: { slug: "different", title: "Different", price: 1000 },
+            },
+            { slug: "one", title: "Duplicate" },
+            { slug: "../../bad", title: "Bad" },
+            { slug: "two", title: "Two" },
+            { slug: "three", title: "Three" },
+            { slug: "four", title: "Four" },
+        ]);
+
+        assert.deepEqual(items.map((item) => item.slug), ["one", "two", "three"]);
+        assert.equal(items[0].snapshot.slug, "one");
+        assert.equal(
+            productCompare.buildCompareUrl(items),
+            "/compare/?products=one%2Ctwo%2Cthree",
+        );
     });
 });

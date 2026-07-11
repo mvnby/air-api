@@ -107,4 +107,5 @@ export const HOMEPAGE_ANALYTICS_EVENTS = {
     quickPick: "home_quick_pick_click",
     productFit: "home_product_fit_click",
     mobileAction: "home_mobile_action_click",
+    selectorComplete: "home_selector_complete",
 } as const;

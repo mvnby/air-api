@@ -1,7 +1,9 @@
 ---
 import PriceWithToggle from "./PriceWithToggle.vue";
 import ProductFitLink from "./product/ProductFitLink.astro";
+import ProductCompareToggle from "./product/ProductCompareToggle.astro";
 import { resolveImageUrl } from "../utils/api";
+import { buildProductCompareSnapshot } from "../utils/product-compare";
 import { formatProductPrice, hasKnownProductPrice } from "../utils/product-display";
 
 interface Props {
@@ -135,6 +137,7 @@ if (wifiBadgeText && !displayFeatureTags.some((t) => String(t.title || "").toLow
 
 // Fallback for legacy props if no tags present
 const showAreaBadge = !!product.area;
+const compareSnapshot = buildProductCompareSnapshot(product);
 ---
 
 {
@@ -223,6 +226,7 @@ const showAreaBadge = !!product.area;
             analyticsEvent={fitCheckAnalyticsEvent}
           />
         )}
+        <ProductCompareToggle slug={product.slug} title={product.title} snapshot={compareSnapshot} />
       </div>
     </div>
   )
