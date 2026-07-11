@@ -1,0 +1,431 @@
+{
+  "meta": {
+    "title": "MVN Climate Atlas — calibration set v1",
+    "brief": "Three production calibration images establishing the shared room, cutaway and warning language for the MVN blog visual library.",
+    "audience": "Homeowners and small-business customers choosing, installing and maintaining HVAC systems in Belarus.",
+    "outputType": "blog hero calibration set",
+    "aspectRatio": "16:9"
+  },
+  "signals": {
+    "visualTerritory": "quiet engineering clarity",
+    "palette": [
+      "#11B8B2",
+      "#075E63",
+      "#EAF7F6",
+      "#F7F5F0",
+      "#24343A",
+      "#F2A93B",
+      "#E56A5D"
+    ],
+    "mustPreserve": [
+      "same fictional MVN Reference Split 01 in every scene",
+      "three-line teal AirFlow system",
+      "upper-left soft daylight",
+      "restrained architectural 3D illustration",
+      "no text or logos"
+    ],
+    "avoid": [
+      "stock-photo realism",
+      "watercolor",
+      "flat clipart",
+      "green odor clouds",
+      "oversized arrows",
+      "floating UI"
+    ]
+  },
+  "items": [
+    {
+      "id": "placement-bedroom-calibration",
+      "title": "Placement and airflow",
+      "caption": "Correct side-wall placement guides the airflow past the sleeping zone; a restrained ghost outline shows the wrong position.",
+      "source": "MVN blog article: gde-nelzya-stavit-kondicioner",
+      "tone": "calm, precise, trustworthy",
+      "motif": "bedroom, side-wall split system, three-line airflow, one warning outline",
+      "palette": "warm white, pale ice, light oak, MVN teal, minimal coral warning",
+      "prompt": "Create one self-contained 16:9 editorial HVAC illustration for the MVN Climate Atlas visual system. Clean restrained architectural 3D illustration with precise flat technical overlays, matte materials, warm-white and pale-ice interior, light oak and mist-gray details. Consistent three-quarter isometric camera, 38 mm lens, camera height 1.65 m, slight 10-degree downward angle, vertical lines straight. Soft daylight from upper left at 5200K, gentle short shadows, quiet premium engineering mood. Use the fictional MVN Reference Split 01: matte warm-white indoor unit, visually about 880 by 295 by 210 mm, softly rounded corners, one graphite lower seam and one continuous louver, no logo and no readable display. Calm modern bedroom. The correctly placed unit sits high on the side wall near the headboard and sends exactly three smooth parallel teal airflow lines, #11B8B2, along the room and safely past the bed, with rounded ends and subtle chevrons. A single subtle coral outline on the opposite wall indicates the wrong placement that would blow directly across the bed, with one restrained crossed marker; it is only a ghost outline, not a second physical unit. Include a small deep-teal measurement point near pillow height. Bed in the lower-right area, clean wall space, one light-oak bedside table, neutral mist-gray textiles. Keep all essential content inside the central 85 percent safe area, 2400 by 1350 master composition. No text, letters, numbers, logo, watermark, extra air conditioners, confused person, multiple warning icons, collage, split-screen frame, photorealistic stock-photo look, watercolor, flat clipart, glossy advertising render, cyberpunk, dark room, hard shadow, fisheye, clutter, oversized arrows, inconsistent body shape, floating UI, deformed architecture. Single coherent frame, one composed scene or object detail, not a collage, not a grid, not a contact sheet, not a scrapbook, not a mood board layout.",
+      "remixSuggestions": {
+        "style": [
+          {
+            "label": "More architectural",
+            "description": "Reduce character detail and strengthen spatial clarity",
+            "promptHint": "Emphasize architectural model precision, matte surfaces and exact wall geometry"
+          },
+          {
+            "label": "Material Airflow",
+            "description": "A closer tactile read of surface, temperature, and finish around Placement and airflow",
+            "promptHint": "Rebuild Placement and airflow as a tactile material study inspired by Correct side-wall placement guides the airflow past the sleeping zone; a restrained ghost outline shows..."
+          },
+          {
+            "label": "Dramatic Airflow",
+            "description": "Richer blacks, sharper highlights, and more cinematic emphasis",
+            "promptHint": "Apply high-contrast cinematic treatment to Placement and airflow; keep Correct side-wall placement guides the airflow past the sleeping zone; a restrained ghost outline shows..."
+          }
+        ],
+        "palette": [
+          {
+            "label": "Softer warning",
+            "description": "Keep coral below five percent of the frame",
+            "promptHint": "Make the wrong-position outline pale coral and secondary to the teal path"
+          },
+          {
+            "label": "Accent Airflow",
+            "description": "A stronger accent color against quieter supporting surfaces",
+            "promptHint": "Add a controlled accent palette to Placement and airflow without changing the main subject"
+          },
+          {
+            "label": "Unexpected Airflow",
+            "description": "A more surprising secondary color relationship around Placement and airflow",
+            "promptHint": "Keep the subject recognizable, but introduce one unexpected supporting color that extends Correct side-wall placement guides the airflow past the sleeping zone; a restrained..."
+          }
+        ],
+        "scene": [
+          {
+            "label": "Wider bedroom",
+            "description": "Show the airflow path across more of the room",
+            "promptHint": "Use a slightly wider room while keeping the 38 mm restrained perspective"
+          },
+          {
+            "label": "Airflow Backstage",
+            "description": "A behind-the-scenes environment that adds process and atmosphere around Placement and airflow",
+            "promptHint": "Reframe Placement and airflow as a backstage or preparation moment; keep Correct side-wall placement guides the airflow past the sleeping zone; a restrained ghost outline shows..."
+          },
+          {
+            "label": "Airflow In Use",
+            "description": "A more believable real-world context for Placement and airflow",
+            "promptHint": "Place Placement and airflow into a realistic usage context; preserve the source image's core cue: Correct side-wall placement guides the airflow past the sleeping zone; a..."
+          }
+        ],
+        "props": [
+          {
+            "label": "No decor",
+            "description": "Remove all nonessential decoration",
+            "promptHint": "Keep only bed, bedside table and one neutral textile"
+          },
+          {
+            "label": "Process Cues",
+            "description": "Tools, traces, or handling details that make Placement and airflow feel actively used",
+            "promptHint": "Add restrained process cues around Placement and airflow; preserve the strongest visual idea from Correct side-wall placement guides the airflow past the sleeping zone; a..."
+          },
+          {
+            "label": "Airflow Cues",
+            "description": "Add restrained supporting objects that clarify the context of Placement and airflow",
+            "promptHint": "Add a few contextual props that reinforce Correct side-wall placement guides the airflow past the sleeping zone; a restrained ghost outline shows the wrong... without..."
+          }
+        ],
+        "character": [
+          {
+            "label": "Unoccupied",
+            "description": "Let the measurement point represent the sleeping zone",
+            "promptHint": "No visible person; preserve human scale through furniture and measurement point"
+          },
+          {
+            "label": "Everyday Use",
+            "description": "More approachable human presence while preserving the mood",
+            "promptHint": "Show Placement and airflow in an everyday user context without losing Correct side-wall placement guides the airflow past the sleeping zone; a restrained ghost outline shows..."
+          },
+          {
+            "label": "Passing Figure",
+            "description": "A partial human presence that adds scale and motion without taking over Placement and airflow",
+            "promptHint": "Add a cropped passing figure or gesture around Placement and airflow; keep identity nonspecific and preserve Correct side-wall placement guides the airflow past the sleeping..."
+          }
+        ],
+        "format": [
+          {
+            "label": "Mobile-safe",
+            "description": "Tighten essential content into the central crop",
+            "promptHint": "Keep unit, bed, airflow and warning outline within the central 70 percent width"
+          },
+          {
+            "label": "Airflow Crop",
+            "description": "Closer inspection of the material, surface, or focal subject",
+            "promptHint": "Create a closer detail crop of Placement and airflow; keep Correct side-wall placement guides the airflow past the sleeping zone; a restrained ghost outline shows the wrong..."
+          },
+          {
+            "label": "Split-Depth Airflow",
+            "description": "Foreground detail and background atmosphere in one composed frame",
+            "promptHint": "Create a single-frame split-depth composition for Placement and airflow; do not make a collage or panel layout"
+          }
+        ]
+      },
+      "imageUrl": "/generated/mcp-thumbs/placement-bedroom-calibration.jpg",
+      "sourceImageUrl": "/generated/f7838f020f852086c24ffc07b1b420d4.png"
+    },
+    {
+      "id": "two-stage-installation-calibration",
+      "title": "Two-stage installation",
+      "caption": "One wall moves from precise hidden engineering to a clean finished interior.",
+      "source": "MVN blog article: montagh-2-etapa",
+      "tone": "technical, orderly, premium without luxury",
+      "motif": "continuous wall, concealed pipe route, finished split system",
+      "palette": "warm plaster gray, warm white, deep teal engineering lines, MVN teal airflow",
+      "prompt": "Create one self-contained 16:9 editorial HVAC illustration for the MVN Climate Atlas visual system. Clean restrained architectural 3D illustration with precise flat technical overlays, matte materials, warm-white and pale-ice interior, light oak and mist-gray details. Consistent three-quarter isometric camera, 38 mm lens, camera height 1.65 m, slight 10-degree downward angle, vertical lines straight. Soft daylight from upper left at 5200K, gentle short shadows, quiet premium engineering mood. Show one continuous apartment wall in a seamless left-to-right material transition, not a split-screen. The left portion is unfinished warm-gray plaster with one precise narrow vertical chase revealing paired copper lines with dark insulation, one electrical cable, and one drain line with a credible gentle downward slope. The right portion is the same finished warm-white wall with the fictional MVN Reference Split 01 installed at the exact route endpoint: matte warm-white body, visually about 880 by 295 by 210 mm, softly rounded corners, one graphite lower seam, one continuous louver, no logo, no readable display. Exactly three smooth parallel teal airflow lines, #11B8B2, leave the unit into a quiet completed room, rounded ends and subtle chevrons. Use a short deep-teal engineering bracket to identify the concealed route. The visual transition should explain first-fix infrastructure followed by clean final installation. Keep all essential content inside the central 85 percent safe area, 2400 by 1350 master composition. No text, letters, numbers, labels, logo, watermark, workers, scattered tools, rubble, impossible pipe bends, vertical drain rise, second air conditioner, collage, framed before-and-after panels, photorealistic raw construction photo, watercolor, flat clipart, glossy advertising render, dark room, hard shadow, clutter, oversized arrows, floating UI, deformed wall geometry. Single coherent frame, one composed scene or object detail, not a collage, not a grid, not a contact sheet, not a scrapbook, not a mood board layout.",
+      "remixSuggestions": {
+        "style": [
+          {
+            "label": "More technical",
+            "description": "Increase route legibility without adding labels",
+            "promptHint": "Render copper, insulation, cable and drainage as four clearly distinct credible materials"
+          },
+          {
+            "label": "Material Installation",
+            "description": "A closer tactile read of surface, temperature, and finish around Two-stage installation",
+            "promptHint": "Rebuild Two-stage installation as a tactile material study inspired by One wall moves from precise hidden engineering to a clean finished interior, with a visibly different..."
+          },
+          {
+            "label": "Dramatic Installation",
+            "description": "Richer blacks, sharper highlights, and more cinematic emphasis",
+            "promptHint": "Apply high-contrast cinematic treatment to Two-stage installation; keep One wall moves from precise hidden engineering to a clean finished interior recognizable but alter..."
+          }
+        ],
+        "palette": [
+          {
+            "label": "Warmer plaster",
+            "description": "Keep the unfinished wall inviting rather than industrial-dark",
+            "promptHint": "Use warm mineral gray plaster with low contrast and soft daylight"
+          },
+          {
+            "label": "Unexpected Installation",
+            "description": "A more surprising secondary color relationship around Two-stage installation",
+            "promptHint": "Keep the subject recognizable, but introduce one unexpected supporting color that extends One wall moves from precise hidden engineering to a clean finished interior"
+          },
+          {
+            "label": "Cool Installation",
+            "description": "Crisper whites, cooler shadows, and restrained technical contrast",
+            "promptHint": "Use cooler minimal accents around Two-stage installation; keep One wall moves from precise hidden engineering to a clean finished interior intact"
+          }
+        ],
+        "scene": [
+          {
+            "label": "Longer transition",
+            "description": "Give both installation phases equal visual weight",
+            "promptHint": "Extend the continuous wall horizontally with a subtle material transition at center"
+          },
+          {
+            "label": "Installation In Use",
+            "description": "A more believable real-world context for Two-stage installation",
+            "promptHint": "Place Two-stage installation into a realistic usage context; preserve the source image's core cue: One wall moves from precise hidden engineering to a clean finished interior"
+          },
+          {
+            "label": "Installation Exterior",
+            "description": "Move Two-stage installation into an outdoor or threshold environment with a fresh spatial read",
+            "promptHint": "Relocate Two-stage installation into an exterior or entryway scene while preserving the core cue: One wall moves from precise hidden engineering to a clean finished interior"
+          }
+        ],
+        "props": [
+          {
+            "label": "Route only",
+            "description": "Strip the construction side to its essential engineering",
+            "promptHint": "No tools or debris; show only wall chase and protected route"
+          },
+          {
+            "label": "Installation Cues",
+            "description": "Add restrained supporting objects that clarify the context of Two-stage installation",
+            "promptHint": "Add a few contextual props that reinforce One wall moves from precise hidden engineering to a clean finished interior without distracting from Two-stage installation"
+          },
+          {
+            "label": "Unexpected Installation Prop",
+            "description": "One surprising but believable object that opens a new story around Two-stage installation",
+            "promptHint": "Add one unexpected supporting prop that extends One wall moves from precise hidden engineering to a clean finished interior without stealing focus from Two-stage installation"
+          }
+        ],
+        "character": [
+          {
+            "label": "No workers",
+            "description": "Keep attention on workmanship rather than labor imagery",
+            "promptHint": "Unoccupied scene with precise construction detail"
+          },
+          {
+            "label": "Passing Figure",
+            "description": "A partial human presence that adds scale and motion without taking over Two-stage installation",
+            "promptHint": "Add a cropped passing figure or gesture around Two-stage installation; keep identity nonspecific and preserve One wall moves from precise hidden engineering to a clean finished..."
+          },
+          {
+            "label": "Expert Hands",
+            "description": "More credible craft, authority, and purposeful interaction with Two-stage installation",
+            "promptHint": "If a person appears, make them an expert operator interacting naturally with Two-stage installation"
+          }
+        ],
+        "format": [
+          {
+            "label": "Balanced 16:9",
+            "description": "Protect both phases from social cropping",
+            "promptHint": "Place route and finished unit within the central 75 percent width"
+          },
+          {
+            "label": "Split-Depth Installation",
+            "description": "Foreground detail and background atmosphere in one composed frame",
+            "promptHint": "Create a single-frame split-depth composition for Two-stage installation; do not make a collage or panel layout"
+          },
+          {
+            "label": "Wide Installation",
+            "description": "Broader horizontal composition for landing-page or banner use",
+            "promptHint": "Adapt Two-stage installation to a wide hero composition with room for layout"
+          }
+        ]
+      },
+      "imageUrl": "/generated/mcp-thumbs/two-stage-installation-calibration.jpg",
+      "sourceImageUrl": "/generated/05f9e4cc86e0c9de98600b48d729f58d.png"
+    },
+    {
+      "id": "odor-source-calibration",
+      "title": "Odor source cutaway",
+      "caption": "A restrained technical cutaway shows where odor actually develops inside the indoor unit.",
+      "source": "MVN blog article: pochemu-poyavilsya-zapah",
+      "tone": "clinical but approachable, factual, non-alarmist",
+      "motif": "split-system cutaway, evaporator, fan, drain pan, sparse contaminated particles",
+      "palette": "warm white, graphite internals, MVN teal airflow, sparse gray-coral contamination",
+      "prompt": "Create one self-contained 16:9 editorial HVAC illustration for the MVN Climate Atlas visual system. Clean restrained architectural 3D illustration with precise flat technical overlays, matte materials, warm-white and pale-ice background. Soft daylight from upper left at 5200K, gentle short shadows, quiet premium engineering mood. Close 70 mm technical cutaway of the same fictional MVN Reference Split 01 used throughout the system: matte warm-white outer body, visually about 880 by 295 by 210 mm, softly rounded corners, one graphite lower seam and one continuous louver, no logo, no readable display. Show credible simplified internal components: evaporator coil, cross-flow fan, drain pan and drain outlet. A light realistic film of dust appears on part of the evaporator and fan, a small amount of moisture sits in the drain pan, and the outlet is partially obstructed. Exactly three smooth parallel teal airflow lines, #11B8B2, enter clean and pass through these internal zones; after the contaminated components they carry only sparse translucent gray-coral particles. Include a small clean serviced section of the same mechanism as a material contrast inside the continuous cutaway, not as a separate panel. One deep-teal engineering bracket identifies the drain area without text. Accurate, restrained, educational and hygienic, not disgusting. Keep all essential content inside the central 85 percent safe area, 2400 by 1350 master composition. No text, letters, numbers, labels, logo, watermark, person holding nose, green cloud, mushrooms, monsters, bacteria characters, insects, horror imagery, excessive grime, dripping sludge, collage, split-screen frame, photorealistic medical macro, watercolor, flat clipart, neon, hard shadow, oversized arrows, extra louvers, inconsistent body shape, floating UI. Single coherent frame, one composed scene or object detail, not a collage, not a grid, not a contact sheet, not a scrapbook, not a mood board layout.",
+      "remixSuggestions": {
+        "style": [
+          {
+            "label": "Cleaner cutaway",
+            "description": "Make the technical section easier to read at thumbnail size",
+            "promptHint": "Simplify internals into four credible large components with clear spacing"
+          },
+          {
+            "label": "Material Cutaway",
+            "description": "A closer tactile read of surface, temperature, and finish around Odor source cutaway",
+            "promptHint": "Rebuild Odor source cutaway as a tactile material study inspired by A restrained technical cutaway shows where odor actually develops inside the indoor unit, with a visibly..."
+          },
+          {
+            "label": "Dramatic Cutaway",
+            "description": "Richer blacks, sharper highlights, and more cinematic emphasis",
+            "promptHint": "Apply high-contrast cinematic treatment to Odor source cutaway; keep A restrained technical cutaway shows where odor actually develops inside the indoor unit recognizable but..."
+          }
+        ],
+        "palette": [
+          {
+            "label": "Less coral",
+            "description": "Use warning color only on sparse particles and deposits",
+            "promptHint": "Limit coral to small low-saturation accents below three percent of the frame"
+          },
+          {
+            "label": "Accent Cutaway",
+            "description": "A stronger accent color against quieter supporting surfaces",
+            "promptHint": "Add a controlled accent palette to Odor source cutaway without changing the main subject"
+          },
+          {
+            "label": "Unexpected Cutaway",
+            "description": "A more surprising secondary color relationship around Odor source cutaway",
+            "promptHint": "Keep the subject recognizable, but introduce one unexpected supporting color that extends A restrained technical cutaway shows where odor actually develops inside the indoor unit"
+          }
+        ],
+        "scene": [
+          {
+            "label": "Closer crop",
+            "description": "Prioritize the evaporator, fan and drain pan",
+            "promptHint": "Use a 70 mm close crop with the full lower louver still visible"
+          },
+          {
+            "label": "Cutaway Studio",
+            "description": "A cleaner controlled studio setting that keeps Odor source cutaway dominant",
+            "promptHint": "Move Odor source cutaway into a cleaner studio-hero setting while preserving A restrained technical cutaway shows where odor actually develops inside the indoor unit"
+          },
+          {
+            "label": "Cutaway Detail",
+            "description": "A tighter scene focused on material, craft, or product detail",
+            "promptHint": "Create a close-detail scene for Odor source cutaway, keeping the most important source cue visible"
+          }
+        ],
+        "props": [
+          {
+            "label": "Drain focus",
+            "description": "Strengthen the relationship between moisture and obstruction",
+            "promptHint": "Make the drain pan and partially blocked outlet clearly connected and credible"
+          },
+          {
+            "label": "Minimal Support",
+            "description": "Reduce surrounding objects so Odor source cutaway carries more weight",
+            "promptHint": "Remove nonessential props and keep Odor source cutaway as the dominant read"
+          },
+          {
+            "label": "Premium Finish",
+            "description": "Sharper materials, cleaner surfaces, and more elevated detail",
+            "promptHint": "Add premium material cues around Odor source cutaway; preserve the source image's composition"
+          }
+        ],
+        "character": [
+          {
+            "label": "No character",
+            "description": "Keep the subject technical, not comic",
+            "promptHint": "No people, faces or anthropomorphic particles"
+          },
+          {
+            "label": "Expert Hands",
+            "description": "More credible craft, authority, and purposeful interaction with Odor source cutaway",
+            "promptHint": "If a person appears, make them an expert operator interacting naturally with Odor source cutaway"
+          },
+          {
+            "label": "No Human",
+            "description": "Let the object, place, or composition carry the frame",
+            "promptHint": "Remove visible people and let Odor source cutaway carry the image"
+          }
+        ],
+        "format": [
+          {
+            "label": "Thumbnail clarity",
+            "description": "Keep contaminated path readable on a small card",
+            "promptHint": "Use large component silhouettes and high separation within the central crop"
+          },
+          {
+            "label": "Portrait Cutaway",
+            "description": "Tighter vertical crop for social or story placement",
+            "promptHint": "Adapt Odor source cutaway to a portrait social crop while preserving the key visual read"
+          },
+          {
+            "label": "Cutaway Crop",
+            "description": "Closer inspection of the material, surface, or focal subject",
+            "promptHint": "Create a closer detail crop of Odor source cutaway; keep A restrained technical cutaway shows where odor actually develops inside the indoor unit legible"
+          }
+        ]
+      },
+      "imageUrl": "/generated/mcp-thumbs/odor-source-calibration.jpg",
+      "sourceImageUrl": "/generated/82551d0a6c11312209a463f014d202d8.png"
+    },
+    {
+      "id": "placement-bedroom-calibration-v2",
+      "title": "Placement and airflow — corrected",
+      "caption": "Corrected calibration: exactly three brand airflow lines and one restrained wrong-position outline.",
+      "source": "Revision of placement-bedroom-calibration after visual QA",
+      "tone": "calm, precise, trustworthy",
+      "motif": "bedroom, side-wall split system, exactly three airflow lines, one warning outline",
+      "palette": "warm white, pale ice, light oak, MVN teal, minimal coral warning",
+      "parentItemId": "placement-bedroom-calibration",
+      "editMode": "quality-control-regeneration",
+      "annotation": "The first version used four teal airflow lines. Regenerate with exactly three and preserve the approved visual language.",
+      "prompt": "Create one self-contained 16:9 editorial HVAC illustration for the MVN Climate Atlas visual system. Clean restrained architectural 3D illustration with precise flat technical overlays, matte materials, warm-white and pale-ice interior, light oak and mist-gray details. Consistent three-quarter isometric camera, 38 mm lens, camera height 1.65 m, slight 10-degree downward angle, vertical lines straight. Soft daylight from upper left at 5200K, gentle short shadows, quiet premium engineering mood. Use one and only one physical fictional MVN Reference Split 01: matte warm-white indoor unit, visually about 880 by 295 by 210 mm, softly rounded corners, one graphite lower seam and one continuous louver, no logo and no readable display. Calm modern bedroom, unit installed high on the right-side wall near the headboard. The AirFlow system is a strict brand requirement: draw EXACTLY THREE teal airflow lines total, no fourth line, no extra trace, no duplicate. The three lines are smooth, parallel and evenly spaced, #11B8B2, 8-pixel visual weight at 1600 by 900 scale, rounded ends, flowing from the physical unit leftward along the open side of the room and safely away from the bed. Put one small directional chevron on each of the three lines near their far ends, exactly three chevrons total. A wrong placement on the opposite wall is shown only as one restrained thin coral ghost outline of a unit and one coral X; do not draw airflow lines from the ghost outline. Include one small deep-teal measurement point near pillow height. Bed in the lower-right, the open safe airflow zone across the left half, clean walls, one light-oak bedside table, neutral mist-gray textiles. Keep unit, bed, three airflow lines and ghost warning inside the central 80 percent safe area, 2400 by 1350 composition. No text, letters, numbers, logo, watermark, second physical air conditioner, fourth airflow line, airflow from the warning outline, multiple crosses, extra arrows, extra icons, person, clutter, collage, split-screen frame, stock-photo look, watercolor, flat clipart, glossy advertising render, cyberpunk, dark room, hard shadow, fisheye, floating UI or deformed architecture. Single coherent frame, not a grid, contact sheet or mood board layout. Count the teal airflow lines before finalizing: the final image must contain exactly three.",
+      "imageUrl": "/generated/mcp-thumbs/placement-bedroom-calibration-v2.jpg",
+      "sourceImageUrl": "/generated/5812d2f78ee96a8f618d8b04d7394cb4.png"
+    },
+    {
+      "id": "placement-bedroom-calibration-v3",
+      "title": "Placement and airflow — strict three-lane version",
+      "caption": "Three separate unbranched airflow lanes pass safely beside the bed.",
+      "source": "Second QA revision of placement-bedroom-calibration",
+      "tone": "calm, precise, trustworthy",
+      "motif": "bedroom, correct placement, three separate unbranched teal lanes, coral ghost outline",
+      "palette": "warm white, pale ice, light oak, MVN teal, minimal coral warning",
+      "parentItemId": "placement-bedroom-calibration-v2",
+      "editMode": "quality-control-regeneration",
+      "annotation": "Version two created an extra short branch near the louver. Use three independent unbranched lanes from start to finish.",
+      "prompt": "One self-contained 16:9 editorial HVAC illustration for the MVN Climate Atlas. Quiet architectural 3D, matte materials, warm-white modern bedroom, pale-ice accents, light oak and mist-gray textile. Three-quarter view, straight verticals, 38 mm lens, camera height 1.65 m, slight downward angle. Soft daylight only from upper left, gentle short shadows. One physical fictional MVN Reference Split 01 high on the right wall beside the headboard: matte warm-white rectangular body, softly rounded corners, one graphite lower seam, one continuous louver, no logo, no display. Show THREE SEPARATE UNBRANCHED TEAL LANES representing air: lane one, lane two, lane three. Each lane begins independently at the lower louver and ends independently in the open left half of the room. Each is one smooth continuous curve. The lanes never split, fork, duplicate, merge or create a short tail. There are exactly three teal curves anywhere in the image, clearly countable from unit to endpoint. Equal spacing. Teal #11B8B2. Each lane has one small left-pointing chevron integrated at its endpoint, exactly three chevrons. All three lanes stay above and to the left of the sleeping zone, not across the pillows or body. On the upper-left wall show one thin coral outline of the wrong unit position and one coral X only; no coral airflow. Add one small deep-teal measurement dot near pillow height without a connecting line. Sparse room: bed lower right, one bedside table, one small neutral vase, blank walls. Keep all essential elements in central safe area, 2400 by 1350. No fourth line, no partial line, no branch near the louver, no glow trail, no shadow interpreted as airflow, no text, no numbers, no logo, no watermark, no second physical unit, no person, no additional arrows or icons, no collage, no split screen, no watercolor, no flat clipart, no glossy commercial render, no dark mood, no clutter, no floating UI. Before finalizing, visually count from the louver: exactly three teal lanes leave it and exactly three reach the left endpoints.",
+      "imageUrl": "/generated/mcp-thumbs/placement-bedroom-calibration-v3.jpg",
+      "sourceImageUrl": "/generated/1ecac71d08d184d90dc988b45977ea46.png"
+    },
+    {
+      "id": "placement-bedroom-clean-base",
+      "title": "Placement and airflow — approved hybrid master",
+      "caption": "Approved architectural base with exact deterministic three-line MVN AirFlow overlay.",
+      "source": "Production master after AirFlow QA",
+      "tone": "calm, precise, trustworthy",
+      "motif": "clean bedroom, side-wall split system, empty wall space for exact overlay",
+      "palette": "warm white, pale ice, light oak, mist gray",
+      "parentItemId": "placement-bedroom-calibration-v3",
+      "editMode": "generated-base-for-deterministic-overlay",
+      "annotation": "Approved hybrid result: generated room and hardware, deterministic AirFlow, warning marker and measurement point.",
+      "prompt": "One self-contained 16:9 clean architectural 3D illustration serving as a background plate for a technical editorial overlay. Calm modern bedroom with matte warm-white walls, pale-ice accents, light-oak floor and bed, mist-gray neutral textiles. Three-quarter view with straight verticals, restrained 38 mm lens, camera height 1.65 m, slight downward angle. Soft daylight only from a large window outside the frame at upper left, gentle short shadows, quiet premium engineering mood. One physical fictional MVN Reference Split 01 installed high on the right-side wall just beside the headboard: matte warm-white rectangular body, softly rounded corners, one graphite lower seam, one continuous dark louver, no logo, no display. Bed in the lower-right. Leave the central and left wall deliberately blank and uncluttered so exact technical airflow graphics can be added later. One minimal bedside table and one small neutral vase. 2400 by 1350. Absolutely no colored lines, no airflow, no arrows, no chevrons, no ghost unit, no measurement dot, no X, no diagrams, no technical overlays, no text, no letters, no numbers, no logo, no watermark, no second air conditioner, no person, no wall artwork, no collage, no split screen, no watercolor, no flat clipart, no stock-photo look, no glossy advertising render, no dark room, no clutter, no floating UI. This is a clean background plate only.",
+      "imageUrl": "/generated/mcp-thumbs/placement-bedroom-clean-base.jpg",
+      "sourceImageUrl": "/generated/placement-bedroom-calibration-final.png"
+    }
+  ]
+}
