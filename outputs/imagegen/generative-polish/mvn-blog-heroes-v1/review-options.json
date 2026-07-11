@@ -1,0 +1,7 @@
+{
+  "preset": "image-wall",
+  "title": "MVN Climate Atlas — blog heroes v1",
+  "showCaptions": false,
+  "contactSheetOutput": "contact-sheet.png",
+  "minTileWidth": 320
+}
