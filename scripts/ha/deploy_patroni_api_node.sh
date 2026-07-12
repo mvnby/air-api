@@ -9,6 +9,8 @@ PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
 READY_URL="${API_READY_URL:-http://127.0.0.1:18080/api/ready}"
 HEALTH_URL="${API_HEALTH_URL:-http://127.0.0.1:18080/api/health}"
 BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-/tmp/deploy_backend_blue_green.sh}"
+PROXY_MODE="${API_PROXY_MODE:-host_nginx}"
+PROXY_SERVICE="${API_PROXY_SERVICE:-api-proxy}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 MAINTENANCE_MARKER="${API_MAINTENANCE_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
@@ -104,6 +106,21 @@ PY
   return 1
 }
 
+reconcile_standby_proxy() {
+  if [[ "${PROXY_MODE}" != "container_nginx" ]]; then
+    return 0
+  fi
+
+  log standby "validating desired container proxy configuration"
+  "${COMPOSE[@]}" run -T --rm --no-deps "${PROXY_SERVICE}" nginx -t
+  "${COMPOSE[@]}" up -d --no-deps "${PROXY_SERVICE}"
+  if ! "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t; then
+    log standby "running proxy has stale mounts; recreating fenced proxy"
+    "${COMPOSE[@]}" up -d --no-deps --force-recreate "${PROXY_SERVICE}"
+    "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t
+  fi
+}
+
 rollback_standby() {
   local exit_code=$?
   trap - ERR
@@ -126,6 +143,10 @@ for command in docker curl python3 flock; do
 done
 [[ "${EXPECTED_ROLE}" == "primary" || "${EXPECTED_ROLE}" == "standby" ]] || {
   log error "API_EXPECTED_PATRONI_ROLE must be primary or standby"
+  exit 1
+}
+[[ "${PROXY_MODE}" == "host_nginx" || "${PROXY_MODE}" == "container_nginx" ]] || {
+  log error "API_PROXY_MODE must be host_nginx or container_nginx"
   exit 1
 }
 [[ "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]] || {
@@ -180,6 +201,7 @@ if [[ -n "${GHCR_PAT:-}" ]]; then
 fi
 
 trap rollback_standby ERR
+reconcile_standby_proxy
 log standby "updating fenced service ${active_service}"
 "${COMPOSE[@]}" pull "${active_service}" bot
 write_backend_image "${BACKEND_IMAGE}"
