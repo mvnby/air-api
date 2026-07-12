@@ -1,3 +1,5 @@
+"""PostgreSQL integration coverage for concurrent media job leasing."""
+
 import asyncio
 from datetime import datetime
 
