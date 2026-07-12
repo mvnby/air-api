@@ -162,7 +162,15 @@ def test_production_patroni_composes_are_role_driven_and_private():
     }
 
     assert reserve["services"]["api-proxy"]["ports"] == ["127.0.0.1:18080:8000"]
+    assert "./api-proxy:/etc/nginx/mvn-proxy:ro" in reserve["services"]["api-proxy"]["volumes"]
+    assert all(
+        "/etc/nginx/conf.d/mvn-upstream.conf" not in mount
+        for mount in reserve["services"]["api-proxy"]["volumes"]
+    )
     assert "proxy_set_header Host api.mvn.by" in PROXY_CONFIG.read_text(encoding="utf-8")
+    assert "include /etc/nginx/mvn-proxy/upstream.conf;" in PROXY_CONFIG.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_patroni_image_publish_is_manual_sha_gated_and_digest_pinned():
