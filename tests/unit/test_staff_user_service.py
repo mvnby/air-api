@@ -89,6 +89,21 @@ def test_telegram_login_payload_signature(monkeypatch):
     assert not StaffUserService.verify_telegram_login_payload(payload)
 
 
+@pytest.mark.parametrize("bot_token", ["", StaffUserService.DISABLED_BOT_TOKEN_PLACEHOLDER])
+def test_telegram_login_payload_rejects_disabled_bot_token(monkeypatch, bot_token):
+    monkeypatch.setattr(settings, "BOT_TOKEN", bot_token, raising=False)
+    payload = {
+        "id": "101",
+        "first_name": "Max",
+        "auth_date": str(int(time.time())),
+    }
+    data_check_string = "\n".join(f"{key}={payload[key]}" for key in sorted(payload))
+    secret_key = hashlib.sha256(bot_token.encode("utf-8")).digest()
+    payload["hash"] = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    assert not StaffUserService.verify_telegram_login_payload(payload)
+
+
 @pytest.mark.asyncio
 async def test_find_active_executors_by_role_excludes_inactive_and_blocked(sqlite_staff_session):
     installer = Installer(name="Active Legacy", is_active=True)

@@ -141,7 +141,7 @@ async def test_new_order_assignment_notification_uses_active_staff_telegram_id(
     )
     await sqlite_installer_session.commit()
 
-    notify_mock = AsyncMock()
+    notify_mock = AsyncMock(return_value=True)
     monkeypatch.setattr("services.bot_service.BotService.notify_installer_new_order", notify_mock)
 
     await OrderService.update_order_installers(

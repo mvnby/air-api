@@ -465,10 +465,6 @@ export const api = {
         return await ManagerGoogleAuthService.getManagerGoogleAuthUrl();
     },
 
-    async exchangeManagerGoogleAuthCode(code: string) {
-        return await ManagerGoogleAuthService.exchangeManagerGoogleAuthCode({ code });
-    },
-
     async listManagerBackups() {
         return await ManagerBackupsService.listManagerBackups();
     },

@@ -48,7 +48,6 @@ async def download_hisense_price_xlsx(spreadsheet_id: str = HISENSE_SPREADSHEET_
         follow_redirects=True,
         timeout=30.0,
         headers={"User-Agent": "Mozilla/5.0 (Codex Hisense Sync)"},
-        verify=False,
     ) as client:
         response = await client.get(url)
         response.raise_for_status()

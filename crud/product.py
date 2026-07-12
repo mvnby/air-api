@@ -601,6 +601,8 @@ class ProductDAO:
             brand_slugs=brand_slugs,
             is_published=is_published,
         )
+        if search_query:
+            stmt = ProductDAO._apply_smart_search_filter(stmt, search_query)
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
         result = await session.execute(stmt)
         return result.scalar_one() or 0

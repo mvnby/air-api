@@ -1,5 +1,6 @@
 import pytest
 import tarfile
+import io
 from pathlib import Path
 
 from services.backup_service import BackupService
@@ -96,6 +97,9 @@ async def test_restore_from_file_async_uses_psql(monkeypatch):
     assert captured["args"][0] == "psql"
     assert "-f" in captured["args"]
     assert "/tmp/test_restore.sql" in captured["args"]
+    assert "--no-psqlrc" in captured["args"]
+    assert "--set=ON_ERROR_STOP=1" in captured["args"]
+    assert "--single-transaction" in captured["args"]
     assert captured["kwargs"]["env"]["PGPASSWORD"] == service.db_password
 
 
@@ -141,3 +145,33 @@ def test_restore_media_from_archive_restores_media_dir(monkeypatch, tmp_path: Pa
     assert safety_path.endswith("safety_media.tar.gz")
     assert (media_dir / "new.txt").read_text(encoding="utf-8") == "new"
     assert not (media_dir / "old.txt").exists()
+
+
+def test_safe_extract_tar_rejects_special_files(tmp_path: Path):
+    archive_path = tmp_path / "unsafe.tar"
+    with tarfile.open(archive_path, "w") as tar:
+        fifo = tarfile.TarInfo("media/pipe")
+        fifo.type = tarfile.FIFOTYPE
+        tar.addfile(fifo)
+
+    destination = tmp_path / "destination"
+    destination.mkdir()
+
+    with pytest.raises(Exception, match="special file"):
+        BackupService._safe_extract_tar(str(archive_path), str(destination))
+
+
+def test_safe_extract_tar_rejects_uncompressed_size_limit(monkeypatch, tmp_path: Path):
+    archive_path = tmp_path / "oversized.tar"
+    with tarfile.open(archive_path, "w") as tar:
+        content = b"too-large"
+        item = tarfile.TarInfo("media/file.bin")
+        item.size = len(content)
+        tar.addfile(item, io.BytesIO(content))
+
+    monkeypatch.setattr(BackupService, "_MAX_MEDIA_ARCHIVE_UNCOMPRESSED_BYTES", 1)
+    destination = tmp_path / "destination"
+    destination.mkdir()
+
+    with pytest.raises(Exception, match="uncompressed size"):
+        BackupService._safe_extract_tar(str(archive_path), str(destination))

@@ -3,6 +3,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from core.request_context import RequestContextLogFilter
+
 # Create logs directory if it doesn't exist
 LOG_DIR = Path(__file__).parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -33,8 +35,9 @@ def setup_logging(session_log_file: str = None, clear_session_log: bool = False)
 
     # Formatter
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        "%(asctime)s - %(name)s - %(levelname)s - request_id=%(request_id)s - %(message)s"
     )
+    request_context_filter = RequestContextLogFilter()
 
     # 1. File Handler (Rotating)
     # Max size 10MB, keep 5 backups
@@ -42,12 +45,14 @@ def setup_logging(session_log_file: str = None, clear_session_log: bool = False)
         log_path, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
     )
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(request_context_filter)
     file_handler.setLevel(logging.INFO)
     logger.addHandler(file_handler)
 
     # 2. Console Handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(request_context_filter)
     console_handler.setLevel(logging.INFO)
     logger.addHandler(console_handler)
 

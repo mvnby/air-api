@@ -16,8 +16,14 @@ class CustomerEquipment(SQLModel, table=True):
     catalog_product_id: Optional[int] = Field(default=None, foreign_key="product.id", index=True)
     source_order_id: Optional[int] = Field(default=None, foreign_key="order.id", index=True)
 
-    equipment_type: str = Field(default="hvac", sa_column=Column(String, index=True))
-    equipment_source: str = Field(default="unknown", sa_column=Column(String, index=True))
+    equipment_type: str = Field(
+        default="hvac",
+        sa_column=Column(String, index=True, nullable=False),
+    )
+    equipment_source: str = Field(
+        default="unknown",
+        sa_column=Column(String, index=True, nullable=False),
+    )
     display_name: Optional[str] = Field(default=None, index=True)
     brand: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=True)
@@ -48,7 +54,10 @@ class EquipmentComponent(SQLModel, table=True):
     catalog_product_id: Optional[int] = Field(default=None, foreign_key="product.id", index=True)
     supplier_id: Optional[int] = Field(default=None, foreign_key="supplier.id", index=True)
 
-    component_type: str = Field(default="other", sa_column=Column(String, index=True))
+    component_type: str = Field(
+        default="other",
+        sa_column=Column(String, index=True, nullable=False),
+    )
     title: Optional[str] = Field(default=None, index=True)
     brand: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=True)
@@ -76,7 +85,7 @@ class EquipmentServiceHistory(SQLModel, table=True):
 
     event_type: EquipmentServiceEventType = Field(
         default=EquipmentServiceEventType.OTHER,
-        sa_column=Column(String, index=True),
+        sa_column=Column(String, index=True, nullable=False),
     )
     event_date: datetime = Field(default_factory=datetime.now, index=True)
     complaint_snapshot: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))

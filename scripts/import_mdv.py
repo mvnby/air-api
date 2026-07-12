@@ -88,7 +88,7 @@ async def download_image(url: str, filename_base: str) -> str | None:
     if os.path.exists(local_path):
         return db_path
 
-    async with httpx.AsyncClient(verify=False) as client:
+    async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
             if resp.status_code == 200:

@@ -580,7 +580,7 @@
           "api"
         ],
         "summary": "Get Global Config",
-        "description": "Get all global configuration parameters as a key-value dictionary.\nExample: {\"phone\": \"+37529...\", \"email\": \"...\"}",
+        "description": "Get the public storefront configuration as a key-value dictionary.\nExample: {\"phone\": \"+37529...\", \"email\": \"...\"}",
         "operationId": "get_config",
         "responses": {
           "200": {
@@ -588,6 +588,48 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/contact": {
+      "post": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Create Public Contact Lead",
+        "operationId": "create_public_contact_lead",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicContactLeadPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicContactLeadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -704,6 +746,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrderResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The selected installation quote conflicts with current tariffs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderPricingErrorResponse"
                 }
               }
             }
@@ -1925,52 +1977,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerGoogleAuthUrlResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
-      }
-    },
-    "/api/manager/google-auth/exchange": {
-      "post": {
-        "tags": [
-          "manager/google-auth"
-        ],
-        "summary": "Exchange Manager Google Auth Code",
-        "operationId": "exchange_manager_google_auth_code",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ManagerGoogleAuthExchangePayload"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ManagerActionMessageResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -5295,6 +5301,92 @@
         }
       }
     },
+    "/api/manager/media/worker/jobs/{job_id}/renew": {
+      "post": {
+        "tags": [
+          "manager media worker"
+        ],
+        "summary": "Renew Media Worker Job",
+        "operationId": "renew_media_worker_job",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-media-worker-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Media-Worker-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaWorkerRenewPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaProcessingJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/media/worker/jobs/{job_id}/complete": {
       "post": {
         "tags": [
@@ -5309,6 +5401,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
               "title": "Job Id"
             }
           },
@@ -5393,6 +5487,8 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
               "title": "Job Id"
             }
           },
@@ -16828,7 +16924,15 @@
         "properties": {
           "worker_id": {
             "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
             "title": "Worker Id"
+          },
+          "lease_token": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 32,
+            "title": "Lease Token"
           },
           "file": {
             "type": "string",
@@ -16839,6 +16943,7 @@
         "type": "object",
         "required": [
           "worker_id",
+          "lease_token",
           "file"
         ],
         "title": "Body_complete_media_worker_job"
@@ -17388,7 +17493,8 @@
           "product_id": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
@@ -17398,6 +17504,8 @@
           },
           "quantity": {
             "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
             "title": "Quantity",
             "default": 1
           },
@@ -17405,6 +17513,18 @@
             "type": "boolean",
             "title": "With Installation",
             "default": false
+          },
+          "installation_rate_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Rate Id"
           },
           "installation_price": {
             "type": "number",
@@ -17414,31 +17534,26 @@
           "installation_meta": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/InstallationMetaPayload"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Installation Meta"
+            ]
           },
           "installation_options": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Installation Options",
-            "default": []
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:[-_][a-z0-9]+)*$"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Installation Options"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "CartItemPayload"
       },
@@ -17711,16 +17826,21 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
             "title": "Name"
           },
           "phone": {
             "type": "string",
+            "maxLength": 40,
+            "minLength": 7,
             "title": "Phone"
           },
           "email": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 254
               },
               {
                 "type": "null"
@@ -17731,7 +17851,8 @@
           "address": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 500
               },
               {
                 "type": "null"
@@ -17741,13 +17862,18 @@
           },
           "type": {
             "type": "string",
+            "enum": [
+              "individual",
+              "company"
+            ],
             "title": "Type",
             "default": "individual"
           },
           "full_legal_name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 300
               },
               {
                 "type": "null"
@@ -17758,7 +17884,8 @@
           "inn": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 32
               },
               {
                 "type": "null"
@@ -17769,7 +17896,8 @@
           "legal_address": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 500
               },
               {
                 "type": "null"
@@ -17780,7 +17908,8 @@
           "iban": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               {
                 "type": "null"
@@ -17791,7 +17920,8 @@
           "bic": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 32
               },
               {
                 "type": "null"
@@ -17802,7 +17932,8 @@
           "bank_name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 300
               },
               {
                 "type": "null"
@@ -17811,6 +17942,7 @@
             "title": "Bank Name"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
@@ -19274,6 +19406,56 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InstallationMetaPayload": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "meters": {
+            "type": "number",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Meters",
+            "default": 3
+          },
+          "power_range": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Range"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "InstallationMetaPayload"
       },
       "LeadCreatePayload": {
         "properties": {
@@ -25708,19 +25890,6 @@
           "rule_id"
         ],
         "title": "ManagerEstimateRuleInputPayload"
-      },
-      "ManagerGoogleAuthExchangePayload": {
-        "properties": {
-          "code": {
-            "type": "string",
-            "title": "Code"
-          }
-        },
-        "type": "object",
-        "required": [
-          "code"
-        ],
-        "title": "ManagerGoogleAuthExchangePayload"
       },
       "ManagerGoogleAuthStatusResponse": {
         "properties": {
@@ -33713,13 +33882,18 @@
         "properties": {
           "worker_id": {
             "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
             "title": "Worker Id"
           },
           "capabilities": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
             },
             "type": "array",
+            "maxItems": 32,
             "title": "Capabilities"
           },
           "lease_seconds": {
@@ -33730,6 +33904,7 @@
             "default": 900
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "worker_id"
@@ -33741,7 +33916,7 @@
           "job": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ManagerMediaProcessingJobResponse"
+                "$ref": "#/components/schemas/MediaWorkerClaimedJobResponse"
               },
               {
                 "type": "null"
@@ -33752,23 +33927,270 @@
         "type": "object",
         "title": "MediaWorkerClaimResponse"
       },
-      "MediaWorkerFailPayload": {
+      "MediaWorkerClaimedJobResponse": {
         "properties": {
-          "worker_id": {
+          "job_id": {
             "type": "string",
+            "title": "Job Id"
+          },
+          "source_asset_id": {
+            "type": "integer",
+            "title": "Source Asset Id"
+          },
+          "result_asset_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Asset Id"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "rembg_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rembg Model"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Worker Id"
           },
+          "request_payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Request Payload"
+          },
+          "result_payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result Payload"
+          },
           "error": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Error"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "result_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Url"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "lease_token": {
+            "type": "string",
+            "title": "Lease Token"
           }
         },
         "type": "object",
         "required": [
+          "job_id",
+          "source_asset_id",
+          "operation",
+          "status",
+          "stage",
+          "priority",
+          "attempts",
+          "created_at",
+          "updated_at",
+          "lease_token"
+        ],
+        "title": "MediaWorkerClaimedJobResponse"
+      },
+      "MediaWorkerFailPayload": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Worker Id"
+          },
+          "lease_token": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 32,
+            "title": "Lease Token"
+          },
+          "error": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
           "worker_id",
+          "lease_token",
           "error"
         ],
         "title": "MediaWorkerFailPayload"
+      },
+      "MediaWorkerRenewPayload": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Worker Id"
+          },
+          "lease_token": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 32,
+            "title": "Lease Token"
+          },
+          "lease_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Lease Seconds",
+            "default": 900
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "worker_id",
+          "lease_token"
+        ],
+        "title": "MediaWorkerRenewPayload"
       },
       "Meta": {
         "properties": {
@@ -34089,13 +34511,15 @@
               "$ref": "#/components/schemas/CartItemPayload"
             },
             "type": "array",
-            "title": "Items",
-            "default": []
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Items"
           },
           "comment": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2000
               },
               {
                 "type": "null"
@@ -34104,9 +34528,11 @@
             "title": "Comment"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
-          "customer"
+          "customer",
+          "items"
         ],
         "title": "OrderPayload"
       },
@@ -38068,6 +38494,119 @@
           "sort_order"
         ],
         "title": "PublicBrandResponse"
+      },
+      "PublicContactLeadPayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 7,
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "phone"
+        ],
+        "title": "PublicContactLeadPayload"
+      },
+      "PublicContactLeadResponse": {
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "title": "Lead Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lead_id",
+          "status",
+          "created_at"
+        ],
+        "title": "PublicContactLeadResponse"
+      },
+      "PublicOrderPricingErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "PublicOrderPricingErrorDetail"
+      },
+      "PublicOrderPricingErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/PublicOrderPricingErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "PublicOrderPricingErrorResponse"
       },
       "RepairDiagnosticLeadResponse": {
         "properties": {

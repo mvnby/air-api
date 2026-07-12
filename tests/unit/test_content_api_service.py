@@ -1,3 +1,8 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
 from services.content_api_service import ContentApiService
 
 
@@ -30,3 +35,25 @@ def test_sanitize_service_description_unwraps_disallowed_tags():
     assert "<section" not in sanitized
     assert "<em>Safe</em>" in sanitized
     assert "Before" in sanitized and "After" in sanitized
+
+
+@pytest.mark.asyncio
+async def test_public_config_returns_only_storefront_allowlist():
+    result = SimpleNamespace(
+        scalars=lambda: SimpleNamespace(
+            all=lambda: [
+                SimpleNamespace(key="phone", value="+375 29 000-00-00"),
+                SimpleNamespace(key="install_discount", value="100"),
+                SimpleNamespace(key="supplier_default_spreadsheet_id", value="private-sheet"),
+                SimpleNamespace(key="catalog_static_rebuild_last_error", value="internal-error"),
+            ]
+        )
+    )
+    session = SimpleNamespace(execute=AsyncMock(return_value=result))
+
+    payload = await ContentApiService.get_global_config_map(session)
+
+    assert payload == {
+        "phone": "+375 29 000-00-00",
+        "install_discount": "100",
+    }

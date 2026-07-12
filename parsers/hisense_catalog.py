@@ -50,7 +50,6 @@ class HisenseCatalogParser(BaseParser):
         description = self._build_description(page.soup)
         series_title = str(model_specs.get("Серия") or self._page_title(page.soup) or "").strip()
         specs = self._augment_specs(model_specs, model=model, series_title=series_title, source_url=page.url)
-        catalog = str(specs.get("__hisense_catalog") or "")
         cooling_kw = self._first_float(
             specs.get("capacity_cooling_kw")
             or specs.get("Холодопроизводительность (кВт)")
@@ -102,7 +101,6 @@ class HisenseCatalogParser(BaseParser):
             follow_redirects=True,
             timeout=25.0,
             headers={"User-Agent": "Mozilla/5.0 (Codex Hisense Importer)"},
-            verify=False,
         ) as client:
             response = await client.get(page_url)
             response.raise_for_status()

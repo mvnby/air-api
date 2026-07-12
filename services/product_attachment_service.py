@@ -3,22 +3,18 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
-from urllib.parse import urlsplit, urlunsplit
-
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.input_validation import validate_public_manual_url
 from models import ProductAttachment
 
 
 def _normalize_url(value: Any) -> str:
-    raw = str(value or "").strip()
-    if not raw:
+    try:
+        return validate_public_manual_url(str(value or ""))
+    except ValueError:
         return ""
-    parts = urlsplit(raw)
-    if not parts.scheme and not parts.netloc:
-        return raw
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, ""))
 
 
 def normalize_manuals(raw_manuals: Iterable[Dict[str, Any]] | None) -> List[Dict[str, str]]:

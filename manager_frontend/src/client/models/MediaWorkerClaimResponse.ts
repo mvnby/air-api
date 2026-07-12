@@ -2,8 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ManagerMediaProcessingJobResponse } from './ManagerMediaProcessingJobResponse';
+import type { MediaWorkerClaimedJobResponse } from './MediaWorkerClaimedJobResponse';
 export type MediaWorkerClaimResponse = {
-    job?: (ManagerMediaProcessingJobResponse | null);
+    job?: (MediaWorkerClaimedJobResponse | null);
 };
 

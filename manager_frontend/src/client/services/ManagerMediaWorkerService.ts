@@ -7,6 +7,7 @@ import type { ManagerMediaProcessingJobResponse } from '../models/ManagerMediaPr
 import type { MediaWorkerClaimPayload } from '../models/MediaWorkerClaimPayload';
 import type { MediaWorkerClaimResponse } from '../models/MediaWorkerClaimResponse';
 import type { MediaWorkerFailPayload } from '../models/MediaWorkerFailPayload';
+import type { MediaWorkerRenewPayload } from '../models/MediaWorkerRenewPayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -27,6 +28,38 @@ export class ManagerMediaWorkerService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/media/worker/jobs/claim',
+            headers: {
+                'authorization': authorization,
+                'x-media-worker-token': xMediaWorkerToken,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Renew Media Worker Job
+     * @param jobId
+     * @param requestBody
+     * @param authorization
+     * @param xMediaWorkerToken
+     * @returns ManagerMediaProcessingJobResponse Successful Response
+     * @throws ApiError
+     */
+    public static renewMediaWorkerJob(
+        jobId: string,
+        requestBody: MediaWorkerRenewPayload,
+        authorization?: (string | null),
+        xMediaWorkerToken?: (string | null),
+    ): CancelablePromise<ManagerMediaProcessingJobResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/media/worker/jobs/{job_id}/renew',
+            path: {
+                'job_id': jobId,
+            },
             headers: {
                 'authorization': authorization,
                 'x-media-worker-token': xMediaWorkerToken,

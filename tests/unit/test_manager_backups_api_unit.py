@@ -2,7 +2,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from core.security import get_current_username
+from core.security import get_current_owner_username
 from routers.manager_backups import router as manager_backups_router
 
 
@@ -10,7 +10,7 @@ from routers.manager_backups import router as manager_backups_router
 async def backups_client():
     app = FastAPI()
     app.include_router(manager_backups_router)
-    app.dependency_overrides[get_current_username] = lambda: "admin"
+    app.dependency_overrides[get_current_owner_username] = lambda: "admin"
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -87,6 +87,8 @@ async def test_get_manual_backup_status(backups_client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_start_restore_accepts_media_backup(backups_client, monkeypatch):
+    monkeypatch.setattr("routers.manager_backups.settings.BACKUP_RESTORE_ENABLED", True)
+
     async def _fake_start_restore(file_id: str):
         assert file_id == "media-file-1"
         return {
@@ -104,7 +106,25 @@ async def test_start_restore_accepts_media_backup(backups_client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_start_restore_rejects_when_backup_running(backups_client, monkeypatch):
+    monkeypatch.setattr("routers.manager_backups.settings.BACKUP_RESTORE_ENABLED", True)
     monkeypatch.setattr("routers.manager_backups.backup_run_runtime_service.has_active_job", lambda: True)
 
     response = await backups_client.post("/api/manager/backups/restore/db-file-1")
     assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_start_restore_is_disabled_by_default(backups_client, monkeypatch):
+    monkeypatch.setattr("routers.manager_backups.settings.BACKUP_RESTORE_ENABLED", False)
+
+    async def _unexpected_restore(file_id: str):
+        raise AssertionError(f"restore must stay disabled: {file_id}")
+
+    monkeypatch.setattr(
+        "routers.manager_backups.backup_restore_runtime_service.start_restore",
+        _unexpected_restore,
+    )
+
+    response = await backups_client.post("/api/manager/backups/restore/db-file-1")
+    assert response.status_code == 503
+    assert "disabled" in response.json()["detail"].lower()

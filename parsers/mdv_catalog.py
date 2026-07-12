@@ -112,7 +112,6 @@ class MdvCatalogParser(BaseParser):
     ) -> dict[str, Any]:
         item = record.item
         props = self._props(item)
-        sections = self._sections(item)
         specs = self._build_specs(record)
         title = self._title_for_record(record, specs)
         images = self._gallery_urls(item)
@@ -196,7 +195,7 @@ class MdvCatalogParser(BaseParser):
         if catalog in self._json_cache:
             return self._json_cache[catalog]
         url = MDV_EXPORT_URLS[catalog]
-        async with httpx.AsyncClient(follow_redirects=True, timeout=45.0, verify=False) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=45.0) as client:
             response = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Codex MDV Importer)"})
         if response.status_code != 200:
             raise ValueError(f"MDV export {catalog} returned HTTP {response.status_code}")
@@ -209,7 +208,7 @@ class MdvCatalogParser(BaseParser):
     async def _load_sitemap_urls(self) -> list[str]:
         if self._sitemap_urls is not None:
             return self._sitemap_urls
-        async with httpx.AsyncClient(follow_redirects=True, timeout=45.0, verify=False) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=45.0) as client:
             response = await client.get(MDV_SITEMAP_URL, headers={"User-Agent": "Mozilla/5.0 (Codex MDV Importer)"})
         if response.status_code != 200:
             raise ValueError(f"MDV sitemap returned HTTP {response.status_code}")
@@ -340,7 +339,7 @@ class MdvCatalogParser(BaseParser):
         if source_url in self._manual_cache:
             return self._manual_cache[source_url]
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0, verify=False) as client:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
                 response = await client.get(source_url, headers={"User-Agent": "Mozilla/5.0 (Codex MDV Importer)"})
             if response.status_code != 200:
                 return []

@@ -52,6 +52,16 @@ jobs:
           npm ci
           npm run build
 
+      - name: Check Storefront
+        working-directory: ./web
+        run: |
+          npm ci
+          npm run audit:theme
+          npm run test:brands
+          npm run test:homepage
+          npm run test:catalog
+          npm run test:seo
+
       - name: Start Services
         run: docker compose up -d --build
 
@@ -70,6 +80,41 @@ jobs:
             echo "Postgres test not ready ($i/60) - sleeping 1s"
             sleep 1
           done
+
+      - name: Verify Alembic Upgrade From Empty Database
+        run: |
+          docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+            -c "DROP DATABASE IF EXISTS mvn_migration_ci WITH (FORCE);"
+          docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+            -c "CREATE DATABASE mvn_migration_ci;"
+
+          migration_url="postgresql+asyncpg://postgres:postgres@db:5432/mvn_migration_ci"
+          docker compose run -T --rm --no-deps \
+            -e DATABASE_URL="${migration_url}" \
+            app alembic upgrade head
+          docker compose run -T --rm --no-deps \
+            -e DATABASE_URL="${migration_url}" \
+            app alembic check
+
+          head_count="$(
+            docker compose run -T --rm --no-deps \
+              -e DATABASE_URL="${migration_url}" \
+              app alembic heads \
+              | grep -c '(head)'
+          )"
+          test "${head_count}" = "1" || {
+            echo "Expected exactly one Alembic head, got ${head_count}."
+            exit 1
+          }
+
+          version_count="$(
+            docker compose exec -T db psql -U postgres -d mvn_migration_ci -tAc \
+              "SELECT count(*) FROM alembic_version;"
+          )"
+          test "${version_count}" = "1" || {
+            echo "Expected one applied Alembic head, got ${version_count}."
+            exit 1
+          }
 
       - name: Verify Manager API Client Is Up To Date
         run: |

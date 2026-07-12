@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from threading import Lock
 from typing import Any, Optional
 
@@ -42,7 +42,7 @@ class ManagerTelemetryService:
     ) -> None:
         cls._append(
             _TelemetryEvent(
-                ts=datetime.utcnow(),
+                ts=datetime.now(UTC),
                 kind="error",
                 endpoint=endpoint,
                 status_code=status_code,
@@ -57,7 +57,7 @@ class ManagerTelemetryService:
         has_critical = any(bool(getattr(payload, key, None)) for key in critical_keys)
         cls._append(
             _TelemetryEvent(
-                ts=datetime.utcnow(),
+                ts=datetime.now(UTC),
                 kind="qualify_attempt",
                 endpoint=endpoint,
                 has_customer_id=bool(getattr(payload, "customer_id", None)),
@@ -71,7 +71,7 @@ class ManagerTelemetryService:
         has_critical = any(bool(getattr(payload, key, None)) for key in critical_keys)
         cls._append(
             _TelemetryEvent(
-                ts=datetime.utcnow(),
+                ts=datetime.now(UTC),
                 kind="qualify_success",
                 endpoint=endpoint,
                 has_customer_id=bool(getattr(payload, "customer_id", None)),
@@ -81,7 +81,7 @@ class ManagerTelemetryService:
 
     @classmethod
     def get_report(cls, *, hours: int = 24) -> dict[str, Any]:
-        cutoff = datetime.utcnow() - timedelta(hours=max(hours, 1))
+        cutoff = datetime.now(UTC) - timedelta(hours=max(hours, 1))
         with cls._lock:
             events = [event for event in cls._events if event.ts >= cutoff]
 

@@ -6,7 +6,7 @@ import type { CartItemPayload } from './CartItemPayload';
 import type { CustomerPayload } from './CustomerPayload';
 export type OrderPayload = {
     customer: CustomerPayload;
-    items?: Array<CartItemPayload>;
+    items: Array<CartItemPayload>;
     comment?: (string | null);
 };
 

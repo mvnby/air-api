@@ -10,7 +10,13 @@ from sqlmodel import select
 
 from crud.product import ProductDAO
 from models import LeadSource, Order, OrderStatus, Product
-from schemas import ProductAvailabilityLeadPayload, ProductAvailabilityLeadResponse
+from schemas import (
+    LeadCreatePayload,
+    ProductAvailabilityLeadPayload,
+    ProductAvailabilityLeadResponse,
+    PublicContactLeadPayload,
+    PublicContactLeadResponse,
+)
 from services.bot_service import BotService
 from services.lead_service import LeadService
 from services.order_service import OrderService
@@ -22,6 +28,80 @@ logger = logging.getLogger(__name__)
 class WebsiteLeadService:
     PRODUCT_AVAILABILITY_LOOKBACK_DAYS = 14
     PRODUCT_AVAILABILITY_NOTIFY_COOLDOWN_HOURS = 24
+
+    @staticmethod
+    async def create_contact_lead(
+        session: AsyncSession,
+        payload: PublicContactLeadPayload,
+    ) -> PublicContactLeadResponse:
+        request_lines = ["Заявка с сайта"]
+        if payload.address:
+            request_lines.append(f"Адрес/район: {payload.address}")
+        if payload.message:
+            request_lines.append(payload.message)
+
+        lead_data = await LeadService.create_lead(
+            session,
+            LeadCreatePayload(
+                source="site",
+                name=payload.name,
+                phone=payload.phone,
+                email=payload.email,
+                request_text="\n".join(request_lines),
+            ),
+        )
+        await WebsiteLeadService._notify_contact_lead_admins(
+            session=session,
+            lead_id=int(lead_data["id"]),
+            payload=payload,
+        )
+        return PublicContactLeadResponse(
+            lead_id=int(lead_data["id"]),
+            status=str(lead_data["status"]),
+            created_at=lead_data["created_at"],
+        )
+
+    @staticmethod
+    async def _notify_contact_lead_admins(
+        *,
+        session: AsyncSession,
+        lead_id: int,
+        payload: PublicContactLeadPayload,
+    ) -> None:
+        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+        if not admin_ids:
+            return
+
+        lines = [
+            f"🔔 <b>ЗАЯВКА С САЙТА #{lead_id}</b>",
+            f"👤 {BotService.escape_html(payload.name, max_length=160)}",
+            f"📱 {BotService.escape_html(payload.phone, max_length=80)}",
+        ]
+        if payload.email:
+            lines.append(f"📧 {BotService.escape_html(payload.email, max_length=254)}")
+        if payload.address:
+            lines.append(f"📍 {BotService.escape_html(payload.address, max_length=300)}")
+        if payload.message:
+            lines.extend(
+                ["", f"💬 {BotService.escape_html(payload.message, max_length=800)}"]
+            )
+        text = "\n".join(lines)
+
+        for admin_id in admin_ids:
+            try:
+                delivered = await BotService.send_message(admin_id, text)
+                if not delivered:
+                    logger.warning(
+                        "WEBSITE_CONTACT_LEAD_DELIVERY_FAILED lead_id=%s admin_id=%s",
+                        lead_id,
+                        admin_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "WEBSITE_CONTACT_LEAD_SEND_FAILED lead_id=%s admin_id=%s",
+                    lead_id,
+                    admin_id,
+                )
 
     @staticmethod
     async def create_product_availability_lead(
@@ -207,23 +287,31 @@ class WebsiteLeadService:
         message_lines = [
             "🔔 <b>ПОВТОРНЫЙ ЗАПРОС НА ПОСТУПЛЕНИЕ</b>" if is_repeat else "🔔 <b>ЗАПРОС НА ПОСТУПЛЕНИЕ С САЙТА</b>",
             f"🆔 Заявка #{order.id}",
-            f"📦 {product.title}",
-            f"🔗 /product/{product.slug}",
-            f"📱 {payload.phone}",
+            f"📦 {BotService.escape_html(product.title, max_length=180)}",
+            f"🔗 /product/{BotService.escape_html(product.slug, max_length=200)}",
+            f"📱 {BotService.escape_html(payload.phone, max_length=80)}",
         ]
         if payload.name and payload.name.strip():
-            message_lines.insert(4, f"👤 {payload.name.strip()}")
+            message_lines.insert(
+                4,
+                f"👤 {BotService.escape_html(payload.name.strip(), max_length=160)}",
+            )
 
         admin_text = "\n".join(message_lines)
         for admin_id in admin_ids:
             try:
-                await BotService.send_message(admin_id, admin_text)
-            except Exception as exc:
-                logger.warning(
-                    "Failed to notify admin %s about product availability order %s: %s",
-                    admin_id,
+                delivered = await BotService.send_message(admin_id, admin_text)
+                if not delivered:
+                    logger.warning(
+                        "WEBSITE_AVAILABILITY_NOTIFY_DELIVERY_FAILED order_id=%s admin_id=%s",
+                        order.id,
+                        admin_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "WEBSITE_AVAILABILITY_NOTIFY_SEND_FAILED order_id=%s admin_id=%s",
                     order.id,
-                    exc,
+                    admin_id,
                 )
 
         WebsiteLeadService._set_order_meta(

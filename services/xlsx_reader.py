@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 import re
-from typing import Any
-from zipfile import ZipFile
-from xml.etree import ElementTree as ET
+from zipfile import BadZipFile, ZipFile
+from xml.etree.ElementTree import Element, ParseError
+
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 
 NS = {
@@ -13,6 +15,9 @@ NS = {
     "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
     "rel": "http://schemas.openxmlformats.org/package/2006/relationships",
 }
+MAX_XLSX_ARCHIVE_ENTRIES = 2_048
+MAX_XLSX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+MAX_XLSX_COMPRESSION_RATIO = 1_000
 
 
 @dataclass(frozen=True)
@@ -28,11 +33,17 @@ class XlsxSheet:
 
 
 def read_xlsx_sheet(content: bytes, sheet_name: str) -> XlsxSheet:
-    with ZipFile(BytesIO(content)) as archive:
+    try:
+        archive_context = ZipFile(BytesIO(content))
+    except BadZipFile as exc:
+        raise ValueError("XLSX file is not a valid ZIP archive") from exc
+
+    with archive_context as archive:
+        _validate_archive(archive)
         shared_strings = _read_shared_strings(archive)
         worksheet_path = _worksheet_path_for_name(archive, sheet_name)
         rels = _read_worksheet_rels(archive, worksheet_path)
-        root = ET.fromstring(archive.read(worksheet_path))
+        root = _parse_xml(archive.read(worksheet_path), worksheet_path)
         hyperlink_by_ref = _read_hyperlinks(root, rels)
 
         rows: list[list[XlsxCell]] = []
@@ -55,12 +66,38 @@ def read_xlsx_sheet(content: bytes, sheet_name: str) -> XlsxSheet:
     return XlsxSheet(name=sheet_name, rows=rows)
 
 
+def _validate_archive(archive: ZipFile) -> None:
+    members = archive.infolist()
+    if len(members) > MAX_XLSX_ARCHIVE_ENTRIES:
+        raise ValueError("XLSX archive contains too many entries")
+
+    total_size = 0
+    for member in members:
+        file_size = max(0, int(member.file_size or 0))
+        compressed_size = max(0, int(member.compress_size or 0))
+        total_size += file_size
+        if total_size > MAX_XLSX_UNCOMPRESSED_BYTES:
+            raise ValueError("XLSX archive exceeds the uncompressed size limit")
+        if file_size and (
+            compressed_size == 0
+            or file_size / compressed_size > MAX_XLSX_COMPRESSION_RATIO
+        ):
+            raise ValueError("XLSX archive contains a suspicious compression ratio")
+
+
+def _parse_xml(raw: bytes, source_name: str) -> Element:
+    try:
+        return ET.fromstring(raw)
+    except (ParseError, DefusedXmlException) as exc:
+        raise ValueError(f"XLSX XML part is unsafe or invalid: {source_name}") from exc
+
+
 def _read_shared_strings(archive: ZipFile) -> list[str]:
     try:
         raw = archive.read("xl/sharedStrings.xml")
     except KeyError:
         return []
-    root = ET.fromstring(raw)
+    root = _parse_xml(raw, "xl/sharedStrings.xml")
     values: list[str] = []
     for item in root.findall("a:si", NS):
         texts = [node.text or "" for node in item.findall(".//a:t", NS)]
@@ -69,8 +106,11 @@ def _read_shared_strings(archive: ZipFile) -> list[str]:
 
 
 def _worksheet_path_for_name(archive: ZipFile, sheet_name: str) -> str:
-    workbook = ET.fromstring(archive.read("xl/workbook.xml"))
-    rels_root = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    workbook = _parse_xml(archive.read("xl/workbook.xml"), "xl/workbook.xml")
+    rels_root = _parse_xml(
+        archive.read("xl/_rels/workbook.xml.rels"),
+        "xl/_rels/workbook.xml.rels",
+    )
     rel_targets = {
         rel.attrib.get("Id"): rel.attrib.get("Target")
         for rel in rels_root.findall("rel:Relationship", NS)
@@ -104,7 +144,7 @@ def _read_worksheet_rels(archive: ZipFile, worksheet_path: str) -> dict[str, str
         raw = archive.read(rels_path)
     except KeyError:
         return {}
-    root = ET.fromstring(raw)
+    root = _parse_xml(raw, rels_path)
     out: dict[str, str] = {}
     for rel in root.findall("rel:Relationship", NS):
         rel_id = str(rel.attrib.get("Id") or "")
@@ -114,7 +154,7 @@ def _read_worksheet_rels(archive: ZipFile, worksheet_path: str) -> dict[str, str
     return out
 
 
-def _read_hyperlinks(root: ET.Element, rels: dict[str, str]) -> dict[str, str]:
+def _read_hyperlinks(root: Element, rels: dict[str, str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for link in root.findall(".//a:hyperlinks/a:hyperlink", NS):
         ref = str(link.attrib.get("ref") or "").strip()
@@ -128,7 +168,7 @@ def _read_hyperlinks(root: ET.Element, rels: dict[str, str]) -> dict[str, str]:
     return out
 
 
-def _read_cell_value(cell_node: ET.Element, shared_strings: list[str]) -> str:
+def _read_cell_value(cell_node: Element, shared_strings: list[str]) -> str:
     cell_type = cell_node.attrib.get("t")
     if cell_type == "inlineStr":
         return "".join(node.text or "" for node in cell_node.findall(".//a:t", NS)).strip()

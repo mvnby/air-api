@@ -18,6 +18,7 @@ from services.product_image_processing_provider import (
     _background_removal_rembg_model,
     _background_removal_timeout_seconds,
     _get_rembg_session,
+    _render_command_argv,
     _run_rembg_subprocess,
     _should_run_rembg_in_subprocess,
     background_removal_provider_options,
@@ -136,6 +137,31 @@ def test_background_removal_timeout_uses_safe_default_and_env(monkeypatch):
 
     monkeypatch.setenv("BACKGROUND_REMOVAL_TIMEOUT_SECONDS", "invalid")
     assert _background_removal_timeout_seconds() == DEFAULT_BACKGROUND_REMOVAL_TIMEOUT_SECONDS
+
+
+def test_command_template_is_rendered_as_argv_without_shell_interpolation():
+    command = _render_command_argv(
+        "processor --input {input} --output={output} '; touch /tmp/owned'",
+        input_path="/tmp/source image.png",
+        output_path="/tmp/result image.png",
+    )
+
+    assert command == [
+        "processor",
+        "--input",
+        "/tmp/source image.png",
+        "--output=/tmp/result image.png",
+        "; touch /tmp/owned",
+    ]
+
+
+def test_command_template_requires_both_file_placeholders():
+    with pytest.raises(RuntimeError, match="must contain"):
+        _render_command_argv(
+            "processor --input {input}",
+            input_path="/tmp/source.png",
+            output_path="/tmp/result.png",
+        )
 
 
 def test_rembg_process_mode_uses_experimental_default_and_env(monkeypatch):
@@ -395,7 +421,10 @@ async def test_command_provider_wraps_timeout(tmp_path, monkeypatch):
         timeout_seconds=1,
     )
 
-    monkeypatch.setenv("TEST_SLOW_BIREFNET_COMMAND", f"{sys.executable} {script}")
+    monkeypatch.setenv(
+        "TEST_SLOW_BIREFNET_COMMAND",
+        f"{sys.executable} {script} {{input}} {{output}}",
+    )
 
     with pytest.raises(RuntimeError, match="provider timed out"):
         await processor.process(

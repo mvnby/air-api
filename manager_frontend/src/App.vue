@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
-import type { Component } from 'vue';
-import { Package, ShoppingCart, Users, UserPlus, Zap, Loader2, Menu, X, Sun, Moon, Calendar, Home, Settings, Wallet, ChevronLeft, ChevronRight, ChevronDown, Tags, FileSpreadsheet, Link2, Award, Database, Calculator, ReceiptText, Image as ImageIcon, ShieldCheck, Truck, Mail, AlertTriangle } from 'lucide-vue-next';
+import { Package, Zap, Loader2, Menu, X, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
+import type { ManagerAuthStatusResponse } from './client';
+import {
+  coreNavItems,
+  defaultExpandedNavSections,
+  navSections,
+  type NavItem,
+  type NavSection,
+  type NavSectionId,
+} from './manager-navigation';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibraryView.vue'));
@@ -29,6 +37,7 @@ const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQua
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
 
 const isAuthenticated = ref(false);
+const currentUserRole = ref('');
 const showLoginModal = ref(false);
 const loginUsername = ref('');
 const loginPassword = ref('');
@@ -64,97 +73,11 @@ type WebRebuildStatus = {
   last_error?: string | null;
 };
 
-type NavItem = {
-  path: string;
-  label: string;
-  icon: Component;
-  match?: 'exact' | 'prefix';
-};
-
-type NavSectionId = 'catalog' | 'services' | 'team' | 'finance' | 'mail' | 'system';
-
-type NavSection = {
-  id: NavSectionId;
-  label: string;
-  items: NavItem[];
-};
-
 declare global {
   interface Window {
     onTelegramManagerAuth?: (user: TelegramLoginPayload) => void;
   }
 }
-
-const coreNavItems: NavItem[] = [
-  { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
-  { path: '/manager/leads', label: 'Лиды', icon: UserPlus, match: 'prefix' },
-  { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart, match: 'prefix' },
-  { path: '/manager/calendar', label: 'Календарь', icon: Calendar, match: 'prefix' },
-  { path: '/manager/customers', label: 'Клиенты', icon: Users, match: 'prefix' },
-];
-
-const navSections: NavSection[] = [
-  {
-    id: 'catalog',
-    label: 'Каталог',
-    items: [
-      { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix' },
-      { path: '/manager/catalog-quality', label: 'Качество каталога', icon: ShieldCheck, match: 'prefix' },
-      { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix' },
-      { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix' },
-      { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix' },
-      { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix' },
-      { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix' },
-      { path: '/manager/media', label: 'Медиатека', icon: ImageIcon, match: 'exact' },
-    ],
-  },
-  {
-    id: 'services',
-    label: 'Услуги',
-    items: [
-      { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet, match: 'prefix' },
-      { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator, match: 'prefix' },
-    ],
-  },
-  {
-    id: 'team',
-    label: 'Команда',
-    items: [
-      { path: '/manager/staff', label: 'Сотрудники', icon: Users, match: 'prefix' },
-    ],
-  },
-  {
-    id: 'finance',
-    label: 'Финансы',
-    items: [
-      { path: '/manager/payments', label: 'Платежи', icon: ReceiptText, match: 'prefix' },
-    ],
-  },
-  {
-    id: 'mail',
-    label: 'Почта',
-    items: [
-      { path: '/manager/mail/outbox', label: 'Исходящие', icon: Mail, match: 'prefix' },
-    ],
-  },
-  {
-    id: 'system',
-    label: 'Системное',
-    items: [
-      { path: '/manager/settings', label: 'Настройки сайта', icon: Settings, match: 'exact' },
-      { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database, match: 'prefix' },
-    ],
-  },
-];
-
-const defaultExpandedNavSections: Record<NavSectionId, boolean> = {
-  catalog: true,
-  services: true,
-  team: true,
-  finance: true,
-  mail: true,
-  system: true,
-};
 
 const expandedNavSections = ref<Record<NavSectionId, boolean>>({ ...defaultExpandedNavSections });
 
@@ -166,6 +89,13 @@ const normalizePath = (path: string) => {
 };
 
 const currentPath = computed(() => normalizePath(currentLocation.value.split('?')[0] || '/manager'));
+const canManageOwnerSettings = computed(() => ['owner', 'admin'].includes(currentUserRole.value));
+const visibleNavSections = computed<NavSection[]>(() => navSections
+  .map(section => ({
+    ...section,
+    items: section.items.filter(item => !item.ownerOnly || canManageOwnerSettings.value),
+  }))
+  .filter(section => section.items.length > 0));
 
 const isNavItemActive = (item: NavItem) => {
   if (item.match === 'exact') return currentPath.value === item.path;
@@ -191,7 +121,7 @@ const loadExpandedNavSections = () => {
 };
 
 const expandActiveNavSection = () => {
-  const activeSection = navSections.find(isNavSectionActive);
+  const activeSection = visibleNavSections.value.find(isNavSectionActive);
   if (activeSection && !expandedNavSections.value[activeSection.id]) {
     expandedNavSections.value = {
       ...expandedNavSections.value,
@@ -286,6 +216,19 @@ const navigate = (path: string) => {
   isMobileNavOpen.value = false;
 };
 
+const enforceAuthorizedLocation = () => {
+  const ownerOnlyPath = (
+    currentPath.value.startsWith('/manager/settings')
+    || currentPath.value.startsWith('/manager/staff')
+    || currentPath.value.startsWith('/manager/users')
+  );
+  if (isAuthenticated.value && !canManageOwnerSettings.value && ownerOnlyPath) {
+    navigate('/manager');
+    return true;
+  }
+  return false;
+};
+
 const toggleMobileNav = () => {
   isMobileNavOpen.value = !isMobileNavOpen.value;
 };
@@ -325,7 +268,10 @@ const handleLogin = async () => {
   loginError.value = '';
   try {
     await api.login(loginUsername.value, loginPassword.value);
+    const auth = await api.checkAuth() as ManagerAuthStatusResponse;
+    currentUserRole.value = String(auth.role || '');
     isAuthenticated.value = true;
+    enforceAuthorizedLocation();
     showLoginModal.value = false;
     loginPassword.value = '';
     void fetchLeadsCount();
@@ -342,7 +288,10 @@ const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
   loginError.value = '';
   try {
     await api.loginTelegram(payload);
+    const auth = await api.checkAuth() as ManagerAuthStatusResponse;
+    currentUserRole.value = String(auth.role || '');
     isAuthenticated.value = true;
+    enforceAuthorizedLocation();
     showLoginModal.value = false;
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
@@ -400,13 +349,16 @@ const fetchLeadsCount = async () => {
 
 const checkAuth = async () => {
   try {
-    await api.checkAuth();
+    const auth = await api.checkAuth() as ManagerAuthStatusResponse;
+    currentUserRole.value = String(auth.role || '');
     isAuthenticated.value = true;
+    enforceAuthorizedLocation();
     // Fetch the badge count once authenticated
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
   } catch {
     isAuthenticated.value = false;
+    currentUserRole.value = '';
     showLoginModal.value = true;
   }
 };
@@ -450,6 +402,7 @@ watch(expandedNavSections, (value) => {
 }, { deep: true });
 
 watch(currentPath, () => {
+  if (enforceAuthorizedLocation()) return;
   expandActiveNavSection();
 });
 </script>
@@ -589,7 +542,7 @@ watch(currentPath, () => {
         </div>
 
         <div
-          v-for="section in navSections"
+          v-for="section in visibleNavSections"
           :key="section.id"
           class="border-t border-gray-100 pt-2"
         >
@@ -691,8 +644,8 @@ watch(currentPath, () => {
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />
-      <SettingsBackupView v-else-if="currentView === 'settings-backup'" :key="currentLocation" />
-      <SettingsView v-else-if="currentView === 'settings'" :key="currentLocation" />
+      <SettingsBackupView v-else-if="currentView === 'settings-backup' && canManageOwnerSettings" :key="currentLocation" />
+      <SettingsView v-else-if="currentView === 'settings' && canManageOwnerSettings" :key="currentLocation" />
       <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
       <ServiceEstimatesView v-else-if="currentView === 'service-estimates'" :key="currentLocation" />
       <OutgoingEmailsView v-else-if="currentView === 'outgoing-emails'" :key="currentLocation" />

@@ -13,6 +13,16 @@ from models import Brand, BrandFeature, GlobalConfig, Product, Service
 
 
 class ContentApiService:
+    PUBLIC_CONFIG_KEYS = frozenset(
+        {
+            "phone",
+            "phone_clean",
+            "email",
+            "address",
+            "work_hours",
+            "install_discount",
+        }
+    )
     _ALLOWED_HTML_TAGS = {
         "p", "br", "ul", "ol", "li", "strong", "b", "em", "i", "a", "h2", "h3", "h4", "blockquote",
     }
@@ -183,7 +193,11 @@ class ContentApiService:
 
     @staticmethod
     async def get_global_config_map(session: AsyncSession) -> Dict[str, str]:
-        stmt = select(GlobalConfig)
+        stmt = select(GlobalConfig).where(GlobalConfig.key.in_(ContentApiService.PUBLIC_CONFIG_KEYS))
         result = await session.execute(stmt)
         configs = result.scalars().all()
-        return {config.key: config.value for config in configs}
+        return {
+            config.key: config.value
+            for config in configs
+            if config.key in ContentApiService.PUBLIC_CONFIG_KEYS
+        }
