@@ -54,6 +54,7 @@ def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_pr
     env = workflow["env"]
     dispatch_inputs = workflow["on"]["workflow_dispatch"]["inputs"]
     gate_step = _step(workflow, "pitr-restore-drill", "Decide Whether To Run")
+    ssh_step = _step(workflow, "pitr-restore-drill", "Setup API SSH Key")
     drill_step = _step(workflow, "pitr-restore-drill", "Run PostgreSQL PITR Restore Drill")
     summary_step = _step(workflow, "pitr-restore-drill", "Write Summary")
     artifact_step = _step(workflow, "pitr-restore-drill", "Upload PITR Restore Drill Log")
@@ -64,6 +65,13 @@ def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_pr
     assert "PITR restore drill skipped because POSTGRES_PITR_REQUIRED is not true." in gate_step["run"]
     assert "postgres-pitr-restore-drill.log" in gate_step["run"]
     assert drill_step["if"] == "steps.gate.outputs.run == 'true'"
+    assert "API_STANDBY_HOST" in ssh_step["env"]
+    assert 'ssh-keyscan -T 10 -H "${API_STANDBY_HOST}"' in ssh_step["run"]
+    assert "API_DB_HA_MODE" in drill_step["env"]
+    assert "API_STANDBY_PROJECT_DIR" in drill_step["env"]
+    assert "check_patroni_production.py --resolve-primary" in drill_step["run"]
+    assert "target_compose_file=docker-compose.patroni.yml" in drill_step["run"]
+    assert 'selected_node=${target_label} ha_mode=${API_DB_HA_MODE}' in drill_step["run"]
     assert "scripts/ha/restore_postgres_pitr_drill.sh" in drill_step["run"]
     assert "REQUIRE_WAL=$(quote \"${PITR_RESTORE_REQUIRE_WAL}\")" in drill_step["run"]
     assert "postgres-pitr-restore-drill.log" in drill_step["run"]
