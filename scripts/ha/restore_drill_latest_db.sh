@@ -106,16 +106,23 @@ docker run -d \
   -e POSTGRES_DB="${POSTGRES_DB}" \
   "${POSTGRES_IMAGE}" >/dev/null
 
-for _ in $(seq 1 30); do
-  if docker exec "${container}" pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; then
-    break
+ready_streak=0
+for _ in $(seq 1 60); do
+  if docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${container}" psql -Atqc "SELECT 1" \
+    -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" 2>/dev/null | grep -Fxq 1; then
+    ready_streak=$((ready_streak + 1))
+    if [[ "${ready_streak}" -ge 3 ]]; then
+      break
+    fi
+  else
+    ready_streak=0
   fi
   sleep 1
 done
 
-if ! docker exec "${container}" pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; then
+if [[ "${ready_streak}" -lt 3 ]]; then
   docker logs "${container}" || true
-  echo "Disposable PostgreSQL did not become ready." >&2
+  echo "Disposable PostgreSQL did not become SQL-ready for three consecutive checks." >&2
   exit 1
 fi
 
@@ -139,10 +146,22 @@ if [[ "${tables_count}" -lt 10 ]]; then
 fi
 
 log "public_tables=${tables_count}"
-docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${container}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" <<'SQL'
-SELECT 'product_count=' || count(*) FROM product;
-SELECT 'payment_count=' || count(*) FROM payment;
-SELECT 'order_count=' || count(*) FROM "order";
-SQL
+business_counts="$(docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${container}" psql -AtF '|' \
+  -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+  -c 'SELECT (SELECT count(*) FROM product), (SELECT count(*) FROM payment), (SELECT count(*) FROM "order");')"
+IFS='|' read -r product_count payment_count order_count <<< "${business_counts}"
+for count in "${product_count}" "${payment_count}" "${order_count}"; do
+  case "${count}" in
+    ''|*[!0-9]*)
+      echo "Restore drill returned invalid business counts: ${business_counts}" >&2
+      exit 1
+      ;;
+  esac
+done
+log "product_count=${product_count} payment_count=${payment_count} order_count=${order_count}"
+if [[ "${product_count}" -lt 1 || "${order_count}" -lt 1 ]]; then
+  echo "Restore drill is missing required product/order data: ${business_counts}" >&2
+  exit 1
+fi
 
 log "restore drill passed; production and standby databases were not modified"
