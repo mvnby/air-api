@@ -200,6 +200,9 @@ const seriesSiblings = Array.isArray(product.series_siblings)
     currency="BYN"
     type="product"
     canonical={`/product/${product.slug}/`}
+    availabilityStatus={product.availability_status}
+    vitebskQty={product.vitebsk_qty}
+    minskQty={product.minsk_qty}
 >
     <StickyBuyBar
         client:visible

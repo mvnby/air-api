@@ -3,6 +3,7 @@ import Layout from "../../../layouts/Layout.astro";
 import ProductCard from "../../../components/ProductCard.astro";
 import { getCatalogForSsg, getPublicBrandBySlug, resolveImageUrl } from "../../../utils/api";
 import { buildCatalogItemListSchema } from "../../../utils/catalog-seo";
+import { safeJsonLd } from "../../../utils/safe-json-ld.js";
 import {
     LEGACY_HAIER_SERIES_PAGES,
     getLegacyHaierSeriesPage,
@@ -48,7 +49,7 @@ const catalogSchema = buildCatalogItemListSchema(products, Astro.url.origin);
     image={logoUrl || undefined}
     canonical={canonicalPath}
 >
-    <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
+    <script type="application/ld+json" set:html={safeJsonLd(catalogSchema)} />
     <main class="container legacy-series-page">
         <nav class="breadcrumb">
             <a href="/">Главная</a>

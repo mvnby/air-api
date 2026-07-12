@@ -232,15 +232,13 @@ const submitOrderHandler = async () => {
                 quantity: i.quantity,
                 // Installation snapshot fields (Phase: Snapshot Pricing Refactor)
                 with_installation: i.withInstallation || false,
+                installation_rate_id: i.withInstallation ? (i.installationRateId || null) : null,
                 installation_price: i.withInstallation ? (i.installationPrice || 0) : 0,
                 installation_meta: i.withInstallation ? {
                     source: "web_calculator",
-                    discount_applied: true,
-                    base_rate: i.installationPrice ? i.installationPrice + 100 : 0,  // Assuming 100 BYN discount rough calc if not strict
                     meters: i.installationMeters || 3,
-                    options: i.installationOptions || []
                 } : null,
-                installation_options: i.installationOptions || []
+                installation_options: i.withInstallation ? (i.installationOptions || []) : []
             };
         }));
 
@@ -276,6 +274,8 @@ const submitOrderHandler = async () => {
         // If API unified error handling threw with structure
         if (e.details && Array.isArray(e.details.detail)) {
              submitError.value = e.details.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+        } else if (e.details && typeof e.details.detail?.message === 'string') {
+             submitError.value = e.details.detail.message;
         } else if (e.details && typeof e.details.detail === 'string') {
              submitError.value = e.details.detail;
         } else {

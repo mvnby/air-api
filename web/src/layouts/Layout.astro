@@ -18,6 +18,9 @@ interface Props {
 	articleDate?: string;
 	canonical?: string;
 	robots?: string;
+	availabilityStatus?: string | null;
+	vitebskQty?: number | null;
+	minskQty?: number | null;
 }
 // Читаем переменную из окружения (она прокидывается скриптом)
 const siteUrl = import.meta.env.PUBLIC_SITE_URL || "";
@@ -33,6 +36,9 @@ const {
 	articleDate,
 	canonical,
 	robots,
+	availabilityStatus,
+	vitebskQty,
+	minskQty,
 } = Astro.props;
 
 const config = await getGlobalConfig();
@@ -81,6 +87,9 @@ const address = config["address"] || SITE_CONFIG.address;
 			currency={currency}
 			canonical={canonical}
 			robots={robots}
+			availabilityStatus={availabilityStatus}
+			vitebskQty={vitebskQty}
+			minskQty={minskQty}
 		/>
 		<slot name="head" />
 
