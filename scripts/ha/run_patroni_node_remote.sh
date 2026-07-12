@@ -14,6 +14,10 @@ BACKEND_IMAGE="${BACKEND_IMAGE:-}"
 SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-}"
 KEY_PATH="${RUNNER_TEMP:-/tmp}/mvn-patroni-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}.key"
 KNOWN_HOSTS_PATH="${KEY_PATH}.known_hosts"
+ROLE_AGENT_SOURCE="scripts/ha/patroni_role_agent.py"
+ROLE_AGENT_REMOTE="/tmp/mvn-patroni-role-agent-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}"
+ROLE_AGENT_TARGET="/usr/local/sbin/mvn-patroni-role-agent"
+ROLE_AGENT_UNIT="mvn-patroni-role-agent.service"
 
 log() {
   printf '[patroni-remote][%s] %s\n' "$1" "$2"
@@ -56,6 +60,10 @@ if [[ "${OPERATION}" == "deploy" ]]; then
   }
   [[ "${PROXY_MODE}" == "host_nginx" || "${PROXY_MODE}" == "container_nginx" ]] || {
     log error "API_NODE_PROXY_MODE must be host_nginx or container_nginx"
+    exit 1
+  }
+  [[ -f "${ROLE_AGENT_SOURCE}" ]] || {
+    log error "role agent source is missing: ${ROLE_AGENT_SOURCE}"
     exit 1
   }
 fi
@@ -113,6 +121,9 @@ scp "${SSH_OPTS[@]}" "${COMPOSE_SOURCE}" \
 scp "${SSH_OPTS[@]}" scripts/ha/run_patroni_migrations.sh \
   scripts/ha/deploy_patroni_api_node.sh scripts/deploy_backend_blue_green.sh \
   "${REMOTE}:/tmp/"
+if [[ "${OPERATION}" == "deploy" ]]; then
+  scp "${SSH_OPTS[@]}" "${ROLE_AGENT_SOURCE}" "${REMOTE}:${ROLE_AGENT_REMOTE}"
+fi
 
 if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
   ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p $(quote "${PROJECT_DIR}/api-proxy")"
@@ -155,4 +166,14 @@ printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   ${proxy_env} \
   bash $(quote "${remote_script}")
 "
+if [[ "${OPERATION}" == "deploy" ]]; then
+  log agent "installing tested Patroni role agent on ${NODE_HOST}"
+  ssh "${SSH_OPTS[@]}" "${REMOTE}" "
+    set -euo pipefail
+    install -m 0755 $(quote "${ROLE_AGENT_REMOTE}") $(quote "${ROLE_AGENT_TARGET}")
+    rm -f $(quote "${ROLE_AGENT_REMOTE}")
+    systemctl restart $(quote "${ROLE_AGENT_UNIT}")
+    systemctl is-active --quiet $(quote "${ROLE_AGENT_UNIT}")
+  "
+fi
 log "done" "${OPERATION} completed on ${NODE_HOST}"

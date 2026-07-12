@@ -416,13 +416,14 @@ from pg_stat_wal_receiver;
         if not slot_name:
             report.fail(f"{standby.label}: WAL receiver has no replication slot")
         try:
-            receive_replay_lag = int(receive_replay_lag_raw)
+            # Replay may be ahead of the receiver after restart or archive recovery.
+            receive_replay_lag = max(0, int(receive_replay_lag_raw))
         except ValueError:
             report.fail(
                 f"{standby.label}: receive/replay lag is not numeric: {receive_replay_lag_raw!r}"
             )
         else:
-            if receive_replay_lag < 0 or receive_replay_lag > config.max_replay_lag_bytes:
+            if receive_replay_lag > config.max_replay_lag_bytes:
                 report.fail(
                     f"{standby.label}: receive/replay lag {receive_replay_lag} exceeds "
                     f"{config.max_replay_lag_bytes} bytes"

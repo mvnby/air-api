@@ -10,6 +10,7 @@ from scripts.ha.check_patroni_production import (
     NodeConfig,
     Report,
     _check_cluster_views,
+    _check_postgres,
     _parse_rows,
     role_from_patroni,
     select_primary,
@@ -173,6 +174,47 @@ def test_cluster_view_accepts_replica_role_but_requires_sync_endpoint():
     report = Report()
     _check_cluster_views(config, runner, api, reserve, report)
     assert report.failures == ["reserve: Patroni /sync endpoint is not healthy"]
+
+
+def test_postgres_check_treats_negative_receiver_delta_as_zero_backlog():
+    api, reserve = _nodes()
+    config = CheckerConfig(
+        api=api,
+        reserve=reserve,
+        ssh_options=(),
+        max_replay_lag_bytes=1_048_576,
+        role_agent_unit="mvn-patroni-role-agent.service",
+        etcd_check_command="check-etcd",
+        ready_url="http://127.0.0.1:18080/api/ready",
+    )
+
+    class FakeRunner:
+        def run(self, node, command, *, stdin=None, check=True):
+            del command, check
+            statement = (stdin or "").strip()
+            if statement == "select pg_is_in_recovery();":
+                output = "f\n" if node == api else "t\n"
+            elif statement == "select system_identifier from pg_control_system();":
+                output = "7657288033494519840\n"
+            elif "from pg_stat_replication" in statement:
+                output = "zakup|10.77.0.1|streaming|sync|0\n"
+            elif "from pg_stat_wal_receiver" in statement:
+                output = "streaming|10.77.0.2|zakup|-10076160\n"
+            elif statement == "show synchronous_standby_names;":
+                output = "ANY 1 (zakup)\n"
+            elif statement == "show wal_log_hints;":
+                output = "on\n"
+            elif statement == "show archive_mode;":
+                output = "on\n"
+            else:
+                raise AssertionError(statement)
+            return subprocess.CompletedProcess([], 0, output, "")
+
+    report = Report()
+    _check_postgres(config, FakeRunner(), api, reserve, report)
+
+    assert report.failures == []
+    assert any("streams synchronously" in message for message in report.ok)
 
 
 def test_replication_workflow_switches_to_role_aware_patroni_monitoring():

@@ -15,6 +15,10 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
     assert "run_patroni_migrations.sh" in text
     assert "deploy_patroni_api_node.sh" in text
     assert "deploy_backend_blue_green.sh" in text
+    assert "scripts/ha/patroni_role_agent.py" in text
+    assert "/usr/local/sbin/mvn-patroni-role-agent" in text
+    assert "systemctl restart" in text
+    assert "systemctl is-active --quiet" in text
     assert "API_PROXY_MODE=" in text
     assert "upstream.conf" in text
     assert "up -d db" not in text
