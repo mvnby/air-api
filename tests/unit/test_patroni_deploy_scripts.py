@@ -68,6 +68,11 @@ def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fenc
     assert "standby image updated without enabling traffic" in text
     assert "alembic upgrade head" not in text
     assert 'up -d --no-deps --force-recreate "${active_service}"' in text
+    assert "reconcile_standby_proxy" in text
+    assert 'run -T --rm --no-deps "${PROXY_SERVICE}" nginx -t' in text
+    assert 'up -d --no-deps "${PROXY_SERVICE}"' in text
+    assert 'up -d --no-deps --force-recreate "${PROXY_SERVICE}"' in text
+    assert "running proxy has stale mounts" in text
     assert "up -d db" not in text
 
 
