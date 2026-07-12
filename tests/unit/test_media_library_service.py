@@ -366,11 +366,13 @@ async def test_media_processing_job_claim_and_complete_creates_media_variant(sql
     assert claimed["job_id"] == created["job_id"]
     assert claimed["status"] == "running"
     assert claimed["attempts"] == 1
+    assert len(claimed["lease_token"]) >= 32
 
     completed = await MediaProcessingJobService.complete_job(
         session=sqlite_session,
         job_id=created["job_id"],
         worker_id="gpu-box",
+        lease_token=claimed["lease_token"],
         content=image_bytes(size=(80, 60), color=(220, 20, 80)),
         filename="processed.png",
     )
@@ -402,16 +404,18 @@ async def test_media_processing_job_fail_marks_claimed_job_failed(sqlite_session
         provider="rembg",
         created_by="admin",
     )
-    await MediaProcessingJobService.claim_next_job(
+    claimed = await MediaProcessingJobService.claim_next_job(
         session=sqlite_session,
         worker_id="gpu-box",
         capabilities=["background_removal"],
     )
+    assert claimed is not None
 
     failed = await MediaProcessingJobService.fail_job(
         session=sqlite_session,
         job_id=created["job_id"],
         worker_id="gpu-box",
+        lease_token=claimed["lease_token"],
         error="model out of memory",
     )
 

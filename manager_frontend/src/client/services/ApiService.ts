@@ -16,6 +16,8 @@ import type { ProductResponse } from '../models/ProductResponse';
 import type { ProductSeriesNavigationResponse } from '../models/ProductSeriesNavigationResponse';
 import type { PublicBrandDetailResponse } from '../models/PublicBrandDetailResponse';
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
+import type { PublicContactLeadPayload } from '../models/PublicContactLeadPayload';
+import type { PublicContactLeadResponse } from '../models/PublicContactLeadResponse';
 import type { RepairDiagnosticLeadResponse } from '../models/RepairDiagnosticLeadResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
 import type { SpecRegistryResponse } from '../models/SpecRegistryResponse';
@@ -250,7 +252,7 @@ export class ApiService {
     }
     /**
      * Get Global Config
-     * Get all global configuration parameters as a key-value dictionary.
+     * Get the public storefront configuration as a key-value dictionary.
      * Example: {"phone": "+37529...", "email": "..."}
      * @returns any Successful Response
      * @throws ApiError
@@ -259,6 +261,25 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/config',
+        });
+    }
+    /**
+     * Create Public Contact Lead
+     * @param requestBody
+     * @returns PublicContactLeadResponse Successful Response
+     * @throws ApiError
+     */
+    public static createPublicContactLead(
+        requestBody: PublicContactLeadPayload,
+    ): CancelablePromise<PublicContactLeadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/leads/contact',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
@@ -316,6 +337,7 @@ export class ApiService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                409: `The selected installation quote conflicts with current tariffs.`,
                 422: `Validation Error`,
             },
         });

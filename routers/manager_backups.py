@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from core.config import settings
-from core.security import get_current_username
+from core.security import get_current_owner_username
 from routers.manager_operation_ids import (
     GET_MANAGER_BACKUP_RUN_STATUS,
     GET_MANAGER_BACKUP_RESTORE_STATUS,
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/manager/backups",
     tags=["manager/backups"],
-    dependencies=[Depends(get_current_username)],
+    dependencies=[Depends(get_current_owner_username)],
 )
 
 
@@ -95,6 +95,15 @@ async def get_manager_backup_run_status(job_id: str):
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def start_manager_backup_restore(file_id: str):
+    if not settings.BACKUP_RESTORE_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Restore is disabled during normal API operation. "
+                "Use the supervised maintenance restore runbook."
+            ),
+        )
+
     if backup_run_runtime_service.has_active_job():
         raise HTTPException(status_code=409, detail="Backup job is running. Wait until it finishes.")
 

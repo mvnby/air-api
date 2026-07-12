@@ -1,7 +1,7 @@
 """Add CRM models
 
 Revision ID: a55c3fc61562
-Revises: 
+Revises: 000000000001
 Create Date: 2026-01-17 01:28:20.663668
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import sqlite
 
 # revision identifiers, used by Alembic.
 revision: str = 'a55c3fc61562'
-down_revision: Union[str, Sequence[str], None] = None
+down_revision: Union[str, Sequence[str], None] = '000000000001'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -75,7 +75,10 @@ def upgrade() -> None:
                existing_nullable=True)
         batch_op.alter_column('type',
                existing_type=sa.TEXT(),
-               type_=sa.Enum('individual', 'company', name='customertype'),
+               # Keep workflow values as strings.  Native PostgreSQL enums made
+               # later data migrations (which introduce new values) impossible
+               # to replay and were never part of the current SQLModel schema.
+               type_=sa.String(),
                nullable=False,
                existing_server_default=sa.text("'individual'"))
         batch_op.alter_column('full_legal_name',
@@ -135,7 +138,7 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column('total_amount', sa.Float(), nullable=False, server_default=sa.text("0.0")))
         batch_op.add_column(sa.Column('total_cost', sa.Float(), nullable=False, server_default=sa.text("0.0")))
         batch_op.add_column(sa.Column('margin', sa.Float(), nullable=False, server_default=sa.text("0.0")))
-        batch_op.add_column(sa.Column('is_paid', sa.Boolean(), nullable=False, server_default=sa.text("0")))
+        batch_op.add_column(sa.Column('is_paid', sa.Boolean(), nullable=False, server_default=sa.false()))
         batch_op.add_column(sa.Column('assessment_date', sa.DateTime(), nullable=True))
         batch_op.add_column(sa.Column('installation_date', sa.DateTime(), nullable=True))
         batch_op.add_column(sa.Column('closed_at', sa.DateTime(), nullable=True))
@@ -149,7 +152,7 @@ def upgrade() -> None:
                existing_nullable=True)
         batch_op.alter_column('status',
                existing_type=sa.TEXT(),
-               type_=sa.Enum('NEW_LEAD', 'ASSESSMENT', 'PROPOSAL', 'NEGOTIATION', 'DEFERRED', 'WON_DEPOSIT', 'INSTALLATION', 'COMPLETED', 'CANCELED', name='orderstatus'),
+               type_=sa.String(),
                nullable=False,
                existing_server_default=sa.text("'new'"))
         batch_op.alter_column('created_at',
@@ -221,7 +224,7 @@ def downgrade() -> None:
                nullable=True,
                existing_server_default=sa.text('(CURRENT_TIMESTAMP)'))
         batch_op.alter_column('status',
-               existing_type=sa.Enum('NEW_LEAD', 'ASSESSMENT', 'PROPOSAL', 'NEGOTIATION', 'DEFERRED', 'WON_DEPOSIT', 'INSTALLATION', 'COMPLETED', 'CANCELED', name='orderstatus'),
+               existing_type=sa.String(),
                type_=sa.TEXT(),
                nullable=True,
                existing_server_default=sa.text("'new'"))
@@ -295,7 +298,7 @@ def downgrade() -> None:
                type_=sa.TEXT(),
                existing_nullable=True)
         batch_op.alter_column('type',
-               existing_type=sa.Enum('individual', 'company', name='customertype'),
+               existing_type=sa.String(),
                type_=sa.TEXT(),
                nullable=True,
                existing_server_default=sa.text("'individual'"))

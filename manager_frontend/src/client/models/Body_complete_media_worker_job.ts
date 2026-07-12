@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type Body_complete_media_worker_job = {
     worker_id: string;
+    lease_token: string;
     file: Blob;
 };
 

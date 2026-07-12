@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 
+from core.input_validation import validate_public_manual_url
 from models import Product
 from schemas import (
     ProductImageResponse,
@@ -194,17 +195,23 @@ def map_product_to_response(
     series = product.series if product.series_id else None
     series_payload = build_product_series_response(series)
 
-    manuals_payload = [
-        ProductManualResponse(
-            id=item.id,
-            kind=item.kind,
-            title=item.title,
-            url=item.url,
-            source=item.source,
+    manuals_payload = []
+    for item in (product.attachments or []):
+        if item.kind != "manual":
+            continue
+        try:
+            public_url = validate_public_manual_url(item.url)
+        except ValueError:
+            continue
+        manuals_payload.append(
+            ProductManualResponse(
+                id=item.id,
+                kind=item.kind,
+                title=item.title,
+                url=public_url,
+                source=item.source,
+            )
         )
-        for item in (product.attachments or [])
-        if item.kind == "manual"
-    ]
 
     return ProductResponse(
         id=product.id,

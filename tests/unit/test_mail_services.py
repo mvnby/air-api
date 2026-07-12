@@ -947,7 +947,7 @@ async def test_bank_statement_import_creates_missing_and_flags_duplicate_receipt
 
 
 @pytest.mark.asyncio
-async def test_bank_receipt_import_notification_goes_to_admins(sqlite_session, monkeypatch):
+async def test_bank_receipt_import_notification_counts_confirmed_admins(sqlite_session, monkeypatch, caplog):
     receipt = BankReceipt(
         status="requires_review",
         operation_type="incoming_funds",
@@ -988,17 +988,19 @@ async def test_bank_receipt_import_notification_goes_to_admins(sqlite_session, m
 
     async def fake_send_message(user_id: int, text: str):
         sent.append((user_id, text))
+        return user_id == 101
 
     monkeypatch.setattr(settings, "ADMIN_IDS", "101,202")
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
 
-    sent_count = await NotificationService.notify_admins_bank_receipts_imported(
-        sqlite_session,
-        [receipt.id, matched.id],
-    )
+    with caplog.at_level("WARNING"):
+        sent_count = await NotificationService.notify_admins_bank_receipts_imported(
+            sqlite_session,
+            [receipt.id, matched.id],
+        )
 
-    assert sent_count == 2
+    assert sent_count == 1
     assert [item[0] for item in sent] == [101, 202]
     assert "Новые банковские поступления: 2" in sent[0][1]
     assert "Разнесено автоматически: 1" in sent[0][1]
@@ -1007,10 +1009,11 @@ async def test_bank_receipt_import_notification_goes_to_admins(sqlite_session, m
     assert "#50" in sent[0][1]
     assert "ООО Уже разнесено" in sent[0][1]
     assert "разнесено в заказ #61" in sent[0][1]
+    assert "NOTIFY_BANK_RECEIPTS_DELIVERY_FAILED admin_id=202" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_email_lead_import_notification_goes_to_admins(sqlite_session, monkeypatch):
+async def test_email_lead_import_notification_counts_confirmed_admins(sqlite_session, monkeypatch, caplog):
     order = Order(
         status=OrderStatus.NEW_LEAD,
         lead_source=LeadSource.EMAIL,
@@ -1029,23 +1032,26 @@ async def test_email_lead_import_notification_goes_to_admins(sqlite_session, mon
 
     async def fake_send_message(user_id: int, text: str):
         sent.append((user_id, text))
+        return user_id == 101
 
     monkeypatch.setattr(settings, "ADMIN_IDS", "101,202")
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
 
-    sent_count = await NotificationService.notify_admins_email_leads_imported(
-        sqlite_session,
-        [order.id],
-    )
+    with caplog.at_level("WARNING"):
+        sent_count = await NotificationService.notify_admins_email_leads_imported(
+            sqlite_session,
+            [order.id],
+        )
 
-    assert sent_count == 2
+    assert sent_count == 1
     assert [item[0] for item in sent] == [101, 202]
     assert "Новые email-заказы: 1" in sent[0][1]
     assert f"Заказ #{order.id}" in sent[0][1]
     assert "client@example.com" in sent[0][1]
     assert "Обслуживание кондиционеров" in sent[0][1]
     assert "Запрос цены на обслуживание HVAC." in sent[0][1]
+    assert "NOTIFY_EMAIL_LEADS_DELIVERY_FAILED admin_id=202" in caplog.text
 
 
 def test_smtp_builds_utf8_message_and_sanitizes_errors(monkeypatch):

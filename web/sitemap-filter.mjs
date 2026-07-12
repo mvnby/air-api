@@ -1,7 +1,8 @@
-const EXCLUDED_SITEMAP_PATHS = new Set([
+export const EXCLUDED_SITEMAP_PATHS = new Set([
   '/404/',
   '/cart/',
   '/checkout/',
+  '/compare/',
   '/success/',
 ]);
 

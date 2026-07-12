@@ -12,6 +12,12 @@ type CatalogSeoProduct = {
     minsk_qty?: number | null;
 };
 
+type ProductSchemaInput = CatalogSeoProduct & {
+    description: string;
+    image: string;
+    currency?: string;
+};
+
 function absoluteUrl(path: string | null | undefined, origin: string) {
     if (!path) return undefined;
     if (/^https?:\/\//i.test(path)) return path;
@@ -28,6 +34,24 @@ export function getSchemaAvailability(product: CatalogSeoProduct) {
         return "https://schema.org/InStock";
     }
     return "https://schema.org/LimitedAvailability";
+}
+
+export function buildProductSchema(product: ProductSchemaInput) {
+    if (!hasKnownProductPrice(product.price)) return null;
+
+    return {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: product.title,
+        image: product.image,
+        description: product.description,
+        offers: {
+            "@type": "Offer",
+            priceCurrency: product.currency || "BYN",
+            price: Number(product.price),
+            availability: getSchemaAvailability(product),
+        },
+    };
 }
 
 export function buildCatalogItemListSchema(products: CatalogSeoProduct[], origin: string) {

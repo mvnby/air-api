@@ -9,6 +9,7 @@ import {
     getFiltersConfig,
 } from "../utils/api";
 import { buildCatalogItemListSchema } from "../utils/catalog-seo";
+import { safeJsonLd } from "../utils/safe-json-ld.js";
 import { matchVirtualCategoryByFilters } from "../utils/virtual-category";
 import {
     VIRTUAL_CATEGORIES,
@@ -308,7 +309,7 @@ const initialFilters = {
             })();
         </script>
     </Fragment>
-    <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
+    <script type="application/ld+json" set:html={safeJsonLd(catalogSchema)} />
     <script is:inline>
         (() => {
             if (typeof window === "undefined") return;

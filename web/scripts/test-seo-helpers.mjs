@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { safeJsonLd } from '../src/utils/safe-json-ld.js';
 
 import {
   buildBrandMetaDescription,
@@ -60,5 +61,17 @@ assert.equal(buildBrandSeoTitle({ title: 'TCL' }), 'Кондиционеры TCL
 const brandDescription = buildBrandMetaDescription({ title: 'TCL' });
 assert.match(brandDescription, /Кондиционеры TCL/);
 assert.ok(brandDescription.length <= 170, brandDescription);
+
+const lineSeparator = String.fromCodePoint(0x2028);
+const paragraphSeparator = String.fromCodePoint(0x2029);
+const unsafeJsonLdValue = `</script><script>alert("xss")</script>${lineSeparator}line${paragraphSeparator}end & more`;
+const serializedJsonLd = safeJsonLd({ value: unsafeJsonLdValue });
+assert.equal(serializedJsonLd.includes('</script>'), false);
+assert.equal(serializedJsonLd.includes(lineSeparator), false);
+assert.equal(serializedJsonLd.includes(paragraphSeparator), false);
+assert.match(serializedJsonLd, /\\u003c\/script\\u003e/);
+assert.match(serializedJsonLd, /\\u2028/);
+assert.match(serializedJsonLd, /\\u2029/);
+assert.deepEqual(JSON.parse(serializedJsonLd), { value: unsafeJsonLdValue });
 
 console.log('SEO helper tests passed');

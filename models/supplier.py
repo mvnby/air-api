@@ -129,14 +129,28 @@ class SupplierOffer(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     supplier_id: int = Field(foreign_key="supplier.id", index=True)
-    source_id: Optional[int] = Field(default=None, foreign_key="supplier_price_source.id", index=True)
+    source_id: Optional[int] = Field(
+        default=None,
+        foreign_key="supplier_price_source.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     external_id: str = Field(index=True)
 
     title_raw: Optional[str] = None
     title_normalized: Optional[str] = Field(default=None, index=True)
-    model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    indoor_model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    outdoor_model_tokens: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    model_tokens: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    indoor_model_tokens: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    outdoor_model_tokens: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
     match_normalizer_version: Optional[str] = Field(default=None, index=True)
     source_url: Optional[str] = Field(default=None, index=True)
     qty_raw: Optional[str] = None

@@ -1,4 +1,8 @@
 import { buildCanonicalUrl } from "./seo.js";
+import {
+    collectCatalogPages,
+    PUBLIC_CATALOG_PAGE_SIZE,
+} from "./catalog-pagination.js";
 
 const ENV_API_URL = import.meta.env.INTERNAL_API_URL || 'http://app:8000/api/v1';
 const PUBLIC_API_URL = (import.meta.env.PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, "");
@@ -231,6 +235,7 @@ async function fetchJson(url, options = {}, returnNullOnError = true) {
         }
         return await response.json();
     } catch (error) {
+        if (error?.name === "AbortError") throw error;
         console.error(`[API] Fetch error for ${url}:`, error.message);
         if (returnNullOnError) return null;
         throw error;
@@ -272,8 +277,9 @@ export async function getCatalog(params = {}, options = {}) {
     const query = buildQuery(params);
     const url = `${API_V1}/catalog?${query}`;
     const runtimeFreshness = getRuntimeFreshnessOption(options);
+    const requestOptions = options.signal ? { signal: options.signal } : {};
 
-    const data = await fetchJsonWithRuntimeCache(url, {}, true, runtimeFreshness);
+    const data = await fetchJsonWithRuntimeCache(url, requestOptions, true, runtimeFreshness);
     if (!data) {
         return { items: [], meta: { total: 0, page: 1, limit: 20, pages: 0 } };
     }
@@ -285,6 +291,19 @@ export async function getCatalogForSsg(params = {}) {
         return await getCatalogStrictForSsg(params);
     }
     return await getCatalog(params);
+}
+
+export async function getAllCatalogPages(params = {}, options = {}) {
+    const runtimeFreshness = getRuntimeFreshnessOption(options);
+    const fetchPage = import.meta.env.SSR && !runtimeFreshness
+        ? getCatalogStrictForSsg
+        : (pageParams) => getCatalog(pageParams, options);
+
+    return await collectCatalogPages(fetchPage, {
+        params,
+        pageSize: PUBLIC_CATALOG_PAGE_SIZE,
+        context: "storefront catalog",
+    });
 }
 
 async function getProductSeriesNavigationStrictForSsg() {
@@ -373,14 +392,10 @@ export async function getPublicBrandBySlug(slug, options = {}) {
 }
 
 export async function getProducts() {
-    // During SSG we require a strict fetch to avoid silently dropping product routes.
-    if (import.meta.env.SSR) {
-        const data = await getCatalogStrictForSsg({ limit: 1000 });
-        return data && data.items ? data.items : [];
-    }
-
-    // Client-side/runtime usage can stay resilient with soft fallback.
-    const data = await getCatalog({ limit: 1000 });
+    // Product route generation must cover the complete public catalog. The
+    // paginator deduplicates slugs and fails the build if API totals drift or
+    // any route would be silently omitted.
+    const data = await getAllCatalogPages();
     return data && data.items ? data.items : [];
 }
 
@@ -487,19 +502,13 @@ export async function getInstallationRates() {
 }
 
 export async function submitContactForm(formData) {
-    // We treat contact form submissions as Orders with no items (Leads)
-    const url = `${API_V1}/orders`;
-
-    // Transform flat form data to OrderPayload
+    const url = `${API_V1}/leads/contact`;
     const payload = {
-        customer: {
-            name: formData.name,
-            phone: formData.phone,
-            email: formData.email || null,
-            address: formData.address || null
-        },
-        items: [],
-        comment: formData.message || formData.comment || null
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email || null,
+        address: formData.address || null,
+        message: formData.message || formData.comment || null,
     };
 
     try {

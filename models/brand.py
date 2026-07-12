@@ -32,18 +32,38 @@ class ProductSeries(SQLModel, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    brand_id: Optional[int] = Field(default=None, foreign_key="brand.id", index=True)
+    brand_id: Optional[int] = Field(
+        default=None,
+        foreign_key="brand.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     title: str = Field(index=True)
     slug: str = Field(index=True)
     tagline: Optional[str] = Field(default=None)
     short_description: Optional[str] = Field(default=None, sa_column=Column(Text))
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     hero_image: Optional[str] = Field(default=None)
-    gallery_images: List[str] = Field(default_factory=list, sa_column=Column(JSON))
-    features: List[str] = Field(default_factory=list, sa_column=Column(JSON))
-    feature_blocks: List[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    content_blocks: List[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    footnotes: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    gallery_images: List[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    features: List[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    feature_blocks: List[dict[str, Any]] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    content_blocks: List[dict[str, Any]] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    footnotes: List[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
     seo_title: Optional[str] = Field(default=None)
     seo_description: Optional[str] = Field(default=None, sa_column=Column(Text))
     source_url: Optional[str] = Field(default=None)
@@ -74,7 +94,10 @@ class BrandFeature(SQLModel, table=True):
     icon: Optional[str] = Field(default=None)
     footnote: Optional[str] = Field(default=None)
     source_url: Optional[str] = Field(default=None)
-    aliases: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    aliases: List[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
     is_published: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0, index=True)
     created_at: datetime = Field(default_factory=datetime.now)

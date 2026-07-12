@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import LeadSource, Order, OrderStatus
 from schemas import OrderPayload, OrderResponse
 from services.bot_service import BotService
+from services.installation_pricing_service import InstallationPricingService
 from services.order_service import OrderService
 from services.staff_user_service import StaffUserService
 
@@ -17,30 +18,20 @@ class WebsiteOrderService:
     @staticmethod
     async def create_order(session: AsyncSession, payload: OrderPayload) -> OrderResponse:
         logger.info(
-            "📦 Incoming order payload: customer=%s, items_count=%s",
-            payload.customer.name,
+            "PUBLIC_CHECKOUT_RECEIVED item_count=%s installation_item_count=%s",
             len(payload.items),
+            len([item for item in payload.items if item.with_installation]),
         )
-        for idx, item in enumerate(payload.items):
-            logger.info(
-                "   Item %s: product_id=%s, qty=%s, with_install=%s, install_price=%s",
-                idx,
-                item.product_id,
-                item.quantity,
-                getattr(item, "with_installation", "N/A"),
-                getattr(item, "installation_price", "N/A"),
-            )
-
-        items = [
+        items = await InstallationPricingService.price_public_items(session, payload.items)
+        pricing_snapshots = [
             {
-                "product_id": item.product_id,
-                "quantity": item.quantity,
-                "with_installation": item.with_installation,
-                "installation_price": item.installation_price,
-                "installation_meta": item.installation_meta,
-                "installation_options": item.installation_options,
+                "item_index": index,
+                "product_id": item["product_id"],
+                "quantity": item["quantity"],
+                "installation_meta": item["installation_meta"],
             }
-            for item in payload.items
+            for index, item in enumerate(items)
+            if item["with_installation"]
         ]
 
         order = await OrderService.create_from_website(
@@ -60,6 +51,12 @@ class WebsiteOrderService:
             customer_iban=payload.customer.iban,
             customer_bic=payload.customer.bic,
             customer_bank_name=payload.customer.bank_name,
+            order_technical_meta={
+                "public_installation_pricing": {
+                    "pricing_version": InstallationPricingService.PRICING_VERSION,
+                    "items": pricing_snapshots,
+                }
+            } if pricing_snapshots else None,
         )
 
         await WebsiteOrderService._notify_admins(session, order, payload)
@@ -83,34 +80,47 @@ class WebsiteOrderService:
 
         message_lines = [
             f"🌐 <b>ЗАКАЗ С САЙТА #{order.id}</b>",
-            f"👤 {payload.customer.name}",
-            f"📱 {payload.customer.phone}",
+            f"👤 {BotService.escape_html(payload.customer.name, max_length=160)}",
+            f"📱 {BotService.escape_html(payload.customer.phone, max_length=80)}",
         ]
 
         if payload.customer.email:
-            message_lines.append(f"📧 {payload.customer.email}")
+            message_lines.append(f"📧 {BotService.escape_html(payload.customer.email, max_length=254)}")
         if payload.customer.address:
-            message_lines.append(f"📍 {payload.customer.address}")
+            message_lines.append(f"📍 {BotService.escape_html(payload.customer.address, max_length=300)}")
         if payload.comment:
-            message_lines.append(f"💬 {payload.comment}")
+            message_lines.append(f"💬 {BotService.escape_html(payload.comment, max_length=500)}")
 
         message_lines.append("")
         message_lines.append("🛒 <b>Товары:</b>")
 
-        for link in order.product_links:
+        product_links = list(order.product_links or [])
+        for link in product_links[:6]:
             product_name = link.product.title if link.product else f"Product #{link.product_id}"
             line_total = link.price * link.quantity
-            message_lines.append(f"▫️ {product_name} x{link.quantity} — {line_total} р.")
+            message_lines.append(
+                f"▫️ {BotService.escape_html(product_name, max_length=140)} "
+                f"x{link.quantity} — {line_total} р."
+            )
 
             if link.is_installation_included:
                 install_price = link.installation_price or 0
                 message_lines.append(f"   └ 🔧 Монтаж: {install_price} BYN")
 
+        if len(product_links) > 6:
+            message_lines.append(f"… ещё товаров: {len(product_links) - 6}")
+
         if order.service_links:
-            for service_link in order.service_links:
+            service_links = list(order.service_links)
+            for service_link in service_links[:4]:
                 title = service_link.title or "Услуга"
                 total = service_link.price * service_link.quantity
-                message_lines.append(f"🔧 {title} x{service_link.quantity} — {total} BYN")
+                message_lines.append(
+                    f"🔧 {BotService.escape_html(title, max_length=140)} "
+                    f"x{service_link.quantity} — {total} BYN"
+                )
+            if len(service_links) > 4:
+                message_lines.append(f"… ещё услуг: {len(service_links) - 4}")
 
         message_lines.append("")
         message_lines.append(f"💰 <b>Итого: {order.total_amount} руб.</b>")
@@ -118,6 +128,16 @@ class WebsiteOrderService:
 
         for admin_id in admin_ids:
             try:
-                await BotService.send_message(admin_id, admin_text)
-            except Exception as exc:
-                logger.warning("Failed to notify admin %s: %s", admin_id, exc)
+                delivered = await BotService.send_message(admin_id, admin_text)
+                if not delivered:
+                    logger.warning(
+                        "WEBSITE_ORDER_NOTIFY_DELIVERY_FAILED order_id=%s admin_id=%s",
+                        order.id,
+                        admin_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "WEBSITE_ORDER_NOTIFY_SEND_FAILED order_id=%s admin_id=%s",
+                    order.id,
+                    admin_id,
+                )

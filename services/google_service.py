@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+import tempfile
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
@@ -49,10 +50,12 @@ class GoogleDocsService:
                 status["expiry"] = self.creds.expiry.strftime("%Y-%m-%d %H:%M:%S")
         return status
 
-    def get_auth_url(self, redirect_uri: Optional[str] = None) -> str:
+    def get_auth_url(self, redirect_uri: Optional[str] = None, *, state: str) -> str:
         """Generates the OAuth2 URL for the user to visit."""
         if not os.path.exists(CLIENT_SECRET_FILE):
              raise Exception(f"Client Secret file '{CLIENT_SECRET_FILE}' not found!")
+        if not state:
+            raise ValueError("OAuth state is required")
         redirect_uri = redirect_uri or get_default_oauth_redirect_uri()
         
         flow = Flow.from_client_secrets_file(
@@ -64,6 +67,7 @@ class GoogleDocsService:
             access_type='offline',
             include_granted_scopes='true',
             prompt='consent',
+            state=state,
         )
         return auth_url
 
@@ -81,9 +85,7 @@ class GoogleDocsService:
         flow.fetch_token(code=code)
         self.creds = flow.credentials
         
-        # Save
-        with open(TOKEN_FILE, 'w') as token:
-            token.write(self.creds.to_json())
+        self._write_token_file()
             
         return True
 
@@ -98,8 +100,36 @@ class GoogleDocsService:
                 try:
                     self.creds.refresh(Request())
                     # Сохраняем токен ТОЛЬКО если успешно обновили
-                    with open(TOKEN_FILE, 'w') as token: token.write(self.creds.to_json())
+                    self._write_token_file()
                 except Exception: self.creds = None
+
+    def _write_token_file(self) -> None:
+        if self.creds is None:
+            raise RuntimeError("Google credentials are not available")
+
+        token_path = os.path.abspath(TOKEN_FILE)
+        token_dir = os.path.dirname(token_path)
+        temp_path: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=token_dir,
+                prefix=f".{os.path.basename(token_path)}.",
+                delete=False,
+            ) as token:
+                temp_path = token.name
+                os.chmod(temp_path, 0o600)
+                token.write(self.creds.to_json())
+                token.flush()
+                os.fsync(token.fileno())
+
+            os.replace(temp_path, token_path)
+            temp_path = None
+            os.chmod(token_path, 0o600)
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
 
     def generate_sheet(self, template_id: str, title: str, replacements: Dict[str, str], 
                        table_data: Optional[List[List[str]]] = None,

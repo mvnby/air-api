@@ -29,8 +29,8 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
     def validate_public_pagination(page: int, limit: int) -> None:
         if page < 1:
             raise ValueError("Page must be >= 1")
-        if limit < 1 or limit > 1000:
-            raise ValueError("Limit must be between 1 and 1000")
+        if limit < 1 or limit > 100:
+            raise ValueError("Limit must be between 1 and 100")
 
     @staticmethod
     async def get_public_spec_keys(session: AsyncSession) -> Dict[str, Any]:

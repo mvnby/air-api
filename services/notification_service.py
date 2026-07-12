@@ -1,5 +1,4 @@
 import logging
-from html import escape
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,6 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationService:
+    # A single Telegram message is limited to 4096 characters. Detailed bank
+    # and email entries are intentionally capped so bounded-but-long database
+    # values cannot make the whole notification undeliverable.
+    MAX_DETAILED_BATCH_ITEMS = 4
+
     SERVICE_LABELS = {
         "turnkey": "Продажа + монтаж",
         "install_only": "Монтаж",
@@ -57,19 +61,27 @@ class NotificationService:
 
         message_lines = [
             f"🔔 <b>НОВЫЙ ЗАКАЗ #{order.id}</b>",
-            f"👤 {customer_name or 'Без имени'} (@{customer_username or 'без username'})",
-            f"📱 {customer_phone or order.delivery_address or 'не указан'}",
+            f"👤 {BotService.escape_html(customer_name or 'Без имени', max_length=160)} "
+            f"(@{BotService.escape_html(customer_username or 'без username', max_length=80)})",
+            f"📱 {BotService.escape_html(customer_phone or order.delivery_address or 'не указан', max_length=180)}",
             "",
             "🛒 <b>Товары:</b>",
         ]
 
-        for link in order.product_links:
+        product_links = list(order.product_links or [])
+        for link in product_links[:10]:
             product_name = link.product.title if link.product else f"Product #{link.product_id}"
             line_total = link.price * link.quantity
-            message_lines.append(f"▫️ {product_name} x{link.quantity} — {line_total} р.")
+            message_lines.append(
+                f"▫️ {BotService.escape_html(product_name, max_length=140)} "
+                f"x{link.quantity} — {line_total} р."
+            )
             if link.is_installation_included:
                 install_price = link.installation_price or 0
                 message_lines.append(f"   └ 🔧 Монтаж: {install_price} BYN")
+
+        if len(product_links) > 10:
+            message_lines.append(f"… ещё товаров: {len(product_links) - 10}")
 
         message_lines.append("")
         message_lines.append(f"💰 <b>Итого: {order.total_amount} руб.</b>")
@@ -77,7 +89,13 @@ class NotificationService:
 
         for admin_id in admin_ids:
             try:
-                await BotService.send_message(admin_id, admin_text)
+                delivered = await BotService.send_message(admin_id, admin_text)
+                if not delivered:
+                    logger.warning(
+                        "NOTIFY_NEW_ORDER_DELIVERY_FAILED order_id=%s admin_id=%s",
+                        order.id,
+                        admin_id,
+                    )
             except Exception:
                 logger.exception("NOTIFY_NEW_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
 
@@ -117,30 +135,30 @@ class NotificationService:
 
         lines = [
             f"🔔 <b>Новый рабочий заказ #{order.id}</b>",
-            f"Источник: {escape(source_label)}",
-            f"Услуга: {escape(service_label)}",
-            f"Дата: {escape(date_text)}",
-            f"Клиент: {escape(customer_name)}",
-            f"Телефон: {escape(customer_phone)}",
-            f"Адрес: {escape(order.delivery_address or 'не указан')}",
+            f"Источник: {BotService.escape_html(source_label, max_length=100)}",
+            f"Услуга: {BotService.escape_html(service_label, max_length=140)}",
+            f"Дата: {BotService.escape_html(date_text, max_length=80)}",
+            f"Клиент: {BotService.escape_html(customer_name, max_length=160)}",
+            f"Телефон: {BotService.escape_html(customer_phone, max_length=80)}",
+            f"Адрес: {BotService.escape_html(order.delivery_address or 'не указан', max_length=300)}",
         ]
         if comment:
-            lines.extend(["", f"<i>{escape(comment)}</i>"])
+            lines.extend(["", f"<i>{BotService.escape_html(comment, max_length=320)}</i>"])
 
         text = "\n".join(lines)
         rich_html = (
             f"<h3>Новый рабочий заказ #{order.id}</h3>"
             "<p>"
-            f"<b>Источник:</b> {escape(source_label)}<br/>"
-            f"<b>Услуга:</b> {escape(service_label)}<br/>"
-            f"<b>Дата:</b> {escape(date_text)}<br/>"
-            f"<b>Клиент:</b> {escape(customer_name)}<br/>"
-            f"<b>Телефон:</b> {escape(customer_phone)}<br/>"
-            f"<b>Адрес:</b> {escape(order.delivery_address or 'не указан')}"
+            f"<b>Источник:</b> {BotService.escape_html(source_label, max_length=100)}<br/>"
+            f"<b>Услуга:</b> {BotService.escape_html(service_label, max_length=140)}<br/>"
+            f"<b>Дата:</b> {BotService.escape_html(date_text, max_length=80)}<br/>"
+            f"<b>Клиент:</b> {BotService.escape_html(customer_name, max_length=160)}<br/>"
+            f"<b>Телефон:</b> {BotService.escape_html(customer_phone, max_length=80)}<br/>"
+            f"<b>Адрес:</b> {BotService.escape_html(order.delivery_address or 'не указан', max_length=300)}"
             "</p>"
         )
         if comment:
-            rich_html += f"<blockquote>{escape(comment)}</blockquote>"
+            rich_html += f"<blockquote>{BotService.escape_html(comment, max_length=320)}</blockquote>"
 
         sent = 0
         for admin_id in admin_ids:
@@ -150,13 +168,14 @@ class NotificationService:
                     rich_html,
                     fallback_text=text,
                 )
-                if not delivered:
-                    logger.info(
-                        "NOTIFY_STAFF_ORDER_RICH_FALLBACK_USED order_id=%s admin_id=%s",
+                if delivered:
+                    sent += 1
+                else:
+                    logger.warning(
+                        "NOTIFY_STAFF_ORDER_DELIVERY_FAILED order_id=%s admin_id=%s",
                         order.id,
                         admin_id,
                     )
-                sent += 1
             except Exception:
                 logger.exception("NOTIFY_STAFF_ORDER_SEND_FAILED order_id=%s admin_id=%s", order.id, admin_id)
         return sent
@@ -201,43 +220,50 @@ class NotificationService:
             comment = f"{comment[:317]}..."
 
         text_lines = [
-            f"🔧 <b>Задача #{stage.id}: {escape(status_label)}</b>",
+            f"🔧 <b>Задача #{stage.id}: {BotService.escape_html(status_label, max_length=100)}</b>",
             f"Заказ: #{order_id}",
-            f"Задача: {escape(title)}",
-            f"Исполнитель: {escape(installer_name)}",
-            f"Дата: {escape(date_text)}",
-            f"Клиент: {escape(customer_name)}",
-            f"Телефон: {escape(customer_phone)}",
-            f"Адрес: {escape(address or 'не указан')}",
+            f"Задача: {BotService.escape_html(title, max_length=180)}",
+            f"Исполнитель: {BotService.escape_html(installer_name, max_length=160)}",
+            f"Дата: {BotService.escape_html(date_text, max_length=80)}",
+            f"Клиент: {BotService.escape_html(customer_name, max_length=160)}",
+            f"Телефон: {BotService.escape_html(customer_phone, max_length=80)}",
+            f"Адрес: {BotService.escape_html(address or 'не указан', max_length=300)}",
         ]
         if comment:
-            text_lines.extend(["", f"<i>{escape(comment)}</i>"])
+            text_lines.extend(["", f"<i>{BotService.escape_html(comment, max_length=320)}</i>"])
         text = "\n".join(text_lines)
 
         rich_html = (
-            f"<h3>Задача #{stage.id}: {escape(status_label)}</h3>"
+            f"<h3>Задача #{stage.id}: {BotService.escape_html(status_label, max_length=100)}</h3>"
             "<p>"
             f"<b>Заказ:</b> #{order_id}<br/>"
-            f"<b>Задача:</b> {escape(title)}<br/>"
-            f"<b>Исполнитель:</b> {escape(installer_name)}<br/>"
-            f"<b>Дата:</b> {escape(date_text)}<br/>"
-            f"<b>Клиент:</b> {escape(customer_name)}<br/>"
-            f"<b>Телефон:</b> {escape(customer_phone)}<br/>"
-            f"<b>Адрес:</b> {escape(address or 'не указан')}"
+            f"<b>Задача:</b> {BotService.escape_html(title, max_length=180)}<br/>"
+            f"<b>Исполнитель:</b> {BotService.escape_html(installer_name, max_length=160)}<br/>"
+            f"<b>Дата:</b> {BotService.escape_html(date_text, max_length=80)}<br/>"
+            f"<b>Клиент:</b> {BotService.escape_html(customer_name, max_length=160)}<br/>"
+            f"<b>Телефон:</b> {BotService.escape_html(customer_phone, max_length=80)}<br/>"
+            f"<b>Адрес:</b> {BotService.escape_html(address or 'не указан', max_length=300)}"
             "</p>"
         )
         if comment:
-            rich_html += f"<blockquote>{escape(comment)}</blockquote>"
+            rich_html += f"<blockquote>{BotService.escape_html(comment, max_length=320)}</blockquote>"
 
         sent = 0
         for admin_id in admin_ids:
             try:
-                await BotService.send_rich_message(
+                delivered = await BotService.send_rich_message(
                     admin_id,
                     rich_html,
                     fallback_text=text,
                 )
-                sent += 1
+                if delivered:
+                    sent += 1
+                else:
+                    logger.warning(
+                        "NOTIFY_WORK_STAGE_STATUS_DELIVERY_FAILED stage_id=%s admin_id=%s",
+                        stage.id,
+                        admin_id,
+                    )
             except Exception:
                 logger.exception(
                     "NOTIFY_WORK_STAGE_STATUS_SEND_FAILED stage_id=%s admin_id=%s",
@@ -275,7 +301,8 @@ class NotificationService:
         if review_count:
             lines.append(f"⚠️ Требует проверки: {review_count}")
         lines.append("")
-        for receipt in receipts[:10]:
+        visible_receipts = receipts[: NotificationService.MAX_DETAILED_BATCH_ITEMS]
+        for receipt in visible_receipts:
             meta = receipt.match_meta or {}
             candidate_ids = meta.get("candidate_order_ids") or []
             candidate_text = ", ".join(f"#{order_id}" for order_id in candidate_ids[:5]) or "нет"
@@ -300,27 +327,36 @@ class NotificationService:
                 status_text = receipt.status or "новый"
             lines.extend(
                 [
-                    f"💳 <b>{escape(amount)}</b> от {escape(payer)}",
-                    f"Статус: {escape(status_text)}",
-                    f"УНП: {escape(receipt.payer_unp or 'не найден')}",
-                    f"Кандидаты заказов: {escape(candidate_text)}",
+                    f"💳 <b>{BotService.escape_html(amount, max_length=80)}</b> от "
+                    f"{BotService.escape_html(payer, max_length=180)}",
+                    f"Статус: {BotService.escape_html(status_text, max_length=120)}",
+                    f"УНП: {BotService.escape_html(receipt.payer_unp or 'не найден', max_length=80)}",
+                    f"Кандидаты заказов: {BotService.escape_html(candidate_text, max_length=160)}",
                 ]
             )
             if receipt.payment_document_number:
-                lines.append(f"Платежный документ: {escape(receipt.payment_document_number)}")
+                lines.append(
+                    "Платежный документ: "
+                    f"{BotService.escape_html(receipt.payment_document_number, max_length=100)}"
+                )
             if purpose:
-                lines.append(f"<i>{escape(purpose)}</i>")
+                lines.append(f"<i>{BotService.escape_html(purpose, max_length=180)}</i>")
             lines.append("")
 
-        if len(receipts) > 10:
-            lines.append(f"Еще {len(receipts) - 10} поступлений видно на главной менеджера.")
+        if len(receipts) > len(visible_receipts):
+            lines.append(
+                f"Еще {len(receipts) - len(visible_receipts)} поступлений видно на главной менеджера."
+            )
 
         text = "\n".join(lines).strip()
         sent = 0
         for admin_id in admin_ids:
             try:
-                await BotService.send_message(admin_id, text)
-                sent += 1
+                delivered = await BotService.send_message(admin_id, text)
+                if delivered:
+                    sent += 1
+                else:
+                    logger.warning("NOTIFY_BANK_RECEIPTS_DELIVERY_FAILED admin_id=%s", admin_id)
             except Exception:
                 logger.exception("NOTIFY_BANK_RECEIPTS_SEND_FAILED admin_id=%s", admin_id)
         return sent
@@ -347,7 +383,8 @@ class NotificationService:
             return 0
 
         lines = [f"🔔 <b>Новые email-заказы: {len(orders)}</b>", ""]
-        for order in orders[:10]:
+        visible_orders = orders[: NotificationService.MAX_DETAILED_BATCH_ITEMS]
+        for order in visible_orders:
             meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
             sender = str(meta.get("email_sender") or "отправитель не распознан")
             subject = str(meta.get("email_subject") or "без темы")
@@ -361,25 +398,30 @@ class NotificationService:
             lines.extend(
                 [
                     f"📩 <b>Заказ #{order.id}</b>",
-                    f"От: {escape(sender)}",
-                    f"Тема: {escape(subject)}",
+                    f"От: {BotService.escape_html(sender, max_length=160)}",
+                    f"Тема: {BotService.escape_html(subject, max_length=220)}",
                 ]
             )
             if reason:
-                lines.append(f"AI: {escape(reason)}")
+                lines.append(f"AI: {BotService.escape_html(reason, max_length=180)}")
             if comment:
-                lines.append(f"<i>{escape(comment)}</i>")
+                lines.append(f"<i>{BotService.escape_html(comment, max_length=220)}</i>")
             lines.append("")
 
-        if len(orders) > 10:
-            lines.append(f"Еще {len(orders) - 10} email-заказов видно в менеджере.")
+        if len(orders) > len(visible_orders):
+            lines.append(
+                f"Еще {len(orders) - len(visible_orders)} email-заказов видно в менеджере."
+            )
 
         text = "\n".join(lines).strip()
         sent = 0
         for admin_id in admin_ids:
             try:
-                await BotService.send_message(admin_id, text)
-                sent += 1
+                delivered = await BotService.send_message(admin_id, text)
+                if delivered:
+                    sent += 1
+                else:
+                    logger.warning("NOTIFY_EMAIL_LEADS_DELIVERY_FAILED admin_id=%s", admin_id)
             except Exception:
                 logger.exception("NOTIFY_EMAIL_LEADS_SEND_FAILED admin_id=%s", admin_id)
         return sent

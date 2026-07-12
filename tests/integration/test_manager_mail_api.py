@@ -201,11 +201,28 @@ async def test_manager_mail_manually_attaches_review_group_bank_receipt(async_cl
 
 @pytest.mark.asyncio
 async def test_manager_mail_import_endpoint_uses_imap_service(async_client, monkeypatch):
+    notified_receipt_ids = []
+
     async def fake_import(_session, *, limit=50):
         assert limit == 2
-        return BankReceiptImportResult(processed=2, created=1, duplicates=1, failed=0, receipt_ids=[10])
+        return BankReceiptImportResult(
+            processed=2,
+            created=1,
+            duplicates=1,
+            failed=0,
+            receipt_ids=[10],
+            created_receipt_ids=[10],
+        )
+
+    async def fake_notify(_session, receipt_ids):
+        notified_receipt_ids.extend(receipt_ids)
+        return 1
 
     monkeypatch.setattr("routers.manager_mail.MailImapService.import_bank_receipts", fake_import)
+    monkeypatch.setattr(
+        "routers.manager_mail.NotificationService.notify_admins_bank_receipts_imported",
+        fake_notify,
+    )
 
     headers = await _auth_headers(async_client)
     response = await async_client.post("/api/manager/mail/bank-receipts/import?limit=2", headers=headers)
@@ -218,6 +235,7 @@ async def test_manager_mail_import_endpoint_uses_imap_service(async_client, monk
         "failed": 0,
         "receipt_ids": [10],
     }
+    assert notified_receipt_ids == [10]
 
 
 @pytest.mark.asyncio

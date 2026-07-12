@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { getInstallationRates, getGlobalConfig, createOrder } from '../utils/api';
 import { installationOptions, fetchInstallationOptions } from '../store/installation';
+import { calculateInstallationPrice } from '../utils/installation-pricing';
 import { formatPhoneForDisplay, validateRequiredBelarusPhone } from '../utils/validation';
 
 const rates = ref([]);
@@ -149,24 +150,24 @@ const optionsTotal = computed(() => {
     }, 0);
 });
 
+const selectedOptionSlugs = computed(() => options.value
+    .filter(option => selectedOptions.value.includes(option.id))
+    .map(option => option.slug));
+
 // Calculation Logic
 const calculatedPrice = computed(() => {
   const rate = activeRate.value;
   if (!rate) return 0;
-  
-  let total = 0;
-  
-  if (!rate.is_fixed) {
-      total = rate.base_price;
-  } else {
-      const extraMeters = Math.max(0, currentMeters.value - rate.included_pipe_meters);
-      total = rate.base_price + (extraMeters * rate.extra_pipe_price);
-  }
-  
-  // Add selected options
-  total += optionsTotal.value;
-  
-  return total;
+
+  const quote = calculateInstallationPrice({
+      rate,
+      meters: currentMeters.value,
+      options: options.value,
+      selectedOptionSlugs: selectedOptionSlugs.value,
+      applyBundleDiscount: false,
+  });
+  if (quote.status === 'fixed') return quote.total;
+  return Math.max(0, Number(rate.base_price) || 0) + optionsTotal.value;
 });
 
 const isFixedPrice = computed(() => activeRate.value?.is_fixed ?? true);
@@ -177,6 +178,7 @@ const showModal = ref(false);
 const submitting = ref(false);
 const success = ref(false);
 const phoneError = ref('');
+const submitError = ref('');
 const phoneInputRef = ref(null);
 const form = ref({
     name: '',
@@ -184,9 +186,11 @@ const form = ref({
 });
 
 const openOrderModal = () => {
+    if (!activeRate.value) return;
     showModal.value = true;
     success.value = false;
     phoneError.value = '';
+    submitError.value = '';
 };
 
 const validatePhoneField = () => {
@@ -196,7 +200,12 @@ const validatePhoneField = () => {
 
 const submitOrder = async () => {
     validatePhoneField();
+    submitError.value = '';
     if (!form.value.name || phoneError.value) return;
+    if (!activeRate.value?.id) {
+        submitError.value = 'Тариф изменился. Обновите страницу и выберите монтаж ещё раз.';
+        return;
+    }
     
     submitting.value = true;
     
@@ -210,10 +219,9 @@ const submitOrder = async () => {
             product_id: null,
             quantity: 1,
             with_installation: true,
+            installation_rate_id: activeRate.value?.id || null,
             installation_price: calculatedPrice.value, // Total price (Main + Options)
-            installation_options: options.value
-                .filter(o => selectedOptions.value.includes(o.id))
-                .map(o => o.slug), // Send slugs
+            installation_options: selectedOptionSlugs.value,
             installation_meta: {
                 source: "calculator_page",
                 type: tCategory(selectedCategory.value),
@@ -224,17 +232,22 @@ const submitOrder = async () => {
         comment: `Заказ на монтаж из калькулятора. ${currentMeters.value}м трассы. Опции: ${selectedOptions.value.length}`
     };
 
-    const res = await createOrder(payload);
-    
-    submitting.value = false;
-    if (res) {
+    try {
+        const res = await createOrder(payload);
+        if (!res) {
+            throw new Error('empty_order_response');
+        }
         success.value = true;
         form.value = { name: '', phone: '' };
         setTimeout(() => {
             showModal.value = false;
         }, 3000);
-    } else {
-        alert('Ошибка при отправке заказа. Попробуйте позже.');
+    } catch (requestError) {
+        submitError.value = requestError?.details?.detail?.message
+            || (typeof requestError?.details?.detail === 'string' ? requestError.details.detail : '')
+            || 'Ошибка отправки. Проверьте выбранный тариф и попробуйте ещё раз.';
+    } finally {
+        submitting.value = false;
     }
 };
 
@@ -386,7 +399,7 @@ const submitOrder = async () => {
         </p>
       </div>
 
-      <button class="action-btn" @click="openOrderModal">
+      <button class="action-btn" @click="openOrderModal" :disabled="!activeRate">
         Заказать монтаж
       </button>
     </div>
@@ -421,6 +434,8 @@ const submitOrder = async () => {
                         />
                         <span v-if="phoneError" class="err-msg">{{ phoneError }}</span>
                     </div>
+
+                    <p v-if="submitError" class="err-msg" role="alert">{{ submitError }}</p>
                     
                     <button type="submit" class="submit-btn" :disabled="submitting">
                         <span v-if="submitting">Отправка...</span>

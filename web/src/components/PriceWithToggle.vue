@@ -9,6 +9,10 @@ import {
     hasKnownProductPrice,
     resolveProductAvailability,
 } from '../utils/product-display';
+import {
+    calculateInstallationPrice,
+    matchProductInstallationRate,
+} from '../utils/installation-pricing';
 
 const props = defineProps({
   basePrice: { type: [Number, String], default: 0 },
@@ -95,72 +99,12 @@ watch(showNotifyModal, async (isOpen) => {
     notifyPhoneError.value = '';
 });
 
-// Helper to normalize strings for comparison
-const normalize = (s) => String(s || '').toLowerCase().trim();
-
-const getAreaRangeMax = (powerRange) => {
-    const key = normalize(powerRange);
-    if (key.includes('07-12')) return 35;
-    if (key.includes('18-24')) return 70;
-    if (key.includes('30-36')) return 100;
-
-    if (key.includes('area-20') || key.includes('area-25') || key.includes('area-35')) return 35;
-    if (key.includes('area-50') || key.includes('area-70')) return 70;
-    if (key.includes('area-80') || key.includes('area-100')) return 100;
-
-    return null;
-};
-
-const categoryMatchesRate = (rateCategory, productCategorySlug) => {
-    const rate = normalize(rateCategory);
-    if (productCategorySlug === 'wall') return rate === 'wall';
-    if (productCategorySlug === 'duct') return rate === 'duct';
-    if (productCategorySlug === 'multisplit') return rate === 'multisplit';
-    if (productCategorySlug === 'cassette' || productCategorySlug === 'ceiling') {
-        return rate === 'cassette' || rate === 'ceiling' || rate === 'cassette/ceiling';
-    }
-    return rate === productCategorySlug;
-};
-
 const matchedRate = computed(() => {
-    if (!rates.value.length) return null;
-
-    // 1. Identify Product Category
-    const knownCategories = ['wall', 'cassette', 'duct', 'ceiling', 'multisplit'];
-    const categoryTag = props.tags.find(t => knownCategories.includes(normalize(t.slug)));
-    const productCategorySlug = categoryTag ? normalize(categoryTag.slug) : 'wall';
-
-    // 2. Filter Rates by Category
-    const categoryRates = rates.value.filter(r => categoryMatchesRate(r.category, productCategorySlug));
-    if (!categoryRates.length) return null;
-
-    // 3. Find Specific Rate by Power/Area
-    for (const rate of categoryRates) {
-        const pRange = normalize(rate.power_range);
-        if (pRange === 'all') return rate;
-
-        const rateSlugs = pRange.split(',').map(s => s.trim());
-        const hasMatchingTag = props.tags.some(t => rateSlugs.includes(normalize(t.slug)));
-
-        if (hasMatchingTag) return rate;
-    }
-
-    // Area-based fallback after legacy area-* tag removal
-    const productArea = Number(props.area) || 0;
-    if (productArea > 0) {
-        const fixedRates = categoryRates
-            .map((rate) => ({ rate, maxArea: getAreaRangeMax(rate.power_range) }))
-            .filter((entry) => entry.maxArea !== null)
-            .sort((a, b) => Number(a.maxArea) - Number(b.maxArea));
-
-        if (fixedRates.length > 0) {
-            const byArea = fixedRates.find((entry) => productArea <= Number(entry.maxArea));
-            if (byArea) return byArea.rate;
-            return fixedRates[fixedRates.length - 1].rate;
-        }
-    }
-
-    return null;
+    return matchProductInstallationRate({
+        rates: rates.value,
+        tags: props.tags,
+        area: props.area,
+    });
 });
 
 // Computed logic for display
@@ -171,9 +115,19 @@ const effectiveInstallPrice = computed(() => {
     return props.installPrice; 
 });
 
+const installationQuote = computed(() => calculateInstallationPrice({
+    rate: matchedRate.value,
+    meters: 3,
+    bundleDiscount: discount.value,
+    applyBundleDiscount: true,
+}));
+
 // Price WITH discount applied
 const finalInstallPrice = computed(() => {
-    return Math.max(0, effectiveInstallPrice.value - discount.value);
+    if (installationQuote.value.status === 'fixed') {
+        return installationQuote.value.total;
+    }
+    return props.installPrice;
 });
 
 const hasKnownPrice = computed(() => hasKnownProductPrice(liveBasePrice.value));
@@ -274,7 +228,7 @@ const addToCart = () => {
     if (!canAddToCart.value) return;
     if (!props.id) return;
     
-    addItem({
+    const added = addItem({
         id: props.id,
         name: props.title,
         price: Number(liveBasePrice.value),
@@ -282,8 +236,12 @@ const addToCart = () => {
         productId: props.productId,
         withInstallation: isInstalled.value,
         installationPrice: finalInstallPrice.value, // Use discounted price
-        // We could infer category from tags if needed, or pass it
+        installationRateId: matchedRate.value?.id || null,
     });
+    if (!added) {
+        addToast('В одном заказе может быть не больше 20 разных позиций', 'error');
+        return;
+    }
     
     // Feedback: Toast + Button State
     addToast(`Добавлено в корзину: ${props.title}`);
