@@ -65,6 +65,29 @@ def test_ha_monitor_workflows_notify_on_failure_after_artifact_upload():
 def test_restore_drill_checks_out_repo_before_local_alert_action():
     workflow = _yaml(REPO_ROOT / ".github/workflows/api-restore-drill.yml")
     steps = workflow["jobs"]["restore-drill"]["steps"]
+    setup_step = next(step for step in steps if step.get("name") == "Setup API SSH Key")
+    run_step = next(
+        step for step in steps if step.get("name") == "Run restore drill on current API primary"
+    )
 
     assert steps[0]["name"] == "Checkout"
     assert steps[0]["uses"] == "actions/checkout@v6"
+    assert "API_STANDBY_HOST" in setup_step["env"]
+    assert 'ssh-keyscan -T 10 -H "${API_STANDBY_HOST}"' in setup_step["run"]
+    assert "API_DB_HA_MODE" in run_step["env"]
+    assert "API_STANDBY_PROJECT_DIR" in run_step["env"]
+    assert "check_patroni_production.py --resolve-primary" in run_step["run"]
+    assert "scripts/ha/restore_drill_latest_db.sh" in run_step["run"]
+    assert 'selected_node=${target_label} ha_mode=${API_DB_HA_MODE}' in run_step["run"]
+
+
+def test_restore_drill_waits_for_stable_sql_and_checks_business_data():
+    script = (REPO_ROOT / "scripts/ha/restore_drill_latest_db.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ready_streak" in script
+    assert '"${ready_streak}" -ge 3' in script
+    assert "business_counts=" in script
+    assert "product_count payment_count order_count" in script
+    assert '"${product_count}" -lt 1 || "${order_count}" -lt 1' in script

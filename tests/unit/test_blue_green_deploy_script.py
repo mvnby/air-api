@@ -205,15 +205,15 @@ def test_container_proxy_switches_by_service_name_without_host_nginx(tmp_path):
     assert result.returncode == 0, result.stderr
     commands = command_log.read_text(encoding="utf-8")
     assert "up -d --no-deps api-proxy" in commands
-    assert "run -T --rm --no-deps api-proxy nginx -t" in commands
-    assert "up -d --no-deps --force-recreate api-proxy" in commands
+    assert "run -T --rm --no-deps api-proxy nginx -t" not in commands
+    assert "up -d --no-deps --force-recreate api-proxy" not in commands
     assert "exec -T api-proxy nginx -t" in commands
     assert "exec -T api-proxy nginx -s reload" in commands
     lines = commands.splitlines()
-    proxy_recreate = max(
+    proxy_reload = max(
         index
         for index, line in enumerate(lines)
-        if "up -d --no-deps --force-recreate api-proxy" in line
+        if "exec -T api-proxy nginx -s reload" in line
     )
     candidate_start = next(
         index
@@ -221,7 +221,7 @@ def test_container_proxy_switches_by_service_name_without_host_nginx(tmp_path):
         if "up -d --no-deps --force-recreate app-blue" in line
     )
     old_stop = next(index for index, line in enumerate(lines) if line.endswith(" stop app"))
-    assert candidate_start < proxy_recreate < old_stop
+    assert candidate_start < proxy_reload < old_stop
     assert "proxy_pass http://app-blue:8000;" in upstream.read_text(encoding="utf-8")
     assert (project / ".active-api-slot").read_text(encoding="utf-8").strip() == "blue"
 

@@ -220,10 +220,20 @@ if [[ "${tables_count}" -lt 10 ]]; then
 fi
 
 log "public_tables=${tables_count}"
-docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${container}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" <<'SQL'
-SELECT 'product_count=' || count(*) FROM product;
-SELECT 'payment_count=' || count(*) FROM payment;
-SELECT 'order_count=' || count(*) FROM "order";
-SQL
+business_counts="$(docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" "${container}" psql -AtF '|' \
+  -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+  -c 'SELECT (SELECT count(*) FROM product), (SELECT count(*) FROM payment), (SELECT count(*) FROM "order");')"
+IFS='|' read -r product_count payment_count order_count <<< "${business_counts}"
+for count in "${product_count}" "${payment_count}" "${order_count}"; do
+  if ! is_unsigned_int "${count}"; then
+    echo "PITR restore drill returned invalid business counts: ${business_counts}" >&2
+    exit 1
+  fi
+done
+log "product_count=${product_count} payment_count=${payment_count} order_count=${order_count}"
+if [[ "${product_count}" -lt 1 || "${order_count}" -lt 1 ]]; then
+  echo "PITR restore drill is missing required product/order data: ${business_counts}" >&2
+  exit 1
+fi
 
 log "PITR restore drill passed; production and standby databases were not modified"

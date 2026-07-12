@@ -78,3 +78,14 @@ def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_pr
     assert "require_wal:" in summary_step["run"]
     assert artifact_step["if"] == "always()"
     assert artifact_step["with"]["path"] == "postgres-pitr-restore-drill.log"
+
+
+def test_postgres_pitr_restore_drill_requires_restored_business_data():
+    script = (REPO_ROOT / "scripts/ha/restore_postgres_pitr_drill.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "business_counts=" in script
+    assert "product_count payment_count order_count" in script
+    assert 'log "product_count=${product_count} payment_count=${payment_count} order_count=${order_count}"' in script
+    assert '"${product_count}" -lt 1 || "${order_count}" -lt 1' in script
