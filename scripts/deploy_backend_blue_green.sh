@@ -270,6 +270,26 @@ reload_proxy() {
   esac
 }
 
+apply_replaced_upstream() {
+  case "${PROXY_MODE}" in
+    host_nginx)
+      reload_proxy
+      ;;
+    container_nginx)
+      # A file-level bind mount keeps the old inode after atomic replacement.
+      # Validate the new mount first, then recreate the proxy so it sees it.
+      "${COMPOSE[@]}" run -T --rm --no-deps "${PROXY_SERVICE}" nginx -t
+      "${COMPOSE[@]}" up -d --no-deps --force-recreate "${PROXY_SERVICE}"
+      wait_service_running "${PROXY_SERVICE}"
+      "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t
+      ;;
+    *)
+      log error "unsupported API_PROXY_MODE=${PROXY_MODE}"
+      return 1
+      ;;
+  esac
+}
+
 ensure_container_proxy() {
   [[ -f "${PROXY_CONFIG_FILE}" ]] || {
     log error "container proxy config is missing: ${PROXY_CONFIG_FILE}"
@@ -444,7 +464,7 @@ rollback_on_error() {
 
   if [[ "${nginx_switch_attempted}" == "true" && -f "${NGINX_UPSTREAM_FILE}" ]]; then
     write_upstream "${active_slot}"
-    reload_proxy
+    apply_replaced_upstream
   fi
 
   if [[ "${bot_update_attempted}" == "true" ]] && is_immutable_image "${previous_image}"; then
@@ -586,7 +606,7 @@ wait_service_running bot
 
 nginx_switch_attempted=true
 write_upstream "${candidate_slot}"
-reload_proxy
+apply_replaced_upstream
 log switch "nginx now routes to ${candidate_slot} on ${candidate_port}"
 
 wait_ready_url "origin" "https://${API_HOST}/api/ready" --resolve "${API_HOST}:443:127.0.0.1"
