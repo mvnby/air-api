@@ -36,6 +36,8 @@ class _GoogleServiceStub:
             "expired": False,
             "expiry": None,
             "scopes": ["drive"],
+            "persistence_ok": True,
+            "persistence_error_code": None,
         }
 
 

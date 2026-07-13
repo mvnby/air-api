@@ -218,7 +218,10 @@ PY
 ```
 
 Check that production still has `ENVIRONMENT=production`, `BACKUP_FOLDER_ID`,
-and the mounted Google credential files expected by `docker-compose.prod.yml`.
+and the directory-backed OAuth token contract described in
+[`google-oauth-token-runbook.md`](google-oauth-token-runbook.md). The token must
+resolve to `/app/google-oauth/token.json`; do not restore the old single-file
+bind mount.
 Trigger a manual backup only after the owner approves a state-changing action.
 
 ## Safety Notes

@@ -119,10 +119,11 @@ Record `.env` key names without values:
 awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/{print $1"=<redacted>"}' .env | sort
 ```
 
-Confirm required runtime files exist:
+Confirm required runtime files exist. Keep the legacy token only as a migration
+source; the running container uses `google-oauth/token.json`:
 
 ```bash
-for f in .env docker-compose.prod.yml token.json client_secret.json credentials.json; do
+for f in .env docker-compose.prod.yml google-oauth/token.json client_secret.json credentials.json; do
   if [ -f "$f" ]; then
     stat -c '%n %s bytes mode=%a owner=%U:%G' "$f"
   else
@@ -153,7 +154,10 @@ Inventory Google Drive backup visibility from the app container:
 docker compose -f docker-compose.prod.yml exec -T app python scripts/restore_db.py --list
 ```
 
-This confirms `token.json` is usable and shows available DB/media backups. Do not use Drive backups as the primary migration source unless a direct frozen dump cannot be used; a fresh dump taken after the maintenance freeze is the least stale source of truth.
+This confirms the configured `GOOGLE_TOKEN_FILE` is usable and shows available
+DB/media backups. Do not use Drive backups as the primary migration source
+unless a direct frozen dump cannot be used; a fresh dump taken after the
+maintenance freeze is the least stale source of truth.
 
 ## Phase 2: New VPS Baseline
 
@@ -278,8 +282,9 @@ ssh "${API_USER}@${OLD_API_HOST}" '
   set -euo pipefail
   cd /opt/air-api
   install -m 700 -d /root/api-migration-stage
-  tar -czf /root/api-migration-stage/runtime-files.tar.gz \
-    .env docker-compose.prod.yml token.json client_secret.json credentials.json
+  set -- .env docker-compose.prod.yml google-oauth/token.json client_secret.json credentials.json
+  test ! -f token.json || set -- "$@" token.json
+  tar -czf /root/api-migration-stage/runtime-files.tar.gz "$@"
   chmod 600 /root/api-migration-stage/runtime-files.tar.gz
 '
 
@@ -290,7 +295,9 @@ ssh "${API_USER}@${NEW_API_HOST}" '
   set -euo pipefail
   cd /opt/air-api
   tar -xzf /root/runtime-files.tar.gz
-  chmod 600 .env token.json client_secret.json credentials.json
+  install -d -m 0700 google-oauth
+  chmod 600 .env google-oauth/token.json client_secret.json credentials.json
+  test ! -f token.json || chmod 600 token.json
 '
 ```
 

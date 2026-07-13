@@ -3538,6 +3538,8 @@ class ManagerGoogleAuthStatusResponse(BaseModel):
     expired: bool
     expiry: Optional[str] = None
     scopes: List[str] = []
+    persistence_ok: bool
+    persistence_error_code: Optional[str] = None
 
 
 class ManagerGoogleAuthUrlResponse(BaseModel):

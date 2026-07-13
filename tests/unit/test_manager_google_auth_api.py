@@ -33,6 +33,8 @@ class _GoogleServiceStub:
             "expired": False,
             "expiry": "2026-04-20 22:00:00",
             "scopes": ["drive"],
+            "persistence_ok": True,
+            "persistence_error_code": None,
         }
 
     def get_auth_url(self, redirect_uri=None, *, state: str):
@@ -88,6 +90,7 @@ async def test_google_auth_status_endpoint(google_auth_client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["valid"] is True
     assert response.json()["exists"] is True
+    assert response.json()["persistence_ok"] is True
 
 
 @pytest.mark.asyncio

@@ -34,6 +34,7 @@ SCHEDULER_STABILITY_SECONDS="${API_SCHEDULER_STABILITY_SECONDS:-9}"
 SERVICE_STOP_TIMEOUT_SECONDS="${API_SERVICE_STOP_TIMEOUT_SECONDS:-5}"
 DRAIN_SECONDS="${API_DRAIN_SECONDS:-5}"
 SUMMARY_FILE="${API_BLUE_GREEN_SUMMARY_FILE:-/tmp/backend_blue_green_summary.txt}"
+GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/prepare_google_oauth_token_dir.sh}"
 
 active_slot="legacy"
 active_service="app"
@@ -536,6 +537,13 @@ if [[ "${DEPLOY_LOCK_ALREADY_HELD}" != "true" ]]; then
     exit 1
   }
 fi
+
+[[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
+  log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
+  exit 1
+}
+GOOGLE_OAUTH_PROJECT_DIR="${PROJECT_DIR}" \
+  bash "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" prepare
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT

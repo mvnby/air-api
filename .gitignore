@@ -34,6 +34,7 @@ AI_AGENT_CONTEXT.md
 credentials.json
 client_secret.json
 token.json
+google-oauth/
 g-vision-ocr.json
 backups/*
 /media/*

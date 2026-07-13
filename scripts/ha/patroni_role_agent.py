@@ -17,6 +17,7 @@ from pathlib import Path
 
 
 PRIMARY_ROLES = {"leader", "master", "primary"}
+REPLICA_ROLES = {"replica", "standby"}
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,11 @@ def fetch_patroni_role(url: str, *, timeout: float = 3.0) -> str:
     if payload.get("state") != "running":
         return "standby"
     role = str(payload.get("role") or "").strip().lower()
-    return "primary" if role in PRIMARY_ROLES else "standby"
+    if role in PRIMARY_ROLES:
+        return "primary"
+    if role in REPLICA_ROLES:
+        return "standby"
+    raise ValueError(f"unsupported Patroni role: {role or '<empty>'}")
 
 
 def app_service(config: AgentConfig) -> str:

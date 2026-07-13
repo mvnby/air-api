@@ -187,8 +187,9 @@ Planned migration steps:
 2. Prepare the new VPS baseline: Docker, Compose, nginx, firewall, TLS, and
    `/opt/air-api`.
 3. Copy runtime files from old API to new API without printing secrets:
-   `.env`, `docker-compose.prod.yml`, `token.json`, `client_secret.json`,
-   `credentials.json`.
+   `.env`, `docker-compose.prod.yml`, the `google-oauth/` directory,
+   `client_secret.json`, and `credentials.json`. Retain a legacy `token.json`
+   only as a temporary rollback artifact.
 4. Create `docker-compose.cutover.yml` on the new host with the SHA-pinned
    backend image.
 5. Start only `db` on the new host.
@@ -409,8 +410,10 @@ Current state:
 
 - Generated order documents, uploaded order documents, customer contracts, and
   document downloads use Google Drive file ids and edit URLs stored in the DB.
-- The app needs mounted Google credential files in production:
-  `token.json`, `client_secret.json`, and `credentials.json`.
+- The app needs Google credential files in production. The refreshable OAuth
+  token uses the writable directory contract
+  `google-oauth/token.json -> /app/google-oauth/token.json`; client secret and
+  service credentials remain read-only runtime files.
 - The migration runbook already treats these credential files as runtime files
   that must be copied to the new VPS without printing contents.
 

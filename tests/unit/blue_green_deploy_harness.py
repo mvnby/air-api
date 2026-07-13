@@ -223,6 +223,7 @@ exit 0
             "BACKEND_IMAGE": NEW_IMAGE,
             "GHCR_PAT": "test-token",
             "GITHUB_ACTOR": "test-user",
+            "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
         }
     )
     return env, project, site, command_log
