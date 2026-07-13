@@ -134,6 +134,22 @@ class Settings(BaseSettings):
     RUNTIME_DB_LOCKS_ENABLED: bool = True
     RUNTIME_LOCK_RETRY_SECONDS: int = 15
 
+    # Durable communications runtime. The process is deliberately inert unless
+    # this immutable deployment gate is explicitly enabled. A second, database-
+    # backed off/canary/all control is evaluated by the runtime after it proves
+    # primary ownership.
+    COMMUNICATIONS_WORKER_ENABLED: bool = False
+    COMMUNICATIONS_WORKER_POLL_SECONDS: float = 1.0
+    COMMUNICATIONS_WORKER_HEARTBEAT_SECONDS: float = 10.0
+    COMMUNICATIONS_WORKER_LOCK_RETRY_SECONDS: float = 2.0
+    COMMUNICATIONS_WORKER_LOCK_CHECK_SECONDS: float = 3.0
+    COMMUNICATIONS_WORKER_DB_PROBE_TIMEOUT_SECONDS: float = 5.0
+    COMMUNICATIONS_WORKER_FENCING_SECONDS: float = 12.0
+    COMMUNICATIONS_WORKER_SHUTDOWN_SECONDS: float = 15.0
+    COMMUNICATIONS_WORKER_PROVIDER_TIMEOUT_SECONDS: float = 10.0
+    COMMUNICATIONS_WORKER_PROVIDER_CLOSE_SECONDS: float = 5.0
+    COMMUNICATIONS_WORKER_LEASE_SECONDS: int = 90
+
     @field_validator(
         "SCHEDULER_ENABLED",
         "BOT_ENABLED",

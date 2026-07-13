@@ -118,6 +118,26 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
     outbox = SQLModel.metadata.tables["integration_outbox_event"]
     inbox = SQLModel.metadata.tables["consumer_inbox"]
     delivery = SQLModel.metadata.tables["communication_delivery"]
+    runtime = SQLModel.metadata.tables["communication_runtime_state"]
+
+    assert [column.name for column in runtime.primary_key.columns] == ["channel"]
+    assert runtime.c.mode.nullable is False
+    assert runtime.c.status.nullable is False
+    assert any(
+        index.name == "ix_communication_runtime_state_heartbeat_at"
+        and [column.name for column in index.columns] == ["heartbeat_at"]
+        for index in runtime.indexes
+    )
+    for constraint_name in (
+        "ck_communication_runtime_channel_nonempty",
+        "ck_communication_runtime_mode_valid",
+        "ck_communication_runtime_status_valid",
+    ):
+        assert any(
+            isinstance(constraint, CheckConstraint)
+            and constraint.name == constraint_name
+            for constraint in runtime.constraints
+        )
 
     assert [column.name for column in inbox.primary_key.columns] == [
         "consumer_name",
