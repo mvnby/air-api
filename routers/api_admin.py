@@ -1,6 +1,6 @@
 """Admin/search/health endpoints split from the main API router."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -59,7 +59,13 @@ async def health_check(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/ready")
-async def readiness_check(session: AsyncSession = Depends(get_session)):
+async def readiness_check(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
     """Check whether this API node should receive public traffic."""
-    status_code, payload = await ReadinessService.check(session)
+    status_code, payload = await ReadinessService.check(
+        session,
+        scheduler_runtime=getattr(request.app.state, "scheduler_runtime", None),
+    )
     return JSONResponse(status_code=status_code, content=payload)

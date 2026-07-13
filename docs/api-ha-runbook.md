@@ -540,10 +540,13 @@ cat scripts/prune_unused_docker_images.sh | ssh zakup \
 Manual zero-downtime code rollback on the current primary:
 
 ```bash
-scp scripts/deploy_backend_blue_green.sh scripts/rollback_backend.sh mvn-api:/tmp/
-ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh /tmp/rollback_backend.sh && \
+scp scripts/deploy_backend_blue_green.sh scripts/deploy_backend_blue_green_safety.sh \
+  scripts/rollback_backend.sh mvn-api:/tmp/
+ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh \
+  /tmp/deploy_backend_blue_green_safety.sh /tmp/rollback_backend.sh && \
   CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
   API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
+  API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh \
   bash /tmp/rollback_backend.sh'
 ```
 

@@ -136,11 +136,18 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "EXPECTED_CURRENT_IMAGE=" in rollback["run"]
     assert "scripts/rollback_backend.sh" in rollback["run"]
     assert "scripts/deploy_backend_blue_green.sh" in primary_deploy["run"]
+    assert "scripts/deploy_backend_blue_green_safety.sh" in primary_deploy["run"]
     assert 'case "${API_DEPLOY_STRATEGY}" in' in primary_deploy["run"]
     assert "blue_green)" in primary_deploy["run"]
     assert "in_place)" in primary_deploy["run"]
     assert "API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}'" in primary_deploy["run"]
     assert "scripts/deploy_backend_blue_green.sh" in rollback["run"]
+    assert "scripts/deploy_backend_blue_green_safety.sh" in rollback["run"]
+    safety_helper_env = (
+        "API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh'"
+    )
+    assert safety_helper_env in primary_deploy["run"]
+    assert safety_helper_env in rollback["run"]
     assert "scripts/deploy.sh" in standby_deploy["run"]
     assert "API_DEPLOY_SERVICES='app'" in standby_deploy["run"]
     assert "API_RUN_MIGRATIONS='false'" in standby_deploy["run"]
