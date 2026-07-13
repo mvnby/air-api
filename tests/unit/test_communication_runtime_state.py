@@ -6,12 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from models import CommunicationRuntimeState
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.runtime_state import (
+    CommunicationRuntimeControlConflict,
     CommunicationRuntimeMode,
+    CommunicationRuntimeModeBlocked,
     CommunicationRuntimeStateOwnershipLost,
     CommunicationRuntimeStateService,
     CommunicationRuntimeStatus,
 )
+
+
+RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
+RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 
 
 @pytest_asyncio.fixture
@@ -37,14 +44,26 @@ async def test_mode_is_operator_owned_and_heartbeats_do_not_enable_runtime(
         )
         await session.commit()
         assert initial.mode == "off"
+        assert initial.canary_run_id is None
+        assert initial.control_revision == 0
         assert initial.status == "stopped"
 
     async with runtime_session_factory() as session:
-        await CommunicationRuntimeStateService.set_mode(
+        canary = await CommunicationRuntimeStateService.set_mode(
             session,
             channel="telegram",
             mode=CommunicationRuntimeMode.CANARY,
+            canary_run_id=RUN_ID_A,
         )
+        assert canary.canary_run_id == RUN_ID_A
+        assert canary.control_revision == 1
+        idempotent = await CommunicationRuntimeStateService.set_mode(
+            session,
+            channel="telegram",
+            mode=CommunicationRuntimeMode.CANARY,
+            canary_run_id=RUN_ID_A,
+        )
+        assert idempotent.control_revision == 1
         await session.commit()
         await CommunicationRuntimeStateService.take_ownership(
             session,
@@ -56,7 +75,7 @@ async def test_mode_is_operator_owned_and_heartbeats_do_not_enable_runtime(
             channel="telegram",
             instance_id="worker-a",
             status=CommunicationRuntimeStatus.PAUSED,
-            last_error_code="canary_scope_unconfigured",
+            last_error_code="operator_pause",
             activity=True,
         )
         await session.commit()
@@ -65,13 +84,147 @@ async def test_mode_is_operator_owned_and_heartbeats_do_not_enable_runtime(
         state = await session.get(CommunicationRuntimeState, "telegram")
         assert state is not None
         assert state.mode == "canary"
+        assert state.canary_run_id == RUN_ID_A
+        assert state.control_revision == 1
         assert state.status == "paused"
         assert state.instance_id == "worker-a"
         assert state.started_at is not None
         assert state.heartbeat_at is not None
         assert state.last_activity_at is not None
         assert state.heartbeat_at.tzinfo in (None, timezone.utc)
-        assert state.last_error_code == "canary_scope_unconfigured"
+        assert state.last_error_code == "operator_pause"
+
+
+@pytest.mark.asyncio
+async def test_control_transitions_are_explicit_and_revisioned(
+    runtime_session_factory,
+):
+    async with runtime_session_factory() as session:
+        with pytest.raises(ValueError, match="requires a run ID"):
+            await CommunicationRuntimeStateService.set_mode(
+                session,
+                channel="telegram",
+                mode=CommunicationRuntimeMode.CANARY,
+            )
+        with pytest.raises(ValueError, match="Only canary"):
+            await CommunicationRuntimeStateService.set_mode(
+                session,
+                channel="telegram",
+                mode=CommunicationRuntimeMode.ALL,
+                canary_run_id=RUN_ID_A,
+            )
+
+        canary = await CommunicationRuntimeStateService.arm_canary_from_off(
+            session,
+            channel="telegram",
+            run_id=RUN_ID_A,
+        )
+        assert canary.control_revision == 1
+
+        for mode, run_id in (
+            (CommunicationRuntimeMode.ALL, None),
+            (CommunicationRuntimeMode.CANARY, RUN_ID_B),
+        ):
+            with pytest.raises(
+                CommunicationRuntimeControlConflict,
+                match="runtime_control_transition_requires_off",
+            ):
+                await CommunicationRuntimeStateService.set_mode(
+                    session,
+                    channel="telegram",
+                    mode=mode,
+                    canary_run_id=run_id,
+                )
+
+        with pytest.raises(
+            CommunicationRuntimeControlConflict,
+            match="canary_runtime_not_off",
+        ):
+            await CommunicationRuntimeStateService.arm_canary_from_off(
+                session,
+                channel="telegram",
+                run_id=RUN_ID_B,
+            )
+
+        off = await CommunicationRuntimeStateService.set_mode(
+            session,
+            channel="telegram",
+            mode=CommunicationRuntimeMode.OFF,
+        )
+        assert off.canary_run_id is None
+        assert off.control_revision == 2
+        all_control = await CommunicationRuntimeStateService.set_mode(
+            session,
+            channel="telegram",
+            mode=CommunicationRuntimeMode.ALL,
+        )
+        assert all_control.control_revision == 3
+        assert all_control.canary_run_id is None
+
+        idempotent = await CommunicationRuntimeStateService.set_mode(
+            session,
+            channel="telegram",
+            mode=CommunicationRuntimeMode.ALL,
+        )
+        assert idempotent.control_revision == 3
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_scope_revision_fences_fast_canary_rearm(
+    runtime_session_factory,
+):
+    async with runtime_session_factory() as session:
+        first = await CommunicationRuntimeStateService.arm_canary_from_off(
+            session,
+            channel="telegram",
+            run_id=RUN_ID_A,
+        )
+        await CommunicationRuntimeStateService.take_ownership(
+            session,
+            channel="telegram",
+            instance_id="worker-a",
+        )
+        stale_scope = CommunicationProcessingScope.canary(
+            run_id=RUN_ID_A,
+            control_revision=first.control_revision,
+        )
+        await CommunicationRuntimeStateService.set_mode(
+            session,
+            channel="telegram",
+            mode=CommunicationRuntimeMode.OFF,
+        )
+        rearmed = await CommunicationRuntimeStateService.arm_canary_from_off(
+            session,
+            channel="telegram",
+            run_id=RUN_ID_A,
+        )
+        assert rearmed.control_revision == first.control_revision + 2
+
+        with pytest.raises(CommunicationRuntimeModeBlocked) as blocked:
+            await CommunicationRuntimeStateService.assert_owned_processing_scope(
+                session,
+                channel="telegram",
+                instance_id="worker-a",
+                scope=stale_scope,
+            )
+        assert blocked.value.mode == CommunicationRuntimeMode.CANARY
+        assert blocked.value.canary_run_id == RUN_ID_A
+        assert blocked.value.control_revision == rearmed.control_revision
+
+        current_scope = CommunicationProcessingScope.canary(
+            run_id=RUN_ID_A,
+            control_revision=rearmed.control_revision,
+        )
+        current = (
+            await CommunicationRuntimeStateService.assert_owned_processing_scope(
+                session,
+                channel="telegram",
+                instance_id="worker-a",
+                scope=current_scope,
+            )
+        )
+        assert current.control_revision == rearmed.control_revision
 
 
 @pytest.mark.asyncio

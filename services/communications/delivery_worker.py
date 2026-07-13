@@ -27,6 +27,7 @@ from services.communications.providers.base import (
     ProviderDeliveryDisposition,
     ProviderDeliveryResult,
 )
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.recipient_directory import ManagementRecipientDirectory
 from services.communications.template_registry import (
     TELEGRAM_CANARY_MAX_ATTEMPTS,
@@ -82,6 +83,7 @@ class CommunicationDeliveryWorker:
         session_factory: Callable[[], AsyncSession],
         provider: CommunicationDeliveryProvider,
         worker_id: str,
+        scope: CommunicationProcessingScope,
         lease_seconds: int = 90,
         recovery_limit: int = 100,
         safety_check: Callable[[], Awaitable[None]] | None = None,
@@ -90,6 +92,7 @@ class CommunicationDeliveryWorker:
         self._session_factory = session_factory
         self._provider = provider
         self._worker_id = CommunicationDeliveryService._normalize_worker_id(worker_id)
+        self._scope = scope
         self._channel = CommunicationDeliveryService._normalize_channel(provider.channel)
         self._lease_seconds = CommunicationDeliveryService._normalize_lease_seconds(
             lease_seconds
@@ -257,6 +260,7 @@ class CommunicationDeliveryWorker:
             async with self._session_factory() as session:
                 recovery = await CommunicationDeliveryService.recover_expired_leases(
                     session,
+                    scope=self._scope,
                     channel=self._channel,
                     limit=self._recovery_limit,
                 )
@@ -269,6 +273,7 @@ class CommunicationDeliveryWorker:
                 claim = await CommunicationDeliveryService.claim_next(
                     session,
                     worker_id=self._worker_id,
+                    scope=self._scope,
                     channel=self._channel,
                     lease_seconds=self._lease_seconds,
                 )

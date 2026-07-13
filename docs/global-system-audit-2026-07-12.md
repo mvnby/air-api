@@ -236,7 +236,7 @@ Checkout, contact/availability leads, repair upload/AI и proxies не имею�
 
 На исходном срезе `BotService.send_message` глотал provider error, а callers увеличивали `sent_count` после любой попытки. В локальном operational log найдено пять реальных отказов, включая обоих текущих owners; рядом scheduler заявил двух уведомлённых. Это был доказанный false-success, а не теоретическая ветка.
 
-Wave 0 перевела текущий production-контракт на подтверждённый `bool`, сделала partial fan-out видимым и сохранила multi-recipient delivery; ручной bank import теперь также уведомляет. C1 добавляет отдельный structured provider result с message ID/error code/retry-after и durable per-recipient retry/DLQ, но этот worker остаётся dormant и не меняет текущий production path до C2 rollout.
+Wave 0 перевела текущий production-контракт на подтверждённый `bool`, сделала partial fan-out видимым и сохранила multi-recipient delivery; ручной bank import теперь также уведомляет. C1 добавил отдельный structured provider result с message ID/error code/retry-after и durable per-recipient retry/DLQ. PR #737 (`e74d53d8`) уже слил в `main` выключенный по умолчанию single-active runtime с primary/advisory-lock fencing, heartbeat и bounded shutdown, но этот runtime ещё не развернут и не меняет текущий production path до отдельного C2 rollout.
 
 ### 8.2 Outbox
 
@@ -252,7 +252,7 @@ Wave 0 перевела текущий production-контракт на подт
 - `installer.assigned`;
 - `work_stage.status_changed`.
 
-Delivery uniqueness: `(event_id, channel, recipient_key, template_version)`. C1 worker берёт только due `queued/retry` через `SKIP LOCKED`; claim коммитится до network, а renew/sent/retry/dead/cancel fenced по `worker_id + lease_token + unexpired lease`. Истёкший `running` сначала отдельно переводится в delayed retry/DLQ и не переотправляется тем же claim. Реализованы deterministic backoff+jitter, Telegram `retry_after`, terminal recipient errors, sanitized diagnostics, active-recipient revalidation и независимый partial fan-out. Chunking/fallback, queue-age/delivery metrics и managed runtime rollout остаются открыты.
+Delivery uniqueness: `(event_id, channel, recipient_key, template_version)`. C1 worker берёт только due `queued/retry` через `SKIP LOCKED`; claim коммитится до network, а renew/sent/retry/dead/cancel fenced по `worker_id + lease_token + unexpired lease`. Истёкший `running` сначала отдельно переводится в delayed retry/DLQ и не переотправляется тем же claim. Реализованы deterministic backoff+jitter, Telegram `retry_after`, terminal recipient errors, sanitized diagnostics, active-recipient revalidation и независимый partial fan-out. PR #737 закрыл managed runtime foundation в коде; deployment, queue-age/delivery metrics и chunking/fallback остаются открыты.
 
 Семантика остаётся честной **at-least-once**: если Telegram принял сообщение, но ответ потерян/неоднозначен, либо process аварийно завершился до terminal DB commit, lease recovery может отправить дубликат. Fencing запрещает stale worker менять состояние, но без provider idempotency не превращает Telegram delivery в exactly-once; этот риск обязателен для C2 canary/runbook и метрик duplicate suspicion.
 
@@ -347,7 +347,7 @@ Wave 0 подтверждена локально, в CI и production. Media pro
 
 ### Wave 1 — данные и надёжность
 
-- Transactional outbox/inbox + communications worker. PR-A развернул выключенный additive persistence/contracts foundation; PR-B добавил caller-owned single-transaction dispatcher (`FOR UPDATE SKIP LOCKED`, deterministic delivery upsert, inbox-last, retry/dead bookkeeping). C1 добавляет всё ещё выключенный provider worker с durable claim-before-network, token fencing, heartbeat, retry/DLQ и Telegram adapter. C2 отдельно проводит transaction review, атомарно переключает producers и только затем подключает managed runtime/scheduler.
+- Transactional outbox/inbox + communications worker. PR-A развернул выключенный additive persistence/contracts foundation; PR-B добавил caller-owned single-transaction dispatcher (`FOR UPDATE SKIP LOCKED`, deterministic delivery upsert, inbox-last, retry/dead bookkeeping); C1 добавил выключенный provider worker с durable claim-before-network, token fencing, heartbeat, retry/DLQ и Telegram adapter. PR #737 (`e74d53d8`) слил managed single-active runtime foundation в `main`, но не развертывал его. Следующий bounded-canary diff добавляет точный run/event scope, control revision, обязательные allowlists, atomic enqueue+arm и emergency `off`; он проверен только локально, ещё не слит и не deployed, live Telegram canary не выполнялся. Producer transaction review, атомарное переключение producers и production rollout остаются отдельными C2 gates.
 - Order version/409 и command-specific updates.
 - Canonical customer identity + checkout idempotency.
 - Public contact/availability lead abuse policy: edge+app rate limit, canonical phone/email, dedupe window, idempotency key и risk-based anti-bot.

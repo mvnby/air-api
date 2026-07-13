@@ -16,6 +16,7 @@ from services.communications.canary_errors import CommunicationsCanarySafetyErro
 from services.communications.contracts import TelegramCanaryRequestedPayloadV1
 from services.communications.dispatcher import CommunicationOutboxDispatcher
 from services.communications.delivery_worker import CommunicationDeliveryWorker
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.recipient_directory import (
     OperationsCanaryRecipientDirectory,
 )
@@ -34,6 +35,10 @@ from services.communications.templates.operations import (
 
 
 RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
+CANARY_SCOPE = CommunicationProcessingScope.canary(
+    run_id=RUN_ID_A,
+    control_revision=1,
+)
 
 
 @pytest.fixture
@@ -251,6 +256,7 @@ async def test_canary_dispatcher_materializes_only_snapshotted_owners(
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
             session,
+            scope=CANARY_SCOPE,
             dispatcher_id="canary-test-dispatcher",
             now=now,
         )
@@ -305,6 +311,7 @@ async def test_canary_dispatcher_dies_closed_when_owner_snapshot_changes(
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
             session,
+            scope=CANARY_SCOPE,
             dispatcher_id="canary-test-dispatcher",
             now=now,
         )
@@ -388,6 +395,7 @@ async def test_canary_worker_cancels_without_provider_call_after_owner_snapshot_
     provider = _NeverSendProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=canary_session_factory,
+        scope=CANARY_SCOPE,
         provider=provider,
         worker_id="canary-worker-test",
         lease_seconds=60,
@@ -438,6 +446,7 @@ async def test_canary_worker_cancels_injected_render_context_without_provider_ca
     provider = _NeverSendProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=canary_session_factory,
+        scope=CANARY_SCOPE,
         provider=provider,
         worker_id="canary-worker-test",
         lease_seconds=60,

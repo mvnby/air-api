@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from core.config import Settings
 from models import CommunicationRuntimeState
 from services.communications.delivery_worker import DeliveryRunOutcome
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.runtime import (
     CommunicationRuntimeConfig,
     CommunicationRuntimeLockUnavailable,
@@ -49,6 +50,7 @@ def runtime_config(**overrides):
     config = CommunicationRuntimeConfig(
         enabled=True,
         app_role="primary",
+        allow_all_mode=True,
         instance_id="test-runtime",
         poll_seconds=0.01,
         heartbeat_seconds=0.01,
@@ -66,8 +68,26 @@ def runtime_config(**overrides):
 
 def test_communications_master_gate_defaults_to_off():
     assert Settings.model_fields["COMMUNICATIONS_WORKER_ENABLED"].default is False
+    assert (
+        Settings.model_fields["COMMUNICATIONS_WORKER_ALLOW_ALL_MODE"].default
+        is False
+    )
     default_config = CommunicationRuntimeConfig(enabled=False, app_role="primary")
     assert default_config.deployment_enabled is False
+    assert default_config.allow_all_mode is False
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"enabled": "false"},
+        {"allow_all_mode": "false"},
+        {"allow_all_mode": 1},
+    ],
+)
+def test_runtime_rejects_truthy_non_boolean_deployment_gates(overrides):
+    with pytest.raises(ValueError, match="deployment gates must be boolean"):
+        runtime_config(**overrides)
 
 
 @pytest.mark.parametrize(
@@ -115,7 +135,7 @@ def test_runtime_rejects_invalid_or_non_finite_lease(invalid_lease):
         runtime_config(lease_seconds=invalid_lease)
 
 
-async def allow_safety() -> None:
+async def allow_safety(_scope: CommunicationProcessingScope) -> None:
     return None
 
 
@@ -123,19 +143,27 @@ async def instant_fencing(stop_event: asyncio.Event, _seconds: float) -> bool:
     return stop_event.is_set()
 
 
-async def own_mode(session_factory, mode: CommunicationRuntimeMode) -> None:
+async def own_mode(
+    session_factory,
+    mode: CommunicationRuntimeMode,
+    *,
+    canary_run_id: str | None = None,
+):
     async with session_factory() as session:
-        await CommunicationRuntimeStateService.set_mode(
+        control = await CommunicationRuntimeStateService.set_mode(
             session,
             channel="telegram",
             mode=mode,
+            canary_run_id=canary_run_id,
         )
-        await CommunicationRuntimeStateService.take_ownership(
+        owned = await CommunicationRuntimeStateService.take_ownership(
             session,
             channel="telegram",
             instance_id="test-runtime",
         )
         await session.commit()
+        assert owned.control_revision == control.control_revision
+        return owned
 
 
 class FakeProvider:
@@ -162,61 +190,28 @@ class FakeWorker:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("mode", "expected_status", "error_code"),
-    [
-        (CommunicationRuntimeMode.OFF, "disabled", None),
-        (
-            CommunicationRuntimeMode.CANARY,
-            "paused",
-            "canary_scope_unconfigured",
-        ),
-    ],
-)
-async def test_off_and_canary_modes_never_construct_provider(
-    runtime_session_factory,
-    mode,
-    expected_status,
-    error_code,
-):
-    await own_mode(runtime_session_factory, mode)
-
-    def provider_factory():
-        raise AssertionError("provider must remain dormant")
-
-    pipeline = CommunicationRuntimePipeline(
-        config=runtime_config(),
-        session_factory=runtime_session_factory,
-        provider_factory=provider_factory,
-        safety_check=allow_safety,
-    )
-    assert await pipeline.run_cycle() is False
-    await pipeline.close()
-
-    async with runtime_session_factory() as session:
-        state = await session.get(CommunicationRuntimeState, "telegram")
-        assert state.status == expected_status
-        assert state.last_error_code == error_code
-
-
-@pytest.mark.asyncio
 async def test_all_mode_runs_dispatch_then_one_delivery_and_closes_provider(
     runtime_session_factory,
 ):
     await own_mode(runtime_session_factory, CommunicationRuntimeMode.ALL)
     events = []
 
-    async def dispatch(_session, *, dispatcher_id):
+    async def dispatch(_session, *, dispatcher_id, scope):
         assert dispatcher_id == "test-runtime"
+        assert scope.mode == "all"
         events.append("dispatch")
         return SimpleNamespace(outcome="materialized")
+
+    def worker_factory(_provider, scope):
+        assert scope.mode == "all"
+        return FakeWorker(events, outcome="sent")
 
     pipeline = CommunicationRuntimePipeline(
         config=runtime_config(),
         session_factory=runtime_session_factory,
         provider_factory=lambda: FakeProvider(events),
         safety_check=allow_safety,
-        worker_factory=lambda _provider: FakeWorker(events, outcome="sent"),
+        worker_factory=worker_factory,
         dispatch=dispatch,
     )
     assert await pipeline.run_cycle() is True
@@ -237,12 +232,13 @@ async def test_stop_set_after_dispatch_prevents_delivery_and_provider_creation(
     stop_event = asyncio.Event()
     events = []
 
-    async def safety_check():
+    async def safety_check(_scope):
         if stop_event.is_set():
             raise CommunicationRuntimeStopRequested("stop requested")
 
-    async def dispatch(_session, *, dispatcher_id):
+    async def dispatch(_session, *, dispatcher_id, scope):
         assert dispatcher_id == "test-runtime"
+        assert scope.mode == "all"
         events.append("dispatch")
         stop_event.set()
         return SimpleNamespace(outcome="materialized")
@@ -256,7 +252,10 @@ async def test_stop_set_after_dispatch_prevents_delivery_and_provider_creation(
         session_factory=runtime_session_factory,
         provider_factory=provider_factory,
         safety_check=safety_check,
-        worker_factory=lambda _provider: FakeWorker(events, outcome="sent"),
+        worker_factory=lambda _provider, _scope: FakeWorker(
+            events,
+            outcome="sent",
+        ),
         dispatch=dispatch,
     )
     await pipeline.run(stop_event)
@@ -467,8 +466,9 @@ async def test_provider_close_retries_before_releasing_reference(
 
     provider = RetryCloseProvider()
 
-    async def dispatch(_session, *, dispatcher_id):
+    async def dispatch(_session, *, dispatcher_id, scope):
         assert dispatcher_id == "test-runtime"
+        assert scope.mode == "all"
         return None
 
     pipeline = CommunicationRuntimePipeline(
@@ -476,7 +476,7 @@ async def test_provider_close_retries_before_releasing_reference(
         session_factory=runtime_session_factory,
         provider_factory=lambda: provider,
         safety_check=allow_safety,
-        worker_factory=lambda _provider: FakeWorker([], outcome="idle"),
+        worker_factory=lambda _provider, _scope: FakeWorker([], outcome="idle"),
         dispatch=dispatch,
     )
     await pipeline.run_cycle()
@@ -522,8 +522,9 @@ async def test_persistent_provider_close_failure_fail_stops_without_unlock(
     provider = PersistentProvider()
     pipeline_holder = []
 
-    async def dispatch(_session, *, dispatcher_id):
+    async def dispatch(_session, *, dispatcher_id, scope):
         assert dispatcher_id == "test-runtime"
+        assert scope.mode == "all"
         return None
 
     def pipeline_factory(safety_check):
@@ -532,7 +533,7 @@ async def test_persistent_provider_close_failure_fail_stops_without_unlock(
             session_factory=runtime_session_factory,
             provider_factory=lambda: provider,
             safety_check=safety_check,
-            worker_factory=lambda _provider: StartedWorker(events),
+            worker_factory=lambda _provider, _scope: StartedWorker(events),
             dispatch=dispatch,
         )
         pipeline_holder.append(pipeline)

@@ -24,6 +24,7 @@ from services.communications.providers.base import (
     ProviderDeliveryDisposition,
     ProviderDeliveryResult,
 )
+from services.communications.processing_scope import CommunicationProcessingScope
 
 DELIVERY_STATUS_QUEUED = "queued"
 DELIVERY_STATUS_RUNNING = "running"
@@ -110,6 +111,7 @@ class CommunicationDeliveryService:
         session: AsyncSession,
         *,
         worker_id: str,
+        scope: CommunicationProcessingScope,
         channel: str = "telegram",
         lease_seconds: int = 90,
         now: datetime | None = None,
@@ -128,6 +130,9 @@ class CommunicationDeliveryService:
                 ),
                 CommunicationDelivery.available_at <= claimed_at,
                 CommunicationDelivery.attempts < CommunicationDelivery.max_attempts,
+                CommunicationDelivery.template_key.in_(
+                    scope.delivery_template_keys
+                ),
             )
             .order_by(
                 CommunicationDelivery.priority.asc(),
@@ -137,6 +142,10 @@ class CommunicationDeliveryService:
             )
             .limit(1)
         )
+        if scope.exact_event_id is not None:
+            statement = statement.where(
+                CommunicationDelivery.event_id == scope.exact_event_id
+            )
         if session.get_bind().dialect.name == "postgresql":
             statement = statement.with_for_update(skip_locked=True)
 
@@ -187,6 +196,7 @@ class CommunicationDeliveryService:
         cls,
         session: AsyncSession,
         *,
+        scope: CommunicationProcessingScope,
         channel: str = "telegram",
         now: datetime | None = None,
         limit: int = 100,
@@ -201,6 +211,9 @@ class CommunicationDeliveryService:
                 CommunicationDelivery.status == DELIVERY_STATUS_RUNNING,
                 CommunicationDelivery.lease_expires_at.is_not(None),
                 CommunicationDelivery.lease_expires_at <= recovered_at,
+                CommunicationDelivery.template_key.in_(
+                    scope.delivery_template_keys
+                ),
             )
             .order_by(
                 CommunicationDelivery.lease_expires_at.asc(),
@@ -209,6 +222,10 @@ class CommunicationDeliveryService:
             )
             .limit(safe_limit)
         )
+        if scope.exact_event_id is not None:
+            statement = statement.where(
+                CommunicationDelivery.event_id == scope.exact_event_id
+            )
         if session.get_bind().dialect.name == "postgresql":
             statement = statement.with_for_update(skip_locked=True)
 

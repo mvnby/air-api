@@ -23,6 +23,7 @@ from services.communications.runtime_config import (
     safe_error_type,
     wait_or_stop,
 )
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.runtime_state import (
     CommunicationRuntimeStateOwnershipLost,
     CommunicationRuntimeStateService,
@@ -91,7 +92,11 @@ class CommunicationRuntimeSupervisor:
             await self._probe_primary()
 
             pipeline = self._pipeline_factory(
-                lambda: self._assert_safe_to_work(stop_event, runtime_lock)
+                lambda scope: self._assert_safe_to_work(
+                    stop_event,
+                    runtime_lock,
+                    scope,
+                )
             )
             work_task = asyncio.create_task(
                 pipeline.run(stop_event),
@@ -304,6 +309,7 @@ class CommunicationRuntimeSupervisor:
         self,
         stop_event: asyncio.Event,
         runtime_lock: RuntimeLock,
+        scope: CommunicationProcessingScope,
     ) -> None:
         if stop_event.is_set():
             raise CommunicationRuntimeStopRequested(
@@ -314,7 +320,7 @@ class CommunicationRuntimeSupervisor:
                 "communications advisory lock was lost before work"
             )
         await self._probe_primary()
-        await self._verify_active_control()
+        await self._verify_active_control(scope)
         if stop_event.is_set():
             raise CommunicationRuntimeStopRequested(
                 "communications runtime stop was requested"
@@ -357,14 +363,18 @@ class CommunicationRuntimeSupervisor:
                 "communications state ownership probe timed out"
             ) from exc
 
-    async def _verify_active_control(self) -> None:
+    async def _verify_active_control(
+        self,
+        scope: CommunicationProcessingScope,
+    ) -> None:
         try:
             async with asyncio.timeout(self._config.db_probe_timeout_seconds):
                 async with self._session_factory() as session:
-                    await CommunicationRuntimeStateService.read_active_owned_control(
+                    await CommunicationRuntimeStateService.assert_owned_processing_scope(
                         session,
                         channel=self._config.channel,
                         instance_id=self._config.instance_id,
+                        scope=scope,
                     )
         except TimeoutError as exc:
             raise CommunicationRuntimeStateOwnershipLost(

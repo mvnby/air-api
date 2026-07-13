@@ -21,11 +21,14 @@ from services.communications.contracts import (
 )
 from services.communications.delivery_materializer import CommunicationDeliveryMaterializer
 from services.communications.dispatcher import CommunicationOutboxDispatcher
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.template_registry import (
     CONSUMER_NAME,
     CONTACT_LEAD_TEMPLATE_KEY,
     WebsiteTemplateRegistry,
 )
+
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 
 
 @pytest.fixture
@@ -107,6 +110,7 @@ async def test_dispatch_materializes_deliveries_inbox_and_published_atomically(
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
             session,
+            scope=ALL_SCOPE,
             dispatcher_id="dispatcher-a",
             now=dispatch_time,
         )
@@ -162,7 +166,7 @@ async def test_dispatch_ignores_unsupported_events_and_respects_priority(
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         await session.commit()
 
@@ -187,7 +191,7 @@ async def test_dispatch_retries_or_dead_letters_when_management_audience_is_empt
         await session.commit()
 
         retry = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         await session.commit()
 
@@ -202,6 +206,7 @@ async def test_dispatch_retries_or_dead_letters_when_management_audience_is_empt
 
         dead = await CommunicationOutboxDispatcher.dispatch_next(
             session,
+            scope=ALL_SCOPE,
             dispatcher_id="dispatcher-a",
             now=retry.next_attempt_at,
         )
@@ -228,7 +233,7 @@ async def test_retry_and_dead_state_remain_owned_by_outer_transaction(
         await session.commit()
 
         retry = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         assert retry is not None and retry.outcome == "retry_scheduled"
         await session.rollback()
@@ -242,7 +247,7 @@ async def test_retry_and_dead_state_remain_owned_by_outer_transaction(
         retry_event.available_at = now + timedelta(days=1)
         await session.commit()
         dead = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         assert dead is not None and dead.outcome == "dead"
         await session.rollback()
@@ -286,7 +291,7 @@ async def test_dispatch_marks_invalid_supported_payload_dead_without_deliveries(
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         await session.commit()
 
@@ -322,7 +327,7 @@ async def test_dispatch_marks_inconsistent_inbox_dead_instead_of_poisoning_queue
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         await session.commit()
 
@@ -344,15 +349,15 @@ async def test_dispatch_rejects_invalid_id_and_ignores_future_event(
 
         with pytest.raises(ValueError, match="required"):
             await CommunicationOutboxDispatcher.dispatch_next(
-                session, dispatcher_id="", now=now
+                session, scope=ALL_SCOPE, dispatcher_id="", now=now
             )
         with pytest.raises(ValueError, match="too long"):
             await CommunicationOutboxDispatcher.dispatch_next(
-                session, dispatcher_id="x" * 129, now=now
+                session, scope=ALL_SCOPE, dispatcher_id="x" * 129, now=now
             )
         assert (
             await CommunicationOutboxDispatcher.dispatch_next(
-                session, dispatcher_id="dispatcher-a", now=now
+                session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
             )
             is None
         )
@@ -375,7 +380,7 @@ async def test_dispatch_marks_supported_future_schema_dead(
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         await session.commit()
 
@@ -415,7 +420,7 @@ async def test_dispatch_materializer_conflict_rolls_back_new_recipient_savepoint
         monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         await session.commit()
 
@@ -474,7 +479,7 @@ async def test_dispatch_recovers_existing_inbox_without_duplicate_delivery(
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
-            session, dispatcher_id="dispatcher-a", now=now
+            session, scope=ALL_SCOPE, dispatcher_id="dispatcher-a", now=now
         )
         await session.commit()
 

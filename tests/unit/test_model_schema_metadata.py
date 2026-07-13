@@ -122,6 +122,9 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
 
     assert [column.name for column in runtime.primary_key.columns] == ["channel"]
     assert runtime.c.mode.nullable is False
+    assert runtime.c.canary_run_id.nullable is True
+    assert runtime.c.canary_run_id.type.length == 36
+    assert runtime.c.control_revision.nullable is False
     assert runtime.c.status.nullable is False
     assert any(
         index.name == "ix_communication_runtime_state_heartbeat_at"
@@ -131,6 +134,8 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
     for constraint_name in (
         "ck_communication_runtime_channel_nonempty",
         "ck_communication_runtime_mode_valid",
+        "ck_communication_runtime_canary_scope_valid",
+        "ck_communication_runtime_control_revision_non_negative",
         "ck_communication_runtime_status_valid",
     ):
         assert any(

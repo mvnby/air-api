@@ -139,6 +139,9 @@ class Settings(BaseSettings):
     # backed off/canary/all control is evaluated by the runtime after it proves
     # primary ownership.
     COMMUNICATIONS_WORKER_ENABLED: bool = False
+    # Full website-event delivery requires a second immutable rollout key.
+    # Canary mode remains available while this is false.
+    COMMUNICATIONS_WORKER_ALLOW_ALL_MODE: bool = False
     COMMUNICATIONS_WORKER_POLL_SECONDS: float = 1.0
     COMMUNICATIONS_WORKER_HEARTBEAT_SECONDS: float = 10.0
     COMMUNICATIONS_WORKER_LOCK_RETRY_SECONDS: float = 2.0

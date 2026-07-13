@@ -17,8 +17,10 @@ from services.communications.delivery_service import (
     CommunicationDeliveryService,
 )
 from services.communications.providers.base import ProviderDeliveryResult
+from services.communications.processing_scope import CommunicationProcessingScope
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 
 
 @pytest.fixture
@@ -88,6 +90,7 @@ async def test_cancel_closes_current_attempt_without_provider_telemetry(
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker",
             lease_seconds=60,
             now=NOW,
@@ -124,6 +127,7 @@ async def test_attempt_history_keeps_every_retry_row(attempt_session_factory):
         await session.commit()
         first_claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker-a",
             lease_seconds=60,
             now=NOW,
@@ -152,6 +156,7 @@ async def test_attempt_history_keeps_every_retry_row(attempt_session_factory):
     async with attempt_session_factory() as session:
         second_claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker-b",
             lease_seconds=60,
             now=failure.next_attempt_at,
@@ -197,6 +202,7 @@ async def test_terminal_transition_and_attempt_are_caller_owned(
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker",
             lease_seconds=60,
             now=NOW,
@@ -244,6 +250,7 @@ async def test_terminal_fence_leaves_attempt_open_for_lease_owner(
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker-a",
             lease_seconds=60,
             now=NOW,
@@ -295,6 +302,7 @@ async def test_duplicate_next_attempt_aborts_claim_before_delivery_mutation(
         with pytest.raises(CommunicationDeliveryAttemptStateError):
             await CommunicationDeliveryService.claim_next(
                 session,
+                scope=ALL_SCOPE,
                 worker_id="worker",
                 lease_seconds=60,
                 now=NOW,

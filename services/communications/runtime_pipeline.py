@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from time import monotonic
 from typing import Any, Protocol
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.communications.delivery_worker import (
     CommunicationDeliveryWorker,
@@ -11,6 +13,7 @@ from services.communications.delivery_worker import (
 )
 from services.communications.dispatcher import CommunicationOutboxDispatcher
 from services.communications.providers.base import CommunicationDeliveryProvider
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.runtime_config import (
     CommunicationRuntimeConfig,
     CommunicationRuntimeError,
@@ -34,8 +37,20 @@ class _DeliveryWorker(Protocol):
     async def run_once(self) -> DeliveryRunOutcome: ...
 
 
-WorkerFactory = Callable[[CommunicationDeliveryProvider], _DeliveryWorker]
-DispatchCallable = Callable[..., Awaitable[Any]]
+class DispatchCallable(Protocol):
+    async def __call__(
+        self,
+        session: AsyncSession,
+        *,
+        dispatcher_id: str,
+        scope: CommunicationProcessingScope,
+    ) -> Any: ...
+
+
+WorkerFactory = Callable[
+    [CommunicationDeliveryProvider, CommunicationProcessingScope],
+    _DeliveryWorker,
+]
 
 
 class CommunicationRuntimePipeline:
@@ -60,6 +75,7 @@ class CommunicationRuntimePipeline:
         self._provider: CommunicationDeliveryProvider | None = None
         self._provider_close_task: asyncio.Task[None] | None = None
         self._worker: _DeliveryWorker | None = None
+        self._worker_scope: CommunicationProcessingScope | None = None
         self._last_status: CommunicationRuntimeStatus | None = None
         self._last_error_code: str | None = None
         self._last_heartbeat_monotonic = 0.0
@@ -68,13 +84,15 @@ class CommunicationRuntimePipeline:
     def _default_worker_factory(
         self,
         provider: CommunicationDeliveryProvider,
+        scope: CommunicationProcessingScope,
     ) -> CommunicationDeliveryWorker:
         return CommunicationDeliveryWorker(
             session_factory=self._session_factory,
             provider=provider,
             worker_id=self._config.instance_id,
+            scope=scope,
             lease_seconds=self._config.lease_seconds,
-            safety_check=self._safety_check,
+            safety_check=lambda: self._safety_check(scope),
             db_operation_timeout_seconds=self._config.db_probe_timeout_seconds,
         )
 
@@ -92,25 +110,29 @@ class CommunicationRuntimePipeline:
 
     async def run_cycle(self) -> bool:
         control = await self._read_control()
-        if control.mode != CommunicationRuntimeMode.ALL:
-            await self._pause_for_mode(control.mode)
+        scope = await self._scope_for_control(control)
+        if scope is None:
             return False
 
+        if self._worker_scope is not None and self._worker_scope != scope:
+            await self._close_provider()
+
         try:
-            await self._safety_check()
+            await self._safety_check(scope)
             await self._record_status(CommunicationRuntimeStatus.RUNNING)
             # The status write above yields control. Re-fence at the last possible
             # point before the dispatcher can lock or mutate an outbox event.
-            await self._safety_check()
-            dispatch_outcome = await self._dispatch_once()
+            await self._safety_check(scope)
+            dispatch_outcome = await self._dispatch_once(scope)
             # Dispatch may set the process stop signal or ownership may disappear
             # while its transaction commits. Do not even construct a provider until
             # this second handoff fence succeeds.
-            await self._safety_check()
-            worker = self._ensure_worker()
+            await self._safety_check(scope)
+            worker = self._ensure_worker(scope)
             delivery_outcome = await worker.run_once()
+            await self._safety_check(scope)
         except CommunicationRuntimeModeBlocked as blocked:
-            await self._pause_for_mode(blocked.mode)
+            await self._pause_for_blocked_control(blocked)
             return False
         worked = dispatch_outcome is not None or delivery_outcome.outcome != "idle"
         await self._record_status(
@@ -119,20 +141,58 @@ class CommunicationRuntimePipeline:
         )
         return worked
 
+    async def _scope_for_control(
+        self,
+        control: CommunicationRuntimeControl,
+    ) -> CommunicationProcessingScope | None:
+        if control.mode == CommunicationRuntimeMode.OFF:
+            await self._pause_for_mode(control.mode)
+            return None
+        if control.mode == CommunicationRuntimeMode.ALL:
+            if not self._config.allow_all_mode:
+                await self._pause_for_mode(control.mode)
+                return None
+            return CommunicationProcessingScope.all(
+                control_revision=control.control_revision
+            )
+        try:
+            return CommunicationProcessingScope.canary(
+                run_id=control.canary_run_id or "",
+                control_revision=control.control_revision,
+            )
+        except ValueError:
+            await self._close_provider()
+            await self._record_status(
+                CommunicationRuntimeStatus.PAUSED,
+                last_error_code="canary_scope_invalid",
+            )
+            return None
+
     async def _pause_for_mode(self, mode: CommunicationRuntimeMode) -> None:
         await self._close_provider()
         if mode == CommunicationRuntimeMode.OFF:
             await self._record_status(CommunicationRuntimeStatus.DISABLED)
             return
-        if mode == CommunicationRuntimeMode.CANARY:
-            # C2 does not guess a canary audience. Until a separate, reviewed
-            # selector exists this mode is deliberately a visible no-op.
+        if mode == CommunicationRuntimeMode.ALL:
             await self._record_status(
                 CommunicationRuntimeStatus.PAUSED,
-                last_error_code="canary_scope_unconfigured",
+                last_error_code="all_mode_not_enabled",
             )
             return
         raise CommunicationRuntimeError("communications runtime mode fence is invalid")
+
+    async def _pause_for_blocked_control(
+        self,
+        blocked: CommunicationRuntimeModeBlocked,
+    ) -> None:
+        await self._close_provider()
+        if blocked.mode == CommunicationRuntimeMode.OFF:
+            await self._record_status(CommunicationRuntimeStatus.DISABLED)
+            return
+        await self._record_status(
+            CommunicationRuntimeStatus.PAUSED,
+            last_error_code="control_scope_changed",
+        )
 
     async def close(self) -> None:
         if self._closed and self._provider is None:
@@ -177,8 +237,15 @@ class CommunicationRuntimePipeline:
         self._last_error_code = last_error_code
         self._last_heartbeat_monotonic = now
 
-    def _ensure_worker(self) -> _DeliveryWorker:
+    def _ensure_worker(
+        self,
+        scope: CommunicationProcessingScope,
+    ) -> _DeliveryWorker:
         if self._worker is not None:
+            if self._worker_scope != scope:
+                raise CommunicationRuntimeError(
+                    "communications worker scope changed without provider reset"
+                )
             return self._worker
         if self._closed:
             raise CommunicationRuntimeError("communications pipeline is closed")
@@ -188,15 +255,17 @@ class CommunicationRuntimePipeline:
             raise CommunicationRuntimeError(
                 "communications provider channel does not match runtime channel"
             )
-        self._worker = self._worker_factory(provider)
+        self._worker = self._worker_factory(provider, scope)
+        self._worker_scope = scope
         return self._worker
 
-    async def _dispatch_once(self) -> Any:
+    async def _dispatch_once(self, scope: CommunicationProcessingScope) -> Any:
         async with self._session_factory() as session:
             try:
                 outcome = await self._dispatch(
                     session,
                     dispatcher_id=self._config.instance_id,
+                    scope=scope,
                 )
                 await session.commit()
                 return outcome
@@ -207,6 +276,7 @@ class CommunicationRuntimePipeline:
     async def _close_provider(self) -> None:
         provider = self._provider
         self._worker = None
+        self._worker_scope = None
         if provider is None:
             return
         for _attempt in range(2):

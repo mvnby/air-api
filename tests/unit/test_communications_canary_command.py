@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import CommunicationDelivery, IntegrationOutboxEvent, StaffUser
+from models import (
+    CommunicationDelivery,
+    IntegrationOutboxEvent,
+    StaffUser,
+)
 from scripts import communications_telegram_canary as canary_cli
 from services.communications.canary import (
     CANARY_MAX_ATTEMPTS,
@@ -268,82 +272,6 @@ async def test_canary_producer_rejects_existing_event_with_retry_budget_drift(
 
 
 @pytest.mark.asyncio
-async def test_canary_cli_execute_only_enqueues_and_replays_idempotently(
-    canary_session_factory,
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        CommunicationsTelegramCanary,
-        "assert_primary_writable_database",
-        staticmethod(_allow_test_database),
-    )
-    async with canary_session_factory() as session:
-        session.add_all([_owner("Owner One", 101), _owner("Owner Two", 202)])
-        await session.commit()
-
-    planned = await canary_cli.run_command(
-        "plan",
-        run_id=RUN_ID_A,
-        session_factory=canary_session_factory,
-        app_role="primary",
-        bot_token="12345:private-token",
-    )
-    first = await canary_cli.run_command(
-        "execute",
-        run_id=RUN_ID_A,
-        session_factory=canary_session_factory,
-        app_role="primary",
-        bot_token="12345:private-token",
-    )
-    replay = await canary_cli.run_command(
-        "execute",
-        run_id=RUN_ID_A,
-        session_factory=canary_session_factory,
-        app_role="primary",
-        bot_token="12345:private-token",
-    )
-    replay_plan = await canary_cli.run_command(
-        "plan",
-        run_id=RUN_ID_A,
-        session_factory=canary_session_factory,
-        app_role="primary",
-        bot_token="12345:private-token",
-    )
-
-    assert planned["run_id"] == RUN_ID_A
-    assert planned["existing"] is False
-    assert planned["execute_would_create"] is True
-    assert planned["will_enqueue"] is False
-    assert first["accepted"] is True
-    assert first["created"] is True
-    assert first["replay"] is False
-    assert first["execution_result"] == "created"
-    assert first["sent_directly"] is False
-    assert first["recipient_keys"] == ["staff:1", "staff:2"]
-    assert replay["event_id"] == first["event_id"]
-    assert replay["accepted"] is False
-    assert replay["created"] is False
-    assert replay["replay"] is True
-    assert replay["execution_result"] == "replay_pending"
-    assert replay_plan["existing"] is True
-    assert replay_plan["existing_status"] == "pending"
-    assert replay_plan["execute_would_create"] is False
-    assert replay_plan["will_enqueue"] is False
-    serialized_first = json.dumps(first)
-    assert '"101"' not in serialized_first
-    assert '"202"' not in serialized_first
-    assert "destination" not in serialized_first
-
-    async with canary_session_factory() as session:
-        assert (
-            await session.execute(select(func.count(IntegrationOutboxEvent.event_id)))
-        ).scalar_one() == 1
-        assert (
-            await session.execute(select(func.count(CommunicationDelivery.delivery_id)))
-        ).scalar_one() == 0
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     (
         "event_status",
@@ -494,6 +422,35 @@ async def test_canary_history_survives_owner_change_and_new_run_uses_new_snapsho
         )
     assert conflict.value.error_code == "canary_snapshot_conflict"
 
+    with pytest.raises(canary_cli.CanaryCommandRejected) as active_run:
+        await canary_cli.run_command(
+            "execute",
+            run_id=RUN_ID_B,
+            session_factory=canary_session_factory,
+            app_role="primary",
+            bot_token="12345:private-token",
+        )
+    assert active_run.value.error_code == "canary_runtime_not_off"
+
+    async with canary_session_factory() as session:
+        assert (
+            await session.get(
+                IntegrationOutboxEvent,
+                CommunicationsTelegramCanary.event_id(RUN_ID_B),
+            )
+            is None
+        )
+
+    disabled = await canary_cli.run_command(
+        "off",
+        run_id=None,
+        session_factory=canary_session_factory,
+        app_role="primary",
+        bot_token=None,
+    )
+    assert disabled["previous_mode"] == "canary"
+    assert disabled["previous_canary_run_id"] == RUN_ID_A
+
     second = await canary_cli.run_command(
         "execute",
         run_id=RUN_ID_B,
@@ -602,7 +559,7 @@ async def test_canary_status_output_excludes_destinations_secrets_and_raw_ack(
         assert secret not in serialized
 
 
-def test_canary_cli_accepts_no_destination_or_arbitrary_text_arguments():
+def test_canary_cli_parser_rejects_arbitrary_payload_and_defers_run_id_rule_to_main():
     parser = canary_cli.build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(
@@ -614,8 +571,16 @@ def test_canary_cli_accepts_no_destination_or_arbitrary_text_arguments():
         )
     with pytest.raises(SystemExit):
         parser.parse_args([])
+
+    status_args = parser.parse_args(["--status"])
+    assert status_args.status is True
+    assert status_args.run_id is None
+    off_args = parser.parse_args(["--off"])
+    assert off_args.off is True
+    assert off_args.run_id is None
+
     with pytest.raises(SystemExit):
-        parser.parse_args(["--status"])
+        canary_cli.main(["--status"])
 
 
 @pytest.mark.parametrize(

@@ -114,9 +114,13 @@ class CommunicationsTelegramCanary:
         return payload
 
     @staticmethod
-    def validate_runtime(*, app_role: str | None, bot_token: str | None) -> None:
+    def validate_primary_role(*, app_role: str | None) -> None:
         if str(app_role or "").strip().lower() != "primary":
             raise CommunicationsCanarySafetyError("app_role_not_primary")
+
+    @classmethod
+    def validate_runtime(cls, *, app_role: str | None, bot_token: str | None) -> None:
+        cls.validate_primary_role(app_role=app_role)
         normalized_token = str(bot_token or "").strip()
         if (
             not normalized_token
@@ -160,6 +164,16 @@ class CommunicationsTelegramCanary:
         bot_token: str | None,
     ) -> None:
         cls.validate_runtime(app_role=app_role, bot_token=bot_token)
+        await cls.assert_primary_writable_database(session)
+
+    @classmethod
+    async def preflight_control(
+        cls,
+        session: AsyncSession,
+        *,
+        app_role: str | None,
+    ) -> None:
+        cls.validate_primary_role(app_role=app_role)
         await cls.assert_primary_writable_database(session)
 
     @classmethod

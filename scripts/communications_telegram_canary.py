@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-CanaryMode = Literal["plan", "execute", "status"]
+CanaryMode = Literal["plan", "execute", "status", "off"]
 
 
 class CanaryCommandRejected(RuntimeError):
@@ -44,7 +44,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--run-id",
-        required=True,
         type=_run_id,
         help="Canonical lowercase UUIDv4 identifying this immutable run",
     )
@@ -60,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show privacy-safe event and delivery status",
     )
+    mode.add_argument(
+        "--off",
+        action="store_true",
+        help="Disable communications processing without requiring token or owners",
+    )
     return parser
 
 
@@ -68,13 +72,15 @@ def _mode(args: argparse.Namespace) -> CanaryMode:
         return "plan"
     if args.execute:
         return "execute"
-    return "status"
+    if args.status:
+        return "status"
+    return "off"
 
 
 async def run_command(
     mode: CanaryMode,
     *,
-    run_id: str,
+    run_id: str | None,
     session_factory=None,
     app_role: str | None = None,
     bot_token: str | None = None,
@@ -85,6 +91,11 @@ async def run_command(
         CommunicationsCanarySafetyError,
     )
     from services.communications.outbox_service import OutboxEventConflictError
+    from services.communications.runtime_state import (
+        CommunicationRuntimeControlConflict,
+        CommunicationRuntimeMode,
+        CommunicationRuntimeStateService,
+    )
     from core.config import settings
     from core.database import async_session_maker
     from services.communications.canary import CommunicationsTelegramCanary
@@ -94,9 +105,37 @@ async def run_command(
     effective_bot_token = settings.BOT_TOKEN if bot_token is None else bot_token
 
     try:
-        normalized_run_id = CommunicationsTelegramCanary.normalize_run_id(run_id)
         async with effective_session_factory() as session:
             try:
+                if mode == "off":
+                    await CommunicationsTelegramCanary.preflight_control(
+                        session,
+                        app_role=effective_app_role,
+                    )
+                    previous = await CommunicationRuntimeStateService.read_control(
+                        session,
+                        channel="telegram",
+                    )
+                    control = await CommunicationRuntimeStateService.set_mode(
+                        session,
+                        channel="telegram",
+                        mode=CommunicationRuntimeMode.OFF,
+                    )
+                    await session.commit()
+                    return {
+                        "mode": "off",
+                        "previous_mode": previous.mode.value,
+                        "previous_canary_run_id": previous.canary_run_id,
+                        "control_revision": control.control_revision,
+                    }
+
+                if run_id is None:
+                    raise CommunicationsCanarySafetyError(
+                        "canary_run_id_required"
+                    )
+                normalized_run_id = CommunicationsTelegramCanary.normalize_run_id(
+                    run_id
+                )
                 if mode == "status":
                     await CommunicationsTelegramCanary.preflight_runtime(
                         session,
@@ -136,12 +175,19 @@ async def run_command(
                     run_id=normalized_run_id,
                     recipient_keys=preflight.recipient_keys,
                 )
+                if enqueue_result.created:
+                    await CommunicationRuntimeStateService.arm_canary_from_off(
+                        session,
+                        channel="telegram",
+                        run_id=normalized_run_id,
+                    )
                 result = await CommunicationsTelegramCanary.execute_snapshot(
                     session,
                     preflight,
                     enqueue_result,
                     run_id=normalized_run_id,
                 )
+                result["runtime_armed"] = enqueue_result.created
                 # The CLI owns this transaction. The producer above deliberately
                 # cannot commit and never imports or invokes a Telegram provider.
                 await session.commit()
@@ -153,6 +199,8 @@ async def run_command(
         raise CanaryCommandRejected(exc.error_code) from None
     except OutboxEventConflictError:
         raise CanaryCommandRejected("canary_snapshot_conflict") from None
+    except CommunicationRuntimeControlConflict as exc:
+        raise CanaryCommandRejected(exc.error_code) from None
 
 
 def _print_json(payload: dict[str, Any]) -> None:
@@ -161,8 +209,11 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    mode = _mode(args)
+    if mode != "off" and args.run_id is None:
+        build_parser().error("--run-id is required unless --off is used")
     try:
-        payload = asyncio.run(run_command(_mode(args), run_id=args.run_id))
+        payload = asyncio.run(run_command(mode, run_id=args.run_id))
     except CanaryCommandRejected as exc:
         _print_json({"ok": False, "error_code": exc.error_code})
         return 2

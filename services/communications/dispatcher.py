@@ -15,10 +15,10 @@ from services.communications.delivery_materializer import (
     DeliveryMaterializationConflict,
     NoEligibleCommunicationRecipients,
 )
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.template_registry import (
     CONSUMER_NAME,
     HANDLER_VERSION,
-    SUPPORTED_EVENT_TYPES,
     InvalidCommunicationEventPayload,
     UnsupportedCommunicationEvent,
     WebsiteTemplateRegistry,
@@ -52,13 +52,14 @@ class CommunicationOutboxDispatcher:
         session: AsyncSession,
         *,
         now: datetime,
+        scope: CommunicationProcessingScope,
     ) -> IntegrationOutboxEvent | None:
         query = (
             select(IntegrationOutboxEvent)
             .where(
                 IntegrationOutboxEvent.status == "pending",
                 IntegrationOutboxEvent.available_at <= now,
-                IntegrationOutboxEvent.event_type.in_(SUPPORTED_EVENT_TYPES),
+                IntegrationOutboxEvent.event_type.in_(scope.outbox_event_types),
             )
             .order_by(
                 IntegrationOutboxEvent.priority.asc(),
@@ -68,6 +69,10 @@ class CommunicationOutboxDispatcher:
             )
             .limit(1)
         )
+        if scope.exact_event_id is not None:
+            query = query.where(
+                IntegrationOutboxEvent.event_id == scope.exact_event_id
+            )
         if session.get_bind().dialect.name == "postgresql":
             query = query.with_for_update(skip_locked=True)
         return (await session.execute(query)).scalar_one_or_none()
@@ -214,6 +219,7 @@ class CommunicationOutboxDispatcher:
         session: AsyncSession,
         *,
         dispatcher_id: str,
+        scope: CommunicationProcessingScope,
         now: datetime | None = None,
     ) -> DispatchOutcomeV1 | None:
         normalized_dispatcher_id = str(dispatcher_id or "").strip()
@@ -223,7 +229,11 @@ class CommunicationOutboxDispatcher:
             raise ValueError("Communication dispatcher_id is too long")
         dispatch_time = now or cls._utc_now()
 
-        event = await cls._select_next(session, now=dispatch_time)
+        event = await cls._select_next(
+            session,
+            now=dispatch_time,
+            scope=scope,
+        )
         if event is None:
             return None
 
