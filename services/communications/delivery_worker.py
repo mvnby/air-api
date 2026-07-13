@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable, Coroutine
 from contextlib import suppress
 from dataclasses import dataclass
@@ -25,7 +26,6 @@ from services.communications.providers.base import (
 )
 from services.communications.recipient_directory import ManagementRecipientDirectory
 from services.communications.template_registry import WebsiteTemplateRegistry
-
 
 logger = logging.getLogger(__name__)
 _TerminalResult = TypeVar("_TerminalResult")
@@ -140,6 +140,7 @@ class CommunicationDeliveryWorker:
             return self._lease_lost_outcome(claim, recovery)
 
         cancellation_after_finalize: asyncio.CancelledError | None = None
+        provider_started_ns = time.monotonic_ns()
         try:
             result = await self._send_with_heartbeat(claim, rendered_text)
         except _ProviderResultDuringCancellation as exc:
@@ -161,6 +162,10 @@ class CommunicationDeliveryWorker:
                 code="provider_call_failed",
                 message="Communication provider failed unexpectedly",
             )
+        provider_latency_ms = max(
+            0,
+            (time.monotonic_ns() - provider_started_ns) // 1_000_000,
+        )
 
         if result.disposition == ProviderDeliveryDisposition.SENT:
             if not result.provider_message_id:
@@ -172,7 +177,11 @@ class CommunicationDeliveryWorker:
             else:
                 try:
                     await self._finish_terminal_despite_cancellation(
-                        self._mark_sent(claim, result.provider_message_id),
+                        self._mark_sent(
+                            claim,
+                            result.provider_message_id,
+                            provider_latency_ms=provider_latency_ms,
+                        ),
                         delivery_id=claim.delivery_id,
                     )
                 except CommunicationDeliveryLeaseLost:
@@ -191,7 +200,12 @@ class CommunicationDeliveryWorker:
                 return outcome
 
         outcome = await self._finish_terminal_despite_cancellation(
-            self._record_failure(claim, result, recovery),
+            self._record_failure(
+                claim,
+                result,
+                recovery,
+                provider_latency_ms=provider_latency_ms,
+            ),
             delivery_id=claim.delivery_id,
         )
         if cancellation_after_finalize is not None:
@@ -438,6 +452,7 @@ class CommunicationDeliveryWorker:
         self,
         claim: ClaimedCommunicationDelivery,
         provider_message_id: str,
+        provider_latency_ms: int | None = None,
     ) -> None:
         async with self._session_factory() as session:
             await CommunicationDeliveryService.mark_sent(
@@ -446,6 +461,7 @@ class CommunicationDeliveryWorker:
                 worker_id=self._worker_id,
                 lease_token=claim.lease_token,
                 provider_message_id=provider_message_id,
+                provider_latency_ms=provider_latency_ms,
             )
             await session.commit()
 
@@ -454,6 +470,7 @@ class CommunicationDeliveryWorker:
         claim: ClaimedCommunicationDelivery,
         result: ProviderDeliveryResult,
         recovery: ExpiredLeaseRecoveryResult,
+        provider_latency_ms: int | None = None,
     ) -> DeliveryRunOutcome:
         try:
             async with self._session_factory() as session:
@@ -463,6 +480,7 @@ class CommunicationDeliveryWorker:
                     worker_id=self._worker_id,
                     lease_token=claim.lease_token,
                     result=result,
+                    provider_latency_ms=provider_latency_ms,
                 )
                 await session.commit()
         except CommunicationDeliveryLeaseLost:

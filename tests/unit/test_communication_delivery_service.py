@@ -9,13 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
-from models import CommunicationDelivery
+from models import CommunicationDelivery, CommunicationDeliveryAttempt
 from services.communications.delivery_service import (
     CommunicationDeliveryLeaseLost,
     CommunicationDeliveryService,
 )
 from services.communications.providers.base import ProviderDeliveryResult
-
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
 
@@ -25,6 +24,7 @@ async def delivery_session_factory(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'delivery.sqlite3'}")
     async with engine.begin() as connection:
         await connection.run_sync(CommunicationDelivery.__table__.create)
+        await connection.run_sync(CommunicationDeliveryAttempt.__table__.create)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         yield factory
@@ -73,6 +73,20 @@ def _delivery(
     )
 
 
+def _running_attempt(
+    sequence: int,
+    *,
+    attempt_no: int = 1,
+    started_at: datetime = NOW - timedelta(minutes=1),
+) -> CommunicationDeliveryAttempt:
+    return CommunicationDeliveryAttempt(
+        delivery_id=f"{sequence:032x}",
+        attempt_no=attempt_no,
+        started_at=started_at,
+        outcome="running",
+    )
+
+
 @pytest.mark.asyncio
 async def test_claim_next_is_due_channel_scoped_ordered_and_caller_owned(
     delivery_session_factory,
@@ -104,6 +118,13 @@ async def test_claim_next_is_due_channel_scoped_ordered_and_caller_owned(
         independent = await session.get(CommunicationDelivery, claim.delivery_id)
         assert independent is not None
         assert independent.status == "running"
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (claim.delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "running"
+        assert attempt.finished_at is None
         await session.rollback()
 
     async with delivery_session_factory() as session:
@@ -111,6 +132,13 @@ async def test_claim_next_is_due_channel_scoped_ordered_and_caller_owned(
         assert rolled_back is not None
         assert rolled_back.status == "queued"
         assert rolled_back.attempts == 0
+        assert (
+            await session.get(
+                CommunicationDeliveryAttempt,
+                (f"{2:032x}", 1),
+            )
+            is None
+        )
 
 
 @pytest.mark.asyncio
@@ -150,15 +178,18 @@ async def test_expired_running_is_recovered_before_it_can_be_claimed(
 ):
     expired_token = "x" * 43
     async with delivery_session_factory() as session:
-        session.add(
-            _delivery(
-                1,
-                status="running",
-                attempts=1,
-                worker_id="old-worker",
-                lease_token=expired_token,
-                lease_expires_at=NOW - timedelta(seconds=1),
-            )
+        session.add_all(
+            [
+                _delivery(
+                    1,
+                    status="running",
+                    attempts=1,
+                    worker_id="old-worker",
+                    lease_token=expired_token,
+                    lease_expires_at=NOW - timedelta(seconds=1),
+                ),
+                _running_attempt(1),
+            ]
         )
         await session.commit()
 
@@ -191,6 +222,15 @@ async def test_expired_running_is_recovered_before_it_can_be_claimed(
         assert recovered.status == "retry"
         assert recovered.attempts == 1
         assert recovered.available_at > NOW.replace(tzinfo=None)
+        recovered_attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (f"{1:032x}", 1),
+        )
+        assert recovered_attempt is not None
+        assert recovered_attempt.outcome == "retry"
+        assert recovered_attempt.error_category == "lease"
+        assert recovered_attempt.error_code == "lease_expired"
+        assert recovered_attempt.ambiguous is True
 
 
 @pytest.mark.asyncio
@@ -240,6 +280,7 @@ async def test_renew_and_terminal_transitions_require_exact_unexpired_lease(
             worker_id="worker-a",
             lease_token=claim.lease_token,
             provider_message_id="telegram-message-42",
+            provider_latency_ms=47,
             now=NOW + timedelta(seconds=2),
         )
         await session.commit()
@@ -254,6 +295,18 @@ async def test_renew_and_terminal_transitions_require_exact_unexpired_lease(
         assert sent.lease_expires_at is None
         assert sent.sent_at == NOW.replace(tzinfo=None) + timedelta(seconds=2)
         assert sent.finished_at == sent.sent_at
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (claim.delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "sent"
+        assert attempt.finished_at == sent.finished_at
+        assert attempt.error_category is None
+        assert attempt.error_code is None
+        assert attempt.retry_after_seconds is None
+        assert attempt.provider_latency_ms == 47
+        assert attempt.ambiguous is False
         with pytest.raises(CommunicationDeliveryLeaseLost):
             await CommunicationDeliveryService.cancel_owned(
                 session,
@@ -282,7 +335,7 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
 
     result = ProviderDeliveryResult.transient_failure(
         category="rate_limit\nsecret",
-        code="retry\tafter",
+        code="plaintextsecret123",
         message="Safe\nmessage",
         retry_after_seconds=900,
     )
@@ -293,6 +346,7 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
             worker_id="worker",
             lease_token=claim.lease_token,
             result=result,
+            provider_latency_ms=125,
             now=NOW + timedelta(seconds=1),
         )
         await session.commit()
@@ -306,9 +360,20 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
         assert row.attempts == 1
         assert row.finished_at is None
         assert row.last_error_category == "rate_limit secret"
-        assert row.last_error_code == "retry after"
+        assert row.last_error_code == "plaintextsecret123"
         assert row.last_error_message == "Safe message"
         assert row.worker_id is None
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (claim.delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "retry"
+        assert attempt.error_category == "unknown"
+        assert attempt.error_code == "delivery_failed"
+        assert attempt.retry_after_seconds == 900
+        assert attempt.provider_latency_ms == 125
+        assert attempt.ambiguous is False
 
     delay = CommunicationDeliveryService.retry_delay_seconds(
         delivery_id=claim.delivery_id,
@@ -338,12 +403,12 @@ async def test_permanent_or_exhausted_failure_is_dead(
     starting_attempts = 0 if permanent else max_attempts - 1
     async with delivery_session_factory() as session:
         session.add(
-                _delivery(
-                    1,
-                    status="queued" if permanent else "retry",
-                    attempts=starting_attempts,
-                    max_attempts=max_attempts,
-                )
+            _delivery(
+                1,
+                status="queued" if permanent else "retry",
+                attempts=starting_attempts,
+                max_attempts=max_attempts,
+            )
         )
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
@@ -375,6 +440,7 @@ async def test_permanent_or_exhausted_failure_is_dead(
             worker_id="worker",
             lease_token=claim.lease_token,
             result=result,
+            provider_latency_ms=84,
             now=NOW + timedelta(seconds=1),
         )
         await session.commit()
@@ -386,6 +452,14 @@ async def test_permanent_or_exhausted_failure_is_dead(
         assert row.finished_at is not None
         assert row.worker_id is None
         assert row.lease_token is None
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (claim.delivery_id, claim.attempts),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "dead"
+        assert attempt.provider_latency_ms == 84
+        assert attempt.ambiguous is (not permanent)
 
 
 @pytest.mark.asyncio
@@ -428,6 +502,10 @@ async def test_recovery_is_limited_ordered_and_separates_retry_from_dead(
                     lease_token="d" * 43,
                     lease_expires_at=NOW + timedelta(seconds=1),
                 ),
+                _running_attempt(1),
+                _running_attempt(2, attempt_no=3),
+                _running_attempt(3),
+                _running_attempt(4),
             ]
         )
         await session.commit()
@@ -454,6 +532,28 @@ async def test_recovery_is_limited_ordered_and_separates_retry_from_dead(
         )
         assert [row.status for row in rows] == ["retry", "dead", "running", "running"]
         assert [row.attempts for row in rows] == [1, 3, 1, 1]
+        attempts = list(
+            (
+                await session.execute(
+                    select(CommunicationDeliveryAttempt).order_by(
+                        CommunicationDeliveryAttempt.delivery_id
+                    )
+                )
+            ).scalars()
+        )
+        assert [attempt.outcome for attempt in attempts] == [
+            "retry",
+            "dead",
+            "running",
+            "running",
+        ]
+        assert [attempt.error_code for attempt in attempts] == [
+            "lease_expired",
+            "lease_expired",
+            None,
+            None,
+        ]
+        assert [attempt.ambiguous for attempt in attempts] == [True, True, False, False]
 
 
 @pytest.mark.asyncio
