@@ -342,9 +342,20 @@ tar -czf - \
 gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
 
 # Put the private R2 credentials in local `.env` using the names above. The
-# helper loads only `POSTGRES_PITR_*` keys from that file, uploads a temporary
-# root-only env file to the primary, removes it after the remote phase, and
-# never prints access keys.
+# helper loads only `POSTGRES_PITR_*` keys from that file. For a live apply it
+# ignores the user's SSH config, pins both physical Patroni nodes to the
+# repository-tracked Ed25519 host identities, probes both nodes, and selects the
+# sole primary. It refuses an unreachable/ambiguous topology, removes any legacy
+# disk-based temporary env from both nodes, and sends the new payload over stdin
+# into a locked Linux memfd. The secret is never linked into the remote filesystem,
+# and the lock prevents concurrent prerequisite runs.
+# Both the local env and key must be owner-only regular non-symlink files.
+chmod 600 .env "$HOME/.ssh/id_ed25519"
+export HA_SSH_IDENTITY_FILE="$HOME/.ssh/id_ed25519"
+
+# Prove both pinned host identities and exactly one Patroni primary without
+# loading or transferring PITR secrets.
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --probe-only
 
 # First verify the local input shape without touching the primary.
 python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --env-file .env --dry-run --no-prompt
@@ -372,6 +383,14 @@ ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap enable-timers'
 # passed with archived WAL present.
 gh variable set POSTGRES_PITR_REQUIRED --repo mvnby/air-api --body true
 ```
+
+The helper has no `--ssh-host`, `--project-dir`, `--compose-file`, remote env
+path, or remote helper override.
+The reviewed physical-node inventory maps `mvn-api` to `/opt/air-api` and
+`zakup` to `/opt/mvn-reserve`; both use the canonical
+`docker-compose.patroni.yml`. Update that inventory and its tracked host key in
+a reviewed change if a physical node is replaced. Never pass a raw address or
+fall back to `ssh-keyscan` for this secret-bearing operation.
 
 Quick PITR status:
 
