@@ -11,6 +11,7 @@ def _cleanup_run(
     tmp_path: Path,
     *,
     daemon_failure: bool = False,
+    lowercase_absence_errors: bool = False,
     volume_remove_failure: bool = False,
     keep_container: bool = False,
     keep_files: bool = False,
@@ -42,7 +43,11 @@ if [[ "$1" == "inspect" ]]; then
     exit 0
   fi
   [[ -f "$CONTAINER_STATE" ]] && exit 0
-  echo 'No such container' >&2
+  if [[ "${LOWERCASE_ABSENCE_ERRORS}" == "true" ]]; then
+    printf '[]\nerror: no such object: drill-container\n' >&2
+  else
+    echo 'No such container' >&2
+  fi
   exit 1
 fi
 if [[ "$1 $2" == "volume inspect" ]]; then
@@ -52,7 +57,11 @@ if [[ "$1 $2" == "volume inspect" ]]; then
     exit 0
   fi
   [[ -f "$VOLUME_STATE" ]] && exit 0
-  echo 'No such volume' >&2
+  if [[ "${LOWERCASE_ABSENCE_ERRORS}" == "true" ]]; then
+    printf '[]\nError response from daemon: get drill-volume: no such volume\n' >&2
+  else
+    echo 'No such volume' >&2
+  fi
   exit 1
 fi
 if [[ "$1 $2" == "rm -fv" ]]; then
@@ -83,6 +92,7 @@ exit 2
             "CONTAINER_STATE": str(container_state),
             "VOLUME_STATE": str(volume_state),
             "DAEMON_FAILURE": str(daemon_failure).lower(),
+            "LOWERCASE_ABSENCE_ERRORS": str(lowercase_absence_errors).lower(),
             "VOLUME_REMOVE_FAILURE": str(volume_remove_failure).lower(),
             "LABEL_MISMATCH": str(label_mismatch).lower(),
             "RESTORE_DRILL_CONTAINER": "drill-container",
@@ -161,9 +171,26 @@ def test_cleanup_honors_explicit_keep_flags(tmp_path):
 
 
 def test_cleanup_accepts_already_absent_runtime(tmp_path):
-    result, _, _, backup, _ = _cleanup_run(tmp_path, create_objects=False)
+    result, _, _, backup, _ = _cleanup_run(
+        tmp_path,
+        create_objects=False,
+        lowercase_absence_errors=True,
+    )
 
     assert result.returncode == 0
+    assert not backup.exists()
+    assert not backup.parent.exists()
+
+
+def test_cleanup_accepts_docker_lowercase_absence_errors(tmp_path):
+    result, container, volume, backup, _ = _cleanup_run(
+        tmp_path,
+        lowercase_absence_errors=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not container.exists()
+    assert not volume.exists()
     assert not backup.exists()
     assert not backup.parent.exists()
 
