@@ -137,11 +137,17 @@ def _insert_attempt(
     )
 
 
-def test_attempt_journal_precedes_the_communication_runtime_head():
+def test_attempt_journal_stays_in_single_alembic_chain_after_lease_hardening():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(ATTEMPT_REVISION)
+    heads = script.get_heads()
+    assert len(heads) == 1
+    revision_ids = {
+        item.revision for item in script.walk_revisions(base="base", head=heads[0])
+    }
 
-    assert script.get_heads() == ["6c0d3e5f7a21"]
+    assert ATTEMPT_REVISION in revision_ids
+    assert "6c0d3e5f7a21" in revision_ids
     assert revision is not None
     assert revision.down_revision == "4a8b1c2d3e05"
 

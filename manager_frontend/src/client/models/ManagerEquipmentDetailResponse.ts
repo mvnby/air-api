@@ -3,7 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerEquipmentComponentItemResponse } from './ManagerEquipmentComponentItemResponse';
+import type { ManagerEquipmentLinkedOrderResponse } from './ManagerEquipmentLinkedOrderResponse';
 import type { ManagerEquipmentServiceHistoryItemResponse } from './ManagerEquipmentServiceHistoryItemResponse';
+import type { ManagerEquipmentWarrantyCoverageResponse } from './ManagerEquipmentWarrantyCoverageResponse';
 export type ManagerEquipmentDetailResponse = {
     id: number;
     customer_id: number;
@@ -29,7 +31,18 @@ export type ManagerEquipmentDetailResponse = {
     is_archived?: boolean;
     created_at: string;
     updated_at?: (string | null);
+    customer_name?: (string | null);
+    customer_phone?: (string | null);
+    branch_name?: (string | null);
+    branch_address?: (string | null);
+    service_contact_name?: (string | null);
+    service_contact_phone?: (string | null);
+    last_service_at?: (string | null);
+    next_maintenance_due_at?: (string | null);
+    attention_reasons?: Array<string>;
     components?: Array<ManagerEquipmentComponentItemResponse>;
     recent_history?: Array<ManagerEquipmentServiceHistoryItemResponse>;
+    coverages?: Array<ManagerEquipmentWarrantyCoverageResponse>;
+    linked_orders?: Array<ManagerEquipmentLinkedOrderResponse>;
 };
 

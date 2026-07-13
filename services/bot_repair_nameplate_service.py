@@ -14,6 +14,8 @@ from models import Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.order_service import OrderService
+from services.private_attachment_storage_service import sha256_bytes
+from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
 
 
@@ -690,18 +692,28 @@ class BotRepairNameplateService:
         attached_at = datetime.now()
         storage_meta: dict[str, Any] = {}
         if file_content:
-            stored = await BotOrderAttachmentService.store_attachment_content(
+            await ServiceAttachmentService.create_and_link_order_attachment(
+                session,
                 order_id=order_id,
                 content=file_content,
                 filename=filename,
                 mime_type=mime_type,
+                category="nameplate",
+                source="telegram_bot",
+                transcript=raw_text,
+                captured_at=attached_at,
+                telegram_meta={
+                    "file_id": file_id,
+                    "user_id": telegram_user_id,
+                    "chat_id": telegram_chat_id,
+                    "message_id": telegram_message_id,
+                    "source_meta": {"purpose": "repair_nameplate"},
+                },
             )
             storage_meta = {
-                "url": stored.url,
-                "storage_provider": stored.storage_provider,
-                "storage_path": stored.path,
-                "content_hash": stored.content_hash,
-                "size_bytes": stored.size_bytes,
+                "storage_provider": "private_service_attachment",
+                "content_hash": sha256_bytes(file_content),
+                "size_bytes": len(file_content),
             }
         entry = BotOrderAttachmentService._build_entry(
             file_id=file_id,

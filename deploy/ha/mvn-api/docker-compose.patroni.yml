@@ -9,7 +9,9 @@ x-api-app: &api-app
     - .ha-app-role.env
   environment:
     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    ENVIRONMENT: production
     GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
+    SERVICE_ATTACHMENT_STORAGE_PROVIDER: r2
   volumes:
     - ./media:/app/media
     - ./postgres-wal-archive:/postgres-wal-archive
@@ -94,6 +96,8 @@ services:
       - .ha-bot-role.env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      ENVIRONMENT: production
+      SERVICE_ATTACHMENT_STORAGE_PROVIDER: r2
     volumes:
       - ./media:/app/media
       - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro

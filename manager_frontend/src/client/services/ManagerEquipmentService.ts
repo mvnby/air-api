@@ -16,6 +16,7 @@ import type { ManagerEquipmentServiceHistoryCreatePayload } from '../models/Mana
 import type { ManagerEquipmentServiceHistoryItemResponse } from '../models/ManagerEquipmentServiceHistoryItemResponse';
 import type { ManagerEquipmentServiceHistoryListResponse } from '../models/ManagerEquipmentServiceHistoryListResponse';
 import type { ManagerEquipmentUpdatePayload } from '../models/ManagerEquipmentUpdatePayload';
+import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -27,6 +28,8 @@ export class ManagerEquipmentService {
      * @param page
      * @param limit
      * @param includeArchived
+     * @param q
+     * @param attention
      * @returns ManagerEquipmentListResponse Successful Response
      * @throws ApiError
      */
@@ -36,6 +39,8 @@ export class ManagerEquipmentService {
         page: number = 1,
         limit: number = 20,
         includeArchived: boolean = false,
+        q?: (string | null),
+        attention?: (string | null),
     ): CancelablePromise<ManagerEquipmentListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -46,6 +51,8 @@ export class ManagerEquipmentService {
                 'page': page,
                 'limit': limit,
                 'include_archived': includeArchived,
+                'q': q,
+                'attention': attention,
             },
             errors: {
                 422: `Validation Error`,
@@ -90,6 +97,26 @@ export class ManagerEquipmentService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Manager Maintenance Order
+     * @param equipmentId
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerMaintenanceOrder(
+        equipmentId: number,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/equipment/{equipment_id}/maintenance-order',
+            path: {
+                'equipment_id': equipmentId,
+            },
             errors: {
                 422: `Validation Error`,
             },

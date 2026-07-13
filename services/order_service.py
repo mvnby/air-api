@@ -2212,6 +2212,25 @@ class OrderService:
         await OrderService.ensure_default_proposal(session, order)
 
         data = OrderService._map_order_list_item(order)
+        from models import CustomerEquipment, EquipmentOrderLink
+        from services.service_attachment_service import ServiceAttachmentService
+
+        data["attachment_count"] = await ServiceAttachmentService.order_attachment_count(
+            session,
+            order=order,
+        )
+        linked_equipment_result = await session.execute(
+            select(EquipmentOrderLink.equipment_id).where(EquipmentOrderLink.order_id == order_id)
+        )
+        linked_equipment_ids = {int(value) for value in linked_equipment_result.scalars().all()}
+        source_equipment_result = await session.execute(
+            select(CustomerEquipment.id).where(
+                CustomerEquipment.source_order_id == order_id,
+                CustomerEquipment.is_archived == False,
+            )
+        )
+        linked_equipment_ids.update(int(value) for value in source_equipment_result.scalars().all())
+        data["linked_equipment_count"] = len(linked_equipment_ids)
         selected_proposal = OrderService._selected_proposal(order)
         selected_proposal_id = selected_proposal.id if selected_proposal else None
         data["product_lines"] = [

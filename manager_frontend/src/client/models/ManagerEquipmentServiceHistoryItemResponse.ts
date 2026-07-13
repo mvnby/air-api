@@ -9,6 +9,7 @@ export type ManagerEquipmentServiceHistoryItemResponse = {
     order_id?: (number | null);
     event_type?: EquipmentServiceEventType;
     event_date: string;
+    maintenance_provider?: ('mvn' | 'authorized' | 'external' | null);
     complaint_snapshot?: (string | null);
     diagnostic_result?: (string | null);
     repair_recommendation?: (string | null);

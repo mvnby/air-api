@@ -3,6 +3,10 @@ import { useDebounceFn } from '@vueuse/core';
 import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, Plus, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
+import EquipmentAttachmentsPanel from '../components/equipment/EquipmentAttachmentsPanel.vue';
+import EquipmentWarrantyPanel from '../components/equipment/EquipmentWarrantyPanel.vue';
+import { equipmentWarrantySummary } from '../components/equipment/equipmentWarrantySummary';
+import { listAllCustomerEquipment } from '../components/equipment/loadAllCustomerEquipment';
 import { api } from '../api';
 import {
   ManagerContractsService,
@@ -28,6 +32,7 @@ import {
   type ManagerEquipmentServiceHistoryCreatePayload,
   type ManagerEquipmentServiceHistoryItemResponse,
   type ManagerEquipmentUpdatePayload,
+  type ManagerEquipmentWarrantyCoverageResponse,
 } from '../client';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
@@ -82,9 +87,12 @@ type EquipmentForm = {
   notes: string;
 };
 
+type MaintenanceProvider = 'mvn' | 'authorized' | 'external';
+
 type EquipmentHistoryForm = {
   event_type: EquipmentServiceEventType;
   event_date: string;
+  maintenance_provider: MaintenanceProvider;
   complaint_snapshot: string;
   diagnostic_result: string;
   repair_recommendation: string;
@@ -93,6 +101,10 @@ type EquipmentHistoryForm = {
   not_repairable: boolean;
   not_repairable_reason: string;
   notes: string;
+};
+
+type EquipmentHistoryPayload = ManagerEquipmentServiceHistoryCreatePayload & {
+  maintenance_provider?: MaintenanceProvider | null;
 };
 
 type EquipmentComponentForm = {
@@ -305,6 +317,7 @@ const emptyEquipmentForm = (): EquipmentForm => ({
 const emptyHistoryForm = (): EquipmentHistoryForm => ({
   event_type: 'diagnostic',
   event_date: toInputDate(new Date()),
+  maintenance_provider: 'mvn',
   complaint_snapshot: '',
   diagnostic_result: '',
   repair_recommendation: '',
@@ -342,6 +355,7 @@ const editingEquipmentId = ref<number | null>(null);
 const equipmentForm = ref<EquipmentForm>(emptyEquipmentForm());
 const selectedEquipmentId = ref<number | null>(null);
 const selectedEquipmentDetail = ref<ManagerEquipmentDetailResponse | null>(null);
+const equipmentCoverageCache = ref<Record<number, ManagerEquipmentWarrantyCoverageResponse[]>>({});
 const showComponentForm = ref(false);
 const editingComponentId = ref<number | null>(null);
 const componentForm = ref<EquipmentComponentForm>(emptyComponentForm());
@@ -349,6 +363,8 @@ const equipmentHistoryLoading = ref(false);
 const historySaving = ref(false);
 const showHistoryForm = ref(false);
 const historyForm = ref<EquipmentHistoryForm>(emptyHistoryForm());
+let equipmentDetailRequestId = 0;
+let equipmentListRequestId = 0;
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -380,24 +396,14 @@ const componentTypeLabel = (value?: string | null) => (
   EQUIPMENT_COMPONENT_OPTIONS.find((option) => option.value === value)?.label || 'Другое'
 );
 
-const warrantyStatusLabel = (value?: string | null) => {
-  const labels: Record<string, string> = {
-    active: 'Гарантия действует',
-    expired: 'Гарантия истекла',
-    scheduled: 'Гарантия начнется',
-    none: 'Без гарантии',
-    unknown: 'Гарантия не указана',
-  };
-  return labels[value || 'unknown'] || 'Гарантия не указана';
-};
-
 const warrantyStatusClass = (value?: string | null) => {
   const classes: Record<string, string> = {
-    active: 'bg-emerald-500/15 text-emerald-400',
-    expired: 'bg-red-500/15 text-red-400',
-    scheduled: 'bg-sky-500/15 text-sky-400',
-    none: 'bg-slate-500/20 text-slate-400',
-    unknown: 'bg-amber-500/15 text-amber-400',
+    active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+    attention: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+    expired: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+    scheduled: 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+    none: 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+    unknown: 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
   };
   return classes[value || 'unknown'] || classes.unknown;
 };
@@ -423,6 +429,15 @@ const equipmentTitle = (item?: Pick<ManagerEquipmentItemResponse, 'display_name'
   const parts = [item.brand, item.model, item.serial || item.inventory_number].map((value) => value?.trim()).filter(Boolean);
   return parts.join(' ') || 'Оборудование';
 };
+
+const equipmentFormTitle = computed(() => {
+  if (!editingEquipmentId.value) return 'Новое оборудование';
+  return `Редактирование: ${equipmentTitle(equipment.value.find((item) => item.id === editingEquipmentId.value))}`;
+});
+
+const equipmentWarrantyView = (item: Pick<ManagerEquipmentItemResponse, 'id' | 'warranty_status' | 'warranty_expires_at'>) => (
+  equipmentWarrantySummary(item, equipmentCoverageCache.value[item.id])
+);
 
 const equipmentSubtitle = (item: ManagerEquipmentItemResponse | ManagerEquipmentDetailResponse) => {
   const parts = [
@@ -472,9 +487,10 @@ const componentPayload = (): ManagerEquipmentComponentCreatePayload | ManagerEqu
   notes: trimOrNull(componentForm.value.notes),
 });
 
-const historyPayload = (): ManagerEquipmentServiceHistoryCreatePayload => ({
+const historyPayload = (): EquipmentHistoryPayload => ({
   event_type: historyForm.value.event_type,
   event_date: historyForm.value.event_date ? `${historyForm.value.event_date}T00:00:00` : null,
+  maintenance_provider: historyForm.value.event_type === 'maintenance' ? historyForm.value.maintenance_provider : null,
   complaint_snapshot: trimOrNull(historyForm.value.complaint_snapshot),
   diagnostic_result: trimOrNull(historyForm.value.diagnostic_result),
   repair_recommendation: trimOrNull(historyForm.value.repair_recommendation),
@@ -736,21 +752,43 @@ const loadCustomerContracts = async () => {
 };
 
 const loadEquipmentDetail = async (equipmentId: number) => {
+  const requestId = ++equipmentDetailRequestId;
   equipmentHistoryLoading.value = true;
   equipmentError.value = '';
   try {
-    selectedEquipmentDetail.value = await ManagerEquipmentService.getManagerEquipment(equipmentId, 10);
+    const detail = await ManagerEquipmentService.getManagerEquipment(equipmentId, 10);
+    if (requestId !== equipmentDetailRequestId || selectedEquipmentId.value !== equipmentId) return;
+    selectedEquipmentDetail.value = detail;
+    equipmentCoverageCache.value = {
+      ...equipmentCoverageCache.value,
+      [equipmentId]: detail.coverages || [],
+    };
   } catch (e) {
+    if (requestId !== equipmentDetailRequestId || selectedEquipmentId.value !== equipmentId) return;
     console.error('Failed to load equipment detail', e);
-    equipmentError.value = `Не удалось загрузить историю: ${getApiErrorMessage(e)}`;
+    equipmentError.value = `Не удалось загрузить данные оборудования: ${getApiErrorMessage(e)}`;
     selectedEquipmentDetail.value = null;
   } finally {
-    equipmentHistoryLoading.value = false;
+    if (requestId === equipmentDetailRequestId) equipmentHistoryLoading.value = false;
   }
+};
+
+const updateSelectedCoverage = (updated: ManagerEquipmentWarrantyCoverageResponse) => {
+  if (!selectedEquipmentDetail.value) return;
+  const coverages = selectedEquipmentDetail.value.coverages || [];
+  selectedEquipmentDetail.value = {
+    ...selectedEquipmentDetail.value,
+    coverages: coverages.map((coverage) => coverage.id === updated.id ? updated : coverage),
+  };
+  equipmentCoverageCache.value = {
+    ...equipmentCoverageCache.value,
+    [selectedEquipmentDetail.value.id]: selectedEquipmentDetail.value.coverages || [],
+  };
 };
 
 const selectEquipment = async (equipmentId: number) => {
   selectedEquipmentId.value = equipmentId;
+  selectedEquipmentDetail.value = null;
   showHistoryForm.value = false;
   showComponentForm.value = false;
   editingComponentId.value = null;
@@ -761,18 +799,19 @@ const selectEquipment = async (equipmentId: number) => {
 
 const loadCustomerEquipment = async () => {
   if (!customerId.value) return;
+  const requestId = ++equipmentListRequestId;
+  const targetCustomerId = customerId.value;
   equipmentLoading.value = true;
   equipmentError.value = '';
   try {
-    const res = await ManagerEquipmentService.listManagerEquipment(
-      customerId.value,
-      null,
-      1,
-      100,
-      includeArchivedEquipment.value,
-    );
-    equipment.value = res.items || [];
+    const items = await listAllCustomerEquipment({
+      customerId: targetCustomerId,
+      includeArchived: includeArchivedEquipment.value,
+    });
+    if (requestId !== equipmentListRequestId || customerId.value !== targetCustomerId) return;
+    equipment.value = items;
     if (selectedEquipmentId.value && !equipment.value.some((item) => item.id === selectedEquipmentId.value)) {
+      equipmentDetailRequestId += 1;
       selectedEquipmentId.value = null;
       selectedEquipmentDetail.value = null;
     }
@@ -782,10 +821,11 @@ const loadCustomerEquipment = async () => {
       await loadEquipmentDetail(selectedEquipmentId.value);
     }
   } catch (e) {
+    if (requestId !== equipmentListRequestId || customerId.value !== targetCustomerId) return;
     console.error('Failed to load customer equipment', e);
     equipmentError.value = `Не удалось загрузить оборудование: ${getApiErrorMessage(e)}`;
   } finally {
-    equipmentLoading.value = false;
+    if (requestId === equipmentListRequestId) equipmentLoading.value = false;
   }
 };
 
@@ -796,6 +836,7 @@ const openEquipmentCreateForm = () => {
 };
 
 const openEquipmentEditForm = (item: ManagerEquipmentItemResponse) => {
+  if (selectedEquipmentId.value !== item.id) void selectEquipment(item.id);
   equipmentForm.value = {
     customer_branch_id: item.customer_branch_id ?? null,
     catalog_product_id: item.catalog_product_id ? String(item.catalog_product_id) : '',
@@ -896,6 +937,8 @@ const openComponentEditForm = (item: ManagerEquipmentComponentItemResponse) => {
 
 const saveEquipmentComponent = async () => {
   if (!selectedEquipmentId.value || componentSaving.value) return;
+  const equipmentId = selectedEquipmentId.value;
+  const componentId = editingComponentId.value;
   const payload = componentPayload();
   if (!payload.title && !payload.brand && !payload.model && !payload.serial && !payload.inventory_number) {
     equipmentError.value = 'Укажите название, бренд, модель, серийный или инвентарный номер компонента';
@@ -904,16 +947,16 @@ const saveEquipmentComponent = async () => {
   componentSaving.value = true;
   equipmentError.value = '';
   try {
-    if (editingComponentId.value) {
+    if (componentId) {
       await ManagerEquipmentService.patchManagerEquipmentComponent(
-        selectedEquipmentId.value,
-        editingComponentId.value,
+        equipmentId,
+        componentId,
         payload as ManagerEquipmentComponentUpdatePayload,
       );
       setToast('Компонент обновлен');
     } else {
       await ManagerEquipmentService.createManagerEquipmentComponent(
-        selectedEquipmentId.value,
+        equipmentId,
         payload as ManagerEquipmentComponentCreatePayload,
       );
       setToast('Компонент добавлен');
@@ -921,7 +964,7 @@ const saveEquipmentComponent = async () => {
     showComponentForm.value = false;
     editingComponentId.value = null;
     componentForm.value = emptyComponentForm();
-    await loadEquipmentDetail(selectedEquipmentId.value);
+    if (selectedEquipmentId.value === equipmentId) await loadEquipmentDetail(equipmentId);
   } catch (e) {
     equipmentError.value = `Не удалось сохранить компонент: ${getApiErrorMessage(e)}`;
   } finally {
@@ -931,16 +974,17 @@ const saveEquipmentComponent = async () => {
 
 const toggleEquipmentComponentArchive = async (item: ManagerEquipmentComponentItemResponse) => {
   if (!selectedEquipmentId.value || componentActionId.value) return;
+  const equipmentId = selectedEquipmentId.value;
   componentActionId.value = item.id;
   equipmentError.value = '';
   try {
     await ManagerEquipmentService.patchManagerEquipmentComponent(
-      selectedEquipmentId.value,
+      equipmentId,
       item.id,
       { is_archived: !item.is_archived },
     );
     setToast(item.is_archived ? 'Компонент возвращен из архива' : 'Компонент архивирован');
-    await loadEquipmentDetail(selectedEquipmentId.value);
+    if (selectedEquipmentId.value === equipmentId) await loadEquipmentDetail(equipmentId);
   } catch (e) {
     equipmentError.value = `Не удалось изменить компонент: ${getApiErrorMessage(e)}`;
   } finally {
@@ -958,14 +1002,15 @@ const openHistoryCreateForm = () => {
 
 const createEquipmentHistory = async () => {
   if (!selectedEquipmentId.value || historySaving.value) return;
+  const equipmentId = selectedEquipmentId.value;
   historySaving.value = true;
   equipmentError.value = '';
   try {
-    await ManagerEquipmentService.createManagerEquipmentHistory(selectedEquipmentId.value, historyPayload());
+    await ManagerEquipmentService.createManagerEquipmentHistory(equipmentId, historyPayload());
     setToast('Событие истории добавлено');
     showHistoryForm.value = false;
     historyForm.value = emptyHistoryForm();
-    await loadEquipmentDetail(selectedEquipmentId.value);
+    if (selectedEquipmentId.value === equipmentId) await loadEquipmentDetail(equipmentId);
   } catch (e) {
     equipmentError.value = `Не удалось добавить событие: ${getApiErrorMessage(e)}`;
   } finally {
@@ -1293,6 +1338,20 @@ const deleteCustomer = async () => {
 };
 
 watch(customerId, () => {
+  equipmentListRequestId += 1;
+  equipmentDetailRequestId += 1;
+  selectedEquipmentId.value = null;
+  selectedEquipmentDetail.value = null;
+  equipmentCoverageCache.value = {};
+  equipment.value = [];
+  showEquipmentForm.value = false;
+  editingEquipmentId.value = null;
+  equipmentForm.value = emptyEquipmentForm();
+  showComponentForm.value = false;
+  editingComponentId.value = null;
+  componentForm.value = emptyComponentForm();
+  showHistoryForm.value = false;
+  historyForm.value = emptyHistoryForm();
   void loadCustomer();
   void loadCustomerDocs();
   void loadCustomerReconciliation();
@@ -1778,6 +1837,7 @@ onMounted(() => {
           </p>
 
           <form v-if="showEquipmentForm" class="mb-4 rounded-2xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-4" @submit.prevent="saveEquipment">
+            <h3 class="mb-3 break-words text-sm font-semibold text-[var(--mv-text)]">{{ equipmentFormTitle }}</h3>
             <div class="grid gap-3 md:grid-cols-3">
               <label class="field-label">
                 Филиал
@@ -1874,35 +1934,38 @@ onMounted(() => {
           </div>
           <div v-else-if="equipment.length" class="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <div class="space-y-3">
-              <button
+              <article
                 v-for="item in equipment"
                 :key="item.id"
-                type="button"
-                class="w-full rounded-xl border p-4 text-left shadow-sm transition"
+                class="rounded-xl border p-4 shadow-sm transition"
                 :class="selectedEquipmentId === item.id ? 'border-teal-400 bg-teal-500/10' : 'border-[var(--mv-border)] bg-[var(--mv-surface)] hover:border-teal-400/60'"
-                @click="selectEquipment(item.id)"
               >
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div class="min-w-0">
+                  <button
+                    type="button"
+                    class="min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                    :aria-pressed="selectedEquipmentId === item.id"
+                    @click="selectEquipment(item.id)"
+                  >
                     <div class="flex flex-wrap items-center gap-2">
                       <p class="break-words text-sm font-semibold text-[var(--mv-text)]">{{ equipmentTitle(item) }}</p>
-                      <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="warrantyStatusClass(item.warranty_status)">
-                        {{ warrantyStatusLabel(item.warranty_status) }}
+                      <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="warrantyStatusClass(equipmentWarrantyView(item).status)">
+                        {{ equipmentWarrantyView(item).label }}
                       </span>
                       <span v-if="item.is_archived" class="rounded-full bg-slate-500/20 px-2 py-0.5 text-[11px] font-semibold text-slate-400">Архив</span>
                     </div>
                     <p class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ equipmentSubtitle(item) }}</p>
                     <p class="mt-1 text-xs text-[var(--mv-text-muted)]">{{ equipmentBranchLabel(item.customer_branch_id) }} · {{ equipmentSourceLabel(item.equipment_source) }}</p>
-                    <p v-if="item.warranty_expires_at" class="mt-1 text-xs text-[var(--mv-text-muted)]">Гарантия до {{ formatDateOnly(item.warranty_expires_at) }}</p>
-                  </div>
+                    <p v-if="equipmentWarrantyView(item).expiresAt" class="mt-1 text-xs text-[var(--mv-text-muted)]">Ближайшее окончание {{ formatDateOnly(equipmentWarrantyView(item).expiresAt) }}</p>
+                  </button>
                   <div class="flex shrink-0 flex-wrap gap-2">
-                    <button class="btn-mini-outline text-xs" type="button" @click.stop="openEquipmentEditForm(item)">Править</button>
-                    <button class="btn-mini-outline text-xs" type="button" :disabled="equipmentActionId === item.id" @click.stop="toggleEquipmentArchive(item)">
+                    <button class="btn-mini-outline text-xs" type="button" @click="openEquipmentEditForm(item)">Править</button>
+                    <button class="btn-mini-outline text-xs" type="button" :disabled="equipmentActionId === item.id" @click="toggleEquipmentArchive(item)">
                       {{ equipmentActionId === item.id ? '...' : (item.is_archived ? 'Вернуть' : 'Архив') }}
                     </button>
                   </div>
                 </div>
-              </button>
+              </article>
             </div>
 
             <div class="rounded-2xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-4">
@@ -1913,8 +1976,8 @@ onMounted(() => {
                     <p class="break-words text-base font-semibold">{{ equipmentTitle(selectedEquipmentDetail) }}</p>
                     <p class="mt-1 break-words text-xs text-[var(--mv-text-muted)]">{{ equipmentSubtitle(selectedEquipmentDetail) }}</p>
                     <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                      <span class="rounded-full px-2 py-0.5 font-semibold" :class="warrantyStatusClass(selectedEquipmentDetail.warranty_status)">
-                        {{ warrantyStatusLabel(selectedEquipmentDetail.warranty_status) }}
+                      <span class="rounded-full px-2 py-0.5 font-semibold" :class="warrantyStatusClass(equipmentWarrantyView(selectedEquipmentDetail).status)">
+                        {{ equipmentWarrantyView(selectedEquipmentDetail).label }}
                       </span>
                       <span class="rounded-full bg-slate-500/20 px-2 py-0.5 text-slate-400">{{ equipmentSourceLabel(selectedEquipmentDetail.equipment_source) }}</span>
                     </div>
@@ -1923,13 +1986,23 @@ onMounted(() => {
                       <p v-if="selectedEquipmentDetail.source_order_id">Исходный заказ: #{{ selectedEquipmentDetail.source_order_id }}</p>
                       <p v-if="selectedEquipmentDetail.installed_at">Установка: {{ formatDateOnly(selectedEquipmentDetail.installed_at) }}</p>
                       <p v-if="selectedEquipmentDetail.commissioned_at">Ввод: {{ formatDateOnly(selectedEquipmentDetail.commissioned_at) }}</p>
-                      <p v-if="selectedEquipmentDetail.warranty_started_at">Гарантия с: {{ formatDateOnly(selectedEquipmentDetail.warranty_started_at) }}</p>
-                      <p v-if="selectedEquipmentDetail.warranty_expires_at">Гарантия до: {{ formatDateOnly(selectedEquipmentDetail.warranty_expires_at) }}</p>
-                      <p v-if="selectedEquipmentDetail.warranty_terms" class="break-words sm:col-span-2">Условия: {{ selectedEquipmentDetail.warranty_terms }}</p>
+                      <template v-if="!(selectedEquipmentDetail.coverages || []).length">
+                        <p v-if="selectedEquipmentDetail.warranty_started_at">Ранее указано, начало: {{ formatDateOnly(selectedEquipmentDetail.warranty_started_at) }}</p>
+                        <p v-if="selectedEquipmentDetail.warranty_expires_at">Ранее указано, окончание: {{ formatDateOnly(selectedEquipmentDetail.warranty_expires_at) }}</p>
+                        <p v-if="selectedEquipmentDetail.warranty_terms" class="break-words sm:col-span-2">Ранее указанные условия: {{ selectedEquipmentDetail.warranty_terms }}</p>
+                      </template>
                     </div>
                   </div>
                   <button class="btn-mini whitespace-nowrap text-xs" type="button" @click="openHistoryCreateForm">Добавить событие</button>
                 </div>
+
+                <EquipmentWarrantyPanel
+                  :coverages="selectedEquipmentDetail.coverages || []"
+                  :linked-orders="selectedEquipmentDetail.linked_orders || []"
+                  @updated="updateSelectedCoverage"
+                />
+
+                <EquipmentAttachmentsPanel :equipment-id="selectedEquipmentDetail.id" />
 
                 <div class="mt-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
                   <div class="flex flex-wrap items-center justify-between gap-2">
@@ -2043,6 +2116,14 @@ onMounted(() => {
                     <label class="field-label">
                       Дата
                       <input v-model="historyForm.event_date" class="field-input" type="date" />
+                    </label>
+                    <label v-if="historyForm.event_type === 'maintenance'" class="field-label md:col-span-2">
+                      Кто выполнил ТО
+                      <select v-model="historyForm.maintenance_provider" class="field-input" required>
+                        <option value="mvn">MVN</option>
+                        <option value="authorized">Авторизованный сервис</option>
+                        <option value="external">Сторонний исполнитель</option>
+                      </select>
                     </label>
                     <label class="field-label md:col-span-2">
                       Жалоба / причина

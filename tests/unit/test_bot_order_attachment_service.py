@@ -1,30 +1,48 @@
+import hashlib
 from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
-from models import Customer, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from models import Customer, Order, OrderAttachmentLink, OrderInstaller, OrderStatus, OrderWorkStage, ServiceAttachment, StaffUser
 from services.bot_order_attachment_service import BotOrderAttachmentService
-from services.general_media_storage_service import StoredGeneralMediaObject
+from services.private_attachment_storage_service import StoredPrivateObject
 
 
-class FakeGeneralMediaStorage:
-    provider_name = "r2"
+class FakePrivateAttachmentStorage:
+    provider_name = "test_private"
 
     def __init__(self):
         self.calls = []
+        self.objects = {}
 
-    async def save_media(self, **kwargs):
+    async def save(self, **kwargs):
         self.calls.append(kwargs)
-        return StoredGeneralMediaObject(
-            url="https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg",
-            content_hash="a" * 64,
-            storage_provider="r2",
-            path="orders/121/telegram/photo/hash.jpg",
+        stored = StoredPrivateObject(
+            provider=self.provider_name,
+            storage_key=f"private/{kwargs['variant']}/{kwargs['content_hash']}.{kwargs['extension']}",
+            content_hash=kwargs["content_hash"],
             size_bytes=len(kwargs["content"]),
         )
+        self.objects.setdefault(stored.storage_key, kwargs["content"])
+        return stored
+
+    async def read(self, storage_key: str) -> bytes:
+        raise FileNotFoundError(storage_key)
+
+    async def exists(self, storage_key: str) -> bool:
+        return storage_key in self.objects
+
+    async def delete(self, storage_key: str) -> None:
+        self.objects.pop(storage_key, None)
+
+    async def verify_writable(self) -> None:
+        return None
+
+    async def presign(self, storage_key: str, *, expires_seconds: int, download_name: str | None = None):
+        return None
 
 
 @pytest.fixture
@@ -83,13 +101,13 @@ async def test_stores_file_id_in_order_meta_and_comment(sqlite_order_attachment_
 
 
 @pytest.mark.asyncio
-async def test_stores_attachment_content_url_in_order_meta_and_comment(
+async def test_stores_attachment_content_in_private_history(
     sqlite_order_attachment_session,
     monkeypatch,
 ):
-    fake_storage = FakeGeneralMediaStorage()
+    fake_storage = FakePrivateAttachmentStorage()
     monkeypatch.setattr(
-        "services.bot_order_attachment_service.get_general_media_storage",
+        "services.service_attachment_service.get_private_attachment_storage",
         lambda: fake_storage,
     )
     order = Order(id=121, title="Монтаж")
@@ -109,16 +127,22 @@ async def test_stores_attachment_content_url_in_order_meta_and_comment(
     )
 
     assert result is not None
-    assert result["attachment"]["url"] == "https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg"
-    assert fake_storage.calls[0]["namespace"] == "orders/121/telegram"
-    assert fake_storage.calls[0]["variant_type"] == "photo"
+    digest = hashlib.sha256(b"image-content").hexdigest()
+    assert result["attachment"]["storage_provider"] == "private_service_attachment"
+    assert fake_storage.calls[0]["variant"] == "original"
+    assert fake_storage.calls[0]["content_hash"] == digest
     assert fake_storage.calls[0]["extension"] == "jpg"
     await sqlite_order_attachment_session.refresh(order)
     attachment = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY][0]
-    assert attachment["storage_provider"] == "r2"
-    assert attachment["content_hash"] == "a" * 64
+    assert attachment["storage_provider"] == "private_service_attachment"
+    assert attachment["content_hash"] == digest
     assert attachment["size_bytes"] == len(b"image-content")
-    assert "url=https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg" in order.comment
+    assert "url=" not in order.comment
+    stored = (await sqlite_order_attachment_session.execute(select(ServiceAttachment))).scalars().one()
+    link = (await sqlite_order_attachment_session.execute(select(OrderAttachmentLink))).scalars().one()
+    assert stored.storage_provider == "test_private"
+    assert stored.telegram_file_id == "telegram-photo"
+    assert link.order_id == order.id
 
 
 @pytest.mark.asyncio
@@ -151,9 +175,9 @@ async def test_updates_existing_attachment_with_stored_content(
     sqlite_order_attachment_session,
     monkeypatch,
 ):
-    fake_storage = FakeGeneralMediaStorage()
+    fake_storage = FakePrivateAttachmentStorage()
     monkeypatch.setattr(
-        "services.bot_order_attachment_service.get_general_media_storage",
+        "services.service_attachment_service.get_private_attachment_storage",
         lambda: fake_storage,
     )
     order = Order(
@@ -192,13 +216,16 @@ async def test_updates_existing_attachment_with_stored_content(
 
     assert result is not None
     assert result["already_attached"] is True
-    assert result["attachment"]["url"] == "https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg"
+    digest = hashlib.sha256(b"image-content").hexdigest()
+    assert result["attachment"]["storage_provider"] == "private_service_attachment"
     await sqlite_order_attachment_session.refresh(order)
     attachments = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY]
     assert len(attachments) == 1
-    assert attachments[0]["url"] == "https://cdn.mvn.by/media/orders/121/telegram/photo/hash.jpg"
-    assert attachments[0]["storage_provider"] == "r2"
-    assert attachments[0]["content_hash"] == "a" * 64
+    assert "url" not in attachments[0]
+    assert attachments[0]["storage_provider"] == "private_service_attachment"
+    assert attachments[0]["content_hash"] == digest
+    stored = (await sqlite_order_attachment_session.execute(select(ServiceAttachment))).scalars().one()
+    assert stored.telegram_file_id == "same-file"
 
 
 @pytest.mark.asyncio

@@ -1,10 +1,11 @@
+import hashlib
 from pathlib import Path
 from datetime import datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
 from models import (
     Customer,
@@ -13,9 +14,11 @@ from models import (
     Order,
     OrderInstaller,
     OrderProductLink,
+    OrderAttachmentLink,
     OrderStatus,
     OrderWorkStage,
     Product,
+    ServiceAttachment,
     StaffUser,
 )
 from services.bot_order_attachment_service import BotOrderAttachmentService
@@ -24,20 +27,39 @@ from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.defect_act_ai_service import DefectActAIService
-from services.general_media_storage_service import StoredGeneralMediaObject
+from services.private_attachment_storage_service import StoredPrivateObject
 
 
-class FakeGeneralMediaStorage:
-    provider_name = "r2"
+class FakePrivateAttachmentStorage:
+    provider_name = "test_private"
 
-    async def save_media(self, **kwargs):
-        return StoredGeneralMediaObject(
-            url="https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg",
-            content_hash="b" * 64,
-            storage_provider="r2",
-            path="orders/42/telegram/photo/hash.jpg",
+    def __init__(self):
+        self.objects = {}
+
+    async def save(self, **kwargs):
+        stored = StoredPrivateObject(
+            provider=self.provider_name,
+            storage_key=f"private/{kwargs['variant']}/{kwargs['content_hash']}.{kwargs['extension']}",
+            content_hash=kwargs["content_hash"],
             size_bytes=len(kwargs["content"]),
         )
+        self.objects.setdefault(stored.storage_key, kwargs["content"])
+        return stored
+
+    async def read(self, storage_key: str) -> bytes:
+        raise FileNotFoundError(storage_key)
+
+    async def exists(self, storage_key: str) -> bool:
+        return storage_key in self.objects
+
+    async def delete(self, storage_key: str) -> None:
+        self.objects.pop(storage_key, None)
+
+    async def verify_writable(self) -> None:
+        return None
+
+    async def presign(self, storage_key: str, *, expires_seconds: int, download_name: str | None = None):
+        return None
 
 
 @pytest.fixture
@@ -270,8 +292,8 @@ async def test_apply_to_order_stores_repair_nameplate_content(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "services.bot_order_attachment_service.get_general_media_storage",
-        lambda: FakeGeneralMediaStorage(),
+        "services.service_attachment_service.get_private_attachment_storage",
+        lambda: FakePrivateAttachmentStorage(),
     )
     order = Order(id=42, title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(order)
@@ -296,10 +318,16 @@ async def test_apply_to_order_stores_repair_nameplate_content(
     assert result is not None
     await sqlite_repair_nameplate_session.refresh(order)
     attachment = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY][0]
-    assert attachment["url"] == "https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg"
-    assert attachment["storage_provider"] == "r2"
-    assert attachment["content_hash"] == "b" * 64
+    digest = hashlib.sha256(b"nameplate-content").hexdigest()
+    assert "url" not in attachment
+    assert attachment["storage_provider"] == "private_service_attachment"
+    assert attachment["content_hash"] == digest
     assert attachment["size_bytes"] == len(b"nameplate-content")
+    stored = (await sqlite_repair_nameplate_session.execute(select(ServiceAttachment))).scalars().one()
+    link = (await sqlite_repair_nameplate_session.execute(select(OrderAttachmentLink))).scalars().one()
+    assert stored.telegram_file_id == "photo-file"
+    assert stored.transcript == "SERIAL SN-001"
+    assert link.category == "nameplate"
 
 
 @pytest.mark.asyncio
@@ -308,8 +336,8 @@ async def test_apply_to_order_preserves_new_attachment_when_order_already_has_te
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "services.bot_order_attachment_service.get_general_media_storage",
-        lambda: FakeGeneralMediaStorage(),
+        "services.service_attachment_service.get_private_attachment_storage",
+        lambda: FakePrivateAttachmentStorage(),
     )
     order = Order(
         id=42,
@@ -354,10 +382,12 @@ async def test_apply_to_order_preserves_new_attachment_when_order_already_has_te
     await sqlite_repair_nameplate_session.refresh(order)
     attachments = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY]
     assert [attachment["file_id"] for attachment in attachments] == ["old-photo", "new-photo"]
-    assert attachments[1]["url"] == "https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg"
-    assert attachments[1]["storage_provider"] == "r2"
+    assert "url" not in attachments[1]
+    assert attachments[1]["storage_provider"] == "private_service_attachment"
     assert order.technical_meta["repair"]["repair_status"] == "scheduled"
-    assert order.technical_meta["repair"]["nameplate_recognitions"][0]["content_hash"] == "b" * 64
+    assert order.technical_meta["repair"]["nameplate_recognitions"][0]["content_hash"] == hashlib.sha256(
+        b"second-nameplate-content"
+    ).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -366,8 +396,8 @@ async def test_apply_to_order_updates_existing_repair_nameplate_attachment_url(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "services.bot_order_attachment_service.get_general_media_storage",
-        lambda: FakeGeneralMediaStorage(),
+        "services.service_attachment_service.get_private_attachment_storage",
+        lambda: FakePrivateAttachmentStorage(),
     )
     order = Order(
         id=42,
@@ -413,11 +443,11 @@ async def test_apply_to_order_updates_existing_repair_nameplate_attachment_url(
     attachments = order.technical_meta[BotOrderAttachmentService.TELEGRAM_ATTACHMENTS_META_KEY]
     assert len(attachments) == 1
     assert attachments[0]["file_id"] == "photo-file"
-    assert attachments[0]["url"] == "https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg"
-    assert attachments[0]["storage_provider"] == "r2"
-    assert attachments[0]["content_hash"] == "b" * 64
+    assert "url" not in attachments[0]
+    assert attachments[0]["storage_provider"] == "private_service_attachment"
+    assert attachments[0]["content_hash"] == hashlib.sha256(b"updated-nameplate-content").hexdigest()
     repair_attachment = order.technical_meta["repair"]["nameplate_recognitions"][0]
-    assert repair_attachment["url"] == "https://cdn.mvn.by/media/orders/42/telegram/photo/hash.jpg"
+    assert "url" not in repair_attachment
 
 
 @pytest.mark.asyncio

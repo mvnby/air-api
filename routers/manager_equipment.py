@@ -11,6 +11,7 @@ from routers.manager_operation_ids import (
     CREATE_MANAGER_EQUIPMENT_COMPONENT,
     CREATE_MANAGER_EQUIPMENT,
     CREATE_MANAGER_EQUIPMENT_FROM_ORDER,
+    CREATE_MANAGER_MAINTENANCE_ORDER,
     CREATE_MANAGER_EQUIPMENT_HISTORY,
     CREATE_MANAGER_EQUIPMENT_HISTORY_FROM_REPAIR_ORDER,
     GET_MANAGER_EQUIPMENT,
@@ -30,6 +31,7 @@ from schemas import (
     ManagerEquipmentHistoryFromRepairOrderPayload,
     ManagerEquipmentItemResponse,
     ManagerEquipmentListResponse,
+    ManagerOrderDetailResponse,
     ManagerEquipmentServiceHistoryCreatePayload,
     ManagerEquipmentServiceHistoryItemResponse,
     ManagerEquipmentServiceHistoryListResponse,
@@ -48,6 +50,8 @@ async def list_manager_equipment(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     include_archived: bool = Query(False),
+    q: Optional[str] = Query(None, max_length=200),
+    attention: Optional[str] = Query(None),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
@@ -59,6 +63,8 @@ async def list_manager_equipment(
             page=page,
             limit=limit,
             include_archived=include_archived,
+            q=q,
+            attention=attention,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -133,6 +139,38 @@ async def create_manager_equipment_from_order(
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{equipment_id}/maintenance-order",
+    response_model=ManagerOrderDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id=CREATE_MANAGER_MAINTENANCE_ORDER,
+)
+async def create_manager_maintenance_order(
+    equipment_id: int,
+    _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        data = await EquipmentService.create_maintenance_order(
+            session=session,
+            equipment_id=equipment_id,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_MAINTENANCE_ORDER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+    if data is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=CREATE_MANAGER_MAINTENANCE_ORDER,
+            error_code=EQUIPMENT_NOT_FOUND,
+        )
+    return data
 
 
 @router.get("/{equipment_id}", response_model=ManagerEquipmentDetailResponse, operation_id=GET_MANAGER_EQUIPMENT)

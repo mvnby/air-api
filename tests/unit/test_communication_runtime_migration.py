@@ -31,11 +31,17 @@ def _load_migration(path: Path, module_name: str):
     return module
 
 
-def test_runtime_state_is_single_alembic_head_after_attempt_journal():
+def test_runtime_state_remains_in_the_single_alembic_chain():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     runtime_revision = script.get_revision(RUNTIME_REVISION)
     canary_revision = script.get_revision(CANARY_SCOPE_REVISION)
-    assert script.get_heads() == [CANARY_SCOPE_REVISION]
+    heads = script.get_heads()
+    assert len(heads) == 1
+    revision_ids = {
+        item.revision for item in script.walk_revisions(base="base", head=heads[0])
+    }
+    assert RUNTIME_REVISION in revision_ids
+    assert CANARY_SCOPE_REVISION in revision_ids
     assert runtime_revision is not None
     assert runtime_revision.down_revision == "5b9c2d3e4f06"
     assert canary_revision is not None

@@ -149,6 +149,9 @@ class SchedulerService:
         # Run supplier sheets sync loop
         tasks.append(asyncio.create_task(self._supplier_sync_loop()))
 
+        # Build internal equipment maintenance reminders once a day.
+        tasks.append(asyncio.create_task(self._equipment_maintenance_reminder_loop()))
+
         # Run bank receipt IMAP import loop
         tasks.append(asyncio.create_task(self._bank_mail_import_loop()))
 
@@ -292,6 +295,25 @@ class SchedulerService:
             except Exception:
                 logger.exception("❌ Supplier sync loop error")
                 await asyncio.sleep(300)
+
+    async def _equipment_maintenance_reminder_loop(self):
+        while True:
+            try:
+                from services.warranty_service import WarrantyService
+
+                logger.info("Equipment maintenance reminder job started")
+                async with async_session_maker() as session:
+                    result = await WarrantyService.generate_maintenance_reminders(session)
+                logger.info(
+                    "Equipment maintenance reminders done. coverages=%s created=%s skipped=%s",
+                    result["coverages"],
+                    result["created"],
+                    result["skipped"],
+                )
+                await asyncio.sleep(24 * 3600)
+            except Exception:
+                logger.exception("Equipment maintenance reminder loop error")
+                await asyncio.sleep(3600)
 
     async def _bank_mail_import_loop(self):
         while True:

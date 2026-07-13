@@ -7,6 +7,7 @@ export type ManagerEquipmentServiceHistoryCreatePayload = {
     event_type?: EquipmentServiceEventType;
     event_date?: (string | null);
     order_id?: (number | null);
+    maintenance_provider?: ('mvn' | 'authorized' | 'external' | null);
     complaint_snapshot?: (string | null);
     diagnostic_result?: (string | null);
     repair_recommendation?: (string | null);

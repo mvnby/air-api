@@ -1063,6 +1063,8 @@ class OrderProposalListResponse(BaseModel):
 
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
+    attachment_count: int = 0
+    linked_equipment_count: int = 0
     product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
     service_lines: List[OrderServiceLineResponse] = Field(default_factory=list)
     proposals: List[OrderProposalResponse] = Field(default_factory=list)
@@ -1766,6 +1768,7 @@ class ManagerEquipmentServiceHistoryItemResponse(BaseModel):
     order_id: Optional[int] = None
     event_type: EquipmentServiceEventType = EquipmentServiceEventType.OTHER
     event_date: datetime
+    maintenance_provider: Optional[Literal["mvn", "authorized", "external"]] = None
     complaint_snapshot: Optional[str] = None
     diagnostic_result: Optional[str] = None
     repair_recommendation: Optional[str] = None
@@ -1822,11 +1825,74 @@ class ManagerEquipmentItemResponse(BaseModel):
     is_archived: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    branch_name: Optional[str] = None
+    branch_address: Optional[str] = None
+    service_contact_name: Optional[str] = None
+    service_contact_phone: Optional[str] = None
+    last_service_at: Optional[datetime] = None
+    next_maintenance_due_at: Optional[datetime] = None
+    attention_reasons: List[str] = Field(default_factory=list)
 
 
 class ManagerEquipmentDetailResponse(ManagerEquipmentItemResponse):
     components: List[ManagerEquipmentComponentItemResponse] = Field(default_factory=list)
     recent_history: List[ManagerEquipmentServiceHistoryItemResponse] = Field(default_factory=list)
+    coverages: List["ManagerEquipmentWarrantyCoverageResponse"] = Field(default_factory=list)
+    linked_orders: List["ManagerEquipmentLinkedOrderResponse"] = Field(default_factory=list)
+
+
+class ManagerEquipmentWarrantyCoverageResponse(BaseModel):
+    id: int
+    equipment_id: int
+    component_id: Optional[int] = None
+    policy_id: Optional[int] = None
+    coverage_type: str
+    source: str
+    starts_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    maintenance_required: bool = False
+    maintenance_interval_months: Optional[int] = None
+    grace_period_days: int = 0
+    allowed_maintenance_provider: str = "any"
+    next_maintenance_due_at: Optional[datetime] = None
+    terms_snapshot: Optional[str] = None
+    policy_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    decision_status: str = "none"
+    decision_reason: Optional[str] = None
+    decided_at: Optional[datetime] = None
+    decided_by: Optional[str] = None
+    time_status: str = "unknown"
+    maintenance_status: str = "unknown"
+    requires_manager_decision: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class ManagerEquipmentLinkedOrderResponse(BaseModel):
+    order_id: int
+    role: str
+    title: str
+    status: str
+    created_at: datetime
+
+
+class ManagerOrderEquipmentLinkCreatePayload(BaseModel):
+    equipment_id: int
+    role: str = "other"
+
+
+class ManagerOrderEquipmentLinkItemResponse(BaseModel):
+    link_id: Optional[int] = None
+    role: str
+    legacy_source_link: bool = False
+    equipment: ManagerEquipmentDetailResponse
+
+
+class ManagerOrderEquipmentLinkListResponse(BaseModel):
+    items: List[ManagerOrderEquipmentLinkItemResponse] = Field(default_factory=list)
+    total: int = 0
 
 
 class ManagerEquipmentListResponse(BaseModel):
@@ -1904,8 +1970,11 @@ class ManagerEquipmentComponentUpdatePayload(BaseModel):
 
 
 class ManagerEquipmentFromOrderPayload(BaseModel):
-    warranty_months: Optional[int] = Field(default=24, ge=0, le=120)
+    supplier_id: Optional[int] = None
     warranty_start_date: Optional[datetime] = None
+    work_warranty_months: Optional[int] = Field(default=None, ge=0, le=120)
+    work_warranty_terms: Optional[str] = None
+    order_role: str = "sale"
     include_component_placeholders: bool = True
 
 
@@ -1920,6 +1989,10 @@ class ManagerEquipmentCreatePayload(BaseModel):
     customer_branch_id: Optional[int] = None
     catalog_product_id: Optional[int] = None
     source_order_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    order_role: str = "other"
+    work_warranty_months: Optional[int] = Field(default=None, ge=0, le=120)
+    work_warranty_terms: Optional[str] = None
     equipment_type: Optional[str] = "hvac"
     equipment_source: Optional[str] = "unknown"
     display_name: Optional[str] = None
@@ -2004,6 +2077,7 @@ class ManagerEquipmentServiceHistoryCreatePayload(BaseModel):
     event_type: EquipmentServiceEventType = EquipmentServiceEventType.OTHER
     event_date: Optional[datetime] = None
     order_id: Optional[int] = None
+    maintenance_provider: Optional[Literal["mvn", "authorized", "external"]] = None
     complaint_snapshot: Optional[str] = None
     diagnostic_result: Optional[str] = None
     repair_recommendation: Optional[str] = None
@@ -2043,6 +2117,104 @@ class ManagerEquipmentHistoryFromRepairOrderPayload(BaseModel):
             return None
         cleaned = value.strip()
         return cleaned or None
+
+
+class ManagerServiceAttachmentItemResponse(BaseModel):
+    id: Optional[int] = None
+    legacy_key: Optional[str] = None
+    legacy: bool = False
+    file_kind: str = "other"
+    category: str = "other"
+    filename: str
+    mime_type: str = "application/octet-stream"
+    size_bytes: int = 0
+    caption: Optional[str] = None
+    transcript: Optional[str] = None
+    source: str = "manager"
+    processing_status: str = "ready"
+    processing_error: Optional[str] = None
+    captured_at: Optional[datetime] = None
+    created_at: datetime
+    preview_available: bool = False
+    equipment_id: Optional[int] = None
+    component_id: Optional[int] = None
+    service_history_id: Optional[int] = None
+
+
+class ManagerServiceAttachmentListResponse(BaseModel):
+    items: List[ManagerServiceAttachmentItemResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class ManagerServiceAttachmentUpdatePayload(BaseModel):
+    order_id: Optional[int] = None
+    category: Optional[str] = None
+    caption: Optional[str] = None
+    transcript: Optional[str] = None
+    equipment_id: Optional[int] = None
+    component_id: Optional[int] = None
+    service_history_id: Optional[int] = None
+
+
+class ManagerServiceAttachmentAccessResponse(BaseModel):
+    url: str
+    expires_at: datetime
+    variant: str
+
+
+class ManagerWarrantyPolicyResponse(BaseModel):
+    id: int
+    name: str
+    coverage_type: str = "supplier"
+    supplier_id: Optional[int] = None
+    brand_id: Optional[int] = None
+    series_id: Optional[int] = None
+    product_id: Optional[int] = None
+    supplier_name: Optional[str] = None
+    brand_title: Optional[str] = None
+    series_title: Optional[str] = None
+    series_brand_id: Optional[int] = None
+    product_title: Optional[str] = None
+    duration_months: Optional[int] = None
+    start_event: str = "commissioning"
+    maintenance_required: bool = False
+    maintenance_interval_months: Optional[int] = None
+    grace_period_days: int = 0
+    allowed_maintenance_provider: str = "any"
+    terms: Optional[str] = None
+    effective_from: Optional[datetime] = None
+    effective_until: Optional[datetime] = None
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+
+class ManagerWarrantyPolicyPayload(BaseModel):
+    name: Optional[str] = None
+    coverage_type: Optional[str] = None
+    supplier_id: Optional[int] = None
+    brand_id: Optional[int] = None
+    series_id: Optional[int] = None
+    product_id: Optional[int] = None
+    duration_months: Optional[int] = None
+    start_event: Optional[str] = None
+    maintenance_required: Optional[bool] = None
+    maintenance_interval_months: Optional[int] = None
+    grace_period_days: Optional[int] = None
+    allowed_maintenance_provider: Optional[str] = None
+    terms: Optional[str] = None
+    effective_from: Optional[datetime] = None
+    effective_until: Optional[datetime] = None
+    is_active: Optional[bool] = None
+
+
+class ManagerWarrantyPolicyListResponse(BaseModel):
+    items: List[ManagerWarrantyPolicyResponse] = Field(default_factory=list)
+
+
+class ManagerWarrantyDecisionPayload(BaseModel):
+    action: Literal["voided", "restored"]
+    reason: str
 
 
 class ManagerCustomerContractItemResponse(BaseModel):
