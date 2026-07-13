@@ -1,7 +1,7 @@
 """add private service assets and equipment warranty coverage
 
 Revision ID: 4a8c1e2f3b70
-Revises: 3f7a9c1d2e04
+Revises: 6c0d3e5f7a21
 Create Date: 2026-07-13 16:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 
 revision: str = "4a8c1e2f3b70"
-down_revision: Union[str, Sequence[str], None] = "3f7a9c1d2e04"
+down_revision: Union[str, Sequence[str], None] = "6c0d3e5f7a21"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
