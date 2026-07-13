@@ -6,7 +6,7 @@
 
 Сначала modular monolith, затем extraction. Storefront и Telegram process уже можно разворачивать отдельно, но это ещё не самостоятельные domain services: они используют общую backend-модель и не имеют устойчивых command/event contracts.
 
-Wave 0 закрыта, слита через PR #726 и развернута в production как SHA `886593e0`: единый CI дал **1177 passed**, migration/codegen gates, Patroni primary/replica deploy и storefront canary/VPS/Cloudflare smoke прошли. Декомпозиция этим не завершена. Outbox producer switch/consumer, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Первая Wave 1 итерация добавляет только выключенный additive outbox/inbox/delivery foundation без изменения production notification path.
+Wave 0 закрыта, слита через PR #726 и развернута в production как SHA `886593e0`: единый CI дал **1177 passed**, migration/codegen gates, Patroni primary/replica deploy и storefront canary/VPS/Cloudflare smoke прошли. Декомпозиция этим не завершена. Outbox producer switch/consumer, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Wave 1 PR-A (#727, SHA `0c16ea38`) уже развернул выключенный additive outbox/inbox/delivery foundation; PR-B добавляет транзакционный dispatcher/materializer, но по-прежнему не включает scheduler, provider worker и producer switch, поэтому production notification path не меняется.
 
 ## Целевые bounded contexts
 

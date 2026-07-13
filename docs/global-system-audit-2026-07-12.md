@@ -57,7 +57,7 @@ MVN уже состоит из нескольких независимо раз�
 | JOB-002 | P1 | Media | Два worker'а могут атомарно незащищённо забрать одну media job | Закрыто и развернуто в API Wave 0: atomic claim, lease token, heartbeat; сам worker остаётся выключен до отдельного managed rollout |
 | COM-001 | P1 | Telegram | Ошибки проглатываются, попытка считается доставкой; живой log доказал ложный `notified_admins=2` при отказе | Закрыто в Wave 0 |
 | COM-002 | P1 | Telegram | Ручной bank import не вызывает notify, после dedupe уведомление теряется навсегда | Закрыто в Wave 0 |
-| COM-003 | P1 | Telegram/Email | Нет transactional outbox: события теряются/дублируются, внешние вызовы блокируют HTTP transaction | В работе: additive outbox/inbox/per-recipient delivery foundation реализуется в Wave 1 PR-A; producer switch и consumer ещё открыты |
+| COM-003 | P1 | Telegram/Email | Нет transactional outbox: события теряются/дублируются, внешние вызовы блокируют HTTP transaction | В работе: PR-A (#727) развернул выключенный additive outbox/inbox/per-recipient delivery foundation; PR-B добавляет атомарную материализацию deliveries+inbox без runtime/scheduler/provider; producer switch и сетевой worker ещё открыты |
 | COM-004 | P1 | Tests | Integration checkout способен отправлять реальные Telegram-сообщения владельцам | Закрыто в Wave 0 |
 | PRIV-001 | P1 | Media | Реквизиты, order attachments и диагностические фото лежат в публичном `/media`/public R2 | Открыто |
 | WEB-001 | P1 | SSG | Build запрашивает только 1000 из 1117 товаров; product routes после 1000 отсутствуют и production URL отвечает 404 | Закрыто в Wave 0: пагинация, dedupe и hard-fail invariant |
@@ -345,7 +345,7 @@ Wave 0 подтверждена локально, в CI и production. Media pro
 
 ### Wave 1 — данные и надёжность
 
-- Transactional outbox/inbox + communications worker. PR-A добавляет только выключенный additive persistence/contracts foundation; переключение producers и consumer выполняются следующими отдельными PR.
+- Transactional outbox/inbox + communications worker. PR-A развернул только выключенный additive persistence/contracts foundation. PR-B добавляет caller-owned single-transaction dispatcher (`FOR UPDATE SKIP LOCKED`, deterministic delivery upsert, inbox-last, retry/dead bookkeeping) без scheduler и сетевых вызовов. Leased provider worker и атомарное переключение producers выполняются следующими отдельными PR.
 - Order version/409 и command-specific updates.
 - Canonical customer identity + checkout idempotency.
 - Public contact/availability lead abuse policy: edge+app rate limit, canonical phone/email, dedupe window, idempotency key и risk-based anti-bot.
