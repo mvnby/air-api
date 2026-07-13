@@ -539,7 +539,7 @@ async def test_manager_repair_act_ai_draft_generates_sanitized_meta(async_client
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["provider"] == "deepseek"
-    assert data["prompt_version"] == "defect_act_v2"
+    assert data["prompt_version"] == "defect_act_v3"
     assert data["repair_meta"]["fault_type"] == "refrigerant_leak"
     assert data["repair_meta"]["structured_diagnosis"]["fault_location"] == "flare_connections"
     assert data["repair_meta"]["diagnostic_result"].startswith("Выявлены признаки утечки")
@@ -2564,10 +2564,12 @@ async def test_manager_order_generate_defect_act_from_structured_repair_meta(asy
     )
     assert response.status_code == 200, response.text
     replacements = captured["replacements"]
-    assert replacements["{{technical_condition}}"].startswith("Неисправное. Выявлены признаки утечки хладагента")
-    assert "Обмерзает теплообменник" in replacements["{{measurement_result}}"]
+    assert replacements["{{technical_condition}}"].startswith("Неисправен. Выявлены признаки утечки хладагента")
+    assert replacements["{{measurement_result}}"].startswith("Выявлены признаки утечки хладагента")
+    assert "манометрическая диагностика" in replacements["{{inspection_work_done}}"]
+    assert "Обмерзает теплообменник" not in replacements["{{measurement_result}}"]
     assert "Эксплуатация оборудования допускается только с ограничениями" in replacements["{{further_use_assessment}}"]
-    assert "повреждение компрессора" in replacements["{{operation_restrictions}}"]
+    assert "повреждению компрессора" in replacements["{{operation_restrictions}}"]
     assert "восстановить герметичность холодильного контура" in replacements["{{technical_conclusion}}"]
     assert replacements["{{repair_possible}}"] == "Да"
     assert replacements["{{refrigerant_type}}"] == "R410A"

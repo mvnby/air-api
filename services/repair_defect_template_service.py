@@ -8,8 +8,11 @@ class RepairDefectTemplateService:
     """Templates for structured repair diagnostics and defect-act wording."""
 
     FAULT_ALIASES = {
-        "multiple_heat_exchanger_defects": "heat_exchanger_damage",
+        "multiple_heat_exchanger_defects": "heat_exchanger_multiple_leaks",
         "compressor_winding_breakdown": "compressor_failure",
+        "compressor_short": "compressor_short_circuit",
+        "compressor_open": "compressor_winding_open",
+        "heat_exchanger_perforation": "heat_exchanger_multiple_leaks",
     }
 
     DEFAULT_ACTIONS = {
@@ -23,6 +26,7 @@ class RepairDefectTemplateService:
         "replace_fan_motor": "заменить двигатель вентилятора",
         "replace_compressor": "заменить компрессор",
         "replace_heat_exchanger": "заменить теплообменник",
+        "decommission_equipment": "вывести кондиционер из эксплуатации и оформить списание",
         "deep_cleaning": "выполнить глубокую очистку оборудования",
         "correct_installation": "устранить нарушения монтажа",
         "additional_diagnostics": "выполнить дополнительную диагностику",
@@ -36,6 +40,20 @@ class RepairDefectTemplateService:
         "repeated_failure": "повторное возникновение неисправности",
         "low_efficiency": "снижение эффективности работы оборудования",
     }
+
+    INSPECTION_TEXTS = {
+        "visual_inspection": "внешний осмотр оборудования",
+        "functional_test": "проверка работоспособности и пробный запуск",
+        "supply_voltage_test": "контроль питающего напряжения",
+        "compressor_current_test": "контроль рабочего тока компрессора",
+        "winding_resistance_test": "измерение сопротивления обмоток компрессора",
+        "insulation_to_case_test": "проверка изоляции обмоток относительно корпуса",
+        "noise_vibration_check": "проверка механических шумов и вибрации компрессора",
+        "pressure_test": "манометрическая диагностика холодильного контура",
+        "leak_test": "проверка герметичности и локализация мест утечки",
+    }
+
+    DECISIONS = {"repair", "write_off", "additional_diagnostics"}
 
     TEMPLATES: dict[str, dict[str, Any]] = {
         "refrigerant_leak": {
@@ -54,6 +72,7 @@ class RepairDefectTemplateService:
                 "vacuuming",
                 "full_refrigerant_charge",
             ],
+            "inspection_codes": ["visual_inspection", "functional_test", "pressure_test", "leak_test"],
         },
         "drainage_failure": {
             "label": "Нарушение отвода конденсата",
@@ -66,6 +85,7 @@ class RepairDefectTemplateService:
             "repairable": True,
             "risks": ["water_leak", "repeated_failure"],
             "recommended_actions": ["clean_drainage", "restore_drainage_slope"],
+            "inspection_codes": ["visual_inspection", "functional_test"],
         },
         "control_board_failure": {
             "label": "Неисправность платы управления",
@@ -78,6 +98,7 @@ class RepairDefectTemplateService:
             "repairable": True,
             "risks": ["electrical_damage", "repeated_failure"],
             "recommended_actions": ["replace_control_board"],
+            "inspection_codes": ["visual_inspection", "functional_test", "supply_voltage_test"],
         },
         "fan_motor_failure": {
             "label": "Неисправность двигателя вентилятора",
@@ -90,6 +111,73 @@ class RepairDefectTemplateService:
             "repairable": True,
             "risks": ["overheating", "repeated_failure"],
             "recommended_actions": ["replace_fan_motor"],
+            "inspection_codes": ["visual_inspection", "functional_test"],
+        },
+        "compressor_short_circuit": {
+            "label": "Короткое замыкание обмоток компрессора",
+            "diagnosis_text": "Выявлено короткое замыкание обмоток компрессора.",
+            "operation_text": "Эксплуатация кондиционера не допускается.",
+            "risk_text": "Повторный запуск может вызвать срабатывание защиты и повреждение электрических цепей.",
+            "repair_text": "Замена компрессора экономически нецелесообразна. Кондиционер подлежит выводу из эксплуатации и списанию.",
+            "estimate_text": "Вывод кондиционера из эксплуатации и списание по причине отказа компрессора.",
+            "not_viable_reason": "Короткое замыкание обмоток компрессора; замена основного агрегата экономически нецелесообразна.",
+            "operation_status": "not_allowed",
+            "decision": "write_off",
+            "repairable": False,
+            "risks": ["electrical_damage"],
+            "recommended_actions": ["decommission_equipment"],
+            "inspection_codes": [
+                "visual_inspection",
+                "functional_test",
+                "supply_voltage_test",
+                "winding_resistance_test",
+                "insulation_to_case_test",
+            ],
+        },
+        "compressor_winding_open": {
+            "label": "Обрыв обмотки компрессора",
+            "diagnosis_text": "Выявлен обрыв электрической обмотки компрессора.",
+            "operation_text": "Эксплуатация кондиционера невозможна.",
+            "risk_text": "Компрессор не запускается и не обеспечивает работу холодильного контура.",
+            "repair_text": "Замена компрессора экономически нецелесообразна. Кондиционер подлежит выводу из эксплуатации и списанию.",
+            "estimate_text": "Вывод кондиционера из эксплуатации и списание по причине отказа компрессора.",
+            "not_viable_reason": "Обрыв обмотки компрессора; восстановление агрегата в условиях эксплуатации не предусмотрено.",
+            "operation_status": "not_allowed",
+            "decision": "write_off",
+            "repairable": False,
+            "risks": ["repeated_failure"],
+            "recommended_actions": ["decommission_equipment"],
+            "inspection_codes": [
+                "visual_inspection",
+                "functional_test",
+                "supply_voltage_test",
+                "winding_resistance_test",
+            ],
+        },
+        "compressor_mechanical_failure": {
+            "label": "Механическая неисправность компрессора",
+            "diagnosis_text": (
+                "Выявлена механическая неисправность компрессора, исключающая его штатную работу "
+                "и создание требуемого перепада давления."
+            ),
+            "operation_text": "Эксплуатация кондиционера не допускается.",
+            "risk_text": "Повторные запуски могут привести к срабатыванию защиты и повреждению электрических цепей.",
+            "repair_text": "Замена компрессора экономически нецелесообразна. Кондиционер подлежит выводу из эксплуатации и списанию.",
+            "estimate_text": "Вывод кондиционера из эксплуатации и списание по причине механического отказа компрессора.",
+            "not_viable_reason": "Механический отказ компрессора; замена основного агрегата экономически нецелесообразна.",
+            "operation_status": "not_allowed",
+            "decision": "write_off",
+            "repairable": False,
+            "risks": ["electrical_damage", "repeated_failure"],
+            "recommended_actions": ["decommission_equipment"],
+            "inspection_codes": [
+                "visual_inspection",
+                "functional_test",
+                "supply_voltage_test",
+                "compressor_current_test",
+                "noise_vibration_check",
+                "pressure_test",
+            ],
         },
         "compressor_failure": {
             "label": "Неисправность компрессора",
@@ -102,6 +190,25 @@ class RepairDefectTemplateService:
             "repairable": False,
             "risks": ["electrical_damage", "repeated_failure"],
             "recommended_actions": ["replace_compressor"],
+            "inspection_codes": ["visual_inspection", "functional_test", "supply_voltage_test"],
+        },
+        "heat_exchanger_multiple_leaks": {
+            "label": "Множественная коррозионная перфорация теплообменника",
+            "diagnosis_text": (
+                "Выявлены множественные очаги сквозной коррозии теплообменника "
+                "с нарушением герметичности холодильного контура."
+            ),
+            "operation_text": "Эксплуатация кондиционера не допускается.",
+            "risk_text": "Локальная пайка не обеспечивает надежного восстановления: после устранения одного очага утечки возникают на соседних участках.",
+            "repair_text": "Восстановительный ремонт теплообменника технически ненадежен и экономически нецелесообразен. Кондиционер подлежит выводу из эксплуатации и списанию.",
+            "estimate_text": "Вывод кондиционера из эксплуатации и списание по причине множественной коррозионной перфорации теплообменника.",
+            "not_viable_reason": "Множественные сквозные коррозионные повреждения теплообменника не позволяют надежно восстановить герметичность.",
+            "operation_status": "not_allowed",
+            "decision": "write_off",
+            "repairable": False,
+            "risks": ["repeated_failure", "compressor_damage"],
+            "recommended_actions": ["decommission_equipment"],
+            "inspection_codes": ["visual_inspection", "pressure_test", "leak_test"],
         },
         "heat_exchanger_damage": {
             "label": "Повреждение теплообменника",
@@ -114,6 +221,7 @@ class RepairDefectTemplateService:
             "repairable": False,
             "risks": ["low_efficiency", "compressor_damage"],
             "recommended_actions": ["replace_heat_exchanger"],
+            "inspection_codes": ["visual_inspection", "pressure_test", "leak_test"],
         },
         "contamination": {
             "label": "Загрязнение оборудования",
@@ -126,6 +234,7 @@ class RepairDefectTemplateService:
             "repairable": True,
             "risks": ["low_efficiency", "overheating"],
             "recommended_actions": ["deep_cleaning"],
+            "inspection_codes": ["visual_inspection", "functional_test"],
         },
         "poor_installation": {
             "label": "Нарушение монтажа",
@@ -138,6 +247,7 @@ class RepairDefectTemplateService:
             "repairable": True,
             "risks": ["repeated_failure", "compressor_damage"],
             "recommended_actions": ["correct_installation"],
+            "inspection_codes": ["visual_inspection", "functional_test"],
         },
         "unknown_fault": {
             "label": "Неисправность требует уточнения",
@@ -150,6 +260,7 @@ class RepairDefectTemplateService:
             "repairable": True,
             "risks": ["repeated_failure"],
             "recommended_actions": ["additional_diagnostics"],
+            "inspection_codes": ["visual_inspection", "functional_test"],
         },
     }
 
@@ -189,13 +300,30 @@ class RepairDefectTemplateService:
         current_meta = current_meta if isinstance(current_meta, dict) else {}
         fault_type = cls.normalize_fault_type(raw.get("fault_type") or current_meta.get("fault_type") or current_meta.get("likely_diagnosis"))
         template = cls.TEMPLATES[fault_type]
+        repairable = cls._bool(raw.get("repairable"), bool(template["repairable"]))
+        decision = cls._clean_text(raw.get("decision") or template.get("decision"), 40)
+        if decision not in cls.DECISIONS:
+            decision = "repair" if repairable else "additional_diagnostics"
+        operation_status = cls._clean_text(raw.get("operation_status") or template["operation_status"], 80)
+        risks = cls._list(raw.get("risks"), template["risks"])
+        recommended_actions = cls._list(raw.get("recommended_actions"), template["recommended_actions"])
+        if template.get("decision") == "write_off":
+            repairable = False
+            decision = "write_off"
+            operation_status = str(template["operation_status"])
+            risks = list(template["risks"])
+            recommended_actions = list(template["recommended_actions"])
+
         return {
             "fault_type": fault_type,
             "fault_location": cls._clean_text(raw.get("fault_location") or current_meta.get("fault_location"), 160),
-            "repairable": cls._bool(raw.get("repairable"), bool(template["repairable"])),
-            "operation_status": cls._clean_text(raw.get("operation_status") or template["operation_status"], 80),
-            "risks": cls._list(raw.get("risks"), template["risks"]),
-            "recommended_actions": cls._list(raw.get("recommended_actions"), template["recommended_actions"]),
+            "repairable": repairable,
+            "decision": decision,
+            "operation_status": operation_status,
+            "risks": risks,
+            "recommended_actions": recommended_actions,
+            "inspection_codes": cls._list(raw.get("inspection_codes"), template.get("inspection_codes", [])),
+            "confirmed_facts": cls._list(raw.get("confirmed_facts"), [])[:3],
             "refrigerant": cls._clean_text(
                 raw.get("refrigerant") or raw.get("refrigerant_type") or current_meta.get("refrigerant_type"),
                 80,
@@ -204,7 +332,10 @@ class RepairDefectTemplateService:
                 raw.get("refrigerant_amount") or current_meta.get("refrigerant_amount"),
                 80,
             ),
-            "hidden_defects_possible": cls._bool(raw.get("hidden_defects_possible"), True),
+            "hidden_defects_possible": cls._bool(
+                raw.get("hidden_defects_possible"),
+                bool(template.get("hidden_defects_possible", False)),
+            ),
         }
 
     @classmethod
@@ -221,61 +352,57 @@ class RepairDefectTemplateService:
         structured = deepcopy(structured)
         structured["fault_type"] = fault_type
 
-        risks_text = cls._risks_text(structured.get("risks") or template["risks"])
-        actions_text = cls._actions_text(structured.get("recommended_actions") or template["recommended_actions"])
+        decision = structured.get("decision") or template.get("decision") or (
+            "repair" if structured.get("repairable") else "additional_diagnostics"
+        )
         diagnosis_text = cls._clean_text(current_meta.get("diagnostic_result") or template["diagnosis_text"])
         repair_text = cls._clean_text(current_meta.get("repair_recommendation") or template["repair_text"])
-        if actions_text and actions_text.lower() not in repair_text.lower():
-            repair_text = f"{repair_text} Основные работы: {actions_text}."
         notes = cls._clean_text(diagnostic_notes or current_meta.get("diagnostic_notes") or current_meta.get("measurement_result"), 900)
-
-        hidden_tail = ""
-        if structured.get("hidden_defects_possible"):
-            hidden_tail = (
-                " В процессе ремонта могут быть выявлены дополнительные неисправности, "
-                "не определяемые при первичном обследовании и требующие отдельного согласования."
-            )
+        inspection_text = cls._inspection_text(structured.get("inspection_codes") or template.get("inspection_codes"))
+        confirmed_facts = [fact.rstrip(".;") for fact in cls._list(structured.get("confirmed_facts"), [])[:3]]
+        finding_text = diagnosis_text
+        if confirmed_facts:
+            finding_text = f"{finding_text} Подтверждено: {'; '.join(confirmed_facts)}."
+        conclusion_text = cls._clean_text(current_meta.get("technical_conclusion") or repair_text)
+        not_viable_reason = cls._clean_text(template.get("not_viable_reason"), 500)
 
         blocks = {
-            "technical_condition": f"Неисправное. {diagnosis_text}",
-            "inspection": " ".join(
-                part for part in [
-                    "Проверена работоспособность оборудования.",
-                    notes,
-                    diagnosis_text,
-                    "Точный объем дефекта уточняется в ходе ремонтных работ с применением специализированного оборудования."
-                    if structured.get("hidden_defects_possible")
-                    else "",
-                ] if part
-            ),
-            "operation": " ".join(part for part in [template["operation_text"], template["risk_text"], risks_text] if part),
-            "conclusion": f"{repair_text}{hidden_tail}",
+            "technical_condition": f"Неисправен. {finding_text}",
+            "inspection": inspection_text,
+            "diagnosis": finding_text,
+            "operation": template["operation_text"],
+            "conclusion": conclusion_text,
         }
 
         return {
             "fault_type": fault_type,
             "fault_location": structured.get("fault_location") or "",
             "operation_status": structured.get("operation_status") or "",
+            "decision": decision,
             "risks": structured.get("risks") or [],
             "recommended_actions": structured.get("recommended_actions") or [],
+            "inspection_codes": structured.get("inspection_codes") or [],
+            "confirmed_facts": confirmed_facts,
             "hidden_defects_possible": bool(structured.get("hidden_defects_possible")),
             "structured_diagnosis": structured,
             "defect_act_blocks": blocks,
             "likely_diagnosis": template["label"],
-            "diagnostic_result": diagnosis_text,
+            "diagnostic_result": finding_text,
             "diagnostic_notes": notes,
             "inspection_work_done": blocks["inspection"],
             "technical_condition": blocks["technical_condition"],
-            "measurement_result": blocks["inspection"],
+            "measurement_result": finding_text,
             "further_use_assessment": template["operation_text"],
-            "operation_restrictions": " ".join(part for part in [template["risk_text"], risks_text] if part),
+            "operation_restrictions": template["risk_text"],
             "repair_recommendation": repair_text,
             "technical_conclusion": blocks["conclusion"],
-            "recommended_decision": repair_text,
-            "repair_feasibility": "Ремонт возможен." if structured.get("repairable") else "Ремонт невозможен или экономически нецелесообразен.",
+            "recommended_decision": blocks["conclusion"],
+            "repair_feasibility": "Ремонт возможен." if structured.get("repairable") else "Ремонт экономически нецелесообразен.",
             "repair_possible": "Да" if structured.get("repairable") else "Нет",
             "repair_not_viable": "Нет" if structured.get("repairable") else "Да",
-            "repair_not_viable_reason": "" if structured.get("repairable") else "Ремонт требует отдельной оценки экономической целесообразности.",
+            "repair_not_viable_reason": "" if structured.get("repairable") else (
+                not_viable_reason or "Ремонт требует отдельной оценки экономической целесообразности."
+            ),
             "refrigerant_type": structured.get("refrigerant") or "",
             "refrigerant_amount": structured.get("refrigerant_amount") or "",
             "repair_estimate_text": template["estimate_text"],
@@ -326,3 +453,15 @@ class RepairDefectTemplateService:
     def _actions_text(cls, actions: Any) -> str:
         labels = [cls.DEFAULT_ACTIONS.get(str(item), str(item)) for item in cls._list(actions, [])]
         return ", ".join(labels)
+
+    @classmethod
+    def _inspection_text(cls, codes: Any) -> str:
+        labels = [cls.INSPECTION_TEXTS.get(str(item), "") for item in cls._list(codes, [])]
+        labels = [label for label in labels if label]
+        if not labels:
+            return "Проведен внешний осмотр оборудования."
+        if len(labels) == 1:
+            joined = labels[0]
+        else:
+            joined = ", ".join(labels[:-1]) + f" и {labels[-1]}"
+        return f"Выполнен комплекс диагностических работ: {joined}."

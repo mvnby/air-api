@@ -17,6 +17,7 @@ from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.bot_task_service import BotTaskService
+from .repair_context import repair_context_keyboard as _repair_context_keyboard
 from ..config import bot
 from ..states import ShopState
 
@@ -343,24 +344,6 @@ def _serial_details_preview_lines(validation_flags: dict) -> list[str]:
     return lines
 
 
-def _repair_context_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Завершить заметки", callback_data="repair_context_finish")],
-        ]
-    )
-
-
-def _repair_comment_preview_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Записать и продолжить", callback_data="repair_comment_confirm")],
-            [InlineKeyboardButton(text="Не записывать", callback_data="repair_comment_cancel")],
-            [InlineKeyboardButton(text="Завершить заметки", callback_data="repair_context_finish")],
-        ]
-    )
-
-
 def _repair_nameplate_preview_text(data: dict[str, object]) -> str:
     extracted = data.get("extracted") if isinstance(data.get("extracted"), dict) else {}
     validation_flags = data.get("validation_flags") if isinstance(data.get("validation_flags"), dict) else {}
@@ -459,35 +442,6 @@ def _warranty_nameplate_preview_text(data: dict[str, object]) -> str:
     if warnings:
         lines.extend(["", "<b>Предупреждения:</b>"])
         lines.extend(f"• {escape(str(message))}" for message in warnings.values())
-    return "\n".join(lines)
-
-
-def _repair_comment_preview_text(data: dict[str, object]) -> str:
-    merge_preview = data.get("merge_preview") if isinstance(data.get("merge_preview"), dict) else {}
-    changes = merge_preview.get("changes") if isinstance(merge_preview.get("changes"), dict) else {}
-    unchanged = merge_preview.get("unchanged") if isinstance(merge_preview.get("unchanged"), dict) else {}
-
-    lines = ["<b>Подготовил поля дефектного акта из комментария:</b>"]
-    if changes:
-        lines.extend(["", "<b>Будет записано/обновлено:</b>"])
-        for field, values in changes.items():
-            label = BotRepairNameplateService.COMMENT_FIELD_LABELS.get(field, field)
-            candidate = values.get("candidate") if isinstance(values, dict) else values
-            existing = values.get("existing") if isinstance(values, dict) else ""
-            if existing:
-                lines.append(f"• <b>{escape(label)}:</b> {escape(str(candidate))}")
-                lines.append(f"  Было: {escape(str(existing))}")
-            else:
-                lines.append(f"• <b>{escape(label)}:</b> {escape(str(candidate))}")
-    if unchanged:
-        lines.extend(["", "<b>Без изменений:</b>"])
-        lines.extend(
-            f"• {escape(BotRepairNameplateService.COMMENT_FIELD_LABELS.get(field, field))}"
-            for field in unchanged.keys()
-        )
-    if not changes and not unchanged:
-        lines.append("")
-        lines.append("AI не вернул полезных полей. Лучше отправить комментарий подробнее.")
     return "\n".join(lines)
 
 
@@ -1118,7 +1072,11 @@ async def confirm_repair_nameplate(callback: CallbackQuery, state: FSMContext):
     if conflict_count:
         lines.append(f"Конфликты оставил без перезаписи: {conflict_count}.")
     lines.append("")
-    lines.append("Теперь можно отправлять комментарии по диагностике текстом или голосом в текст. Я подготовлю поля дефектного акта по этому заказу.")
+    lines.append("Выберите частый диагноз кнопкой ниже или пришлите свободный комментарий текстом.")
+    lines.append(
+        "Например: «КЗ компрессора», «обрыв обмотки», «компрессор хрустит и выбивает автомат» "
+        "или «после пайки вскрываются новые свищи теплообменника»."
+    )
     await callback.message.edit_text("\n".join(lines), reply_markup=_repair_context_keyboard())
     await callback.answer()
 
@@ -1397,119 +1355,6 @@ async def cancel_warranty_nameplate(callback: CallbackQuery, state: FSMContext):
     await state.update_data(pending_warranty_nameplate=None, pending_requisites_file=None)
     await state.set_state(None)
     await callback.message.edit_text("Ок, гарантийный шильдик оставил без обработки.")
-    await callback.answer()
-
-
-@router.message(ShopState.waiting_for_repair_context_comment)
-async def handle_repair_context_comment(message: types.Message, state: FSMContext):
-    context = await _get_bot_access_context(message.from_user.id if message.from_user else None)
-    if not context.is_staff:
-        await state.clear()
-        return
-
-    text = str(message.text or "").strip()
-    if not text:
-        await message.answer("Пришлите диагностический комментарий текстом.")
-        return
-    if text.casefold() in {"стоп", "завершить", "готово", "отмена"}:
-        await state.update_data(active_repair_order_context=None, pending_repair_comment=None)
-        await state.set_state(None)
-        await message.answer("Ок, вышел из режима заметок по ремонту.")
-        return
-
-    data = await state.get_data()
-    active_context = data.get("active_repair_order_context") or {}
-    order_id = _parse_order_id(str(active_context.get("order_id") if isinstance(active_context, dict) else ""))
-    if not order_id:
-        await state.set_state(None)
-        await message.answer("Контекст ремонтного заказа потерян. Отправьте шильдик или выберите заказ заново.")
-        return
-
-    progress = await message.answer("Готовлю поля дефектного акта из комментария…")
-    try:
-        async with async_session_maker() as session:
-            draft = await BotRepairNameplateService.build_diagnostic_comment_draft(
-                session,
-                order_id=order_id,
-                comment=text,
-            )
-    except Exception as exc:
-        await progress.edit_text(f"❌ Не удалось обработать комментарий: {escape(str(exc))}")
-        return
-
-    if not draft:
-        await progress.edit_text("Ремонтный заказ не найден. Выйдите из режима и выберите заказ заново.")
-        return
-
-    draft["telegram_message_id"] = message.message_id
-    draft["telegram_chat_id"] = message.chat.id if message.chat else None
-    await state.update_data(pending_repair_comment=draft)
-    await progress.edit_text(
-        _repair_comment_preview_text(draft),
-        reply_markup=_repair_comment_preview_keyboard(),
-        parse_mode="HTML",
-    )
-
-
-@router.callback_query(F.data == "repair_comment_confirm")
-async def confirm_repair_context_comment(callback: CallbackQuery, state: FSMContext):
-    context = await _get_bot_access_context(callback.from_user.id)
-    if not context.is_staff:
-        await callback.answer("Недостаточно прав", show_alert=True)
-        return
-
-    data = await state.get_data()
-    active_context = data.get("active_repair_order_context") or {}
-    order_id = _parse_order_id(str(active_context.get("order_id") if isinstance(active_context, dict) else ""))
-    draft = data.get("pending_repair_comment") or {}
-    if not order_id or not isinstance(draft, dict):
-        await callback.answer("Черновик комментария не найден.", show_alert=True)
-        return
-
-    async with async_session_maker() as session:
-        result = await BotRepairNameplateService.apply_diagnostic_comment(
-            session,
-            order_id,
-            repair_meta_draft=draft.get("repair_meta") or {},
-            raw_comment=str(draft.get("comment") or ""),
-            telegram_user_id=callback.from_user.id,
-            telegram_chat_id=draft.get("telegram_chat_id"),
-            telegram_message_id=draft.get("telegram_message_id"),
-            can_attach_any=context.is_manager,
-        )
-
-    if not result:
-        await callback.answer("Заказ не найден или недоступен.", show_alert=True)
-        return
-
-    await state.update_data(pending_repair_comment=None)
-    await state.set_state(ShopState.waiting_for_repair_context_comment)
-    changed_count = len(result.get("changes") or {})
-    await callback.message.edit_text(
-        f"✅ Комментарий записан в ремонт #{result['id']}.\n"
-        f"Обновлено полей: {changed_count}.\n\n"
-        "Можно отправить следующий диагностический комментарий.",
-        reply_markup=_repair_context_keyboard(),
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "repair_comment_cancel")
-async def cancel_repair_context_comment(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(pending_repair_comment=None)
-    await state.set_state(ShopState.waiting_for_repair_context_comment)
-    await callback.message.edit_text(
-        "Ок, комментарий не записал. Можно отправить следующий диагностический комментарий.",
-        reply_markup=_repair_context_keyboard(),
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "repair_context_finish")
-async def finish_repair_context(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(active_repair_order_context=None, pending_repair_comment=None)
-    await state.set_state(None)
-    await callback.message.edit_text("Ок, вышел из режима заметок по ремонту.")
     await callback.answer()
 
 

@@ -31469,7 +31469,7 @@
           "prompt_version": {
             "type": "string",
             "title": "Prompt Version",
-            "default": "defect_act_v2"
+            "default": "defect_act_v3"
           }
         },
         "type": "object",

@@ -11,6 +11,7 @@ from core.config import settings
 
 settings.BOT_TOKEN = "123:test"
 from bot_app.handlers import admin as admin_handler
+from bot_app.handlers import repair_context as repair_context_handler
 
 
 class _DummyMessage:
@@ -836,8 +837,11 @@ async def test_repair_nameplate_confirm_applies_and_clears_pending(monkeypatch):
     callback.message.edit_text.assert_awaited_once()
     args, kwargs = callback.message.edit_text.await_args
     assert "Данные со шильдика записаны" in args[0]
-    assert "можно отправлять комментарии" in args[0]
-    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_context_finish"
+    assert "Выберите частый диагноз" in args[0]
+    assert "свободный комментарий" in args[0]
+    assert "КЗ компрессора" in args[0]
+    assert "новые свищи теплообменника" in args[0]
+    assert kwargs["reply_markup"].inline_keyboard[-1][0].callback_data == "repair_context_finish"
 
 
 @pytest.mark.asyncio
@@ -1015,6 +1019,119 @@ def test_nameplate_preview_shows_serial_candidates():
     assert "партия: 44" in text
 
 
+def test_repair_context_keyboard_has_presets_and_finish():
+    keyboard = repair_context_handler.repair_context_keyboard()
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert callbacks == [
+        "repair_preset_compressor_short",
+        "repair_preset_compressor_open",
+        "repair_preset_compressor_mechanical",
+        "repair_preset_heat_exchanger_multiple",
+        "repair_context_finish",
+    ]
+    assert repair_context_handler.REPAIR_PRESET_FAULT_TYPES == {
+        "repair_preset_compressor_short": "compressor_short_circuit",
+        "repair_preset_compressor_open": "compressor_winding_open",
+        "repair_preset_compressor_mechanical": "compressor_mechanical_failure",
+        "repair_preset_heat_exchanger_multiple": "heat_exchanger_multiple_leaks",
+    }
+
+
+def test_repair_comment_preview_is_compact_and_counts_replacements():
+    text = repair_context_handler.repair_comment_preview_text(
+        {
+            "repair_meta": {
+                "likely_diagnosis": "Короткое замыкание обмотки компрессора.",
+                "inspection_work_done": "Проверены сопротивление и изоляция обмоток.",
+                "diagnostic_result": "Зафиксировано короткое замыкание.",
+                "technical_conclusion": "Компрессор подлежит замене.",
+            },
+            "merge_preview": {
+                "changes": {
+                    "likely_diagnosis": {
+                        "existing": "Старый диагноз",
+                        "candidate": "Короткое замыкание обмотки компрессора.",
+                    },
+                    "inspection_work_done": {
+                        "existing": "",
+                        "candidate": "Проверены сопротивление и изоляция обмоток.",
+                    },
+                    "diagnostic_result": {
+                        "existing": "Старый результат",
+                        "candidate": "Зафиксировано короткое замыкание.",
+                    },
+                },
+                "unchanged": {"technical_conclusion": "Компрессор подлежит замене."},
+            },
+        }
+    )
+
+    assert "<b>Диагноз:</b> Короткое замыкание обмотки компрессора." in text
+    assert "<b>Проведено:</b> Проверены сопротивление и изоляция обмоток." in text
+    assert "<b>Выявлено:</b> Зафиксировано короткое замыкание." in text
+    assert "<b>Заключение:</b> Компрессор подлежит замене." in text
+    assert "Ранее заполненные данные будут обновлены: 2." in text
+    assert "Старый диагноз" not in text
+    assert "Будет записано/обновлено" not in text
+    assert "Без изменений" not in text
+    assert "Было:" not in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("callback_data", "fault_type"),
+    [
+        ("repair_preset_compressor_short", "compressor_short_circuit"),
+        ("repair_preset_compressor_open", "compressor_winding_open"),
+        ("repair_preset_compressor_mechanical", "compressor_mechanical_failure"),
+        ("repair_preset_heat_exchanger_multiple", "heat_exchanger_multiple_leaks"),
+    ],
+)
+async def test_repair_preset_builds_existing_confirmation(monkeypatch, callback_data, fault_type):
+    callback = _DummyCallback(data=callback_data, user_id=5)
+    state = _DummyState({"active_repair_order_context": {"order_id": 42}})
+    draft = {
+        "order": {"id": 42},
+        "comment": "",
+        "repair_meta": {
+            "likely_diagnosis": "Диагноз из пресета.",
+            "diagnostic_result": "Результат из пресета.",
+        },
+        "merge_preview": {"changes": {}, "unchanged": {}},
+    }
+
+    async def fake_build(session, *, order_id, fault_type: str):
+        assert order_id == 42
+        assert fault_type == expected_fault_type
+        return draft
+
+    expected_fault_type = fault_type
+    monkeypatch.setattr(
+        repair_context_handler,
+        "_access_context",
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(repair_context_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(
+        repair_context_handler.BotDefectActService,
+        "build_diagnostic_preset_draft",
+        fake_build,
+        raising=False,
+    )
+
+    await repair_context_handler.prepare_repair_diagnostic_preset(callback, state)
+
+    assert state._data["pending_repair_comment"] == draft
+    state.set_state.assert_awaited_once_with(repair_context_handler.ShopState.waiting_for_repair_context_comment)
+    callback.message.edit_text.assert_awaited_once()
+    args, kwargs = callback.message.edit_text.await_args
+    assert "<b>Диагноз:</b> Диагноз из пресета." in args[0]
+    assert kwargs["parse_mode"] == "HTML"
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_comment_confirm"
+    callback.answer.assert_awaited_once_with()
+
+
 @pytest.mark.asyncio
 async def test_repair_context_comment_builds_ai_preview(monkeypatch):
     message = _DummyMessage(text="фреона нет, утечку нашли, компрессор не качает", user_id=5)
@@ -1041,16 +1158,20 @@ async def test_repair_context_comment_builds_ai_preview(monkeypatch):
         }
 
     monkeypatch.setattr(
-        admin_handler,
-        "_get_bot_access_context",
+        repair_context_handler,
+        "_access_context",
         AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
     )
-    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
-    monkeypatch.setattr(admin_handler.BotRepairNameplateService, "build_diagnostic_comment_draft", fake_build)
+    monkeypatch.setattr(repair_context_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(
+        repair_context_handler.BotDefectActService,
+        "build_diagnostic_comment_draft",
+        fake_build,
+    )
 
-    await admin_handler.handle_repair_context_comment(message, state)
+    await repair_context_handler.handle_repair_context_comment(message, state)
 
-    message.answer.assert_awaited_once_with("Готовлю поля дефектного акта из комментария…")
+    message.answer.assert_awaited_once_with("Готовлю краткий дефектный акт из комментария…")
     progress.edit_text.assert_awaited_once()
     args, kwargs = progress.edit_text.await_args
     assert "Компрессор не создает давление" in args[0]
@@ -1084,21 +1205,25 @@ async def test_repair_context_comment_confirm_applies_and_keeps_context(monkeypa
         }
 
     monkeypatch.setattr(
-        admin_handler,
-        "_get_bot_access_context",
+        repair_context_handler,
+        "_access_context",
         AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True)),
     )
-    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
-    monkeypatch.setattr(admin_handler.BotRepairNameplateService, "apply_diagnostic_comment", fake_apply)
+    monkeypatch.setattr(repair_context_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(
+        repair_context_handler.BotDefectActService,
+        "apply_diagnostic_comment",
+        fake_apply,
+    )
 
-    await admin_handler.confirm_repair_context_comment(callback, state)
+    await repair_context_handler.confirm_repair_context_comment(callback, state)
 
     assert state._data["pending_repair_comment"] is None
-    state.set_state.assert_awaited_with(admin_handler.ShopState.waiting_for_repair_context_comment)
+    state.set_state.assert_awaited_with(repair_context_handler.ShopState.waiting_for_repair_context_comment)
     callback.message.edit_text.assert_awaited_once()
     args, kwargs = callback.message.edit_text.await_args
     assert "Комментарий записан" in args[0]
-    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "repair_context_finish"
+    assert kwargs["reply_markup"].inline_keyboard[-1][0].callback_data == "repair_context_finish"
 
 
 @pytest.mark.asyncio

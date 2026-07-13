@@ -19,6 +19,7 @@ from models import (
     StaffUser,
 )
 from services.bot_order_attachment_service import BotOrderAttachmentService
+from services.bot_defect_act_service import BotDefectActService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
@@ -255,6 +256,7 @@ async def test_apply_to_order_merges_without_overwriting_existing_repair_meta(sq
     await sqlite_repair_nameplate_session.refresh(order)
     repair_meta = order.technical_meta["repair"]
     assert repair_meta["equipment_model"] == "Введено вручную"
+    assert repair_meta["equipment_models"] == ["Введено вручную", "ALASKA AL-12LHJ"]
     assert repair_meta["equipment_serial_number"] == "SN-001"
     assert repair_meta["customer_complaint"] == "Не охлаждает"
     assert repair_meta["repair_status"] == "scheduled"
@@ -495,7 +497,7 @@ async def test_build_diagnostic_comment_draft_uses_ai_and_previews_changes(sqlit
 
     monkeypatch.setattr(DefectActAIService, "generate_repair_meta", fake_generate)
 
-    draft = await BotRepairNameplateService.build_diagnostic_comment_draft(
+    draft = await BotDefectActService.build_diagnostic_comment_draft(
         sqlite_repair_nameplate_session,
         order_id=int(order.id),
         comment="подключили шланги, утечку устранили, компрессор не качает",
@@ -509,12 +511,58 @@ async def test_build_diagnostic_comment_draft_uses_ai_and_previews_changes(sqlit
 
 
 @pytest.mark.asyncio
+async def test_build_diagnostic_preset_draft_is_deterministic_and_compact(sqlite_repair_nameplate_session):
+    order = Order(
+        title="Ремонт",
+        status=OrderStatus.EXECUTION,
+        workflow_type="repair",
+        technical_meta={"repair": {"equipment_brand": "MDV", "equipment_model": "MDSAF-12HRN1"}},
+    )
+    sqlite_repair_nameplate_session.add(order)
+    await sqlite_repair_nameplate_session.commit()
+
+    draft = await BotDefectActService.build_diagnostic_preset_draft(
+        sqlite_repair_nameplate_session,
+        order_id=int(order.id),
+        fault_type="compressor_short_circuit",
+    )
+
+    assert draft is not None
+    repair_meta = draft["repair_meta"]
+    assert repair_meta["fault_type"] == "compressor_short_circuit"
+    assert repair_meta["decision"] == "write_off"
+    assert repair_meta["repair_possible"] == "Нет"
+    assert "измерение сопротивления обмоток" in repair_meta["inspection_work_done"]
+    assert "подлежит выводу из эксплуатации и списанию" in repair_meta["technical_conclusion"]
+    assert isinstance(repair_meta["structured_diagnosis"], dict)
+    assert draft["merge_preview"]["changes"]["structured_diagnosis"]["candidate"]["repairable"] is False
+
+
+def test_preview_comment_merge_keeps_structured_values_typed():
+    preview = BotDefectActService.preview_comment_merge(
+        {"hidden_defects_possible": True},
+        {
+            "hidden_defects_possible": False,
+            "inspection_codes": ["visual_inspection", "winding_resistance_test"],
+            "structured_diagnosis": {"fault_type": "compressor_short_circuit", "repairable": False},
+        },
+    )
+
+    assert preview["changes"]["hidden_defects_possible"]["candidate"] is False
+    assert preview["changes"]["inspection_codes"]["candidate"] == [
+        "visual_inspection",
+        "winding_resistance_test",
+    ]
+    assert preview["changes"]["structured_diagnosis"]["candidate"]["repairable"] is False
+
+
+@pytest.mark.asyncio
 async def test_apply_diagnostic_comment_updates_repair_meta_and_keeps_history(sqlite_repair_nameplate_session):
     order = Order(title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(order)
     await sqlite_repair_nameplate_session.commit()
 
-    result = await BotRepairNameplateService.apply_diagnostic_comment(
+    result = await BotDefectActService.apply_diagnostic_comment(
         sqlite_repair_nameplate_session,
         int(order.id),
         repair_meta_draft={
