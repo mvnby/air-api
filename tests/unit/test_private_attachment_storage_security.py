@@ -5,9 +5,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from core import config as config_module
 from core.config import Settings
-from services import private_attachment_storage_service as storage_module
 from services.private_attachment_storage_service import (
     S3PrivateAttachmentStorage,
     verify_private_attachment_storage_startup,
@@ -135,7 +133,8 @@ def test_production_private_bucket_must_not_be_shared(public_bucket_setting):
         Settings(_env_file=None, **values)
 
 
-def test_local_settings_do_not_require_r2_or_run_startup_probe(monkeypatch):
+@pytest.mark.asyncio
+async def test_local_settings_do_not_require_r2_or_run_startup_probe():
     local_settings = Settings(
         _env_file=None,
         SECRET_KEY="test",
@@ -144,31 +143,12 @@ def test_local_settings_do_not_require_r2_or_run_startup_probe(monkeypatch):
         ENVIRONMENT="local",
         SERVICE_ATTACHMENT_STORAGE_PROVIDER="local",
     )
-    calls = []
-    monkeypatch.setattr(
-        storage_module,
-        "verify_private_attachment_storage_startup",
-        calls.append,
-    )
+    client = _ProbeS3Client()
 
-    config_module._run_production_startup_checks(local_settings)
+    await verify_private_attachment_storage_startup(local_settings, client=client)
 
     assert local_settings.SERVICE_ATTACHMENT_STORAGE_PROVIDER == "local"
-    assert calls == []
-
-
-def test_production_startup_hook_invokes_private_storage_probe(monkeypatch):
-    configured = _startup_settings()
-    calls = []
-    monkeypatch.setattr(
-        storage_module,
-        "verify_private_attachment_storage_startup",
-        calls.append,
-    )
-
-    config_module._run_production_startup_checks(configured)
-
-    assert calls == [configured]
+    assert client.operations == []
 
 
 def test_s3_storage_rejects_non_https_endpoint():
@@ -183,10 +163,41 @@ def test_s3_storage_rejects_non_https_endpoint():
         )
 
 
-def test_startup_probe_writes_reads_deletes_and_confirms_cleanup():
+@pytest.mark.asyncio
+async def test_app_lifespan_checks_private_storage_before_database(monkeypatch):
+    from core import app_lifespan as lifespan_module
+
+    events = []
+
+    async def verify_storage():
+        events.append("storage")
+
+    async def bootstrap_database():
+        events.append("database")
+        return False
+
+    async def stop_scheduler(_app):
+        return None
+
+    monkeypatch.setattr(
+        lifespan_module,
+        "_verify_private_attachment_storage",
+        verify_storage,
+    )
+    monkeypatch.setattr(lifespan_module, "_bootstrap_database", bootstrap_database)
+    monkeypatch.setattr(lifespan_module, "_start_scheduler_supervisor", lambda _app: False)
+    monkeypatch.setattr(lifespan_module, "_stop_scheduler_supervisor", stop_scheduler)
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    async with lifespan_module.app_lifespan(app):
+        assert events == ["storage", "database"]
+
+
+@pytest.mark.asyncio
+async def test_startup_probe_writes_reads_deletes_and_confirms_cleanup():
     client = _ProbeS3Client()
 
-    verify_private_attachment_storage_startup(
+    await verify_private_attachment_storage_startup(
         _startup_settings(),
         client=client,
     )
@@ -203,12 +214,13 @@ def test_startup_probe_writes_reads_deletes_and_confirms_cleanup():
     assert client.objects == {}
 
 
-def test_startup_probe_fails_closed_when_delete_does_not_remove_object():
+@pytest.mark.asyncio
+async def test_startup_probe_fails_closed_when_delete_does_not_remove_object():
     client = _ProbeS3Client(delete_objects=False)
     configured = _startup_settings()
 
     with pytest.raises(RuntimeError, match="startup probe failed") as error:
-        verify_private_attachment_storage_startup(configured, client=client)
+        await verify_private_attachment_storage_startup(configured, client=client)
 
     assert configured.SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY not in str(error.value)
 
