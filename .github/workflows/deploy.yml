@@ -351,14 +351,16 @@ jobs:
             blue_green)
               cat scripts/ha/mvn-primary-status.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "install -m 0755 /dev/stdin /usr/local/sbin/mvn-primary-status"
               cat scripts/deploy_backend_blue_green.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green.sh"
+              cat scripts/deploy_backend_blue_green_safety.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green_safety.sh"
               printf '%s\n' "${GHCR_PAT}" | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-                chmod +x /tmp/deploy_backend_blue_green.sh && \
+                chmod +x /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh && \
                 IFS= read -r GHCR_PAT && export GHCR_PAT && \
                 GITHUB_ACTOR='${{ github.actor }}' \
                 API_PROJECT_DIR='${API_PROJECT_DIR}' \
                 API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
                 API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
                 API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
+                API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh' \
                 BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
                 API_BLUE_GREEN_SUMMARY_FILE='/tmp/backend_blue_green_summary.txt' \
                 bash /tmp/deploy_backend_blue_green.sh && \
@@ -455,9 +457,10 @@ jobs:
           set -euo pipefail
           SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
           cat scripts/deploy_backend_blue_green.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green.sh"
+          cat scripts/deploy_backend_blue_green_safety.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green_safety.sh"
           cat scripts/rollback_backend.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/rollback_backend.sh"
           printf '%s\n' "${GHCR_PAT}" | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-            chmod +x /tmp/rollback_backend.sh /tmp/deploy_backend_blue_green.sh && \
+            chmod +x /tmp/rollback_backend.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh && \
             IFS= read -r GHCR_PAT && export GHCR_PAT && \
             GITHUB_ACTOR='${{ github.actor }}' \
             CONFIRM_ROLLBACK=true \
@@ -465,6 +468,7 @@ jobs:
             API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
             API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
             API_READY_URL='${API_READY_URL}' \
+            API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh' \
             EXPECTED_CURRENT_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
             bash /tmp/rollback_backend.sh" | tee backend_rollback.log
 

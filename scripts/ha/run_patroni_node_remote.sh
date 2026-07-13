@@ -120,6 +120,7 @@ scp "${SSH_OPTS[@]}" "${COMPOSE_SOURCE}" \
   "${REMOTE}:${PROJECT_DIR}/docker-compose.patroni.yml"
 scp "${SSH_OPTS[@]}" scripts/ha/run_patroni_migrations.sh \
   scripts/ha/deploy_patroni_api_node.sh scripts/deploy_backend_blue_green.sh \
+  scripts/deploy_backend_blue_green_safety.sh \
   "${REMOTE}:/tmp/"
 if [[ "${OPERATION}" == "deploy" ]]; then
   scp "${SSH_OPTS[@]}" "${ROLE_AGENT_SOURCE}" "${REMOTE}:${ROLE_AGENT_REMOTE}"
@@ -152,7 +153,7 @@ printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   set -euo pipefail
   IFS= read -r GHCR_PAT
   export GHCR_PAT
-  chmod 0755 /tmp/run_patroni_migrations.sh /tmp/deploy_patroni_api_node.sh /tmp/deploy_backend_blue_green.sh
+  chmod 0755 /tmp/run_patroni_migrations.sh /tmp/deploy_patroni_api_node.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh
   API_PROJECT_DIR=$(quote "${PROJECT_DIR}") \
   API_COMPOSE_FILE=docker-compose.patroni.yml \
   API_EXPECTED_PATRONI_ROLE=$(quote "${EXPECTED_ROLE}") \
@@ -160,6 +161,7 @@ printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   API_HEALTH_URL=http://127.0.0.1:18080/api/health \
   API_INTERNAL_PROXY_PORT=18080 \
   API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
+  API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh \
   API_PUBLIC_READY_URL=https://api.mvn.by/api/ready \
   BACKEND_IMAGE=$(quote "${BACKEND_IMAGE}") \
   GITHUB_ACTOR=$(quote "${GITHUB_ACTOR:-github-actions}") \
