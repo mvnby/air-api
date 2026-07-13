@@ -51,6 +51,8 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
     text = SCRIPT.read_text(encoding="utf-8")
 
     assert "probe|migrate|deploy" in text
+    assert "required_commands=(ssh ssh-keyscan)" in text
+    assert 'required_commands+=(scp)' in text
     assert "StrictHostKeyChecking=yes" in text
     assert "UserKnownHostsFile=" in text
     assert "docker-compose.patroni.yml" in text

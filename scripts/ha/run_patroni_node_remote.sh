@@ -76,7 +76,11 @@ if [[ "${OPERATION}" != "probe" ]]; then
   }
 fi
 
-for command in ssh scp ssh-keyscan; do
+required_commands=(ssh ssh-keyscan)
+if [[ "${OPERATION}" != "probe" ]]; then
+  required_commands+=(scp)
+fi
+for command in "${required_commands[@]}"; do
   command -v "${command}" >/dev/null 2>&1 || {
     log error "required command is missing: ${command}"
     exit 1
