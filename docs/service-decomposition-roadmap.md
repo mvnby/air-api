@@ -6,7 +6,7 @@
 
 Сначала modular monolith, затем extraction. Storefront и Telegram process уже можно разворачивать отдельно, но это ещё не самостоятельные domain services: они используют общую backend-модель и не имеют устойчивых command/event contracts.
 
-Текущий рабочий diff закрывает foundation Wave 0 (RBAC, server-authoritative checkout, OAuth state, честный Telegram delivery result, SSG completeness, media leases и migration CI), но не завершает декомпозицию. Outbox, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Локальные gates пройдены: **996 unit**, **181 integration**, manager typecheck/build, storefront full-data build (**797 pages**, **740/740 product routes**) и fresh empty-DB Alembic replay/check. До production всё ещё обязательны PR CI и совместимый rollout.
+Wave 0 закрыта, слита через PR #726 и развернута в production как SHA `886593e0`: единый CI дал **1177 passed**, migration/codegen gates, Patroni primary/replica deploy и storefront canary/VPS/Cloudflare smoke прошли. Декомпозиция этим не завершена. Outbox producer switch/consumer, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Первая Wave 1 итерация добавляет только выключенный additive outbox/inbox/delivery foundation без изменения production notification path.
 
 ## Целевые bounded contexts
 
@@ -146,7 +146,7 @@ flowchart LR
   H --> I["Re-evaluate CRM/Catalog physical split"]
 ```
 
-Wave 0 на этой диаграмме локально проверена, но ещё не развёрнута: впереди PR CI и production rollout. В Wave 1 отдельно входят public lead abuse/dedupe/rate-limit contract, checkout idempotency/canonical identity, order versioning, outbox/inbox и durable operations. Media extraction нельзя начинать только на основании уже реализованного lease claim.
+Wave 0 на этой диаграмме развернута. В Wave 1 отдельно входят public lead abuse/dedupe/rate-limit contract, checkout idempotency/canonical identity, order versioning, переключение producers/consumer на outbox и durable operations. Media worker в production пока отсутствует и остаётся выключен; extraction нельзя начинать только на основании уже реализованного lease claim.
 
 ## Anti-goals
 
