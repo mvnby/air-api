@@ -25,21 +25,23 @@ jobs:
 
       - name: Create Dummy Env
         run: |
-          echo "POSTGRES_USER=postgres" >> .env
-          echo "POSTGRES_PASSWORD=postgres" >> .env
-          echo "POSTGRES_DB=air_conditioners" >> .env
-          # IMPORTANT: Inside docker network, host is 'db' (service name)
-          echo "POSTGRES_SERVER=db" >> .env
-          echo "POSTGRES_PORT=5432" >> .env
-          # Construct URL explicitly to be safe
-          echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/air_conditioners" >> .env
+          {
+            echo "POSTGRES_USER=postgres"
+            echo "POSTGRES_PASSWORD=postgres"
+            echo "POSTGRES_DB=air_conditioners"
+            # IMPORTANT: Inside docker network, host is 'db' (service name)
+            echo "POSTGRES_SERVER=db"
+            echo "POSTGRES_PORT=5432"
+            # Construct URL explicitly to be safe
+            echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/air_conditioners"
 
-          echo "SECRET_KEY=dummy_secret_for_tests" >> .env
-          echo "BOT_TOKEN=dummy_token" >> .env
-          echo "ADMIN_USERNAME=admin" >> .env
-          echo "ADMIN_PASSWORD=admin" >> .env
-          echo "ENVIRONMENT=test" >> .env
-          echo "WEBSITE_URL=http://localhost:4321" >> .env
+            echo "SECRET_KEY=dummy_secret_for_tests"
+            echo "BOT_TOKEN=dummy_token"
+            echo "ADMIN_USERNAME=admin"
+            echo "ADMIN_PASSWORD=admin"
+            echo "ENVIRONMENT=test"
+            echo "WEBSITE_URL=http://localhost:4321"
+          } >> .env
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -67,19 +69,8 @@ jobs:
 
       - name: Wait for DB
         run: |
-          echo "Waiting for Postgres (main) to be ready..."
-          for i in $(seq 1 60); do
-            docker compose exec -T db pg_isready -U postgres -d air_conditioners >/dev/null 2>&1 && { echo "Postgres (main) ready"; break; }
-            echo "Postgres not ready ($i/60) - sleeping 1s"
-            sleep 1
-          done
-
-          echo "Waiting for Postgres (test) to be ready..."
-          for i in $(seq 1 60); do
-            docker compose exec -T db_test pg_isready -U postgres -d air_conditioners_test >/dev/null 2>&1 && { echo "Postgres (test) ready"; break; }
-            echo "Postgres test not ready ($i/60) - sleeping 1s"
-            sleep 1
-          done
+          scripts/ci/wait_for_stable_postgres.sh db air_conditioners postgres
+          scripts/ci/wait_for_stable_postgres.sh db_test air_conditioners_test postgres
 
       - name: Verify Alembic Upgrade From Empty Database
         run: |
