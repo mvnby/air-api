@@ -28,4 +28,3 @@ export type ManagerWarrantyPolicyResponse = {
     created_at: string;
     updated_at: string;
 };
-

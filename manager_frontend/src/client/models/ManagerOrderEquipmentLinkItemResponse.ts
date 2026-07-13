@@ -9,4 +9,3 @@ export type ManagerOrderEquipmentLinkItemResponse = {
     legacy_source_link?: boolean;
     equipment: ManagerEquipmentDetailResponse;
 };
-

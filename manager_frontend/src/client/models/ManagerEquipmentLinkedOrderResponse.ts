@@ -9,4 +9,3 @@ export type ManagerEquipmentLinkedOrderResponse = {
     status: string;
     created_at: string;
 };
-

@@ -6,4 +6,3 @@ import type { ManagerWarrantyPolicyResponse } from './ManagerWarrantyPolicyRespo
 export type ManagerWarrantyPolicyListResponse = {
     items?: Array<ManagerWarrantyPolicyResponse>;
 };
-

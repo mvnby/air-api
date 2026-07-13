@@ -20,4 +20,3 @@ export type ManagerWarrantyPolicyPayload = {
     effective_until?: (string | null);
     is_active?: (boolean | null);
 };
-

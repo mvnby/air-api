@@ -11,4 +11,3 @@ export type Body_upload_manager_order_attachment = {
     component_id?: (number | null);
     service_history_id?: (number | null);
 };
-
