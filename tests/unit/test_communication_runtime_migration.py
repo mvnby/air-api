@@ -27,12 +27,12 @@ def _load_migration():
     return module
 
 
-def test_runtime_state_is_single_alembic_head_after_c1():
+def test_runtime_state_is_single_alembic_head_after_attempt_journal():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
     assert script.get_heads() == [REVISION]
     assert revision is not None
-    assert revision.down_revision == "4a8b1c2d3e05"
+    assert revision.down_revision == "5b9c2d3e4f06"
 
 
 def test_runtime_state_migration_seeds_off_and_downgrades_on_sqlite():
