@@ -58,8 +58,8 @@ const editEquipmentId = ref<number | null>(null);
 const editComponentId = ref<number | null>(null);
 const savingId = ref<number | null>(null);
 const deletingId = ref<number | null>(null);
-const previewUrls = reactive<Record<number, string>>({});
-const audioUrls = reactive<Record<number, string>>({});
+const previewUrls = reactive<Record<string, string>>({});
+const audioUrls = reactive<Record<string, string>>({});
 let listRequestId = 0;
 
 const uploading = computed(() => uploadingCount.value > 0);
@@ -73,6 +73,13 @@ const uploadComponents = computed(() => (
 const editComponents = computed(() => (
   props.equipmentOptions.find((item) => item.id === editEquipmentId.value)?.components || []
 ));
+
+const persistedId = (item: ServiceAttachmentItem) => (
+  typeof item.id === 'number' && Number.isInteger(item.id) && item.id > 0 ? item.id : null
+);
+const attachmentKey = (item: ServiceAttachmentItem) => (
+  persistedId(item) !== null ? `id:${item.id}` : (item.legacy_key || `legacy:${item.filename}:${item.created_at}`)
+);
 
 const iconForItem = (item: ServiceAttachmentItem) => {
   if (isAudioAttachment(item)) return 'graphic_eq';
@@ -107,20 +114,24 @@ const replaceItem = (updated: ServiceAttachmentItem) => {
 };
 
 const loadPreview = async (item: ServiceAttachmentItem) => {
-  if (!item.preview_available || previewUrls[item.id]) return;
+  const attachmentId = persistedId(item);
+  const key = attachmentKey(item);
+  if (attachmentId === null || !item.preview_available || previewUrls[key]) return;
   try {
-    const access = await serviceAttachmentsApi.getAccess(item.id, 'preview');
-    previewUrls[item.id] = access.url;
+    const access = await serviceAttachmentsApi.getAccess(attachmentId, 'preview');
+    previewUrls[key] = access.url;
   } catch {
     // A missing preview must not hide the attachment itself.
   }
 };
 
 const loadAudio = async (item: ServiceAttachmentItem) => {
-  if (!isAudioAttachment(item) || audioUrls[item.id]) return;
+  const attachmentId = persistedId(item);
+  const key = attachmentKey(item);
+  if (attachmentId === null || !isAudioAttachment(item) || audioUrls[key]) return;
   try {
-    const access = await serviceAttachmentsApi.getAccess(item.id, 'original');
-    audioUrls[item.id] = access.url;
+    const access = await serviceAttachmentsApi.getAccess(attachmentId, 'original');
+    audioUrls[key] = access.url;
   } catch {
     // The viewer still exposes a retry with the backend error.
   }
@@ -251,11 +262,18 @@ const pasteFromClipboard = async () => {
 };
 
 const openViewer = (item: ServiceAttachmentItem) => {
-  viewerAttachmentId.value = item.id;
+  const attachmentId = persistedId(item);
+  if (attachmentId === null) {
+    actionError.value = item.processing_error || 'Старый файл ожидает безопасного переноса.';
+    return;
+  }
+  viewerAttachmentId.value = attachmentId;
 };
 
 const beginEdit = (item: ServiceAttachmentItem) => {
-  editingId.value = item.id;
+  const attachmentId = persistedId(item);
+  if (attachmentId === null) return;
+  editingId.value = attachmentId;
   editCategory.value = item.category || 'other';
   editCaption.value = item.caption || '';
   editEquipmentId.value = null;
@@ -266,10 +284,12 @@ const beginEdit = (item: ServiceAttachmentItem) => {
 const saveEdit = async () => {
   const item = editingItem.value;
   if (!item) return;
-  savingId.value = item.id;
+  const attachmentId = persistedId(item);
+  if (attachmentId === null) return;
+  savingId.value = attachmentId;
   actionError.value = '';
   try {
-    const updated = await serviceAttachmentsApi.update(item.id, {
+    const updated = await serviceAttachmentsApi.update(props.orderId, attachmentId, {
       category: editCategory.value,
       caption: editCaption.value.trim() || null,
       ...(editEquipmentId.value ? {
@@ -289,18 +309,20 @@ const saveEdit = async () => {
 };
 
 const deleteAttachment = async (item: ServiceAttachmentItem) => {
+  const attachmentId = persistedId(item);
+  if (attachmentId === null) return;
   if (!window.confirm(`Архивировать файл «${item.filename}»?`)) return;
-  deletingId.value = item.id;
+  deletingId.value = attachmentId;
   actionError.value = '';
   try {
-    await serviceAttachmentsApi.remove(item.id);
-    items.value = items.value.filter((candidate) => candidate.id !== item.id);
-    delete previewUrls[item.id];
-    delete audioUrls[item.id];
+    await serviceAttachmentsApi.remove(props.orderId, attachmentId);
+    items.value = items.value.filter((candidate) => candidate.id !== attachmentId);
+    delete previewUrls[attachmentKey(item)];
+    delete audioUrls[attachmentKey(item)];
     total.value = Math.max(0, total.value - 1);
-    if (viewerAttachmentId.value === item.id) viewerAttachmentId.value = null;
-    if (editingId.value === item.id) editingId.value = null;
-    emit('deleted', item.id);
+    if (viewerAttachmentId.value === attachmentId) viewerAttachmentId.value = null;
+    if (editingId.value === attachmentId) editingId.value = null;
+    emit('deleted', attachmentId);
     emit('count-change', total.value);
     actionMessage.value = 'Файл перемещён в архив';
   } catch (error) {
@@ -325,8 +347,8 @@ watch(() => props.orderId, () => {
   actionError.value = '';
   viewerAttachmentId.value = null;
   editingId.value = null;
-  for (const key of Object.keys(previewUrls)) delete previewUrls[Number(key)];
-  for (const key of Object.keys(audioUrls)) delete audioUrls[Number(key)];
+  for (const key of Object.keys(previewUrls)) delete previewUrls[key];
+  for (const key of Object.keys(audioUrls)) delete audioUrls[key];
   if (expanded.value) void loadAttachments();
 });
 
@@ -450,10 +472,10 @@ defineExpose({ refresh, expand });
       <div v-if="imageItems.length" class="mt-4">
         <h4 class="mb-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Изображения</h4>
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          <article v-for="item in imageItems" :key="item.id" class="group relative min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
+          <article v-for="item in imageItems" :key="attachmentKey(item)" class="group relative min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
             <button type="button" class="block w-full text-left" @click="openViewer(item)">
               <span class="flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-100 dark:bg-slate-950">
-                <img v-if="previewUrls[item.id]" :src="previewUrls[item.id]" :alt="item.caption || item.filename" loading="lazy" class="h-full w-full object-cover" @error="delete previewUrls[item.id]" />
+                <img v-if="previewUrls[attachmentKey(item)]" :src="previewUrls[attachmentKey(item)]" :alt="item.caption || item.filename" loading="lazy" class="h-full w-full object-cover" @error="delete previewUrls[attachmentKey(item)]" />
                 <span v-else class="material-icons-round text-[34px] text-slate-300 dark:text-slate-600" aria-hidden="true">image</span>
               </span>
               <span class="block min-w-0 p-2">
@@ -462,7 +484,7 @@ defineExpose({ refresh, expand });
               </span>
             </button>
             <span class="absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold shadow-sm" :class="statusClass(item.processing_status)">{{ statusLabel(item.processing_status) }}</span>
-            <button v-if="!readonly" type="button" class="absolute right-1.5 top-1.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/95 text-slate-600 shadow-sm hover:text-teal-700 dark:bg-slate-900/95 dark:text-slate-300" title="Изменить файл" aria-label="Изменить файл" @click.stop="beginEdit(item)">
+            <button v-if="!readonly && !item.legacy && item.id !== null" type="button" class="absolute right-1.5 top-1.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/95 text-slate-600 shadow-sm hover:text-teal-700 dark:bg-slate-900/95 dark:text-slate-300" title="Изменить файл" aria-label="Изменить файл" @click.stop="beginEdit(item)">
               <span class="material-icons-round text-[18px]" aria-hidden="true">edit</span>
             </button>
             <p v-if="item.processing_error" class="border-t border-red-100 px-2 py-1.5 text-[11px] text-red-600 dark:border-red-900/40 dark:text-red-300">{{ item.processing_error }}</p>
@@ -473,7 +495,7 @@ defineExpose({ refresh, expand });
       <div v-if="fileItems.length" class="mt-4">
         <h4 class="mb-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Документы и аудио</h4>
         <div class="divide-y divide-slate-200 border-y border-slate-200 dark:divide-slate-700 dark:border-slate-700">
-          <article v-for="item in fileItems" :key="item.id" class="py-3">
+          <article v-for="item in fileItems" :key="attachmentKey(item)" class="py-3">
             <div class="flex min-w-0 items-start gap-3">
               <button type="button" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:text-teal-700 dark:bg-slate-800 dark:text-slate-300" :title="`Открыть ${item.filename}`" :aria-label="`Открыть ${item.filename}`" @click="openViewer(item)">
                 <span class="material-icons-round text-[22px]" aria-hidden="true">{{ iconForItem(item) }}</span>
@@ -485,11 +507,11 @@ defineExpose({ refresh, expand });
                 </span>
               </button>
               <span class="hidden shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold sm:inline" :class="statusClass(item.processing_status)">{{ statusLabel(item.processing_status) }}</span>
-              <button v-if="!readonly" type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800" title="Изменить файл" aria-label="Изменить файл" @click="beginEdit(item)">
+              <button v-if="!readonly && !item.legacy && item.id !== null" type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800" title="Изменить файл" aria-label="Изменить файл" @click="beginEdit(item)">
                 <span class="material-icons-round text-[19px]" aria-hidden="true">edit</span>
               </button>
             </div>
-            <audio v-if="isAudioAttachment(item) && audioUrls[item.id]" :src="audioUrls[item.id]" controls preload="metadata" class="mt-2 h-9 w-full" />
+            <audio v-if="isAudioAttachment(item) && audioUrls[attachmentKey(item)]" :src="audioUrls[attachmentKey(item)]" controls preload="metadata" class="mt-2 h-9 w-full" />
             <p v-if="item.transcript" class="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-slate-600 dark:text-slate-300">{{ item.transcript }}</p>
             <p v-if="item.processing_error" class="mt-1 text-xs text-red-600 dark:text-red-300">{{ item.processing_error }}</p>
           </article>

@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -11,8 +11,10 @@ from models import (
     CustomerBranch,
     CustomerEquipment,
     EquipmentComponent,
+    EquipmentOrderLink,
     EquipmentServiceEventType,
     EquipmentServiceHistory,
+    EquipmentWarrantyCoverage,
     Order,
     OrderProductLink,
     Product,
@@ -26,6 +28,7 @@ class EquipmentService:
     REPAIR_HISTORY_AUTO_SYNC_STATUSES = frozenset({"completed", "not_repairable"})
     EQUIPMENT_SOURCES = frozenset({"sold_by_us", "installed_by_us", "customer_owned", "unknown"})
     COMPONENT_TYPES = frozenset({"system", "indoor_unit", "outdoor_unit", "remote", "wifi_module", "other"})
+    ORDER_LINK_ROLES = frozenset({"sale", "installation", "maintenance", "repair", "diagnostic", "warranty_case", "other"})
 
     @staticmethod
     def _clean_optional_text(value: Any) -> Optional[str]:
@@ -81,6 +84,38 @@ class EquipmentService:
             allowed = ", ".join(sorted(EquipmentService.COMPONENT_TYPES))
             raise ValueError(f"Invalid component_type: {raw}. Allowed: {allowed}")
         return value
+
+    @staticmethod
+    def _normalize_order_link_role(raw: Any) -> str:
+        value = EquipmentService._clean_optional_text(raw) or "other"
+        if value not in EquipmentService.ORDER_LINK_ROLES:
+            allowed = ", ".join(sorted(EquipmentService.ORDER_LINK_ROLES))
+            raise ValueError(f"Invalid equipment order role: {raw}. Allowed: {allowed}")
+        return value
+
+    @staticmethod
+    async def _ensure_equipment_order_link(
+        session: AsyncSession,
+        *,
+        equipment_id: int,
+        order_id: int,
+        role: str,
+    ) -> EquipmentOrderLink:
+        normalized_role = EquipmentService._normalize_order_link_role(role)
+        result = await session.execute(
+            select(EquipmentOrderLink).where(
+                EquipmentOrderLink.equipment_id == equipment_id,
+                EquipmentOrderLink.order_id == order_id,
+                EquipmentOrderLink.role == normalized_role,
+            )
+        )
+        link = result.scalars().first()
+        if link:
+            return link
+        link = EquipmentOrderLink(equipment_id=equipment_id, order_id=order_id, role=normalized_role)
+        session.add(link)
+        await session.flush()
+        return link
 
     @staticmethod
     def _warranty_status(equipment: CustomerEquipment) -> str:
@@ -458,6 +493,8 @@ class EquipmentService:
         page: int,
         limit: int,
         include_archived: bool = False,
+        q: str | None = None,
+        attention: str | None = None,
     ) -> Optional[Dict[str, Any]]:
         if customer_id is not None and not await EquipmentService._ensure_customer_exists(session, customer_id):
             return None
@@ -475,17 +512,143 @@ class EquipmentService:
             filters.append(CustomerEquipment.customer_branch_id == customer_branch_id)
         if not include_archived:
             filters.append(CustomerEquipment.is_archived == False)
+        search = EquipmentService._clean_optional_text(q)
+        if search:
+            pattern = f"%{search}%"
+            filters.append(
+                or_(
+                    CustomerEquipment.display_name.ilike(pattern),
+                    CustomerEquipment.brand.ilike(pattern),
+                    CustomerEquipment.model.ilike(pattern),
+                    CustomerEquipment.serial.ilike(pattern),
+                    CustomerEquipment.inventory_number.ilike(pattern),
+                    CustomerEquipment.location_hint.ilike(pattern),
+                    CustomerEquipment.customer.has(Customer.name.ilike(pattern)),
+                    CustomerEquipment.customer_branch.has(CustomerBranch.delivery_address.ilike(pattern)),
+                )
+            )
+
+        normalized_attention = EquipmentService._clean_optional_text(attention)
+        if normalized_attention and normalized_attention != "all":
+            now = datetime.now()
+            soon = now + timedelta(days=30)
+            attention_conditions = {
+                "maintenance_due_soon": (
+                    EquipmentWarrantyCoverage.maintenance_required == True,
+                    EquipmentWarrantyCoverage.next_maintenance_due_at >= now,
+                    EquipmentWarrantyCoverage.next_maintenance_due_at <= soon,
+                ),
+                "maintenance_overdue": (
+                    EquipmentWarrantyCoverage.maintenance_required == True,
+                    EquipmentWarrantyCoverage.next_maintenance_due_at < now,
+                ),
+                "warranty_expiring": (
+                    EquipmentWarrantyCoverage.expires_at >= now,
+                    EquipmentWarrantyCoverage.expires_at <= soon,
+                    EquipmentWarrantyCoverage.decision_status != "voided",
+                ),
+                "warranty_expired": (
+                    EquipmentWarrantyCoverage.expires_at < now,
+                    EquipmentWarrantyCoverage.decision_status != "voided",
+                ),
+                "needs_decision": (
+                    EquipmentWarrantyCoverage.maintenance_required == True,
+                    EquipmentWarrantyCoverage.next_maintenance_due_at < now,
+                    EquipmentWarrantyCoverage.decision_status == "none",
+                ),
+            }
+            selected_conditions = attention_conditions.get(normalized_attention)
+            if selected_conditions is None:
+                raise ValueError("Unsupported equipment attention filter")
+            matching_equipment_ids = select(EquipmentWarrantyCoverage.equipment_id).where(*selected_conditions)
+            filters.append(CustomerEquipment.id.in_(matching_equipment_ids))
 
         count_result = await session.execute(select(func.count(CustomerEquipment.id)).where(*filters))
         total = int(count_result.scalar() or 0)
         result = await session.execute(
             select(CustomerEquipment)
+            .options(
+                selectinload(CustomerEquipment.customer),
+                selectinload(CustomerEquipment.customer_branch),
+            )
             .where(*filters)
             .order_by(CustomerEquipment.is_archived.asc(), CustomerEquipment.created_at.desc(), CustomerEquipment.id.desc())
             .offset((page - 1) * limit)
             .limit(limit)
         )
-        items = [EquipmentService._to_equipment_item(item) for item in result.scalars().all()]
+        equipment_rows = list(result.scalars().all())
+        equipment_ids = [int(item.id or 0) for item in equipment_rows]
+        coverages_by_equipment: dict[int, list[EquipmentWarrantyCoverage]] = {item_id: [] for item_id in equipment_ids}
+        last_service_by_equipment: dict[int, datetime] = {}
+        if equipment_ids:
+            coverage_result = await session.execute(
+                select(EquipmentWarrantyCoverage).where(
+                    EquipmentWarrantyCoverage.equipment_id.in_(equipment_ids)
+                )
+            )
+            for coverage in coverage_result.scalars().all():
+                coverages_by_equipment.setdefault(int(coverage.equipment_id), []).append(coverage)
+            history_result = await session.execute(
+                select(
+                    EquipmentServiceHistory.equipment_id,
+                    func.max(EquipmentServiceHistory.event_date),
+                )
+                .where(EquipmentServiceHistory.equipment_id.in_(equipment_ids))
+                .group_by(EquipmentServiceHistory.equipment_id)
+            )
+            last_service_by_equipment = {
+                int(equipment_id): event_date
+                for equipment_id, event_date in history_result.all()
+                if event_date is not None
+            }
+
+        from services.warranty_service import WarrantyService
+
+        now = datetime.now()
+        items = []
+        for equipment in equipment_rows:
+            equipment_id = int(equipment.id or 0)
+            data = EquipmentService._to_equipment_item(equipment)
+            customer = equipment.customer
+            branch = equipment.customer_branch
+            data.update(
+                {
+                    "customer_name": customer.name if customer else None,
+                    "customer_phone": customer.phone if customer else None,
+                    "branch_name": branch.name if branch else None,
+                    "branch_address": branch.delivery_address if branch else equipment.location_hint,
+                    "service_contact_name": (
+                        branch.contact_name if branch and branch.contact_name else (customer.name if customer else None)
+                    ),
+                    "service_contact_phone": (
+                        branch.contact_phone if branch and branch.contact_phone else (customer.phone if customer else None)
+                    ),
+                    "last_service_at": last_service_by_equipment.get(equipment_id),
+                }
+            )
+            next_due_values = []
+            attention_reasons: set[str] = set()
+            for coverage in coverages_by_equipment.get(equipment_id, []):
+                status = WarrantyService.coverage_status(coverage, now=now)
+                if coverage.next_maintenance_due_at is not None:
+                    next_due_values.append(EquipmentService._normalize_naive_datetime(coverage.next_maintenance_due_at))
+                if status["maintenance_status"] == "overdue":
+                    attention_reasons.add("maintenance_overdue")
+                elif status["maintenance_status"] == "due_soon":
+                    attention_reasons.add("maintenance_due_soon")
+                if status["requires_manager_decision"]:
+                    attention_reasons.add("needs_decision")
+                if status["time_status"] == "expired":
+                    attention_reasons.add("warranty_expired")
+                elif (
+                    status["time_status"] == "active"
+                    and coverage.expires_at is not None
+                    and EquipmentService._normalize_naive_datetime(coverage.expires_at) <= now + timedelta(days=30)
+                ):
+                    attention_reasons.add("warranty_expiring")
+            data["next_maintenance_due_at"] = min((value for value in next_due_values if value), default=None)
+            data["attention_reasons"] = sorted(attention_reasons)
+            items.append(data)
         return {
             "items": items,
             "meta": {
@@ -520,6 +683,11 @@ class EquipmentService:
         data = EquipmentService._to_equipment_item(equipment)
         data["components"] = components
         data["recent_history"] = history["items"]
+        from services.equipment_link_service import EquipmentLinkService
+        from services.warranty_service import WarrantyService
+
+        data["coverages"] = await WarrantyService.list_coverages(session, equipment_id=equipment_id)
+        data["linked_orders"] = await EquipmentLinkService.list_linked_orders(session, equipment_id=equipment_id)
         return data
 
     @staticmethod
@@ -539,8 +707,9 @@ class EquipmentService:
                 customer_branch_id=int(customer_branch_id),
             )
         catalog_product_id = payload.get("catalog_product_id")
+        product = None
         if catalog_product_id is not None:
-            await EquipmentService._ensure_product_exists(session, int(catalog_product_id))
+            product = await EquipmentService._ensure_product_exists(session, int(catalog_product_id))
         source_order_id = payload.get("source_order_id")
         if source_order_id is not None:
             await EquipmentService._ensure_source_order_for_customer(
@@ -576,6 +745,38 @@ class EquipmentService:
             is_archived=bool(payload.get("is_archived", False)),
         )
         session.add(equipment)
+        await session.flush()
+        if source_order_id is not None:
+            await EquipmentService._ensure_equipment_order_link(
+                session,
+                equipment_id=int(equipment.id or 0),
+                order_id=int(source_order_id),
+                role=payload.get("order_role") or "other",
+            )
+        if product is not None:
+            from services.warranty_service import WarrantyService
+
+            supplier_coverage = await WarrantyService.create_supplier_coverage(
+                session,
+                equipment=equipment,
+                product=product,
+                supplier_id=payload.get("supplier_id"),
+                explicit_start=payload.get("warranty_started_at"),
+            )
+            if supplier_coverage:
+                equipment.warranty_started_at = supplier_coverage.starts_at
+                equipment.warranty_expires_at = supplier_coverage.expires_at
+                equipment.warranty_terms = supplier_coverage.terms_snapshot
+                session.add(equipment)
+            await WarrantyService.create_work_coverage(
+                session,
+                equipment=equipment,
+                duration_months=payload.get("work_warranty_months"),
+                starts_at=payload.get("installed_at"),
+                terms=payload.get("work_warranty_terms"),
+                product=product,
+                supplier_id=payload.get("supplier_id"),
+            )
         await session.commit()
         await session.refresh(equipment)
         return EquipmentService._to_equipment_item(equipment)
@@ -742,10 +943,10 @@ class EquipmentService:
         if not product_links:
             raise ValueError("Selected order proposal has no catalog products")
 
-        warranty_months = payload.get("warranty_months")
-        warranty_months = 24 if warranty_months is None else int(warranty_months)
         warranty_start = EquipmentService._order_warranty_start(order, payload)
-        warranty_expires = EquipmentService._add_months(warranty_start, warranty_months) if warranty_months > 0 else None
+        supplier_id = int(payload["supplier_id"]) if payload.get("supplier_id") is not None else None
+        work_warranty_months = payload.get("work_warranty_months")
+        order_role = EquipmentService._normalize_order_link_role(payload.get("order_role") or "sale")
         include_placeholders = bool(payload.get("include_component_placeholders", True))
         created_ids: list[int] = []
         skipped_count = 0
@@ -758,14 +959,22 @@ class EquipmentService:
 
         for product_id, quantity in product_quantities.items():
             link = first_link_by_product[product_id]
-            existing_count_result = await session.execute(
-                select(func.count(CustomerEquipment.id)).where(
+            existing_equipment_result = await session.execute(
+                select(CustomerEquipment).where(
                     CustomerEquipment.source_order_id == order_id,
                     CustomerEquipment.catalog_product_id == product_id,
                     CustomerEquipment.is_archived == False,
                 )
             )
-            existing_count = int(existing_count_result.scalar() or 0)
+            existing_equipment = list(existing_equipment_result.scalars().all())
+            existing_count = len(existing_equipment)
+            for current_equipment in existing_equipment:
+                await EquipmentService._ensure_equipment_order_link(
+                    session,
+                    equipment_id=int(current_equipment.id or 0),
+                    order_id=order_id,
+                    role=order_role,
+                )
             missing_count = max(0, quantity - existing_count)
             skipped_count += quantity - missing_count
             if missing_count <= 0:
@@ -809,14 +1018,17 @@ class EquipmentService:
                     refrigerant_type=refrigerant_type,
                     installed_at=EquipmentService._normalize_naive_datetime(order.installation_date),
                     commissioned_at=warranty_start,
-                    warranty_started_at=warranty_start if warranty_months > 0 else None,
-                    warranty_expires_at=warranty_expires,
-                    warranty_terms="Гарантия действует при соблюдении условий эксплуатации и сервисного обслуживания.",
                     notes=f"Создано из заказа #{order_id}, строка товара #{link.id or product_id}.",
                 )
                 session.add(equipment)
                 await session.flush()
                 created_ids.append(int(equipment.id or 0))
+                await EquipmentService._ensure_equipment_order_link(
+                    session,
+                    equipment_id=int(equipment.id or 0),
+                    order_id=order_id,
+                    role=order_role,
+                )
 
                 if include_placeholders:
                     session.add(
@@ -851,10 +1063,31 @@ class EquipmentService:
                         )
                     )
 
-        if created_ids:
-            await session.commit()
-        else:
-            await session.rollback()
+                from services.warranty_service import WarrantyService
+
+                supplier_coverage = await WarrantyService.create_supplier_coverage(
+                    session,
+                    equipment=equipment,
+                    product=product,
+                    supplier_id=supplier_id,
+                    explicit_start=warranty_start,
+                )
+                if supplier_coverage:
+                    equipment.warranty_started_at = supplier_coverage.starts_at
+                    equipment.warranty_expires_at = supplier_coverage.expires_at
+                    equipment.warranty_terms = supplier_coverage.terms_snapshot
+                    session.add(equipment)
+                await WarrantyService.create_work_coverage(
+                    session,
+                    equipment=equipment,
+                    duration_months=work_warranty_months,
+                    starts_at=order.installation_date or warranty_start,
+                    terms=payload.get("work_warranty_terms"),
+                    product=product,
+                    supplier_id=supplier_id,
+                )
+
+        await session.commit()
 
         items = []
         for equipment_id in created_ids:
@@ -870,6 +1103,71 @@ class EquipmentService:
             "created_count": len(items),
             "skipped_count": skipped_count,
         }
+
+    @staticmethod
+    async def create_maintenance_order(
+        session: AsyncSession,
+        *,
+        equipment_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        result = await session.execute(
+            select(CustomerEquipment)
+            .where(CustomerEquipment.id == equipment_id)
+            .options(
+                selectinload(CustomerEquipment.customer),
+                selectinload(CustomerEquipment.customer_branch),
+            )
+        )
+        equipment = result.scalars().first()
+        if not equipment or equipment.is_archived or not equipment.customer:
+            return None
+
+        from schemas import ManagerOrderCreatePayload
+        from services.order_service import OrderService
+
+        branch = equipment.customer_branch
+        address = (
+            branch.delivery_address
+            if branch
+            else equipment.location_hint or equipment.customer.actual_address or equipment.customer.legal_address
+        )
+        equipment_title = equipment.display_name or equipment.model or f"Оборудование #{equipment_id}"
+        payload = ManagerOrderCreatePayload(
+            customer_id=int(equipment.customer_id),
+            name=equipment.customer.name,
+            phone=equipment.customer.phone,
+            source="manager",
+            request_text=f"Плановое техническое обслуживание: {equipment_title}",
+            service_type="maintenance",
+            customer_type=(
+                equipment.customer.type.value
+                if hasattr(equipment.customer.type, "value")
+                else str(equipment.customer.type)
+            ),
+            address=address,
+        )
+        created = await OrderService.create_manager_order(session=session, payload=payload)
+        if not created:
+            raise ValueError("Maintenance order could not be created")
+        order_id = int(created["id"])
+        order = await session.get(Order, order_id)
+        if not order:
+            raise ValueError("Created maintenance order not found")
+        order.customer_branch_id = equipment.customer_branch_id
+        order.technical_meta = {
+            **(order.technical_meta or {}),
+            "equipment_id": equipment_id,
+            "equipment_display_name": equipment_title,
+        }
+        session.add(order)
+        await EquipmentService._ensure_equipment_order_link(
+            session,
+            equipment_id=equipment_id,
+            order_id=order_id,
+            role="maintenance",
+        )
+        await session.commit()
+        return await OrderService.get_order_detail_for_manager(session, order_id)
 
     @staticmethod
     async def update_component(
@@ -1007,6 +1305,15 @@ class EquipmentService:
             payload={**payload, "event_type": event_type},
         )
         session.add(entry)
+        await session.flush()
+        from services.warranty_service import WarrantyService
+
+        await WarrantyService.recalculate_after_maintenance(
+            session,
+            equipment_id=equipment_id,
+            event_type=event_type,
+            event_date=entry.event_date,
+        )
         await session.commit()
         await session.refresh(entry)
         return EquipmentService._to_history_item(entry)

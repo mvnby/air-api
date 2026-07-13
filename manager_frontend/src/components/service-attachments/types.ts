@@ -13,7 +13,9 @@ export type ServiceAttachmentCategory = (typeof SERVICE_ATTACHMENT_CATEGORIES)[n
 export type ServiceAttachmentVariant = 'preview' | 'original';
 
 export type ServiceAttachmentItem = {
-  id: number;
+  id: number | null;
+  legacy_key?: string | null;
+  legacy?: boolean;
   file_kind: string;
   category: string;
   filename: string;
@@ -27,6 +29,8 @@ export type ServiceAttachmentItem = {
   captured_at: string | null;
   created_at: string;
   preview_available: boolean;
+  equipment_id?: number | null;
+  component_id?: number | null;
 };
 
 export type ServiceAttachmentListResponse = {
@@ -37,6 +41,7 @@ export type ServiceAttachmentListResponse = {
 export type ServiceAttachmentAccessResponse = {
   url: string;
   expires_at: string;
+  variant: ServiceAttachmentVariant;
 };
 
 export type ServiceAttachmentUpdatePayload = {

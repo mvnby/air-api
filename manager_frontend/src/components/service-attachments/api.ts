@@ -93,16 +93,17 @@ export const serviceAttachmentsApi = {
     });
   },
 
-  update(attachmentId: number, payload: ServiceAttachmentUpdatePayload) {
+  update(orderId: number, attachmentId: number, payload: ServiceAttachmentUpdatePayload) {
     return request<ServiceAttachmentItem>(`/api/manager/service-attachments/${encodeURIComponent(String(attachmentId))}`, {
       method: 'PATCH',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, order_id: orderId }),
       headers: { 'Content-Type': 'application/json' },
     });
   },
 
-  remove(attachmentId: number) {
-    return request<void>(`/api/manager/service-attachments/${encodeURIComponent(String(attachmentId))}`, {
+  remove(orderId: number, attachmentId: number) {
+    const query = new URLSearchParams({ order_id: String(orderId) });
+    return request<void>(`/api/manager/service-attachments/${encodeURIComponent(String(attachmentId))}?${query.toString()}`, {
       method: 'DELETE',
     });
   },

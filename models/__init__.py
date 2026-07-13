@@ -24,6 +24,16 @@ from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
 from .communication_runtime import CommunicationRuntimeState
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
 from .media import MediaAsset, MediaProcessingJob
+from .service_asset import (
+    EquipmentAttachmentLink,
+    EquipmentMaintenanceReminder,
+    EquipmentOrderLink,
+    EquipmentWarrantyCoverage,
+    EquipmentWarrantyDecision,
+    OrderAttachmentLink,
+    ServiceAttachment,
+    WarrantyPolicy,
+)
 from .staff import StaffUser
 from .order import (
     BankReceipt,
@@ -99,8 +109,13 @@ __all__ = [
     "DocumentTemplateCustomerLink",
     "CustomerEquipment",
     "EquipmentComponent",
+    "EquipmentAttachmentLink",
+    "EquipmentMaintenanceReminder",
+    "EquipmentOrderLink",
     "EquipmentServiceEventType",
     "EquipmentServiceHistory",
+    "EquipmentWarrantyCoverage",
+    "EquipmentWarrantyDecision",
     "Favorite",
     "GlobalConfig",
     "InstallationRate",
@@ -115,6 +130,7 @@ __all__ = [
     "LeadStatus",
     "MediaAsset",
     "MediaProcessingJob",
+    "OrderAttachmentLink",
     "Order",
     "OrderDocument",
     "OrderInstaller",
@@ -141,6 +157,7 @@ __all__ = [
     "ProductSeriesFeatureLink",
     "ProductTagLink",
     "Service",
+    "ServiceAttachment",
     "StaffUser",
     "Tag",
     "TagGroup",
@@ -156,4 +173,5 @@ __all__ = [
     "SupplierWarehouse",
     "SupplyRequest",
     "SupplyRequestLine",
+    "WarrantyPolicy",
 ]

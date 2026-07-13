@@ -9027,6 +9027,39 @@
               "default": false,
               "title": "Include Archived"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "attention",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attention"
+            }
           }
         ],
         "responses": {
@@ -9137,6 +9170,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerEquipmentFromOrderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/equipment/{equipment_id}/maintenance-order": {
+      "post": {
+        "tags": [
+          "manager-equipment"
+        ],
+        "summary": "Create Manager Maintenance Order",
+        "operationId": "create_manager_maintenance_order",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipment Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
                 }
               }
             }
@@ -9559,6 +9639,157 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/equipment-links": {
+      "get": {
+        "tags": [
+          "manager-equipment-links"
+        ],
+        "summary": "List Manager Order Equipment Links",
+        "operationId": "list_manager_order_equipment_links",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderEquipmentLinkListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-equipment-links"
+        ],
+        "summary": "Create Manager Order Equipment Link",
+        "operationId": "create_manager_order_equipment_link",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderEquipmentLinkCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderEquipmentLinkItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/equipment-links/{link_id}": {
+      "delete": {
+        "tags": [
+          "manager-equipment-links"
+        ],
+        "summary": "Delete Manager Order Equipment Link",
+        "operationId": "delete_manager_order_equipment_link",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -13886,6 +14117,334 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/attachments": {
+      "get": {
+        "tags": [
+          "manager-service-attachments"
+        ],
+        "summary": "List Manager Order Attachments",
+        "operationId": "list_manager_order_attachments",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceAttachmentListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-service-attachments"
+        ],
+        "summary": "Upload Manager Order Attachment",
+        "operationId": "upload_manager_order_attachment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_order_attachment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceAttachmentItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/equipment/{equipment_id}/attachments": {
+      "get": {
+        "tags": [
+          "manager-service-attachments"
+        ],
+        "summary": "List Manager Equipment Attachments",
+        "operationId": "list_manager_equipment_attachments",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceAttachmentListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/service-attachments/{attachment_id}": {
+      "patch": {
+        "tags": [
+          "manager-service-attachments"
+        ],
+        "summary": "Patch Manager Service Attachment",
+        "operationId": "patch_manager_service_attachment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerServiceAttachmentUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceAttachmentItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager-service-attachments"
+        ],
+        "summary": "Delete Manager Service Attachment",
+        "operationId": "delete_manager_service_attachment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "order_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/service-attachments/{attachment_id}/access": {
+      "get": {
+        "tags": [
+          "manager-service-attachments"
+        ],
+        "summary": "Get Manager Service Attachment Access",
+        "operationId": "get_manager_service_attachment_access",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(original|preview)$",
+              "default": "original",
+              "title": "Variant"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Download"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceAttachmentAccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tags/groups": {
       "get": {
         "tags": [
@@ -16236,6 +16795,327 @@
         }
       }
     },
+    "/api/manager/warranty-policies": {
+      "get": {
+        "tags": [
+          "manager-warranties"
+        ],
+        "summary": "List Manager Warranty Policies",
+        "operationId": "list_manager_warranty_policies",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "brand_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Brand Id"
+            }
+          },
+          {
+            "name": "series_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Series Id"
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Inactive"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerWarrantyPolicyListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-warranties"
+        ],
+        "summary": "Create Manager Warranty Policy",
+        "operationId": "create_manager_warranty_policy",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerWarrantyPolicyPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerWarrantyPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/warranty-policies/{policy_id}": {
+      "patch": {
+        "tags": [
+          "manager-warranties"
+        ],
+        "summary": "Patch Manager Warranty Policy",
+        "operationId": "patch_manager_warranty_policy",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Policy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerWarrantyPolicyPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerWarrantyPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/equipment/{equipment_id}/warranty-coverages": {
+      "get": {
+        "tags": [
+          "manager-warranties"
+        ],
+        "summary": "List Manager Equipment Warranty Coverages",
+        "operationId": "list_manager_equipment_warranty_coverages",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ManagerEquipmentWarrantyCoverageResponse"
+                  },
+                  "title": "Response List Manager Equipment Warranty Coverages"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/warranty-coverages/{coverage_id}/decision": {
+      "post": {
+        "tags": [
+          "manager-warranties"
+        ],
+        "summary": "Decide Manager Warranty Coverage",
+        "operationId": "decide_manager_warranty_coverage",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "coverage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Coverage Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerWarrantyDecisionPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerEquipmentWarrantyCoverageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/rebuild-web/status": {
       "get": {
         "tags": [
@@ -17234,6 +18114,69 @@
           "file"
         ],
         "title": "Body_upload_manager_customer_contract"
+      },
+      "Body_upload_manager_order_attachment": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": "other"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          },
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_manager_order_attachment"
       },
       "Body_upload_manager_order_document": {
         "properties": {
@@ -24499,6 +25442,46 @@
             ],
             "title": "Source Order Id"
           },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "order_role": {
+            "type": "string",
+            "title": "Order Role",
+            "default": "other"
+          },
+          "work_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 120.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Months"
+          },
+          "work_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Terms"
+          },
           "equipment_type": {
             "anyOf": [
               {
@@ -24909,6 +25892,103 @@
             ],
             "title": "Updated At"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "branch_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Address"
+          },
+          "service_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Contact Name"
+          },
+          "service_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Contact Phone"
+          },
+          "last_service_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Service At"
+          },
+          "next_maintenance_due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Maintenance Due At"
+          },
+          "attention_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Attention Reasons"
+          },
           "components": {
             "items": {
               "$ref": "#/components/schemas/ManagerEquipmentComponentItemResponse"
@@ -24922,6 +26002,20 @@
             },
             "type": "array",
             "title": "Recent History"
+          },
+          "coverages": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEquipmentWarrantyCoverageResponse"
+            },
+            "type": "array",
+            "title": "Coverages"
+          },
+          "linked_orders": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEquipmentLinkedOrderResponse"
+            },
+            "type": "array",
+            "title": "Linked Orders"
           }
         },
         "type": "object",
@@ -24934,19 +26028,16 @@
       },
       "ManagerEquipmentFromOrderPayload": {
         "properties": {
-          "warranty_months": {
+          "supplier_id": {
             "anyOf": [
               {
-                "type": "integer",
-                "maximum": 120.0,
-                "minimum": 0.0
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Warranty Months",
-            "default": 24
+            "title": "Supplier Id"
           },
           "warranty_start_date": {
             "anyOf": [
@@ -24959,6 +26050,35 @@
               }
             ],
             "title": "Warranty Start Date"
+          },
+          "work_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 120.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Months"
+          },
+          "work_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Terms"
+          },
+          "order_role": {
+            "type": "string",
+            "title": "Order Role",
+            "default": "sale"
           },
           "include_component_placeholders": {
             "type": "boolean",
@@ -25264,6 +26384,103 @@
               }
             ],
             "title": "Updated At"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "branch_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Address"
+          },
+          "service_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Contact Name"
+          },
+          "service_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Contact Phone"
+          },
+          "last_service_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Service At"
+          },
+          "next_maintenance_due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Maintenance Due At"
+          },
+          "attention_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Attention Reasons"
           }
         },
         "type": "object",
@@ -25273,6 +26490,40 @@
           "created_at"
         ],
         "title": "ManagerEquipmentItemResponse"
+      },
+      "ManagerEquipmentLinkedOrderResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "role",
+          "title",
+          "status",
+          "created_at"
+        ],
+        "title": "ManagerEquipmentLinkedOrderResponse"
       },
       "ManagerEquipmentListResponse": {
         "properties": {
@@ -25786,6 +27037,200 @@
         },
         "type": "object",
         "title": "ManagerEquipmentUpdatePayload"
+      },
+      "ManagerEquipmentWarrantyCoverageResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "equipment_id": {
+            "type": "integer",
+            "title": "Equipment Id"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "coverage_type": {
+            "type": "string",
+            "title": "Coverage Type"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "maintenance_required": {
+            "type": "boolean",
+            "title": "Maintenance Required",
+            "default": false
+          },
+          "maintenance_interval_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Interval Months"
+          },
+          "grace_period_days": {
+            "type": "integer",
+            "title": "Grace Period Days",
+            "default": 0
+          },
+          "allowed_maintenance_provider": {
+            "type": "string",
+            "title": "Allowed Maintenance Provider",
+            "default": "any"
+          },
+          "next_maintenance_due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Maintenance Due At"
+          },
+          "terms_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Snapshot"
+          },
+          "policy_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy Snapshot"
+          },
+          "decision_status": {
+            "type": "string",
+            "title": "Decision Status",
+            "default": "none"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "time_status": {
+            "type": "string",
+            "title": "Time Status",
+            "default": "unknown"
+          },
+          "maintenance_status": {
+            "type": "string",
+            "title": "Maintenance Status",
+            "default": "unknown"
+          },
+          "requires_manager_decision": {
+            "type": "boolean",
+            "title": "Requires Manager Decision",
+            "default": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "equipment_id",
+          "coverage_type",
+          "source",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ManagerEquipmentWarrantyCoverageResponse"
       },
       "ManagerEstimateLineResponse": {
         "properties": {
@@ -27935,6 +29380,16 @@
             "title": "Balance Due",
             "default": 0.0
           },
+          "attachment_count": {
+            "type": "integer",
+            "title": "Attachment Count",
+            "default": 0
+          },
+          "linked_equipment_count": {
+            "type": "integer",
+            "title": "Linked Equipment Count",
+            "default": 0
+          },
           "product_lines": {
             "items": {
               "$ref": "#/components/schemas/OrderProductLineResponse"
@@ -28301,6 +29756,75 @@
           "edit_url"
         ],
         "title": "ManagerOrderDocumentResponse"
+      },
+      "ManagerOrderEquipmentLinkCreatePayload": {
+        "properties": {
+          "equipment_id": {
+            "type": "integer",
+            "title": "Equipment Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "other"
+          }
+        },
+        "type": "object",
+        "required": [
+          "equipment_id"
+        ],
+        "title": "ManagerOrderEquipmentLinkCreatePayload"
+      },
+      "ManagerOrderEquipmentLinkItemResponse": {
+        "properties": {
+          "link_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "legacy_source_link": {
+            "type": "boolean",
+            "title": "Legacy Source Link",
+            "default": false
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/ManagerEquipmentDetailResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "equipment"
+        ],
+        "title": "ManagerOrderEquipmentLinkItemResponse"
+      },
+      "ManagerOrderEquipmentLinkListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderEquipmentLinkItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderEquipmentLinkListResponse"
       },
       "ManagerOrderExportRequest": {
         "properties": {
@@ -31826,6 +33350,268 @@
         ],
         "title": "ManagerRestoreJobStatusResponse"
       },
+      "ManagerServiceAttachmentAccessResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "variant": {
+            "type": "string",
+            "title": "Variant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_at",
+          "variant"
+        ],
+        "title": "ManagerServiceAttachmentAccessResponse"
+      },
+      "ManagerServiceAttachmentItemResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "legacy_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Key"
+          },
+          "legacy": {
+            "type": "boolean",
+            "title": "Legacy",
+            "default": false
+          },
+          "file_kind": {
+            "type": "string",
+            "title": "File Kind",
+            "default": "other"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": "other"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "default": "application/octet-stream"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "default": 0
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "manager"
+          },
+          "processing_status": {
+            "type": "string",
+            "title": "Processing Status",
+            "default": "ready"
+          },
+          "processing_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Error"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "preview_available": {
+            "type": "boolean",
+            "title": "Preview Available",
+            "default": false
+          },
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "created_at"
+        ],
+        "title": "ManagerServiceAttachmentItemResponse"
+      },
+      "ManagerServiceAttachmentListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerServiceAttachmentItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ManagerServiceAttachmentListResponse"
+      },
+      "ManagerServiceAttachmentUpdatePayload": {
+        "properties": {
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          }
+        },
+        "type": "object",
+        "title": "ManagerServiceAttachmentUpdatePayload"
+      },
       "ManagerServiceEstimateListResponse": {
         "properties": {
           "items": {
@@ -33572,6 +35358,386 @@
         },
         "type": "object",
         "title": "ManagerTariffUpdatePayload"
+      },
+      "ManagerWarrantyDecisionPayload": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "voided",
+              "restored"
+            ],
+            "title": "Action"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "reason"
+        ],
+        "title": "ManagerWarrantyDecisionPayload"
+      },
+      "ManagerWarrantyPolicyListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerWarrantyPolicyResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ManagerWarrantyPolicyListResponse"
+      },
+      "ManagerWarrantyPolicyPayload": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "coverage_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Type"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "duration_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Months"
+          },
+          "start_event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Event"
+          },
+          "maintenance_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Required"
+          },
+          "maintenance_interval_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Interval Months"
+          },
+          "grace_period_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grace Period Days"
+          },
+          "allowed_maintenance_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Maintenance Provider"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "ManagerWarrantyPolicyPayload"
+      },
+      "ManagerWarrantyPolicyResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "coverage_type": {
+            "type": "string",
+            "title": "Coverage Type",
+            "default": "supplier"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "duration_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Months"
+          },
+          "start_event": {
+            "type": "string",
+            "title": "Start Event",
+            "default": "commissioning"
+          },
+          "maintenance_required": {
+            "type": "boolean",
+            "title": "Maintenance Required",
+            "default": false
+          },
+          "maintenance_interval_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Interval Months"
+          },
+          "grace_period_days": {
+            "type": "integer",
+            "title": "Grace Period Days",
+            "default": 0
+          },
+          "allowed_maintenance_provider": {
+            "type": "string",
+            "title": "Allowed Maintenance Provider",
+            "default": "any"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ManagerWarrantyPolicyResponse"
       },
       "MdvCatalogImportPayload": {
         "properties": {

@@ -113,6 +113,19 @@ class Settings(BaseSettings):
     MEDIA_S3_KEY_PREFIX: str = ""
     MEDIA_S3_CACHE_CONTROL: str = "public, max-age=31536000, immutable"
 
+    # Customer, installation and warranty evidence is private. In production
+    # use a dedicated non-public bucket; never expose a public base URL.
+    SERVICE_ATTACHMENT_STORAGE_PROVIDER: str = "local"
+    SERVICE_ATTACHMENT_LOCAL_DIR: str = "private_media/service-attachments"
+    SERVICE_ATTACHMENT_S3_BUCKET: str = ""
+    SERVICE_ATTACHMENT_S3_ENDPOINT_URL: str = ""
+    SERVICE_ATTACHMENT_S3_REGION: str = "auto"
+    SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID: str = ""
+    SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY: str = ""
+    SERVICE_ATTACHMENT_S3_KEY_PREFIX: str = "service-attachments"
+    SERVICE_ATTACHMENT_ACCESS_TTL_SECONDS: int = 300
+    SERVICE_ATTACHMENT_MAX_SIZE_BYTES: int = 25 * 1024 * 1024
+
     PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER: str = "local"
     PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR: str = "media/products/shared"
     PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX: str = "/media/products/shared"

@@ -7,6 +7,10 @@ export type ManagerEquipmentCreatePayload = {
     customer_branch_id?: (number | null);
     catalog_product_id?: (number | null);
     source_order_id?: (number | null);
+    supplier_id?: (number | null);
+    order_role?: string;
+    work_warranty_months?: (number | null);
+    work_warranty_terms?: (string | null);
     equipment_type?: (string | null);
     equipment_source?: (string | null);
     display_name?: (string | null);

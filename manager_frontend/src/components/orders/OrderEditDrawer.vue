@@ -7,6 +7,7 @@ import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
+import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
@@ -2642,6 +2643,15 @@ watch(
           </label>
         </div>
       </OrderDrawerSection>
+
+      <OrderAttachmentsPanel
+        v-if="order"
+        :key="`order-attachments-${order.id}`"
+        class="mt-4"
+        :order-id="order.id"
+        :initial-count="order.attachment_count"
+        @error="setToast($event, 'error')"
+      />
 
       <OrderDrawerSection
         v-if="isWebsiteOrder"

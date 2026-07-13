@@ -66,6 +66,8 @@ export type ManagerOrderDetailResponse = {
     execution_status_changed_at?: (string | null);
     total_payments?: number;
     balance_due?: number;
+    attachment_count?: number;
+    linked_equipment_count?: number;
     product_lines?: Array<OrderProductLineResponse>;
     service_lines?: Array<OrderServiceLineResponse>;
     proposals?: Array<OrderProposalResponse>;

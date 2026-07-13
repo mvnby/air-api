@@ -1,6 +1,4 @@
 from datetime import datetime
-import mimetypes
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm.attributes import flag_modified
@@ -9,10 +7,8 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
-from services.general_media_storage_service import (
-    StoredGeneralMediaObject,
-    get_general_media_storage,
-)
+from services.private_attachment_storage_service import sha256_bytes
+from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
 
 
@@ -52,17 +48,6 @@ class BotOrderAttachmentService:
         if str(mime_type or "") == "application/pdf":
             return "pdf"
         return "document"
-
-    @staticmethod
-    def _extension_from_filename_or_mime(filename: str, mime_type: str | None) -> str:
-        suffix = Path(str(filename or "")).suffix.lower().lstrip(".")
-        if suffix and "/" not in suffix and "\\" not in suffix:
-            return "jpg" if suffix == "jpeg" else suffix
-        guessed = mimetypes.guess_extension(str(mime_type or "").split(";", 1)[0].strip())
-        if guessed:
-            normalized = guessed.lower().lstrip(".")
-            return "jpg" if normalized in {"jpeg", "jpe"} else normalized
-        return "bin"
 
     @classmethod
     def _build_entry(
@@ -270,18 +255,26 @@ class BotOrderAttachmentService:
         already_attached = isinstance(existing_entry, dict)
         storage_meta: dict[str, Any] = {}
         if content and (not already_attached or not existing_entry.get("url")):
-            stored = await cls.store_attachment_content(
+            await ServiceAttachmentService.create_and_link_order_attachment(
+                session,
                 order_id=order_id,
                 content=content,
                 filename=filename,
                 mime_type=mime_type,
+                category="other",
+                source="telegram_bot",
+                captured_at=attached_at,
+                telegram_meta={
+                    "file_id": file_id,
+                    "user_id": telegram_user_id,
+                    "chat_id": telegram_chat_id,
+                    "message_id": telegram_message_id,
+                },
             )
             storage_meta = {
-                "url": stored.url,
-                "storage_provider": stored.storage_provider,
-                "storage_path": stored.path,
-                "content_hash": stored.content_hash,
-                "size_bytes": stored.size_bytes,
+                "storage_provider": "private_service_attachment",
+                "content_hash": sha256_bytes(content),
+                "size_bytes": len(content),
             }
 
         if already_attached:
@@ -314,21 +307,3 @@ class BotOrderAttachmentService:
         data["attachment"] = entry
         data["already_attached"] = already_attached
         return data
-
-    @classmethod
-    async def store_attachment_content(
-        cls,
-        *,
-        order_id: int,
-        content: bytes,
-        filename: str,
-        mime_type: str | None,
-    ) -> StoredGeneralMediaObject:
-        storage = get_general_media_storage()
-        return await storage.save_media(
-            content=content,
-            namespace=f"orders/{order_id}/telegram",
-            variant_type=cls._file_kind(mime_type),
-            extension=cls._extension_from_filename_or_mime(filename, mime_type),
-            content_type=mime_type or "application/octet-stream",
-        )

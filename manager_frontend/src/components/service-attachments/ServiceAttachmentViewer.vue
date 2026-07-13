@@ -86,6 +86,10 @@ const loadAccess = async () => {
   zoom.value = 1;
   detailsOpen.value = false;
   if (!item) return;
+  if (typeof item.id !== 'number') {
+    accessError.value = item.processing_error || 'Файл ожидает безопасного переноса.';
+    return;
+  }
 
   accessLoading.value = true;
   try {

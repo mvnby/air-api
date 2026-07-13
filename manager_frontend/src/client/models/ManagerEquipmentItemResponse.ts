@@ -27,5 +27,14 @@ export type ManagerEquipmentItemResponse = {
     is_archived?: boolean;
     created_at: string;
     updated_at?: (string | null);
+    customer_name?: (string | null);
+    customer_phone?: (string | null);
+    branch_name?: (string | null);
+    branch_address?: (string | null);
+    service_contact_name?: (string | null);
+    service_contact_phone?: (string | null);
+    last_service_at?: (string | null);
+    next_maintenance_due_at?: (string | null);
+    attention_reasons?: Array<string>;
 };
 
