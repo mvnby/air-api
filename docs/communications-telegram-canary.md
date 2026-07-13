@@ -37,8 +37,26 @@ CANARY=(docker compose -f docker-compose.patroni.yml --profile bluegreen exec -T
 
 run_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 "${CANARY[@]}" --plan --run-id "${run_id}"
+```
+
+Review the plan before issuing the one intentional execute command:
+
+```bash
 "${CANARY[@]}" --execute --run-id "${run_id}"
+```
+
+Poll the same immutable run ID until it reaches a terminal outcome or the
+bounded operational deadline. Do not generate another ID after a timeout or an
+ambiguous SSH result:
+
+```bash
 "${CANARY[@]}" --status --run-id "${run_id}"
+```
+
+Only after terminal success, or immediately after an incident decision, switch
+the runtime off in a separate operator action:
+
+```bash
 "${CANARY[@]}" --off
 ```
 
