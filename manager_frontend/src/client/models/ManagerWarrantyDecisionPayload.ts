@@ -6,3 +6,4 @@ export type ManagerWarrantyDecisionPayload = {
     action: 'voided' | 'restored';
     reason: string;
 };
+

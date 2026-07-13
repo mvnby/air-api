@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, Column, JSON, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Index, JSON, String, Text, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -123,6 +123,14 @@ class EquipmentWarrantyCoverage(SQLModel, table=True):
     __tablename__ = "equipment_warranty_coverage"
     __table_args__ = (
         UniqueConstraint("equipment_id", "component_id", "coverage_type", name="uq_equipment_warranty_scope"),
+        Index(
+            "uq_equipment_warranty_system_scope",
+            "equipment_id",
+            "coverage_type",
+            unique=True,
+            postgresql_where=text("component_id IS NULL"),
+            sqlite_where=text("component_id IS NULL"),
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)

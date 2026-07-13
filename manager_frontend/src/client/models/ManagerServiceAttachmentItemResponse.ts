@@ -23,3 +23,4 @@ export type ManagerServiceAttachmentItemResponse = {
     component_id?: (number | null);
     service_history_id?: (number | null);
 };
+

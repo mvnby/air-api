@@ -18,6 +18,20 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _create_column_indexes(table_name: str, columns: Sequence[str]) -> None:
+    for column_name in columns:
+        op.create_index(
+            f"ix_{table_name}_{column_name}",
+            table_name,
+            [column_name],
+        )
+
+
+def _drop_column_indexes(table_name: str, columns: Sequence[str]) -> None:
+    for column_name in reversed(columns):
+        op.drop_index(f"ix_{table_name}_{column_name}", table_name=table_name)
+
+
 def upgrade() -> None:
     op.create_table(
         "service_attachment",
@@ -52,6 +66,19 @@ def upgrade() -> None:
     op.create_index("ix_service_attachment_processing_status", "service_attachment", ["processing_status"])
     op.create_index("ix_service_attachment_telegram_file_id", "service_attachment", ["telegram_file_id"])
     op.create_index("ix_service_attachment_archived_at", "service_attachment", ["archived_at"])
+    _create_column_indexes(
+        "service_attachment",
+        (
+            "captured_at",
+            "created_by",
+            "file_kind",
+            "source",
+            "storage_provider",
+            "telegram_chat_id",
+            "telegram_message_id",
+            "telegram_user_id",
+        ),
+    )
 
     op.create_table(
         "order_attachment_link",
@@ -73,6 +100,10 @@ def upgrade() -> None:
     op.create_index("ix_order_attachment_link_attachment_id", "order_attachment_link", ["attachment_id"])
     op.create_index("ix_order_attachment_link_category", "order_attachment_link", ["category"])
     op.create_index("ix_order_attachment_link_archived_at", "order_attachment_link", ["archived_at"])
+    _create_column_indexes(
+        "order_attachment_link",
+        ("created_at", "work_stage_id"),
+    )
 
     op.create_table(
         "equipment_attachment_link",
@@ -95,6 +126,10 @@ def upgrade() -> None:
     op.create_index("ix_equipment_attachment_link_equipment_id", "equipment_attachment_link", ["equipment_id"])
     op.create_index("ix_equipment_attachment_link_attachment_id", "equipment_attachment_link", ["attachment_id"])
     op.create_index("ix_equipment_attachment_link_archived_at", "equipment_attachment_link", ["archived_at"])
+    _create_column_indexes(
+        "equipment_attachment_link",
+        ("category", "component_id", "created_at", "service_history_id"),
+    )
 
     op.create_table(
         "equipment_order_link",
@@ -111,6 +146,7 @@ def upgrade() -> None:
     op.create_index("ix_equipment_order_link_equipment_id", "equipment_order_link", ["equipment_id"])
     op.create_index("ix_equipment_order_link_order_id", "equipment_order_link", ["order_id"])
     op.create_index("ix_equipment_order_link_role", "equipment_order_link", ["role"])
+    op.create_index("ix_equipment_order_link_created_at", "equipment_order_link", ["created_at"])
 
     op.create_table(
         "warranty_policy",
@@ -139,8 +175,22 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["supplier_id"], ["supplier.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_warranty_policy_scope", "warranty_policy", ["product_id", "series_id", "brand_id", "supplier_id"])
-    op.create_index("ix_warranty_policy_active", "warranty_policy", ["is_active", "effective_from", "effective_until"])
+    _create_column_indexes(
+        "warranty_policy",
+        (
+            "brand_id",
+            "coverage_type",
+            "created_at",
+            "effective_from",
+            "effective_until",
+            "is_active",
+            "maintenance_required",
+            "name",
+            "product_id",
+            "series_id",
+            "supplier_id",
+        ),
+    )
 
     op.create_table(
         "equipment_warranty_coverage",
@@ -172,7 +222,22 @@ def upgrade() -> None:
         sa.UniqueConstraint("equipment_id", "component_id", "coverage_type", name="uq_equipment_warranty_scope"),
     )
     op.create_index("ix_equipment_warranty_coverage_equipment_id", "equipment_warranty_coverage", ["equipment_id"])
-    op.create_index("ix_equipment_warranty_coverage_attention", "equipment_warranty_coverage", ["expires_at", "next_maintenance_due_at", "decision_status"])
+    _create_column_indexes(
+        "equipment_warranty_coverage",
+        (
+            "component_id",
+            "coverage_type",
+            "created_at",
+            "decided_at",
+            "decision_status",
+            "expires_at",
+            "maintenance_required",
+            "next_maintenance_due_at",
+            "policy_id",
+            "source",
+            "starts_at",
+        ),
+    )
     op.create_index(
         "uq_equipment_warranty_system_scope",
         "equipment_warranty_coverage",
@@ -193,6 +258,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_equipment_warranty_decision_coverage_id", "equipment_warranty_decision", ["coverage_id"])
+    _create_column_indexes(
+        "equipment_warranty_decision",
+        ("action", "created_at", "decided_by"),
+    )
 
     op.create_table(
         "equipment_maintenance_reminder",
@@ -219,34 +288,92 @@ def upgrade() -> None:
         "equipment_maintenance_reminder",
         ["equipment_id"],
     )
-    op.create_index(
-        "ix_equipment_maintenance_reminder_status",
+    _create_column_indexes(
         "equipment_maintenance_reminder",
-        ["status", "due_at"],
+        (
+            "coverage_id",
+            "created_at",
+            "due_at",
+            "reminder_type",
+            "resolved_at",
+            "status",
+        ),
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_equipment_maintenance_reminder_status", table_name="equipment_maintenance_reminder")
+    _drop_column_indexes(
+        "equipment_maintenance_reminder",
+        (
+            "coverage_id",
+            "created_at",
+            "due_at",
+            "reminder_type",
+            "resolved_at",
+            "status",
+        ),
+    )
     op.drop_index("ix_equipment_maintenance_reminder_equipment_id", table_name="equipment_maintenance_reminder")
     op.drop_table("equipment_maintenance_reminder")
+    _drop_column_indexes(
+        "equipment_warranty_decision",
+        ("action", "created_at", "decided_by"),
+    )
     op.drop_index("ix_equipment_warranty_decision_coverage_id", table_name="equipment_warranty_decision")
     op.drop_table("equipment_warranty_decision")
-    op.drop_index("ix_equipment_warranty_coverage_attention", table_name="equipment_warranty_coverage")
+    _drop_column_indexes(
+        "equipment_warranty_coverage",
+        (
+            "component_id",
+            "coverage_type",
+            "created_at",
+            "decided_at",
+            "decision_status",
+            "expires_at",
+            "maintenance_required",
+            "next_maintenance_due_at",
+            "policy_id",
+            "source",
+            "starts_at",
+        ),
+    )
     op.drop_index("uq_equipment_warranty_system_scope", table_name="equipment_warranty_coverage")
     op.drop_index("ix_equipment_warranty_coverage_equipment_id", table_name="equipment_warranty_coverage")
     op.drop_table("equipment_warranty_coverage")
-    op.drop_index("ix_warranty_policy_active", table_name="warranty_policy")
-    op.drop_index("ix_warranty_policy_scope", table_name="warranty_policy")
+    _drop_column_indexes(
+        "warranty_policy",
+        (
+            "brand_id",
+            "coverage_type",
+            "created_at",
+            "effective_from",
+            "effective_until",
+            "is_active",
+            "maintenance_required",
+            "name",
+            "product_id",
+            "series_id",
+            "supplier_id",
+        ),
+    )
     op.drop_table("warranty_policy")
+    op.drop_index("ix_equipment_order_link_created_at", table_name="equipment_order_link")
     op.drop_index("ix_equipment_order_link_role", table_name="equipment_order_link")
     op.drop_index("ix_equipment_order_link_order_id", table_name="equipment_order_link")
     op.drop_index("ix_equipment_order_link_equipment_id", table_name="equipment_order_link")
     op.drop_table("equipment_order_link")
     op.drop_index("ix_equipment_attachment_link_attachment_id", table_name="equipment_attachment_link")
     op.drop_index("ix_equipment_attachment_link_archived_at", table_name="equipment_attachment_link")
+    _drop_column_indexes(
+        "equipment_attachment_link",
+        ("category", "component_id", "created_at", "service_history_id"),
+    )
     op.drop_index("ix_equipment_attachment_link_equipment_id", table_name="equipment_attachment_link")
     op.drop_table("equipment_attachment_link")
+    _drop_column_indexes(
+        "order_attachment_link",
+        ("created_at", "work_stage_id"),
+    )
     op.drop_index("ix_order_attachment_link_category", table_name="order_attachment_link")
     op.drop_index("ix_order_attachment_link_archived_at", table_name="order_attachment_link")
     op.drop_index("ix_order_attachment_link_attachment_id", table_name="order_attachment_link")
@@ -256,4 +383,17 @@ def downgrade() -> None:
     op.drop_index("ix_service_attachment_telegram_file_id", table_name="service_attachment")
     op.drop_index("ix_service_attachment_processing_status", table_name="service_attachment")
     op.drop_index("ix_service_attachment_created_at", table_name="service_attachment")
+    _drop_column_indexes(
+        "service_attachment",
+        (
+            "captured_at",
+            "created_by",
+            "file_kind",
+            "source",
+            "storage_provider",
+            "telegram_chat_id",
+            "telegram_message_id",
+            "telegram_user_id",
+        ),
+    )
     op.drop_table("service_attachment")

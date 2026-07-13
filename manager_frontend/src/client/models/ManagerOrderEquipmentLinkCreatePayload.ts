@@ -6,3 +6,4 @@ export type ManagerOrderEquipmentLinkCreatePayload = {
     equipment_id: number;
     role?: string;
 };
+

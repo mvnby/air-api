@@ -7,3 +7,4 @@ export type ManagerServiceAttachmentListResponse = {
     items?: Array<ManagerServiceAttachmentItemResponse>;
     total?: number;
 };
+

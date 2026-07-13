@@ -7,3 +7,4 @@ export type ManagerOrderEquipmentLinkListResponse = {
     items?: Array<ManagerOrderEquipmentLinkItemResponse>;
     total?: number;
 };
+

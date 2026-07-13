@@ -7,3 +7,4 @@ export type ManagerServiceAttachmentAccessResponse = {
     expires_at: string;
     variant: string;
 };
+
