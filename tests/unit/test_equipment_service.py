@@ -2,7 +2,14 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from models import CustomerEquipment, EquipmentServiceEventType, EquipmentServiceHistory, Order, OrderStatus
+from models import (
+    CustomerEquipment,
+    EquipmentServiceEventType,
+    EquipmentServiceHistory,
+    EquipmentWarrantyCoverage,
+    Order,
+    OrderStatus,
+)
 from services.equipment_service import EquipmentService
 
 
@@ -22,6 +29,39 @@ def test_warranty_status_uses_equipment_warranty_dates():
     assert EquipmentService._warranty_status(
         CustomerEquipment(customer_id=1, warranty_started_at=now + timedelta(days=1), warranty_expires_at=now + timedelta(days=3))
     ) == "scheduled"
+
+
+def test_coverage_summary_replaces_stale_legacy_warranty_fields():
+    now = datetime(2026, 7, 13, 12, 0)
+    data = EquipmentService._to_equipment_item(
+        CustomerEquipment(
+            customer_id=1,
+            warranty_started_at=datetime(2020, 1, 1),
+            warranty_expires_at=datetime(2021, 1, 1),
+            warranty_terms="Old legacy value",
+        )
+    )
+    supplier = EquipmentWarrantyCoverage(
+        equipment_id=1,
+        coverage_type="supplier",
+        starts_at=datetime(2026, 7, 1),
+        expires_at=datetime(2028, 7, 1),
+        terms_snapshot="Supplier snapshot",
+    )
+    work = EquipmentWarrantyCoverage(
+        equipment_id=1,
+        coverage_type="mvn_work",
+        starts_at=datetime(2026, 7, 1),
+        expires_at=datetime(2027, 7, 1),
+        terms_snapshot="Work snapshot",
+    )
+
+    EquipmentService._apply_coverage_summary(data, [work, supplier], now=now)
+
+    assert data["warranty_status"] == "active"
+    assert data["warranty_started_at"] == datetime(2026, 7, 1)
+    assert data["warranty_expires_at"] == datetime(2028, 7, 1)
+    assert data["warranty_terms"] == "Supplier snapshot"
 
 
 def test_add_months_clamps_month_end_for_warranty_expiry():

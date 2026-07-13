@@ -5,12 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import mimetypes
-import os
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
-
-from core.config import settings
+from urllib.parse import urlsplit
 
 
 @dataclass(frozen=True)
@@ -36,6 +35,12 @@ class PrivateAttachmentStorage(Protocol):
 
     async def read(self, storage_key: str) -> bytes: ...
 
+    async def exists(self, storage_key: str) -> bool: ...
+
+    async def delete(self, storage_key: str) -> None: ...
+
+    async def verify_writable(self) -> None: ...
+
     async def presign(self, storage_key: str, *, expires_seconds: int, download_name: str | None = None) -> str | None: ...
 
 
@@ -49,6 +54,27 @@ def _safe_extension(value: str) -> str:
 def _safe_segment(value: str) -> str:
     normalized = "".join(ch.lower() if ch.isalnum() else "-" for ch in str(value or "")).strip("-")
     return normalized or "file"
+
+
+def _validate_https_endpoint(endpoint_url: str) -> None:
+    try:
+        parsed_endpoint = urlsplit(endpoint_url)
+        parsed_endpoint.port
+    except ValueError:
+        parsed_endpoint = None
+    if (
+        parsed_endpoint is None
+        or parsed_endpoint.scheme.lower() != "https"
+        or not parsed_endpoint.hostname
+        or parsed_endpoint.username is not None
+        or parsed_endpoint.password is not None
+        or parsed_endpoint.query
+        or parsed_endpoint.fragment
+        or any(char.isspace() for char in endpoint_url)
+    ):
+        raise ValueError(
+            "Private attachment S3 endpoint must be a credential-free HTTPS URL"
+        )
 
 
 def _deterministic_key(*, prefix: str, content_hash: str, variant: str, extension: str) -> str:
@@ -105,6 +131,32 @@ class LocalPrivateAttachmentStorage:
             raise FileNotFoundError(storage_key)
         return await asyncio.to_thread(path.read_bytes)
 
+    async def exists(self, storage_key: str) -> bool:
+        return await asyncio.to_thread(self._path(storage_key).is_file)
+
+    async def delete(self, storage_key: str) -> None:
+        path = self._path(storage_key)
+        if path.is_file():
+            await asyncio.to_thread(path.unlink)
+
+    async def verify_writable(self) -> None:
+        content = f"mvn-private-storage-{secrets.token_hex(16)}".encode()
+        digest = hashlib.sha256(content).hexdigest()
+        stored = await self.save(
+            content=content,
+            content_hash=digest,
+            extension="txt",
+            content_type="text/plain",
+            variant="healthcheck",
+        )
+        try:
+            if await self.read(stored.storage_key) != content:
+                raise RuntimeError("Private local storage read-back mismatch")
+        finally:
+            await self.delete(stored.storage_key)
+        if await self.exists(stored.storage_key):
+            raise RuntimeError("Private local storage delete verification failed")
+
     async def presign(self, storage_key: str, *, expires_seconds: int, download_name: str | None = None) -> str | None:
         del storage_key, expires_seconds, download_name
         return None
@@ -132,9 +184,19 @@ class S3PrivateAttachmentStorage:
         self.key_prefix = key_prefix.strip(" /")
         self._client_override = client
         self._client: Any | None = None
-        missing = [name for name, value in (("bucket", self.bucket), ("endpoint", self.endpoint_url)) if not value]
+        missing = [
+            name
+            for name, value in (
+                ("bucket", self.bucket),
+                ("endpoint", self.endpoint_url),
+                ("access key", self.access_key_id),
+                ("secret key", self.secret_access_key),
+            )
+            if not value
+        ]
         if missing:
             raise ValueError("Private attachment S3 storage requires " + ", ".join(missing))
+        _validate_https_endpoint(self.endpoint_url)
 
     def _get_client(self) -> Any:
         if self._client_override is not None:
@@ -152,7 +214,13 @@ class S3PrivateAttachmentStorage:
             region_name=self.region,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.secret_access_key,
-            config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+            config=Config(
+                signature_version="s3v4",
+                connect_timeout=5,
+                read_timeout=10,
+                retries={"max_attempts": 2, "mode": "standard"},
+                s3={"addressing_style": "path"},
+            ),
         )
         return self._client
 
@@ -189,6 +257,46 @@ class S3PrivateAttachmentStorage:
         response = await asyncio.to_thread(self._get_client().get_object, Bucket=self.bucket, Key=storage_key)
         return await asyncio.to_thread(response["Body"].read)
 
+    async def exists(self, storage_key: str) -> bool:
+        try:
+            await asyncio.to_thread(
+                self._get_client().head_object,
+                Bucket=self.bucket,
+                Key=storage_key,
+            )
+        except Exception as exc:
+            response = getattr(exc, "response", {}) or {}
+            error = response.get("Error", {}) if isinstance(response, dict) else {}
+            if str(error.get("Code") or "") in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
+        return True
+
+    async def delete(self, storage_key: str) -> None:
+        await asyncio.to_thread(
+            self._get_client().delete_object,
+            Bucket=self.bucket,
+            Key=storage_key,
+        )
+
+    async def verify_writable(self) -> None:
+        content = f"mvn-private-storage-{secrets.token_hex(16)}".encode()
+        digest = hashlib.sha256(content).hexdigest()
+        stored = await self.save(
+            content=content,
+            content_hash=digest,
+            extension="txt",
+            content_type="text/plain",
+            variant="healthcheck",
+        )
+        try:
+            if await self.read(stored.storage_key) != content:
+                raise RuntimeError("Private S3 storage read-back mismatch")
+        finally:
+            await self.delete(stored.storage_key)
+        if await self.exists(stored.storage_key):
+            raise RuntimeError("Private S3 storage delete verification failed")
+
     async def presign(self, storage_key: str, *, expires_seconds: int, download_name: str | None = None) -> str | None:
         params: dict[str, Any] = {"Bucket": self.bucket, "Key": storage_key}
         if download_name:
@@ -201,23 +309,97 @@ class S3PrivateAttachmentStorage:
         )
 
 
-def get_private_attachment_storage(provider: str | None = None) -> PrivateAttachmentStorage:
-    selected = (provider or settings.SERVICE_ATTACHMENT_STORAGE_PROVIDER or "local").strip().lower()
+def _build_private_attachment_storage(
+    current_settings: Any,
+    provider: str | None = None,
+    *,
+    client: Any | None = None,
+) -> PrivateAttachmentStorage:
+    selected = (
+        provider or current_settings.SERVICE_ATTACHMENT_STORAGE_PROVIDER or "local"
+    ).strip().lower()
     if selected == "local":
-        return LocalPrivateAttachmentStorage(settings.SERVICE_ATTACHMENT_LOCAL_DIR)
+        if current_settings.is_production:
+            raise RuntimeError(
+                "Production service attachments require a dedicated private R2/S3 bucket; "
+                "local container storage is not persistent"
+            )
+        return LocalPrivateAttachmentStorage(
+            current_settings.SERVICE_ATTACHMENT_LOCAL_DIR
+        )
     if selected in {"r2", "s3", "s3_compatible"}:
-        bucket = settings.SERVICE_ATTACHMENT_S3_BUCKET.strip()
-        if not bucket:
-            raise ValueError("SERVICE_ATTACHMENT_S3_BUCKET must point to a dedicated private bucket")
+        required = {
+            "SERVICE_ATTACHMENT_S3_BUCKET": current_settings.SERVICE_ATTACHMENT_S3_BUCKET,
+            "SERVICE_ATTACHMENT_S3_ENDPOINT_URL": current_settings.SERVICE_ATTACHMENT_S3_ENDPOINT_URL,
+            "SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID": current_settings.SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID,
+            "SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY": current_settings.SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY,
+        }
+        missing = [name for name, value in required.items() if not str(value or "").strip()]
+        if missing:
+            raise ValueError("Private attachment storage is missing: " + ", ".join(missing))
         return S3PrivateAttachmentStorage(
-            bucket=bucket,
-            endpoint_url=settings.SERVICE_ATTACHMENT_S3_ENDPOINT_URL or settings.MEDIA_S3_ENDPOINT_URL,
-            access_key_id=settings.SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID or settings.MEDIA_S3_ACCESS_KEY_ID,
-            secret_access_key=settings.SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY or settings.MEDIA_S3_SECRET_ACCESS_KEY,
-            region=settings.SERVICE_ATTACHMENT_S3_REGION or settings.MEDIA_S3_REGION,
-            key_prefix=settings.SERVICE_ATTACHMENT_S3_KEY_PREFIX,
+            bucket=current_settings.SERVICE_ATTACHMENT_S3_BUCKET,
+            endpoint_url=current_settings.SERVICE_ATTACHMENT_S3_ENDPOINT_URL,
+            access_key_id=current_settings.SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID,
+            secret_access_key=current_settings.SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY,
+            region=current_settings.SERVICE_ATTACHMENT_S3_REGION,
+            key_prefix=current_settings.SERVICE_ATTACHMENT_S3_KEY_PREFIX,
+            client=client,
         )
     raise ValueError(f"Unsupported SERVICE_ATTACHMENT_STORAGE_PROVIDER={selected!r}")
+
+
+def get_private_attachment_storage(provider: str | None = None) -> PrivateAttachmentStorage:
+    from core.config import settings
+
+    return _build_private_attachment_storage(settings, provider)
+
+
+def verify_private_attachment_storage_startup(
+    current_settings: Any,
+    *,
+    client: Any | None = None,
+) -> None:
+    if not current_settings.is_production:
+        return
+
+    provider = str(
+        current_settings.SERVICE_ATTACHMENT_STORAGE_PROVIDER or ""
+    ).strip().lower()
+    if provider != "r2":
+        raise RuntimeError("Production private attachment startup requires provider r2")
+
+    private_bucket = str(current_settings.SERVICE_ATTACHMENT_S3_BUCKET or "").strip().casefold()
+    public_buckets = {
+        str(current_settings.MEDIA_S3_BUCKET or "").strip().casefold(),
+        str(current_settings.PRODUCT_MEDIA_S3_BUCKET or "").strip().casefold(),
+    }
+    public_buckets.discard("")
+    if private_bucket in public_buckets:
+        raise RuntimeError(
+            "Production private attachment bucket must be separate from public media buckets"
+        )
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError(
+            "Private attachment startup probe must run before the application event loop"
+        )
+
+    try:
+        storage = _build_private_attachment_storage(
+            current_settings,
+            client=client,
+        )
+        asyncio.run(storage.verify_writable())
+    except Exception as exc:
+        raise RuntimeError(
+            "Private attachment R2 startup probe failed "
+            f"({type(exc).__name__}); check endpoint, credentials and bucket permissions"
+        ) from None
 
 
 def sha256_bytes(content: bytes) -> str:

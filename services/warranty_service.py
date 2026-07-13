@@ -6,14 +6,12 @@ import re
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import (
     Brand,
     CustomerEquipment,
-    EquipmentMaintenanceReminder,
     EquipmentServiceEventType,
     EquipmentWarrantyCoverage,
     EquipmentWarrantyDecision,
@@ -27,14 +25,14 @@ from models import (
 class WarrantyService:
     COVERAGE_TYPES = {"supplier", "mvn_work", "legacy"}
     DECISIONS = {"voided", "restored"}
-    REMINDER_THRESHOLDS = {
-        "due_30_days": timedelta(days=30),
-        "due_7_days": timedelta(days=7),
-        "overdue": timedelta(0),
-    }
 
     @staticmethod
-    def policy_to_item(policy: WarrantyPolicy) -> dict[str, Any]:
+    def policy_to_item(
+        policy: WarrantyPolicy,
+        *,
+        scope_names: dict[str, dict[int, Any]] | None = None,
+    ) -> dict[str, Any]:
+        names = scope_names or {}
         return {
             "id": int(policy.id or 0),
             "name": policy.name,
@@ -43,6 +41,11 @@ class WarrantyService:
             "brand_id": policy.brand_id,
             "series_id": policy.series_id,
             "product_id": policy.product_id,
+            "supplier_name": names.get("suppliers", {}).get(int(policy.supplier_id or 0)),
+            "brand_title": names.get("brands", {}).get(int(policy.brand_id or 0)),
+            "series_title": names.get("series", {}).get(int(policy.series_id or 0)),
+            "series_brand_id": names.get("series_brand_ids", {}).get(int(policy.series_id or 0)),
+            "product_title": names.get("products", {}).get(int(policy.product_id or 0)),
             "duration_months": policy.duration_months,
             "start_event": policy.start_event,
             "maintenance_required": bool(policy.maintenance_required),
@@ -56,6 +59,37 @@ class WarrantyService:
             "created_at": policy.created_at,
             "updated_at": policy.updated_at,
         }
+
+    @staticmethod
+    async def _policy_scope_names(
+        session: AsyncSession,
+        policies: list[WarrantyPolicy],
+    ) -> dict[str, dict[int, Any]]:
+        lookups: tuple[tuple[str, Any, Any, set[int]], ...] = (
+            ("suppliers", Supplier, Supplier.name, {int(item.supplier_id) for item in policies if item.supplier_id}),
+            ("brands", Brand, Brand.title, {int(item.brand_id) for item in policies if item.brand_id}),
+            ("products", Product, Product.title, {int(item.product_id) for item in policies if item.product_id}),
+        )
+        names: dict[str, dict[int, Any]] = {}
+        for key, model, title_field, ids in lookups:
+            if not ids:
+                names[key] = {}
+                continue
+            result = await session.execute(select(model.id, title_field).where(model.id.in_(ids)))
+            names[key] = {int(item_id): str(title) for item_id, title in result.all()}
+        series_ids = {int(item.series_id) for item in policies if item.series_id}
+        names["series"] = {}
+        names["series_brand_ids"] = {}
+        if series_ids:
+            result = await session.execute(
+                select(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id).where(
+                    ProductSeries.id.in_(series_ids)
+                )
+            )
+            for series_id, title, brand_id in result.all():
+                names["series"][int(series_id)] = str(title)
+                names["series_brand_ids"][int(series_id)] = int(brand_id)
+        return names
 
     @classmethod
     def _validated_policy_values(cls, payload: dict[str, Any], *, partial: bool) -> dict[str, Any]:
@@ -122,7 +156,9 @@ class WarrantyService:
             .where(*filters)
             .order_by(WarrantyPolicy.is_active.desc(), WarrantyPolicy.name, WarrantyPolicy.id)
         )
-        return [cls.policy_to_item(item) for item in result.scalars().all()]
+        policies = list(result.scalars().all())
+        scope_names = await cls._policy_scope_names(session, policies)
+        return [cls.policy_to_item(item, scope_names=scope_names) for item in policies]
 
     @classmethod
     async def create_policy(cls, session: AsyncSession, *, payload: dict[str, Any]) -> dict[str, Any]:
@@ -134,7 +170,8 @@ class WarrantyService:
         session.add(policy)
         await session.commit()
         await session.refresh(policy)
-        return cls.policy_to_item(policy)
+        scope_names = await cls._policy_scope_names(session, [policy])
+        return cls.policy_to_item(policy, scope_names=scope_names)
 
     @classmethod
     async def update_policy(
@@ -167,7 +204,8 @@ class WarrantyService:
         session.add(policy)
         await session.commit()
         await session.refresh(policy)
-        return cls.policy_to_item(policy)
+        scope_names = await cls._policy_scope_names(session, [policy])
+        return cls.policy_to_item(policy, scope_names=scope_names)
 
     @staticmethod
     async def _validate_policy_scope(session: AsyncSession, values: dict[str, Any]) -> None:
@@ -256,13 +294,16 @@ class WarrantyService:
         return True
 
     @staticmethod
-    def _policy_score(policy: WarrantyPolicy) -> int:
-        return (
-            (1000 if policy.product_id is not None else 0)
-            + (700 if policy.series_id is not None else 0)
-            + (400 if policy.brand_id is not None else 0)
-            + (100 if policy.supplier_id is not None else 0)
-        )
+    def _policy_score(policy: WarrantyPolicy) -> tuple[int, int]:
+        if policy.product_id is not None:
+            scope_specificity = 4
+        elif policy.series_id is not None:
+            scope_specificity = 3
+        elif policy.brand_id is not None:
+            scope_specificity = 2
+        else:
+            scope_specificity = 1
+        return scope_specificity, int(policy.supplier_id is not None)
 
     @classmethod
     async def resolve_policy(
@@ -298,13 +339,14 @@ class WarrantyService:
         event: str,
         equipment: CustomerEquipment,
         explicit: datetime | None,
+        sale_at: datetime | None = None,
     ) -> datetime | None:
         if explicit:
             return WarrantyService._naive(explicit)
         if event == "installation":
             return WarrantyService._naive(equipment.installed_at)
         if event == "sale":
-            return WarrantyService._naive(equipment.commissioned_at or equipment.installed_at)
+            return WarrantyService._naive(sale_at or equipment.commissioned_at or equipment.installed_at)
         if event == "manual":
             return None
         return WarrantyService._naive(equipment.commissioned_at or equipment.installed_at)
@@ -318,6 +360,9 @@ class WarrantyService:
         product: Product | None,
         supplier_id: int | None,
         explicit_start: datetime | None = None,
+        sale_at: datetime | None = None,
+        manual_expires_at: datetime | None = None,
+        manual_terms: str | None = None,
     ) -> EquipmentWarrantyCoverage | None:
         existing = await cls._existing_system_coverage(
             session,
@@ -326,14 +371,31 @@ class WarrantyService:
         )
         if existing:
             return existing
-        policy = await cls.resolve_policy(
-            session,
-            product=product,
-            supplier_id=supplier_id,
-            coverage_type="supplier",
-            at=explicit_start,
-        )
-        if policy:
+        policy_at = explicit_start or sale_at or equipment.commissioned_at or equipment.installed_at
+        policy = None
+        if manual_expires_at is None:
+            policy = await cls.resolve_policy(
+                session,
+                product=product,
+                supplier_id=supplier_id,
+                coverage_type="supplier",
+                at=policy_at,
+            )
+        if manual_expires_at is not None:
+            duration_months = None
+            start_event = "manual"
+            maintenance_required = False
+            interval = None
+            grace = 0
+            provider = "any"
+            terms = manual_terms
+            source = "manual"
+            snapshot = {
+                "starts_at": cls._naive(explicit_start).isoformat() if explicit_start else None,
+                "expires_at": cls._naive(manual_expires_at).isoformat(),
+                "terms": manual_terms,
+            }
+        elif policy:
             duration_months = policy.duration_months
             start_event = policy.start_event
             maintenance_required = bool(policy.maintenance_required)
@@ -374,8 +436,15 @@ class WarrantyService:
                 "product_id": int(product.id or 0) if product else None,
             }
 
-        starts_at = cls._start_for_event(event=start_event, equipment=equipment, explicit=explicit_start)
-        expires_at = cls._add_months(starts_at, duration_months) if starts_at and duration_months else None
+        starts_at = cls._start_for_event(
+            event=start_event,
+            equipment=equipment,
+            explicit=explicit_start,
+            sale_at=sale_at,
+        )
+        expires_at = cls._naive(manual_expires_at)
+        if expires_at is None and starts_at and duration_months:
+            expires_at = cls._add_months(starts_at, duration_months)
         next_due = cls._add_months(starts_at, interval) if starts_at and maintenance_required and interval else None
         coverage = EquipmentWarrantyCoverage(
             equipment_id=int(equipment.id or 0),
@@ -407,6 +476,7 @@ class WarrantyService:
         terms: str | None = None,
         product: Product | None = None,
         supplier_id: int | None = None,
+        sale_at: datetime | None = None,
     ) -> EquipmentWarrantyCoverage | None:
         existing = await cls._existing_system_coverage(
             session,
@@ -415,28 +485,43 @@ class WarrantyService:
         )
         if existing:
             return existing
-        policy = None
-        if duration_months is None:
-            policy = await cls.resolve_policy(
-                session,
-                product=product,
-                supplier_id=supplier_id,
-                coverage_type="mvn_work",
-                at=starts_at,
-            )
-            duration_months = policy.duration_months if policy else None
-            terms = policy.terms if policy else terms
+        explicit_duration = duration_months is not None
+        policy_at = starts_at or sale_at or equipment.installed_at or equipment.commissioned_at
+        policy = await cls.resolve_policy(
+            session,
+            product=product,
+            supplier_id=supplier_id,
+            coverage_type="mvn_work",
+            at=policy_at,
+        )
+        duration_months = duration_months if explicit_duration else (policy.duration_months if policy else None)
+        if terms is None and policy:
+            terms = policy.terms
         if duration_months is None or int(duration_months) <= 0:
             return None
-        start = cls._naive(starts_at) or cls._naive(equipment.installed_at or equipment.commissioned_at)
+        maintenance_required = bool(policy.maintenance_required) if policy else False
+        interval = policy.maintenance_interval_months if policy else None
+        grace = int(policy.grace_period_days or 0) if policy else 0
+        provider = policy.allowed_maintenance_provider if policy else "any"
+        start = cls._start_for_event(
+            event=policy.start_event if policy else "installation",
+            equipment=equipment,
+            explicit=starts_at if explicit_duration else None,
+            sale_at=sale_at,
+        )
+        next_due = cls._add_months(start, interval) if start and maintenance_required and interval else None
         coverage = EquipmentWarrantyCoverage(
             equipment_id=int(equipment.id or 0),
             policy_id=policy.id if policy else None,
             coverage_type="mvn_work",
-            source="policy" if policy else "manual",
+            source="policy_override" if policy and explicit_duration else ("policy" if policy else "manual"),
             starts_at=start,
             expires_at=cls._add_months(start, int(duration_months)) if start else None,
-            maintenance_required=False,
+            maintenance_required=maintenance_required,
+            maintenance_interval_months=interval,
+            grace_period_days=grace,
+            allowed_maintenance_provider=provider,
+            next_maintenance_due_at=next_due,
             terms_snapshot=terms,
             policy_snapshot=(
                 {
@@ -448,6 +533,10 @@ class WarrantyService:
                     "product_id": policy.product_id,
                     "duration_months": int(duration_months),
                     "start_event": policy.start_event,
+                    "maintenance_required": policy.maintenance_required,
+                    "maintenance_interval_months": policy.maintenance_interval_months,
+                    "grace_period_days": policy.grace_period_days,
+                    "allowed_maintenance_provider": policy.allowed_maintenance_provider,
                     "terms": policy.terms,
                 }
                 if policy
@@ -534,67 +623,9 @@ class WarrantyService:
         *,
         now: datetime | None = None,
     ) -> dict[str, int]:
-        moment = cls._naive(now) or datetime.now()
-        coverage_result = await session.execute(
-            select(EquipmentWarrantyCoverage).where(
-                EquipmentWarrantyCoverage.maintenance_required == True,
-                EquipmentWarrantyCoverage.next_maintenance_due_at.is_not(None),
-                EquipmentWarrantyCoverage.decision_status != "voided",
-            )
-        )
-        coverages = list(coverage_result.scalars().all())
-        created = 0
-        skipped = 0
-        for coverage in coverages:
-            due_at = cls._naive(coverage.next_maintenance_due_at)
-            if due_at is None:
-                continue
-            for reminder_type, threshold in cls.REMINDER_THRESHOLDS.items():
-                if moment < due_at - threshold:
-                    continue
-                existing = await session.execute(
-                    select(EquipmentMaintenanceReminder.id).where(
-                        EquipmentMaintenanceReminder.coverage_id == int(coverage.id or 0),
-                        EquipmentMaintenanceReminder.reminder_type == reminder_type,
-                        EquipmentMaintenanceReminder.due_at == due_at,
-                    )
-                )
-                if existing.scalar_one_or_none() is not None:
-                    skipped += 1
-                    continue
-                reminder = EquipmentMaintenanceReminder(
-                    equipment_id=int(coverage.equipment_id),
-                    coverage_id=int(coverage.id or 0),
-                    reminder_type=reminder_type,
-                    due_at=due_at,
-                )
-                try:
-                    async with session.begin_nested():
-                        session.add(reminder)
-                        await session.flush()
-                    created += 1
-                except IntegrityError:
-                    skipped += 1
-        await session.commit()
-        return {"created": created, "skipped": skipped, "coverages": len(coverages)}
+        from services.warranty_maintenance_service import WarrantyMaintenanceService
 
-    @staticmethod
-    async def _resolve_open_maintenance_reminders(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        resolved_at: datetime,
-    ) -> None:
-        result = await session.execute(
-            select(EquipmentMaintenanceReminder).where(
-                EquipmentMaintenanceReminder.equipment_id == equipment_id,
-                EquipmentMaintenanceReminder.status == "open",
-            )
-        )
-        for reminder in result.scalars().all():
-            reminder.status = "resolved"
-            reminder.resolved_at = resolved_at
-            session.add(reminder)
+        return await WarrantyMaintenanceService.generate_reminders(session, now=now)
 
     @classmethod
     async def record_decision(
@@ -629,6 +660,11 @@ class WarrantyService:
                 decided_by=decided_by,
             )
         )
+        if normalized_action == "restored":
+            from services.warranty_maintenance_service import WarrantyMaintenanceService
+
+            await session.flush()
+            await WarrantyMaintenanceService.restore_from_latest_maintenance(session, coverage=coverage)
         await session.commit()
         await session.refresh(coverage)
         return cls.to_item(coverage)
@@ -641,26 +677,14 @@ class WarrantyService:
         equipment_id: int,
         event_type: EquipmentServiceEventType,
         event_date: datetime,
+        maintenance_provider: str | None,
     ) -> None:
-        if event_type != EquipmentServiceEventType.MAINTENANCE:
-            return
-        normalized_event_date = cls._naive(event_date) or datetime.now()
-        await cls._resolve_open_maintenance_reminders(
+        from services.warranty_maintenance_service import WarrantyMaintenanceService
+
+        await WarrantyMaintenanceService.apply_maintenance_event(
             session,
             equipment_id=equipment_id,
-            resolved_at=normalized_event_date,
+            event_type=event_type,
+            event_date=event_date,
+            maintenance_provider=maintenance_provider,
         )
-        result = await session.execute(
-            select(EquipmentWarrantyCoverage).where(
-                EquipmentWarrantyCoverage.equipment_id == equipment_id,
-                EquipmentWarrantyCoverage.maintenance_required == True,
-            )
-        )
-        for coverage in result.scalars().all():
-            if coverage.maintenance_interval_months:
-                coverage.next_maintenance_due_at = cls._add_months(
-                    normalized_event_date,
-                    int(coverage.maintenance_interval_months),
-                )
-                coverage.updated_at = datetime.now()
-                session.add(coverage)

@@ -5,6 +5,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import settings
 from core.database import get_session
 from core.security import get_current_username
 from routers.manager_operation_ids import (
@@ -25,6 +26,19 @@ from services.service_attachment_service import ServiceAttachmentService
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager-service-attachments"])
+
+
+async def _read_upload_limited(file: UploadFile) -> bytes:
+    limit = int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES)
+    content = bytearray()
+    while True:
+        chunk = await file.read(min(1024 * 1024, limit + 1))
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > limit:
+            raise ValueError("Attachment exceeds the configured size limit")
+    return bytes(content)
 
 
 @router.get(
@@ -73,14 +87,16 @@ async def upload_manager_order_attachment(
     work_stage_id: int | None = Form(None),
     equipment_id: int | None = Form(None),
     component_id: int | None = Form(None),
+    service_history_id: int | None = Form(None),
     username: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
     try:
+        content = await _read_upload_limited(file)
         return await ServiceAttachmentService.create_and_link_order_attachment(
             session,
             order_id=order_id,
-            content=await file.read(),
+            content=content,
             filename=file.filename or "attachment",
             mime_type=file.content_type,
             category=category,
@@ -88,6 +104,7 @@ async def upload_manager_order_attachment(
             work_stage_id=work_stage_id,
             equipment_id=equipment_id,
             component_id=component_id,
+            service_history_id=service_history_id,
             created_by=username,
         )
     except ValueError as exc:

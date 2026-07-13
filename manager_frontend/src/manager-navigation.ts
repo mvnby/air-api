@@ -1,6 +1,7 @@
 import type { Component } from 'vue';
 import {
   Award,
+  Boxes,
   Calendar,
   Calculator,
   Database,
@@ -64,6 +65,7 @@ export const navSections: NavSection[] = [
     id: 'services',
     label: 'Услуги',
     items: [
+      { path: '/manager/equipment', label: 'Оборудование', icon: Boxes, match: 'prefix' },
       { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet, match: 'prefix' },
       { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator, match: 'prefix' },
     ],

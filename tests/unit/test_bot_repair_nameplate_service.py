@@ -33,16 +33,30 @@ from services.private_attachment_storage_service import StoredPrivateObject
 class FakePrivateAttachmentStorage:
     provider_name = "test_private"
 
+    def __init__(self):
+        self.objects = {}
+
     async def save(self, **kwargs):
-        return StoredPrivateObject(
+        stored = StoredPrivateObject(
             provider=self.provider_name,
             storage_key=f"private/{kwargs['variant']}/{kwargs['content_hash']}.{kwargs['extension']}",
             content_hash=kwargs["content_hash"],
             size_bytes=len(kwargs["content"]),
         )
+        self.objects.setdefault(stored.storage_key, kwargs["content"])
+        return stored
 
     async def read(self, storage_key: str) -> bytes:
         raise FileNotFoundError(storage_key)
+
+    async def exists(self, storage_key: str) -> bool:
+        return storage_key in self.objects
+
+    async def delete(self, storage_key: str) -> None:
+        self.objects.pop(storage_key, None)
+
+    async def verify_writable(self) -> None:
+        return None
 
     async def presign(self, storage_key: str, *, expires_seconds: int, download_name: str | None = None):
         return None

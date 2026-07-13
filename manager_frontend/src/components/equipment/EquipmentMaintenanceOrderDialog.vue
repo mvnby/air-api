@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { LoaderCircle, Wrench, X } from 'lucide-vue-next';
 import { equipmentLocation, equipmentTitle } from './registry';
 import type { EquipmentRegistryItem } from './types';
+import { useDialogA11y } from './useDialogA11y';
 
 const props = defineProps<{
   equipment: EquipmentRegistryItem;
@@ -16,23 +17,17 @@ const emit = defineEmits<{
 }>();
 
 const confirmButton = ref<HTMLButtonElement | null>(null);
+const dialogRef = ref<HTMLElement | null>(null);
 
 const close = () => {
   if (!props.loading) emit('close');
 };
 
-const onKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') close();
-};
-
-onMounted(async () => {
-  window.addEventListener('keydown', onKeydown);
-  await nextTick();
-  confirmButton.value?.focus();
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown);
+useDialogA11y({
+  open: computed(() => true),
+  dialogRef,
+  initialFocusRef: confirmButton,
+  close,
 });
 </script>
 
@@ -43,10 +38,12 @@ onBeforeUnmount(() => {
       @click.self="close"
     >
       <section
+        ref="dialogRef"
         role="dialog"
         aria-modal="true"
         aria-labelledby="maintenance-order-title"
         aria-describedby="maintenance-order-description"
+        tabindex="-1"
         class="w-full max-w-md rounded-t-lg border border-gray-200 bg-white shadow-2xl sm:rounded-lg dark:border-slate-700 dark:bg-slate-800"
       >
         <header class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-slate-700">

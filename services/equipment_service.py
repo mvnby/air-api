@@ -1,9 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, Optional
 
-from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import (
@@ -29,6 +27,7 @@ class EquipmentService:
     EQUIPMENT_SOURCES = frozenset({"sold_by_us", "installed_by_us", "customer_owned", "unknown"})
     COMPONENT_TYPES = frozenset({"system", "indoor_unit", "outdoor_unit", "remote", "wifi_module", "other"})
     ORDER_LINK_ROLES = frozenset({"sale", "installation", "maintenance", "repair", "diagnostic", "warranty_case", "other"})
+    MAINTENANCE_PROVIDERS = frozenset({"mvn", "authorized", "external"})
 
     @staticmethod
     def _clean_optional_text(value: Any) -> Optional[str]:
@@ -91,6 +90,16 @@ class EquipmentService:
         if value not in EquipmentService.ORDER_LINK_ROLES:
             allowed = ", ".join(sorted(EquipmentService.ORDER_LINK_ROLES))
             raise ValueError(f"Invalid equipment order role: {raw}. Allowed: {allowed}")
+        return value
+
+    @staticmethod
+    def _normalize_maintenance_provider(raw: Any) -> Optional[str]:
+        value = EquipmentService._clean_optional_text(raw)
+        if value is None:
+            return None
+        if value not in EquipmentService.MAINTENANCE_PROVIDERS:
+            allowed = ", ".join(sorted(EquipmentService.MAINTENANCE_PROVIDERS))
+            raise ValueError(f"Invalid maintenance provider: {raw}. Allowed: {allowed}")
         return value
 
     @staticmethod
@@ -221,9 +230,8 @@ class EquipmentService:
         ]
 
     @staticmethod
-    def _order_warranty_start(order: Order, payload: Dict[str, Any]) -> datetime:
-        explicit = EquipmentService._normalize_naive_datetime(payload.get("warranty_start_date"))
-        return explicit or order.installation_date or order.closed_at or datetime.now()
+    def _order_warranty_start(order: Order, payload: Dict[str, Any]) -> Optional[datetime]:
+        return EquipmentService._normalize_naive_datetime(payload.get("warranty_start_date"))
 
     @staticmethod
     def _to_equipment_item(equipment: CustomerEquipment) -> Dict[str, Any]:
@@ -255,6 +263,51 @@ class EquipmentService:
         }
 
     @staticmethod
+    def _apply_coverage_summary(
+        data: Dict[str, Any],
+        coverages: list[EquipmentWarrantyCoverage],
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        """Keep compact registry fields aligned with immutable warranty coverages."""
+
+        moment = EquipmentService._normalize_naive_datetime(now) or datetime.now()
+        available = [item for item in coverages if item.decision_status != "voided"]
+        if not available:
+            return
+        primary = [item for item in available if item.coverage_type in {"supplier", "legacy"}]
+        scoped = primary or available
+
+        def status(item: EquipmentWarrantyCoverage) -> str:
+            starts_at = EquipmentService._normalize_naive_datetime(item.starts_at)
+            expires_at = EquipmentService._normalize_naive_datetime(item.expires_at)
+            if starts_at and starts_at > moment:
+                return "scheduled"
+            if expires_at is None:
+                return "unknown"
+            return "active" if expires_at >= moment else "expired"
+
+        statuses = {status(item) for item in scoped}
+        for candidate in ("active", "scheduled", "unknown", "expired"):
+            if candidate in statuses:
+                data["warranty_status"] = candidate
+                break
+        starts = [
+            EquipmentService._normalize_naive_datetime(item.starts_at)
+            for item in scoped
+            if item.starts_at is not None
+        ]
+        expirations = [
+            EquipmentService._normalize_naive_datetime(item.expires_at)
+            for item in scoped
+            if item.expires_at is not None
+        ]
+        data["warranty_started_at"] = min((value for value in starts if value), default=None)
+        data["warranty_expires_at"] = max((value for value in expirations if value), default=None)
+        terms_item = next((item for item in scoped if item.terms_snapshot), None)
+        data["warranty_terms"] = terms_item.terms_snapshot if terms_item else None
+
+    @staticmethod
     def _to_history_item(entry: EquipmentServiceHistory) -> Dict[str, Any]:
         return {
             "id": int(entry.id or 0),
@@ -262,6 +315,7 @@ class EquipmentService:
             "order_id": entry.order_id,
             "event_type": EquipmentService._enum_value(entry.event_type),
             "event_date": entry.event_date,
+            "maintenance_provider": entry.maintenance_provider,
             "complaint_snapshot": entry.complaint_snapshot,
             "diagnostic_result": entry.diagnostic_result,
             "repair_recommendation": entry.repair_recommendation,
@@ -312,10 +366,17 @@ class EquipmentService:
     @staticmethod
     def _history_values_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         order_id = payload.get("order_id")
+        event_type = EquipmentService._normalize_event_type(payload.get("event_type"))
+        maintenance_provider = EquipmentService._normalize_maintenance_provider(payload.get("maintenance_provider"))
+        if event_type == EquipmentServiceEventType.MAINTENANCE and maintenance_provider is None:
+            maintenance_provider = "mvn" if order_id is not None else None
+            if maintenance_provider is None:
+                raise ValueError("Maintenance provider is required for a maintenance event")
         return {
             "order_id": int(order_id) if order_id is not None else None,
-            "event_type": EquipmentService._normalize_event_type(payload.get("event_type")),
+            "event_type": event_type,
             "event_date": EquipmentService._normalize_naive_datetime(payload.get("event_date")) or datetime.now(),
+            "maintenance_provider": maintenance_provider if event_type == EquipmentServiceEventType.MAINTENANCE else None,
             "complaint_snapshot": EquipmentService._clean_optional_text(payload.get("complaint_snapshot")),
             "diagnostic_result": EquipmentService._clean_optional_text(payload.get("diagnostic_result")),
             "repair_recommendation": EquipmentService._clean_optional_text(payload.get("repair_recommendation")),
@@ -496,954 +557,134 @@ class EquipmentService:
         q: str | None = None,
         attention: str | None = None,
     ) -> Optional[Dict[str, Any]]:
-        if customer_id is not None and not await EquipmentService._ensure_customer_exists(session, customer_id):
-            return None
-        if customer_id is not None and customer_branch_id is not None:
-            await EquipmentService._ensure_branch_for_customer(
-                session,
-                customer_id=customer_id,
-                customer_branch_id=customer_branch_id,
-            )
-
-        filters = []
-        if customer_id is not None:
-            filters.append(CustomerEquipment.customer_id == customer_id)
-        if customer_branch_id is not None:
-            filters.append(CustomerEquipment.customer_branch_id == customer_branch_id)
-        if not include_archived:
-            filters.append(CustomerEquipment.is_archived == False)
-        search = EquipmentService._clean_optional_text(q)
-        if search:
-            pattern = f"%{search}%"
-            filters.append(
-                or_(
-                    CustomerEquipment.display_name.ilike(pattern),
-                    CustomerEquipment.brand.ilike(pattern),
-                    CustomerEquipment.model.ilike(pattern),
-                    CustomerEquipment.serial.ilike(pattern),
-                    CustomerEquipment.inventory_number.ilike(pattern),
-                    CustomerEquipment.location_hint.ilike(pattern),
-                    CustomerEquipment.customer.has(Customer.name.ilike(pattern)),
-                    CustomerEquipment.customer_branch.has(CustomerBranch.delivery_address.ilike(pattern)),
-                )
-            )
-
-        normalized_attention = EquipmentService._clean_optional_text(attention)
-        if normalized_attention and normalized_attention != "all":
-            now = datetime.now()
-            soon = now + timedelta(days=30)
-            attention_conditions = {
-                "maintenance_due_soon": (
-                    EquipmentWarrantyCoverage.maintenance_required == True,
-                    EquipmentWarrantyCoverage.next_maintenance_due_at >= now,
-                    EquipmentWarrantyCoverage.next_maintenance_due_at <= soon,
-                ),
-                "maintenance_overdue": (
-                    EquipmentWarrantyCoverage.maintenance_required == True,
-                    EquipmentWarrantyCoverage.next_maintenance_due_at < now,
-                ),
-                "warranty_expiring": (
-                    EquipmentWarrantyCoverage.expires_at >= now,
-                    EquipmentWarrantyCoverage.expires_at <= soon,
-                    EquipmentWarrantyCoverage.decision_status != "voided",
-                ),
-                "warranty_expired": (
-                    EquipmentWarrantyCoverage.expires_at < now,
-                    EquipmentWarrantyCoverage.decision_status != "voided",
-                ),
-                "needs_decision": (
-                    EquipmentWarrantyCoverage.maintenance_required == True,
-                    EquipmentWarrantyCoverage.next_maintenance_due_at < now,
-                    EquipmentWarrantyCoverage.decision_status == "none",
-                ),
-            }
-            selected_conditions = attention_conditions.get(normalized_attention)
-            if selected_conditions is None:
-                raise ValueError("Unsupported equipment attention filter")
-            matching_equipment_ids = select(EquipmentWarrantyCoverage.equipment_id).where(*selected_conditions)
-            filters.append(CustomerEquipment.id.in_(matching_equipment_ids))
-
-        count_result = await session.execute(select(func.count(CustomerEquipment.id)).where(*filters))
-        total = int(count_result.scalar() or 0)
-        result = await session.execute(
-            select(CustomerEquipment)
-            .options(
-                selectinload(CustomerEquipment.customer),
-                selectinload(CustomerEquipment.customer_branch),
-            )
-            .where(*filters)
-            .order_by(CustomerEquipment.is_archived.asc(), CustomerEquipment.created_at.desc(), CustomerEquipment.id.desc())
-            .offset((page - 1) * limit)
-            .limit(limit)
+        from services.equipment_registry_service import EquipmentRegistryService
+        return await EquipmentRegistryService.list_equipment(
+            session, customer_id=customer_id, customer_branch_id=customer_branch_id,
+            page=page, limit=limit, include_archived=include_archived, q=q, attention=attention,
         )
-        equipment_rows = list(result.scalars().all())
-        equipment_ids = [int(item.id or 0) for item in equipment_rows]
-        coverages_by_equipment: dict[int, list[EquipmentWarrantyCoverage]] = {item_id: [] for item_id in equipment_ids}
-        last_service_by_equipment: dict[int, datetime] = {}
-        if equipment_ids:
-            coverage_result = await session.execute(
-                select(EquipmentWarrantyCoverage).where(
-                    EquipmentWarrantyCoverage.equipment_id.in_(equipment_ids)
-                )
-            )
-            for coverage in coverage_result.scalars().all():
-                coverages_by_equipment.setdefault(int(coverage.equipment_id), []).append(coverage)
-            history_result = await session.execute(
-                select(
-                    EquipmentServiceHistory.equipment_id,
-                    func.max(EquipmentServiceHistory.event_date),
-                )
-                .where(EquipmentServiceHistory.equipment_id.in_(equipment_ids))
-                .group_by(EquipmentServiceHistory.equipment_id)
-            )
-            last_service_by_equipment = {
-                int(equipment_id): event_date
-                for equipment_id, event_date in history_result.all()
-                if event_date is not None
-            }
-
-        from services.warranty_service import WarrantyService
-
-        now = datetime.now()
-        items = []
-        for equipment in equipment_rows:
-            equipment_id = int(equipment.id or 0)
-            data = EquipmentService._to_equipment_item(equipment)
-            customer = equipment.customer
-            branch = equipment.customer_branch
-            data.update(
-                {
-                    "customer_name": customer.name if customer else None,
-                    "customer_phone": customer.phone if customer else None,
-                    "branch_name": branch.name if branch else None,
-                    "branch_address": branch.delivery_address if branch else equipment.location_hint,
-                    "service_contact_name": (
-                        branch.contact_name if branch and branch.contact_name else (customer.name if customer else None)
-                    ),
-                    "service_contact_phone": (
-                        branch.contact_phone if branch and branch.contact_phone else (customer.phone if customer else None)
-                    ),
-                    "last_service_at": last_service_by_equipment.get(equipment_id),
-                }
-            )
-            next_due_values = []
-            attention_reasons: set[str] = set()
-            for coverage in coverages_by_equipment.get(equipment_id, []):
-                status = WarrantyService.coverage_status(coverage, now=now)
-                if coverage.next_maintenance_due_at is not None:
-                    next_due_values.append(EquipmentService._normalize_naive_datetime(coverage.next_maintenance_due_at))
-                if status["maintenance_status"] == "overdue":
-                    attention_reasons.add("maintenance_overdue")
-                elif status["maintenance_status"] == "due_soon":
-                    attention_reasons.add("maintenance_due_soon")
-                if status["requires_manager_decision"]:
-                    attention_reasons.add("needs_decision")
-                if status["time_status"] == "expired":
-                    attention_reasons.add("warranty_expired")
-                elif (
-                    status["time_status"] == "active"
-                    and coverage.expires_at is not None
-                    and EquipmentService._normalize_naive_datetime(coverage.expires_at) <= now + timedelta(days=30)
-                ):
-                    attention_reasons.add("warranty_expiring")
-            data["next_maintenance_due_at"] = min((value for value in next_due_values if value), default=None)
-            data["attention_reasons"] = sorted(attention_reasons)
-            items.append(data)
-        return {
-            "items": items,
-            "meta": {
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "pages": (total + limit - 1) // limit if limit else 0,
-            },
-        }
 
     @staticmethod
     async def get_equipment_detail(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        history_limit: int,
+        session: AsyncSession, *, equipment_id: int, history_limit: int,
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
-        if not equipment:
-            return None
-        history = await EquipmentService.list_history(
-            session,
-            equipment_id=equipment_id,
-            page=1,
-            limit=history_limit,
+        from services.equipment_registry_service import EquipmentRegistryService
+        return await EquipmentRegistryService.get_equipment_detail(
+            session, equipment_id=equipment_id, history_limit=history_limit,
         )
-        components = await EquipmentService.list_components(
-            session,
-            equipment_id=equipment_id,
-            include_archived=True,
-        )
-        data = EquipmentService._to_equipment_item(equipment)
-        data["components"] = components
-        data["recent_history"] = history["items"]
-        from services.equipment_link_service import EquipmentLinkService
-        from services.warranty_service import WarrantyService
-
-        data["coverages"] = await WarrantyService.list_coverages(session, equipment_id=equipment_id)
-        data["linked_orders"] = await EquipmentLinkService.list_linked_orders(session, equipment_id=equipment_id)
-        return data
 
     @staticmethod
     async def create_equipment(
-        session: AsyncSession,
-        *,
-        payload: Dict[str, Any],
+        session: AsyncSession, *, payload: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        customer_id = int(payload["customer_id"])
-        if not await EquipmentService._ensure_customer_exists(session, customer_id):
-            return None
-        customer_branch_id = payload.get("customer_branch_id")
-        if customer_branch_id is not None:
-            await EquipmentService._ensure_branch_for_customer(
-                session,
-                customer_id=customer_id,
-                customer_branch_id=int(customer_branch_id),
-            )
-        catalog_product_id = payload.get("catalog_product_id")
-        product = None
-        if catalog_product_id is not None:
-            product = await EquipmentService._ensure_product_exists(session, int(catalog_product_id))
-        source_order_id = payload.get("source_order_id")
-        if source_order_id is not None:
-            await EquipmentService._ensure_source_order_for_customer(
-                session,
-                customer_id=customer_id,
-                source_order_id=int(source_order_id),
-            )
-
-        data = {
-            "equipment_type": EquipmentService._clean_optional_text(payload.get("equipment_type")) or "hvac",
-            "equipment_source": EquipmentService._normalize_equipment_source(payload.get("equipment_source")),
-            "display_name": EquipmentService._clean_optional_text(payload.get("display_name")),
-            "brand": EquipmentService._clean_optional_text(payload.get("brand")),
-            "model": EquipmentService._clean_optional_text(payload.get("model")),
-            "serial": EquipmentService._clean_optional_text(payload.get("serial")),
-            "inventory_number": EquipmentService._clean_optional_text(payload.get("inventory_number")),
-            "location_hint": EquipmentService._clean_optional_text(payload.get("location_hint")),
-            "refrigerant_type": EquipmentService._clean_optional_text(payload.get("refrigerant_type")),
-            "installed_at": EquipmentService._normalize_naive_datetime(payload.get("installed_at")),
-            "commissioned_at": EquipmentService._normalize_naive_datetime(payload.get("commissioned_at")),
-            "warranty_started_at": EquipmentService._normalize_naive_datetime(payload.get("warranty_started_at")),
-            "warranty_expires_at": EquipmentService._normalize_naive_datetime(payload.get("warranty_expires_at")),
-            "warranty_terms": EquipmentService._clean_optional_text(payload.get("warranty_terms")),
-            "notes": EquipmentService._clean_optional_text(payload.get("notes")),
-        }
-        data["display_name"] = EquipmentService._default_display_name(data)
-        equipment = CustomerEquipment(
-            customer_id=customer_id,
-            customer_branch_id=int(customer_branch_id) if customer_branch_id is not None else None,
-            catalog_product_id=int(catalog_product_id) if catalog_product_id is not None else None,
-            source_order_id=int(source_order_id) if source_order_id is not None else None,
-            **data,
-            is_archived=bool(payload.get("is_archived", False)),
-        )
-        session.add(equipment)
-        await session.flush()
-        if source_order_id is not None:
-            await EquipmentService._ensure_equipment_order_link(
-                session,
-                equipment_id=int(equipment.id or 0),
-                order_id=int(source_order_id),
-                role=payload.get("order_role") or "other",
-            )
-        if product is not None:
-            from services.warranty_service import WarrantyService
-
-            supplier_coverage = await WarrantyService.create_supplier_coverage(
-                session,
-                equipment=equipment,
-                product=product,
-                supplier_id=payload.get("supplier_id"),
-                explicit_start=payload.get("warranty_started_at"),
-            )
-            if supplier_coverage:
-                equipment.warranty_started_at = supplier_coverage.starts_at
-                equipment.warranty_expires_at = supplier_coverage.expires_at
-                equipment.warranty_terms = supplier_coverage.terms_snapshot
-                session.add(equipment)
-            await WarrantyService.create_work_coverage(
-                session,
-                equipment=equipment,
-                duration_months=payload.get("work_warranty_months"),
-                starts_at=payload.get("installed_at"),
-                terms=payload.get("work_warranty_terms"),
-                product=product,
-                supplier_id=payload.get("supplier_id"),
-            )
-        await session.commit()
-        await session.refresh(equipment)
-        return EquipmentService._to_equipment_item(equipment)
+        from services.equipment_workflow_service import EquipmentWorkflowService
+        return await EquipmentWorkflowService.create_equipment(session, payload=payload)
 
     @staticmethod
     async def update_equipment(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        payload: Dict[str, Any],
+        session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
-        if not equipment:
-            return None
-
-        if "customer_branch_id" in payload:
-            customer_branch_id = payload.get("customer_branch_id")
-            if customer_branch_id is None:
-                equipment.customer_branch_id = None
-            else:
-                await EquipmentService._ensure_branch_for_customer(
-                    session,
-                    customer_id=int(equipment.customer_id),
-                    customer_branch_id=int(customer_branch_id),
-                )
-                equipment.customer_branch_id = int(customer_branch_id)
-
-        if "catalog_product_id" in payload:
-            catalog_product_id = payload.get("catalog_product_id")
-            if catalog_product_id is None:
-                equipment.catalog_product_id = None
-            else:
-                await EquipmentService._ensure_product_exists(session, int(catalog_product_id))
-                equipment.catalog_product_id = int(catalog_product_id)
-
-        if "source_order_id" in payload:
-            source_order_id = payload.get("source_order_id")
-            if source_order_id is None:
-                equipment.source_order_id = None
-            else:
-                await EquipmentService._ensure_source_order_for_customer(
-                    session,
-                    customer_id=int(equipment.customer_id),
-                    source_order_id=int(source_order_id),
-                )
-                equipment.source_order_id = int(source_order_id)
-
-        text_fields = (
-            "equipment_type",
-            "equipment_source",
-            "display_name",
-            "brand",
-            "model",
-            "serial",
-            "inventory_number",
-            "location_hint",
-            "refrigerant_type",
-            "warranty_terms",
-            "notes",
+        from services.equipment_workflow_service import EquipmentWorkflowService
+        return await EquipmentWorkflowService.update_equipment(
+            session, equipment_id=equipment_id, payload=payload,
         )
-        for field in text_fields:
-            if field not in payload:
-                continue
-            value = EquipmentService._clean_optional_text(payload.get(field))
-            if field == "equipment_type":
-                equipment.equipment_type = value or "hvac"
-            elif field == "equipment_source":
-                equipment.equipment_source = EquipmentService._normalize_equipment_source(value)
-            else:
-                setattr(equipment, field, value)
-        date_fields = (
-            "installed_at",
-            "commissioned_at",
-            "warranty_started_at",
-            "warranty_expires_at",
-        )
-        for field in date_fields:
-            if field in payload:
-                setattr(equipment, field, EquipmentService._normalize_naive_datetime(payload.get(field)))
-        if "is_archived" in payload and payload["is_archived"] is not None:
-            equipment.is_archived = bool(payload["is_archived"])
-
-        equipment.updated_at = datetime.now()
-        session.add(equipment)
-        await session.commit()
-        await session.refresh(equipment)
-        return EquipmentService._to_equipment_item(equipment)
-
-    @staticmethod
-    async def list_components(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        include_archived: bool = False,
-    ) -> list[Dict[str, Any]]:
-        filters = [EquipmentComponent.equipment_id == equipment_id]
-        if not include_archived:
-            filters.append(EquipmentComponent.is_archived == False)
-        result = await session.execute(
-            select(EquipmentComponent)
-            .where(*filters)
-            .order_by(
-                EquipmentComponent.is_archived.asc(),
-                EquipmentComponent.component_type.asc(),
-                EquipmentComponent.id.asc(),
-            )
-        )
-        return [EquipmentService._to_component_item(item) for item in result.scalars().all()]
-
-    @staticmethod
-    async def create_component(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        payload: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
-        if not equipment:
-            return None
-
-        catalog_product_id = payload.get("catalog_product_id")
-        if catalog_product_id is not None:
-            await EquipmentService._ensure_product_exists(session, int(catalog_product_id))
-        supplier_id = payload.get("supplier_id")
-        if supplier_id is not None:
-            await EquipmentService._ensure_supplier_exists(session, int(supplier_id))
-
-        component = EquipmentComponent(
-            equipment_id=equipment_id,
-            catalog_product_id=int(catalog_product_id) if catalog_product_id is not None else None,
-            supplier_id=int(supplier_id) if supplier_id is not None else None,
-            **EquipmentService._component_values_from_payload(payload),
-            is_archived=bool(payload.get("is_archived", False)),
-        )
-        session.add(component)
-        await session.commit()
-        await session.refresh(component)
-        return EquipmentService._to_component_item(component)
 
     @staticmethod
     async def create_equipment_from_order(
-        session: AsyncSession,
-        *,
-        order_id: int,
-        payload: Dict[str, Any],
+        session: AsyncSession, *, order_id: int, payload: Dict[str, Any],
     ) -> Dict[str, Any]:
-        result = await session.execute(
-            select(Order)
-            .where(Order.id == order_id)
-            .options(
-                selectinload(Order.customer),
-                selectinload(Order.customer_branch),
-                selectinload(Order.proposals),
-                selectinload(Order.product_links).selectinload(OrderProductLink.product).selectinload(Product.brand),
-            )
+        from services.equipment_workflow_service import EquipmentWorkflowService
+        return await EquipmentWorkflowService.create_equipment_from_order(
+            session, order_id=order_id, payload=payload,
         )
-        order = result.scalars().first()
-        if not order:
-            raise ValueError("Order not found")
-        if order.customer_id is None:
-            raise ValueError("Order customer is required to create customer equipment")
-
-        product_links = [link for link in EquipmentService._selected_order_product_links(order) if link.product_id is not None]
-        if not product_links:
-            raise ValueError("Selected order proposal has no catalog products")
-
-        warranty_start = EquipmentService._order_warranty_start(order, payload)
-        supplier_id = int(payload["supplier_id"]) if payload.get("supplier_id") is not None else None
-        work_warranty_months = payload.get("work_warranty_months")
-        order_role = EquipmentService._normalize_order_link_role(payload.get("order_role") or "sale")
-        include_placeholders = bool(payload.get("include_component_placeholders", True))
-        created_ids: list[int] = []
-        skipped_count = 0
-        product_quantities: dict[int, int] = {}
-        first_link_by_product: dict[int, OrderProductLink] = {}
-        for link in product_links:
-            product_id = int(link.product_id)
-            product_quantities[product_id] = product_quantities.get(product_id, 0) + max(1, int(link.quantity or 1))
-            first_link_by_product.setdefault(product_id, link)
-
-        for product_id, quantity in product_quantities.items():
-            link = first_link_by_product[product_id]
-            existing_equipment_result = await session.execute(
-                select(CustomerEquipment).where(
-                    CustomerEquipment.source_order_id == order_id,
-                    CustomerEquipment.catalog_product_id == product_id,
-                    CustomerEquipment.is_archived == False,
-                )
-            )
-            existing_equipment = list(existing_equipment_result.scalars().all())
-            existing_count = len(existing_equipment)
-            for current_equipment in existing_equipment:
-                await EquipmentService._ensure_equipment_order_link(
-                    session,
-                    equipment_id=int(current_equipment.id or 0),
-                    order_id=order_id,
-                    role=order_role,
-                )
-            missing_count = max(0, quantity - existing_count)
-            skipped_count += quantity - missing_count
-            if missing_count <= 0:
-                continue
-
-            product = link.product
-            product_title = EquipmentService._clean_optional_text(getattr(product, "title", None)) or f"Товар #{product_id}"
-            brand = EquipmentService._product_brand_title(product)
-            location_hint = EquipmentService._clean_optional_text(
-                order.delivery_address or (order.customer_branch.delivery_address if order.customer_branch else None)
-            )
-            refrigerant_type = EquipmentService._product_spec_text(product, "refrigerant", "refrigerant_type", "хладагент")
-            indoor_model = EquipmentService._product_spec_text(
-                product,
-                "indoor_model",
-                "indoor_unit_model",
-                "модель внутреннего блока",
-                "внутренний блок",
-            )
-            outdoor_model = EquipmentService._product_spec_text(
-                product,
-                "outdoor_model",
-                "outdoor_unit_model",
-                "модель наружного блока",
-                "наружный блок",
-            )
-
-            for index in range(missing_count):
-                suffix = f" #{existing_count + index + 1}" if quantity > 1 else ""
-                equipment = CustomerEquipment(
-                    customer_id=int(order.customer_id),
-                    customer_branch_id=order.customer_branch_id,
-                    catalog_product_id=product_id,
-                    source_order_id=order_id,
-                    equipment_type="hvac",
-                    equipment_source="sold_by_us",
-                    display_name=f"{product_title}{suffix}",
-                    brand=brand,
-                    model=product_title,
-                    location_hint=location_hint,
-                    refrigerant_type=refrigerant_type,
-                    installed_at=EquipmentService._normalize_naive_datetime(order.installation_date),
-                    commissioned_at=warranty_start,
-                    notes=f"Создано из заказа #{order_id}, строка товара #{link.id or product_id}.",
-                )
-                session.add(equipment)
-                await session.flush()
-                created_ids.append(int(equipment.id or 0))
-                await EquipmentService._ensure_equipment_order_link(
-                    session,
-                    equipment_id=int(equipment.id or 0),
-                    order_id=order_id,
-                    role=order_role,
-                )
-
-                if include_placeholders:
-                    session.add(
-                        EquipmentComponent(
-                            equipment_id=int(equipment.id or 0),
-                            catalog_product_id=product_id,
-                            component_type="indoor_unit",
-                            title="Внутренний блок",
-                            brand=brand,
-                            model=indoor_model,
-                        )
-                    )
-                    session.add(
-                        EquipmentComponent(
-                            equipment_id=int(equipment.id or 0),
-                            catalog_product_id=product_id,
-                            component_type="outdoor_unit",
-                            title="Наружный блок",
-                            brand=brand,
-                            model=outdoor_model,
-                        )
-                    )
-                else:
-                    session.add(
-                        EquipmentComponent(
-                            equipment_id=int(equipment.id or 0),
-                            catalog_product_id=product_id,
-                            component_type="system",
-                            title=product_title,
-                            brand=brand,
-                            model=product_title,
-                        )
-                    )
-
-                from services.warranty_service import WarrantyService
-
-                supplier_coverage = await WarrantyService.create_supplier_coverage(
-                    session,
-                    equipment=equipment,
-                    product=product,
-                    supplier_id=supplier_id,
-                    explicit_start=warranty_start,
-                )
-                if supplier_coverage:
-                    equipment.warranty_started_at = supplier_coverage.starts_at
-                    equipment.warranty_expires_at = supplier_coverage.expires_at
-                    equipment.warranty_terms = supplier_coverage.terms_snapshot
-                    session.add(equipment)
-                await WarrantyService.create_work_coverage(
-                    session,
-                    equipment=equipment,
-                    duration_months=work_warranty_months,
-                    starts_at=order.installation_date or warranty_start,
-                    terms=payload.get("work_warranty_terms"),
-                    product=product,
-                    supplier_id=supplier_id,
-                )
-
-        await session.commit()
-
-        items = []
-        for equipment_id in created_ids:
-            detail = await EquipmentService.get_equipment_detail(
-                session,
-                equipment_id=equipment_id,
-                history_limit=0,
-            )
-            if detail:
-                items.append(detail)
-        return {
-            "items": items,
-            "created_count": len(items),
-            "skipped_count": skipped_count,
-        }
 
     @staticmethod
     async def create_maintenance_order(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
+        session: AsyncSession, *, equipment_id: int,
     ) -> Optional[Dict[str, Any]]:
-        result = await session.execute(
-            select(CustomerEquipment)
-            .where(CustomerEquipment.id == equipment_id)
-            .options(
-                selectinload(CustomerEquipment.customer),
-                selectinload(CustomerEquipment.customer_branch),
-            )
+        from services.equipment_workflow_service import EquipmentWorkflowService
+        return await EquipmentWorkflowService.create_maintenance_order(
+            session, equipment_id=equipment_id,
         )
-        equipment = result.scalars().first()
-        if not equipment or equipment.is_archived or not equipment.customer:
-            return None
 
-        from schemas import ManagerOrderCreatePayload
-        from services.order_service import OrderService
+    @staticmethod
+    async def list_components(
+        session: AsyncSession, *, equipment_id: int, include_archived: bool = False,
+    ) -> list[Dict[str, Any]]:
+        from services.equipment_component_service import EquipmentComponentService
+        return await EquipmentComponentService.list_components(
+            session, equipment_id=equipment_id, include_archived=include_archived,
+        )
 
-        branch = equipment.customer_branch
-        address = (
-            branch.delivery_address
-            if branch
-            else equipment.location_hint or equipment.customer.actual_address or equipment.customer.legal_address
+    @staticmethod
+    async def create_component(
+        session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        from services.equipment_component_service import EquipmentComponentService
+        return await EquipmentComponentService.create_component(
+            session, equipment_id=equipment_id, payload=payload,
         )
-        equipment_title = equipment.display_name or equipment.model or f"Оборудование #{equipment_id}"
-        payload = ManagerOrderCreatePayload(
-            customer_id=int(equipment.customer_id),
-            name=equipment.customer.name,
-            phone=equipment.customer.phone,
-            source="manager",
-            request_text=f"Плановое техническое обслуживание: {equipment_title}",
-            service_type="maintenance",
-            customer_type=(
-                equipment.customer.type.value
-                if hasattr(equipment.customer.type, "value")
-                else str(equipment.customer.type)
-            ),
-            address=address,
-        )
-        created = await OrderService.create_manager_order(session=session, payload=payload)
-        if not created:
-            raise ValueError("Maintenance order could not be created")
-        order_id = int(created["id"])
-        order = await session.get(Order, order_id)
-        if not order:
-            raise ValueError("Created maintenance order not found")
-        order.customer_branch_id = equipment.customer_branch_id
-        order.technical_meta = {
-            **(order.technical_meta or {}),
-            "equipment_id": equipment_id,
-            "equipment_display_name": equipment_title,
-        }
-        session.add(order)
-        await EquipmentService._ensure_equipment_order_link(
-            session,
-            equipment_id=equipment_id,
-            order_id=order_id,
-            role="maintenance",
-        )
-        await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
 
     @staticmethod
     async def update_component(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        component_id: int,
-        payload: Dict[str, Any],
+        session: AsyncSession, *, equipment_id: int, component_id: int, payload: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        component = await EquipmentService._get_equipment_component(
-            session,
-            equipment_id=equipment_id,
-            component_id=component_id,
+        from services.equipment_component_service import EquipmentComponentService
+        return await EquipmentComponentService.update_component(
+            session, equipment_id=equipment_id, component_id=component_id, payload=payload,
         )
-        if not component:
-            return None
-
-        if "catalog_product_id" in payload:
-            catalog_product_id = payload.get("catalog_product_id")
-            if catalog_product_id is None:
-                component.catalog_product_id = None
-            else:
-                await EquipmentService._ensure_product_exists(session, int(catalog_product_id))
-                component.catalog_product_id = int(catalog_product_id)
-
-        if "supplier_id" in payload:
-            supplier_id = payload.get("supplier_id")
-            if supplier_id is None:
-                component.supplier_id = None
-            else:
-                await EquipmentService._ensure_supplier_exists(session, int(supplier_id))
-                component.supplier_id = int(supplier_id)
-
-        text_fields = (
-            "component_type",
-            "title",
-            "brand",
-            "model",
-            "serial",
-            "inventory_number",
-            "supplier_invoice_number",
-            "notes",
-        )
-        for field in text_fields:
-            if field not in payload:
-                continue
-            value = EquipmentService._clean_optional_text(payload.get(field))
-            if field == "component_type":
-                component.component_type = EquipmentService._normalize_component_type(value)
-            else:
-                setattr(component, field, value)
-        if "supplier_invoice_date" in payload:
-            component.supplier_invoice_date = EquipmentService._normalize_naive_datetime(
-                payload.get("supplier_invoice_date")
-            )
-        if "is_archived" in payload and payload["is_archived"] is not None:
-            component.is_archived = bool(payload["is_archived"])
-
-        component.updated_at = datetime.now()
-        session.add(component)
-        await session.commit()
-        await session.refresh(component)
-        return EquipmentService._to_component_item(component)
 
     @staticmethod
     async def list_history(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        page: int,
-        limit: int,
+        session: AsyncSession, *, equipment_id: int, page: int, limit: int,
     ) -> Optional[Dict[str, Any]]:
-        if not await EquipmentService._get_equipment(session, equipment_id):
-            return None
-
-        count_result = await session.execute(
-            select(func.count(EquipmentServiceHistory.id)).where(EquipmentServiceHistory.equipment_id == equipment_id)
+        from services.equipment_history_service import EquipmentHistoryService
+        return await EquipmentHistoryService.list_history(
+            session, equipment_id=equipment_id, page=page, limit=limit,
         )
-        total = int(count_result.scalar() or 0)
-        result = await session.execute(
-            select(EquipmentServiceHistory)
-            .where(EquipmentServiceHistory.equipment_id == equipment_id)
-            .options(selectinload(EquipmentServiceHistory.order))
-            .order_by(EquipmentServiceHistory.event_date.desc(), EquipmentServiceHistory.id.desc())
-            .offset((page - 1) * limit)
-            .limit(limit)
-        )
-        items = [EquipmentService._to_history_item(item) for item in result.scalars().all()]
-        return {
-            "items": items,
-            "meta": {
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "pages": (total + limit - 1) // limit if limit else 0,
-            },
-        }
 
     @staticmethod
-    async def _lock_order_for_history_sync(session: AsyncSession, *, order_id: int) -> None:
-        await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
+    async def _lock_order_for_history_sync(
+        session: AsyncSession, *, order_id: int,
+    ) -> None:
+        from services.equipment_history_service import EquipmentHistoryService
+        await EquipmentHistoryService._lock_order_for_history_sync(session, order_id=order_id)
 
     @staticmethod
-    async def _list_history_for_order(session: AsyncSession, *, order_id: int) -> list[EquipmentServiceHistory]:
-        result = await session.execute(
-            select(EquipmentServiceHistory)
-            .where(EquipmentServiceHistory.order_id == order_id)
-            .order_by(EquipmentServiceHistory.id.asc())
-            .with_for_update()
-        )
-        return list(result.scalars().all())
+    async def _list_history_for_order(
+        session: AsyncSession, *, order_id: int,
+    ) -> list[EquipmentServiceHistory]:
+        from services.equipment_history_service import EquipmentHistoryService
+        return await EquipmentHistoryService._list_history_for_order(session, order_id=order_id)
 
     @staticmethod
     async def add_history(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        payload: Dict[str, Any],
+        session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
-        if not equipment:
-            return None
-
-        order_id = payload.get("order_id")
-        if order_id is not None:
-            await EquipmentService._validate_order_link(
-                session,
-                equipment=equipment,
-                order_id=int(order_id),
-            )
-
-        event_type = EquipmentService._normalize_event_type(payload.get("event_type"))
-        entry = EquipmentService._build_history_entry(
-            equipment_id=equipment_id,
-            payload={**payload, "event_type": event_type},
+        from services.equipment_history_service import EquipmentHistoryService
+        return await EquipmentHistoryService.add_history(
+            session, equipment_id=equipment_id, payload=payload,
         )
-        session.add(entry)
-        await session.flush()
-        from services.warranty_service import WarrantyService
-
-        await WarrantyService.recalculate_after_maintenance(
-            session,
-            equipment_id=equipment_id,
-            event_type=event_type,
-            event_date=entry.event_date,
-        )
-        await session.commit()
-        await session.refresh(entry)
-        return EquipmentService._to_history_item(entry)
 
     @staticmethod
     def _infer_repair_history_event_type(repair_meta: Dict[str, Any]) -> EquipmentServiceEventType:
-        status = EquipmentService._clean_optional_text(repair_meta.get("repair_status"))
-        repair_not_viable = EquipmentService._boolish(repair_meta.get("repair_not_viable"))
-        repair_possible = EquipmentService._boolish(repair_meta.get("repair_possible"))
-        if status == "not_repairable" or repair_not_viable is True or repair_possible is False:
-            return EquipmentServiceEventType.NOT_REPAIRABLE
-        if status in {"completed", "repair_in_progress", "approved_for_repair", "awaiting_parts"}:
-            return EquipmentServiceEventType.REPAIR
-        if EquipmentService._first_text(repair_meta.get("refrigerant_type"), repair_meta.get("refrigerant_amount")):
-            return EquipmentServiceEventType.REFRIGERANT_CHARGE
-        if EquipmentService._first_text(repair_meta.get("diagnostic_result"), repair_meta.get("technical_condition")):
-            return EquipmentServiceEventType.DIAGNOSTIC
-        if EquipmentService._first_text(repair_meta.get("repair_recommendation"), repair_meta.get("technical_conclusion")):
-            return EquipmentServiceEventType.RECOMMENDATION
-        return EquipmentServiceEventType.OTHER
+        from services.equipment_history_service import EquipmentHistoryService
+        return EquipmentHistoryService._infer_repair_history_event_type(repair_meta)
 
     @staticmethod
     def build_history_payload_from_repair_order(
-        order: Order,
-        *,
-        event_type: Optional[Any] = None,
-        event_date: Optional[datetime] = None,
-        notes: Optional[str] = None,
+        order: Order, *, event_type: Optional[Any] = None,
+        event_date: Optional[datetime] = None, notes: Optional[str] = None,
     ) -> Dict[str, Any]:
-        from services.order_service import OrderService
-
-        workflow_type = OrderService._normalize_workflow_type(getattr(order, "workflow_type", None))
-        if workflow_type != "repair":
-            raise ValueError("Only repair orders can create equipment service history from repair meta")
-
-        repair_meta = OrderService._get_repair_meta(order)
-        normalized_event_type = (
-            EquipmentService._normalize_event_type(event_type)
-            if event_type is not None
-            else EquipmentService._infer_repair_history_event_type(repair_meta)
+        from services.equipment_history_service import EquipmentHistoryService
+        return EquipmentHistoryService.build_history_payload_from_repair_order(
+            order, event_type=event_type, event_date=event_date, notes=notes,
         )
-        repair_not_viable = EquipmentService._boolish(repair_meta.get("repair_not_viable"))
-        repair_possible = EquipmentService._boolish(repair_meta.get("repair_possible"))
-        not_repairable = (
-            normalized_event_type == EquipmentServiceEventType.NOT_REPAIRABLE
-            or repair_not_viable is True
-            or repair_possible is False
-        )
-
-        return {
-            "order_id": int(order.id) if order.id is not None else None,
-            "event_type": normalized_event_type,
-            "event_date": (
-                EquipmentService._normalize_naive_datetime(event_date)
-                or EquipmentService._normalize_naive_datetime(order.closed_at)
-                or EquipmentService._normalize_naive_datetime(order.updated_at)
-                or datetime.now()
-            ),
-            "complaint_snapshot": EquipmentService._first_text(
-                repair_meta.get("customer_complaint"),
-                repair_meta.get("complaint_official"),
-                repair_meta.get("complaint_text"),
-                order.comment,
-            ),
-            "diagnostic_result": EquipmentService._first_text(
-                repair_meta.get("diagnostic_result"),
-                repair_meta.get("technical_condition"),
-                repair_meta.get("defect_technical_condition"),
-                repair_meta.get("measurement_result"),
-            ),
-            "repair_recommendation": EquipmentService._first_text(
-                repair_meta.get("repair_recommendation"),
-                repair_meta.get("recommended_decision"),
-                repair_meta.get("technical_conclusion"),
-            ),
-            "refrigerant_type": EquipmentService._clean_optional_text(repair_meta.get("refrigerant_type")),
-            "refrigerant_amount": EquipmentService._clean_optional_text(repair_meta.get("refrigerant_amount")),
-            "not_repairable": not_repairable,
-            "not_repairable_reason": EquipmentService._clean_optional_text(repair_meta.get("repair_not_viable_reason")),
-            "notes": EquipmentService._first_text(
-                notes,
-                repair_meta.get("repair_completion_note"),
-                repair_meta.get("customer_approval_note"),
-                repair_meta.get("parts_note"),
-            ),
-        }
 
     @staticmethod
     async def add_history_from_repair_order(
-        session: AsyncSession,
-        *,
-        equipment_id: int,
-        payload: Dict[str, Any],
+        session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
-        if not equipment:
-            return None
-        order = await EquipmentService._validate_order_link(
-            session,
-            equipment=equipment,
-            order_id=int(payload["order_id"]),
+        from services.equipment_history_service import EquipmentHistoryService
+        return await EquipmentHistoryService.add_history_from_repair_order(
+            session, equipment_id=equipment_id, payload=payload,
         )
-        order_id = int(order.id)
-        await EquipmentService._lock_order_for_history_sync(session, order_id=order_id)
-        existing_histories = await EquipmentService._list_history_for_order(session, order_id=order_id)
-        existing_history = EquipmentService.resolve_repair_order_history_sync_target(
-            existing_histories,
-            equipment_id=equipment_id,
-            order_id=order_id,
-        )
-        history_payload = EquipmentService.build_history_payload_from_repair_order(
-            order,
-            event_type=payload.get("event_type"),
-            event_date=payload.get("event_date"),
-            notes=payload.get("notes"),
-        )
-        if existing_history is not None:
-            history_payload = EquipmentService._preserve_omitted_repair_history_overrides(
-                existing_history,
-                history_payload,
-                payload,
-            )
-            if EquipmentService._apply_history_payload(existing_history, history_payload):
-                session.add(existing_history)
-                await session.commit()
-                await session.refresh(existing_history)
-            return EquipmentService._to_history_item(existing_history)
-
-        entry = EquipmentService._build_history_entry(equipment_id=equipment_id, payload=history_payload)
-        session.add(entry)
-        await session.commit()
-        await session.refresh(entry)
-        return EquipmentService._to_history_item(entry)

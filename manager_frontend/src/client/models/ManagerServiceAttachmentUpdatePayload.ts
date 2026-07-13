@@ -9,5 +9,6 @@ export type ManagerServiceAttachmentUpdatePayload = {
     transcript?: (string | null);
     equipment_id?: (number | null);
     component_id?: (number | null);
+    service_history_id?: (number | null);
 };
 

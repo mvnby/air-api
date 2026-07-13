@@ -9,5 +9,6 @@ export type Body_upload_manager_order_attachment = {
     work_stage_id?: (number | null);
     equipment_id?: (number | null);
     component_id?: (number | null);
+    service_history_id?: (number | null);
 };
 

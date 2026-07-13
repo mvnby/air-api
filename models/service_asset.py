@@ -17,7 +17,7 @@ class ServiceAttachment(SQLModel, table=True):
     size_bytes: int = Field(default=0)
     content_hash: Optional[str] = Field(
         default=None,
-        sa_column=Column(String(64), nullable=True, unique=True, index=True),
+        sa_column=Column(String(64), nullable=True, index=True),
     )
 
     storage_provider: str = Field(default="local", sa_column=Column(String(32), nullable=False, index=True))
@@ -68,6 +68,11 @@ class EquipmentAttachmentLink(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     equipment_id: int = Field(foreign_key="customer_equipment.id", index=True)
     attachment_id: int = Field(foreign_key="service_attachment.id", index=True)
+    order_attachment_link_id: Optional[int] = Field(
+        default=None,
+        foreign_key="order_attachment_link.id",
+        index=True,
+    )
     component_id: Optional[int] = Field(default=None, foreign_key="equipment_component.id", index=True)
     service_history_id: Optional[int] = Field(default=None, foreign_key="equipment_service_history.id", index=True)
     category: str = Field(default="other", sa_column=Column(String(64), nullable=False, index=True))

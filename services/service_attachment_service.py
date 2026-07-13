@@ -4,27 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-import io
-import logging
 import mimetypes
 from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any
 from urllib.parse import quote
 
-from PIL import Image, ImageOps, UnidentifiedImageError
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import and_, func, select
+from sqlmodel import func, select
 
 from core.config import settings
 from models import (
     CustomerEquipment,
     EquipmentAttachmentLink,
-    EquipmentComponent,
     Order,
     OrderAttachmentLink,
-    OrderWorkStage,
     ServiceAttachment,
 )
 from services.private_attachment_storage_service import (
@@ -33,10 +27,13 @@ from services.private_attachment_storage_service import (
     get_private_attachment_storage,
     sha256_bytes,
 )
-
-
-logger = logging.getLogger(__name__)
-
+from services.service_attachment_presenter import (
+    attachment_file_kind,
+    attachment_to_item,
+    create_image_preview,
+    legacy_attachment_items,
+)
+from services.service_attachment_link_service import ServiceAttachmentLinkService
 
 class ServiceAttachmentService:
     CATEGORIES = {
@@ -86,51 +83,11 @@ class ServiceAttachmentService:
         return mime_type
 
     @staticmethod
-    def file_kind(mime_type: str) -> str:
-        if mime_type.startswith("image/"):
-            return "image"
-        if mime_type == "application/pdf":
-            return "pdf"
-        if mime_type.startswith("audio/"):
-            return "audio"
-        if mime_type.startswith("text/") or "word" in mime_type or "excel" in mime_type or "sheet" in mime_type:
-            return "document"
-        return "other"
-
-    @staticmethod
     def _clean_text(value: Any, *, limit: int | None = None) -> str | None:
         cleaned = " ".join(str(value or "").split()).strip()
         if not cleaned:
             return None
         return cleaned[:limit] if limit else cleaned
-
-    @staticmethod
-    def _parse_datetime(value: Any) -> datetime | None:
-        if isinstance(value, datetime):
-            return value.replace(tzinfo=None) if value.tzinfo else value
-        raw = str(value or "").strip()
-        if not raw:
-            return None
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
-
-    @staticmethod
-    def _image_preview(content: bytes) -> tuple[bytes, str] | None:
-        try:
-            with Image.open(io.BytesIO(content)) as source:
-                image = ImageOps.exif_transpose(source)
-                image.thumbnail((720, 720), Image.Resampling.LANCZOS)
-                if image.mode not in {"RGB", "RGBA"}:
-                    image = image.convert("RGBA" if "transparency" in image.info else "RGB")
-                output = io.BytesIO()
-                image.save(output, format="WEBP", quality=82, method=6, exif=b"")
-                return output.getvalue(), "image/webp"
-        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
-            logger.info("Attachment preview could not be generated", exc_info=True)
-            return None
 
     @classmethod
     async def create_and_link_order_attachment(
@@ -148,10 +105,12 @@ class ServiceAttachmentService:
         work_stage_id: int | None = None,
         equipment_id: int | None = None,
         component_id: int | None = None,
+        service_history_id: int | None = None,
         transcript: str | None = None,
         captured_at: datetime | None = None,
         telegram_meta: dict[str, Any] | None = None,
         storage: PrivateAttachmentStorage | None = None,
+        commit: bool = True,
     ) -> dict[str, Any]:
         if not content:
             raise ValueError("Attachment is empty")
@@ -160,39 +119,106 @@ class ServiceAttachmentService:
         order = await session.get(Order, order_id)
         if not order:
             raise ValueError("Order not found")
-        if work_stage_id is not None:
-            stage = await session.get(OrderWorkStage, work_stage_id)
-            if not stage or int(stage.order_id) != order_id:
-                raise ValueError("Work stage does not belong to this order")
-        equipment = None
-        if equipment_id is not None:
-            equipment = await session.get(CustomerEquipment, equipment_id)
-            if not equipment:
-                raise ValueError("Equipment not found")
-            if order.customer_id is None or int(equipment.customer_id) != int(order.customer_id):
-                raise ValueError("Equipment does not belong to the order customer")
-            if (
-                order.customer_branch_id is not None
-                and equipment.customer_branch_id is not None
-                and int(order.customer_branch_id) != int(equipment.customer_branch_id)
-            ):
-                raise ValueError("Equipment does not belong to the order branch")
-        if component_id is not None:
-            component = await session.get(EquipmentComponent, component_id)
-            if not component or equipment_id is None or int(component.equipment_id) != equipment_id:
-                raise ValueError("Equipment component does not belong to this equipment")
+        context = await ServiceAttachmentLinkService.validate_order_context(
+            session,
+            order=order,
+            work_stage_id=work_stage_id,
+            equipment_id=equipment_id,
+            component_id=component_id,
+            service_history_id=service_history_id,
+        )
+        equipment = context.equipment
+        equipment_id = int(equipment.id or 0) if equipment is not None else None
+        component_id = context.component_id
+        service_history_id = context.service_history_id
 
         clean_filename = cls._clean_text(filename, limit=255) or "attachment"
         normalized_mime = cls._normalize_mime_type(mime_type, clean_filename)
         normalized_category = cls.normalize_category(category)
         digest = sha256_bytes(content)
-        existing_result = await session.execute(
-            select(ServiceAttachment).where(ServiceAttachment.content_hash == digest)
-        )
-        attachment = existing_result.scalars().first()
         selected_storage = storage or get_private_attachment_storage()
+        telegram_meta = telegram_meta or {}
+        telegram_file_id = cls._clean_text(telegram_meta.get("file_id"), limit=255)
+        telegram_chat_id = telegram_meta.get("chat_id")
+        telegram_message_id = telegram_meta.get("message_id")
 
-        if attachment is None:
+        if telegram_file_id:
+            occurrence_filters = [
+                OrderAttachmentLink.order_id == order_id,
+                OrderAttachmentLink.archived_at.is_(None),
+                ServiceAttachment.archived_at.is_(None),
+            ]
+            if telegram_chat_id is not None and telegram_message_id is not None:
+                occurrence_filters.extend(
+                    [
+                        ServiceAttachment.telegram_chat_id == telegram_chat_id,
+                        ServiceAttachment.telegram_message_id == telegram_message_id,
+                    ]
+                )
+            else:
+                occurrence_filters.append(ServiceAttachment.telegram_file_id == telegram_file_id)
+            existing_occurrence_result = await session.execute(
+                select(ServiceAttachment, OrderAttachmentLink)
+                .join(OrderAttachmentLink, OrderAttachmentLink.attachment_id == ServiceAttachment.id)
+                .where(*occurrence_filters)
+                .limit(1)
+            )
+            existing_occurrence = existing_occurrence_result.first()
+            if existing_occurrence:
+                attachment, link = existing_occurrence
+                equipment_link = None
+                if equipment is not None:
+                    equipment_link = await session.scalar(
+                        select(EquipmentAttachmentLink).where(
+                            EquipmentAttachmentLink.order_attachment_link_id == int(link.id or 0),
+                            EquipmentAttachmentLink.equipment_id == int(equipment.id or 0),
+                        )
+                    )
+                    if equipment_link is None:
+                        equipment_link = EquipmentAttachmentLink(
+                            equipment_id=int(equipment.id or 0),
+                            attachment_id=int(attachment.id or 0),
+                            order_attachment_link_id=int(link.id or 0),
+                        )
+                    equipment_link.archived_at = None
+                    equipment_link.component_id = component_id
+                    equipment_link.service_history_id = service_history_id
+                    equipment_link.category = normalized_category
+                    equipment_link.caption = cls._clean_text(caption)
+                    session.add(equipment_link)
+                if commit:
+                    await session.commit()
+                else:
+                    await session.flush()
+                return attachment_to_item(
+                    attachment,
+                    link=link,
+                    equipment_id=int(equipment.id or 0) if equipment else None,
+                    component_id=equipment_link.component_id if equipment_link else None,
+                    service_history_id=equipment_link.service_history_id if equipment_link else None,
+                )
+
+        reusable_binary = None
+        binary_result = await session.execute(
+            select(ServiceAttachment)
+            .where(
+                ServiceAttachment.content_hash == digest,
+                ServiceAttachment.storage_provider == selected_storage.provider_name,
+                ServiceAttachment.storage_key.is_not(None),
+            )
+            .order_by(ServiceAttachment.id.asc())
+        )
+        for candidate in binary_result.scalars().all():
+            if candidate.storage_key and await selected_storage.exists(candidate.storage_key):
+                reusable_binary = candidate
+                break
+
+        preview_key = reusable_binary.preview_storage_key if reusable_binary else None
+        preview_mime = reusable_binary.preview_mime_type if reusable_binary else None
+        if preview_key and not await selected_storage.exists(preview_key):
+            preview_key = None
+            preview_mime = None
+        if reusable_binary is None:
             original = await selected_storage.save(
                 content=content,
                 content_hash=digest,
@@ -200,174 +226,83 @@ class ServiceAttachmentService:
                 content_type=normalized_mime,
                 variant="original",
             )
-            preview_key = None
-            preview_mime = None
-            if normalized_mime.startswith("image/"):
-                preview = await asyncio.to_thread(cls._image_preview, content)
-                if preview:
-                    preview_content, preview_mime = preview
-                    stored_preview = await selected_storage.save(
-                        content=preview_content,
-                        content_hash=digest,
-                        extension="webp",
-                        content_type=preview_mime,
-                        variant="preview",
-                    )
-                    preview_key = stored_preview.storage_key
+            storage_provider = original.provider
+            storage_key = original.storage_key
+        else:
+            storage_provider = reusable_binary.storage_provider
+            storage_key = reusable_binary.storage_key
 
-            telegram_meta = telegram_meta or {}
-            attachment = ServiceAttachment(
-                file_kind=cls.file_kind(normalized_mime),
-                original_filename=clean_filename,
-                mime_type=normalized_mime,
-                size_bytes=len(content),
-                content_hash=digest,
-                storage_provider=original.provider,
-                storage_key=original.storage_key,
-                preview_storage_key=preview_key,
-                preview_mime_type=preview_mime,
-                source=source,
-                processing_status="ready",
-                transcript=cls._clean_text(transcript),
-                source_meta=dict(telegram_meta.get("source_meta") or {}),
-                telegram_file_id=cls._clean_text(telegram_meta.get("file_id"), limit=255),
-                telegram_chat_id=telegram_meta.get("chat_id"),
-                telegram_message_id=telegram_meta.get("message_id"),
-                telegram_user_id=telegram_meta.get("user_id"),
-                captured_at=captured_at,
-                created_by=created_by,
-            )
-            try:
-                async with session.begin_nested():
-                    session.add(attachment)
-                    await session.flush()
-            except IntegrityError:
-                existing_result = await session.execute(
-                    select(ServiceAttachment).where(ServiceAttachment.content_hash == digest)
+        if normalized_mime.startswith("image/") and not preview_key:
+            preview = await asyncio.to_thread(create_image_preview, content)
+            if preview:
+                preview_content, preview_mime = preview
+                stored_preview = await selected_storage.save(
+                    content=preview_content,
+                    content_hash=sha256_bytes(preview_content),
+                    extension="webp",
+                    content_type=preview_mime,
+                    variant="preview",
                 )
-                attachment = existing_result.scalars().one()
-        elif attachment.archived_at is not None:
-            attachment.archived_at = None
-            attachment.updated_at = datetime.now()
-            session.add(attachment)
-            await session.flush()
+                preview_key = stored_preview.storage_key
 
-        link_result = await session.execute(
-            select(OrderAttachmentLink).where(
-                OrderAttachmentLink.order_id == order_id,
-                OrderAttachmentLink.attachment_id == int(attachment.id or 0),
-            )
+        attachment = ServiceAttachment(
+            file_kind=attachment_file_kind(normalized_mime),
+            original_filename=clean_filename,
+            mime_type=normalized_mime,
+            size_bytes=len(content),
+            content_hash=digest,
+            storage_provider=storage_provider,
+            storage_key=storage_key,
+            preview_storage_key=preview_key,
+            preview_mime_type=preview_mime,
+            source=source,
+            processing_status="ready",
+            transcript=cls._clean_text(transcript),
+            source_meta=dict(telegram_meta.get("source_meta") or {}),
+            telegram_file_id=telegram_file_id,
+            telegram_chat_id=telegram_chat_id,
+            telegram_message_id=telegram_message_id,
+            telegram_user_id=telegram_meta.get("user_id"),
+            captured_at=captured_at,
+            created_by=created_by,
         )
-        link = link_result.scalars().first()
-        if link is None:
-            link = OrderAttachmentLink(
-                order_id=order_id,
+        session.add(attachment)
+        await session.flush()
+
+        link = OrderAttachmentLink(
+            order_id=order_id,
+            attachment_id=int(attachment.id or 0),
+            work_stage_id=work_stage_id,
+            category=normalized_category,
+            caption=cls._clean_text(caption),
+        )
+        session.add(link)
+        await session.flush()
+
+        if equipment is not None:
+            equipment_link = EquipmentAttachmentLink(
+                equipment_id=int(equipment.id or 0),
                 attachment_id=int(attachment.id or 0),
-                work_stage_id=work_stage_id,
+                order_attachment_link_id=int(link.id or 0),
+                component_id=component_id,
+                service_history_id=service_history_id,
                 category=normalized_category,
                 caption=cls._clean_text(caption),
             )
-        else:
-            link.archived_at = None
-            link.work_stage_id = work_stage_id or link.work_stage_id
-            link.category = normalized_category
-            link.caption = cls._clean_text(caption) or link.caption
-        session.add(link)
-
-        if equipment is not None:
-            equipment_link_result = await session.execute(
-                select(EquipmentAttachmentLink).where(
-                    EquipmentAttachmentLink.equipment_id == int(equipment.id or 0),
-                    EquipmentAttachmentLink.attachment_id == int(attachment.id or 0),
-                )
-            )
-            equipment_link = equipment_link_result.scalars().first()
-            if equipment_link is None:
-                equipment_link = EquipmentAttachmentLink(
-                    equipment_id=int(equipment.id or 0),
-                    attachment_id=int(attachment.id or 0),
-                    component_id=component_id,
-                    category=normalized_category,
-                    caption=cls._clean_text(caption),
-                )
-            else:
-                equipment_link.archived_at = None
-                equipment_link.component_id = component_id or equipment_link.component_id
-                equipment_link.category = normalized_category
-                equipment_link.caption = cls._clean_text(caption) or equipment_link.caption
             session.add(equipment_link)
 
-        await session.commit()
-        await session.refresh(attachment)
-        return cls.to_item(attachment, link=link, equipment_id=equipment_id, component_id=component_id)
-
-    @classmethod
-    def to_item(
-        cls,
-        attachment: ServiceAttachment,
-        *,
-        link: OrderAttachmentLink | EquipmentAttachmentLink | None = None,
-        equipment_id: int | None = None,
-        component_id: int | None = None,
-    ) -> dict[str, Any]:
-        return {
-            "id": int(attachment.id or 0),
-            "legacy_key": None,
-            "legacy": False,
-            "file_kind": attachment.file_kind,
-            "category": link.category if link else "other",
-            "filename": attachment.original_filename,
-            "mime_type": attachment.mime_type,
-            "size_bytes": int(attachment.size_bytes or 0),
-            "caption": link.caption if link else None,
-            "transcript": attachment.transcript,
-            "source": attachment.source,
-            "processing_status": attachment.processing_status,
-            "processing_error": attachment.processing_error,
-            "captured_at": attachment.captured_at,
-            "created_at": attachment.created_at,
-            "preview_available": bool(attachment.preview_storage_key),
-            "equipment_id": equipment_id,
-            "component_id": component_id,
-        }
-
-    @classmethod
-    def _legacy_items(cls, order: Order, normalized_file_ids: set[str]) -> list[dict[str, Any]]:
-        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
-        raw_items = meta.get("telegram_attachments")
-        if not isinstance(raw_items, list):
-            return []
-        result: list[dict[str, Any]] = []
-        for index, raw in enumerate(raw_items):
-            if not isinstance(raw, dict):
-                continue
-            file_id = str(raw.get("file_id") or "").strip()
-            if file_id and file_id in normalized_file_ids:
-                continue
-            mime_type = str(raw.get("mime_type") or "application/octet-stream")
-            result.append(
-                {
-                    "id": None,
-                    "legacy_key": f"telegram:{index}:{file_id or 'unknown'}",
-                    "legacy": True,
-                    "file_kind": cls.file_kind(mime_type),
-                    "category": str(raw.get("purpose") or "other"),
-                    "filename": str(raw.get("filename") or f"Telegram файл {index + 1}"),
-                    "mime_type": mime_type,
-                    "size_bytes": int(raw.get("size_bytes") or 0),
-                    "caption": None,
-                    "transcript": None,
-                    "source": "telegram_bot",
-                    "processing_status": "migration_required",
-                    "processing_error": "Файл найден в старых данных и ожидает безопасного переноса.",
-                    "captured_at": cls._parse_datetime(raw.get("attached_at")),
-                    "created_at": cls._parse_datetime(raw.get("attached_at")) or order.created_at,
-                    "preview_available": False,
-                    "equipment_id": None,
-                    "component_id": None,
-                }
-            )
-        return result
+        if commit:
+            await session.commit()
+            await session.refresh(attachment)
+        else:
+            await session.flush()
+        return attachment_to_item(
+            attachment,
+            link=link,
+            equipment_id=equipment_id,
+            component_id=component_id,
+            service_history_id=service_history_id,
+        )
 
     @classmethod
     async def list_order_attachments(cls, session: AsyncSession, *, order_id: int) -> dict[str, Any] | None:
@@ -379,10 +314,8 @@ class ServiceAttachmentService:
             .join(OrderAttachmentLink, OrderAttachmentLink.attachment_id == ServiceAttachment.id)
             .outerjoin(
                 EquipmentAttachmentLink,
-                and_(
-                    EquipmentAttachmentLink.attachment_id == ServiceAttachment.id,
-                    EquipmentAttachmentLink.archived_at.is_(None),
-                ),
+                (EquipmentAttachmentLink.order_attachment_link_id == OrderAttachmentLink.id)
+                & (EquipmentAttachmentLink.archived_at.is_(None)),
             )
             .where(
                 OrderAttachmentLink.order_id == order_id,
@@ -400,11 +333,12 @@ class ServiceAttachmentService:
                 continue
             seen_attachment_ids.add(attachment_id)
             items.append(
-                cls.to_item(
+                attachment_to_item(
                     attachment,
                     link=link,
                     equipment_id=equipment_link.equipment_id if equipment_link else None,
                     component_id=equipment_link.component_id if equipment_link else None,
+                    service_history_id=equipment_link.service_history_id if equipment_link else None,
                 )
             )
         normalized_file_ids = {
@@ -412,7 +346,19 @@ class ServiceAttachmentService:
             for attachment, _, _ in rows
             if attachment.telegram_file_id
         }
-        items.extend(cls._legacy_items(order, normalized_file_ids))
+        normalized_source_keys = {
+            str((attachment.source_meta or {}).get("legacy_source_key"))
+            for attachment, _, _ in rows
+            if isinstance(attachment.source_meta, dict)
+            and (attachment.source_meta or {}).get("legacy_source_key")
+        }
+        items.extend(
+            legacy_attachment_items(
+                order,
+                normalized_file_ids,
+                normalized_source_keys,
+            )
+        )
         return {"items": items, "total": len(items)}
 
     @classmethod
@@ -436,11 +382,12 @@ class ServiceAttachmentService:
             .order_by(ServiceAttachment.captured_at.desc().nullslast(), ServiceAttachment.created_at.desc())
         )
         items = [
-            cls.to_item(
+            attachment_to_item(
                 attachment,
                 link=equipment_link,
                 equipment_id=equipment_id,
                 component_id=equipment_link.component_id,
+                service_history_id=equipment_link.service_history_id,
             )
             for attachment, equipment_link in result.all()
         ]
@@ -458,16 +405,24 @@ class ServiceAttachmentService:
             )
         )
         normalized_result = await session.execute(
-            select(ServiceAttachment.telegram_file_id)
+            select(ServiceAttachment.telegram_file_id, ServiceAttachment.source_meta)
             .join(OrderAttachmentLink, OrderAttachmentLink.attachment_id == ServiceAttachment.id)
             .where(
                 OrderAttachmentLink.order_id == int(order.id or 0),
                 OrderAttachmentLink.archived_at.is_(None),
-                ServiceAttachment.telegram_file_id.is_not(None),
+                ServiceAttachment.archived_at.is_(None),
             )
         )
-        normalized_ids = {str(item) for item in normalized_result.scalars().all() if item}
-        return int(db_count or 0) + len(cls._legacy_items(order, normalized_ids))
+        normalized_rows = normalized_result.all()
+        normalized_ids = {str(file_id) for file_id, _ in normalized_rows if file_id}
+        normalized_source_keys = {
+            str(source_meta.get("legacy_source_key"))
+            for _, source_meta in normalized_rows
+            if isinstance(source_meta, dict) and source_meta.get("legacy_source_key")
+        }
+        return int(db_count or 0) + len(
+            legacy_attachment_items(order, normalized_ids, normalized_source_keys)
+        )
 
     @classmethod
     async def update_attachment(
@@ -505,66 +460,30 @@ class ServiceAttachmentService:
             attachment.transcript = cls._clean_text(payload.get("transcript"))
         equipment_id_for_response: int | None = None
         component_id_for_response: int | None = None
-        if "equipment_id" in payload:
+        service_history_id_for_response: int | None = None
+        if {"equipment_id", "component_id", "service_history_id"}.intersection(payload):
             if order_id is None:
                 raise ValueError("order_id is required to change equipment link")
-            equipment_id = payload.get("equipment_id")
-            component_id = payload.get("component_id")
-            equipment_links_result = await session.execute(
+            order = await session.get(Order, order_id)
+            if not order or link is None:
+                raise ValueError("Order or attachment link not found")
+            await ServiceAttachmentLinkService.replace_equipment_link(
+                session,
+                order=order,
+                order_link=link,
+                attachment_id=attachment_id,
+                payload=payload,
+            )
+
+        active_equipment_link = None
+        if link is not None:
+            active_equipment_link_result = await session.execute(
                 select(EquipmentAttachmentLink).where(
-                    EquipmentAttachmentLink.attachment_id == attachment_id,
+                    EquipmentAttachmentLink.order_attachment_link_id == int(link.id or 0),
                     EquipmentAttachmentLink.archived_at.is_(None),
                 )
             )
-            equipment_links = list(equipment_links_result.scalars().all())
-            if equipment_id is None:
-                for equipment_link in equipment_links:
-                    equipment_link.archived_at = datetime.now()
-                    session.add(equipment_link)
-            else:
-                order = await session.get(Order, order_id)
-                equipment = await session.get(CustomerEquipment, int(equipment_id))
-                if not order or not equipment:
-                    raise ValueError("Order or equipment not found")
-                if order.customer_id is None or int(order.customer_id) != int(equipment.customer_id):
-                    raise ValueError("Equipment does not belong to the order customer")
-                if (
-                    order.customer_branch_id is not None
-                    and equipment.customer_branch_id is not None
-                    and int(order.customer_branch_id) != int(equipment.customer_branch_id)
-                ):
-                    raise ValueError("Equipment does not belong to the order branch")
-                if component_id is not None:
-                    component = await session.get(EquipmentComponent, int(component_id))
-                    if not component or int(component.equipment_id) != int(equipment_id):
-                        raise ValueError("Equipment component does not belong to this equipment")
-                target = next(
-                    (item for item in equipment_links if int(item.equipment_id) == int(equipment_id)),
-                    None,
-                )
-                if target is None:
-                    target = EquipmentAttachmentLink(
-                        equipment_id=int(equipment_id),
-                        attachment_id=attachment_id,
-                    )
-                target.archived_at = None
-                target.component_id = int(component_id) if component_id is not None else None
-                target.category = link.category if link else "other"
-                target.caption = link.caption if link else None
-                session.add(target)
-                for equipment_link in equipment_links:
-                    if equipment_link is target:
-                        continue
-                    equipment_link.archived_at = datetime.now()
-                    session.add(equipment_link)
-
-        active_equipment_link_result = await session.execute(
-            select(EquipmentAttachmentLink).where(
-                EquipmentAttachmentLink.attachment_id == attachment_id,
-                EquipmentAttachmentLink.archived_at.is_(None),
-            )
-        )
-        active_equipment_link = active_equipment_link_result.scalars().first()
+            active_equipment_link = active_equipment_link_result.scalars().first()
         if active_equipment_link:
             if link and ("category" in payload or "caption" in payload):
                 active_equipment_link.category = link.category
@@ -572,18 +491,38 @@ class ServiceAttachmentService:
                 session.add(active_equipment_link)
             equipment_id_for_response = int(active_equipment_link.equipment_id)
             component_id_for_response = active_equipment_link.component_id
+            service_history_id_for_response = active_equipment_link.service_history_id
         attachment.updated_at = datetime.now()
         session.add(attachment)
         if link:
             session.add(link)
         await session.commit()
         await session.refresh(attachment)
-        return cls.to_item(
+        return attachment_to_item(
             attachment,
             link=link,
             equipment_id=equipment_id_for_response,
             component_id=component_id_for_response,
+            service_history_id=service_history_id_for_response,
         )
+
+    @staticmethod
+    async def _has_active_link(session: AsyncSession, *, attachment_id: int) -> bool:
+        active_order_link = await session.scalar(
+            select(OrderAttachmentLink.id).where(
+                OrderAttachmentLink.attachment_id == attachment_id,
+                OrderAttachmentLink.archived_at.is_(None),
+            ).limit(1)
+        )
+        if active_order_link is not None:
+            return True
+        active_equipment_link = await session.scalar(
+            select(EquipmentAttachmentLink.id).where(
+                EquipmentAttachmentLink.attachment_id == attachment_id,
+                EquipmentAttachmentLink.archived_at.is_(None),
+            ).limit(1)
+        )
+        return active_equipment_link is not None
 
     @staticmethod
     async def archive_attachment(
@@ -608,7 +547,37 @@ class ServiceAttachmentService:
                 return False
             link.archived_at = datetime.now()
             session.add(link)
+            equipment_links_result = await session.execute(
+                select(EquipmentAttachmentLink).where(
+                    EquipmentAttachmentLink.order_attachment_link_id == int(link.id or 0),
+                    EquipmentAttachmentLink.archived_at.is_(None),
+                )
+            )
+            for equipment_link in equipment_links_result.scalars().all():
+                equipment_link.archived_at = datetime.now()
+                session.add(equipment_link)
         else:
+            order_links_result = await session.execute(
+                select(OrderAttachmentLink).where(
+                    OrderAttachmentLink.attachment_id == attachment_id,
+                    OrderAttachmentLink.archived_at.is_(None),
+                )
+            )
+            for order_link in order_links_result.scalars().all():
+                order_link.archived_at = datetime.now()
+                session.add(order_link)
+            equipment_links_result = await session.execute(
+                select(EquipmentAttachmentLink).where(
+                    EquipmentAttachmentLink.attachment_id == attachment_id,
+                    EquipmentAttachmentLink.archived_at.is_(None),
+                )
+            )
+            for equipment_link in equipment_links_result.scalars().all():
+                equipment_link.archived_at = datetime.now()
+                session.add(equipment_link)
+
+        await session.flush()
+        if not await ServiceAttachmentService._has_active_link(session, attachment_id=attachment_id):
             attachment.archived_at = datetime.now()
             attachment.updated_at = datetime.now()
             session.add(attachment)
@@ -648,6 +617,8 @@ class ServiceAttachmentService:
         attachment = await session.get(ServiceAttachment, attachment_id)
         if not attachment or attachment.archived_at is not None:
             return None
+        if not await cls._has_active_link(session, attachment_id=attachment_id):
+            return None
         normalized_variant = "preview" if variant == "preview" and attachment.preview_storage_key else "original"
         storage_key = attachment.preview_storage_key if normalized_variant == "preview" else attachment.storage_key
         if not storage_key:
@@ -682,6 +653,8 @@ class ServiceAttachmentService:
     ) -> tuple[ServiceAttachment, bytes, str]:
         attachment = await session.get(ServiceAttachment, attachment_id)
         if not attachment or attachment.archived_at is not None:
+            raise FileNotFoundError("Attachment not found")
+        if not await ServiceAttachmentService._has_active_link(session, attachment_id=attachment_id):
             raise FileNotFoundError("Attachment not found")
         normalized_variant = "preview" if variant == "preview" and attachment.preview_storage_key else "original"
         key = attachment.preview_storage_key if normalized_variant == "preview" else attachment.storage_key

@@ -13,6 +13,7 @@ import EquipmentMaintenanceOrderDialog from '../components/equipment/EquipmentMa
 import EquipmentRegistryCards from '../components/equipment/EquipmentRegistryCards.vue';
 import EquipmentRegistryFilters from '../components/equipment/EquipmentRegistryFilters.vue';
 import EquipmentRegistryTable from '../components/equipment/EquipmentRegistryTable.vue';
+import WarrantyPolicyManager from '../components/equipment/WarrantyPolicyManager.vue';
 import {
   createEquipmentMaintenanceOrder,
   listEquipmentRegistry,
@@ -191,6 +192,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </header>
+
+      <WarrantyPolicyManager />
 
       <EquipmentRegistryFilters
         v-model="search"

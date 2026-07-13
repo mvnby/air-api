@@ -88,6 +88,7 @@ class EquipmentServiceHistory(SQLModel, table=True):
         sa_column=Column(String, index=True, nullable=False),
     )
     event_date: datetime = Field(default_factory=datetime.now, index=True)
+    maintenance_provider: Optional[str] = Field(default=None, index=True)
     complaint_snapshot: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     diagnostic_result: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     repair_recommendation: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))

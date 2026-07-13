@@ -1,5 +1,7 @@
+from urllib.parse import urlsplit
+
 from dotenv import load_dotenv
-from pydantic import field_validator
+from pydantic import ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.runtime_controls import (
@@ -8,6 +10,17 @@ from core.runtime_controls import (
 )
 
 load_dotenv()
+
+
+def _redact_settings_validation_error(error: ValidationError) -> ValidationError:
+    line_errors = error.errors(include_url=False)
+    for line_error in line_errors:
+        line_error["input"] = "[redacted]"
+    return ValidationError.from_exception_data(
+        error.title,
+        line_errors,
+        hide_input=True,
+    )
 
 
 class Settings(BaseSettings):
@@ -74,7 +87,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        redacted_error: ValidationError | None = None
+        try:
+            super().__init__(**kwargs)
+        except ValidationError as error:
+            redacted_error = _redact_settings_validation_error(error)
+        if redacted_error is not None:
+            raise redacted_error from None
         # If DATABASE_URL not provided, construct it from POSTGRES_* settings
         if not self.DATABASE_URL:
             self.DATABASE_URL = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -125,6 +144,62 @@ class Settings(BaseSettings):
     SERVICE_ATTACHMENT_S3_KEY_PREFIX: str = "service-attachments"
     SERVICE_ATTACHMENT_ACCESS_TTL_SECONDS: int = 300
     SERVICE_ATTACHMENT_MAX_SIZE_BYTES: int = 25 * 1024 * 1024
+
+    @model_validator(mode="after")
+    def _validate_private_attachment_storage(self):
+        if not self.is_production:
+            return self
+        provider = str(self.SERVICE_ATTACHMENT_STORAGE_PROVIDER or "").strip().lower()
+        if provider != "r2":
+            raise ValueError(
+                "Production service attachments require SERVICE_ATTACHMENT_STORAGE_PROVIDER=r2 "
+                "and a dedicated private bucket"
+            )
+        required = {
+            "SERVICE_ATTACHMENT_S3_BUCKET": self.SERVICE_ATTACHMENT_S3_BUCKET,
+            "SERVICE_ATTACHMENT_S3_ENDPOINT_URL": self.SERVICE_ATTACHMENT_S3_ENDPOINT_URL,
+            "SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID": self.SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID,
+            "SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY": self.SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY,
+        }
+        missing = [name for name, value in required.items() if not str(value or "").strip()]
+        if missing:
+            raise ValueError("Production private attachment storage is missing: " + ", ".join(missing))
+
+        endpoint = self.SERVICE_ATTACHMENT_S3_ENDPOINT_URL.strip()
+        try:
+            parsed_endpoint = urlsplit(endpoint)
+            parsed_endpoint.port
+        except ValueError:
+            parsed_endpoint = None
+        if (
+            parsed_endpoint is None
+            or parsed_endpoint.scheme.lower() != "https"
+            or not parsed_endpoint.hostname
+            or parsed_endpoint.username is not None
+            or parsed_endpoint.password is not None
+            or parsed_endpoint.query
+            or parsed_endpoint.fragment
+            or any(char.isspace() for char in endpoint)
+        ):
+            raise ValueError(
+                "Production private attachment storage endpoint must be a credential-free HTTPS URL"
+            )
+
+        private_bucket = self.SERVICE_ATTACHMENT_S3_BUCKET.strip().casefold()
+        shared_bucket_settings = [
+            name
+            for name, value in (
+                ("MEDIA_S3_BUCKET", self.MEDIA_S3_BUCKET),
+                ("PRODUCT_MEDIA_S3_BUCKET", self.PRODUCT_MEDIA_S3_BUCKET),
+            )
+            if str(value or "").strip().casefold() == private_bucket
+        ]
+        if shared_bucket_settings:
+            raise ValueError(
+                "Production private attachment bucket must differ from: "
+                + ", ".join(shared_bucket_settings)
+            )
+        return self
 
     PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER: str = "local"
     PRODUCT_MEDIA_LOCAL_ORIGINAL_DIR: str = "media/products/shared"
@@ -274,7 +349,21 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
+        hide_input_in_errors=True,
     )
 
+
+def _run_production_startup_checks(current_settings: Settings) -> None:
+    if not current_settings.is_production:
+        return
+
+    from services.private_attachment_storage_service import (
+        verify_private_attachment_storage_startup,
+    )
+
+    verify_private_attachment_storage_startup(current_settings)
+
+
 settings = Settings()
+_run_production_startup_checks(settings)

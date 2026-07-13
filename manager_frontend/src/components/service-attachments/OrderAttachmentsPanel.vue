@@ -175,7 +175,13 @@ const chooseFiles = () => fileInput.value?.click();
 
 const uploadFiles = async (fileList: FileList | File[]) => {
   const files = Array.from(fileList);
-  if (!files.length || props.readonly) return;
+  if (!files.length || props.readonly || uploading.value) return;
+  const uploadMetadata = {
+    category: uploadCategory.value,
+    caption: uploadCaption.value,
+    equipmentId: uploadEquipmentId.value,
+    componentId: uploadComponentId.value,
+  };
   actionError.value = '';
   actionMessage.value = '';
   uploadingCount.value += files.length;
@@ -184,10 +190,7 @@ const uploadFiles = async (fileList: FileList | File[]) => {
   for (const file of files) {
     try {
       const created = await serviceAttachmentsApi.upload(props.orderId, file, {
-        category: uploadCategory.value,
-        caption: uploadCaption.value,
-        equipmentId: uploadEquipmentId.value,
-        componentId: uploadComponentId.value,
+        ...uploadMetadata,
       });
       items.value = [created, ...items.value.filter((item) => item.id !== created.id)];
       total.value += 1;
@@ -276,8 +279,8 @@ const beginEdit = (item: ServiceAttachmentItem) => {
   editingId.value = attachmentId;
   editCategory.value = item.category || 'other';
   editCaption.value = item.caption || '';
-  editEquipmentId.value = null;
-  editComponentId.value = null;
+  editEquipmentId.value = item.equipment_id ?? null;
+  editComponentId.value = item.component_id ?? null;
   actionError.value = '';
 };
 
@@ -292,7 +295,7 @@ const saveEdit = async () => {
     const updated = await serviceAttachmentsApi.update(props.orderId, attachmentId, {
       category: editCategory.value,
       caption: editCaption.value.trim() || null,
-      ...(editEquipmentId.value ? {
+      ...(props.equipmentOptions.length ? {
         equipment_id: editEquipmentId.value,
         component_id: editComponentId.value,
       } : {}),
@@ -360,10 +363,6 @@ watch(uploadEquipmentId, () => {
   uploadComponentId.value = null;
 });
 
-watch(editEquipmentId, () => {
-  editComponentId.value = null;
-});
-
 if (expanded.value) void loadAttachments();
 
 defineExpose({ refresh, expand });
@@ -429,7 +428,7 @@ defineExpose({ refresh, expand });
         <input ref="fileInput" type="file" class="hidden" multiple accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt" @change="onFileChange" />
       </div>
 
-      <div v-if="!readonly && equipmentOptions.length" class="mt-2 grid gap-2 sm:grid-cols-2">
+      <div v-if="!readonly" class="mt-2 grid gap-2 sm:grid-cols-2">
         <label class="min-w-0">
           <span class="sr-only">Связать с оборудованием</span>
           <select v-model="uploadEquipmentId" class="field-input h-10 text-sm">
@@ -536,10 +535,10 @@ defineExpose({ refresh, expand });
             Подпись
             <input v-model="editCaption" class="field-input h-10 text-sm" placeholder="Что изображено или приложено" />
           </label>
-          <label v-if="equipmentOptions.length" class="field-label">
+          <label class="field-label">
             Связать с оборудованием
-            <select v-model="editEquipmentId" class="field-input h-10 text-sm">
-              <option :value="null">Не менять связь</option>
+            <select v-model="editEquipmentId" class="field-input h-10 text-sm" @change="editComponentId = null">
+              <option :value="null">Без привязки к оборудованию</option>
               <option v-for="equipment in equipmentOptions" :key="equipment.id" :value="equipment.id">{{ equipment.label }}</option>
             </select>
           </label>

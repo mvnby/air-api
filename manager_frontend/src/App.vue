@@ -35,6 +35,7 @@ const SupplierFeedsView = defineAsyncComponent(() => import('./views/SupplierFee
 const SupplierMappingView = defineAsyncComponent(() => import('./views/SupplierMappingView.vue'));
 const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQualityView.vue'));
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
+const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
 
 const isAuthenticated = ref(false);
 const currentUserRole = ref('');
@@ -143,6 +144,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
+  if (path.startsWith('/manager/equipment')) return 'equipment';
   if (path.startsWith('/manager/media')) return 'media-library';
   if (path.startsWith('/manager/catalog-quality')) return 'catalog-quality';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
@@ -639,6 +641,7 @@ watch(currentPath, () => {
       <LeadsView v-else-if="currentView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
+      <EquipmentRegistryView v-else-if="currentView === 'equipment'" :key="currentLocation" />
       <MediaLibraryView v-else-if="currentView === 'media-library'" :key="currentLocation" />
       <CatalogQualityView v-else-if="currentView === 'catalog-quality'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />

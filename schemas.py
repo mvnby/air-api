@@ -1768,6 +1768,7 @@ class ManagerEquipmentServiceHistoryItemResponse(BaseModel):
     order_id: Optional[int] = None
     event_type: EquipmentServiceEventType = EquipmentServiceEventType.OTHER
     event_date: datetime
+    maintenance_provider: Optional[Literal["mvn", "authorized", "external"]] = None
     complaint_snapshot: Optional[str] = None
     diagnostic_result: Optional[str] = None
     repair_recommendation: Optional[str] = None
@@ -2076,6 +2077,7 @@ class ManagerEquipmentServiceHistoryCreatePayload(BaseModel):
     event_type: EquipmentServiceEventType = EquipmentServiceEventType.OTHER
     event_date: Optional[datetime] = None
     order_id: Optional[int] = None
+    maintenance_provider: Optional[Literal["mvn", "authorized", "external"]] = None
     complaint_snapshot: Optional[str] = None
     diagnostic_result: Optional[str] = None
     repair_recommendation: Optional[str] = None
@@ -2136,6 +2138,7 @@ class ManagerServiceAttachmentItemResponse(BaseModel):
     preview_available: bool = False
     equipment_id: Optional[int] = None
     component_id: Optional[int] = None
+    service_history_id: Optional[int] = None
 
 
 class ManagerServiceAttachmentListResponse(BaseModel):
@@ -2150,6 +2153,7 @@ class ManagerServiceAttachmentUpdatePayload(BaseModel):
     transcript: Optional[str] = None
     equipment_id: Optional[int] = None
     component_id: Optional[int] = None
+    service_history_id: Optional[int] = None
 
 
 class ManagerServiceAttachmentAccessResponse(BaseModel):
@@ -2166,6 +2170,11 @@ class ManagerWarrantyPolicyResponse(BaseModel):
     brand_id: Optional[int] = None
     series_id: Optional[int] = None
     product_id: Optional[int] = None
+    supplier_name: Optional[str] = None
+    brand_title: Optional[str] = None
+    series_title: Optional[str] = None
+    series_brand_id: Optional[int] = None
+    product_title: Optional[str] = None
     duration_months: Optional[int] = None
     start_event: str = "commissioning"
     maintenance_required: bool = False

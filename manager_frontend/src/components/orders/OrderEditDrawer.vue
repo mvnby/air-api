@@ -8,6 +8,8 @@ import DealExecutionTab from './DealExecutionTab.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
+import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
+import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
@@ -283,13 +285,13 @@ const selectedRepairEquipmentId = ref<number | null>(null);
 const selectedRepairEquipmentDetail = ref<ManagerEquipmentDetailResponse | null>(null);
 const repairEquipmentHistoryLoading = ref(false);
 const creatingRepairEquipment = ref(false);
-const creatingOrderEquipment = ref(false);
 const recordingRepairHistory = ref(false);
 const repairHistoryEventType = ref<EquipmentServiceEventType | ''>('');
 const repairHistoryNotes = ref('');
 const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
+const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 
 const executorOptions = computed(() => {
   const selectedIds = new Set<number>();
@@ -977,13 +979,6 @@ const documentSectionSummary = computed(() => {
   return `${orderDocuments.value.length} док. · ${contractText}`;
 });
 const documentSectionHasError = computed(() => isCompanyOrder.value && !props.order?.customer_contract_id && !hasClosingBaseDocument.value);
-const canCreateEquipmentFromOrder = computed(() => (
-  Boolean(props.order?.id)
-  && Boolean(customer.value?.id)
-  && !isRepairWorkflow.value
-  && productLines.value.some((line) => Boolean(line.product_id))
-));
-
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
   let mutated = false;
@@ -1001,28 +996,6 @@ const beforeDocumentGenerate = async (type: string) => {
     emit('reload', props.order.id);
   }
   return { mutated };
-};
-
-const createEquipmentFromOrder = async () => {
-  if (!props.order?.id || creatingOrderEquipment.value || !canCreateEquipmentFromOrder.value) return;
-  creatingOrderEquipment.value = true;
-  try {
-    await saveCurrentProposalLines();
-    const result = await ManagerEquipmentService.createManagerEquipmentFromOrder(props.order.id, {
-      warranty_months: 24,
-      include_component_placeholders: true,
-    });
-    if (result.created_count) {
-      setToast(`Создано паспортов оборудования: ${result.created_count}`, 'success');
-    } else {
-      setToast('Паспорта уже созданы по текущим товарам заказа', 'success');
-    }
-    emit('reload', props.order.id);
-  } catch (error) {
-    setToast(`Не удалось создать паспорта оборудования: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    creatingOrderEquipment.value = false;
-  }
 };
 
 const handleDocumentPanelToast = (payload: { message: string; type?: 'success' | 'error' }) => {
@@ -1435,6 +1408,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (initializedOrderId.value !== order.id) {
     initializedOrderId.value = order.id;
     expandedDrawerSections.value = restoreDrawerSections();
+    linkedEquipmentOptions.value = [];
   }
   status.value = order.status;
   orderTitle.value = order.title ?? '';
@@ -2644,12 +2618,27 @@ watch(
         </div>
       </OrderDrawerSection>
 
+      <OrderEquipmentPanel
+        v-if="order"
+        :key="`order-equipment-${order.id}`"
+        class="mt-4"
+        :order-id="order.id"
+        :customer-id="customer?.id"
+        :customer-branch-id="customerBranchId"
+        :initial-count="order.linked_equipment_count"
+        :has-catalog-products="productLines.some((line) => Boolean(line.product_id))"
+        @options-change="linkedEquipmentOptions = $event"
+        @reload="emit('reload', order.id)"
+        @error="setToast($event, 'error')"
+      />
+
       <OrderAttachmentsPanel
         v-if="order"
         :key="`order-attachments-${order.id}`"
         class="mt-4"
         :order-id="order.id"
         :initial-count="order.attachment_count"
+        :equipment-options="linkedEquipmentOptions"
         @error="setToast($event, 'error')"
       />
 
@@ -3707,16 +3696,6 @@ watch(
             >
               <span class="material-icons-round text-[18px]">chat</span> Viber
             </a>
-            <button
-              v-if="canCreateEquipmentFromOrder"
-              type="button"
-              class="flex items-center gap-1 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-700 shadow-sm transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-70"
-              :disabled="creatingOrderEquipment"
-              @click="createEquipmentFromOrder"
-            >
-              <span class="material-icons-round text-[18px]">verified</span>
-              {{ creatingOrderEquipment ? 'Создаем...' : 'Создать паспорта оборудования' }}
-            </button>
           </div>
         </div>
 

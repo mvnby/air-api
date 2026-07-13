@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useDialogA11y } from '../equipment/useDialogA11y';
 import { serviceAttachmentsApi } from './api';
 import {
   formatAttachmentDate,
@@ -24,9 +25,13 @@ const emit = defineEmits<{
 const accessUrl = ref('');
 const accessLoading = ref(false);
 const accessError = ref('');
+const downloadLoading = ref(false);
 const zoom = ref(1);
 const detailsOpen = ref(false);
+const dialogRef = ref<HTMLElement | null>(null);
+const closeButtonRef = ref<HTMLElement | null>(null);
 let accessRequestId = 0;
+let downloadRequestId = 0;
 let previousBodyOverflow = '';
 
 const activeIndex = computed(() => props.items.findIndex((item) => item.id === props.modelValue));
@@ -83,6 +88,9 @@ const loadAccess = async () => {
   const requestId = ++accessRequestId;
   accessUrl.value = '';
   accessError.value = '';
+  accessLoading.value = false;
+  downloadRequestId += 1;
+  downloadLoading.value = false;
   zoom.value = 1;
   detailsOpen.value = false;
   if (!item) return;
@@ -104,14 +112,44 @@ const loadAccess = async () => {
   }
 };
 
+const downloadOriginal = async () => {
+  const item = activeItem.value;
+  if (!item || typeof item.id !== 'number' || downloadLoading.value) return;
+  const attachmentId = item.id;
+  const requestId = ++downloadRequestId;
+  downloadLoading.value = true;
+  try {
+    const response = await serviceAttachmentsApi.getAccess(attachmentId, 'original', true);
+    if (requestId !== downloadRequestId || activeItem.value?.id !== attachmentId) return;
+    const anchor = document.createElement('a');
+    anchor.href = response.url;
+    anchor.rel = 'noopener';
+    anchor.download = item.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } catch (error) {
+    if (requestId !== downloadRequestId || activeItem.value?.id !== attachmentId) return;
+    accessError.value = error instanceof Error ? error.message : 'Не удалось скачать файл';
+  } finally {
+    if (requestId === downloadRequestId) downloadLoading.value = false;
+  }
+};
+
 const onKeydown = (event: KeyboardEvent) => {
   if (!isOpen.value) return;
-  if (event.key === 'Escape') close();
   if (event.key === 'ArrowLeft') showPrevious();
   if (event.key === 'ArrowRight') showNext();
   if (isImage.value && (event.key === '+' || event.key === '=')) setZoom(zoom.value + 0.25);
   if (isImage.value && event.key === '-') setZoom(zoom.value - 0.25);
 };
+
+useDialogA11y({
+  open: isOpen,
+  dialogRef,
+  initialFocusRef: closeButtonRef,
+  close,
+});
 
 watch(() => activeItem.value?.id, () => void loadAccess(), { immediate: true });
 
@@ -127,6 +165,7 @@ watch(isOpen, (open) => {
 onMounted(() => document.addEventListener('keydown', onKeydown));
 onBeforeUnmount(() => {
   accessRequestId += 1;
+  downloadRequestId += 1;
   document.removeEventListener('keydown', onKeydown);
   if (isOpen.value) document.body.style.overflow = previousBodyOverflow;
 });
@@ -136,10 +175,12 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="isOpen && activeItem"
+      ref="dialogRef"
       class="fixed inset-0 z-[120] flex flex-col bg-slate-950/95 text-white"
       role="dialog"
       aria-modal="true"
       :aria-label="`Просмотр файла ${activeItem.filename}`"
+      tabindex="-1"
     >
       <header class="flex min-h-14 items-center gap-2 border-b border-white/10 px-3 py-2 sm:px-5">
         <div class="min-w-0 flex-1">
@@ -161,19 +202,18 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <a
+        <button
           v-if="accessUrl"
-          :href="accessUrl"
-          :download="activeItem.filename"
-          target="_blank"
-          rel="noopener"
           class="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10"
+          type="button"
+          :disabled="downloadLoading"
           title="Скачать оригинал"
           aria-label="Скачать оригинал"
+          @click="downloadOriginal"
         >
-          <span class="material-icons-round text-[21px]" aria-hidden="true">download</span>
-        </a>
-        <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10" title="Закрыть" aria-label="Закрыть" @click="close">
+          <span class="material-icons-round text-[21px]" :class="{ 'animate-pulse': downloadLoading }" aria-hidden="true">download</span>
+        </button>
+        <button ref="closeButtonRef" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10" title="Закрыть" aria-label="Закрыть" @click="close">
           <span class="material-icons-round text-[22px]" aria-hidden="true">close</span>
         </button>
       </header>

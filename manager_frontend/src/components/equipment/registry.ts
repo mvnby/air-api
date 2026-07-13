@@ -3,6 +3,7 @@ import type {
   EquipmentAttentionReason,
   EquipmentRegistryItem,
 } from './types';
+import { equipmentWarrantySummary } from './equipmentWarrantySummary';
 
 export const ATTENTION_FILTER_OPTIONS: ReadonlyArray<{
   value: EquipmentAttentionFilter;
@@ -85,6 +86,15 @@ export const formatEquipmentDate = (value: string | null | undefined) => {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : DATE_FORMATTER.format(date);
+};
+
+export const equipmentWarrantyDate = (item: EquipmentRegistryItem) => {
+  const summary = equipmentWarrantySummary(item);
+  if (summary.expiresAt) return formatEquipmentDate(summary.expiresAt);
+  if (hasAttentionReason(item, 'warranty_expiring') || hasAttentionReason(item, 'warranty_expired')) {
+    return 'См. покрытие';
+  }
+  return summary.status === 'unknown' ? 'Уточнить' : '—';
 };
 
 export const hasAttentionReason = (item: EquipmentRegistryItem, reason: EquipmentAttentionReason) => (

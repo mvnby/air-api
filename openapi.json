@@ -18170,6 +18170,17 @@
               }
             ],
             "title": "Component Id"
+          },
+          "service_history_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service History Id"
           }
         },
         "type": "object",
@@ -26574,6 +26585,22 @@
             ],
             "title": "Order Id"
           },
+          "maintenance_provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "mvn",
+                  "authorized",
+                  "external"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Provider"
+          },
           "complaint_snapshot": {
             "anyOf": [
               {
@@ -26689,6 +26716,22 @@
             "type": "string",
             "format": "date-time",
             "title": "Event Date"
+          },
+          "maintenance_provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "mvn",
+                  "authorized",
+                  "external"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Provider"
           },
           "complaint_snapshot": {
             "anyOf": [
@@ -33513,6 +33556,17 @@
               }
             ],
             "title": "Component Id"
+          },
+          "service_history_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service History Id"
           }
         },
         "type": "object",
@@ -33607,6 +33661,17 @@
               }
             ],
             "title": "Component Id"
+          },
+          "service_history_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service History Id"
           }
         },
         "type": "object",
@@ -35636,6 +35701,61 @@
               }
             ],
             "title": "Product Id"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "brand_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Title"
+          },
+          "series_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Title"
+          },
+          "series_brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Brand Id"
+          },
+          "product_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Title"
           },
           "duration_months": {
             "anyOf": [

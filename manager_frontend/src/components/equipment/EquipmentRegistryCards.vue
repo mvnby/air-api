@@ -7,6 +7,7 @@ import {
   equipmentSubtitle,
   equipmentTitle,
   formatEquipmentDate,
+  equipmentWarrantyDate,
   hasDistinctServiceContact,
   maintenanceDateClass,
   phoneHref,
@@ -43,7 +44,7 @@ const emit = defineEmits<{
       </div>
 
       <div class="mt-3">
-        <EquipmentAttentionBadges :reasons="item.attention_reasons" />
+        <EquipmentAttentionBadges :reasons="item.attention_reasons" :warranty-status="item.warranty_status" />
       </div>
 
       <div class="mt-4 space-y-2.5 border-t border-gray-100 pt-3 text-sm dark:border-slate-700">
@@ -97,7 +98,7 @@ const emit = defineEmits<{
         <div class="min-w-0 px-1.5">
           <dt class="text-[11px] font-medium leading-tight text-gray-500 dark:text-slate-400">Гарантия до</dt>
           <dd class="mt-1 break-words text-xs font-semibold" :class="warrantyDateClass(item)">
-            {{ formatEquipmentDate(item.warranty_expires_at) }}
+            {{ equipmentWarrantyDate(item) }}
           </dd>
         </div>
       </dl>

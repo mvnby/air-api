@@ -71,6 +71,10 @@ export const serviceAttachmentsApi = {
     return request<ServiceAttachmentListResponse>(`/api/manager/orders/${encodeURIComponent(String(orderId))}/attachments`);
   },
 
+  listEquipment(equipmentId: number) {
+    return request<ServiceAttachmentListResponse>(`/api/manager/equipment/${encodeURIComponent(String(equipmentId))}/attachments`);
+  },
+
   upload(
     orderId: number,
     file: File,
@@ -108,8 +112,9 @@ export const serviceAttachmentsApi = {
     });
   },
 
-  getAccess(attachmentId: number, variant: ServiceAttachmentVariant) {
+  getAccess(attachmentId: number, variant: ServiceAttachmentVariant, download = false) {
     const query = new URLSearchParams({ variant });
+    if (download) query.set('download', 'true');
     return request<ServiceAttachmentAccessResponse>(
       `/api/manager/service-attachments/${encodeURIComponent(String(attachmentId))}/access?${query.toString()}`,
     );
