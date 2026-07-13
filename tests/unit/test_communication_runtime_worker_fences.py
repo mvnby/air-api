@@ -13,6 +13,7 @@ from models import CommunicationDelivery, CommunicationDeliveryAttempt, StaffUse
 from services.communications.contracts import PublicContactLeadCreatedPayloadV1
 from services.communications.delivery_service import CommunicationDeliveryService
 from services.communications.delivery_worker import CommunicationDeliveryWorker
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.providers.base import ProviderDeliveryResult
 from services.communications.runtime_state import (
     CommunicationRuntimeMode,
@@ -20,6 +21,9 @@ from services.communications.runtime_state import (
     CommunicationRuntimeStateService,
 )
 from services.communications.template_registry import CONTACT_LEAD_TEMPLATE_KEY
+
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
 
 
 @pytest.fixture
@@ -82,9 +86,9 @@ async def seed_delivery(
         return delivery_id
 
 
-async def own_runtime_mode(session_factory) -> None:
+async def own_runtime_mode(session_factory) -> CommunicationProcessingScope:
     async with session_factory() as session:
-        await CommunicationRuntimeStateService.set_mode(
+        control = await CommunicationRuntimeStateService.set_mode(
             session,
             channel="telegram",
             mode=CommunicationRuntimeMode.ALL,
@@ -95,6 +99,9 @@ async def own_runtime_mode(session_factory) -> None:
             instance_id="mode-fence-worker",
         )
         await session.commit()
+        return CommunicationProcessingScope.all(
+            control_revision=control.control_revision
+        )
 
 
 async def set_runtime_mode(
@@ -102,21 +109,38 @@ async def set_runtime_mode(
     mode: CommunicationRuntimeMode,
 ) -> None:
     async with session_factory() as session:
+        current = await CommunicationRuntimeStateService.read_control(
+            session,
+            channel="telegram",
+        )
+        if (
+            current.mode != CommunicationRuntimeMode.OFF
+            and mode != CommunicationRuntimeMode.OFF
+        ):
+            await CommunicationRuntimeStateService.set_mode(
+                session,
+                channel="telegram",
+                mode=CommunicationRuntimeMode.OFF,
+            )
         await CommunicationRuntimeStateService.set_mode(
             session,
             channel="telegram",
             mode=mode,
+            canary_run_id=(
+                RUN_ID_A if mode == CommunicationRuntimeMode.CANARY else None
+            ),
         )
         await session.commit()
 
 
-def active_mode_safety_check(session_factory):
+def active_mode_safety_check(session_factory, scope):
     async def safety_check() -> None:
         async with session_factory() as session:
-            await CommunicationRuntimeStateService.read_active_owned_control(
+            await CommunicationRuntimeStateService.assert_owned_processing_scope(
                 session,
                 channel="telegram",
                 instance_id="mode-fence-worker",
+                scope=scope,
             )
 
     return safety_check
@@ -166,6 +190,7 @@ async def test_runtime_safety_check_fences_claim_and_provider_send(
 
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="generic-fence-worker",
         lease_seconds=60,
@@ -199,14 +224,15 @@ async def test_db_mode_flip_before_claim_leaves_delivery_queued(
         sequence=16,
         telegram_id=161016,
     )
-    await own_runtime_mode(worker_session_factory)
+    scope = await own_runtime_mode(worker_session_factory)
     provider = ImmediateProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=scope,
         provider=provider,
         worker_id="mode-fence-worker",
         lease_seconds=60,
-        safety_check=active_mode_safety_check(worker_session_factory),
+        safety_check=active_mode_safety_check(worker_session_factory, scope),
     )
     original_recovery = worker._recover_expired_leases
 
@@ -245,14 +271,15 @@ async def test_db_mode_flip_before_provider_send_leaves_durable_claim(
         sequence=17,
         telegram_id=171017,
     )
-    await own_runtime_mode(worker_session_factory)
+    scope = await own_runtime_mode(worker_session_factory)
     provider = ImmediateProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=scope,
         provider=provider,
         worker_id="mode-fence-worker",
         lease_seconds=60,
-        safety_check=active_mode_safety_check(worker_session_factory),
+        safety_check=active_mode_safety_check(worker_session_factory, scope),
     )
     original_renewal = worker._renew_before_send
 
@@ -295,6 +322,7 @@ async def test_runtime_db_timeout_fails_closed_before_claim(
     )
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="db-timeout-worker",
         lease_seconds=60,
@@ -335,6 +363,7 @@ async def test_terminal_db_timeout_is_recovered_as_ambiguous_attempt(
     )
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="terminal-timeout-worker",
         lease_seconds=60,
@@ -358,6 +387,7 @@ async def test_terminal_db_timeout_is_recovered_as_ambiguous_attempt(
         assert attempt.outcome == "running"
         recovered = await CommunicationDeliveryService.recover_expired_leases(
             session,
+            scope=ALL_SCOPE,
             now=recovery_time,
         )
         await session.commit()

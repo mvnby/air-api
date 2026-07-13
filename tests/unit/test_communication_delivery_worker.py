@@ -17,7 +17,10 @@ from services.communications.delivery_service import (
 )
 from services.communications.delivery_worker import CommunicationDeliveryWorker
 from services.communications.providers.base import ProviderDeliveryResult
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.template_registry import CONTACT_LEAD_TEMPLATE_KEY
+
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 
 
 @pytest.fixture
@@ -197,6 +200,7 @@ async def test_worker_commits_claim_before_provider_and_marks_sent(
     )
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="test-worker",
         lease_seconds=60,
@@ -243,6 +247,7 @@ async def test_worker_renews_lease_while_provider_call_is_in_flight(
     provider = HeartbeatObservingProvider(worker_session_factory)
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="heartbeat-worker",
         lease_seconds=3,
@@ -269,6 +274,7 @@ async def test_worker_refences_expired_lease_before_network_call(
     provider = ImmediateProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="preflight-worker",
         lease_seconds=60,
@@ -308,6 +314,7 @@ async def test_known_provider_result_wins_simultaneous_heartbeat_failure(
     provider = ImmediateProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="simultaneous-worker",
         lease_seconds=60,
@@ -344,6 +351,7 @@ async def test_managed_cancellation_preserves_known_provider_result(
     provider = CancellationRaceProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="cancellation-worker",
         lease_seconds=60,
@@ -377,6 +385,7 @@ async def test_cancellation_inside_sent_finalizer_commits_then_propagates(
     provider = ImmediateProvider()
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="sent-finalizer-worker",
         lease_seconds=60,
@@ -427,6 +436,7 @@ async def test_cancellation_inside_failure_finalizer_commits_then_propagates(
     )
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=ImmediateFailureProvider(),
         worker_id="failure-finalizer-worker",
         lease_seconds=60,
@@ -499,6 +509,7 @@ async def test_worker_revalidates_recipient_and_cancels_without_network(
     )
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="test-worker",
         lease_seconds=60,
@@ -555,6 +566,7 @@ async def test_worker_keeps_recipient_failures_independent(
     )
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="test-worker",
         lease_seconds=60,
@@ -596,7 +608,10 @@ async def test_worker_converts_render_error_to_permanent_dead_letter(
     async with worker_session_factory() as session:
         row = await session.get(CommunicationDelivery, delivery_id)
         assert row is not None
-        row.template_key = "telegram.unsupported_template"
+        # Keep the row inside the reviewed runtime allowlist while corrupting
+        # its immutable payload snapshot. Unknown templates are intentionally
+        # invisible to the worker and therefore cannot exercise render DLQ.
+        row.render_context = {"lead_id": 5}
         session.add(row)
         await session.commit()
 
@@ -606,6 +621,7 @@ async def test_worker_converts_render_error_to_permanent_dead_letter(
     )
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
         provider=provider,
         worker_id="test-worker",
         lease_seconds=60,

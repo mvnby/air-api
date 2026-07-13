@@ -78,7 +78,7 @@ def test_delivery_lease_hardening_remains_before_communication_runtime_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(LEASE_REVISION)
 
-    assert script.get_heads() == ["5b9c2d4e6f10"]
+    assert script.get_heads() == ["6c0d3e5f7a21"]
     assert revision is not None
     assert revision.down_revision == "3f7a9c1d2e04"
 

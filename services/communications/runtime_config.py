@@ -17,6 +17,7 @@ from services.communications.delivery_limits import (
     MAX_DELIVERY_LEASE_SECONDS,
     MIN_DELIVERY_LEASE_SECONDS,
 )
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.providers.base import CommunicationDeliveryProvider
 
 
@@ -51,7 +52,7 @@ class CommunicationRuntimeStopRequested(CommunicationRuntimeError):
 SessionFactory = Callable[[], AsyncSession]
 ProviderFactory = Callable[[], CommunicationDeliveryProvider]
 PrimaryProbe = Callable[[SessionFactory], Awaitable[None]]
-RuntimeSafetyCheck = Callable[[], Awaitable[None]]
+RuntimeSafetyCheck = Callable[[CommunicationProcessingScope], Awaitable[None]]
 
 
 def _default_instance_id() -> str:
@@ -63,6 +64,7 @@ def _default_instance_id() -> str:
 class CommunicationRuntimeConfig:
     enabled: bool
     app_role: str
+    allow_all_mode: bool = False
     channel: str = "telegram"
     lock_name: str = "mvn:communications:telegram"
     instance_id: str = ""
@@ -78,6 +80,8 @@ class CommunicationRuntimeConfig:
     lease_seconds: int = 90
 
     def __post_init__(self) -> None:
+        if type(self.enabled) is not bool or type(self.allow_all_mode) is not bool:
+            raise ValueError("Communication runtime deployment gates must be boolean")
         object.__setattr__(self, "app_role", normalize_app_role(self.app_role))
         object.__setattr__(self, "channel", str(self.channel or "").strip().lower())
         object.__setattr__(self, "lock_name", str(self.lock_name or "").strip())
@@ -161,6 +165,7 @@ class CommunicationRuntimeConfig:
         return cls(
             enabled=settings.COMMUNICATIONS_WORKER_ENABLED,
             app_role=settings.APP_ROLE,
+            allow_all_mode=settings.COMMUNICATIONS_WORKER_ALLOW_ALL_MODE,
             poll_seconds=settings.COMMUNICATIONS_WORKER_POLL_SECONDS,
             heartbeat_seconds=settings.COMMUNICATIONS_WORKER_HEARTBEAT_SECONDS,
             lock_retry_seconds=settings.COMMUNICATIONS_WORKER_LOCK_RETRY_SECONDS,

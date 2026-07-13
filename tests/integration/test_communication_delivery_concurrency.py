@@ -15,7 +15,17 @@ from services.communications.delivery_service import (
     CommunicationDeliveryLeaseLost,
     CommunicationDeliveryService,
 )
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.providers.base import ProviderDeliveryResult
+from services.communications.template_registry import (
+    CONTACT_LEAD_TEMPLATE_KEY,
+    TELEGRAM_CANARY_TEMPLATE_KEY,
+    telegram_canary_event_id,
+)
+
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
+RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 
 
 @pytest.fixture
@@ -121,6 +131,7 @@ async def test_postgres_claim_skips_locked_row_and_claims_distinct_delivery(
     async with factory() as session_a, factory() as session_b:
         claim_a = await CommunicationDeliveryService.claim_next(
             session_a,
+            scope=ALL_SCOPE,
             worker_id="worker-a",
             lease_seconds=60,
         )
@@ -129,6 +140,7 @@ async def test_postgres_claim_skips_locked_row_and_claims_distinct_delivery(
         claim_b = await asyncio.wait_for(
             CommunicationDeliveryService.claim_next(
                 session_b,
+                scope=ALL_SCOPE,
                 worker_id="worker-b",
                 lease_seconds=60,
             ),
@@ -175,6 +187,7 @@ async def test_postgres_locked_single_claim_rolls_back_without_consuming_attempt
     async with factory() as session_a, factory() as session_b:
         claim_a = await CommunicationDeliveryService.claim_next(
             session_a,
+            scope=ALL_SCOPE,
             worker_id="worker-a",
             lease_seconds=60,
         )
@@ -182,6 +195,7 @@ async def test_postgres_locked_single_claim_rolls_back_without_consuming_attempt
         claim_while_locked = await asyncio.wait_for(
             CommunicationDeliveryService.claim_next(
                 session_b,
+                scope=ALL_SCOPE,
                 worker_id="worker-b",
                 lease_seconds=60,
             ),
@@ -193,6 +207,7 @@ async def test_postgres_locked_single_claim_rolls_back_without_consuming_attempt
 
         claim_after_rollback = await CommunicationDeliveryService.claim_next(
             session_b,
+            scope=ALL_SCOPE,
             worker_id="worker-b",
             lease_seconds=60,
         )
@@ -226,11 +241,13 @@ async def test_postgres_concurrent_recovery_skips_locked_expired_delivery(
     async with factory() as session_a, factory() as session_b:
         recovery_a = await CommunicationDeliveryService.recover_expired_leases(
             session_a,
+            scope=ALL_SCOPE,
             limit=1,
         )
         recovery_b = await asyncio.wait_for(
             CommunicationDeliveryService.recover_expired_leases(
                 session_b,
+                scope=ALL_SCOPE,
                 limit=1,
             ),
             timeout=3,
@@ -264,6 +281,147 @@ async def test_postgres_concurrent_recovery_skips_locked_expired_delivery(
 
 
 @pytest.mark.asyncio
+async def test_postgres_canary_scope_isolates_claim_and_recovery_mixed_queue(
+    communication_db_engine,
+):
+    assert communication_db_engine.dialect.name == "postgresql"
+    scope_a = CommunicationProcessingScope.canary(
+        run_id=RUN_ID_A,
+        control_revision=11,
+    )
+    factory = sessionmaker(
+        communication_db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    now = datetime.now(timezone.utc)
+
+    def delivery(
+        sequence: int,
+        *,
+        event_id: str,
+        template_key: str,
+        status: str,
+        priority: int,
+    ) -> CommunicationDelivery:
+        running = status == "running"
+        return CommunicationDelivery(
+            delivery_id=f"{sequence:032x}",
+            event_id=event_id,
+            channel="telegram",
+            recipient_key=f"staff:{sequence}",
+            destination=str(200000 + sequence),
+            template_key=template_key,
+            template_version=1,
+            render_context={},
+            status=status,
+            priority=priority,
+            attempts=1 if running else 0,
+            max_attempts=3,
+            available_at=now - timedelta(seconds=1),
+            worker_id="expired-worker" if running else None,
+            lease_token="x" * 43 if running else None,
+            lease_expires_at=now - timedelta(seconds=1) if running else None,
+            created_at=now + timedelta(microseconds=sequence),
+            updated_at=now,
+        )
+
+    queued_a = delivery(
+        101,
+        event_id=telegram_canary_event_id(RUN_ID_A),
+        template_key=TELEGRAM_CANARY_TEMPLATE_KEY,
+        status="queued",
+        priority=100,
+    )
+    queued_b = delivery(
+        102,
+        event_id=telegram_canary_event_id(RUN_ID_B),
+        template_key=TELEGRAM_CANARY_TEMPLATE_KEY,
+        status="queued",
+        priority=-100,
+    )
+    queued_website = delivery(
+        103,
+        event_id="a" * 32,
+        template_key=CONTACT_LEAD_TEMPLATE_KEY,
+        status="queued",
+        priority=-200,
+    )
+    running_a = delivery(
+        111,
+        event_id=telegram_canary_event_id(RUN_ID_A),
+        template_key=TELEGRAM_CANARY_TEMPLATE_KEY,
+        status="running",
+        priority=100,
+    )
+    running_b = delivery(
+        112,
+        event_id=telegram_canary_event_id(RUN_ID_B),
+        template_key=TELEGRAM_CANARY_TEMPLATE_KEY,
+        status="running",
+        priority=-100,
+    )
+    running_website = delivery(
+        113,
+        event_id="b" * 32,
+        template_key=CONTACT_LEAD_TEMPLATE_KEY,
+        status="running",
+        priority=-200,
+    )
+    async with factory() as session:
+        session.add_all(
+            [
+                queued_a,
+                queued_b,
+                queued_website,
+                running_a,
+                running_b,
+                running_website,
+            ]
+        )
+        session.add_all(
+            [
+                CommunicationDeliveryAttempt(
+                    delivery_id=item.delivery_id,
+                    attempt_no=1,
+                    started_at=now - timedelta(minutes=1),
+                    outcome="running",
+                )
+                for item in (running_a, running_b, running_website)
+            ]
+        )
+        await session.commit()
+
+        claim = await CommunicationDeliveryService.claim_next(
+            session,
+            scope=scope_a,
+            worker_id="canary-a-worker",
+            now=now,
+        )
+        recovery = await CommunicationDeliveryService.recover_expired_leases(
+            session,
+            scope=scope_a,
+            now=now,
+        )
+        await session.commit()
+
+        assert claim is not None
+        assert claim.delivery_id == queued_a.delivery_id
+        assert recovery.retry_count == 1
+        assert recovery.dead_count == 0
+        for untouched in (queued_b, queued_website):
+            await session.refresh(untouched)
+            assert untouched.status == "queued"
+            assert untouched.attempts == 0
+        await session.refresh(running_a)
+        assert running_a.status == "retry"
+        for untouched in (running_b, running_website):
+            await session.refresh(untouched)
+            assert untouched.status == "running"
+            assert untouched.worker_id == "expired-worker"
+
+
+@pytest.mark.asyncio
 async def test_postgres_recovery_rotates_token_and_fences_stale_attempt(
     communication_db_engine,
 ):
@@ -278,7 +436,7 @@ async def test_postgres_recovery_rotates_token_and_fences_stale_attempt(
     stale_token = "expired-token-1".ljust(40, "x")
 
     async with factory() as session:
-        recovery = await CommunicationDeliveryService.recover_expired_leases(session)
+        recovery = await CommunicationDeliveryService.recover_expired_leases(session, scope=ALL_SCOPE)
         assert recovery.retry_count == 1
         await session.commit()
         recovered = await session.get(CommunicationDelivery, f"{1:032x}")
@@ -288,6 +446,7 @@ async def test_postgres_recovery_rotates_token_and_fences_stale_attempt(
     async with factory() as session:
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id=stale_worker,
             lease_seconds=60,
             now=retry_at,
@@ -347,6 +506,7 @@ async def test_postgres_concurrent_terminal_transitions_have_single_winner(
     async with factory() as session:
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="terminal-worker",
             lease_seconds=60,
         )

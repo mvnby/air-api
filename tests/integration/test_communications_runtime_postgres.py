@@ -11,12 +11,14 @@ from sqlalchemy.orm import sessionmaker
 import services.communications.runtime as runtime_module
 from conftest import TEST_DATABASE_URL
 from models import CommunicationRuntimeState
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.runtime import (
     CommunicationRuntimeConfig,
     CommunicationRuntimeLockLost,
     CommunicationRuntimeSupervisor,
 )
 from services.communications.runtime_state import (
+    CommunicationRuntimeControlConflict,
     CommunicationRuntimeMode,
     CommunicationRuntimeStateService,
 )
@@ -31,6 +33,10 @@ async def _wait_until(predicate, *, timeout=3.0):
 
 async def _instant_fencing(stop_event: asyncio.Event, _seconds: float) -> bool:
     return stop_event.is_set()
+
+
+RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
+RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 
 
 @pytest_asyncio.fixture
@@ -163,6 +169,65 @@ async def test_postgres_runtime_advisory_lock_serializes_two_processes(
 
 
 @pytest.mark.asyncio
+async def test_postgres_concurrent_first_arm_creates_one_fenced_runtime_scope(
+    runtime_postgres_engine,
+):
+    """The unseeded-row fallback must not poison either outer transaction."""
+
+    session_factory = sessionmaker(
+        bind=runtime_postgres_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    release = asyncio.Event()
+    ready = 0
+    both_ready = asyncio.Event()
+
+    async def arm(run_id: str):
+        nonlocal ready
+        async with session_factory() as session:
+            ready += 1
+            if ready == 2:
+                both_ready.set()
+            await release.wait()
+            try:
+                control = await CommunicationRuntimeStateService.arm_canary_from_off(
+                    session,
+                    channel="telegram",
+                    run_id=run_id,
+                )
+            except CommunicationRuntimeControlConflict as exc:
+                await session.rollback()
+                return exc.error_code
+            await session.commit()
+            return control
+
+    first = asyncio.create_task(arm(RUN_ID_A))
+    second = asyncio.create_task(arm(RUN_ID_B))
+    await asyncio.wait_for(both_ready.wait(), timeout=1)
+    release.set()
+    results = await asyncio.wait_for(
+        asyncio.gather(first, second),
+        timeout=3,
+    )
+
+    controls = [item for item in results if not isinstance(item, str)]
+    conflicts = [item for item in results if isinstance(item, str)]
+    assert len(controls) == 1
+    assert conflicts == ["canary_runtime_not_off"]
+    assert controls[0].mode == CommunicationRuntimeMode.CANARY
+    assert controls[0].canary_run_id in {RUN_ID_A, RUN_ID_B}
+    assert controls[0].control_revision == 1
+
+    async with session_factory() as session:
+        stored = await session.get(CommunicationRuntimeState, "telegram")
+        assert stored is not None
+        assert stored.mode == "canary"
+        assert stored.canary_run_id == controls[0].canary_run_id
+        assert stored.control_revision == 1
+
+
+@pytest.mark.asyncio
 async def test_postgres_failover_never_overlaps_provider_calls(
     runtime_postgres_engine,
     monkeypatch,
@@ -179,12 +244,15 @@ async def test_postgres_failover_never_overlaps_provider_calls(
         expire_on_commit=False,
     )
     async with session_factory() as session:
-        await CommunicationRuntimeStateService.set_mode(
+        control = await CommunicationRuntimeStateService.set_mode(
             session,
             channel="telegram",
             mode=CommunicationRuntimeMode.ALL,
         )
         await session.commit()
+    expected_scope = CommunicationProcessingScope.all(
+        control_revision=control.control_revision
+    )
 
     acquired_locks = []
 
@@ -200,6 +268,7 @@ async def test_postgres_failover_never_overlaps_provider_calls(
     base_config = CommunicationRuntimeConfig(
         enabled=True,
         app_role="primary",
+        allow_all_mode=True,
         instance_id="failover-one",
         lock_name=lock_name,
         poll_seconds=0.01,
@@ -228,7 +297,7 @@ async def test_postgres_failover_never_overlaps_provider_calls(
 
         async def run(self, stop_event):
             nonlocal active_provider_calls, maximum_provider_calls
-            await self.safety_check()
+            await self.safety_check(expected_scope)
             active_provider_calls += 1
             maximum_provider_calls = max(
                 maximum_provider_calls,

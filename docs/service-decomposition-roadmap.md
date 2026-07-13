@@ -6,7 +6,7 @@
 
 Сначала modular monolith, затем extraction. Storefront и Telegram process уже можно разворачивать отдельно, но это ещё не самостоятельные domain services: они используют общую backend-модель и не имеют устойчивых command/event contracts.
 
-Wave 0 закрыта, слита через PR #726 и развернута в production как SHA `886593e0`: единый CI дал **1177 passed**, migration/codegen gates, Patroni primary/replica deploy и storefront canary/VPS/Cloudflare smoke прошли. Декомпозиция этим не завершена. Outbox producer switch/consumer, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Wave 1 PR-A (#727, SHA `0c16ea38`) уже развернул выключенный additive outbox/inbox/delivery foundation; PR-B добавил транзакционный dispatcher/materializer. C1 добавляет dormant leased Telegram provider worker, но не включает runtime/scheduler и не переключает producers, поэтому production notification path по-прежнему не меняется.
+Wave 0 закрыта, слита через PR #726 и развернута в production как SHA `886593e0`: единый CI дал **1177 passed**, migration/codegen gates, Patroni primary/replica deploy и storefront canary/VPS/Cloudflare smoke прошли. Декомпозиция этим не завершена. Outbox producer switch/consumer, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Wave 1 PR-A (#727, SHA `0c16ea38`) уже развернул выключенный additive outbox/inbox/delivery foundation; PR-B добавил транзакционный dispatcher/materializer; C1 добавил dormant leased Telegram provider worker. PR #737 (`e74d53d8`) развернул выключенный managed single-active runtime foundation; production подтверждён на migration head `5b9c2d4e6f10` с control `off/stopped`, пустыми очередями и HA invariants `5/5`. Bounded-canary интеграция остаётся локальным follow-up: она ещё не слита, не deployed и не использовалась для live Telegram send. Поэтому production notification path по-прежнему не меняется.
 
 ## Целевые bounded contexts
 
@@ -59,11 +59,11 @@ Rollback выполняется в обратном безопасном пор�
 
 Владеет templates, channel routing, deliveries, retry/DLQ и provider diagnostics. Producers не вызывают Telegram/SMTP напрямую; они пишут domain event/outbox.
 
-C1 формирует безопасное in-process ядро: immutable recipient snapshot, durable claim до network, per-recipient lease token/heartbeat, строго fenced terminal transitions, отдельное восстановление expired lease, deterministic retry с provider `retry_after`, DLQ и повторная проверка активного получателя. Ядро остаётся не подключённым к runtime.
+C1 сформировал безопасное in-process ядро: immutable recipient snapshot, durable claim до network, per-recipient lease token/heartbeat, строго fenced terminal transitions, отдельное восстановление expired lease, deterministic retry с provider `retry_after`, DLQ и повторная проверка активного получателя. PR #737 подключил его к выключенному по умолчанию managed runtime с single-active advisory lock, primary fencing и bounded lifecycle и развернул эту foundation-версию в production. Durable control остаётся `off/stopped`; ни claim, ни provider call не активированы.
 
 Delivery остаётся at-least-once: ambiguous provider timeout или hard crash после принятия Telegram-сообщения, но до terminal DB commit, может привести к повтору после lease recovery. Lease fencing защищает состояние от stale worker, но exactly-once невозможно без idempotency со стороны провайдера.
 
-C2 начинается только после review транзакций producer use cases: domain mutation и outbox event должны коммититься атомарно. Затем нужен managed single-active/canary rollout, метрики queue age/lease expiry/delivery outcome и rollback без mixed worker versions. Выделять Communications можно после этой стабилизации: перенос worker не меняет producer contract.
+C2 rollout всё ещё начинается только после review транзакций producer use cases: domain mutation и outbox event должны коммититься атомарно. Текущий follow-up реализует bounded Telegram canary как один immutable run: exact event/template scope, monotonic control revision, обязательный переход через `off`, atomic enqueue+arm и fail-closed full-mode deployment gate. Эти изменения проверены локально, но ещё не слиты и не deployed; live canary не запускался. После merge всё равно нужны production canary, метрики queue age/lease expiry/delivery outcome и rollback без mixed worker versions. Выделять Communications можно только после этой стабилизации: перенос worker не меняет producer contract.
 
 ### Documents
 
@@ -150,7 +150,7 @@ flowchart LR
   H --> I["Re-evaluate CRM/Catalog physical split"]
 ```
 
-Wave 0 на этой диаграмме развернута. В Wave 1 отдельно входят public lead abuse/dedupe/rate-limit contract, checkout idempotency/canonical identity, order versioning, C2 transaction review и переключение producers/consumer на outbox, managed communications-worker rollout и durable operations. Media и Communications workers в production пока отсутствуют и остаются выключены; extraction нельзя начинать только на основании реализованного lease claim.
+Wave 0 на этой диаграмме развернута. В Wave 1 отдельно входят public lead abuse/dedupe/rate-limit contract, checkout idempotency/canonical identity, order versioning, C2 transaction review и переключение producers/consumer на outbox, managed communications-worker rollout и durable operations. PR #737 развернул dormant runtime foundation, но control остаётся `off`; Media worker и bounded-canary follow-up также ещё не deployed. Extraction нельзя начинать только на основании реализованного lease claim или локально зелёного canary-кода.
 
 ## Anti-goals
 

@@ -7,17 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import CommunicationDelivery, ConsumerInbox, IntegrationOutboxEvent
+from services.communications.audience_resolver import CommunicationAudienceResolver
+from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.contracts import DispatchOutcomeV1
 from services.communications.delivery_materializer import (
     CommunicationDeliveryMaterializer,
     DeliveryMaterializationConflict,
     NoEligibleCommunicationRecipients,
 )
-from services.communications.recipient_directory import ManagementRecipientDirectory
+from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.template_registry import (
     CONSUMER_NAME,
     HANDLER_VERSION,
-    SUPPORTED_EVENT_TYPES,
     InvalidCommunicationEventPayload,
     UnsupportedCommunicationEvent,
     WebsiteTemplateRegistry,
@@ -51,13 +52,14 @@ class CommunicationOutboxDispatcher:
         session: AsyncSession,
         *,
         now: datetime,
+        scope: CommunicationProcessingScope,
     ) -> IntegrationOutboxEvent | None:
         query = (
             select(IntegrationOutboxEvent)
             .where(
                 IntegrationOutboxEvent.status == "pending",
                 IntegrationOutboxEvent.available_at <= now,
-                IntegrationOutboxEvent.event_type.in_(SUPPORTED_EVENT_TYPES),
+                IntegrationOutboxEvent.event_type.in_(scope.outbox_event_types),
             )
             .order_by(
                 IntegrationOutboxEvent.priority.asc(),
@@ -67,6 +69,10 @@ class CommunicationOutboxDispatcher:
             )
             .limit(1)
         )
+        if scope.exact_event_id is not None:
+            query = query.where(
+                IntegrationOutboxEvent.event_id == scope.exact_event_id
+            )
         if session.get_bind().dialect.name == "postgresql":
             query = query.with_for_update(skip_locked=True)
         return (await session.execute(query)).scalar_one_or_none()
@@ -117,7 +123,11 @@ class CommunicationOutboxDispatcher:
         event.worker_id = None
         event.lease_token = None
         event.lease_expires_at = None
-        event.last_error_code = type(error).__name__[:100]
+        event.last_error_code = (
+            error.error_code
+            if isinstance(error, CommunicationsCanarySafetyError)
+            else type(error).__name__[:100]
+        )
         event.last_error_message = (str(error).strip() or type(error).__name__)[:1000]
         event.updated_at = now
         return DispatchOutcomeV1(
@@ -161,6 +171,23 @@ class CommunicationOutboxDispatcher:
             raise ConsumerInboxConsistencyError(
                 "Consumer inbox exists without materialized deliveries"
             )
+        if plan.audience == "operations_canary":
+            expected_recipients = await CommunicationAudienceResolver.list_telegram(
+                session,
+                plan=plan,
+            )
+            expected_routing = {
+                (recipient.recipient_key, recipient.destination)
+                for recipient in expected_recipients
+            }
+            actual_routing = {
+                (delivery.recipient_key, delivery.destination)
+                for delivery in deliveries
+            }
+            if actual_routing != expected_routing:
+                raise ConsumerInboxConsistencyError(
+                    "Canary inbox delivery recipients are inconsistent"
+                )
         for delivery in deliveries:
             if (
                 delivery.channel != plan.channel
@@ -192,6 +219,7 @@ class CommunicationOutboxDispatcher:
         session: AsyncSession,
         *,
         dispatcher_id: str,
+        scope: CommunicationProcessingScope,
         now: datetime | None = None,
     ) -> DispatchOutcomeV1 | None:
         normalized_dispatcher_id = str(dispatcher_id or "").strip()
@@ -201,7 +229,11 @@ class CommunicationOutboxDispatcher:
             raise ValueError("Communication dispatcher_id is too long")
         dispatch_time = now or cls._utc_now()
 
-        event = await cls._select_next(session, now=dispatch_time)
+        event = await cls._select_next(
+            session,
+            now=dispatch_time,
+            scope=scope,
+        )
         if event is None:
             return None
 
@@ -223,6 +255,7 @@ class CommunicationOutboxDispatcher:
             )
         except (
             ConsumerInboxConsistencyError,
+            CommunicationsCanarySafetyError,
             InvalidCommunicationEventPayload,
             TemplateRenderError,
             UnsupportedCommunicationEvent,
@@ -243,11 +276,10 @@ class CommunicationOutboxDispatcher:
             async with session.begin_nested():
                 plan = WebsiteTemplateRegistry.plan(event)
                 WebsiteTemplateRegistry.render(plan)
-                if plan.audience != "management":
-                    raise UnsupportedCommunicationEvent(
-                        f"Unsupported communication audience {plan.audience!r}"
-                    )
-                recipients = await ManagementRecipientDirectory.list_telegram(session)
+                recipients = await CommunicationAudienceResolver.list_telegram(
+                    session,
+                    plan=plan,
+                )
                 materialized = await CommunicationDeliveryMaterializer.materialize(
                     session,
                     event=event,
@@ -255,7 +287,10 @@ class CommunicationOutboxDispatcher:
                     recipients=recipients,
                     now=dispatch_time,
                 )
-        except NoEligibleCommunicationRecipients as exc:
+        except (
+            CommunicationsCanarySafetyError,
+            NoEligibleCommunicationRecipients,
+        ) as exc:
             return cls._record_failure(
                 event,
                 error=exc,

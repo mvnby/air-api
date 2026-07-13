@@ -5,9 +5,12 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import CommunicationRuntimeState
+from services.communications.canary_run_id import normalize_canary_run_id
+from services.communications.processing_scope import CommunicationProcessingScope
 
 
 class CommunicationRuntimeMode(str, Enum):
@@ -30,16 +33,32 @@ class CommunicationRuntimeStateOwnershipLost(RuntimeError):
     pass
 
 
+class CommunicationRuntimeControlConflict(RuntimeError):
+    def __init__(self, error_code: str) -> None:
+        self.error_code = error_code
+        super().__init__(error_code)
+
+
 class CommunicationRuntimeModeBlocked(RuntimeError):
-    def __init__(self, mode: CommunicationRuntimeMode) -> None:
+    def __init__(
+        self,
+        mode: CommunicationRuntimeMode,
+        *,
+        canary_run_id: str | None,
+        control_revision: int,
+    ) -> None:
         super().__init__("Communication runtime mode does not allow delivery work")
         self.mode = mode
+        self.canary_run_id = canary_run_id
+        self.control_revision = control_revision
 
 
 @dataclass(frozen=True)
 class CommunicationRuntimeControl:
     channel: str
     mode: CommunicationRuntimeMode
+    canary_run_id: str | None
+    control_revision: int
     status: CommunicationRuntimeStatus
     instance_id: str | None
     heartbeat_at: datetime | None
@@ -95,14 +114,79 @@ class CommunicationRuntimeStateService:
         state = CommunicationRuntimeState(
             channel=normalized_channel,
             mode=CommunicationRuntimeMode.OFF.value,
+            canary_run_id=None,
+            control_revision=0,
             status=CommunicationRuntimeStatus.STOPPED.value,
             control_updated_at=now,
             created_at=now,
             updated_at=now,
         )
-        session.add(state)
-        await session.flush()
+        try:
+            # The migration seeds the production row. The savepoint also makes
+            # first-use initialization safe for isolated databases and tests:
+            # concurrent callers race on the primary key without poisoning the
+            # caller-owned outer transaction.
+            async with session.begin_nested():
+                session.add(state)
+                await session.flush()
+            return state
+        except IntegrityError:
+            concurrent_state = await session.get(
+                CommunicationRuntimeState,
+                normalized_channel,
+                populate_existing=True,
+            )
+            if concurrent_state is None:  # pragma: no cover - defensive DB fence
+                raise
+            return concurrent_state
+
+    @classmethod
+    async def _lock_state(
+        cls,
+        session: AsyncSession,
+        *,
+        channel: str,
+    ) -> CommunicationRuntimeState:
+        normalized_channel = cls._normalize_channel(channel)
+        state = await cls.ensure_state(session, channel=normalized_channel)
+        if session.get_bind().dialect.name == "postgresql":
+            state = await session.get(
+                CommunicationRuntimeState,
+                normalized_channel,
+                populate_existing=True,
+                with_for_update=True,
+            )
+            if state is None:  # pragma: no cover - protected by ensure_state
+                raise RuntimeError("Communication runtime state disappeared")
         return state
+
+    @staticmethod
+    def _normalize_canary_scope(
+        mode: CommunicationRuntimeMode,
+        canary_run_id: str | None,
+    ) -> str | None:
+        if mode == CommunicationRuntimeMode.CANARY:
+            if canary_run_id is None:
+                raise ValueError("Canary runtime mode requires a run ID")
+            return normalize_canary_run_id(canary_run_id)
+        if canary_run_id is not None:
+            raise ValueError("Only canary runtime mode accepts a run ID")
+        return None
+
+    @classmethod
+    def _apply_control(
+        cls,
+        state: CommunicationRuntimeState,
+        *,
+        mode: CommunicationRuntimeMode,
+        canary_run_id: str | None,
+    ) -> None:
+        now = cls._now()
+        state.mode = mode.value
+        state.canary_run_id = canary_run_id
+        state.control_revision = int(state.control_revision) + 1
+        state.control_updated_at = now
+        state.updated_at = now
 
     @classmethod
     async def set_mode(
@@ -111,13 +195,49 @@ class CommunicationRuntimeStateService:
         *,
         channel: str,
         mode: CommunicationRuntimeMode | str,
+        canary_run_id: str | None = None,
     ) -> CommunicationRuntimeControl:
         normalized_mode = CommunicationRuntimeMode(mode)
-        state = await cls.ensure_state(session, channel=channel)
-        now = cls._now()
-        state.mode = normalized_mode.value
-        state.control_updated_at = now
-        state.updated_at = now
+        normalized_run_id = cls._normalize_canary_scope(
+            normalized_mode,
+            canary_run_id,
+        )
+        state = await cls._lock_state(session, channel=channel)
+        current_mode = CommunicationRuntimeMode(state.mode)
+        if current_mode == normalized_mode and state.canary_run_id == normalized_run_id:
+            return cls._to_control(state)
+        if (
+            current_mode != CommunicationRuntimeMode.OFF
+            and normalized_mode != CommunicationRuntimeMode.OFF
+        ):
+            raise CommunicationRuntimeControlConflict(
+                "runtime_control_transition_requires_off"
+            )
+        cls._apply_control(
+            state,
+            mode=normalized_mode,
+            canary_run_id=normalized_run_id,
+        )
+        await session.flush()
+        return cls._to_control(state)
+
+    @classmethod
+    async def arm_canary_from_off(
+        cls,
+        session: AsyncSession,
+        *,
+        channel: str,
+        run_id: str,
+    ) -> CommunicationRuntimeControl:
+        normalized_run_id = normalize_canary_run_id(run_id)
+        state = await cls._lock_state(session, channel=channel)
+        if CommunicationRuntimeMode(state.mode) != CommunicationRuntimeMode.OFF:
+            raise CommunicationRuntimeControlConflict("canary_runtime_not_off")
+        cls._apply_control(
+            state,
+            mode=CommunicationRuntimeMode.CANARY,
+            canary_run_id=normalized_run_id,
+        )
         await session.flush()
         return cls._to_control(state)
 
@@ -131,18 +251,7 @@ class CommunicationRuntimeStateService:
     ) -> CommunicationRuntimeControl:
         normalized_channel = cls._normalize_channel(channel)
         normalized_instance_id = cls._normalize_instance_id(instance_id)
-        state = await cls.ensure_state(session, channel=normalized_channel)
-        if session.get_bind().dialect.name == "postgresql":
-            # Re-read while locking the row. The advisory lock serializes normal
-            # runtimes; this row lock also protects manual control-plane writes.
-            state = await session.get(
-                CommunicationRuntimeState,
-                normalized_channel,
-                populate_existing=True,
-                with_for_update=True,
-            )
-            if state is None:  # pragma: no cover - protected by ensure_state
-                raise RuntimeError("Communication runtime state disappeared")
+        state = await cls._lock_state(session, channel=normalized_channel)
         now = cls._now()
         state.status = CommunicationRuntimeStatus.FENCING.value
         state.instance_id = normalized_instance_id
@@ -172,22 +281,39 @@ class CommunicationRuntimeStateService:
         return cls._to_control(state)
 
     @classmethod
-    async def read_active_owned_control(
+    async def read_control(
+        cls,
+        session: AsyncSession,
+        *,
+        channel: str,
+    ) -> CommunicationRuntimeControl:
+        state = await cls.ensure_state(session, channel=channel)
+        return cls._to_control(state)
+
+    @classmethod
+    async def assert_owned_processing_scope(
         cls,
         session: AsyncSession,
         *,
         channel: str,
         instance_id: str,
+        scope: CommunicationProcessingScope,
     ) -> CommunicationRuntimeControl:
-        """Return owned control only while the operator permits full work."""
-
         control = await cls.read_owned_control(
             session,
             channel=channel,
             instance_id=instance_id,
         )
-        if control.mode != CommunicationRuntimeMode.ALL:
-            raise CommunicationRuntimeModeBlocked(control.mode)
+        if not scope.matches_control(
+            mode=control.mode.value,
+            canary_run_id=control.canary_run_id,
+            control_revision=control.control_revision,
+        ):
+            raise CommunicationRuntimeModeBlocked(
+                control.mode,
+                canary_run_id=control.canary_run_id,
+                control_revision=control.control_revision,
+            )
         return control
 
     @classmethod
@@ -231,6 +357,8 @@ class CommunicationRuntimeStateService:
         return CommunicationRuntimeControl(
             channel=state.channel,
             mode=CommunicationRuntimeMode(state.mode),
+            canary_run_id=state.canary_run_id,
+            control_revision=int(state.control_revision),
             status=CommunicationRuntimeStatus(state.status),
             instance_id=state.instance_id,
             heartbeat_at=state.heartbeat_at,

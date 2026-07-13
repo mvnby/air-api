@@ -15,8 +15,10 @@ from services.communications.delivery_service import (
     CommunicationDeliveryService,
 )
 from services.communications.providers.base import ProviderDeliveryResult
+from services.communications.processing_scope import CommunicationProcessingScope
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 
 
 @pytest.fixture
@@ -105,6 +107,7 @@ async def test_claim_next_is_due_channel_scoped_ordered_and_caller_owned(
     async with delivery_session_factory() as session:
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="delivery-worker-a",
             now=NOW,
             lease_seconds=60,
@@ -150,6 +153,7 @@ async def test_claim_snapshot_is_frozen_and_redacts_lease_token(
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker",
             lease_seconds=60,
             now=NOW,
@@ -196,6 +200,7 @@ async def test_expired_running_is_recovered_before_it_can_be_claimed(
     async with delivery_session_factory() as session:
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="new-worker",
             lease_seconds=60,
             now=NOW,
@@ -203,6 +208,7 @@ async def test_expired_running_is_recovered_before_it_can_be_claimed(
         assert claim is None
         recovery = await CommunicationDeliveryService.recover_expired_leases(
             session,
+            scope=ALL_SCOPE,
             now=NOW,
         )
         await session.commit()
@@ -212,6 +218,7 @@ async def test_expired_running_is_recovered_before_it_can_be_claimed(
     async with delivery_session_factory() as session:
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="new-worker",
             lease_seconds=60,
             now=NOW,
@@ -242,6 +249,7 @@ async def test_renew_and_terminal_transitions_require_exact_unexpired_lease(
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker-a",
             lease_seconds=60,
             now=NOW,
@@ -326,6 +334,7 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker",
             lease_seconds=60,
             now=NOW,
@@ -413,6 +422,7 @@ async def test_permanent_or_exhausted_failure_is_dead(
         await session.commit()
         claim = await CommunicationDeliveryService.claim_next(
             session,
+            scope=ALL_SCOPE,
             worker_id="worker",
             lease_seconds=60,
             now=NOW,
@@ -513,6 +523,7 @@ async def test_recovery_is_limited_ordered_and_separates_retry_from_dead(
     async with delivery_session_factory() as session:
         outcome = await CommunicationDeliveryService.recover_expired_leases(
             session,
+            scope=ALL_SCOPE,
             now=NOW,
             limit=2,
         )

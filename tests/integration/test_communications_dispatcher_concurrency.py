@@ -15,12 +15,21 @@ from models import (
     IntegrationOutboxEvent,
     StaffUser,
 )
+from services.communications.canary import CommunicationsTelegramCanary
 from services.communications.contracts import CommunicationRecipientV1
 from services.communications.delivery_materializer import (
     CommunicationDeliveryMaterializer,
 )
 from services.communications.dispatcher import CommunicationOutboxDispatcher
+from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.recipient_directory import (
+    OperationsCanaryRecipientDirectory,
+)
 from services.communications.template_registry import WebsiteTemplateRegistry
+
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
+RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 
 
 def _event(sequence: int, *, now: datetime) -> IntegrationOutboxEvent:
@@ -53,6 +62,7 @@ async def _dispatch_once(factory, barrier: asyncio.Barrier, worker: str, now: da
         await barrier.wait()
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
             session,
+            scope=ALL_SCOPE,
             dispatcher_id=worker,
             now=now,
         )
@@ -188,6 +198,82 @@ async def test_postgres_concurrent_dispatchers_skip_locked_to_distinct_events(db
                 select(func.count(ConsumerInbox.event_id))
             )
         ).scalar_one() == 2
+
+
+@pytest.mark.asyncio
+async def test_postgres_canary_dispatch_scope_isolates_mixed_outbox_queue(db_engine):
+    assert db_engine.dialect.name == "postgresql"
+    factory = sessionmaker(
+        bind=db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    now = datetime(2026, 7, 13, 18, 0, tzinfo=timezone.utc)
+    scope_a = CommunicationProcessingScope.canary(
+        run_id=RUN_ID_A,
+        control_revision=4,
+    )
+    async with factory() as session:
+        session.add_all(
+            [
+                StaffUser(
+                    display_name="Owner One",
+                    status="active",
+                    roles=["owner"],
+                    primary_role="owner",
+                    telegram_id=8101,
+                ),
+                StaffUser(
+                    display_name="Owner Two",
+                    status="active",
+                    roles=["owner"],
+                    primary_role="owner",
+                    telegram_id=8102,
+                ),
+            ]
+        )
+        await session.flush()
+        recipients = await OperationsCanaryRecipientDirectory.list_telegram(session)
+        recipient_keys = tuple(item.recipient_key for item in recipients)
+        run_a = await CommunicationsTelegramCanary.enqueue(
+            session,
+            run_id=RUN_ID_A,
+            recipient_keys=recipient_keys,
+            occurred_at=now,
+        )
+        run_b = await CommunicationsTelegramCanary.enqueue(
+            session,
+            run_id=RUN_ID_B,
+            recipient_keys=recipient_keys,
+            occurred_at=now,
+        )
+        website = _event(731, now=now)
+        website.priority = -100
+        session.add(website)
+        await session.commit()
+
+        outcome = await CommunicationOutboxDispatcher.dispatch_next(
+            session,
+            scope=scope_a,
+            dispatcher_id="canary-a-dispatcher",
+            now=now,
+        )
+        await session.commit()
+
+        assert outcome is not None
+        assert outcome.event_id == run_a.event.event_id
+        assert outcome.delivery_count == 2
+        await session.refresh(run_b.event)
+        await session.refresh(website)
+        assert run_b.event.status == "pending"
+        assert run_b.event.attempts == 0
+        assert website.status == "pending"
+        assert website.attempts == 0
+        assert (
+            await session.execute(
+                select(func.count(ConsumerInbox.event_id))
+            )
+        ).scalar_one() == 1
 
 
 @pytest.mark.asyncio

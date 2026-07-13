@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, String
+from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Index, String
 from sqlmodel import Field, SQLModel
 
 
@@ -29,6 +29,16 @@ class CommunicationRuntimeState(SQLModel, table=True):
             name="ck_communication_runtime_mode_valid",
         ),
         CheckConstraint(
+            "(mode = 'canary' AND canary_run_id IS NOT NULL "
+            "AND length(canary_run_id) = 36) OR "
+            "(mode IN ('off', 'all') AND canary_run_id IS NULL)",
+            name="ck_communication_runtime_canary_scope_valid",
+        ),
+        CheckConstraint(
+            "control_revision >= 0",
+            name="ck_communication_runtime_control_revision_non_negative",
+        ),
+        CheckConstraint(
             "status IN ('stopped', 'fencing', 'disabled', 'paused', "
             "'running', 'stopping', 'faulted')",
             name="ck_communication_runtime_status_valid",
@@ -43,6 +53,14 @@ class CommunicationRuntimeState(SQLModel, table=True):
     mode: str = Field(
         default="off",
         sa_column=Column(String(16), nullable=False),
+    )
+    canary_run_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(36), nullable=True),
+    )
+    control_revision: int = Field(
+        default=0,
+        sa_column=Column(BigInteger, nullable=False),
     )
     status: str = Field(
         default="stopped",

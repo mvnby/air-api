@@ -19,6 +19,7 @@ os.environ.update(
         "BOT_ENABLED": "false",
         "SCHEDULER_ENABLED": "false",
         "COMMUNICATIONS_WORKER_ENABLED": "false",
+        "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
         "HA_ALERT_TELEGRAM_BOT_TOKEN": "",
         "HA_ALERT_TELEGRAM_CHAT_ID": "",
         "MAIL_IMAP_USERNAME": "",

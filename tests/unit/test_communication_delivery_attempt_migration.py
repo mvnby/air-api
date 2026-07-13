@@ -14,6 +14,9 @@ from sqlalchemy.orm import sessionmaker
 
 from models import CommunicationDelivery, CommunicationDeliveryAttempt
 from services.communications.delivery_service import CommunicationDeliveryService
+from services.communications.processing_scope import CommunicationProcessingScope
+
+ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 
 FOUNDATION_PATH = Path(
     "alembic/versions/3f7a9c1d2e04_add_communications_outbox_foundation.py"
@@ -138,7 +141,7 @@ def test_attempt_journal_precedes_the_communication_runtime_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(ATTEMPT_REVISION)
 
-    assert script.get_heads() == ["5b9c2d4e6f10"]
+    assert script.get_heads() == ["6c0d3e5f7a21"]
     assert revision is not None
     assert revision.down_revision == "4a8b1c2d3e05"
 
@@ -334,6 +337,7 @@ async def test_attempt_journal_backfills_running_row_for_lease_recovery(tmp_path
         async with factory() as session:
             recovery = await CommunicationDeliveryService.recover_expired_leases(
                 session,
+                scope=ALL_SCOPE,
                 now=datetime(2026, 7, 13, 12, 6, tzinfo=timezone.utc),
             )
             await session.commit()
