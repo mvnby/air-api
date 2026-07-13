@@ -87,6 +87,41 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("delivery_id", "attempt_no"),
     )
+    # A rolling deployment may observe a lease claimed by the dormant C1
+    # worker before this migration is applied. Preserve that open attempt so
+    # the C2 terminal/recovery paths can fence and finalize it normally rather
+    # than repeatedly failing on a missing journal row.
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO communication_delivery_attempt (
+                delivery_id,
+                attempt_no,
+                started_at,
+                finished_at,
+                outcome,
+                error_category,
+                error_code,
+                retry_after_seconds,
+                provider_latency_ms,
+                ambiguous
+            )
+            SELECT
+                delivery_id,
+                attempts,
+                updated_at,
+                NULL,
+                'running',
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                false
+            FROM communication_delivery
+            WHERE status = 'running'
+            """
+        )
+    )
     op.create_index(
         "ix_delivery_attempt_outcome_started",
         "communication_delivery_attempt",

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +29,28 @@ class CommunicationDeliveryAttemptService:
             "recipient",
             "template",
             "unknown",
+        }
+    )
+    ERROR_CODES = frozenset(
+        {
+            "delivery_failed",
+            "lease_expired",
+            "provider_call_failed",
+            "provider_result_invalid",
+            "recipient_inactive",
+            "telegram_api_error",
+            "telegram_bad_request",
+            "telegram_chat_migrated",
+            "telegram_destination_invalid",
+            "telegram_entity_too_large",
+            "telegram_network_error",
+            "telegram_provider_auth_or_conflict",
+            "telegram_recipient_unavailable",
+            "telegram_retry_after",
+            "telegram_text_invalid",
+            "telegram_unexpected_error",
+            "template_render_failed",
+            "timeout",
         }
     )
     FINAL_OUTCOMES = frozenset({"sent", "retry", "dead", "canceled"})
@@ -155,7 +176,7 @@ class CommunicationDeliveryAttemptService:
         if normalized_category not in cls.ERROR_CATEGORIES:
             normalized_category = "unknown"
         normalized_code = str(code or "").strip().lower()
-        if not re.fullmatch(r"[a-z][a-z0-9_]{0,99}", normalized_code):
+        if normalized_code not in cls.ERROR_CODES:
             normalized_code = "delivery_failed"
         return normalized_category, normalized_code
 

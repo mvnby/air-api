@@ -335,7 +335,7 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
 
     result = ProviderDeliveryResult.transient_failure(
         category="rate_limit\nsecret",
-        code="retry\tafter",
+        code="plaintextsecret123",
         message="Safe\nmessage",
         retry_after_seconds=900,
     )
@@ -360,7 +360,7 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
         assert row.attempts == 1
         assert row.finished_at is None
         assert row.last_error_category == "rate_limit secret"
-        assert row.last_error_code == "retry after"
+        assert row.last_error_code == "plaintextsecret123"
         assert row.last_error_message == "Safe message"
         assert row.worker_id is None
         attempt = await session.get(
