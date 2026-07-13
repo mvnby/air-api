@@ -9,13 +9,14 @@ x-api-app: &api-app
     - .ha-app-role.env
   environment:
     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
   volumes:
     - ./media:/app/media
     - ./postgres-wal-archive:/postgres-wal-archive
     - ./model-cache/u2net:/root/.u2net
-    - ./token.json:/app/token.json
-    - ./client_secret.json:/app/client_secret.json
-    - ./credentials.json:/app/credentials.json
+    - ./google-oauth:/app/google-oauth
+    - ./client_secret.json:/app/client_secret.json:ro
+    - ./credentials.json:/app/credentials.json:ro
     - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
 
 services:

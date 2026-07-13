@@ -242,14 +242,19 @@ class SchedulerService:
                 await asyncio.sleep(wait_seconds)
                 
                 logger.info("⏳ Starting Daily Backup (DB + Media)...")
-                # We need to run sync method in thread executor because subprocess is blocking
-                await asyncio.to_thread(backup_service.perform_backup, cleanup=True)
-                logger.info("✅ Daily Backup Completed.")
+                await self._run_daily_backup()
                 
             except Exception:
                 logger.exception("❌ Backup Loop Error")
                 # Retry in 1 hour if it crashed to avoid loop spam
                 await asyncio.sleep(3600)
+
+    async def _run_daily_backup(self) -> None:
+        """Run one production backup and reject skipped/partial success states."""
+        result = await asyncio.to_thread(backup_service.perform_backup, cleanup=True)
+        if result is not True:
+            raise RuntimeError("Daily backup was skipped or did not complete")
+        logger.info("✅ Daily Backup Completed.")
 
     async def _lead_archive_loop(self):
         """Archives lost/spam leads older than 90 days once every 24 hours."""

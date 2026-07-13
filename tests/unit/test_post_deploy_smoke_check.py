@@ -25,14 +25,30 @@ def test_smoke_check_resolves_active_green_service(tmp_path):
     _executable(
         fake_bin / "curl",
         """#!/usr/bin/env bash
-url="${*: -1}"
+output_file=""
+write_format=""
+url=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o) output_file="$2"; shift 2 ;;
+    -w) write_format="$2"; shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
 case "$url" in
-  */api/ready) printf '{"status":"ok","api":"ready","traffic":"enabled","database":"online"}\n' ;;
-  */api/health|*/health) printf '{"status":"ok","database":"online"}\n' ;;
-  *products*) printf '{"items":[]}\n' ;;
-  *filters/config*) printf '{"price":{},"area":{},"brands":[],"expert_tags":[]}\n' ;;
+  */api/ready) payload='{"status":"ok","api":"ready","traffic":"enabled","database":"online"}'; status=200 ;;
+  */api/health|*/health) payload='{"status":"ok","database":"online"}'; status=200 ;;
+  *products*) payload='{"items":[]}'; status=200 ;;
+  *filters/config*) payload='{"price":{},"area":{},"brands":[],"expert_tags":[]}'; status=200 ;;
   *) exit 22 ;;
 esac
+if [[ -n "$output_file" ]]; then
+  printf '%s\n' "$payload" > "$output_file"
+else
+  printf '%s\n' "$payload"
+fi
+[[ -z "$write_format" ]] || printf '%s' "$status"
 """,
     )
     _executable(

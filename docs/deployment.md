@@ -83,6 +83,11 @@ The multi-origin API HA target and Cloudflare/DB/media runbook is documented in
 [`api-ha-runbook.md`](api-ha-runbook.md). Use `/api/health` for basic smoke
 checks and `/api/ready` for Cloudflare Load Balancer origin health.
 
+Google OAuth refresh state uses a writable directory mount, not a bind-mounted
+file. Prepare and verify it with
+[`google-oauth-token-runbook.md`](google-oauth-token-runbook.md) before manual
+deployments; automated deploy paths run the same fail-closed preparation.
+
 The backend deploy workflow is primary-host configurable. Keep sensitive values
 in GitHub secrets and non-secret routing values in GitHub variables.
 
@@ -375,10 +380,13 @@ Application release and database maintenance are separate lifecycles:
 - cleanup retains three backend releases and never runs a global
   `docker system prune -af`.
 
-Automatic rollback restores the previous application image only when the failed
-candidate was actually activated. It never downgrades the database schema. Use
-expand/contract migrations so both the new image and retained rollback images
-can run against the current schema.
+Before compose promotion, failed-candidate recovery restores the active runtime
+image and canonical compose together under the same deployment lock. After the
+Google token-directory migration, manual rollback accepts only images labeled
+with the `directory-v1` token contract and requires a durable Google backup probe;
+pre-hotfix images fail closed and must be replaced by a roll-forward release.
+Rollback never downgrades the database schema. Use expand/contract migrations so
+all retained directory-compatible images can run against the current schema.
 
 The primary compose keeps the legacy `app` service on port `8000` only for the
 first migration and emergency compatibility. Normal releases alternate between
@@ -390,14 +398,22 @@ Manual code rollback on the active API host:
 
 ```bash
 scp scripts/deploy_backend_blue_green.sh scripts/deploy_backend_blue_green_safety.sh \
-  scripts/rollback_backend.sh mvn-api:/tmp/
+  scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh mvn-api:/tmp/
 ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh \
-  /tmp/deploy_backend_blue_green_safety.sh /tmp/rollback_backend.sh && \
+  /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh \
+  /tmp/rollback_backend.sh && \
   CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
   API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
   API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh \
+  GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=/tmp/prepare_google_oauth_token_dir.sh \
   bash /tmp/rollback_backend.sh'
 ```
+
+This command refuses an unlabeled pre-hotfix image. It also restores the current
+image automatically if the post-activation Google durability probe fails.
+
+The old `deploy_api.sh` source-bind path is intentionally retired. Production
+changes must use the CI-tested immutable-image workflow.
 
 ### Web Release Safety
 

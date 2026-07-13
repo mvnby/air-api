@@ -1,10 +1,12 @@
 import os
 import sys
+from pathlib import Path
 
 # Добавляем путь к корню проекта для корректных импортов (если понадобятся)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from google_auth_oauthlib.flow import InstalledAppFlow
+from services.google_oauth_credentials import GoogleOAuthCredentialStore
 
 # Права: полный доступ к Диску и Документам
 # Это позволит боту создавать файлы от вашего имени
@@ -13,6 +15,15 @@ SCOPES = [
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/spreadsheets'
 ]
+
+
+def get_token_file() -> Path:
+    return Path(os.environ.get('GOOGLE_TOKEN_FILE', 'token.json')).expanduser()
+
+
+def persist_token(creds, token_file: Path) -> None:
+    GoogleOAuthCredentialStore(str(token_file), SCOPES).persist(creds)
+
 
 def main():
     # Проверка наличия файла секрета
@@ -34,10 +45,10 @@ def main():
     creds = flow.run_local_server(port=0)
     
     # Сохраняем полученный токен доступа
-    with open('token.json', 'w') as token:
-        token.write(creds.to_json())
+    token_file = get_token_file()
+    persist_token(creds, token_file)
     
-    print("\n✅ Успешно! Файл token.json создан.")
+    print(f"\n✅ Успешно! Файл {token_file} создан.")
     print("Теперь бот имеет доступ к вашему Диску и будет использовать вашу квоту.")
 
 if __name__ == '__main__':

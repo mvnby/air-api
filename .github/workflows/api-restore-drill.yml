@@ -5,6 +5,10 @@ on:
     - cron: "42 4 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: api-restore-drill
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
@@ -99,17 +103,22 @@ jobs:
           }
           remote_target="${target_user}@${target_host}"
           remote_script="/tmp/mvn-api-restore-drill-${GITHUB_RUN_ID}.sh"
+          remote_cleanup_script="/tmp/mvn-api-restore-drill-cleanup-${GITHUB_RUN_ID}.sh"
           echo "[restore-drill][info] selected_node=${target_label} ha_mode=${API_DB_HA_MODE}" | tee api-restore-drill.log
           # shellcheck disable=SC2029
           ssh "${SSH_OPTIONS[@]}" "${remote_target}" "cat > $(quote "${remote_script}") && chmod +x $(quote "${remote_script}")" \
             < scripts/ha/restore_drill_latest_db.sh
           # shellcheck disable=SC2029
+          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "cat > $(quote "${remote_cleanup_script}") && chmod +x $(quote "${remote_cleanup_script}")" \
+            < scripts/ha/cleanup_restore_drill_runtime.sh
+          # shellcheck disable=SC2029
           ssh "${SSH_OPTIONS[@]}" "${remote_target}" "\
             PROJECT_DIR=$(quote "${target_project_dir}") \
             COMPOSE_FILE=$(quote "${target_compose_file}") \
+            RESTORE_DRILL_CLEANUP_SCRIPT=$(quote "${remote_cleanup_script}") \
             bash $(quote "${remote_script}"); \
             status=\$?; \
-            rm -f $(quote "${remote_script}"); \
+            rm -f $(quote "${remote_script}") $(quote "${remote_cleanup_script}"); \
             exit \${status}" | tee -a api-restore-drill.log
 
       - name: Upload restore drill log

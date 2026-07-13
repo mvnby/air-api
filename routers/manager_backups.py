@@ -1,8 +1,10 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from starlette.concurrency import run_in_threadpool
 
 from core.config import settings
+from core.manager_api_errors import manager_http_error
 from core.security import get_current_owner_username
 from routers.manager_operation_ids import (
     GET_MANAGER_BACKUP_RUN_STATUS,
@@ -22,7 +24,8 @@ from services.backup_run_runtime_service import (
     BackupRunConflictError,
     backup_run_runtime_service,
 )
-from services.backup_service import backup_service
+from services.backup_service import BackupConfigurationError, backup_service
+from services.google_oauth_credentials import GoogleCredentialsError, GoogleDriveListError
 from services.backup_restore_runtime_service import (
     BackupNotFoundError,
     RestoreConflictError,
@@ -37,11 +40,30 @@ router = APIRouter(
     tags=["manager/backups"],
     dependencies=[Depends(get_current_owner_username)],
 )
+BACKUP_LIST_UNAVAILABLE = "backup_list_unavailable"
+BACKUP_LIST_UNAVAILABLE_MESSAGE = "Список резервных копий временно недоступен"
 
 
 @router.get("", response_model=ManagerBackupListResponse, operation_id=LIST_MANAGER_BACKUPS)
 async def list_manager_backups():
-    items = backup_service.list_backups(limit=100)
+    try:
+        items = await run_in_threadpool(lambda: backup_service.list_backups(limit=100))
+    except BackupConfigurationError as exc:
+        logger.error("Backup list is unavailable because backup storage is not configured")
+        raise manager_http_error(
+            status_code=503,
+            endpoint=LIST_MANAGER_BACKUPS,
+            error_code=BACKUP_LIST_UNAVAILABLE,
+            message=BACKUP_LIST_UNAVAILABLE_MESSAGE,
+        ) from exc
+    except (GoogleCredentialsError, GoogleDriveListError) as exc:
+        logger.warning("Backup list is unavailable error_type=%s", type(exc).__name__)
+        raise manager_http_error(
+            status_code=502,
+            endpoint=LIST_MANAGER_BACKUPS,
+            error_code=BACKUP_LIST_UNAVAILABLE,
+            message=BACKUP_LIST_UNAVAILABLE_MESSAGE,
+        ) from exc
     return ManagerBackupListResponse(items=items)
 
 

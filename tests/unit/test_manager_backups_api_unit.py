@@ -4,6 +4,8 @@ from httpx import ASGITransport, AsyncClient
 
 from core.security import get_current_owner_username
 from routers.manager_backups import router as manager_backups_router
+from services.backup_service import BackupConfigurationError
+from services.google_oauth_credentials import GoogleTokenRefreshError
 
 
 @pytest.fixture()
@@ -15,6 +17,44 @@ async def backups_client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.mark.asyncio
+async def test_list_backups_maps_google_auth_failure_to_redacted_502(
+    backups_client,
+    monkeypatch,
+):
+    def _fail_list(*, limit: int):
+        assert limit == 100
+        raise GoogleTokenRefreshError("provider-secret-detail")
+
+    monkeypatch.setattr("routers.manager_backups.backup_service.list_backups", _fail_list)
+
+    response = await backups_client.get("/api/manager/backups")
+
+    assert response.status_code == 502
+    payload = response.json()
+    assert payload["detail"]["error_code"] == "backup_list_unavailable"
+    assert "provider-secret-detail" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_list_backups_maps_missing_storage_configuration_to_redacted_503(
+    backups_client,
+    monkeypatch,
+):
+    def _fail_list(*, limit: int):
+        assert limit == 100
+        raise BackupConfigurationError("BACKUP_FOLDER_ID=private-provider-detail")
+
+    monkeypatch.setattr("routers.manager_backups.backup_service.list_backups", _fail_list)
+
+    response = await backups_client.get("/api/manager/backups")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["detail"]["error_code"] == "backup_list_unavailable"
+    assert "private-provider-detail" not in response.text
 
 
 @pytest.mark.asyncio

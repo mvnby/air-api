@@ -3,7 +3,8 @@ import tarfile
 import io
 from pathlib import Path
 
-from services.backup_service import BackupService
+from services.backup_service import BackupConfigurationError, BackupService
+from services.google_oauth_credentials import GoogleTokenRefreshError
 
 
 def test_list_backups_classifies_and_sorts(monkeypatch):
@@ -50,6 +51,52 @@ def test_list_backups_classifies_and_sorts(monkeypatch):
     assert items[1]["kind"] == "media"
     assert items[1]["size_bytes"] == 1024
     assert items[0]["created_at"] > items[1]["created_at"]
+
+
+def test_list_backups_propagates_google_auth_failure(monkeypatch):
+    service = BackupService()
+    service.backup_folder_id = "folder-id"
+
+    class _FailingGoogleService:
+        def list_files(self, _folder_id: str, limit: int = 20):
+            raise GoogleTokenRefreshError("Google OAuth token refresh failed")
+
+    monkeypatch.setattr(
+        "services.backup_service.get_google_service",
+        lambda: _FailingGoogleService(),
+    )
+
+    with pytest.raises(GoogleTokenRefreshError, match="token refresh failed"):
+        service.list_backups(limit=100)
+
+
+def test_list_backups_fails_closed_without_backup_folder_id():
+    service = BackupService()
+    service.backup_folder_id = None
+
+    with pytest.raises(BackupConfigurationError, match="BACKUP_FOLDER_ID"):
+        service.list_backups(limit=100)
+
+
+def test_production_backup_fails_before_dump_without_backup_folder_id(monkeypatch):
+    service = BackupService()
+    service.backup_folder_id = None
+    monkeypatch.setattr(
+        "services.backup_service.settings",
+        type(
+            "ProductionSettings",
+            (),
+            {"is_production": True, "ENVIRONMENT": "production"},
+        )(),
+    )
+    monkeypatch.setattr(
+        service,
+        "create_dump",
+        lambda: pytest.fail("dump must not start without a destination folder"),
+    )
+
+    with pytest.raises(BackupConfigurationError, match="BACKUP_FOLDER_ID"):
+        service.perform_backup()
 
 
 def test_sanitize_plain_sql_dump_removes_client_only_settings(tmp_path: Path):

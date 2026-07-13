@@ -39,6 +39,11 @@ backups
 media
 logs
 generated_documents
+google-oauth
+token.json
+client_secret.json
+credentials.json
+g-vision-ocr.json
 
 # Environment files
 .env
