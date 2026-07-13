@@ -976,13 +976,17 @@ onMounted(() => {
             </div>
 
             <div class="mt-4 p-3 rounded-lg border"
-                :class="googleAuthStatus?.valid
+                :class="googleAuthStatus?.valid && googleAuthStatus?.persistence_ok
                     ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-500/10 dark:border-green-500/40 dark:text-green-300'
                     : 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-300'">
                 <div class="text-sm font-medium">
                     <span v-if="googleAuthLoading">Проверяем статус...</span>
-                    <span v-else-if="googleAuthStatus?.valid">Подключено</span>
+                    <span v-else-if="googleAuthStatus?.valid && googleAuthStatus?.persistence_ok">Подключено</span>
+                    <span v-else-if="googleAuthStatus?.valid">Работает временно — токен не сохранён</span>
                     <span v-else>Не подключено / токен истёк</span>
+                </div>
+                <div v-if="googleAuthStatus?.valid && !googleAuthStatus?.persistence_ok" class="text-xs mt-1 opacity-80">
+                    Переподключите Google: после перезапуска доступ может пропасть.
                 </div>
                 <div v-if="googleAuthStatus?.expiry" class="text-xs mt-1 opacity-80">
                     Действует до: {{ googleAuthStatus.expiry }}

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.patroni.yml}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
@@ -9,6 +10,7 @@ PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 MAINTENANCE_MARKER="${API_MAINTENANCE_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
 RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
+GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/../prepare_google_oauth_token_dir.sh}"
 
 log() {
   printf '[patroni-migrate][%s] %s\n' "$1" "$2"
@@ -21,7 +23,12 @@ payload = json.load(sys.stdin)
 if payload.get("state") != "running":
     raise SystemExit(1)
 role = str(payload.get("role") or "").lower()
-print("primary" if role in {"leader", "master", "primary"} else "standby")
+if role in {"leader", "master", "primary"}:
+    print("primary")
+elif role in {"replica", "standby"}:
+    print("standby")
+else:
+    raise SystemExit(1)
 '
 }
 
@@ -64,6 +71,12 @@ flock -n 9 || {
 }
 
 require_primary
+[[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
+  log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
+  exit 1
+}
+GOOGLE_OAUTH_PROJECT_DIR="${PROJECT_DIR}" \
+  bash "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" prepare
 export BACKEND_IMAGE
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
 if [[ -n "${GHCR_PAT:-}" ]]; then

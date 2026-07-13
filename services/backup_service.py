@@ -16,6 +16,10 @@ from services.google_service import get_google_service
 BACKUP_DIR = "backups"
 
 
+class BackupConfigurationError(RuntimeError):
+    """Required production backup configuration is missing or invalid."""
+
+
 class BackupService:
     # pg_dump from a newer client can emit SET commands unsupported by our
     # current postgres:15 server. Keep plain SQL dumps restorable on the server
@@ -81,15 +85,18 @@ class BackupService:
         except (TypeError, ValueError):
             return None
 
+    def _require_backup_folder_id(self) -> str:
+        folder_id = (self.backup_folder_id or "").strip()
+        if not folder_id:
+            raise BackupConfigurationError("BACKUP_FOLDER_ID is not configured")
+        return folder_id
+
     def list_backups(self, limit: int = 50) -> List[Dict[str, Any]]:
         """
         Returns available backups from Google Drive folder with `db/media` classification.
         """
-        if not self.backup_folder_id:
-            logger.warning("BACKUP_FOLDER_ID not set. Returning empty backup list.")
-            return []
-
-        files = get_google_service().list_files(self.backup_folder_id, limit=limit)
+        folder_id = self._require_backup_folder_id()
+        files = get_google_service().list_files(folder_id, limit=limit)
         items: List[Dict[str, Any]] = []
         for item in files:
             name = item.get("name", "")
@@ -211,11 +218,10 @@ class BackupService:
         """
         Keeps only the latest 10 backup sets in Google Drive (db + media).
         """
-        if not self.backup_folder_id:
-            return
+        folder_id = self._require_backup_folder_id()
 
         try:
-            files = get_google_service().list_files(self.backup_folder_id, limit=50)
+            files = get_google_service().list_files(folder_id, limit=50)
             keep_limit = 10 * 2
 
             if len(files) > keep_limit:
@@ -245,9 +251,7 @@ class BackupService:
             )
             return False
 
-        if not self.backup_folder_id:
-            logger.warning("BACKUP_FOLDER_ID not set. Skipping upload.")
-            return
+        folder_id = self._require_backup_folder_id()
 
         created_files: List[str] = []
         try:
@@ -267,7 +271,7 @@ class BackupService:
                     file_path=filepath,
                     filename=filename,
                     mime_type=mime,
-                    folder_id=self.backup_folder_id,
+                    folder_id=folder_id,
                 )
                 uploaded_count += 1
 

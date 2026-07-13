@@ -59,13 +59,14 @@ services:
       BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS: ""
       BACKGROUND_REMOVAL_PROCESS_MAX_MEMORY_MB: "384"
       BACKGROUND_REMOVAL_PROCESS_MAX_CPU_SECONDS: "45"
+      GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
     ports:
       - "127.0.0.1:${MVN_RESERVE_APP_PORT:-18000}:8000"
     volumes:
       - ./media:/app/media
       - ./postgres-wal-archive:/postgres-wal-archive
       - ./model-cache/u2net:/root/.u2net
-      - ./secrets/token.json:/app/token.json
+      - ./google-oauth:/app/google-oauth
       - ./secrets/client_secret.json:/app/client_secret.json:ro
       - ./secrets/credentials.json:/app/credentials.json:ro
       - ./secrets/g-vision-ocr.json:/app/g-vision-ocr.json:ro

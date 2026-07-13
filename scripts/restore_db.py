@@ -3,7 +3,7 @@
 Database Restore Script
 =======================
 Downloads the latest SQL dump from Google Drive and restores it to the local database.
-Uses the project's Google Drive API credentials (token.json).
+Uses the project's Google Drive API credentials (`GOOGLE_TOKEN_FILE`).
 
 Usage (inside Docker container):
     python scripts/restore_db.py                    # Restore latest backup
@@ -22,15 +22,14 @@ import subprocess
 import tempfile
 import logging
 from io import BytesIO
+from pathlib import Path
 
 # Add project root to path so we can import google_service
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from google_auth_oauthlib.flow import Flow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+from services.google_oauth_credentials import GoogleOAuthCredentialStore
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -38,7 +37,7 @@ logger = logging.getLogger(__name__)
 # Google Drive backup folder ID
 BACKUP_FOLDER_ID = '1jhl2Mp__fqcVlZMzR5lOgWo8JuIUWsNy'
 SCOPES = ['https://www.googleapis.com/auth/drive']
-TOKEN_FILE = 'token.json'
+DEFAULT_TOKEN_FILE = 'token.json'
 
 # Database settings from environment
 DB_USER = os.environ.get('POSTGRES_USER', 'mvnadmin')
@@ -80,24 +79,30 @@ def sanitize_plain_sql_dump(dump_path):
     return changed
 
 
+def get_token_file() -> Path:
+    """Return the configured OAuth token path for local and container runs."""
+    return Path(os.environ.get('GOOGLE_TOKEN_FILE', DEFAULT_TOKEN_FILE)).expanduser()
+
+
+def persist_credentials(creds, token_file: Path) -> None:
+    """Persist refreshed credentials atomically inside the token directory."""
+    GoogleOAuthCredentialStore(str(token_file), SCOPES).persist(creds)
+
+
 def get_credentials():
-    """Load Google API credentials from token.json."""
-    if not os.path.exists(TOKEN_FILE):
-        logger.error(f"❌ Token file '{TOKEN_FILE}' not found!")
+    """Load Google API credentials from GOOGLE_TOKEN_FILE."""
+    token_file = get_token_file()
+    if not token_file.exists():
+        logger.error(f"❌ Token file '{token_file}' not found!")
         logger.error("   Run the app and authenticate via /admin/google-auth first.")
         sys.exit(1)
 
-    creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            with open(TOKEN_FILE, 'w') as f:
-                f.write(creds.to_json())
-        else:
-            logger.error("❌ Google credentials are invalid or expired.")
-            logger.error("   Re-authenticate via /admin/google-auth")
-            sys.exit(1)
-    return creds
+    state = GoogleOAuthCredentialStore(str(token_file), SCOPES).load()
+    if state.error is not None or state.credentials is None or not state.credentials.valid:
+        logger.error("❌ Google credentials are invalid, unavailable, or not durable.")
+        logger.error("   Re-authenticate via the manager Google settings page.")
+        sys.exit(1)
+    return state.credentials
 
 
 def list_backups(creds, file_type='sql'):

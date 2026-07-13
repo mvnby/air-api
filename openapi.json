@@ -25923,13 +25923,29 @@
             "type": "array",
             "title": "Scopes",
             "default": []
+          },
+          "persistence_ok": {
+            "type": "boolean",
+            "title": "Persistence Ok"
+          },
+          "persistence_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persistence Error Code"
           }
         },
         "type": "object",
         "required": [
           "exists",
           "valid",
-          "expired"
+          "expired",
+          "persistence_ok"
         ],
         "title": "ManagerGoogleAuthStatusResponse"
       },

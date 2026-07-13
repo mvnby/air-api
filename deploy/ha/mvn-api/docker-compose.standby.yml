@@ -33,12 +33,13 @@ services:
       MAIL_IMAP_AUTO_IMPORT_ENABLED: "false"
       MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED: "false"
       BACKGROUND_REMOVAL_PROVIDER: noop
+      GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./media:/app/media
       - ./model-cache/u2net:/root/.u2net
-      - ./token.json:/app/token.json
+      - ./google-oauth:/app/google-oauth
       - ./client_secret.json:/app/client_secret.json:ro
       - ./credentials.json:/app/credentials.json:ro
       - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro

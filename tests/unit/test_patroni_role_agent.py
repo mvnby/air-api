@@ -4,7 +4,13 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.ha import patroni_role_agent
-from scripts.ha.patroni_role_agent import AgentConfig, app_service, reconcile, role_env
+from scripts.ha.patroni_role_agent import (
+    AgentConfig,
+    app_service,
+    fetch_patroni_role,
+    reconcile,
+    role_env,
+)
 
 
 def _config(tmp_path: Path, *, app_service_override: str = "") -> AgentConfig:
@@ -24,6 +30,51 @@ def _config(tmp_path: Path, *, app_service_override: str = "") -> AgentConfig:
         promotion_delay_seconds=0,
         ready_attempts=2,
     )
+
+
+class _PatroniResponse:
+    def __init__(self, payload: str):
+        self.payload = payload.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self) -> bytes:
+        return self.payload
+
+
+@pytest.mark.parametrize(
+    ("reported_role", "expected_role"),
+    [("leader", "primary"), ("primary", "primary"), ("replica", "standby")],
+)
+def test_fetch_patroni_role_uses_explicit_role_whitelist(
+    monkeypatch, reported_role, expected_role
+):
+    response = _PatroniResponse(
+        f'{{"state":"running","role":"{reported_role}"}}'
+    )
+    monkeypatch.setattr(
+        patroni_role_agent.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: response,
+    )
+
+    assert fetch_patroni_role("http://patroni.invalid/patroni") == expected_role
+
+
+def test_fetch_patroni_role_rejects_unknown_running_role(monkeypatch):
+    response = _PatroniResponse('{"state":"running","role":"mystery"}')
+    monkeypatch.setattr(
+        patroni_role_agent.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: response,
+    )
+
+    with pytest.raises(ValueError, match="unsupported Patroni role: mystery"):
+        fetch_patroni_role("http://patroni.invalid/patroni")
 
 
 def test_role_env_opens_api_and_singleton_processes_only_on_primary():

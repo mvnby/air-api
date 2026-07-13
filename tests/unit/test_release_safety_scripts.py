@@ -40,6 +40,8 @@ if [[ "$*" == *"compose -f docker-compose.prod.yml"* && "$*" == *"ps --status ru
   printf '%s\n' "${DOCKER_PS_SERVICES:-app}"
 elif [[ "$1 $2" == "image ls" ]]; then
   cat "${IMAGE_IDS_FILE:-/dev/null}"
+elif [[ "$1 $2" == "image inspect" && "$*" == *"--format"* ]]; then
+  printf '%s\n' "${DOCKER_IMAGE_CONTRACT:-directory-v1}"
 elif [[ "$1 $2" == "ps -aq" && "$*" == *"ancestor=${RUNNING_IMAGE_ID:-__none__}"* ]]; then
   printf 'container-id\n'
 fi
@@ -54,6 +56,7 @@ exit 0
             "DOCKER_LOG": str(docker_log),
             "GHCR_PAT": "test-token",
             "GITHUB_ACTOR": "test-user",
+            "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
         }
     )
     return fake_bin, env, docker_log
@@ -62,7 +65,18 @@ exit 0
 def _project(tmp_path: Path, image: str = OLD_IMAGE) -> Path:
     project = tmp_path / "project"
     project.mkdir()
-    (project / "docker-compose.prod.yml").write_text("services: {}\n", encoding="utf-8")
+    (project / "docker-compose.prod.yml").write_text(
+        "services:\n"
+        "  app:\n"
+        "    image: ${BACKEND_IMAGE}\n"
+        "    environment:\n"
+        "      GOOGLE_TOKEN_FILE: /app/google-oauth/token.json\n"
+        "    volumes:\n"
+        "      - ./google-oauth:/app/google-oauth\n"
+        "  bot:\n"
+        "    image: ${BACKEND_IMAGE}\n",
+        encoding="utf-8",
+    )
     (project / ".env").write_text(f"KEEP=value\nBACKEND_IMAGE={image}\n", encoding="utf-8")
     return project
 
@@ -189,7 +203,58 @@ def test_deploy_rejects_mutable_image_tag_before_docker_calls(tmp_path):
 
     assert result.returncode == 1
     assert "40-character Git SHA tag or sha256 digest" in result.stderr
-    assert docker_log.read_text(encoding="utf-8") == ""
+    calls = docker_log.read_text(encoding="utf-8")
+    assert "up -d" not in calls
+
+
+def test_rollback_refuses_pre_directory_contract_image(tmp_path):
+    _, env, _ = _fake_environment(tmp_path)
+    project = _project(tmp_path, image=NEW_IMAGE)
+    (project / ".previous-backend-image").write_text(OLD_IMAGE + "\n", encoding="utf-8")
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "CONFIRM_ROLLBACK": "true",
+            "EXPECTED_CURRENT_IMAGE": NEW_IMAGE,
+            "DOCKER_IMAGE_CONTRACT": "legacy-file-mount",
+        }
+    )
+
+    result = _run("scripts/rollback_backend.sh", env)
+
+    assert result.returncode != 0
+    assert "cannot durably refresh Google OAuth" in result.stderr
+
+
+def test_rollback_refuses_compose_without_exact_token_environment(tmp_path):
+    _, env, _ = _fake_environment(tmp_path)
+    project = _project(tmp_path, image=NEW_IMAGE)
+    compose = project / "docker-compose.prod.yml"
+    compose.write_text(
+        compose.read_text(encoding="utf-8").replace(
+            "      GOOGLE_TOKEN_FILE: /app/google-oauth/token.json\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+    (project / ".previous-backend-image").write_text(OLD_IMAGE + "\n", encoding="utf-8")
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "CONFIRM_ROLLBACK": "true",
+            "EXPECTED_CURRENT_IMAGE": NEW_IMAGE,
+        }
+    )
+
+    result = _run("scripts/rollback_backend.sh", env)
+
+    assert result.returncode != 0
+    assert "does not provide the directory-v1" in result.stderr
+
+
+def test_dockerfile_declares_directory_token_contract():
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert 'org.mvn.google-oauth-token-contract="directory-v1"' in dockerfile
 
 
 def test_automatic_rollback_is_noop_when_candidate_was_not_activated(tmp_path):
@@ -257,7 +322,86 @@ def test_rollback_delegates_to_blue_green_when_active_slot_exists(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert delegate_log.read_text(encoding="utf-8").strip() == f"{OLD_IMAGE}|false|true"
-    assert docker_log.read_text(encoding="utf-8") == ""
+    calls = docker_log.read_text(encoding="utf-8")
+    assert "google-oauth-token-contract" in calls
+    assert "exec -T app-blue python3 -" in calls
+    assert "up -d" not in calls
+
+
+def test_rollback_probe_failure_reactivates_previous_blue_green_image(tmp_path):
+    _, env, _ = _fake_environment(tmp_path)
+    project = _project(tmp_path, image=NEW_IMAGE)
+    (project / ".previous-backend-image").write_text(OLD_IMAGE + "\n", encoding="utf-8")
+    (project / ".active-api-slot").write_text("blue\n", encoding="utf-8")
+    delegate_log = tmp_path / "delegate.log"
+    delegate = tmp_path / "blue-green.sh"
+    _executable(
+        delegate,
+        "#!/usr/bin/env bash\nprintf '%s\\n' \"$BACKEND_IMAGE\" >> \"$DELEGATE_LOG\"\n",
+    )
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "CONFIRM_ROLLBACK": "true",
+            "EXPECTED_CURRENT_IMAGE": NEW_IMAGE,
+            "API_BLUE_GREEN_SCRIPT": str(delegate),
+            "DELEGATE_LOG": str(delegate_log),
+            "DOCKER_FAIL_MATCH": "exec -T app-blue python3 -",
+        }
+    )
+
+    result = _run("scripts/rollback_backend.sh", env)
+
+    assert result.returncode != 0
+    assert delegate_log.read_text(encoding="utf-8").splitlines() == [
+        OLD_IMAGE,
+        NEW_IMAGE,
+    ]
+    assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+
+
+def test_rollback_reports_critical_when_probe_and_reactivation_both_fail(tmp_path):
+    _, env, _ = _fake_environment(tmp_path)
+    project = _project(tmp_path, image=NEW_IMAGE)
+    (project / ".previous-backend-image").write_text(OLD_IMAGE + "\n", encoding="utf-8")
+    (project / ".active-api-slot").write_text("blue\n", encoding="utf-8")
+    delegate = tmp_path / "blue-green.sh"
+    _executable(
+        delegate,
+        f"""#!/usr/bin/env bash
+if [[ "$BACKEND_IMAGE" == "{NEW_IMAGE}" ]]; then
+  exit 77
+fi
+exit 0
+""",
+    )
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "CONFIRM_ROLLBACK": "true",
+            "EXPECTED_CURRENT_IMAGE": NEW_IMAGE,
+            "API_BLUE_GREEN_SCRIPT": str(delegate),
+            "DOCKER_FAIL_MATCH": "exec -T app-blue python3 -",
+        }
+    )
+
+    result = _run("scripts/rollback_backend.sh", env)
+
+    assert result.returncode == 90
+    assert "CRITICAL" in result.stderr
+    assert "could not be restored" in result.stderr
+
+
+def test_rollback_probe_requires_durable_auth_and_atomic_directory_write():
+    script = (REPO_ROOT / "scripts/rollback_backend.sh").read_text(encoding="utf-8")
+    assert "google.auth_error is not None" in script
+    assert 'status.get("persistence_ok") is not True' in script
+    assert 'os.replace(temporary, probe_path)' in script
+    assert "Google backup probe returned no backup objects" in script
+    list_index = script.index("items = backup_service.list_backups(limit=1)")
+    status_index = script.index("status = google.get_token_status()")
+    persistence_index = script.index('status.get("persistence_ok") is not True')
+    assert list_index < status_index < persistence_index
 
 
 def test_prune_keeps_three_newest_and_every_container_image(tmp_path):

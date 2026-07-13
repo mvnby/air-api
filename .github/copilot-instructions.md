@@ -28,7 +28,7 @@
 - Фоновые задачи (ценовые синки и т.п.) запускаются из `main.py` (например, `services/scheduler_service.py`).
 
 5. Интеграции и секреты
-- Google API (Docs/Drive): `client_secret.json` + `token.json` (в корне). Генерация токена: `python scripts/get_token.py`.
+- Google API (Docs/Drive): `client_secret.json` + `GOOGLE_TOKEN_FILE` (production: `/app/google-oauth/token.json`). Генерация токена: `python scripts/get_token.py`.
 - Ветка `feature/gdocs-service-phase28` содержит изменения, связанные с переходом на OAuth2 (user account) — проверяйте `services/google_service.py` и `services/document_service.py`.
 
 6. Частые изменения, которых стоит избегать

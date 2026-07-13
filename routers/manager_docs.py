@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
@@ -36,12 +37,33 @@ from schemas import (
 )
 from services.document_service import DocumentHasDependentsError, DocumentService
 from services.document_template_service import DocumentTemplateService
+from services.google_oauth_credentials import GoogleCredentialsError, GoogleDriveListError
 from services.google_service import get_google_service
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/manager", tags=["manager-docs"])
 
 DEFAULT_DOCUMENT_TEMPLATE_FOLDER_ID = "1SClclCJS2FUVtfF-vbVqN8zI77Sl_E9t"
+DOCUMENT_TEMPLATE_FILES_UNAVAILABLE = "document_template_files_unavailable"
+DOCUMENT_TEMPLATE_FILES_UNAVAILABLE_MESSAGE = (
+    "Список файлов шаблонов временно недоступен"
+)
+
+
+def _document_template_files_google_error(
+    exc: GoogleCredentialsError | GoogleDriveListError,
+):
+    logger.warning(
+        "Document template files are unavailable error_type=%s",
+        type(exc).__name__,
+    )
+    return manager_http_error(
+        status_code=502,
+        endpoint=LIST_MANAGER_DOCUMENT_TEMPLATE_FILES,
+        error_code=DOCUMENT_TEMPLATE_FILES_UNAVAILABLE,
+        message=DOCUMENT_TEMPLATE_FILES_UNAVAILABLE_MESSAGE,
+    )
 
 
 @router.get(
@@ -285,7 +307,12 @@ async def list_manager_document_template_files(
     limit: int = Query(100, ge=1, le=200),
     _: str = Depends(get_current_username),
 ):
-    files = await run_in_threadpool(lambda: get_google_service().list_files(folder_id, limit=limit))
+    try:
+        files = await run_in_threadpool(
+            lambda: get_google_service().list_files(folder_id, limit=limit)
+        )
+    except (GoogleCredentialsError, GoogleDriveListError) as exc:
+        raise _document_template_files_google_error(exc) from exc
     return {
         "items": [
             DocumentTemplateFileItem(

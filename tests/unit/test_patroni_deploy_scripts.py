@@ -42,6 +42,7 @@ def test_migration_script_requires_primary_and_never_manages_database_service(tm
             "API_PROJECT_DIR": str(project),
             "API_COMPOSE_FILE": "compose.yml",
             "BACKEND_IMAGE": IMAGE,
+            "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
         }
     )
 
@@ -56,6 +57,54 @@ def test_migration_script_requires_primary_and_never_manages_database_service(tm
     assert "ensure_global_config_defaults.py" in commands
     assert " up " not in commands
     assert " db" not in commands
+
+
+def test_deploy_and_migration_scripts_reject_unknown_running_patroni_role(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "compose.yml").write_text("services: {}\n", encoding="utf-8")
+    command_log = tmp_path / "commands.log"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _executable(fake_bin / "flock", "#!/usr/bin/env bash\nexit 0\n")
+    _executable(
+        fake_bin / "curl",
+        "#!/usr/bin/env bash\nprintf '{\"state\":\"running\",\"role\":\"mystery\"}\\n'\n",
+    )
+    _executable(
+        fake_bin / "docker",
+        '#!/usr/bin/env bash\nprintf "docker %s\\n" "$*" >> "$COMMAND_LOG"\n',
+    )
+    base_env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "COMMAND_LOG": str(command_log),
+        "API_PROJECT_DIR": str(project),
+        "API_COMPOSE_FILE": "compose.yml",
+        "BACKEND_IMAGE": IMAGE,
+        "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
+    }
+
+    deploy = subprocess.run(
+        ["bash", str(DEPLOY)],
+        env={**base_env, "API_EXPECTED_PATRONI_ROLE": "standby"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    migrate = subprocess.run(
+        ["bash", str(MIGRATE)],
+        env=base_env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert deploy.returncode != 0
+    assert migrate.returncode != 0
+    assert "local Patroni API is unavailable" in deploy.stdout
+    assert "local Patroni API is unavailable" in migrate.stdout
+    assert not command_log.exists()
 
 
 def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fences():

@@ -1,16 +1,23 @@
 import os
 import logging
 import re
-import tempfile
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
 from google_auth_oauthlib.flow import Flow
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBaseUpload
 import datetime
+
+from services.google_oauth_credentials import (
+    GoogleCredentialsError,
+    GoogleDriveListError,
+    GoogleOAuthCredentialStore,
+    GoogleTokenExchangeError,
+    GoogleTokenPersistenceError,
+    GoogleTokenUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +26,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/spreadsheets'
 ]
-TOKEN_FILE = 'token.json'
+TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json").strip() or "token.json"
 CLIENT_SECRET_FILE = 'client_secret.json'
 DESTINATION_FOLDER_ID = '1kLK6Vque3V5iPV1i1HjeH_su-TmyCzQt' 
 DEFAULT_OAUTH_REDIRECT_URI = "http://127.0.0.1:8000/api/manager/google-auth/callback"
@@ -31,16 +38,33 @@ def get_default_oauth_redirect_uri() -> str:
 class GoogleDocsService:
     def __init__(self):
         self.creds = None
+        self._auth_error: GoogleCredentialsError | None = None
         self._authenticate()
 
+    @property
+    def auth_error(self) -> GoogleCredentialsError | None:
+        return self._auth_error
+
+    @staticmethod
+    def _credential_store() -> GoogleOAuthCredentialStore:
+        return GoogleOAuthCredentialStore(TOKEN_FILE, SCOPES)
+
     def get_token_status(self) -> Dict[str, Any]:
-        """Returns status of current token."""
+        """Return current-process usability and separate durable-store health.
+
+        A refresh can remain usable in memory even when saving it fails, so
+        ``valid`` alone must never be treated as proof of durable persistence.
+        """
         status = {
             "exists": os.path.exists(TOKEN_FILE),
             "valid": False,
             "expired": False,
             "expiry": None,
-            "scopes": []
+            "scopes": [],
+            "persistence_ok": self._auth_error is None,
+            "persistence_error_code": (
+                type(self._auth_error).__name__ if self._auth_error is not None else None
+            ),
         }
         if self.creds:
             status["valid"] = self.creds.valid
@@ -82,54 +106,83 @@ class GoogleDocsService:
             scopes=SCOPES,
             redirect_uri=redirect_uri
         )
-        flow.fetch_token(code=code)
+        try:
+            flow.fetch_token(code=code)
+        except Exception as exc:
+            raise GoogleTokenExchangeError(
+                "Google OAuth authorization code exchange failed"
+            ) from exc
+
         self.creds = flow.credentials
-        
         self._write_token_file()
+        self._auth_error = None
             
         return True
 
-    def _authenticate(self):
-        if os.path.exists(TOKEN_FILE):
-            try:
-                self.creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-            except Exception: self.creds = None
-        
-        if not self.creds or not self.creds.valid:
-            if self.creds and self.creds.expired and self.creds.refresh_token:
+    def _authenticate(self) -> None:
+        state = self._credential_store().load()
+        self.creds = state.credentials
+        self._auth_error = state.error
+
+        if isinstance(state.error, GoogleTokenPersistenceError):
+            logger.error(
+                "Google OAuth token refresh succeeded but persistence failed "
+                "persistence_state=failed credentials_valid=%s error_type=%s",
+                bool(state.credentials and state.credentials.valid),
+                type(state.error).__name__,
+            )
+        elif state.error and not isinstance(state.error, GoogleTokenUnavailableError):
+            logger.warning(
+                "Google OAuth credentials are unavailable error_type=%s",
+                type(state.error).__name__,
+            )
+
+    def _require_credentials(self) -> Credentials:
+        if self.creds is not None and self.creds.valid:
+            if self._auth_error is not None and not isinstance(
+                self._auth_error,
+                GoogleTokenPersistenceError,
+            ):
+                raise self._auth_error
+            if isinstance(self._auth_error, GoogleTokenPersistenceError):
                 try:
-                    self.creds.refresh(Request())
-                    # Сохраняем токен ТОЛЬКО если успешно обновили
-                    self._write_token_file()
-                except Exception: self.creds = None
+                    self._credential_store().persist(self.creds)
+                except GoogleTokenPersistenceError as exc:
+                    self._auth_error = exc
+                    logger.warning(
+                        "Google OAuth persistence retry failed error_type=%s",
+                        type(exc).__name__,
+                    )
+                else:
+                    self._auth_error = None
+                    logger.info("Google OAuth persistence recovered")
+            return self.creds
+
+        self._authenticate()
+        if self._auth_error is not None and not isinstance(
+            self._auth_error,
+            GoogleTokenPersistenceError,
+        ):
+            raise self._auth_error
+        if self.creds is not None and self.creds.valid:
+            return self.creds
+        if self._auth_error is not None:
+            raise self._auth_error
+        raise GoogleTokenUnavailableError("Google OAuth credentials are unavailable")
 
     def _write_token_file(self) -> None:
         if self.creds is None:
-            raise RuntimeError("Google credentials are not available")
-
-        token_path = os.path.abspath(TOKEN_FILE)
-        token_dir = os.path.dirname(token_path)
-        temp_path: str | None = None
+            raise GoogleTokenUnavailableError("Google OAuth credentials are unavailable")
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=token_dir,
-                prefix=f".{os.path.basename(token_path)}.",
-                delete=False,
-            ) as token:
-                temp_path = token.name
-                os.chmod(temp_path, 0o600)
-                token.write(self.creds.to_json())
-                token.flush()
-                os.fsync(token.fileno())
-
-            os.replace(temp_path, token_path)
-            temp_path = None
-            os.chmod(token_path, 0o600)
-        finally:
-            if temp_path and os.path.exists(temp_path):
-                os.unlink(temp_path)
+            self._credential_store().persist(self.creds)
+        except GoogleTokenPersistenceError as exc:
+            self._auth_error = exc
+            logger.error(
+                "Google OAuth credentials were issued but persistence failed "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+            raise
 
     def generate_sheet(self, template_id: str, title: str, replacements: Dict[str, str], 
                        table_data: Optional[List[List[str]]] = None,
@@ -143,13 +196,11 @@ class GoogleDocsService:
         start_cell_addr: Адрес ячейки (напр. "A12").
         target_sheet_name: Имя листа (вкладки), куда писать данные (напр. "ТН-2").
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds: return "Ошибка: Нет доступа к Google API (проверьте права)."
+        credentials = self._require_credentials()
 
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
-            sheets_service = build('sheets', 'v4', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
+            sheets_service = build('sheets', 'v4', credentials=credentials)
 
             # 1. Копируем файл
             copy_body = {'name': title, 'parents': [DESTINATION_FOLDER_ID] if DESTINATION_FOLDER_ID else []}
@@ -190,12 +241,8 @@ class GoogleDocsService:
         sheet_name: Optional[str] = None,
         range_a1: Optional[str] = None,
     ) -> List[List[str]]:
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                raise Exception("Ошибка: Нет доступа к Google API (проверьте права).")
-
-        sheets_service = build("sheets", "v4", credentials=self.creds)
+        credentials = self._require_credentials()
+        sheets_service = build("sheets", "v4", credentials=credentials)
         query_range = range_a1
         if not query_range:
             query_range = f"{sheet_name}" if sheet_name else "A:Z"
@@ -218,12 +265,8 @@ class GoogleDocsService:
         return m.group(1) if m else raw
 
     def list_sheet_tabs(self, spreadsheet_id: str) -> List[Dict[str, Any]]:
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                raise Exception("Ошибка: Нет доступа к Google API (проверьте права).")
-
-        sheets_service = build("sheets", "v4", credentials=self.creds)
+        credentials = self._require_credentials()
+        sheets_service = build("sheets", "v4", credentials=credentials)
         spreadsheet = (
             sheets_service.spreadsheets()
             .get(spreadsheetId=spreadsheet_id, includeGridData=False)
@@ -501,13 +544,11 @@ class GoogleDocsService:
         """
         has_footer=True: Включает режим объединения ячеек в последней строке таблицы (Итого).
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds: return "Ошибка: Нет доступа к Google API."
+        credentials = self._require_credentials()
 
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
-            docs_service = build('docs', 'v1', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
+            docs_service = build('docs', 'v1', credentials=credentials)
 
             # 1. Копируем
             copy_body = {'name': title, 'parents': [DESTINATION_FOLDER_ID] if DESTINATION_FOLDER_ID else []}
@@ -538,8 +579,8 @@ class GoogleDocsService:
             return f"Google API Error: {str(e)}"
     def export_pdf(self, file_id: str) -> bytes:
         """Скачивает Google Doc как PDF."""
-        if not self.creds: self._authenticate()
-        drive_service = build('drive', 'v3', credentials=self.creds)
+        credentials = self._require_credentials()
+        drive_service = build('drive', 'v3', credentials=credentials)
         
         request = drive_service.files().export_media(fileId=file_id, mimeType='application/pdf')
         file_io = BytesIO()
@@ -564,13 +605,10 @@ class GoogleDocsService:
             - file_id: ID созданного файла
             - edit_url: Ссылка для редактирования
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                raise Exception("Ошибка: Нет доступа к Google API.")
+        credentials = self._require_credentials()
         
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
             
             # Копируем файл
             copy_body = {
@@ -598,13 +636,10 @@ class GoogleDocsService:
             file_id: ID документа в Google Drive
             replacements: Словарь замен {"{{placeholder}}": "value"}
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                raise Exception("Ошибка: Нет доступа к Google API.")
+        credentials = self._require_credentials()
         
         try:
-            docs_service = build('docs', 'v1', credentials=self.creds)
+            docs_service = build('docs', 'v1', credentials=credentials)
             self.render_conditional_blocks(docs_service, file_id, replacements)
             
             # Формируем запросы на замену
@@ -752,13 +787,10 @@ class GoogleDocsService:
         Returns:
             BytesIO объект с содержимым файла
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                raise Exception("Ошибка: Нет доступа к Google API.")
+        credentials = self._require_credentials()
         
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
             
             request = drive_service.files().export_media(fileId=file_id, mimeType=mime_type)
             file_io = BytesIO()
@@ -981,13 +1013,10 @@ class GoogleDocsService:
         Args:
             file_id: ID файла в Google Drive
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                raise Exception("Ошибка: Нет доступа к Google API.")
+        credentials = self._require_credentials()
                 
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
             
             # Обновляем метаданные файла, устанавливая trashed=True
             drive_service.files().update(fileId=file_id, body={'trashed': True}).execute()
@@ -1010,13 +1039,10 @@ class GoogleDocsService:
         Returns:
             ID загруженного файла
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                 raise Exception("Ошибка: Нет доступа к Google API.")
+        credentials = self._require_credentials()
         
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
             
             file_metadata = {'name': filename}
             if folder_id:
@@ -1032,13 +1058,10 @@ class GoogleDocsService:
 
     def create_document_from_html(self, title: str, html: str, folder_id: str = None) -> Dict[str, str]:
         """Creates an editable Google Doc by uploading HTML and converting it."""
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                 raise Exception("Ошибка: Нет доступа к Google API.")
+        credentials = self._require_credentials()
 
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
             file_metadata = {
                 'name': title,
                 'mimeType': 'application/vnd.google-apps.document',
@@ -1075,13 +1098,10 @@ class GoogleDocsService:
         Returns:
             BytesIO объект с содержимым файла
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-            if not self.creds:
-                raise Exception("Ошибка: Нет доступа к Google API.")
+        credentials = self._require_credentials()
 
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
             request = drive_service.files().get_media(fileId=file_id)
             file_io = BytesIO()
             downloader = MediaIoBaseDownload(file_io, request)
@@ -1099,11 +1119,10 @@ class GoogleDocsService:
         """
         Возвращает список файлов в папке, отсортированный по дате создания (DESC).
         """
-        if not self.creds or not self.creds.valid:
-            self._authenticate()
-        
+        credentials = self._require_credentials()
+
         try:
-            drive_service = build('drive', 'v3', credentials=self.creds)
+            drive_service = build('drive', 'v3', credentials=credentials)
             
             query = f"'{folder_id}' in parents and trashed = false"
             
@@ -1116,9 +1135,12 @@ class GoogleDocsService:
             
             return results.get('files', [])
             
-        except Exception as e:
-            logger.error(f"Google Drive List Files Error: {e}")
-            return []
+        except Exception as exc:
+            logger.error(
+                "Google Drive list files failed error_type=%s",
+                type(exc).__name__,
+            )
+            raise GoogleDriveListError("Google Drive failed to list files") from exc
 
 _google_service_instance = None
 
