@@ -134,11 +134,11 @@ def _insert_attempt(
     )
 
 
-def test_attempt_journal_is_the_single_alembic_head_after_lease_hardening():
+def test_attempt_journal_precedes_the_communication_runtime_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(ATTEMPT_REVISION)
 
-    assert script.get_heads() == [ATTEMPT_REVISION]
+    assert script.get_heads() == ["5b9c2d4e6f10"]
     assert revision is not None
     assert revision.down_revision == "4a8b1c2d3e05"
 

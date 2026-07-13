@@ -1,0 +1,213 @@
+import asyncio
+from dataclasses import replace
+
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+
+from models import CommunicationRuntimeState
+from services.communications.delivery_service import CommunicationDeliveryService
+from services.communications.delivery_worker import DeliveryRunOutcome
+from services.communications.runtime import (
+    CommunicationRuntimeConfig,
+    CommunicationRuntimePipeline,
+    CommunicationRuntimeSupervisor,
+)
+from services.communications.runtime_state import (
+    CommunicationRuntimeMode,
+    CommunicationRuntimeModeBlocked,
+    CommunicationRuntimeStateService,
+)
+from services.runtime_lock_service import RuntimeLock
+
+
+@pytest_asyncio.fixture
+async def runtime_session_factory():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(CommunicationRuntimeState.__table__.create)
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        yield factory
+    finally:
+        await engine.dispose()
+
+
+def runtime_config(**overrides):
+    config = CommunicationRuntimeConfig(
+        enabled=True,
+        app_role="primary",
+        instance_id="test-runtime",
+        poll_seconds=0.01,
+        heartbeat_seconds=0.01,
+        lock_retry_seconds=0.01,
+        lock_check_seconds=0.01,
+        db_probe_timeout_seconds=0.1,
+        fencing_seconds=2,
+        shutdown_seconds=0.2,
+        provider_timeout_seconds=1,
+        provider_close_seconds=0.1,
+        lease_seconds=30,
+    )
+    return replace(config, **overrides)
+
+
+async def own_mode(session_factory, mode: CommunicationRuntimeMode) -> None:
+    async with session_factory() as session:
+        await CommunicationRuntimeStateService.set_mode(
+            session,
+            channel="telegram",
+            mode=mode,
+        )
+        await CommunicationRuntimeStateService.take_ownership(
+            session,
+            channel="telegram",
+            instance_id="test-runtime",
+        )
+        await session.commit()
+
+
+async def set_mode(session_factory, mode: CommunicationRuntimeMode) -> None:
+    async with session_factory() as session:
+        await CommunicationRuntimeStateService.set_mode(
+            session,
+            channel="telegram",
+            mode=mode,
+        )
+        await session.commit()
+
+
+class ForbiddenProvider:
+    channel = "telegram"
+
+    async def send(self, **_kwargs):
+        raise AssertionError("provider send must not be called")
+
+    async def close(self):
+        return None
+
+
+class IdleWorker:
+    async def run_once(self):
+        return DeliveryRunOutcome(outcome="idle")
+
+
+@pytest.mark.parametrize("invalid_lease", [15, 29])
+def test_runtime_rejects_lease_below_delivery_service_minimum(invalid_lease):
+    with pytest.raises(ValueError, match="between 30 and 3600"):
+        runtime_config(lease_seconds=invalid_lease)
+
+
+def test_runtime_lease_matches_delivery_service_bounds():
+    assert CommunicationDeliveryService.MIN_LEASE_SECONDS == 30
+    assert runtime_config(lease_seconds=30).lease_seconds == 30
+    assert runtime_config(lease_seconds=90).lease_seconds == 90
+
+
+def test_runtime_rejects_lease_that_cannot_cover_bounded_delivery_window():
+    with pytest.raises(ValueError, match="strictly greater"):
+        runtime_config(
+            db_probe_timeout_seconds=5,
+            provider_timeout_seconds=10,
+            fencing_seconds=100,
+            lease_seconds=45,
+        )
+    assert runtime_config(
+        db_probe_timeout_seconds=5,
+        provider_timeout_seconds=10,
+        fencing_seconds=100,
+        lease_seconds=46,
+    ).lease_seconds == 46
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("blocked_mode", "expected_status", "expected_error"),
+    [
+        (CommunicationRuntimeMode.OFF, "disabled", None),
+        (
+            CommunicationRuntimeMode.CANARY,
+            "paused",
+            "canary_scope_unconfigured",
+        ),
+    ],
+)
+async def test_db_mode_flip_before_dispatch_aborts_cycle(
+    runtime_session_factory,
+    blocked_mode,
+    expected_status,
+    expected_error,
+):
+    await own_mode(runtime_session_factory, CommunicationRuntimeMode.ALL)
+    events = []
+    safety_calls = 0
+
+    async def safety_check():
+        nonlocal safety_calls
+        safety_calls += 1
+        async with runtime_session_factory() as session:
+            await CommunicationRuntimeStateService.read_active_owned_control(
+                session,
+                channel="telegram",
+                instance_id="test-runtime",
+            )
+        if safety_calls == 1:
+            await set_mode(runtime_session_factory, blocked_mode)
+
+    async def dispatch(_session, *, dispatcher_id):
+        events.append(("dispatch", dispatcher_id))
+
+    def provider_factory():
+        events.append(("provider", None))
+        return ForbiddenProvider()
+
+    pipeline = CommunicationRuntimePipeline(
+        config=runtime_config(),
+        session_factory=runtime_session_factory,
+        provider_factory=provider_factory,
+        safety_check=safety_check,
+        worker_factory=lambda _provider: IdleWorker(),
+        dispatch=dispatch,
+    )
+
+    assert await pipeline.run_cycle() is False
+    assert events == []
+    async with runtime_session_factory() as session:
+        state = await session.get(CommunicationRuntimeState, "telegram")
+        assert state is not None
+        assert state.status == expected_status
+        assert state.last_error_code == expected_error
+
+    await set_mode(runtime_session_factory, CommunicationRuntimeMode.ALL)
+    assert await pipeline.run_cycle() is False
+    assert events == [
+        ("dispatch", "test-runtime"),
+        ("provider", None),
+    ]
+    await pipeline.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "blocked_mode",
+    [CommunicationRuntimeMode.OFF, CommunicationRuntimeMode.CANARY],
+)
+async def test_supervisor_action_fence_rechecks_active_db_mode(
+    runtime_session_factory,
+    blocked_mode,
+):
+    await own_mode(runtime_session_factory, blocked_mode)
+    supervisor = CommunicationRuntimeSupervisor(
+        config=runtime_config(),
+        session_factory=runtime_session_factory,
+        pipeline_factory=lambda _safety_check: (_ for _ in ()).throw(
+            AssertionError()
+        ),
+        primary_probe=lambda _factory: asyncio.sleep(0),
+    )
+    runtime_lock = RuntimeLock("mvn:test", None, True, "acquired")
+
+    with pytest.raises(CommunicationRuntimeModeBlocked) as blocked:
+        await supervisor._assert_safe_to_work(asyncio.Event(), runtime_lock)
+    assert blocked.value.mode == blocked_mode

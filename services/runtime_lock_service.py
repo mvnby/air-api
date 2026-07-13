@@ -29,12 +29,25 @@ _LOCK_IS_HELD_QUERY = text(
 )
 
 
+def _safe_error_type(error: BaseException) -> str:
+    raw_name = type(error).__name__
+    normalized = "".join(
+        character if character.isalnum() or character == "_" else "_"
+        for character in raw_name
+    )
+    return (normalized or "Exception")[:64]
+
+
 async def _invalidate_and_close(connection: AsyncConnection) -> None:
     """Discard a connection whose advisory-lock state is no longer trustworthy."""
     try:
         await connection.invalidate()
-    except Exception:
-        logger.exception("Failed to invalidate a runtime-lock database connection.")
+    except Exception as error:
+        logger.error(
+            "Runtime-lock connection invalidation failed "
+            "error_code=runtime_lock_invalidate_failed error_type=%s",
+            _safe_error_type(error),
+        )
     finally:
         with suppress(Exception):
             await connection.close()
@@ -73,8 +86,13 @@ class RuntimeLock:
             self.connection = None
             await _invalidate_and_close(connection)
             raise
-        except Exception:
-            logger.exception("Runtime lock %r liveness check failed.", self.name)
+        except Exception as error:
+            logger.error(
+                "Runtime lock liveness check failed "
+                "error_code=runtime_lock_liveness_failed error_type=%s lock_name=%r",
+                _safe_error_type(error),
+                self.name,
+            )
             self.acquired = False
             self.connection = None
             await _invalidate_and_close(connection)

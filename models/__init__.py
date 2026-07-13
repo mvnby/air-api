@@ -21,6 +21,7 @@ from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .content import Article, GlobalConfig
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
+from .communication_runtime import CommunicationRuntimeState
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
 from .media import MediaAsset, MediaProcessingJob
 from .staff import StaffUser
@@ -85,6 +86,7 @@ __all__ = [
     "CatalogImportJob",
     "CommunicationDelivery",
     "CommunicationDeliveryAttempt",
+    "CommunicationRuntimeState",
     "ConsumerInbox",
     "Customer",
     "CustomerBranch",
