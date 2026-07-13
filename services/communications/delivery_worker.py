@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
@@ -75,6 +75,7 @@ class CommunicationDeliveryWorker:
         worker_id: str,
         lease_seconds: int = 90,
         recovery_limit: int = 100,
+        safety_check: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._provider = provider
@@ -87,9 +88,13 @@ class CommunicationDeliveryWorker:
             1,
             min(CommunicationDeliveryService.MAX_RECOVERY_LIMIT, int(recovery_limit)),
         )
+        self._safety_check = safety_check
 
     async def run_once(self) -> DeliveryRunOutcome:
+        await self._assert_safe_to_continue()
         recovery = await self._recover_expired_leases()
+        # Re-fence after recovery and immediately before the durable claim.
+        await self._assert_safe_to_continue()
         claim = await self._claim_and_commit()
         if claim is None:
             return DeliveryRunOutcome(
@@ -139,6 +144,9 @@ class CommunicationDeliveryWorker:
             # claim transaction. Re-fence immediately before any network I/O.
             return self._lease_lost_outcome(claim, recovery)
 
+        # Ownership, primary role and process stop are rechecked after the
+        # durable lease renewal and immediately before provider network I/O.
+        await self._assert_safe_to_continue()
         cancellation_after_finalize: asyncio.CancelledError | None = None
         provider_started_ns = time.monotonic_ns()
         try:
@@ -211,6 +219,10 @@ class CommunicationDeliveryWorker:
         if cancellation_after_finalize is not None:
             raise cancellation_after_finalize
         return outcome
+
+    async def _assert_safe_to_continue(self) -> None:
+        if self._safety_check is not None:
+            await self._safety_check()
 
     async def _recover_expired_leases(self) -> ExpiredLeaseRecoveryResult:
         async with self._session_factory() as session:

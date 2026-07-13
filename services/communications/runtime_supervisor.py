@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import signal
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from services.communications.runtime_config import (
@@ -13,10 +13,14 @@ from services.communications.runtime_config import (
     CommunicationRuntimeLockLost,
     CommunicationRuntimeLockUnavailable,
     CommunicationRuntimePrimaryRequired,
+    CommunicationRuntimeProviderCloseFailed,
     CommunicationRuntimeShutdownTimeout,
+    CommunicationRuntimeStopRequested,
     PrimaryProbe,
+    RuntimeSafetyCheck,
     SessionFactory,
     assert_primary_writable,
+    safe_error_type,
     wait_or_stop,
 )
 from services.communications.runtime_state import (
@@ -42,10 +46,13 @@ class CommunicationRuntimeSupervisor:
         *,
         config: CommunicationRuntimeConfig,
         session_factory: SessionFactory,
-        pipeline_factory: Callable[[], RuntimePipeline],
+        pipeline_factory: Callable[[RuntimeSafetyCheck], RuntimePipeline],
         primary_probe: PrimaryProbe = assert_primary_writable,
         lock_service: type[RuntimeLockService] = RuntimeLockService,
         hard_stop: Callable[[], None] | None = None,
+        fencing_wait: Callable[
+            [asyncio.Event, float], Awaitable[bool]
+        ] = wait_or_stop,
     ) -> None:
         self._config = config
         self._session_factory = session_factory
@@ -53,6 +60,8 @@ class CommunicationRuntimeSupervisor:
         self._primary_probe = primary_probe
         self._lock_service = lock_service
         self._hard_stop = hard_stop or self._kill_process
+        self._fencing_wait = fencing_wait
+        self._lock_probe_mutex = asyncio.Lock()
 
     @staticmethod
     def _kill_process() -> None:
@@ -73,7 +82,7 @@ class CommunicationRuntimeSupervisor:
             await self._take_ownership()
             owned = True
 
-            if await wait_or_stop(stop_event, self._config.fencing_seconds):
+            if await self._fencing_wait(stop_event, self._config.fencing_seconds):
                 return
             if not await self._lock_is_held(runtime_lock):
                 raise CommunicationRuntimeLockLost(
@@ -81,7 +90,9 @@ class CommunicationRuntimeSupervisor:
                 )
             await self._probe_primary()
 
-            pipeline = self._pipeline_factory()
+            pipeline = self._pipeline_factory(
+                lambda: self._assert_safe_to_work(stop_event, runtime_lock)
+            )
             work_task = asyncio.create_task(
                 pipeline.run(stop_event),
                 name="communications-work-loop",
@@ -104,14 +115,34 @@ class CommunicationRuntimeSupervisor:
                 # drain provider work, persist state, then release ownership.
                 done = set()
                 terminal_error = cancellation
-            if work_task in done and not stop_event.is_set():
-                terminal_error = work_task.exception() or CommunicationRuntimeError(
-                    "communications work loop stopped unexpectedly"
-                )
-            elif monitor_task in done and not stop_event.is_set():
-                terminal_error = monitor_task.exception() or CommunicationRuntimeError(
-                    "communications ownership monitor stopped unexpectedly"
-                )
+            monitor_failure: BaseException | None = None
+            if monitor_task in done:
+                if monitor_task.cancelled():
+                    monitor_failure = CommunicationRuntimeError(
+                        "communications ownership monitor was cancelled"
+                    )
+                else:
+                    monitor_failure = monitor_task.exception()
+                    if monitor_failure is None and not stop_event.is_set():
+                        monitor_failure = CommunicationRuntimeError(
+                            "communications ownership monitor stopped unexpectedly"
+                        )
+            if monitor_failure is not None:
+                # Ownership loss is a fail-stop event, not a graceful drain.
+                # Cancel the active claim/provider task before any state write
+                # or other await can widen the failover overlap window.
+                terminal_error = monitor_failure
+                stop_event.set()
+                work_task.cancel()
+            elif work_task in done and not stop_event.is_set():
+                if work_task.cancelled():
+                    terminal_error = CommunicationRuntimeError(
+                        "communications work loop was cancelled unexpectedly"
+                    )
+                else:
+                    terminal_error = work_task.exception() or CommunicationRuntimeError(
+                        "communications work loop stopped unexpectedly"
+                    )
 
             stop_event.set()
             await self._best_effort_status(CommunicationRuntimeStatus.STOPPING)
@@ -127,7 +158,9 @@ class CommunicationRuntimeSupervisor:
                 )
                 logger.critical(
                     "Communications runtime shutdown deadline exceeded; "
-                    "advisory lock will not be released"
+                    "advisory lock will not be released "
+                    "error_code=shutdown_timeout instance_id=%s",
+                    self._config.instance_id,
                 )
                 self._hard_stop()
                 raise CommunicationRuntimeShutdownTimeout(
@@ -136,10 +169,30 @@ class CommunicationRuntimeSupervisor:
 
             results = await asyncio.gather(*drained, return_exceptions=True)
             for result in results:
-                if isinstance(result, BaseException) and terminal_error is None:
+                if isinstance(result, CommunicationRuntimeProviderCloseFailed):
+                    terminal_error = result
+                elif isinstance(result, BaseException) and terminal_error is None:
                     terminal_error = result
             stop_task.cancel()
             await asyncio.gather(stop_task, return_exceptions=True)
+            if isinstance(
+                terminal_error,
+                CommunicationRuntimeProviderCloseFailed,
+            ):
+                release_allowed = False
+                await self._best_effort_status(
+                    CommunicationRuntimeStatus.FAULTED,
+                    last_error_code="provider_close_failed",
+                )
+                logger.critical(
+                    "Communications provider close failed; fail-stop required "
+                    "error_code=provider_close_failed instance_id=%s",
+                    self._config.instance_id,
+                )
+                self._hard_stop()
+                raise CommunicationRuntimeShutdownTimeout(
+                    "communications provider-close hard-stop callback returned"
+                )
             if terminal_error is not None:
                 raise terminal_error
         except BaseException as exc:
@@ -166,7 +219,7 @@ class CommunicationRuntimeSupervisor:
         elif not isinstance(terminal_error, CommunicationRuntimeShutdownTimeout):
             await self._best_effort_status(
                 CommunicationRuntimeStatus.FAULTED,
-                last_error_code=type(terminal_error).__name__,
+                last_error_code=safe_error_type(terminal_error),
             )
 
     async def _release_lock(self, runtime_lock: RuntimeLock) -> None:
@@ -179,7 +232,11 @@ class CommunicationRuntimeSupervisor:
             timeout=self._config.db_probe_timeout_seconds,
         )
         if pending:
-            logger.critical("Communications advisory lock release deadline exceeded")
+            logger.critical(
+                "Communications advisory lock release deadline exceeded "
+                "error_code=lock_release_timeout instance_id=%s",
+                self._config.instance_id,
+            )
             self._hard_stop()
             raise CommunicationRuntimeShutdownTimeout(
                 "communications lock release hard-stop callback returned"
@@ -199,7 +256,11 @@ class CommunicationRuntimeSupervisor:
                         required=True,
                     )
             except TimeoutError:
-                logger.warning("Communications advisory lock acquisition timed out")
+                logger.warning(
+                    "Communications advisory lock acquisition timed out "
+                    "error_code=lock_acquire_timeout instance_id=%s",
+                    self._config.instance_id,
+                )
                 await wait_or_stop(stop_event, self._config.lock_retry_seconds)
                 continue
             if lock.acquired:
@@ -239,10 +300,31 @@ class CommunicationRuntimeSupervisor:
                 "communications writable-primary probe timed out"
             ) from exc
 
+    async def _assert_safe_to_work(
+        self,
+        stop_event: asyncio.Event,
+        runtime_lock: RuntimeLock,
+    ) -> None:
+        if stop_event.is_set():
+            raise CommunicationRuntimeStopRequested(
+                "communications runtime stop was requested"
+            )
+        if not await self._lock_is_held(runtime_lock):
+            raise CommunicationRuntimeLockLost(
+                "communications advisory lock was lost before work"
+            )
+        await self._probe_primary()
+        await self._verify_state_ownership()
+        if stop_event.is_set():
+            raise CommunicationRuntimeStopRequested(
+                "communications runtime stop was requested"
+            )
+
     async def _lock_is_held(self, runtime_lock: RuntimeLock) -> bool:
         try:
-            async with asyncio.timeout(self._config.db_probe_timeout_seconds):
-                return await runtime_lock.is_held()
+            async with self._lock_probe_mutex:
+                async with asyncio.timeout(self._config.db_probe_timeout_seconds):
+                    return await runtime_lock.is_held()
         except TimeoutError as exc:
             raise CommunicationRuntimeLockLost(
                 "communications advisory lock liveness probe timed out"
@@ -259,18 +341,21 @@ class CommunicationRuntimeSupervisor:
                     "communications advisory lock was lost"
                 )
             await self._probe_primary()
-            try:
-                async with asyncio.timeout(self._config.db_probe_timeout_seconds):
-                    async with self._session_factory() as session:
-                        await CommunicationRuntimeStateService.read_owned_control(
-                            session,
-                            channel=self._config.channel,
-                            instance_id=self._config.instance_id,
-                        )
-            except TimeoutError as exc:
-                raise CommunicationRuntimeStateOwnershipLost(
-                    "communications state ownership probe timed out"
-                ) from exc
+            await self._verify_state_ownership()
+
+    async def _verify_state_ownership(self) -> None:
+        try:
+            async with asyncio.timeout(self._config.db_probe_timeout_seconds):
+                async with self._session_factory() as session:
+                    await CommunicationRuntimeStateService.read_owned_control(
+                        session,
+                        channel=self._config.channel,
+                        instance_id=self._config.instance_id,
+                    )
+        except TimeoutError as exc:
+            raise CommunicationRuntimeStateOwnershipLost(
+                "communications state ownership probe timed out"
+            ) from exc
 
     async def _best_effort_status(
         self,
@@ -290,6 +375,15 @@ class CommunicationRuntimeSupervisor:
                     )
                     await session.commit()
         except CommunicationRuntimeStateOwnershipLost:
-            logger.error("Communications runtime state ownership was lost")
-        except Exception:
-            logger.exception("Failed to record communications runtime lifecycle state")
+            logger.error(
+                "Communications runtime state ownership was lost "
+                "error_code=runtime_state_ownership_lost instance_id=%s",
+                self._config.instance_id,
+            )
+        except Exception as error:
+            logger.error(
+                "Communications runtime lifecycle state write failed "
+                "error_code=runtime_state_write_failed error_type=%s instance_id=%s",
+                safe_error_type(error),
+                self._config.instance_id,
+            )

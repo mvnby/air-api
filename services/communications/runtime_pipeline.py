@@ -14,7 +14,10 @@ from services.communications.providers.base import CommunicationDeliveryProvider
 from services.communications.runtime_config import (
     CommunicationRuntimeConfig,
     CommunicationRuntimeError,
+    CommunicationRuntimeProviderCloseFailed,
+    CommunicationRuntimeStopRequested,
     ProviderFactory,
+    RuntimeSafetyCheck,
     SessionFactory,
     wait_or_stop,
 )
@@ -43,15 +46,18 @@ class CommunicationRuntimePipeline:
         config: CommunicationRuntimeConfig,
         session_factory: SessionFactory,
         provider_factory: ProviderFactory,
+        safety_check: RuntimeSafetyCheck,
         worker_factory: WorkerFactory | None = None,
         dispatch: DispatchCallable = CommunicationOutboxDispatcher.dispatch_next,
     ) -> None:
         self._config = config
         self._session_factory = session_factory
         self._provider_factory = provider_factory
+        self._safety_check = safety_check
         self._worker_factory = worker_factory or self._default_worker_factory
         self._dispatch = dispatch
         self._provider: CommunicationDeliveryProvider | None = None
+        self._provider_close_task: asyncio.Task[None] | None = None
         self._worker: _DeliveryWorker | None = None
         self._last_status: CommunicationRuntimeStatus | None = None
         self._last_error_code: str | None = None
@@ -67,6 +73,7 @@ class CommunicationRuntimePipeline:
             provider=provider,
             worker_id=self._config.instance_id,
             lease_seconds=self._config.lease_seconds,
+            safety_check=self._safety_check,
         )
 
     async def run(self, stop_event: asyncio.Event) -> None:
@@ -75,6 +82,9 @@ class CommunicationRuntimePipeline:
                 worked = await self.run_cycle()
                 if not worked:
                     await wait_or_stop(stop_event, self._config.poll_seconds)
+        except CommunicationRuntimeStopRequested:
+            if not stop_event.is_set():
+                raise
         finally:
             await self.close()
 
@@ -94,9 +104,17 @@ class CommunicationRuntimePipeline:
             )
             return False
 
-        worker = self._ensure_worker()
+        await self._safety_check()
         await self._record_status(CommunicationRuntimeStatus.RUNNING)
+        # The status write above yields control. Re-fence at the last possible
+        # point before the dispatcher can lock or mutate an outbox event.
+        await self._safety_check()
         dispatch_outcome = await self._dispatch_once()
+        # Dispatch may set the process stop signal or ownership may disappear
+        # while its transaction commits. Do not even construct a provider until
+        # this second handoff fence succeeds.
+        await self._safety_check()
+        worker = self._ensure_worker()
         delivery_outcome = await worker.run_once()
         worked = dispatch_outcome is not None or delivery_outcome.outcome != "idle"
         await self._record_status(
@@ -106,7 +124,7 @@ class CommunicationRuntimePipeline:
         return worked
 
     async def close(self) -> None:
-        if self._closed:
+        if self._closed and self._provider is None:
             return
         self._closed = True
         await self._close_provider()
@@ -178,8 +196,51 @@ class CommunicationRuntimePipeline:
     async def _close_provider(self) -> None:
         provider = self._provider
         self._worker = None
-        self._provider = None
         if provider is None:
             return
-        async with asyncio.timeout(self._config.provider_close_seconds):
-            await provider.close()
+        for _attempt in range(2):
+            if await self._close_provider_once(provider):
+                # Retain the strong provider reference until close positively
+                # completes. A replacement runtime must never start while the
+                # previous provider resource is still live or indeterminate.
+                self._provider = None
+                return
+        raise CommunicationRuntimeProviderCloseFailed(
+            "communications provider did not close after bounded retries"
+        )
+
+    async def _close_provider_once(
+        self,
+        provider: CommunicationDeliveryProvider,
+    ) -> bool:
+        close_task = self._provider_close_task
+        if close_task is None:
+            close_task = asyncio.create_task(
+                provider.close(),
+                name="communications-provider-close",
+            )
+            self._provider_close_task = close_task
+        finished, pending = await asyncio.wait(
+            {close_task},
+            timeout=self._config.provider_close_seconds,
+        )
+        if pending:
+            close_task.cancel()
+            finished, pending = await asyncio.wait(
+                {close_task},
+                timeout=self._config.provider_close_seconds,
+            )
+            if pending:
+                raise CommunicationRuntimeProviderCloseFailed(
+                    "communications provider close ignored cancellation"
+                )
+
+        completed_task = next(iter(finished))
+        self._provider_close_task = None
+        if completed_task.cancelled():
+            return False
+        try:
+            completed_task.result()
+        except BaseException:
+            return False
+        return True

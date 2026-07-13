@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import socket
 import uuid
@@ -35,9 +36,18 @@ class CommunicationRuntimeShutdownTimeout(CommunicationRuntimeError):
     pass
 
 
+class CommunicationRuntimeProviderCloseFailed(CommunicationRuntimeError):
+    pass
+
+
+class CommunicationRuntimeStopRequested(CommunicationRuntimeError):
+    pass
+
+
 SessionFactory = Callable[[], AsyncSession]
 ProviderFactory = Callable[[], CommunicationDeliveryProvider]
 PrimaryProbe = Callable[[SessionFactory], Awaitable[None]]
+RuntimeSafetyCheck = Callable[[], Awaitable[None]]
 
 
 def _default_instance_id() -> str:
@@ -57,7 +67,7 @@ class CommunicationRuntimeConfig:
     lock_retry_seconds: float = 2.0
     lock_check_seconds: float = 3.0
     db_probe_timeout_seconds: float = 5.0
-    fencing_seconds: float = 12.0
+    fencing_seconds: float = 60.0
     shutdown_seconds: float = 15.0
     provider_timeout_seconds: float = 10.0
     provider_close_seconds: float = 5.0
@@ -77,23 +87,45 @@ class CommunicationRuntimeConfig:
             raise ValueError("Communication runtime lock name is invalid")
         if not self.instance_id.strip() or len(self.instance_id) > 128:
             raise ValueError("Communication runtime instance ID is invalid")
-        for field_name in (
+        duration_fields = (
             "poll_seconds",
             "heartbeat_seconds",
             "lock_retry_seconds",
             "lock_check_seconds",
             "db_probe_timeout_seconds",
+            "fencing_seconds",
             "shutdown_seconds",
+            "provider_timeout_seconds",
             "provider_close_seconds",
-        ):
-            if float(getattr(self, field_name)) <= 0:
-                raise ValueError(f"{field_name} must be greater than zero")
-        if not 0 <= float(self.fencing_seconds) <= 300:
-            raise ValueError("fencing_seconds must be between 0 and 300")
-        if not 1 <= float(self.provider_timeout_seconds) <= 60:
+        )
+        for field_name in duration_fields:
+            value = float(getattr(self, field_name))
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{field_name} must be finite and greater than zero")
+            object.__setattr__(self, field_name, value)
+        if self.provider_timeout_seconds < 1 or self.provider_timeout_seconds > 60:
             raise ValueError("provider_timeout_seconds must be between 1 and 60")
-        if not 15 <= int(self.lease_seconds) <= 3600:
+        handoff_window = (
+            self.lock_check_seconds
+            # One probe may already hold the serialized advisory connection
+            # when the monitor wakes, followed by lock, primary and state
+            # checks. Budget all four bounded database probe windows.
+            + (4 * self.db_probe_timeout_seconds)
+            + self.shutdown_seconds
+            + self.provider_timeout_seconds
+            + self.provider_close_seconds
+        )
+        if self.fencing_seconds <= handoff_window:
+            raise ValueError(
+                "fencing_seconds must be strictly greater than the worst-case "
+                "ownership detection and shutdown window"
+            )
+        lease_seconds = float(self.lease_seconds)
+        if not math.isfinite(lease_seconds) or not 15 <= lease_seconds <= 3600:
             raise ValueError("lease_seconds must be between 15 and 3600")
+        if not lease_seconds.is_integer():
+            raise ValueError("lease_seconds must be a whole number")
+        object.__setattr__(self, "lease_seconds", int(lease_seconds))
 
     @property
     def deployment_enabled(self) -> bool:
@@ -155,3 +187,12 @@ async def wait_or_stop(stop_event: asyncio.Event, seconds: float) -> bool:
     except TimeoutError:
         return False
     return True
+
+
+def safe_error_type(error: BaseException) -> str:
+    raw_name = type(error).__name__
+    normalized = "".join(
+        character if character.isalnum() or character == "_" else "_"
+        for character in raw_name
+    )
+    return (normalized or "Exception")[:64]

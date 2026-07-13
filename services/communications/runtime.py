@@ -16,10 +16,13 @@ from services.communications.runtime_config import (
     CommunicationRuntimeLockLost,
     CommunicationRuntimeLockUnavailable,
     CommunicationRuntimePrimaryRequired,
+    CommunicationRuntimeProviderCloseFailed,
     CommunicationRuntimeShutdownTimeout,
     ProviderFactory,
+    RuntimeSafetyCheck,
     SessionFactory,
     assert_primary_writable,
+    safe_error_type,
 )
 from services.communications.runtime_pipeline import CommunicationRuntimePipeline
 from services.communications.runtime_supervisor import CommunicationRuntimeSupervisor
@@ -34,6 +37,7 @@ __all__ = [
     "CommunicationRuntimeLockUnavailable",
     "CommunicationRuntimePipeline",
     "CommunicationRuntimePrimaryRequired",
+    "CommunicationRuntimeProviderCloseFailed",
     "CommunicationRuntimeShutdownTimeout",
     "CommunicationRuntimeSupervisor",
     "assert_primary_writable",
@@ -75,11 +79,12 @@ async def run_communications_runtime(
         effective_config
     )
 
-    def build_pipeline() -> CommunicationRuntimePipeline:
+    def build_pipeline(safety_check: RuntimeSafetyCheck) -> CommunicationRuntimePipeline:
         return CommunicationRuntimePipeline(
             config=effective_config,
             session_factory=session_factory,
             provider_factory=effective_provider_factory,
+            safety_check=safety_check,
         )
 
     supervisor = CommunicationRuntimeSupervisor(
@@ -108,8 +113,12 @@ def main() -> int:
         asyncio.run(_run_process())
     except KeyboardInterrupt:
         return 0
-    except Exception:
-        logger.exception("Communications runtime terminated with an error")
+    except Exception as error:
+        logger.error(
+            "Communications runtime terminated "
+            "error_code=runtime_terminated error_type=%s",
+            safe_error_type(error),
+        )
         return 1
     return 0
 
