@@ -2,6 +2,7 @@
 # Client-side values are shell-quoted deliberately before they enter SSH commands.
 # shellcheck disable=SC2029
 set -euo pipefail
+umask 077
 
 OPERATION="${1:-}"
 NODE_HOST="${API_NODE_HOST:-}"
@@ -12,6 +13,7 @@ PROXY_MODE="${API_NODE_PROXY_MODE:-host_nginx}"
 EXPECTED_ROLE="${API_EXPECTED_PATRONI_ROLE:-}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
 SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-}"
+SSH_HOST_KEY_SOURCE="${API_NODE_SSH_HOST_KEY_SOURCE:-}"
 KEY_PATH="${RUNNER_TEMP:-/tmp}/mvn-patroni-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}.key"
 KNOWN_HOSTS_PATH="${KEY_PATH}.known_hosts"
 ROLE_AGENT_SOURCE="scripts/ha/patroni_role_agent.py"
@@ -45,6 +47,18 @@ quote() {
   log error "SSH_PRIVATE_KEY is required"
   exit 1
 }
+[[ -f "${SSH_HOST_KEY_SOURCE}" && ! -L "${SSH_HOST_KEY_SOURCE}" ]] || {
+  log error "tracked API_NODE_SSH_HOST_KEY_SOURCE is required"
+  exit 1
+}
+[[ "${NODE_HOST}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] || {
+  log error "API_NODE_HOST contains unsupported characters"
+  exit 1
+}
+[[ "${NODE_USER}" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] || {
+  log error "API_NODE_USER contains unsupported characters"
+  exit 1
+}
 if [[ "${OPERATION}" != "probe" ]]; then
   [[ -n "${PROJECT_DIR}" && -f "${COMPOSE_SOURCE}" ]] || {
     log error "project directory and tracked compose source are required"
@@ -76,7 +90,7 @@ if [[ "${OPERATION}" != "probe" ]]; then
   }
 fi
 
-required_commands=(ssh ssh-keyscan)
+required_commands=(ssh ssh-keygen)
 if [[ "${OPERATION}" != "probe" ]]; then
   required_commands+=(scp)
 fi
@@ -91,22 +105,40 @@ trap 'rm -f "${KEY_PATH}" "${KNOWN_HOSTS_PATH}"' EXIT
 printf '%s\n' "${SSH_PRIVATE_KEY}" > "${KEY_PATH}"
 chmod 600 "${KEY_PATH}"
 : > "${KNOWN_HOSTS_PATH}"
-for attempt in 1 2 3 4 5; do
-  if ssh-keyscan -T 10 -H "${NODE_HOST}" >> "${KNOWN_HOSTS_PATH}" 2>/dev/null; then
-    break
-  fi
-  (( attempt < 5 )) || {
-    log error "could not obtain SSH host key for ${NODE_HOST}"
-    exit 1
-  }
-  sleep $((attempt * 2))
-done
+host_key_lines=()
+while IFS= read -r host_key_line || [[ -n "${host_key_line}" ]]; do
+  host_key_lines+=("${host_key_line}")
+done < "${SSH_HOST_KEY_SOURCE}"
+[[ "${#host_key_lines[@]}" -eq 1 ]] || {
+  log error "pinned SSH host key source must contain exactly one line"
+  exit 1
+}
+read -r host_key_type host_key_value host_key_extra <<< "${host_key_lines[0]}"
+[[ "${host_key_type}" == "ssh-ed25519" \
+  && "${host_key_value}" =~ ^[A-Za-z0-9+/]+={0,2}$ \
+  && -z "${host_key_extra:-}" ]] || {
+  log error "pinned SSH host key must contain one Ed25519 public key"
+  exit 1
+}
+ssh-keygen -lf "${SSH_HOST_KEY_SOURCE}" -E sha256 >/dev/null || {
+  log error "pinned SSH host key is invalid"
+  exit 1
+}
+printf '%s %s %s\n' \
+  "${NODE_HOST}" "${host_key_type}" "${host_key_value}" \
+  > "${KNOWN_HOSTS_PATH}"
+chmod 600 "${KNOWN_HOSTS_PATH}"
 
 SSH_OPTS=(
+  -F /dev/null
   -i "${KEY_PATH}"
   -o BatchMode=yes
+  -o IdentitiesOnly=yes
   -o StrictHostKeyChecking=yes
+  -o GlobalKnownHostsFile=/dev/null
   -o "UserKnownHostsFile=${KNOWN_HOSTS_PATH}"
+  -o HostKeyAlgorithms=ssh-ed25519
+  -o UpdateHostKeys=no
   -o ConnectTimeout=20
   -o ServerAliveInterval=15
   -o ServerAliveCountMax=3

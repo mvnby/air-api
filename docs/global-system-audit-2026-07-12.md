@@ -46,6 +46,7 @@ MVN уже состоит из нескольких независимо раз�
 | ID | Приоритет | Контур | Подтверждённая проблема | Статус |
 |---|---:|---|---|---|
 | SEC-001 | P0 | API/Manager | Любой active staff, включая installer/repair, получает полный manager API; роль извлекается, но не проверяется | Закрыто в Wave 0 |
+| SEC-002 | P1 | CI/SSH | Release и operational workflows получают SSH host key через ту же сеть, которой собираются доверять; MITM может подменить удалённый узел | Частично: активный Patroni release закреплён за проверенными ключами обоих физических узлов в #739; legacy/monitoring workflows остаются открыты |
 | OPS-001 | P0 | Backup | Destructive restore доступен обычному staff, lock/status process-local; `psql` может продолжить после SQL error, media replacement неатомарна | Частично: owner-only, default-off, fail-fast и atomic media swap; distributed control plane открыт |
 | ORD-001 | P0 | Checkout | Browser управляет `quantity` и `installation_price`; отрицательные/огромные значения проходят и влияют на CRM total | Закрыто в Wave 0: bounds + серверный расчёт; idempotency остаётся в DATA-002/WEB-004 |
 | AUTH-001 | P1 | Auth | Telegram login принимает вычислимую HMAC-подпись при пустом `BOT_TOKEN` | Закрыто в Wave 0 |
@@ -139,6 +140,25 @@ Process-local locks безопасны только при единственн�
 - реальные dependency advisories требуют coordinated upgrade + full regression, а не слепого pin bump.
 
 Wave 0 уже убрала все обнаруженные `verify=False`, перевела configurable image command с shell-string на argv без shell, добавила hardened XML parser для supplier/XLSX/SVG и ограничила XLSX/tar archive expansion. Dependency advisory upgrade остаётся отдельной волной.
+
+### 5.7 SSH trust boundary в CI
+
+Дополнительный проход release path обнаружил, что GitHub runner строил
+`known_hosts` через `ssh-keyscan` непосредственно перед выполнением probe,
+migration и deploy. `StrictHostKeyChecking=yes` после такого scan не защищает
+от активной подмены: идентичность узла была получена из того же недоверенного
+сетевого канала.
+
+Для активного Patroni release оба Ed25519 host key теперь хранятся в
+репозитории, проверены через уже доверенные operator sessions и привязаны к
+физическим узлам, а не к текущей роли primary/standby. Runner игнорирует
+локальный SSH config, принимает только закреплённый алгоритм и прекращает
+release до первой удалённой команды при любом несовпадении.
+
+Это не закрывает SEC-002 целиком: несколько restore, monitoring, legacy
+physical-HA и web workflows всё ещё используют dynamic scan. Их нужно
+перевести на общий fail-closed helper после отдельной проверки ключа web-узла;
+неизвестный ключ нельзя автоматически собирать из production-сети.
 
 ## 6. Manager Vue + manager API
 
