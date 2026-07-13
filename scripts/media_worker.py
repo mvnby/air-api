@@ -15,10 +15,12 @@ import argparse
 import asyncio
 import os
 import shlex
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urljoin
@@ -86,12 +88,97 @@ def _download_source(api_url: str, job: dict, token: str, path: Path) -> None:
                     output.write(chunk)
 
 
-def _complete_job(api_url: str, token: str, job_id: str, worker_id: str, output_path: Path):
+def _renew_job(
+    api_url: str,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    lease_token: str,
+    lease_seconds: int,
+) -> None:
+    response = requests.post(
+        f"{api_url.rstrip('/')}/api/manager/media/worker/jobs/{job_id}/renew",
+        headers=_headers(token),
+        json={
+            "worker_id": worker_id,
+            "lease_token": lease_token,
+            "lease_seconds": lease_seconds,
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+
+
+def _lease_heartbeat(
+    *,
+    stop_event: threading.Event,
+    api_url: str,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    lease_token: str,
+    lease_seconds: int,
+) -> None:
+    interval = max(10.0, min(60.0, lease_seconds / 3))
+    while not stop_event.wait(interval):
+        try:
+            _renew_job(
+                api_url,
+                token,
+                job_id,
+                worker_id,
+                lease_token,
+                lease_seconds,
+            )
+        except Exception as exc:
+            print(
+                f"Media job {job_id} lease heartbeat failed: {type(exc).__name__}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+
+def _start_lease_heartbeat(
+    *,
+    api_url: str,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    lease_token: str,
+    lease_seconds: int,
+) -> tuple[threading.Event, threading.Thread]:
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_lease_heartbeat,
+        kwargs={
+            "stop_event": stop_event,
+            "api_url": api_url,
+            "token": token,
+            "job_id": job_id,
+            "worker_id": worker_id,
+            "lease_token": lease_token,
+            "lease_seconds": lease_seconds,
+        },
+        name=f"media-lease-{job_id[:12]}",
+        daemon=True,
+    )
+    thread.start()
+    return stop_event, thread
+
+
+def _complete_job(
+    api_url: str,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    lease_token: str,
+    output_path: Path,
+):
     with output_path.open("rb") as file_obj:
         response = requests.post(
             f"{api_url.rstrip('/')}/api/manager/media/worker/jobs/{job_id}/complete",
             headers=_headers(token),
-            data={"worker_id": worker_id},
+            data={"worker_id": worker_id, "lease_token": lease_token},
             files={"file": (output_path.name, file_obj, "image/png")},
             timeout=180,
         )
@@ -99,31 +186,86 @@ def _complete_job(api_url: str, token: str, job_id: str, worker_id: str, output_
     return response.json()
 
 
-def _fail_job(api_url: str, token: str, job_id: str, worker_id: str, error: str) -> None:
+def _fail_job(
+    api_url: str,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    lease_token: str,
+    error: str,
+) -> None:
     response = requests.post(
         f"{api_url.rstrip('/')}/api/manager/media/worker/jobs/{job_id}/fail",
         headers=_headers(token),
-        json={"worker_id": worker_id, "error": error[:2000]},
+        json={"worker_id": worker_id, "lease_token": lease_token, "error": error[:2000]},
         timeout=30,
     )
     response.raise_for_status()
 
 
 def _run_external_command(template: str, *, job: dict, input_path: Path, output_path: Path) -> None:
-    command = template.format(
-        input=shlex.quote(str(input_path)),
-        output=shlex.quote(str(output_path)),
-        operation=shlex.quote(str(job.get("operation") or "")),
-        provider=shlex.quote(str(job.get("provider") or "")),
-        rembg_model=shlex.quote(str(job.get("rembg_model") or "")),
-        job_id=shlex.quote(str(job.get("job_id") or "")),
+    if "{input}" not in template or "{output}" not in template:
+        raise RuntimeError("Media worker command must contain {input} and {output}")
+    try:
+        command = [
+            part.format(
+                input=str(input_path),
+                output=str(output_path),
+                operation=str(job.get("operation") or ""),
+                provider=str(job.get("provider") or ""),
+                rembg_model=str(job.get("rembg_model") or ""),
+                job_id=str(job.get("job_id") or ""),
+            )
+            for part in shlex.split(template, posix=os.name != "nt")
+        ]
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError("Media worker command template is invalid") from exc
+    if not command or not command[0].strip():
+        raise RuntimeError("Media worker command is empty")
+
+    completed = _run_command_with_timeout(
+        command,
+        timeout=max(1, _int_env("MEDIA_WORKER_COMMAND_TIMEOUT_SECONDS", 1800)),
     )
-    completed = subprocess.run(command, shell=True, text=True, capture_output=True, timeout=None)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()
         raise RuntimeError(f"External processor failed ({completed.returncode}): {detail}")
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError("External processor did not create output file")
+
+
+def _run_command_with_timeout(
+    command: list[str],
+    *,
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    popen_kwargs = {
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    process = subprocess.Popen(command, **popen_kwargs)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        if os.name == "nt":
+            process.kill()
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        raise RuntimeError(f"External processor timed out after {timeout}s") from exc
+
+    return subprocess.CompletedProcess(
+        command,
+        process.returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
 
 
 async def _run_builtin_background_removal(job: dict, input_path: Path, output_path: Path) -> None:
@@ -168,20 +310,44 @@ def _run_once(api_url: str, token: str, worker_id: str, capabilities: list[str],
         return False
 
     job_id = job["job_id"]
+    lease_token = str(job.get("lease_token") or "")
+    if not lease_token:
+        raise RuntimeError(
+            "Claimed job does not include lease_token; deploy the API and worker script together"
+        )
     print(f"Claimed media job {job_id}: {job.get('operation')} {job.get('provider') or ''}", flush=True)
+    stop_event, heartbeat_thread = _start_lease_heartbeat(
+        api_url=api_url,
+        token=token,
+        job_id=job_id,
+        worker_id=worker_id,
+        lease_token=lease_token,
+        lease_seconds=lease_seconds,
+    )
     try:
         with tempfile.TemporaryDirectory(prefix="media-worker-") as tmp_dir:
             input_path = Path(tmp_dir) / "input"
             output_path = Path(tmp_dir) / "output.png"
             _download_source(api_url, job, token, input_path)
             _process_job(job, input_path, output_path)
-            result = _complete_job(api_url, token, job_id, worker_id, output_path)
+            result = _complete_job(api_url, token, job_id, worker_id, lease_token, output_path)
+            stop_event.set()
+            heartbeat_thread.join(timeout=5)
             print(
                 f"Completed media job {job_id}: asset #{result.get('result_asset_id')}",
                 flush=True,
             )
     except Exception as exc:
-        _fail_job(api_url, token, job_id, worker_id, str(exc))
+        stop_event.set()
+        heartbeat_thread.join(timeout=5)
+        try:
+            _fail_job(api_url, token, job_id, worker_id, lease_token, str(exc))
+        except Exception as fail_exc:
+            print(
+                f"Could not mark media job {job_id} failed: {type(fail_exc).__name__}",
+                file=sys.stderr,
+                flush=True,
+            )
         print(f"Failed media job {job_id}: {exc}", file=sys.stderr, flush=True)
     return True
 

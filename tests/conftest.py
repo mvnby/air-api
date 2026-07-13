@@ -1,15 +1,56 @@
 import os
+
+# Apply test-safe process settings before any application/config module can be
+# imported during collection. Local .env notification credentials must never be
+# inherited by tests.
+os.environ.update(
+    {
+        "ENVIRONMENT": "test",
+        # Keep collection hermetic in clean worktrees: application settings
+        # intentionally require these values, but tests must not depend on a
+        # developer's .env or inherit real credentials.
+        "SECRET_KEY": "test-only-secret-key-at-least-32-bytes-long",
+        "ADMIN_USERNAME": "test-admin",
+        "ADMIN_PASSWORD": "test-only-password",
+        "SENTRY_DSN": "",
+        "BOT_TOKEN": "",
+        "ADMIN_IDS": "",
+        "ADMIN_ID": "0",
+        "BOT_ENABLED": "false",
+        "SCHEDULER_ENABLED": "false",
+        "HA_ALERT_TELEGRAM_BOT_TOKEN": "",
+        "HA_ALERT_TELEGRAM_CHAT_ID": "",
+        "MAIL_IMAP_USERNAME": "",
+        "MAIL_IMAP_PASSWORD": "",
+        "MAIL_IMAP_AUTO_IMPORT_ENABLED": "false",
+        "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED": "false",
+        "MAIL_SMTP_USERNAME": "",
+        "MAIL_SMTP_PASSWORD": "",
+        "DEEPSEEK_TOKEN": "",
+        "GOOGLE_VISION_CREDENTIALS_FILE": "",
+        "GOOGLE_VISION_PROJECT_ID": "",
+        "GITHUB_TOKEN": "",
+        "BACKUP_FOLDER_ID": "",
+        "MEDIA_WORKER_TOKEN": "",
+        "PRODUCT_MEDIA_STORAGE_PROVIDER": "local",
+        "PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER": "local",
+        "PRODUCT_MEDIA_S3_BUCKET": "",
+        "PRODUCT_MEDIA_S3_ENDPOINT_URL": "",
+        "PRODUCT_MEDIA_S3_ACCESS_KEY_ID": "",
+        "PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY": "",
+        "MEDIA_STORAGE_PROVIDER": "local",
+        "MEDIA_S3_BUCKET": "",
+        "MEDIA_S3_ENDPOINT_URL": "",
+        "MEDIA_S3_ACCESS_KEY_ID": "",
+        "MEDIA_S3_SECRET_ACCESS_KEY": "",
+    }
+)
+
 import asyncio
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
-
-# Tests should never emit events into the real Sentry project, even when a
-# developer has production-like values in a local .env.
-os.environ["ENVIRONMENT"] = "test"
-os.environ["SENTRY_DSN"] = ""
-
 
 def _running_inside_docker() -> bool:
     return os.path.exists("/.dockerenv")

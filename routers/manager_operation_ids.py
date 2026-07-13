@@ -80,6 +80,7 @@ REMOVE_MEDIA_ASSET_BACKGROUND = "remove_media_asset_background"
 CREATE_MEDIA_PROCESSING_JOB = "create_media_processing_job"
 LIST_MEDIA_PROCESSING_JOBS = "list_media_processing_jobs"
 CLAIM_MEDIA_WORKER_JOB = "claim_media_worker_job"
+RENEW_MEDIA_WORKER_JOB = "renew_media_worker_job"
 COMPLETE_MEDIA_WORKER_JOB = "complete_media_worker_job"
 FAIL_MEDIA_WORKER_JOB = "fail_media_worker_job"
 CREATE_MAIN_IMAGE_CLEANUP_BATCH = "create_main_image_cleanup_batch"
@@ -173,7 +174,6 @@ UPDATE_MANAGER_SETTING = "update_manager_setting"
 CREATE_MANAGER_SETTING = "create_manager_setting"
 GET_MANAGER_GOOGLE_AUTH_STATUS = "get_manager_google_auth_status"
 GET_MANAGER_GOOGLE_AUTH_URL = "get_manager_google_auth_url"
-EXCHANGE_MANAGER_GOOGLE_AUTH_CODE = "exchange_manager_google_auth_code"
 LIST_MANAGER_BACKUPS = "list_manager_backups"
 START_MANAGER_BACKUP_RUN = "start_manager_backup_run"
 GET_MANAGER_BACKUP_RUN_STATUS = "get_manager_backup_run_status"
@@ -336,6 +336,7 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MEDIA_PROCESSING_JOB,
     LIST_MEDIA_PROCESSING_JOBS,
     CLAIM_MEDIA_WORKER_JOB,
+    RENEW_MEDIA_WORKER_JOB,
     COMPLETE_MEDIA_WORKER_JOB,
     FAIL_MEDIA_WORKER_JOB,
     CREATE_MAIN_IMAGE_CLEANUP_BATCH,
@@ -417,7 +418,6 @@ ALL_MANAGER_OPERATION_IDS = (
     UPDATE_MANAGER_SETTING,
     GET_MANAGER_GOOGLE_AUTH_STATUS,
     GET_MANAGER_GOOGLE_AUTH_URL,
-    EXCHANGE_MANAGER_GOOGLE_AUTH_CODE,
     LIST_MANAGER_BACKUPS,
     START_MANAGER_BACKUP_RUN,
     GET_MANAGER_BACKUP_RUN_STATUS,

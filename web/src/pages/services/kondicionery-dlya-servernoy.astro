@@ -1,6 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import ContactForm from "../../components/ContactForm.vue";
+import TechnicalFigure from "../../components/TechnicalFigure.astro";
 
 export const prerender = true;
 ---
@@ -51,6 +52,12 @@ export const prerender = true;
                 </div>
                 <span class="material-icons-round" aria-hidden="true">device_thermostat</span>
             </section>
+
+            <TechnicalFigure
+                src="/img/blog/v2/inline/server-redundancy-monitoring.svg"
+                alt="Схема охлаждения серверной с основным и резервным кондиционерами, независимым датчиком температуры и контроллером переключения"
+                caption="Для ответственной серверной одного блока недостаточно: независимый датчик и контроллер помогают вовремя включить резерв и чередовать оборудование."
+            />
 
             <section class="info-grid" aria-label="Что учитываем для серверной">
                 <div class="info-card">

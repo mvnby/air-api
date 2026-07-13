@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import ContactForm from "../components/ContactForm.vue";
 import InstallationCalculator from "../components/InstallationCalculator.vue";
+import TechnicalFigure from "../components/TechnicalFigure.astro";
 import { getInstallationPricingInfo } from "../utils/api";
 
 export const prerender = true;
@@ -87,6 +88,12 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
                             </p>
                         </div>
                     </div>
+
+                    <TechnicalFigure
+                        src="/img/blog/v2/inline/installation-connection-node.svg"
+                        alt="Схема правильного подхода трассы, дренажа и кабеля к внутреннему блоку кондиционера"
+                        caption="Даже в обычном монтаже точка ввода и уклон дренажа должны совпадать с выбранным блоком — это влияет на внешний вид и нормальный отвод конденсата."
+                    />
                 </section>
 
                 <section class="mb-12">
@@ -205,12 +212,12 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
             </div>
         </div>
 
-        <div class="sidebar">
+        <div id="installation-request" class="sidebar">
             <ContactForm
                 client:visible
                 title="Заказать монтаж"
-                subtitle="Консультация и выезд мастера бесплатно"
-                buttonText="Вызвать мастера"
+                subtitle="Оставьте телефон: мастер уточнит задачу и подскажет, какие фото нужны для предварительной оценки."
+                buttonText="Рассчитать монтаж"
                 subject="Заказ монтажа"
             />
         </div>
@@ -237,6 +244,9 @@ const { minStandardPrice, minBundlePrice } = await getInstallationPricingInfo();
         grid-template-columns: 2fr 1fr;
         gap: 4rem;
         margin-bottom: 6rem;
+    }
+    #installation-request {
+        scroll-margin-top: 100px;
     }
 
     .content,

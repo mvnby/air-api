@@ -71,7 +71,7 @@ async def get_installation_rates(session: AsyncSession = Depends(get_session)):
 @router.get("/v1/config", operation_id="get_config")
 async def get_global_config(session: AsyncSession = Depends(get_session)):
     """
-    Get all global configuration parameters as a key-value dictionary.
+    Get the public storefront configuration as a key-value dictionary.
     Example: {"phone": "+37529...", "email": "..."}
     """
     return await ContentApiService.get_global_config_map(session)

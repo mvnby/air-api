@@ -13,6 +13,7 @@ import {
     isRuntimeFreshnessEnabled,
 } from "../../utils/api";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
+import { safeJsonLd } from "../../utils/safe-json-ld.js";
 import { buildCatalogQueryFromVirtual } from "../../utils/virtual-category";
 
 export const prerender = !isRuntimeFreshnessEnabled();
@@ -102,7 +103,7 @@ const staticPopularProducts =
     canonical={`/catalog/${resolvedCategory.slug}/`}
     robots={robotsValue}
 >
-    <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
+    <script type="application/ld+json" set:html={safeJsonLd(catalogSchema)} />
     <div class="container catalog-page">
         <header class="catalog-header">
             <div class="breadcrumb">

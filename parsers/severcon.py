@@ -8,6 +8,8 @@ from xml.etree import ElementTree as ET
 
 import httpx
 import slugify
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+from defusedxml.common import DefusedXmlException
 
 from .base import BaseParser
 
@@ -128,8 +130,8 @@ class SeverconEnergoluxParser(BaseParser):
                 raise Exception(f"Ошибка загрузки XML Severcon: {response.status_code}")
 
         try:
-            root = ET.fromstring(response.content)
-        except ET.ParseError as exc:
+            root = safe_xml_fromstring(response.content)
+        except (ET.ParseError, DefusedXmlException) as exc:
             raise ValueError("Severcon XML feed could not be parsed.") from exc
 
         shop = root.find("shop")

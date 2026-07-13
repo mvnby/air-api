@@ -37,11 +37,24 @@ def test_postgres_pitr_check_workflow_preserves_strict_remote_gate():
     assert artifact_step["with"]["path"] == "postgres-pitr-check.log"
 
 
+def test_postgres_pitr_status_uses_activity_aware_remote_wal_gate():
+    script = (REPO_ROOT / "scripts/ha/check_postgres_pitr_status.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "is_uploadable_wal_name" in script
+    assert '--local-pending-wal-count "${wal_count}"' in script
+    assert '--expected-wal "${last_archived_wal}"' in script
+    assert "pitr_remote_wal status=idle" in script
+    assert "no uploadable WAL is pending locally" in script
+
+
 def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_proof():
     workflow = _workflow(".github/workflows/postgres-pitr-restore-drill.yml")
     env = workflow["env"]
     dispatch_inputs = workflow["on"]["workflow_dispatch"]["inputs"]
     gate_step = _step(workflow, "pitr-restore-drill", "Decide Whether To Run")
+    ssh_step = _step(workflow, "pitr-restore-drill", "Setup API SSH Key")
     drill_step = _step(workflow, "pitr-restore-drill", "Run PostgreSQL PITR Restore Drill")
     summary_step = _step(workflow, "pitr-restore-drill", "Write Summary")
     artifact_step = _step(workflow, "pitr-restore-drill", "Upload PITR Restore Drill Log")
@@ -52,9 +65,27 @@ def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_pr
     assert "PITR restore drill skipped because POSTGRES_PITR_REQUIRED is not true." in gate_step["run"]
     assert "postgres-pitr-restore-drill.log" in gate_step["run"]
     assert drill_step["if"] == "steps.gate.outputs.run == 'true'"
+    assert "API_STANDBY_HOST" in ssh_step["env"]
+    assert 'ssh-keyscan -T 10 -H "${API_STANDBY_HOST}"' in ssh_step["run"]
+    assert "API_DB_HA_MODE" in drill_step["env"]
+    assert "API_STANDBY_PROJECT_DIR" in drill_step["env"]
+    assert "check_patroni_production.py --resolve-primary" in drill_step["run"]
+    assert "target_compose_file=docker-compose.patroni.yml" in drill_step["run"]
+    assert 'selected_node=${target_label} ha_mode=${API_DB_HA_MODE}' in drill_step["run"]
     assert "scripts/ha/restore_postgres_pitr_drill.sh" in drill_step["run"]
     assert "REQUIRE_WAL=$(quote \"${PITR_RESTORE_REQUIRE_WAL}\")" in drill_step["run"]
     assert "postgres-pitr-restore-drill.log" in drill_step["run"]
     assert "require_wal:" in summary_step["run"]
     assert artifact_step["if"] == "always()"
     assert artifact_step["with"]["path"] == "postgres-pitr-restore-drill.log"
+
+
+def test_postgres_pitr_restore_drill_requires_restored_business_data():
+    script = (REPO_ROOT / "scripts/ha/restore_postgres_pitr_drill.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "business_counts=" in script
+    assert "product_count payment_count order_count" in script
+    assert 'log "product_count=${product_count} payment_count=${payment_count} order_count=${order_count}"' in script
+    assert '"${product_count}" -lt 1 || "${order_count}" -lt 1' in script

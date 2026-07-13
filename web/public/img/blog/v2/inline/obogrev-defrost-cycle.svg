@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Как проходит оттайка наружного блока</title>
+  <desc id="desc">Короткая пауза в подаче тепла — нормальная часть зимней работы</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#24343A" flood-opacity=".10"/></filter>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF7F6"/></linearGradient>
+    <style>
+      .title{font:700 34px Inter,Arial,sans-serif;fill:#24343A}
+      .subtitle{font:400 20px Inter,Arial,sans-serif;fill:#607277}
+      .label{font:700 25px Inter,Arial,sans-serif;fill:#24343A}
+      .note{font:500 18px Inter,Arial,sans-serif;fill:#607277}
+      .small{font:600 16px Inter,Arial,sans-serif;fill:#24343A}
+      .line{fill:none;stroke-linecap:round;stroke-linejoin:round}
+    </style>
+  </defs>
+  <rect width="1200" height="760" rx="40" fill="#F7F5F0"/>
+  <text x="600" y="58" text-anchor="middle" class="title">Как проходит оттайка наружного блока</text>
+  <text x="600" y="96" text-anchor="middle" class="subtitle">Короткая пауза в подаче тепла — нормальная часть зимней работы</text>
+  <g>
+          <rect x="55" y="145" width="320" height="500" rx="32" fill="url(#panel)" stroke="#11B8B2" stroke-width="4" filter="url(#shadow)"/>
+          <text x="215" y="200" text-anchor="middle" class="label">1. Обогрев</text>
+          <g opacity="1" filter="url(#shadow)">
+      <rect x="153" y="270" width="125" height="125" rx="18" fill="#F2F4F3" stroke="#C9D5D5" stroke-width="3"/>
+      <circle cx="215.5" cy="332.5" r="38.75" fill="none" stroke="#075E63" stroke-width="7"/>
+      <circle cx="215.5" cy="332.5" r="8" fill="#075E63"/>
+      <path d="M215.5 298.75 Q243.0 322.5 215.5 332.5 Q188.0 342.5 215.5 366.25" fill="none" stroke="#075E63" stroke-width="5"/>
+    </g>
+          
+          <text x="215" y="560" text-anchor="middle" class="note"><tspan x="215" dy="0">Наружный блок</tspan><tspan x="215" dy="28">забирает тепло</tspan></text>
+        </g><g>
+          <rect x="425" y="145" width="320" height="500" rx="32" fill="url(#panel)" stroke="#F2A93B" stroke-width="4" filter="url(#shadow)"/>
+          <text x="585" y="200" text-anchor="middle" class="label">2. Иней</text>
+          <g opacity="1" filter="url(#shadow)">
+      <rect x="523" y="270" width="125" height="125" rx="18" fill="#F2F4F3" stroke="#C9D5D5" stroke-width="3"/>
+      <circle cx="585.5" cy="332.5" r="38.75" fill="none" stroke="#075E63" stroke-width="7"/>
+      <circle cx="585.5" cy="332.5" r="8" fill="#075E63"/>
+      <path d="M585.5 298.75 Q613.0 322.5 585.5 332.5 Q558.0 342.5 585.5 366.25" fill="none" stroke="#075E63" stroke-width="5"/>
+    </g>
+          <circle cx="545" cy="410" r="8" fill="#EAF7F6" stroke="#075E63" stroke-width="3"/><circle cx="579" cy="434" r="8" fill="#EAF7F6" stroke="#075E63" stroke-width="3"/><circle cx="613" cy="410" r="8" fill="#EAF7F6" stroke="#075E63" stroke-width="3"/><circle cx="647" cy="434" r="8" fill="#EAF7F6" stroke="#075E63" stroke-width="3"/><circle cx="681" cy="410" r="8" fill="#EAF7F6" stroke="#075E63" stroke-width="3"/>
+          <text x="585" y="560" text-anchor="middle" class="note"><tspan x="585" dy="0">Теплообменник постепенно</tspan><tspan x="585" dy="28">обмерзает</tspan></text>
+        </g><g>
+          <rect x="795" y="145" width="320" height="500" rx="32" fill="url(#panel)" stroke="#E56A5D" stroke-width="4" filter="url(#shadow)"/>
+          <text x="955" y="200" text-anchor="middle" class="label">3. Оттайка</text>
+          <g opacity=".45" filter="url(#shadow)">
+      <rect x="893" y="270" width="125" height="125" rx="18" fill="#F2F4F3" stroke="#C9D5D5" stroke-width="3"/>
+      <circle cx="955.5" cy="332.5" r="38.75" fill="none" stroke="#075E63" stroke-width="7"/>
+      <circle cx="955.5" cy="332.5" r="8" fill="#075E63"/>
+      <path d="M955.5 298.75 Q983.0 322.5 955.5 332.5 Q928.0 342.5 955.5 366.25" fill="none" stroke="#075E63" stroke-width="5"/>
+    </g>
+          <path d="M965 460 q-14 22 0 34 q14-12 0-34 M1010 470 q-12 19 0 30 q12-11 0-30" fill="#11B8B2" opacity=".7"/>
+          <text x="955" y="560" text-anchor="middle" class="note"><tspan x="955" dy="0">Система временно</tspan><tspan x="955" dy="28">растапливает лёд</tspan></text>
+        </g><path d="M365 390 L410 390" class="line" stroke="#075E63" stroke-width="5"/>
+      <path d="M394 378 L410 390 L394 402" class="line" stroke="#075E63" stroke-width="5"/><path d="M735 390 L780 390" class="line" stroke="#075E63" stroke-width="5"/>
+      <path d="M764 378 L780 390 L764 402" class="line" stroke="#075E63" stroke-width="5"/>
+</svg>

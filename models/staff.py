@@ -1,12 +1,18 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import BigInteger, Column, JSON, String
+from sqlalchemy import BigInteger, Column, JSON, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
 class StaffUser(SQLModel, table=True):
     __tablename__ = "staff_users"
+    __table_args__ = (
+        UniqueConstraint(
+            "legacy_installer_id",
+            name="uq_staff_users_legacy_installer_id",
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     display_name: str = Field(index=True)
@@ -22,7 +28,11 @@ class StaffUser(SQLModel, table=True):
     telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, unique=True, nullable=True))
     telegram_username: Optional[str] = Field(default=None, index=True)
 
-    legacy_installer_id: Optional[int] = Field(default=None, foreign_key="installers.id", unique=True, index=True)
+    legacy_installer_id: Optional[int] = Field(
+        default=None,
+        foreign_key="installers.id",
+        index=True,
+    )
     default_rate: Optional[float] = Field(default=None)
 
     created_at: datetime = Field(default_factory=datetime.now)

@@ -1,0 +1,188 @@
+---
+interface BrandItem {
+    title: string;
+    slug: string;
+    logo: string;
+    productCountLabel: string;
+    initials: string;
+}
+
+interface Props {
+    brands: BrandItem[];
+}
+
+const { brands } = Astro.props;
+---
+
+{
+    brands.length > 0 && (
+        <section class="home-brands" aria-labelledby="home-brands-title">
+            <div class="container">
+                <div class="home-brands__heading">
+                    <div>
+                        <p>Каталог по производителям</p>
+                        <h2 id="home-brands-title">Бренды кондиционеров</h2>
+                    </div>
+                    <a href="/brands/">Все бренды</a>
+                </div>
+
+                <div class="home-brands__strip">
+                    {brands.map((brand) => (
+                        <a href={`/brands/${brand.slug}/`} aria-label={`Открыть бренд ${brand.title}`}>
+                            <span class="home-brands__logo">
+                                {brand.logo ? (
+                                    <img
+                                        src={brand.logo}
+                                        alt=""
+                                        width="120"
+                                        height="48"
+                                        loading="lazy"
+                                        decoding="async"
+                                    />
+                                ) : (
+                                    <span>{brand.initials}</span>
+                                )}
+                            </span>
+                            <span>
+                                <strong>{brand.title}</strong>
+                                <small>{brand.productCountLabel}</small>
+                            </span>
+                        </a>
+                    ))}
+                </div>
+            </div>
+        </section>
+    )
+}
+
+<style>
+    .home-brands {
+        padding: 4.5rem 0;
+    }
+
+    .home-brands__heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.4rem;
+    }
+
+    .home-brands__heading p {
+        color: var(--primary);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .home-brands h2 {
+        margin-top: 0.25rem;
+        font-size: clamp(1.8rem, 4vw, 2.5rem);
+    }
+
+    .home-brands__heading > a {
+        color: var(--primary);
+        font-size: 0.9rem;
+        font-weight: 800;
+    }
+
+    .home-brands__strip {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 0.7rem;
+    }
+
+    .home-brands__strip > a {
+        display: grid;
+        align-content: space-between;
+        min-width: 0;
+        min-height: 138px;
+        padding: 1rem;
+        border: 1px solid var(--panel-chip-border);
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+    }
+
+    .home-brands__strip > a:hover {
+        border-color: var(--panel-chip-hover-border);
+    }
+
+    .home-brands__strip a:focus-visible,
+    .home-brands__heading > a:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+    }
+
+    .home-brands__logo {
+        display: flex;
+        align-items: center;
+        height: 54px;
+    }
+
+    .home-brands__logo img {
+        width: auto;
+        max-width: 100%;
+        height: 42px;
+        object-fit: contain;
+        object-position: left center;
+    }
+
+    .home-brands__logo > span {
+        color: var(--primary);
+        font-size: 1.4rem;
+        font-weight: 800;
+    }
+
+    .home-brands__strip > a > span:last-child {
+        display: grid;
+        min-width: 0;
+        gap: 0.15rem;
+    }
+
+    .home-brands__strip strong,
+    .home-brands__strip small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .home-brands__strip strong {
+        color: var(--text);
+        font-size: 0.85rem;
+    }
+
+    .home-brands__strip small {
+        color: var(--text-muted);
+        font-size: 0.72rem;
+    }
+
+    @media (max-width: 1000px) {
+        .home-brands__strip {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 560px) {
+        .home-brands {
+            padding: 3.5rem 0;
+        }
+
+        .home-brands__strip {
+            grid-auto-columns: min(42vw, 170px);
+            grid-auto-flow: column;
+            grid-template-columns: none;
+            padding-right: 1rem;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scrollbar-width: none;
+        }
+
+        .home-brands__strip::-webkit-scrollbar {
+            display: none;
+        }
+
+        .home-brands__strip > a {
+            scroll-snap-align: start;
+        }
+    }
+</style>

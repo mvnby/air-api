@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 
+import pytest
 from sqlmodel import select
 
 from crud.product import ProductDAO
 from models import Product
+from services.product_read_service import ProductReadService
 
 
 def _session(dialect_name: str):
@@ -63,3 +65,32 @@ def test_common_filters_prefer_typed_indoor_type_with_legacy_fallback_sqlite():
     assert "json_extract(product.specs, '$.__typed_specs.indoor_type.value')" in sql
     assert "json_extract(product.specs, '$.__filter_indoor_type')" in sql
     assert "coalesce" in sql.lower()
+
+
+@pytest.mark.asyncio
+async def test_count_filtered_applies_the_same_smart_search_as_items():
+    captured = {}
+
+    class CaptureSession:
+        bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+        async def execute(self, stmt):
+            captured["stmt"] = stmt
+            return SimpleNamespace(scalar_one=lambda: 2)
+
+    total = await ProductDAO.count_filtered(
+        CaptureSession(),
+        search_query="COUNTMARKER",
+    )
+
+    sql = _compiled_sql(captured["stmt"])
+    assert total == 2
+    assert "product.title ILIKE '%%COUNTMARKER%%'" in sql
+    assert "tag.title ILIKE '%%COUNTMARKER%%'" in sql
+
+
+def test_public_catalog_pagination_cap_is_100():
+    ProductReadService.validate_public_pagination(page=1, limit=100)
+
+    with pytest.raises(ValueError, match="between 1 and 100"):
+        ProductReadService.validate_public_pagination(page=1, limit=101)

@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -6,12 +7,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from models import LeadSource, Order, OrderStatus
+from services.bot_service import BotService
 from services.general_media_storage_service import StoredGeneralMediaObject
 from services.repair_diagnostic_service import (
     RepairDiagnosticIncomingFile,
     RepairDiagnosticLeadPayload,
     RepairDiagnosticService,
 )
+from services.staff_user_service import StaffUserService
 
 
 class FakeRepairDiagnosticStorage:
@@ -117,3 +120,49 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     assert repair_meta["ai_pre_diagnosis_status"] == "pending"
     assert repair_meta["preliminary_fault_type"] == "refrigerant_leak"
     assert "Фото шильдика" not in repair_meta["missing_data"]
+
+
+@pytest.mark.asyncio
+async def test_repair_notification_escapes_contact_fields(monkeypatch, caplog):
+    payload = RepairDiagnosticLeadPayload.model_validate(
+        {
+            "scenario": "repair",
+            "symptom": "not_cooling",
+            "client_checks": [],
+            "contact": {
+                "name": "Анна <admin>",
+                "phone": "+375291112233",
+                "address": "Витебск & <центр>",
+            },
+        }
+    )
+    sent_messages = []
+
+    async def fake_recipients(_session):
+        return [101, 202]
+
+    async def fake_send_message(admin_id, text):
+        sent_messages.append((admin_id, text))
+        return admin_id == 101
+
+    monkeypatch.setattr(
+        StaffUserService,
+        "get_active_owner_admin_telegram_recipient_ids",
+        fake_recipients,
+    )
+    monkeypatch.setattr(BotService, "send_message", fake_send_message)
+
+    with caplog.at_level("WARNING"):
+        await RepairDiagnosticService._notify_admins(
+            object(),
+            SimpleNamespace(id=42),
+            payload,
+            {},
+        )
+
+    sent_text = sent_messages[0][1]
+    assert "Анна &lt;admin&gt;" in sent_text
+    assert "Витебск &amp; &lt;центр&gt;" in sent_text
+    assert "<admin>" not in sent_text
+    assert len(sent_text) <= BotService.MAX_MESSAGE_LENGTH
+    assert "REPAIR_DIAGNOSTIC_NOTIFY_DELIVERY_FAILED order_id=42 admin_id=202" in caplog.text

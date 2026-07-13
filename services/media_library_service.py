@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
-import math
 import mimetypes
 import os
 import re
@@ -17,8 +16,10 @@ from typing import Iterable
 from urllib.parse import unquote, urlparse
 
 import httpx
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+from defusedxml.common import DefusedXmlException
 from PIL import Image, ImageOps, UnidentifiedImageError, features
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -34,6 +35,7 @@ from models import (
     Service,
 )
 from services.general_media_storage_service import get_general_media_storage
+from services.media_library_read_service import MediaLibraryReadService
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -92,51 +94,15 @@ class MediaLibraryService:
         tag: str | None = None,
         status: str | None = None,
     ) -> dict:
-        safe_page = max(1, int(page or 1))
-        safe_limit = max(1, min(int(limit or 40), 100))
-
-        stmt = select(MediaAsset)
-        conditions = []
-        q = (query or "").strip()
-        if q:
-            pattern = f"%{q}%"
-            conditions.append(
-                or_(
-                    MediaAsset.title.ilike(pattern),
-                    MediaAsset.alt_text.ilike(pattern),
-                    MediaAsset.description.ilike(pattern),
-                    MediaAsset.source_filename.ilike(pattern),
-                )
-            )
-        if kind:
-            conditions.append(MediaAsset.kind == MediaLibraryService._normalize_kind(kind))
-        if status:
-            conditions.append(MediaAsset.processing_status == status)
-        for condition in conditions:
-            stmt = stmt.where(condition)
-
-        rows = (await session.execute(stmt.order_by(MediaAsset.created_at.desc()))).scalars().all()
-        normalized_tag = MediaLibraryService._normalize_tag(tag) if tag else ""
-        if normalized_tag:
-            rows = [
-                row
-                for row in rows
-                if normalized_tag in {MediaLibraryService._normalize_tag(item) for item in row.tags or []}
-            ]
-
-        total = len(rows)
-        start = (safe_page - 1) * safe_limit
-        page_rows = rows[start : start + safe_limit]
-        items = [await MediaLibraryService.serialize_asset(session, item) for item in page_rows]
-        return {
-            "items": items,
-            "meta": {
-                "total": total,
-                "page": safe_page,
-                "limit": safe_limit,
-                "pages": math.ceil(total / safe_limit) if total else 1,
-            },
-        }
+        return await MediaLibraryReadService.list_assets(
+            session,
+            page=page,
+            limit=limit,
+            query=query,
+            kind=MediaLibraryService._normalize_kind(kind) if kind else None,
+            tag=MediaLibraryService._normalize_tag(tag) if tag else None,
+            status=status,
+        )
 
     @staticmethod
     async def upload_assets(
@@ -449,32 +415,21 @@ class MediaLibraryService:
         return {"message": "Media asset deleted"}
 
     @staticmethod
-    async def serialize_asset(session: AsyncSession, asset: MediaAsset) -> dict:
-        return {
-            "id": asset.id,
-            "parent_asset_id": asset.parent_asset_id,
-            "title": asset.title,
-            "alt_text": asset.alt_text,
-            "description": asset.description,
-            "kind": asset.kind,
-            "tags": asset.tags or [],
-            "variant_type": asset.variant_type,
-            "url": asset.url,
-            "original_url": asset.original_url,
-            "source_filename": asset.source_filename,
-            "mime_type": asset.mime_type,
-            "storage_provider": asset.storage_provider,
-            "processing_status": asset.processing_status,
-            "processing_error": asset.processing_error,
-            "content_hash": asset.content_hash,
-            "width": asset.width,
-            "height": asset.height,
-            "size_bytes": asset.size_bytes,
-            "usage_count": await MediaLibraryService._usage_count(session, asset.url),
-            "created_by": asset.created_by,
-            "created_at": asset.created_at,
-            "updated_at": asset.updated_at,
-        }
+    async def serialize_asset(
+        session: AsyncSession,
+        asset: MediaAsset,
+        *,
+        usage_count: int | None = None,
+    ) -> dict:
+        resolved_usage_count = (
+            await MediaLibraryService._usage_count(session, asset.url)
+            if usage_count is None
+            else int(usage_count)
+        )
+        return MediaLibraryReadService.serialize_asset(
+            asset,
+            usage_count=resolved_usage_count,
+        )
 
     @staticmethod
     async def _create_variant_asset(
@@ -750,8 +705,8 @@ class MediaLibraryService:
             raise ValueError("SVG doctype and entities are not allowed")
 
         try:
-            root = ET.fromstring(text)
-        except ET.ParseError as exc:
+            root = safe_xml_fromstring(text)
+        except (ET.ParseError, DefusedXmlException) as exc:
             raise ValueError("Source SVG cannot be parsed") from exc
 
         if MediaLibraryService._local_xml_name(root.tag) != "svg":
@@ -837,41 +792,8 @@ class MediaLibraryService:
 
     @staticmethod
     async def _usage_count(session: AsyncSession, url: str) -> int:
-        counts = []
-        counts.append(
-            await session.scalar(select(func.count()).select_from(Product).where(Product.main_image == url))
-        )
-        counts.append(
-            await session.scalar(select(func.count()).select_from(ProductImage).where(ProductImage.url == url))
-        )
-        counts.append(
-            await session.scalar(
-                select(func.count()).select_from(ProductImageVariant).where(ProductImageVariant.url == url)
-            )
-        )
-        counts.append(
-            await session.scalar(
-                select(func.count()).select_from(Article).where(
-                    or_(Article.main_image == url, Article.cover_image == url)
-                )
-            )
-        )
-        counts.append(
-            await session.scalar(select(func.count()).select_from(Brand).where(Brand.logo_url == url))
-        )
-        counts.append(
-            await session.scalar(
-                select(func.count()).select_from(ProductSeries).where(ProductSeries.hero_image == url)
-            )
-        )
-        counts.append(await MediaLibraryService._series_json_usage_count(session, url))
-        counts.append(
-            await session.scalar(select(func.count()).select_from(ProductAttachment).where(ProductAttachment.url == url))
-        )
-        counts.append(
-            await session.scalar(select(func.count()).select_from(Service).where(Service.image == url))
-        )
-        return sum(int(value or 0) for value in counts)
+        counts = await MediaLibraryReadService.usage_counts_for_urls(session, [url])
+        return counts.get(url, 0)
 
     @staticmethod
     async def _collect_existing_media_references(session: AsyncSession) -> list[ExistingMediaReference]:
@@ -1035,20 +957,6 @@ class MediaLibraryService:
             )
 
         return [ref for ref in references if ref.url]
-
-    @staticmethod
-    async def _series_json_usage_count(session: AsyncSession, url: str) -> int:
-        if not url:
-            return 0
-
-        count = 0
-        series_rows = (await session.execute(select(ProductSeries))).scalars().all()
-        for series in series_rows:
-            count += sum(1 for image_url in series.gallery_images or [] if image_url == url)
-            for block in series.feature_blocks or []:
-                if isinstance(block, dict) and block.get("image_url") == url:
-                    count += 1
-        return count
 
     @staticmethod
     def _group_references_by_url(

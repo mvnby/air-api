@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.patroni.yml}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
@@ -9,12 +10,16 @@ PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
 READY_URL="${API_READY_URL:-http://127.0.0.1:18080/api/ready}"
 HEALTH_URL="${API_HEALTH_URL:-http://127.0.0.1:18080/api/health}"
 BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-/tmp/deploy_backend_blue_green.sh}"
+PROXY_MODE="${API_PROXY_MODE:-host_nginx}"
+PROXY_SERVICE="${API_PROXY_SERVICE:-api-proxy}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
+DEPLOY_LOCK_ALREADY_HELD="${API_DEPLOY_LOCK_ALREADY_HELD:-false}"
 MAINTENANCE_MARKER="${API_MAINTENANCE_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
 ENV_FILE="${PROJECT_DIR}/.env"
 HEALTH_ATTEMPTS="${API_HEALTH_ATTEMPTS:-30}"
+GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/../prepare_google_oauth_token_dir.sh}"
 
 previous_image=""
 active_service="app"
@@ -32,7 +37,12 @@ payload = json.load(sys.stdin)
 if payload.get("state") != "running":
     raise SystemExit(1)
 role = str(payload.get("role") or "").lower()
-print("primary" if role in {"leader", "master", "primary"} else "standby")
+if role in {"leader", "master", "primary"}:
+    print("primary")
+elif role in {"replica", "standby"}:
+    print("standby")
+else:
+    raise SystemExit(1)
 '
 }
 
@@ -104,6 +114,21 @@ PY
   return 1
 }
 
+reconcile_standby_proxy() {
+  if [[ "${PROXY_MODE}" != "container_nginx" ]]; then
+    return 0
+  fi
+
+  log standby "validating desired container proxy configuration"
+  "${COMPOSE[@]}" run -T --rm --no-deps "${PROXY_SERVICE}" nginx -t
+  "${COMPOSE[@]}" up -d --no-deps "${PROXY_SERVICE}"
+  if ! "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t; then
+    log standby "running proxy has stale mounts; recreating fenced proxy"
+    "${COMPOSE[@]}" up -d --no-deps --force-recreate "${PROXY_SERVICE}"
+    "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t
+  fi
+}
+
 rollback_standby() {
   local exit_code=$?
   trap - ERR
@@ -128,6 +153,10 @@ done
   log error "API_EXPECTED_PATRONI_ROLE must be primary or standby"
   exit 1
 }
+[[ "${PROXY_MODE}" == "host_nginx" || "${PROXY_MODE}" == "container_nginx" ]] || {
+  log error "API_PROXY_MODE must be host_nginx or container_nginx"
+  exit 1
+}
 [[ "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]] || {
   log error "BACKEND_IMAGE must be immutable"
   exit 1
@@ -142,12 +171,20 @@ done
 }
 
 cd "${PROJECT_DIR}"
-exec 9>"${DEPLOY_LOCK_FILE}"
-flock -n 9 || {
-  log error "another deployment holds ${DEPLOY_LOCK_FILE}"
+if [[ "${DEPLOY_LOCK_ALREADY_HELD}" != "true" ]]; then
+  exec 9>"${DEPLOY_LOCK_FILE}"
+  flock -n 9 || {
+    log error "another deployment holds ${DEPLOY_LOCK_FILE}"
+    exit 1
+  }
+fi
+require_expected_role
+[[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
+  log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
   exit 1
 }
-require_expected_role
+GOOGLE_OAUTH_PROJECT_DIR="${PROJECT_DIR}" \
+  bash "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" prepare
 
 if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
   [[ -x "${BLUE_GREEN_SCRIPT}" ]] || {
@@ -180,6 +217,7 @@ if [[ -n "${GHCR_PAT:-}" ]]; then
 fi
 
 trap rollback_standby ERR
+reconcile_standby_proxy
 log standby "updating fenced service ${active_service}"
 "${COMPOSE[@]}" pull "${active_service}" bot
 write_backend_image "${BACKEND_IMAGE}"

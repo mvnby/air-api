@@ -9,6 +9,7 @@ ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-$(dirname "${COMPOSE_FILE}")/.active-a
 BOT_RUNTIME_CHECK_SERVICE="${BOT_RUNTIME_CHECK_SERVICE:-bot}"
 BOT_EXPECT_ENABLED="${BOT_EXPECT_ENABLED:-true}"
 READY_URL="${READY_URL:-}"
+READY_EXPECTATION="${READY_EXPECTATION:-ready}"
 MAX_RETRIES=${MAX_RETRIES:-20}
 RETRY_DELAY=${RETRY_DELAY:-2}
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
@@ -147,20 +148,31 @@ PY
 checks_done="health,products,filters_config"
 if [[ -n "${READY_URL}" ]]; then
   log request "GET ${READY_URL}"
-  ready_payload="$(curl -fsS "${READY_URL}")"
-  READY_PAYLOAD="${ready_payload}" python3 - <<'PY'
+  ready_status="$(curl -sS -o /tmp/mvn-post-deploy-ready.json -w '%{http_code}' "${READY_URL}")"
+  ready_payload="$(cat /tmp/mvn-post-deploy-ready.json)"
+  READY_PAYLOAD="${ready_payload}" \
+  READY_HTTP_STATUS="${ready_status}" \
+  READY_EXPECTATION="${READY_EXPECTATION}" python3 - <<'PY'
 import json
 import os
 
 ready = json.loads(os.environ["READY_PAYLOAD"])
-if ready.get("status") != "ok" or ready.get("api") != "ready":
-    raise SystemExit("readiness payload is not ready")
+http_status = os.environ["READY_HTTP_STATUS"]
+expectation = os.environ["READY_EXPECTATION"]
+if expectation == "ready":
+    if http_status != "200" or ready.get("status") != "ok" or ready.get("api") != "ready":
+        raise SystemExit("readiness payload is not ready")
+elif expectation == "fenced":
+    if http_status != "503" or ready.get("api") != "not_ready" or ready.get("traffic") != "disabled":
+        raise SystemExit("standby readiness payload is not fenced")
+else:
+    raise SystemExit(f"unsupported READY_EXPECTATION={expectation}")
 
 print(f"ready_status={ready.get('status')}")
 print(f"ready_traffic={ready.get('traffic')}")
 print(f"ready_database={ready.get('database')}")
 PY
-  checks_done="${checks_done},readiness"
+  checks_done="${checks_done},readiness_${READY_EXPECTATION}"
 fi
 
 log request "docker compose ps --status running --services"

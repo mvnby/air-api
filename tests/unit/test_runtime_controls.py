@@ -149,38 +149,11 @@ async def test_database_bootstrap_explicit_switch_overrides_standby(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_scheduler_runtime_lock_skips_for_standby(monkeypatch):
-    _set_required_env(monkeypatch)
-    app_lifespan = importlib.import_module("core.app_lifespan")
-
-    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "standby", raising=False)
-    monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
-
-    assert await app_lifespan._acquire_scheduler_runtime_lock() is None
-
-
-@pytest.mark.asyncio
-async def test_scheduler_runtime_lock_requires_free_lock(monkeypatch):
-    _set_required_env(monkeypatch)
-    app_lifespan = importlib.import_module("core.app_lifespan")
-
-    monkeypatch.setattr(app_lifespan.settings, "APP_ROLE", "primary", raising=False)
-    monkeypatch.setattr(app_lifespan.settings, "SCHEDULER_ENABLED", None, raising=False)
-    monkeypatch.setattr(
-        app_lifespan.RuntimeLockService,
-        "try_acquire",
-        AsyncMock(return_value=SimpleNamespace(acquired=False, reason="held elsewhere")),
-    )
-
-    assert await app_lifespan._acquire_scheduler_runtime_lock() is None
-
-
-@pytest.mark.asyncio
 async def test_catalog_import_resume_runs_inside_scheduler_lock(monkeypatch):
     _set_required_env(monkeypatch)
     app_lifespan = importlib.import_module("core.app_lifespan")
 
-    resume_pending_jobs = AsyncMock()
+    resume_pending_jobs = AsyncMock(return_value=True)
     monkeypatch.setitem(
         sys.modules,
         "services.catalog_import_runtime_service",

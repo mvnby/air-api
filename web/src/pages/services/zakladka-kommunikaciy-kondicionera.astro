@@ -1,6 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import ContactForm from "../../components/ContactForm.vue";
+import TechnicalFigure from "../../components/TechnicalFigure.astro";
 
 export const prerender = true;
 ---
@@ -91,6 +92,12 @@ export const prerender = true;
                 </div>
                 <span class="material-icons-round" aria-hidden="true">straighten</span>
             </section>
+
+            <TechnicalFigure
+                src="/img/blog/v2/inline/installation-connection-node.svg"
+                alt="Схема подхода медных труб, дренажа и кабеля к нижнему левому вводу внутреннего блока кондиционера"
+                caption="Точку выхода привязывают к корпусу до отделки: трасса подходит к нижнему левому вводу, а дренаж уходит от блока с постоянным уклоном."
+            />
 
             <section class="article-content">
                 <h3>Когда звать монтажников</h3>

@@ -682,3 +682,43 @@ async def test_defect_act_legacy_conclusion_placeholder_prefers_legacy_value(sql
     assert replacements["{{repair_recommendation}}"] == (
         "Заменить компрессор при наличии экономической целесообразности."
     )
+
+
+@pytest.mark.parametrize(
+    ("repair_meta", "title", "expected_name"),
+    [
+        (
+            {
+                "equipment_name": "Наружный блок",
+                "equipment_brand": "TCL",
+                "equipment_model": "TCL I-12",
+                "equipment_power": "3,5 кВт",
+            },
+            "Не использовать",
+            "Кондиционер TCL I-12",
+        ),
+        (
+            {
+                "equipment_name": "Внутренний блок",
+                "equipment_brand": "TCL",
+                "equipment_models": [
+                    "Внутренний блок: TCL I-12",
+                    "Наружный блок — TCL O-12",
+                    "Внутренний блок: TCL I-12",
+                ],
+            },
+            "Не использовать",
+            "Кондиционер TCL I-12 / O-12",
+        ),
+        ({"equipment_name": "Наружный блок"}, "Товар из заказа", "Кондиционер"),
+        ({"equipment_name": "Наружный блок"}, "Ремонт", "Кондиционер"),
+        ({"equipment_name": "Наружный блок"}, "Ремонт кондиционера", "Кондиционер"),
+        ({"equipment_name": "Наружный блок"}, None, "Кондиционер"),
+    ],
+)
+def test_defect_act_formats_equipment_name(repair_meta, title, expected_name):
+    strategy = DefectActStrategy(None, 0)
+    strategy.order = Order(title=title, technical_meta={"repair": repair_meta})
+    replacements = {}
+    strategy._add_specific_replacements(replacements)
+    assert replacements["{{equipment_name}}"] == expected_name

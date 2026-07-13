@@ -521,19 +521,31 @@ class RepairDiagnosticService:
         photo_count = sum(len(items) for items in photos.values())
         message_lines = [
             f"<b>ЗАЯВКА НА РЕМОНТ С САЙТА #{order.id}</b>",
-            f"Клиент: {payload.contact.name}",
-            f"Телефон: {payload.contact.phone}",
-            f"Симптом: {SYMPTOM_LABELS[payload.symptom]}",
+            f"Клиент: {BotService.escape_html(payload.contact.name, max_length=160)}",
+            f"Телефон: {BotService.escape_html(payload.contact.phone, max_length=80)}",
+            f"Симптом: {BotService.escape_html(SYMPTOM_LABELS[payload.symptom], max_length=180)}",
         ]
         if payload.contact.address:
-            message_lines.append(f"Адрес/район: {payload.contact.address}")
+            message_lines.append(
+                f"Адрес/район: {BotService.escape_html(payload.contact.address, max_length=300)}"
+            )
         message_lines.append(f"Фото: {photo_count}")
         admin_text = "\n".join(message_lines)
         for admin_id in admin_ids:
             try:
-                await BotService.send_message(admin_id, admin_text)
-            except Exception as exc:
-                logger.warning("Failed to notify admin %s about repair order %s: %s", admin_id, order.id, exc)
+                delivered = await BotService.send_message(admin_id, admin_text)
+                if not delivered:
+                    logger.warning(
+                        "REPAIR_DIAGNOSTIC_NOTIFY_DELIVERY_FAILED order_id=%s admin_id=%s",
+                        order.id,
+                        admin_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "REPAIR_DIAGNOSTIC_NOTIFY_SEND_FAILED order_id=%s admin_id=%s",
+                    order.id,
+                    admin_id,
+                )
 
 
 def _normalize_content_type(value: Optional[str]) -> str:

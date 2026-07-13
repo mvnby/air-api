@@ -22,3 +22,18 @@ def test_extract_spec_value_falls_back_to_text():
     cell = BeautifulSoup(html, "html.parser").find("td")
 
     assert OnlinerParser._extract_spec_value(cell) == "приобретается отдельно"
+
+
+def test_infer_manufacturer_uses_api_value():
+    assert (
+        OnlinerParser._infer_manufacturer(
+            {"manufacturer": {"name": "Haier"}},
+            "Кондиционер Другой Бренд",
+        )
+        == "Haier"
+    )
+
+
+def test_infer_manufacturer_falls_back_to_product_title():
+    assert OnlinerParser._infer_manufacturer({}, "Кондиционер MDV MDSAG-09") == "MDV"
+    assert OnlinerParser._infer_manufacturer({}, "Hisense AS-10") == "Hisense"

@@ -968,7 +968,8 @@ class OrderService:
         customer_iban: Optional[str] = None,
         customer_bic: Optional[str] = None,
         customer_bank_name: Optional[str] = None,
-        customer_id: Optional[int] = None
+        customer_id: Optional[int] = None,
+        order_technical_meta: Optional[Dict[str, Any]] = None,
     ) -> Order:
         """
         Create order from website checkout.
@@ -1009,7 +1010,10 @@ class OrderService:
             try:
                 customer = result.scalar_one_or_none()
             except Exception:
-                logger.warning(f"Multiple customers found for phone '{phone_clean}'. Creating new individual.")
+                logger.warning(
+                    "CUSTOMER_LOOKUP_MULTIPLE_MATCHES source=%s creating_new=true",
+                    lead_source.value,
+                )
                 customer = None
         
         if not customer:
@@ -1028,7 +1032,11 @@ class OrderService:
             )
             session.add(customer)
             await session.flush()
-            logger.info(f"Created new customer: {customer.name} ({customer.phone})")
+            logger.info(
+                "CUSTOMER_CREATED customer_id=%s source=%s",
+                customer.id,
+                lead_source.value,
+            )
         else:
             # Update address if provided
             if customer_address:
@@ -1061,6 +1069,7 @@ class OrderService:
             lead_source=lead_source,
             comment=comment,
             title=default_title,
+            technical_meta=dict(order_technical_meta or {}),
             created_at=datetime.now(),
             status_changed_at=datetime.now(),
         )
@@ -1429,10 +1438,12 @@ class OrderService:
         
         # Log
         logger.info(
-            f"NEW ORDER #{order.id} | Source: {lead_source.value} | "
-            f"Customer: {customer.name} ({customer.phone}) | "
-            f"Total: {order.total_amount} RUB | Items: {len(added_items)} | "
-            f"Installation services: {len(installation_services)}"
+            "NEW_ORDER_CREATED order_id=%s source=%s item_count=%s total=%s installation_service_count=%s",
+            order.id,
+            lead_source.value,
+            len(added_items),
+            order.total_amount,
+            len(installation_services),
         )
         logger.debug(f"Order #{order.id} items: {', '.join(added_items)}")
         
@@ -1574,13 +1585,20 @@ class OrderService:
                     inst,
                 )
                 if telegram_id:
-                    await BotService.notify_installer_new_order(
+                    delivered = await BotService.notify_installer_new_order(
                         installer_tg_id=telegram_id,
                         order_id=order_id,
                         address=order.delivery_address or "Адрес не указан",
                         date_str=order.installation_date.strftime("%d.%m.%Y") if order.installation_date else "Не назначена",
                         role="Монтажник" # Можно уточнить из связи
                     )
+                    if not delivered:
+                        logger.warning(
+                            "INSTALLER_ORDER_NOTIFY_DELIVERY_FAILED order_id=%s installer_id=%s telegram_id=%s",
+                            order_id,
+                            inst.id,
+                            telegram_id,
+                        )
 
         # Пересчет
         order = await OrderDAO.get_with_links(session, order_id)

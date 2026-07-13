@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ProductCard from './ProductCard.vue';
 import { getCatalog, getFiltersConfig, resolveImageUrl } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
+import { createCatalogRequestGuard } from '../utils/catalog-request-guard';
 
 const BASE_LIMIT = 20;
 const POPULAR_LIMIT = 80;
@@ -101,6 +102,7 @@ const availableBrands = ref((props.initialBrands || []).map((brand) => ({
   sort_order: brand.sort_order ?? 999,
 })));
 let searchDebounceTimeout = null;
+const catalogRequestGuard = createCatalogRequestGuard();
 
 const getBrandLogo = (brand) => {
   const logoUrl = String(brand?.logo_url || '').trim();
@@ -771,12 +773,14 @@ const buildApiParams = (page = 1) => {
   return applyLockedFilters(base);
 };
 
-const buildPopularApiParams = () => ({
-  ...buildApiParams(1),
+const buildPopularApiParams = (filterParams = buildApiParams(1)) => ({
+  ...filterParams,
   page: 1,
   limit: POPULAR_LIMIT,
   sort: CATALOG_DEFAULT_SORT,
 });
+
+catalogRequestGuard.setCommittedFilterSnapshot(buildApiParams(1));
 
 const syncUrlFromState = (page = 1, { replace = false } = {}) => {
   if (typeof window === 'undefined') return;
@@ -817,48 +821,75 @@ const activateDynamicResults = () => {
   dynamicActive.value = true;
 };
 
-const fetchProducts = async ({ page = 1, append = false } = {}) => {
+const fetchProducts = async ({ page = 1, append = false, updateUrlOnCommit = false } = {}) => {
   activateDynamicResults();
   syncStaticHeaderFromState();
+
+  const filterSnapshot = buildApiParams(1);
+  const requestSnapshot = {
+    apiParams: { ...filterSnapshot, page, limit: BASE_LIMIT },
+    popularParams: append ? null : buildPopularApiParams(filterSnapshot),
+  };
+  const request = append
+    ? catalogRequestGuard.beginAppend({ filterSnapshot, requestSnapshot })
+    : catalogRequestGuard.beginReload({ filterSnapshot, requestSnapshot });
+
+  if (!request) return false;
+
   if (append) {
     loadingMore.value = true;
   } else {
     loadingInitial.value = true;
+    loadingMore.value = false;
   }
 
   try {
-    const apiParams = buildApiParams(page);
+    const { apiParams, popularParams } = request.snapshot;
     const [data, popularData] = append
-      ? [await getCatalog(apiParams), null]
+      ? [await getCatalog(apiParams, { signal: request.signal }), null]
       : await Promise.all([
-        getCatalog(apiParams),
-        getCatalog(buildPopularApiParams()),
+        getCatalog(apiParams, { signal: request.signal }),
+        getCatalog(popularParams, { signal: request.signal }),
       ]);
 
-    const incomingItems = data.items || [];
-    if (append) {
-      const seen = new Set(products.value.map((item) => item.id));
-      const merged = [...products.value];
-      incomingItems.forEach((item) => {
-        if (!seen.has(item.id)) {
-          merged.push(item);
-          seen.add(item.id);
-        }
-      });
-      products.value = merged;
-    } else {
-      products.value = incomingItems;
-      popularProducts.value = popularData?.items || incomingItems;
-    }
+    const committed = catalogRequestGuard.commit(request, buildApiParams(1), () => {
+      const incomingItems = data.items || [];
+      if (append) {
+        const seen = new Set(products.value.map((item) => item.id));
+        const merged = [...products.value];
+        incomingItems.forEach((item) => {
+          if (!seen.has(item.id)) {
+            merged.push(item);
+            seen.add(item.id);
+          }
+        });
+        products.value = merged;
+      } else {
+        products.value = incomingItems;
+        popularProducts.value = popularData?.items || incomingItems;
+      }
 
-    syncMultiSelectionState();
+      syncMultiSelectionState();
+      meta.value = data.meta || { total: 0, page: 1, limit: BASE_LIMIT, pages: 1 };
+      if (updateUrlOnCommit) {
+        syncUrlFromState(page);
+      }
+    });
 
-    meta.value = data.meta || { total: 0, page: 1, limit: BASE_LIMIT, pages: 1 };
+    return committed;
   } catch (error) {
-    console.error('Fetch catalog failed', error);
+    if (error?.name !== 'AbortError' && !request.signal.aborted) {
+      console.error('Fetch catalog failed', error);
+    }
+    return false;
   } finally {
-    loadingInitial.value = false;
-    loadingMore.value = false;
+    if (catalogRequestGuard.finish(request)) {
+      if (append) {
+        loadingMore.value = false;
+      } else {
+        loadingInitial.value = false;
+      }
+    }
   }
 };
 
@@ -993,10 +1024,9 @@ const toggleBrand = async (brandSlug) => {
 };
 
 const loadMore = async () => {
-  if (!hasMore.value || loadingMore.value) return;
+  if (!hasMore.value || loadingInitial.value || loadingMore.value) return;
   const nextPage = Number(meta.value?.page || 1) + 1;
-  syncUrlFromState(nextPage);
-  await fetchProducts({ page: nextPage, append: true });
+  await fetchProducts({ page: nextPage, append: true, updateUrlOnCommit: true });
 };
 
 const setPowerPreset = async (preset) => {
@@ -1054,11 +1084,19 @@ const onSortChange = async () => {
 
 const onSearchInput = () => {
   if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+  catalogRequestGuard.invalidate();
+  loadingInitial.value = false;
+  loadingMore.value = false;
   searchDebounceTimeout = setTimeout(async () => {
     syncUrlFromState(1, { replace: true });
     await fetchProducts({ page: 1, append: false });
   }, 450);
 };
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+  catalogRequestGuard.invalidate();
+});
 
 onMounted(async () => {
   syncStateFromUrl();

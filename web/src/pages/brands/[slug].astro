@@ -12,6 +12,7 @@ import {
     applyRuntimeFreshnessHeaders,
     createRuntimeFreshnessContext,
     createRuntimeNotFoundResponse,
+    getAllCatalogPages,
     getCatalog,
     getFiltersConfig,
     getPublicBrandBySlug,
@@ -22,6 +23,7 @@ import {
 import { formatBrandProductCount, getBrandIntro, getBrandIntroPlainText, renderBrandIntroMarkdown } from "../../utils/brands";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 import { buildBrandMetaDescription, buildBrandSeoTitle } from "../../utils/seo";
+import { safeJsonLd } from "../../utils/safe-json-ld.js";
 
 export const prerender = !isRuntimeFreshnessEnabled();
 
@@ -139,9 +141,8 @@ const catalogParams = {
     brand_slugs: [brand.slug],
 };
 const data = await getCatalog(catalogParams, runtimeFreshnessOption);
-const popularData = await getCatalog({
+const popularData = await getAllCatalogPages({
     ...catalogParams,
-    limit: 120,
 }, runtimeFreshnessOption);
 const products = (data.items || []) as Product[];
 const popularProducts = (popularData.items || []) as Product[];
@@ -218,7 +219,7 @@ const resolvedHeroImage = heroImage ? resolveImageUrl(heroImage) : "";
     image={logoUrl || undefined}
     canonical={`/brands/${brand.slug}/`}
 >
-    <script type="application/ld+json" set:html={JSON.stringify(catalogSchema)} />
+    <script type="application/ld+json" set:html={safeJsonLd(catalogSchema)} />
     <div class="container brand-page catalog-page">
         <header class="brand-header catalog-header">
             <div class="breadcrumb">

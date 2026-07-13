@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type MediaWorkerFailPayload = {
     worker_id: string;
+    lease_token: string;
     error: string;
 };
 

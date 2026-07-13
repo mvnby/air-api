@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+LABEL org.mvn.google-oauth-token-contract="directory-v1"
+
 # Set working directory
 WORKDIR /app
 

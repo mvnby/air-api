@@ -79,7 +79,7 @@ async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
         delivery_address="phone",
         product_links=[
             SimpleNamespace(
-                product=SimpleNamespace(title="Model X"),
+                product=SimpleNamespace(title="Model <X>"),
                 product_id=1,
                 price=500,
                 quantity=2,
@@ -89,26 +89,29 @@ async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
         ],
     )
     session = _DummySession(order=order)
-    send_mock = AsyncMock()
+    send_mock = AsyncMock(return_value=True)
     monkeypatch.setattr("services.notification_service.BotService.send_message", send_mock)
 
     await NotificationService.notify_admins_new_order(
         session=session,
         order_id=77,
-        customer_name="Ivan",
-        customer_username="ivanov",
-        customer_phone="+375291234567",
+        customer_name="Ivan <script>",
+        customer_username="ivan&co",
+        customer_phone="<+375291234567>",
     )
 
     assert send_mock.await_count == 3
     sent_text = send_mock.await_args_list[0].args[1]
     assert "НОВЫЙ ЗАКАЗ #77" in sent_text
-    assert "Model X x2" in sent_text
+    assert "Ivan &lt;script&gt;" in sent_text
+    assert "ivan&amp;co" in sent_text
+    assert "Model &lt;X&gt; x2" in sent_text
+    assert "<script>" not in sent_text
     assert "Монтаж: 120 BYN" in sent_text
 
 
 @pytest.mark.asyncio
-async def test_notify_admins_staff_order_created_sends_work_order_summary(monkeypatch):
+async def test_notify_admins_staff_order_created_counts_only_confirmed_delivery(monkeypatch, caplog):
     monkeypatch.setattr(settings, "ADMIN_IDS", "10,11", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
 
@@ -122,16 +125,17 @@ async def test_notify_admins_staff_order_created_sends_work_order_summary(monkey
         customer=SimpleNamespace(name="Иван", phone="+375 29 123-45-67"),
     )
     session = _DummySession(order=order)
-    send_mock = AsyncMock(return_value=True)
+    send_mock = AsyncMock(side_effect=[True, False])
     monkeypatch.setattr("services.notification_service.BotService.send_rich_message", send_mock)
 
-    sent = await NotificationService.notify_admins_staff_order_created(
-        session=session,
-        order_id=88,
-        source_label="Telegram-бот",
-    )
+    with caplog.at_level("WARNING"):
+        sent = await NotificationService.notify_admins_staff_order_created(
+            session=session,
+            order_id=88,
+            source_label="Telegram-бот",
+        )
 
-    assert sent == 2
+    assert sent == 1
     rich_text = send_mock.await_args_list[0].args[1]
     fallback_text = send_mock.await_args_list[0].kwargs["fallback_text"]
     assert "<h3>Новый рабочий заказ #88</h3>" in rich_text
@@ -140,10 +144,11 @@ async def test_notify_admins_staff_order_created_sends_work_order_summary(monkey
     assert "<b>Клиент:</b> Иван" in rich_text
     assert "Победы 15" in rich_text
     assert "Новый рабочий заказ #88" in fallback_text
+    assert "NOTIFY_STAFF_ORDER_DELIVERY_FAILED order_id=88 admin_id=11" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_notify_admins_work_stage_status_changed_sends_task_summary(monkeypatch):
+async def test_notify_admins_work_stage_status_changed_counts_only_confirmed_delivery(monkeypatch, caplog):
     monkeypatch.setattr(settings, "ADMIN_IDS", "10,11", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
 
@@ -163,12 +168,13 @@ async def test_notify_admins_work_stage_status_changed_sends_task_summary(monkey
         ),
     )
     session = _DummySession(order=stage)
-    send_mock = AsyncMock(return_value=True)
+    send_mock = AsyncMock(side_effect=[True, False])
     monkeypatch.setattr("services.notification_service.BotService.send_rich_message", send_mock)
 
-    sent = await NotificationService.notify_admins_work_stage_status_changed(session, stage_id=5)
+    with caplog.at_level("WARNING"):
+        sent = await NotificationService.notify_admins_work_stage_status_changed(session, stage_id=5)
 
-    assert sent == 2
+    assert sent == 1
     rich_text = send_mock.await_args_list[0].args[1]
     fallback_text = send_mock.await_args_list[0].kwargs["fallback_text"]
     assert "<h3>Задача #5: выполнена</h3>" in rich_text
@@ -177,3 +183,4 @@ async def test_notify_admins_work_stage_status_changed_sends_task_summary(monkey
     assert "<blockquote>Готово &lt;фото&gt;</blockquote>" in rich_text
     assert "<важно>" not in rich_text
     assert "Задача #5: выполнена" in fallback_text
+    assert "NOTIFY_WORK_STAGE_STATUS_DELIVERY_FAILED stage_id=5 admin_id=11" in caplog.text

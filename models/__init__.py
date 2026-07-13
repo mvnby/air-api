@@ -20,6 +20,8 @@ from .bot_fsm import BotFsmState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .content import Article, GlobalConfig
+from .communication import CommunicationDelivery
+from .integration_event import ConsumerInbox, IntegrationOutboxEvent
 from .media import MediaAsset, MediaProcessingJob
 from .staff import StaffUser
 from .order import (
@@ -81,6 +83,8 @@ __all__ = [
     "BrandFeature",
     "BotFsmState",
     "CatalogImportJob",
+    "CommunicationDelivery",
+    "ConsumerInbox",
     "Customer",
     "CustomerBranch",
     "CustomerContract",
@@ -97,6 +101,7 @@ __all__ = [
     "Favorite",
     "GlobalConfig",
     "InstallationRate",
+    "IntegrationOutboxEvent",
     "ImportMediaCache",
     "Installer",
     "Lead",

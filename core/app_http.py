@@ -12,6 +12,7 @@ from core.config import settings
 from core.logger import logger
 from core.manager_error_codes import INTERNAL_ERROR, VALIDATION_ERROR, resolve_manager_error_message
 from core.manager_telemetry import ManagerTelemetryService
+from core.request_context import RequestContextMiddleware
 
 
 def _is_manager_api_path(path: str) -> bool:
@@ -80,7 +81,19 @@ async def manager_validation_exception_handler(request: Request, exc: RequestVal
 
 
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception(f"Unhandled exception at {request.url}: {exc}")
+    # Query strings can contain phone numbers, email addresses, OAuth codes and
+    # other customer data. Keep the diagnostic path while never copying the
+    # raw URL or exception text into the generic log message.
+    # Do not attach exc_info here: traceback rendering includes the raw
+    # exception message and can reintroduce OAuth codes, URLs or PII that the
+    # structured message deliberately omits. Sentry receives a separately
+    # scrubbed event when enabled.
+    logger.error(
+        "Unhandled request exception method=%s path=%s error_type=%s",
+        request.method,
+        request.url.path,
+        type(exc).__name__,
+    )
 
     if _is_manager_api_path(str(request.url.path)):
         ManagerTelemetryService.record_error(
@@ -102,7 +115,12 @@ def configure_http(app: FastAPI) -> None:
     app.exception_handler(Exception)(global_exception_handler)
 
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
-    app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.SECRET_KEY,
+        same_site="lax",
+        https_only=settings.is_production,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
@@ -110,3 +128,6 @@ def configure_http(app: FastAPI) -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Added last so it is the outermost user middleware and also covers CORS
+    # preflight/short-circuit responses.
+    app.add_middleware(RequestContextMiddleware)

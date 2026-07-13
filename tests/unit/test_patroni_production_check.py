@@ -5,11 +5,14 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.ha import check_patroni_production as patroni_check
 from scripts.ha.check_patroni_production import (
     CheckerConfig,
     NodeConfig,
     Report,
     _check_cluster_views,
+    _check_postgres,
+    _check_runtime,
     _parse_rows,
     role_from_patroni,
     select_primary,
@@ -173,6 +176,139 @@ def test_cluster_view_accepts_replica_role_but_requires_sync_endpoint():
     report = Report()
     _check_cluster_views(config, runner, api, reserve, report)
     assert report.failures == ["reserve: Patroni /sync endpoint is not healthy"]
+
+
+def test_postgres_check_treats_negative_receiver_delta_as_zero_backlog():
+    api, reserve = _nodes()
+    config = CheckerConfig(
+        api=api,
+        reserve=reserve,
+        ssh_options=(),
+        max_replay_lag_bytes=1_048_576,
+        role_agent_unit="mvn-patroni-role-agent.service",
+        etcd_check_command="check-etcd",
+        ready_url="http://127.0.0.1:18080/api/ready",
+    )
+
+    class FakeRunner:
+        def run(self, node, command, *, stdin=None, check=True):
+            del command, check
+            statement = (stdin or "").strip()
+            if statement == "select pg_is_in_recovery();":
+                output = "f\n" if node == api else "t\n"
+            elif statement == "select system_identifier from pg_control_system();":
+                output = "7657288033494519840\n"
+            elif "from pg_stat_replication" in statement:
+                output = "zakup|10.77.0.1|streaming|sync|0\n"
+            elif "from pg_stat_wal_receiver" in statement:
+                output = "streaming|10.77.0.2|zakup|-10076160\n"
+            elif statement == "show synchronous_standby_names;":
+                output = "ANY 1 (zakup)\n"
+            elif statement == "show wal_log_hints;":
+                output = "on\n"
+            elif statement == "show archive_mode;":
+                output = "on\n"
+            else:
+                raise AssertionError(statement)
+            return subprocess.CompletedProcess([], 0, output, "")
+
+    report = Report()
+    _check_postgres(config, FakeRunner(), api, reserve, report)
+
+    assert report.failures == []
+    assert any("streams synchronously" in message for message in report.ok)
+
+
+def test_runtime_check_requires_role_aware_scheduler_state(monkeypatch):
+    api, reserve = _nodes()
+    config = CheckerConfig(
+        api=api,
+        reserve=reserve,
+        ssh_options=(),
+        max_replay_lag_bytes=1_048_576,
+        role_agent_unit="mvn-patroni-role-agent.service",
+        etcd_check_command="check-etcd",
+        ready_url="http://127.0.0.1:18080/api/ready",
+    )
+    readiness = {
+        "api": (
+            200,
+            {
+                "api": "ready",
+                "traffic": "enabled",
+                "scheduler_runtime": {"expected": True, "status": "running"},
+            },
+        ),
+        "reserve": (
+            503,
+            {
+                "api": "not_ready",
+                "traffic": "disabled",
+                "scheduler_runtime": {"expected": False, "status": "disabled"},
+            },
+        ),
+    }
+
+    class FakeRunner:
+        def run(self, node, command, *, stdin=None, check=True):
+            del stdin, check
+            if command.endswith("/.ha-runtime-role"):
+                role = "primary" if node == api else "standby"
+                return subprocess.CompletedProcess([], 0, f"{role}\n", "")
+            raise AssertionError(command)
+
+    def role_env(_runner, node, filename):
+        primary = node == api
+        role = "primary" if primary else "standby"
+        common = {
+            "APP_ROLE": role,
+            "API_READY_ENABLED": str(primary).lower() if filename == ".ha-app-role.env" else "false",
+            "DB_BOOTSTRAP_ENABLED": "false",
+            "SCHEDULER_ENABLED": str(primary).lower() if filename == ".ha-app-role.env" else "false",
+        }
+        if filename == ".ha-bot-role.env":
+            common["BOT_ENABLED"] = str(primary).lower()
+        if not primary and filename == ".ha-app-role.env":
+            common.update(
+                {
+                    "MAIL_IMAP_AUTO_IMPORT_ENABLED": "false",
+                    "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED": "false",
+                    "CLOUDFLARE_PURGE_ENABLED": "false",
+                }
+            )
+        return common
+
+    monkeypatch.setattr(patroni_check, "_unit_enabled", lambda *_args: True)
+    monkeypatch.setattr(
+        patroni_check,
+        "_unit_active",
+        lambda _runner, node, unit: (
+            True if unit == config.role_agent_unit else node == api
+        ),
+    )
+    monkeypatch.setattr(patroni_check, "_role_env", role_env)
+    monkeypatch.setattr(
+        patroni_check,
+        "_running_services",
+        lambda _runner, node: {"app-blue", "bot"} if node == api else {"app-blue"},
+    )
+    monkeypatch.setattr(
+        patroni_check,
+        "_ready_response",
+        lambda _runner, node, _url: readiness[node.label],
+    )
+
+    report = Report()
+    _check_runtime(config, FakeRunner(), api, reserve, report)
+    assert report.failures == []
+
+    readiness["api"][1]["scheduler_runtime"] = {
+        "expected": True,
+        "status": "retrying",
+    }
+    report = Report()
+    _check_runtime(config, FakeRunner(), api, reserve, report)
+    assert any("primary scheduler runtime" in failure for failure in report.failures)
 
 
 def test_replication_workflow_switches_to_role_aware_patroni_monitoring():

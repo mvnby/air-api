@@ -1,4 +1,4 @@
-from typing import List, Optional, Any, Dict, Literal
+from typing import Annotated, List, Optional, Any, Dict, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 from datetime import date, datetime
 from enum import Enum
@@ -8,9 +8,20 @@ from core.input_validation import (
     validate_optional_iban,
     validate_optional_phone,
     validate_optional_unp,
+    validate_public_manual_url,
     validate_required_phone,
 )
 from models import EquipmentServiceEventType, PaymentCurrency
+from schemas_public_checkout import (
+    CartItemPayload,
+    CustomerPayload,
+    InstallationMetaPayload,
+    OrderPayload,
+    OrderResponse,
+    PublicContactLeadPayload,
+    PublicContactLeadResponse,
+    PublicOrderPricingErrorResponse,
+)
 
 # --- SHARED ---
 
@@ -148,18 +159,38 @@ class ManagerMediaProcessingJobListResponse(BaseModel):
 
 
 class MediaWorkerClaimPayload(BaseModel):
-    worker_id: str
-    capabilities: List[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    worker_id: str = Field(min_length=1, max_length=128)
+    capabilities: List[Annotated[str, Field(min_length=1, max_length=128)]] = Field(
+        default_factory=list,
+        max_length=32,
+    )
     lease_seconds: int = Field(default=900, ge=60, le=86400)
 
 
+class MediaWorkerClaimedJobResponse(ManagerMediaProcessingJobResponse):
+    lease_token: str
+
+
 class MediaWorkerClaimResponse(BaseModel):
-    job: Optional[ManagerMediaProcessingJobResponse] = None
+    job: Optional[MediaWorkerClaimedJobResponse] = None
+
+
+class MediaWorkerRenewPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    worker_id: str = Field(min_length=1, max_length=128)
+    lease_token: str = Field(min_length=32, max_length=256)
+    lease_seconds: int = Field(default=900, ge=60, le=86400)
 
 
 class MediaWorkerFailPayload(BaseModel):
-    worker_id: str
-    error: str
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    worker_id: str = Field(min_length=1, max_length=128)
+    lease_token: str = Field(min_length=32, max_length=256)
+    error: str = Field(min_length=1, max_length=2000)
 
 
 class ManagerBackgroundRemovalModelOption(BaseModel):
@@ -235,6 +266,11 @@ class ProductManualPayload(BaseModel):
     title: str
     url: str
     source: Optional[str] = None
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, value: str) -> str:
+        return validate_public_manual_url(value)
 
 
 class ProductSiblingResponse(BaseModel):
@@ -485,65 +521,6 @@ class CalendarEventResponse(BaseModel):
     start: datetime
     allDay: bool = True
     color: str
-
-
-class CartItemPayload(BaseModel):
-    product_id: Optional[int] = None
-    quantity: int = 1
-    # Installation snapshot fields (Phase: Snapshot Pricing Refactor)
-    with_installation: bool = False
-    installation_price: float = 0.0
-    installation_meta: Optional[Dict] = None
-    installation_options: Optional[List[str]] = []
-
-class CustomerPayload(BaseModel):
-    name: str
-    phone: str
-    email: Optional[str] = None
-    address: Optional[str] = None # For delivery
-    type: str = "individual" # "individual" or "company"
-    full_legal_name: Optional[str] = None
-    inn: Optional[str] = None
-    legal_address: Optional[str] = None
-    iban: Optional[str] = None
-    bic: Optional[str] = None
-    bank_name: Optional[str] = None
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, value: str) -> str:
-        return validate_required_phone(value)
-
-    @field_validator("email")
-    @classmethod
-    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_email(value)
-
-    @field_validator("inn")
-    @classmethod
-    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_unp(value)
-
-    @field_validator("iban")
-    @classmethod
-    def _validate_iban(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_iban(value)
-
-    @field_validator("bic")
-    @classmethod
-    def _validate_bic(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_bic(value)
-
-class OrderPayload(BaseModel):
-    customer: CustomerPayload
-    items: List[CartItemPayload] = []
-    comment: Optional[str] = None
-
-class OrderResponse(BaseModel):
-    id: int
-    status: str
-    total_amount: float
-    created_at: datetime
 
 
 class ProductAvailabilityLeadPayload(BaseModel):
@@ -3561,6 +3538,8 @@ class ManagerGoogleAuthStatusResponse(BaseModel):
     expired: bool
     expiry: Optional[str] = None
     scopes: List[str] = []
+    persistence_ok: bool
+    persistence_error_code: Optional[str] = None
 
 
 class ManagerGoogleAuthUrlResponse(BaseModel):
@@ -3795,7 +3774,7 @@ class ManagerRepairActAiDraftResponse(BaseModel):
     repair_meta: Dict[str, Any] = Field(default_factory=dict)
     provider: str = "deepseek"
     model: str
-    prompt_version: str = "defect_act_v2"
+    prompt_version: str = "defect_act_v3"
 
 
 # --- SERVICE ESTIMATES ---

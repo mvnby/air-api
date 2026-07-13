@@ -5,7 +5,11 @@ import CheckoutFormFn from "../components/checkout/CheckoutForm.vue";
 export const prerender = true;
 ---
 
-<Layout title="Оформление заказа">
+<Layout
+    title="Оформление заказа"
+    canonical="/checkout/"
+    robots="noindex,follow"
+>
     <div class="container checkout-page-wrapper">
         <h1 class="gradient-text">Оформление заказа</h1>
         <CheckoutFormFn client:load />

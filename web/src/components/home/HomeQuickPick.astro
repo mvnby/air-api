@@ -1,0 +1,156 @@
+---
+import { HOMEPAGE_ANALYTICS_EVENTS, HOMEPAGE_QUICK_PICKS } from "../../config/homepage";
+---
+
+<section class="quick-pick" aria-labelledby="quick-pick-title">
+    <div class="container">
+        <div class="quick-pick__heading">
+            <div>
+                <p>Быстрый выбор</p>
+                <h2 id="quick-pick-title">Выберите по задаче</h2>
+            </div>
+            <a href="/catalog/">Весь каталог</a>
+        </div>
+
+        <div class="quick-pick__grid">
+            {
+                HOMEPAGE_QUICK_PICKS.map((item) => (
+                    <a
+                        class="quick-pick__item"
+                        href={item.href}
+                        data-home-event={HOMEPAGE_ANALYTICS_EVENTS.quickPick}
+                        data-home-action="open_category"
+                        data-home-item={item.analyticsItem}
+                        onclick="window.trackHomeConversion?.(this)"
+                    >
+                        <span class="material-icons-round" aria-hidden="true">{item.icon}</span>
+                        <span>
+                            <strong>{item.title}</strong>
+                            <small>{item.note}</small>
+                        </span>
+                    </a>
+                ))
+            }
+        </div>
+    </div>
+</section>
+
+<style>
+    .quick-pick {
+        padding: 2.25rem 0 4rem;
+    }
+
+    .quick-pick__heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .quick-pick__heading p {
+        color: var(--primary);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .quick-pick__heading h2 {
+        margin-top: 0.2rem;
+        font-size: clamp(1.65rem, 3vw, 2.25rem);
+    }
+
+    .quick-pick__heading > a {
+        color: var(--primary);
+        font-size: 0.9rem;
+        font-weight: 800;
+    }
+
+    .quick-pick__heading > a:focus-visible,
+    .quick-pick__item:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+    }
+
+    .quick-pick__grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .quick-pick__item {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        min-width: 0;
+        min-height: 88px;
+        padding: 1rem;
+        border: 1px solid var(--panel-chip-border);
+        border-radius: 8px;
+        background: var(--panel-chip-bg);
+    }
+
+    .quick-pick__item:hover {
+        border-color: var(--panel-chip-hover-border);
+        transform: translateY(-2px);
+    }
+
+    .quick-pick__item > .material-icons-round {
+        display: grid;
+        flex: 0 0 42px;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 8px;
+        background: var(--secondary);
+        color: var(--primary);
+        font-size: 24px;
+    }
+
+    .quick-pick__item > span:last-child {
+        display: grid;
+        min-width: 0;
+    }
+
+    .quick-pick__item strong {
+        color: var(--text);
+        font-size: 0.95rem;
+    }
+
+    .quick-pick__item small {
+        margin-top: 0.1rem;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        line-height: 1.35;
+    }
+
+    @media (max-width: 760px) {
+        .quick-pick__grid {
+            grid-auto-columns: min(76vw, 280px);
+            grid-auto-flow: column;
+            grid-template-columns: none;
+            padding-right: 1rem;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scrollbar-width: none;
+        }
+
+        .quick-pick__grid::-webkit-scrollbar {
+            display: none;
+        }
+
+        .quick-pick__item {
+            scroll-snap-align: start;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .quick-pick__item {
+            transition: none;
+        }
+
+        .quick-pick__item:hover {
+            transform: none;
+        }
+    }
+</style>

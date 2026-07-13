@@ -7,7 +7,7 @@ export type CustomerPayload = {
     phone: string;
     email?: (string | null);
     address?: (string | null);
-    type?: string;
+    type?: 'individual' | 'company';
     full_legal_name?: (string | null);
     inn?: (string | null);
     legal_address?: (string | null);

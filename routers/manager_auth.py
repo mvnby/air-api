@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from core.security import AuthenticatedUser, get_current_auth_context
+from core.security import AuthenticatedUser, require_manager_access
 from routers.manager_operation_ids import READ_USER_ME
 from schemas import ManagerAuthStatusResponse
 
@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
 @router.get("/me", response_model=ManagerAuthStatusResponse, operation_id=READ_USER_ME)
-async def check_auth_status(auth: AuthenticatedUser = Depends(get_current_auth_context)):
+async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_access)):
     """
     Check if current user is authenticated.
     Returns username if valid, 401 otherwise (via Depends).

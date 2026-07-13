@@ -1,5 +1,7 @@
 ---
 import { buildCanonicalUrl } from "../../utils/seo.js";
+import { buildProductSchema } from "../../utils/catalog-seo";
+import { safeJsonLd } from "../../utils/safe-json-ld.js";
 
 export interface Props {
     title: string;
@@ -10,6 +12,9 @@ export interface Props {
     currency?: string;
     canonical?: string;
     robots?: string;
+    availabilityStatus?: string | null;
+    vitebskQty?: number | null;
+    minskQty?: number | null;
 }
 
 const {
@@ -21,6 +26,9 @@ const {
     currency = "BYN",
     canonical,
     robots,
+    availabilityStatus,
+    vitebskQty,
+    minskQty,
 } = Astro.props;
 
 const site = Astro.site ? Astro.site.toString() : Astro.url.origin;
@@ -41,22 +49,18 @@ const resolveImage = (img: string | undefined): URL => {
 
 const resolvedImage = resolveImage(image);
 
-const schema =
-    type === "product" && price
-        ? {
-              "@context": "https://schema.org",
-              "@type": "Product",
-              name: title,
-              image: resolvedImage.toString(),
-              description: description,
-              offers: {
-                  "@type": "Offer",
-                  priceCurrency: currency,
-                  price: price,
-                  availability: "https://schema.org/InStock",
-              },
-          }
-        : null;
+const schema = type === "product"
+    ? buildProductSchema({
+          title,
+          description,
+          image: resolvedImage.toString(),
+          price,
+          currency,
+          availability_status: availabilityStatus,
+          vitebsk_qty: vitebskQty,
+          minsk_qty: minskQty,
+      })
+    : null;
 ---
 
 <!-- Global Metadata -->
@@ -94,7 +98,7 @@ const schema =
         <script
             is:inline
             type="application/ld+json"
-            set:html={JSON.stringify(schema)}
+            set:html={safeJsonLd(schema)}
         />
     )
 }

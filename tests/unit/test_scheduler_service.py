@@ -114,3 +114,16 @@ async def test_start_loop_cancels_child_tasks(monkeypatch):
 
     assert started == 6
     assert cancelled == 6
+
+
+@pytest.mark.asyncio
+async def test_daily_backup_rejects_skipped_result(monkeypatch):
+    service = SchedulerService()
+    monkeypatch.setattr(
+        scheduler_module.backup_service,
+        "perform_backup",
+        lambda cleanup=True: False,
+    )
+
+    with pytest.raises(RuntimeError, match="skipped or did not complete"):
+        await service._run_daily_backup()

@@ -5,7 +5,11 @@ import CartPageFn from "../components/cart/CartPage.vue";
 export const prerender = true;
 ---
 
-<Layout title="Корзина">
+<Layout
+    title="Корзина"
+    canonical="/cart/"
+    robots="noindex,follow"
+>
     <div class="container cart-page-wrapper">
         <h1 class="gradient-text">Корзина товаров</h1>
         <CartPageFn client:load />
