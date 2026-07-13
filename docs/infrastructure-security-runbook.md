@@ -18,6 +18,10 @@ reachability is checked independently from a GitHub runner.
 
 - `deploy/ha/security/00-mvn-cicd-reliability.conf`: effective SSH policy;
 - `deploy/ha/security/mvn-sshd.local`: fail2ban SSH jail policy;
+- `deploy/ha/security/mvn-api-ssh-host-key.pub`: pinned `mvn-api` release
+  identity;
+- `deploy/ha/security/zakup-ssh-host-key.pub`: pinned `zakup` release
+  identity;
 - `scripts/ha/check_host_security.sh`: host-local effective-state audit;
 - `.github/workflows/check-infrastructure-security.yml`: three-host and public
   listener audit every six hours.
@@ -26,6 +30,16 @@ The SSH policy allows root only with a key because the current release path is
 root-based. Password and keyboard-interactive login stay disabled. CI
 connection bursts are bounded by `MaxStartups 20:30:40` and
 `PerSourceMaxStartups 10`; fail2ban remains the abuse-control layer.
+
+The Patroni release workflow never learns a host identity from the network it
+is about to trust. Every probe, migration, and deployment uses the reviewed
+Ed25519 key tracked for the physical node. A mismatch stops the release before
+any remote command runs. The reviewed fingerprints are:
+
+| Node | Ed25519 SHA256 fingerprint |
+| --- | --- |
+| `mvn-api` | `SHA256:sSKU5/aHiQp5pr8ntRWcEXPb4m+Z2rIJRGQP7ojZC0Q` |
+| `zakup` | `SHA256:HoSkXhYVeDMbdQtwvMVstWLAeeBp+NJQPhvCcMri+GQ` |
 
 ## Safe Apply
 
@@ -108,3 +122,23 @@ until an independent key-only login and `check_host_security.sh` both pass.
 Changing firewall policy, rotating SSH host keys, moving away from root-based
 deploys, or enabling Patroni watchdog fencing are separate changes with their
 own rollback plans. They must not be bundled into this config reload.
+
+## SSH Host Key Rotation
+
+Do not repair a release mismatch with `ssh-keyscan` or by disabling strict host
+key checking. First treat an unexpected key as a possible interception or host
+replacement. Verify the new Ed25519 public key and SHA256 fingerprint through
+the provider console or an already trusted operator session on the physical
+node:
+
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
+cat /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+Update only that node's tracked `.pub` file in a reviewed pull request and run
+`pytest tests/unit/test_patroni_remote_script.py -q`. The expected fingerprint
+in the test and in this runbook must change in the same commit. Keep the old
+operator session open until the merged Patroni workflow has successfully
+probed both nodes. Revert the tracked key commit if the new identity cannot be
+independently verified; never fall back to dynamic trust in the release path.
