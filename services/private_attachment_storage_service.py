@@ -355,7 +355,7 @@ def get_private_attachment_storage(provider: str | None = None) -> PrivateAttach
     return _build_private_attachment_storage(settings, provider)
 
 
-def verify_private_attachment_storage_startup(
+async def verify_private_attachment_storage_startup(
     current_settings: Any,
     *,
     client: Any | None = None,
@@ -381,20 +381,11 @@ def verify_private_attachment_storage_startup(
         )
 
     try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        pass
-    else:
-        raise RuntimeError(
-            "Private attachment startup probe must run before the application event loop"
-        )
-
-    try:
         storage = _build_private_attachment_storage(
             current_settings,
             client=client,
         )
-        asyncio.run(storage.verify_writable())
+        await storage.verify_writable()
     except Exception as exc:
         raise RuntimeError(
             "Private attachment R2 startup probe failed "

@@ -354,16 +354,4 @@ class Settings(BaseSettings):
     )
 
 
-def _run_production_startup_checks(current_settings: Settings) -> None:
-    if not current_settings.is_production:
-        return
-
-    from services.private_attachment_storage_service import (
-        verify_private_attachment_storage_startup,
-    )
-
-    verify_private_attachment_storage_startup(current_settings)
-
-
 settings = Settings()
-_run_production_startup_checks(settings)

@@ -45,6 +45,14 @@ class SchedulerOwnershipLost(SchedulerRuntimeFatal):
 _detached_scheduler_probe_tasks: set[asyncio.Task] = set()
 
 
+async def _verify_private_attachment_storage() -> None:
+    from services.private_attachment_storage_service import (
+        verify_private_attachment_storage_startup,
+    )
+
+    await verify_private_attachment_storage_startup(settings)
+
+
 def _discard_detached_scheduler_probe(task: asyncio.Task) -> None:
     _detached_scheduler_probe_tasks.discard(task)
     try:
@@ -469,6 +477,7 @@ async def _stop_scheduler_supervisor(app: FastAPI) -> None:
 async def app_lifespan(app: FastAPI):
     logger.info("Starting Application...")
 
+    await _verify_private_attachment_storage()
     await _bootstrap_database()
     _start_scheduler_supervisor(app)
 

@@ -6,6 +6,9 @@ from .handlers import admin, base, catalog, repair_context, work
 from core.config import settings
 from core.database import async_session_maker
 from core.logger import setup_logging
+from services.private_attachment_storage_service import (
+    verify_private_attachment_storage_startup,
+)
 from services.runtime_lock_service import RuntimeLockService
 
 # Setup logging with session-specific bot.log (cleared on restart)
@@ -37,6 +40,8 @@ async def _setup_bot_commands() -> None:
 
 
 async def main(*, wait_when_disabled: bool = True):
+    await verify_private_attachment_storage_startup(settings)
+
     decision = settings.bot_control_decision
     if not decision.enabled:
         logger.warning("Telegram bot polling disabled: %s.", decision.reason)

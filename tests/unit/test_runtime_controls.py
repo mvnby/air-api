@@ -233,11 +233,18 @@ async def test_bot_main_disabled_does_not_poll(monkeypatch):
     monkeypatch.setattr(bot_main.settings, "BOT_ENABLED", None, raising=False)
     delete_webhook = AsyncMock()
     start_polling = AsyncMock()
+    verify_storage = AsyncMock()
+    monkeypatch.setattr(
+        bot_main,
+        "verify_private_attachment_storage_startup",
+        verify_storage,
+    )
     monkeypatch.setattr(bot_main.bot, "delete_webhook", delete_webhook)
     monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
 
     await bot_main.main(wait_when_disabled=False)
 
+    verify_storage.assert_awaited_once_with(bot_main.settings)
     delete_webhook.assert_not_awaited()
     start_polling.assert_not_awaited()
 
