@@ -21,7 +21,9 @@ from services.communications.providers.base import ProviderDeliveryResult
 @pytest.fixture
 async def communication_db_engine():
     database_url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
-    assert database_url and "test" in database_url.lower()
+    environment = os.environ.get("ENVIRONMENT", "").strip().lower()
+    assert database_url
+    assert "test" in database_url.lower() or environment == "test"
     schema_name = f"communication_c1_{uuid.uuid4().hex}"
     admin_engine = create_async_engine(database_url)
     async with admin_engine.begin() as connection:
