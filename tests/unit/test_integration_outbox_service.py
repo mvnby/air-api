@@ -114,6 +114,34 @@ async def test_enqueue_is_deterministic_and_does_not_commit(outbox_session_facto
 
 
 @pytest.mark.asyncio
+async def test_enqueue_with_result_reports_insert_vs_replay(outbox_session_factory):
+    async with outbox_session_factory() as session:
+        first = await IntegrationOutboxService.enqueue_with_result(
+            session,
+            event_type="crm.public_contact_lead.created",
+            aggregate_type="lead",
+            aggregate_id=12,
+            aggregate_version=1,
+            idempotency_key="contact-request-12",
+            payload=_lead_payload(),
+        )
+        replay = await IntegrationOutboxService.enqueue_with_result(
+            session,
+            event_type="crm.public_contact_lead.created",
+            aggregate_type="lead",
+            aggregate_id=12,
+            aggregate_version=1,
+            idempotency_key="contact-request-12",
+            payload=_lead_payload(),
+        )
+
+        assert first.created is True
+        assert replay.created is False
+        assert replay.event is first.event
+        assert replay.event.event_id == first.event.event_id
+
+
+@pytest.mark.asyncio
 async def test_same_event_key_with_different_payload_is_a_conflict(
     outbox_session_factory,
 ):

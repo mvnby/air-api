@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from services.communications.canary_run_id import CANARY_RUN_ID_PATTERN
 
 
 class _ContractV1(BaseModel):
@@ -97,6 +99,46 @@ class PublicContactLeadCreatedPayloadV1(_ContractV1):
     message: str | None = Field(default=None, max_length=2000)
 
 
+CanaryRecipientKeyV1 = Annotated[
+    str,
+    Field(
+        min_length=7,
+        max_length=160,
+        pattern=r"^staff:[1-9][0-9]*$",
+    ),
+]
+
+
+class TelegramCanaryRequestedPayloadV1(_ContractV1):
+    """Routing-only canary payload: safe IDs, never message text or PII."""
+
+    run_id: str = Field(
+        min_length=36,
+        max_length=36,
+        pattern=CANARY_RUN_ID_PATTERN,
+    )
+    recipient_keys: tuple[CanaryRecipientKeyV1, CanaryRecipientKeyV1]
+
+    @field_validator("run_id", mode="before")
+    @classmethod
+    def run_id_must_be_unmodified_canonical_text(cls, value: Any) -> Any:
+        if not isinstance(value, str) or value != value.strip():
+            raise ValueError("Canary run_id must be canonical text")
+        return value
+
+    @model_validator(mode="after")
+    def recipient_keys_must_be_unique_and_stable(
+        self,
+    ) -> "TelegramCanaryRequestedPayloadV1":
+        keys = self.recipient_keys
+        if len(set(keys)) != 2:
+            raise ValueError("Canary recipient keys must be unique")
+        numeric_ids = tuple(int(key.removeprefix("staff:")) for key in keys)
+        if numeric_ids != tuple(sorted(numeric_ids)):
+            raise ValueError("Canary recipient keys must use stable StaffUser order")
+        return self
+
+
 class CommunicationRecipientV1(_ContractV1):
     channel: Literal["telegram"] = "telegram"
     recipient_key: str = Field(
@@ -111,7 +153,7 @@ class CommunicationRecipientV1(_ContractV1):
 
 class CommunicationTemplatePlanV1(_ContractV1):
     channel: Literal["telegram"] = "telegram"
-    audience: Literal["management"] = "management"
+    audience: Literal["management", "operations_canary"] = "management"
     template_key: str = Field(
         min_length=3,
         max_length=120,

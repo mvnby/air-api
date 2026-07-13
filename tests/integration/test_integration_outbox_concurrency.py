@@ -21,10 +21,10 @@ async def test_postgres_concurrent_identical_enqueue_creates_one_event(db_engine
     )
     barrier = asyncio.Barrier(2)
 
-    async def enqueue_from(worker_name: str) -> str:
+    async def enqueue_from(worker_name: str) -> tuple[str, bool]:
         async with session_factory() as session:
             await barrier.wait()
-            event = await IntegrationOutboxService.enqueue(
+            result = await IntegrationOutboxService.enqueue_with_result(
                 session,
                 event_type="crm.public_contact_lead.created",
                 aggregate_type="lead",
@@ -41,9 +41,9 @@ async def test_postgres_concurrent_identical_enqueue_creates_one_event(db_engine
                 ),
             )
             await session.commit()
-            return event.event_id
+            return result.event.event_id, result.created
 
-    event_ids = await asyncio.gather(
+    results = await asyncio.gather(
         enqueue_from("request-a"),
         enqueue_from("request-b"),
     )
@@ -57,5 +57,6 @@ async def test_postgres_concurrent_identical_enqueue_creates_one_event(db_engine
             )
         ).scalar_one()
 
-    assert event_ids[0] == event_ids[1]
+    assert results[0][0] == results[1][0]
+    assert sorted(result[1] for result in results) == [False, True]
     assert event_count == 1

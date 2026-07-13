@@ -4,6 +4,7 @@ import hashlib
 import json
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -20,6 +21,12 @@ from services.communications.contracts import IntegrationEventEnvelopeV1
 
 class OutboxEventConflictError(ValueError):
     """The same deterministic event key was reused with different content."""
+
+
+@dataclass(frozen=True)
+class IntegrationOutboxEnqueueResult:
+    event: IntegrationOutboxEvent
+    created: bool
 
 
 class IntegrationOutboxService:
@@ -128,7 +135,7 @@ class IntegrationOutboxService:
             )
 
     @classmethod
-    async def enqueue(
+    async def enqueue_with_result(
         cls,
         session: AsyncSession,
         *,
@@ -145,8 +152,8 @@ class IntegrationOutboxService:
         idempotency_key: str | None = None,
         priority: int = 100,
         max_attempts: int = 8,
-    ) -> IntegrationOutboxEvent:
-        """Add an event to the current transaction without committing it."""
+    ) -> IntegrationOutboxEnqueueResult:
+        """Add an event and report whether this transaction inserted it."""
 
         normalized_payload = cls._normalize_payload(payload)
         normalized_event_type = str(event_type).strip()
@@ -188,7 +195,7 @@ class IntegrationOutboxService:
         )
         if existing is not None:
             cls._ensure_same_event(existing, envelope, deduplication_key)
-            return existing
+            return IntegrationOutboxEnqueueResult(event=existing, created=False)
 
         event = IntegrationOutboxEvent(
             event_id=envelope.event_id,
@@ -234,4 +241,46 @@ class IntegrationOutboxService:
         if existing is None:
             raise RuntimeError("Outbox event insert completed without a readable row")
         cls._ensure_same_event(existing, envelope, deduplication_key)
-        return existing
+        return IntegrationOutboxEnqueueResult(
+            event=existing,
+            created=inserted_event_id is not None,
+        )
+
+    @classmethod
+    async def enqueue(
+        cls,
+        session: AsyncSession,
+        *,
+        event_type: str,
+        aggregate_type: str,
+        aggregate_id: int | str,
+        payload: BaseModel | Mapping[str, Any],
+        schema_version: int = 1,
+        aggregate_version: int | None = None,
+        occurred_at: datetime | None = None,
+        actor_id: str | None = None,
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+        idempotency_key: str | None = None,
+        priority: int = 100,
+        max_attempts: int = 8,
+    ) -> IntegrationOutboxEvent:
+        """Add an event to the caller-owned transaction without committing it."""
+
+        result = await cls.enqueue_with_result(
+            session,
+            event_type=event_type,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            payload=payload,
+            schema_version=schema_version,
+            aggregate_version=aggregate_version,
+            occurred_at=occurred_at,
+            actor_id=actor_id,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            idempotency_key=idempotency_key,
+            priority=priority,
+            max_attempts=max_attempts,
+        )
+        return result.event

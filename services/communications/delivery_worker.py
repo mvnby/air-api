@@ -12,6 +12,8 @@ from typing import Any, Literal, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.communications.audience_resolver import CommunicationAudienceResolver
+from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.contracts import CommunicationTemplatePlanV1
 from services.communications.delivery_service import (
     ClaimedCommunicationDelivery,
@@ -26,7 +28,13 @@ from services.communications.providers.base import (
     ProviderDeliveryResult,
 )
 from services.communications.recipient_directory import ManagementRecipientDirectory
-from services.communications.template_registry import WebsiteTemplateRegistry
+from services.communications.template_registry import (
+    TELEGRAM_CANARY_MAX_ATTEMPTS,
+    TELEGRAM_CANARY_TEMPLATE_KEY,
+    InvalidCommunicationEventPayload,
+    UnsupportedCommunicationEvent,
+    WebsiteTemplateRegistry,
+)
 
 logger = logging.getLogger(__name__)
 _TerminalResult = TypeVar("_TerminalResult")
@@ -272,7 +280,26 @@ class CommunicationDeliveryWorker:
     async def _recipient_is_current(self, claim: ClaimedCommunicationDelivery) -> bool:
         async with self._bounded_db_operation():
             async with self._session_factory() as session:
-                recipients = await ManagementRecipientDirectory.list_telegram(session)
+                if claim.template_key == TELEGRAM_CANARY_TEMPLATE_KEY:
+                    if claim.max_attempts != TELEGRAM_CANARY_MAX_ATTEMPTS:
+                        return False
+                    try:
+                        recipients = await CommunicationAudienceResolver.list_telegram(
+                            session,
+                            plan=self._plan(claim),
+                        )
+                    except (
+                        CommunicationsCanarySafetyError,
+                        InvalidCommunicationEventPayload,
+                        UnsupportedCommunicationEvent,
+                    ):
+                        # A changed or incomplete owner pair cancels canary delivery;
+                        # it must never fall back to management or legacy recipients.
+                        return False
+                else:
+                    recipients = await ManagementRecipientDirectory.list_telegram(
+                        session
+                    )
         return any(
             recipient.recipient_key == claim.recipient_key
             and recipient.destination == claim.destination
@@ -292,14 +319,17 @@ class CommunicationDeliveryWorker:
                 await session.commit()
 
     @staticmethod
-    def _render(claim: ClaimedCommunicationDelivery) -> str:
-        plan = CommunicationTemplatePlanV1(
+    def _plan(claim: ClaimedCommunicationDelivery) -> CommunicationTemplatePlanV1:
+        return WebsiteTemplateRegistry.plan_delivery(
             channel=claim.channel,
-            audience="management",
             template_key=claim.template_key,
             template_version=claim.template_version,
             render_context=claim.render_context_dict(),
         )
+
+    @classmethod
+    def _render(cls, claim: ClaimedCommunicationDelivery) -> str:
+        plan = cls._plan(claim)
         return WebsiteTemplateRegistry.render(plan)
 
     async def _send_with_heartbeat(

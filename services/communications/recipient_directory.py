@@ -5,6 +5,7 @@ from sqlmodel import select
 
 from core.config import settings
 from models import StaffUser
+from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.contracts import CommunicationRecipientV1
 from services.staff_user_service import StaffUserService
 
@@ -67,5 +68,67 @@ class ManagementRecipientDirectory:
                     destination=destination,
                     source="legacy",
                 )
+            )
+        return recipients
+
+
+class OperationsCanaryRecipientDirectory:
+    """Resolve one immutable pair of active owner StaffUsers, or fail closed."""
+
+    EXPECTED_RECIPIENT_COUNT = 2
+
+    @classmethod
+    async def list_telegram(
+        cls,
+        session: AsyncSession,
+        *,
+        required_recipient_keys: tuple[str, str] | None = None,
+    ) -> list[CommunicationRecipientV1]:
+        result = await session.execute(select(StaffUser).order_by(StaffUser.id.asc()))
+        active_owners = [
+            staff_user
+            for staff_user in result.scalars().all()
+            if StaffUserService.is_active(staff_user)
+            and StaffUserService.primary_role(staff_user) == StaffUserService.ROLE_OWNER
+        ]
+        if len(active_owners) != cls.EXPECTED_RECIPIENT_COUNT:
+            raise CommunicationsCanarySafetyError(
+                "active_owner_recipient_count_invalid"
+            )
+
+        recipients: list[CommunicationRecipientV1] = []
+        destinations: set[str] = set()
+        for staff_user in active_owners:
+            if staff_user.id is None or staff_user.telegram_id is None:
+                raise CommunicationsCanarySafetyError(
+                    "active_owner_recipient_invalid"
+                )
+            telegram_id = int(staff_user.telegram_id)
+            if telegram_id <= 0:
+                raise CommunicationsCanarySafetyError(
+                    "active_owner_recipient_invalid"
+                )
+            destination = str(telegram_id)
+            if destination in destinations:
+                raise CommunicationsCanarySafetyError(
+                    "active_owner_recipient_invalid"
+                )
+            destinations.add(destination)
+            recipients.append(
+                CommunicationRecipientV1(
+                    recipient_key=f"staff:{int(staff_user.id)}",
+                    destination=destination,
+                    source="staff",
+                    staff_user_id=int(staff_user.id),
+                )
+            )
+
+        recipient_keys = tuple(recipient.recipient_key for recipient in recipients)
+        if (
+            required_recipient_keys is not None
+            and recipient_keys != tuple(required_recipient_keys)
+        ):
+            raise CommunicationsCanarySafetyError(
+                "active_owner_recipient_snapshot_changed"
             )
         return recipients
