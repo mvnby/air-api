@@ -3772,7 +3772,7 @@ class ManagerRepairActAiDraftResponse(BaseModel):
     repair_meta: Dict[str, Any] = Field(default_factory=dict)
     provider: str = "deepseek"
     model: str
-    prompt_version: str = "defect_act_v2"
+    prompt_version: str = "defect_act_v3"
 
 
 # --- SERVICE ESTIMATES ---

@@ -13,10 +13,8 @@ from core.config import settings
 from models import Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
-from services.defect_act_ai_service import DefectActAIService
 from services.order_service import OrderService
 from services.staff_user_service import StaffUserService
-from schemas import ManagerRepairActAiDraftPayload
 
 
 class BotRepairNameplateService:
@@ -60,53 +58,6 @@ class BotRepairNameplateService:
         "refrigerant_amount": "Количество хладагента",
     }
     HISTORY_META_KEY = "nameplate_recognitions"
-    COMMENT_HISTORY_META_KEY = "bot_diagnostic_comments"
-    COMMENT_FIELDS = (
-        "customer_complaint",
-        "complaint_official",
-        "likely_diagnosis",
-        "technical_condition",
-        "inspection_work_done",
-        "startup_check_result",
-        "compressor_check_result",
-        "measurement_result",
-        "diagnostic_result",
-        "further_use_assessment",
-        "operation_restrictions",
-        "technical_conclusion",
-        "repair_feasibility",
-        "recommended_decision",
-        "repair_recommendation",
-        "repair_possible",
-        "refrigerant_type",
-        "refrigerant_amount",
-        "refrigerant_pricing_mode",
-        "repair_not_viable",
-        "repair_not_viable_reason",
-    )
-    COMMENT_FIELD_LABELS = {
-        "customer_complaint": "Жалоба клиента",
-        "complaint_official": "Жалоба для акта",
-        "likely_diagnosis": "Вероятная причина",
-        "technical_condition": "Техническое состояние",
-        "startup_check_result": "Проверка запуска",
-        "compressor_check_result": "Проверка компрессора",
-        "measurement_result": "Результаты замеров",
-        "diagnostic_result": "Результат диагностики",
-        "further_use_assessment": "Дальнейшая эксплуатация",
-        "operation_restrictions": "Ограничения эксплуатации",
-        "technical_conclusion": "Техническое заключение",
-        "repair_feasibility": "Целесообразность ремонта",
-        "recommended_decision": "Рекомендованное решение",
-        "repair_recommendation": "Рекомендация по ремонту",
-        "repair_possible": "Ремонт возможен",
-        "refrigerant_type": "Хладагент",
-        "refrigerant_amount": "Количество хладагента",
-        "refrigerant_pricing_mode": "Расчет хладагента",
-        "repair_not_viable": "Ремонт нецелесообразен",
-        "repair_not_viable_reason": "Причина нецелесообразности",
-        "inspection_work_done": "Выполненные работы",
-    }
 
     @staticmethod
     def _clean_text(value: Any, *, max_length: int = 500) -> Optional[str]:
@@ -673,140 +624,6 @@ class BotRepairNameplateService:
         return cls.preview_merge(OrderService._get_repair_meta(order), extracted)
 
     @classmethod
-    def preview_comment_merge(cls, current_repair_meta: dict[str, Any], draft_meta: dict[str, Any]) -> dict[str, Any]:
-        changes: dict[str, dict[str, str]] = {}
-        unchanged: dict[str, str] = {}
-        for field in cls.COMMENT_FIELDS:
-            candidate = cls._clean_text(draft_meta.get(field), max_length=1200)
-            if not candidate:
-                continue
-            existing = cls._clean_text(current_repair_meta.get(field), max_length=1200)
-            if existing == candidate:
-                unchanged[field] = candidate
-            else:
-                changes[field] = {"existing": existing or "", "candidate": candidate}
-        return {"changes": changes, "unchanged": unchanged}
-
-    @classmethod
-    def _comment_payload(cls, *, repair_meta: dict[str, Any], comment: str) -> ManagerRepairActAiDraftPayload:
-        return ManagerRepairActAiDraftPayload(
-            defect_type="field_diagnostic_note",
-            defect_label="Диагностическая заметка с выезда",
-            allow_assumptions=False,
-            polish_existing=True,
-            equipment_name=cls._clean_text(repair_meta.get("equipment_name"), max_length=200),
-            equipment_brand=cls._clean_text(repair_meta.get("equipment_brand"), max_length=120),
-            equipment_model=cls._clean_text(repair_meta.get("equipment_model"), max_length=200),
-            equipment_power=cls._clean_text(repair_meta.get("equipment_power"), max_length=120),
-            customer_complaint=cls._clean_text(repair_meta.get("customer_complaint"), max_length=500),
-            complaint_official=cls._clean_text(repair_meta.get("complaint_official"), max_length=500),
-            likely_diagnosis=cls._clean_text(repair_meta.get("likely_diagnosis"), max_length=500),
-            extra_context=comment,
-            current_meta=repair_meta,
-        )
-
-    @classmethod
-    async def build_diagnostic_comment_draft(
-        cls,
-        session: AsyncSession,
-        *,
-        order_id: int,
-        comment: str,
-    ) -> dict[str, Any] | None:
-        result = await session.execute(
-            select(Order)
-            .where(Order.id == order_id)
-            .options(selectinload(Order.customer))
-            .limit(1)
-        )
-        order = result.scalars().first()
-        if not order or OrderService._normalize_workflow_type(getattr(order, "workflow_type", None)) != "repair":
-            return None
-
-        raw_comment = cls._clean_text(comment, max_length=4000)
-        if not raw_comment:
-            raise ValueError("Комментарий пустой")
-
-        repair_meta = OrderService._get_repair_meta(order)
-        ai_meta = await DefectActAIService.generate_repair_meta(
-            cls._comment_payload(repair_meta=repair_meta, comment=raw_comment)
-        )
-        merge_preview = cls.preview_comment_merge(repair_meta, ai_meta)
-        return {
-            "order": cls._map_order(order),
-            "comment": raw_comment,
-            "repair_meta": ai_meta,
-            "merge_preview": merge_preview,
-        }
-
-    @classmethod
-    async def apply_diagnostic_comment(
-        cls,
-        session: AsyncSession,
-        order_id: int,
-        *,
-        repair_meta_draft: dict[str, Any],
-        raw_comment: str,
-        telegram_user_id: int | None,
-        telegram_chat_id: int | None,
-        telegram_message_id: int | None,
-        can_attach_any: bool = False,
-    ) -> dict[str, Any] | None:
-        allowed = await cls.can_use_order(
-            session,
-            order_id,
-            telegram_user_id=telegram_user_id,
-            can_attach_any=can_attach_any,
-        )
-        if not allowed:
-            return None
-
-        result = await session.execute(select(Order).where(Order.id == order_id).limit(1))
-        order = result.scalars().first()
-        if not order:
-            return None
-
-        repair_meta = OrderService._get_repair_meta(order)
-        merge = cls.preview_comment_merge(repair_meta, repair_meta_draft)
-        for field, values in merge["changes"].items():
-            repair_meta[field] = values["candidate"]
-
-        raw_history = repair_meta.get(cls.COMMENT_HISTORY_META_KEY)
-        history = list(raw_history) if isinstance(raw_history, list) else []
-        history.append(
-            {
-                "source": "telegram_bot",
-                "telegram_user_id": telegram_user_id,
-                "telegram_chat_id": telegram_chat_id,
-                "telegram_message_id": telegram_message_id,
-                "comment": cls._clean_text(raw_comment, max_length=4000),
-                "ai_meta": {
-                    key: cls._clean_text(value, max_length=1200)
-                    for key, value in repair_meta_draft.items()
-                    if cls._clean_text(value, max_length=1200)
-                },
-                "applied_fields": list(merge["changes"].keys()),
-                "created_at": datetime.now().isoformat(timespec="seconds"),
-            }
-        )
-        repair_meta[cls.COMMENT_HISTORY_META_KEY] = history[-20:]
-        OrderService._set_repair_meta(
-            order,
-            repair_meta,
-            default_status=OrderService.REPAIR_DEFAULT_STATUS,
-        )
-        flag_modified(order, "technical_meta")
-        session.add(order)
-        await session.commit()
-        await session.refresh(order)
-
-        return {
-            "id": int(order.id or 0),
-            "changes": merge["changes"],
-            "unchanged": merge["unchanged"],
-        }
-
-    @classmethod
     async def apply_to_order(
         cls,
         session: AsyncSession,
@@ -847,6 +664,26 @@ class BotRepairNameplateService:
         merge = cls.preview_merge(repair_meta, extracted)
         if merge["applied"]:
             repair_meta.update(merge["applied"])
+
+        model_candidates: list[str] = []
+        raw_models = repair_meta.get("equipment_models")
+        if isinstance(raw_models, list):
+            model_candidates.extend(str(item) for item in raw_models)
+        model_candidates.extend(
+            str(value)
+            for value in (repair_meta.get("equipment_model"), extracted.get("equipment_model"))
+            if value
+        )
+        equipment_models: list[str] = []
+        seen_models: set[str] = set()
+        for value in model_candidates:
+            model = cls._clean_text(value, max_length=200)
+            if not model or model.casefold() in seen_models:
+                continue
+            seen_models.add(model.casefold())
+            equipment_models.append(model)
+        if equipment_models:
+            repair_meta["equipment_models"] = equipment_models[:4]
 
         raw_nameplate_history = repair_meta.get(cls.HISTORY_META_KEY)
         attachments = list(raw_nameplate_history) if isinstance(raw_nameplate_history, list) else []

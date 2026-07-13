@@ -120,3 +120,52 @@ async def test_defect_act_ai_sanitization_keeps_structured_keys_and_drops_workfl
     assert "customer_approval_status" not in result
     assert "parts_status" not in result
     assert "unknown_key" not in result
+
+
+@pytest.mark.asyncio
+async def test_defect_act_ai_classifies_field_note_into_controlled_write_off_template(monkeypatch):
+    async def _fake_request_completion(prompt: str) -> str:
+        assert "Бесконечное сопротивление" in prompt
+        assert "compressor_winding_open" in prompt
+        assert "heat_exchanger_multiple_leaks" in prompt
+        assert "Ты работаешь как классификатор" in prompt
+        return json.dumps(
+            {
+                "fault_type": "compressor_winding_open",
+                "repairable": True,
+                "decision": "repair",
+                "operation_status": "not_allowed",
+                "inspection_codes": [
+                    "visual_inspection",
+                    "winding_resistance_test",
+                    "invented_check",
+                ],
+                "confirmed_facts": [
+                    "напряжение на компрессор поступает",
+                    "обмотка не прозванивается",
+                    "факт 3",
+                    "факт 4",
+                ],
+            },
+            ensure_ascii=False,
+        )
+
+    monkeypatch.setattr(DefectActAIService, "_request_completion", staticmethod(_fake_request_completion))
+
+    result = await DefectActAIService.generate_repair_meta(
+        ManagerRepairActAiDraftPayload(
+            defect_type="field_diagnostic_note",
+            polish_existing=True,
+            extra_context="напряжение приходит, сопротивление бесконечное, обмотка не прозванивается",
+            current_meta={"diagnostic_result": "Старый предварительный результат"},
+        )
+    )
+
+    assert result["fault_type"] == "compressor_winding_open"
+    assert result["decision"] == "write_off"
+    assert result["structured_diagnosis"]["repairable"] is False
+    assert result["inspection_codes"] == ["visual_inspection", "winding_resistance_test"]
+    assert len(result["confirmed_facts"]) == 3
+    assert "Старый предварительный результат" not in result["diagnostic_result"]
+    assert "обмотка не прозванивается" in result["diagnostic_result"]
+    assert "подлежит выводу из эксплуатации и списанию" in result["technical_conclusion"]
