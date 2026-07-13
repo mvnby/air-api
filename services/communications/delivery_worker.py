@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
-from collections.abc import Awaitable, Callable, Coroutine
-from contextlib import suppress
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, TypeVar
@@ -76,6 +77,7 @@ class CommunicationDeliveryWorker:
         lease_seconds: int = 90,
         recovery_limit: int = 100,
         safety_check: Callable[[], Awaitable[None]] | None = None,
+        db_operation_timeout_seconds: float | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._provider = provider
@@ -89,6 +91,15 @@ class CommunicationDeliveryWorker:
             min(CommunicationDeliveryService.MAX_RECOVERY_LIMIT, int(recovery_limit)),
         )
         self._safety_check = safety_check
+        if db_operation_timeout_seconds is None:
+            self._db_operation_timeout_seconds = None
+        else:
+            timeout_seconds = float(db_operation_timeout_seconds)
+            if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+                raise ValueError(
+                    "db_operation_timeout_seconds must be finite and greater than zero"
+                )
+            self._db_operation_timeout_seconds = timeout_seconds
 
     async def run_once(self) -> DeliveryRunOutcome:
         await self._assert_safe_to_continue()
@@ -224,32 +235,44 @@ class CommunicationDeliveryWorker:
         if self._safety_check is not None:
             await self._safety_check()
 
+    @asynccontextmanager
+    async def _bounded_db_operation(self) -> AsyncIterator[None]:
+        timeout_seconds = self._db_operation_timeout_seconds
+        if timeout_seconds is None:
+            yield
+            return
+        async with asyncio.timeout(timeout_seconds):
+            yield
+
     async def _recover_expired_leases(self) -> ExpiredLeaseRecoveryResult:
-        async with self._session_factory() as session:
-            recovery = await CommunicationDeliveryService.recover_expired_leases(
-                session,
-                channel=self._channel,
-                limit=self._recovery_limit,
-            )
-            await session.commit()
-            return recovery
+        async with self._bounded_db_operation():
+            async with self._session_factory() as session:
+                recovery = await CommunicationDeliveryService.recover_expired_leases(
+                    session,
+                    channel=self._channel,
+                    limit=self._recovery_limit,
+                )
+                await session.commit()
+                return recovery
 
     async def _claim_and_commit(self) -> ClaimedCommunicationDelivery | None:
-        async with self._session_factory() as session:
-            claim = await CommunicationDeliveryService.claim_next(
-                session,
-                worker_id=self._worker_id,
-                channel=self._channel,
-                lease_seconds=self._lease_seconds,
-            )
-            # This commit is deliberately before recipient lookup, rendering,
-            # and every network operation. An uncommitted claim is never sent.
-            await session.commit()
-            return claim
+        async with self._bounded_db_operation():
+            async with self._session_factory() as session:
+                claim = await CommunicationDeliveryService.claim_next(
+                    session,
+                    worker_id=self._worker_id,
+                    channel=self._channel,
+                    lease_seconds=self._lease_seconds,
+                )
+                # This commit is deliberately before recipient lookup, rendering,
+                # and every network operation. An uncommitted claim is never sent.
+                await session.commit()
+                return claim
 
     async def _recipient_is_current(self, claim: ClaimedCommunicationDelivery) -> bool:
-        async with self._session_factory() as session:
-            recipients = await ManagementRecipientDirectory.list_telegram(session)
+        async with self._bounded_db_operation():
+            async with self._session_factory() as session:
+                recipients = await ManagementRecipientDirectory.list_telegram(session)
         return any(
             recipient.recipient_key == claim.recipient_key
             and recipient.destination == claim.destination
@@ -258,14 +281,15 @@ class CommunicationDeliveryWorker:
         )
 
     async def _cancel_inactive_recipient(self, claim: ClaimedCommunicationDelivery) -> None:
-        async with self._session_factory() as session:
-            await CommunicationDeliveryService.cancel_owned(
-                session,
-                delivery_id=claim.delivery_id,
-                worker_id=self._worker_id,
-                lease_token=claim.lease_token,
-            )
-            await session.commit()
+        async with self._bounded_db_operation():
+            async with self._session_factory() as session:
+                await CommunicationDeliveryService.cancel_owned(
+                    session,
+                    delivery_id=claim.delivery_id,
+                    worker_id=self._worker_id,
+                    lease_token=claim.lease_token,
+                )
+                await session.commit()
 
     @staticmethod
     def _render(claim: ClaimedCommunicationDelivery) -> str:
@@ -395,15 +419,16 @@ class CommunicationDeliveryWorker:
                     await heartbeat_task
 
     async def _renew_before_send(self, claim: ClaimedCommunicationDelivery) -> None:
-        async with self._session_factory() as session:
-            await CommunicationDeliveryService.renew_lease(
-                session,
-                delivery_id=claim.delivery_id,
-                worker_id=self._worker_id,
-                lease_token=claim.lease_token,
-                lease_seconds=self._lease_seconds,
-            )
-            await session.commit()
+        async with self._bounded_db_operation():
+            async with self._session_factory() as session:
+                await CommunicationDeliveryService.renew_lease(
+                    session,
+                    delivery_id=claim.delivery_id,
+                    worker_id=self._worker_id,
+                    lease_token=claim.lease_token,
+                    lease_seconds=self._lease_seconds,
+                )
+                await session.commit()
 
     @staticmethod
     async def _finish_terminal_despite_cancellation(
@@ -450,15 +475,16 @@ class CommunicationDeliveryWorker:
             except TimeoutError:
                 pass
 
-            async with self._session_factory() as session:
-                await CommunicationDeliveryService.renew_lease(
-                    session,
-                    delivery_id=claim.delivery_id,
-                    worker_id=self._worker_id,
-                    lease_token=claim.lease_token,
-                    lease_seconds=self._lease_seconds,
-                )
-                await session.commit()
+            async with self._bounded_db_operation():
+                async with self._session_factory() as session:
+                    await CommunicationDeliveryService.renew_lease(
+                        session,
+                        delivery_id=claim.delivery_id,
+                        worker_id=self._worker_id,
+                        lease_token=claim.lease_token,
+                        lease_seconds=self._lease_seconds,
+                    )
+                    await session.commit()
 
     async def _mark_sent(
         self,
@@ -466,16 +492,17 @@ class CommunicationDeliveryWorker:
         provider_message_id: str,
         provider_latency_ms: int | None = None,
     ) -> None:
-        async with self._session_factory() as session:
-            await CommunicationDeliveryService.mark_sent(
-                session,
-                delivery_id=claim.delivery_id,
-                worker_id=self._worker_id,
-                lease_token=claim.lease_token,
-                provider_message_id=provider_message_id,
-                provider_latency_ms=provider_latency_ms,
-            )
-            await session.commit()
+        async with self._bounded_db_operation():
+            async with self._session_factory() as session:
+                await CommunicationDeliveryService.mark_sent(
+                    session,
+                    delivery_id=claim.delivery_id,
+                    worker_id=self._worker_id,
+                    lease_token=claim.lease_token,
+                    provider_message_id=provider_message_id,
+                    provider_latency_ms=provider_latency_ms,
+                )
+                await session.commit()
 
     async def _record_failure(
         self,
@@ -485,16 +512,17 @@ class CommunicationDeliveryWorker:
         provider_latency_ms: int | None = None,
     ) -> DeliveryRunOutcome:
         try:
-            async with self._session_factory() as session:
-                failure = await CommunicationDeliveryService.mark_failed(
-                    session,
-                    delivery_id=claim.delivery_id,
-                    worker_id=self._worker_id,
-                    lease_token=claim.lease_token,
-                    result=result,
-                    provider_latency_ms=provider_latency_ms,
-                )
-                await session.commit()
+            async with self._bounded_db_operation():
+                async with self._session_factory() as session:
+                    failure = await CommunicationDeliveryService.mark_failed(
+                        session,
+                        delivery_id=claim.delivery_id,
+                        worker_id=self._worker_id,
+                        lease_token=claim.lease_token,
+                        result=result,
+                        provider_latency_ms=provider_latency_ms,
+                    )
+                    await session.commit()
         except CommunicationDeliveryLeaseLost:
             return self._lease_lost_outcome(claim, recovery)
         return self._failure_outcome(claim, failure, recovery)

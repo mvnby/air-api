@@ -314,7 +314,7 @@ class CommunicationRuntimeSupervisor:
                 "communications advisory lock was lost before work"
             )
         await self._probe_primary()
-        await self._verify_state_ownership()
+        await self._verify_active_control()
         if stop_event.is_set():
             raise CommunicationRuntimeStopRequested(
                 "communications runtime stop was requested"
@@ -355,6 +355,20 @@ class CommunicationRuntimeSupervisor:
         except TimeoutError as exc:
             raise CommunicationRuntimeStateOwnershipLost(
                 "communications state ownership probe timed out"
+            ) from exc
+
+    async def _verify_active_control(self) -> None:
+        try:
+            async with asyncio.timeout(self._config.db_probe_timeout_seconds):
+                async with self._session_factory() as session:
+                    await CommunicationRuntimeStateService.read_active_owned_control(
+                        session,
+                        channel=self._config.channel,
+                        instance_id=self._config.instance_id,
+                    )
+        except TimeoutError as exc:
+            raise CommunicationRuntimeStateOwnershipLost(
+                "communications active control probe timed out"
             ) from exc
 
     async def _best_effort_status(

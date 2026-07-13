@@ -24,6 +24,7 @@ from services.communications.runtime_config import (
 from services.communications.runtime_state import (
     CommunicationRuntimeControl,
     CommunicationRuntimeMode,
+    CommunicationRuntimeModeBlocked,
     CommunicationRuntimeStateService,
     CommunicationRuntimeStatus,
 )
@@ -74,6 +75,7 @@ class CommunicationRuntimePipeline:
             worker_id=self._config.instance_id,
             lease_seconds=self._config.lease_seconds,
             safety_check=self._safety_check,
+            db_operation_timeout_seconds=self._config.db_probe_timeout_seconds,
         )
 
     async def run(self, stop_event: asyncio.Event) -> None:
@@ -90,38 +92,47 @@ class CommunicationRuntimePipeline:
 
     async def run_cycle(self) -> bool:
         control = await self._read_control()
-        if control.mode == CommunicationRuntimeMode.OFF:
-            await self._close_provider()
-            await self._record_status(CommunicationRuntimeStatus.DISABLED)
-            return False
-        if control.mode == CommunicationRuntimeMode.CANARY:
-            # C2 does not guess a canary audience. Until a separate, reviewed
-            # selector exists this mode is deliberately a visible no-op.
-            await self._close_provider()
-            await self._record_status(
-                CommunicationRuntimeStatus.PAUSED,
-                last_error_code="canary_scope_unconfigured",
-            )
+        if control.mode != CommunicationRuntimeMode.ALL:
+            await self._pause_for_mode(control.mode)
             return False
 
-        await self._safety_check()
-        await self._record_status(CommunicationRuntimeStatus.RUNNING)
-        # The status write above yields control. Re-fence at the last possible
-        # point before the dispatcher can lock or mutate an outbox event.
-        await self._safety_check()
-        dispatch_outcome = await self._dispatch_once()
-        # Dispatch may set the process stop signal or ownership may disappear
-        # while its transaction commits. Do not even construct a provider until
-        # this second handoff fence succeeds.
-        await self._safety_check()
-        worker = self._ensure_worker()
-        delivery_outcome = await worker.run_once()
+        try:
+            await self._safety_check()
+            await self._record_status(CommunicationRuntimeStatus.RUNNING)
+            # The status write above yields control. Re-fence at the last possible
+            # point before the dispatcher can lock or mutate an outbox event.
+            await self._safety_check()
+            dispatch_outcome = await self._dispatch_once()
+            # Dispatch may set the process stop signal or ownership may disappear
+            # while its transaction commits. Do not even construct a provider until
+            # this second handoff fence succeeds.
+            await self._safety_check()
+            worker = self._ensure_worker()
+            delivery_outcome = await worker.run_once()
+        except CommunicationRuntimeModeBlocked as blocked:
+            await self._pause_for_mode(blocked.mode)
+            return False
         worked = dispatch_outcome is not None or delivery_outcome.outcome != "idle"
         await self._record_status(
             CommunicationRuntimeStatus.RUNNING,
             activity=worked,
         )
         return worked
+
+    async def _pause_for_mode(self, mode: CommunicationRuntimeMode) -> None:
+        await self._close_provider()
+        if mode == CommunicationRuntimeMode.OFF:
+            await self._record_status(CommunicationRuntimeStatus.DISABLED)
+            return
+        if mode == CommunicationRuntimeMode.CANARY:
+            # C2 does not guess a canary audience. Until a separate, reviewed
+            # selector exists this mode is deliberately a visible no-op.
+            await self._record_status(
+                CommunicationRuntimeStatus.PAUSED,
+                last_error_code="canary_scope_unconfigured",
+            )
+            return
+        raise CommunicationRuntimeError("communications runtime mode fence is invalid")
 
     async def close(self) -> None:
         if self._closed and self._provider is None:

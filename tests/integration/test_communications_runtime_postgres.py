@@ -94,7 +94,7 @@ async def test_postgres_runtime_advisory_lock_serializes_two_processes(
         shutdown_seconds=1,
         provider_timeout_seconds=1,
         provider_close_seconds=0.1,
-        lease_seconds=15,
+        lease_seconds=30,
     )
     active = 0
     maximum_active = 0
@@ -211,7 +211,7 @@ async def test_postgres_failover_never_overlaps_provider_calls(
         shutdown_seconds=0.4,
         provider_timeout_seconds=1,
         provider_close_seconds=0.05,
-        lease_seconds=15,
+        lease_seconds=30,
     )
     active_provider_calls = 0
     maximum_provider_calls = 0

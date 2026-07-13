@@ -16,6 +16,10 @@ from models import CommunicationDelivery
 from services.communications.delivery_attempt_service import (
     CommunicationDeliveryAttemptService,
 )
+from services.communications.delivery_limits import (
+    MAX_DELIVERY_LEASE_SECONDS,
+    MIN_DELIVERY_LEASE_SECONDS,
+)
 from services.communications.providers.base import (
     ProviderDeliveryDisposition,
     ProviderDeliveryResult,
@@ -93,8 +97,8 @@ class DeliveryFailureOutcome:
 class CommunicationDeliveryService:
     """Transaction-neutral state machine for one immutable recipient delivery."""
 
-    MIN_LEASE_SECONDS = 30
-    MAX_LEASE_SECONDS = 3600
+    MIN_LEASE_SECONDS = MIN_DELIVERY_LEASE_SECONDS
+    MAX_LEASE_SECONDS = MAX_DELIVERY_LEASE_SECONDS
     MAX_RECOVERY_LIMIT = 1000
     RETRY_BASE_SECONDS = 30
     RETRY_MAX_SECONDS = 3600

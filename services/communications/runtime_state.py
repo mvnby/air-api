@@ -30,6 +30,12 @@ class CommunicationRuntimeStateOwnershipLost(RuntimeError):
     pass
 
 
+class CommunicationRuntimeModeBlocked(RuntimeError):
+    def __init__(self, mode: CommunicationRuntimeMode) -> None:
+        super().__init__("Communication runtime mode does not allow delivery work")
+        self.mode = mode
+
+
 @dataclass(frozen=True)
 class CommunicationRuntimeControl:
     channel: str
@@ -164,6 +170,25 @@ class CommunicationRuntimeStateService:
                 "Communication runtime state ownership was lost"
             )
         return cls._to_control(state)
+
+    @classmethod
+    async def read_active_owned_control(
+        cls,
+        session: AsyncSession,
+        *,
+        channel: str,
+        instance_id: str,
+    ) -> CommunicationRuntimeControl:
+        """Return owned control only while the operator permits full work."""
+
+        control = await cls.read_owned_control(
+            session,
+            channel=channel,
+            instance_id=instance_id,
+        )
+        if control.mode != CommunicationRuntimeMode.ALL:
+            raise CommunicationRuntimeModeBlocked(control.mode)
+        return control
 
     @classmethod
     async def record_status(

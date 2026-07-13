@@ -59,7 +59,7 @@ def runtime_config(**overrides):
         shutdown_seconds=0.2,
         provider_timeout_seconds=1,
         provider_close_seconds=0.1,
-        lease_seconds=15,
+        lease_seconds=30,
     )
     return replace(config, **overrides)
 

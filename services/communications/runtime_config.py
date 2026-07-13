@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.runtime_controls import ACTIVE_APP_ROLES, normalize_app_role
+from services.communications.delivery_limits import (
+    MAX_DELIVERY_LEASE_SECONDS,
+    MIN_DELIVERY_LEASE_SECONDS,
+)
 from services.communications.providers.base import CommunicationDeliveryProvider
 
 
@@ -121,10 +125,31 @@ class CommunicationRuntimeConfig:
                 "ownership detection and shutdown window"
             )
         lease_seconds = float(self.lease_seconds)
-        if not math.isfinite(lease_seconds) or not 15 <= lease_seconds <= 3600:
-            raise ValueError("lease_seconds must be between 15 and 3600")
+        if (
+            not math.isfinite(lease_seconds)
+            or not MIN_DELIVERY_LEASE_SECONDS
+            <= lease_seconds
+            <= MAX_DELIVERY_LEASE_SECONDS
+        ):
+            raise ValueError(
+                "lease_seconds must be between "
+                f"{MIN_DELIVERY_LEASE_SECONDS} and "
+                f"{MAX_DELIVERY_LEASE_SECONDS}"
+            )
         if not lease_seconds.is_integer():
             raise ValueError("lease_seconds must be a whole number")
+        # From the database timestamp used by the pre-send renewal, budget its
+        # remaining transaction, an in-flight monitor lock probe plus the three
+        # action-fence probes, a possible heartbeat-renewal teardown, and the
+        # terminal result transaction. The provider call is bounded separately.
+        lease_work_window = self.provider_timeout_seconds + (
+            7 * self.db_probe_timeout_seconds
+        )
+        if lease_seconds <= lease_work_window:
+            raise ValueError(
+                "lease_seconds must be strictly greater than the worst-case "
+                "provider and delivery database operation window"
+            )
         object.__setattr__(self, "lease_seconds", int(lease_seconds))
 
     @property
