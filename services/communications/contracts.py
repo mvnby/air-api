@@ -95,3 +95,40 @@ class PublicContactLeadCreatedPayloadV1(_ContractV1):
     email: str | None = Field(default=None, max_length=254)
     address: str | None = Field(default=None, max_length=500)
     message: str | None = Field(default=None, max_length=2000)
+
+
+class CommunicationRecipientV1(_ContractV1):
+    channel: Literal["telegram"] = "telegram"
+    recipient_key: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[a-z][a-z0-9_.:-]*$",
+    )
+    destination: str = Field(pattern=r"^-?[1-9][0-9]{0,19}$")
+    source: Literal["staff", "legacy"]
+    staff_user_id: int | None = Field(default=None, gt=0)
+
+
+class CommunicationTemplatePlanV1(_ContractV1):
+    channel: Literal["telegram"] = "telegram"
+    audience: Literal["management"] = "management"
+    template_key: str = Field(
+        min_length=3,
+        max_length=120,
+        pattern=r"^[a-z][a-z0-9_.-]+$",
+    )
+    template_version: Literal[1] = 1
+    render_context: dict[str, Any]
+
+
+class DispatchOutcomeV1(_ContractV1):
+    outcome: Literal[
+        "materialized",
+        "already_materialized",
+        "retry_scheduled",
+        "dead",
+    ]
+    event_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    attempts: int = Field(ge=0)
+    delivery_count: int = Field(ge=0)
+    next_attempt_at: datetime | None = None
