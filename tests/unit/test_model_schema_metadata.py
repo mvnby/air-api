@@ -1,4 +1,4 @@
-from sqlalchemy import Enum, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Enum, String, UniqueConstraint
 from sqlmodel import SQLModel
 
 import models  # noqa: F401
@@ -111,4 +111,53 @@ def test_model_indexes_match_current_database_shape():
     assert any(
         index.name == "ix_bank_receipt_account_balance_after"
         for index in bank_receipt.indexes
+    )
+
+
+def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_indexes():
+    outbox = SQLModel.metadata.tables["integration_outbox_event"]
+    inbox = SQLModel.metadata.tables["consumer_inbox"]
+    delivery = SQLModel.metadata.tables["communication_delivery"]
+
+    assert [column.name for column in inbox.primary_key.columns] == [
+        "consumer_name",
+        "event_id",
+    ]
+    assert outbox.c.idempotency_key.nullable is True
+    assert outbox.c.deduplication_key.type.length == 255
+    assert any(
+        isinstance(constraint, UniqueConstraint)
+        and constraint.name == "uq_integration_outbox_event_deduplication_key"
+        and [column.name for column in constraint.columns] == ["deduplication_key"]
+        for constraint in outbox.constraints
+    )
+    assert any(
+        index.name == "ix_integration_outbox_event_claim"
+        and [column.name for column in index.columns]
+        == ["status", "available_at", "priority", "occurred_at"]
+        for index in outbox.indexes
+    )
+    assert any(
+        isinstance(constraint, UniqueConstraint)
+        and constraint.name
+        == "uq_communication_delivery_event_channel_recipient_template"
+        and [column.name for column in constraint.columns]
+        == ["event_id", "channel", "recipient_key", "template_version"]
+        for constraint in delivery.constraints
+    )
+    assert any(
+        index.name == "ix_communication_delivery_claim"
+        and [column.name for column in index.columns]
+        == ["status", "available_at", "priority", "created_at"]
+        for index in delivery.indexes
+    )
+    assert any(
+        isinstance(constraint, CheckConstraint)
+        and constraint.name == "ck_outbox_status_valid"
+        for constraint in outbox.constraints
+    )
+    assert any(
+        isinstance(constraint, CheckConstraint)
+        and constraint.name == "ck_delivery_status_valid"
+        for constraint in delivery.constraints
     )

@@ -54,10 +54,10 @@ MVN уже состоит из нескольких независимо раз�
 | DATA-001 | P1 | Orders | Нет version/ETag; полный snapshot из drawer молча затирает параллельные изменения | Открыто |
 | DATA-002 | P1 | Customers | Неединая нормализация телефона и race find-or-create создают дубликаты; checkout не имеет idempotency key | Открыто |
 | JOB-001 | P1 | Runtime | Backup, restore, email import и часть catalog jobs используют память процесса и `create_task` | Открыто |
-| JOB-002 | P1 | Media | Два worker'а могут атомарно незащищённо забрать одну media job | Закрыто в коде Wave 0: atomic claim, lease token, heartbeat; production rollout ещё не выполнен |
+| JOB-002 | P1 | Media | Два worker'а могут атомарно незащищённо забрать одну media job | Закрыто и развернуто в API Wave 0: atomic claim, lease token, heartbeat; сам worker остаётся выключен до отдельного managed rollout |
 | COM-001 | P1 | Telegram | Ошибки проглатываются, попытка считается доставкой; живой log доказал ложный `notified_admins=2` при отказе | Закрыто в Wave 0 |
 | COM-002 | P1 | Telegram | Ручной bank import не вызывает notify, после dedupe уведомление теряется навсегда | Закрыто в Wave 0 |
-| COM-003 | P1 | Telegram/Email | Нет transactional outbox: события теряются/дублируются, внешние вызовы блокируют HTTP transaction | Открыто |
+| COM-003 | P1 | Telegram/Email | Нет transactional outbox: события теряются/дублируются, внешние вызовы блокируют HTTP transaction | В работе: additive outbox/inbox/per-recipient delivery foundation реализуется в Wave 1 PR-A; producer switch и consumer ещё открыты |
 | COM-004 | P1 | Tests | Integration checkout способен отправлять реальные Telegram-сообщения владельцам | Закрыто в Wave 0 |
 | PRIV-001 | P1 | Media | Реквизиты, order attachments и диагностические фото лежат в публичном `/media`/public R2 | Открыто |
 | WEB-001 | P1 | SSG | Build запрашивает только 1000 из 1117 товаров; product routes после 1000 отсутствуют и production URL отвечает 404 | Закрыто в Wave 0: пагинация, dedupe и hard-fail invariant |
@@ -328,7 +328,7 @@ Delivery uniqueness: `(event_id, channel, recipient_id, template_version)`. Work
 
 ### Wave 0 — ledger на текущем snapshot
 
-Кодовая часть Wave 0 прошла локальные release-gates и готова к публикации в draft PR. Это не означает production rollout и не закрывает явно перенесённые в Wave 1–2 риски. Фактические проверки:
+Wave 0 слита через PR #726 и развернута в production как immutable SHA `886593e0`. Backend migration/blue-green primary/fenced replica, frontend canary/atomic VPS/Cloudflare smoke, последующие replication и HA invariant checks прошли. Это не закрывает явно перенесённые в Wave 1–2 риски. Фактические проверки:
 
 | Gate | Результат | Статус |
 |---|---|---|
@@ -338,12 +338,14 @@ Delivery uniqueness: `(event_id, channel, recipient_id, template_version)`. Work
 | Storefront tests/build | Все scoped Node/theme tests; production-like API: **740 products**, build: **797 pages**, **740/740 product routes** | Пройден |
 | Alembic upgrade/check на clone существующей БД | Пройден на текущей цепочке migrations | Пройден |
 | Fresh empty-DB replay до текущего `head` + `alembic check` | Полная цепочка до `2d4f6a8b0c13`; `No new upgrade operations detected` | Пройден |
+| Единый GitHub CI после исправления Linux module collision | **1177 passed**, migration и codegen gates зелёные | Пройден |
+| Production deploy/smoke | Patroni migration + primary/replica deploy, Cloudflare/VPS storefront smoke, live API DB online | Пройден |
 
-Статусы выше означают «исправлено и локально проверено в рабочем diff», а не «развёрнуто в production». CI draft PR и совместимый production rollout остаются следующими gate. Открытые DATA/JOB/COM/PRIV/WEB/PERF/SUPPLY пункты переходят в Wave 1–2 и не должны теряться при публикации Wave 0.
+Wave 0 подтверждена локально, в CI и production. Media processing worker намеренно не активирован: в production нет worker unit/container/token и очередь пуста; его первое включение остаётся отдельным canary rollout только новой версии. Открытые DATA/JOB/COM/PRIV/WEB/PERF/SUPPLY пункты переходят в Wave 1–2.
 
 ### Wave 1 — данные и надёжность
 
-- Transactional outbox/inbox + communications worker.
+- Transactional outbox/inbox + communications worker. PR-A добавляет только выключенный additive persistence/contracts foundation; переключение producers и consumer выполняются следующими отдельными PR.
 - Order version/409 и command-specific updates.
 - Canonical customer identity + checkout idempotency.
 - Public contact/availability lead abuse policy: edge+app rate limit, canonical phone/email, dedupe window, idempotency key и risk-based anti-bot.
