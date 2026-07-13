@@ -2,7 +2,7 @@ import asyncio
 from aiogram import types
 from aiogram.types import BotCommand
 from .config import bot, dp
-from .handlers import admin, base, catalog, work
+from .handlers import admin, base, catalog, repair_context, work
 from core.config import settings
 from core.database import async_session_maker
 from core.logger import setup_logging
@@ -64,6 +64,7 @@ async def main(*, wait_when_disabled: bool = True):
     dp.include_router(base.router)
     dp.include_router(work.router)
     dp.include_router(catalog.router)
+    dp.include_router(repair_context.router)
     dp.include_router(admin.router)
     
     try:
