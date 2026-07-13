@@ -90,7 +90,11 @@ class ServiceTariffRule(SQLModel, table=True):
     __tablename__ = "service_tariff_rule"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    tariff_id: int = Field(foreign_key="service_tariff.id", index=True)
+    tariff_id: int = Field(
+        foreign_key="service_tariff.id",
+        ondelete="CASCADE",
+        index=True,
+    )
 
     rule_type: str = Field(default="per_unit_manual", index=True)
     name: str = Field(index=True)
@@ -102,7 +106,12 @@ class ServiceTariffRule(SQLModel, table=True):
     is_favorite: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0, index=True)
-    service_id: Optional[int] = Field(default=None, foreign_key="service.id", index=True)
+    service_id: Optional[int] = Field(
+        default=None,
+        foreign_key="service.id",
+        ondelete="SET NULL",
+        index=True,
+    )
 
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(
@@ -138,8 +147,18 @@ class ServiceEstimate(SQLModel, table=True):
     __tablename__ = "service_estimate"
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
-    tariff_id: Optional[int] = Field(default=None, foreign_key="service_tariff.id", index=True)
+    customer_id: Optional[int] = Field(
+        default=None,
+        foreign_key="customer.id",
+        ondelete="SET NULL",
+        index=True,
+    )
+    tariff_id: Optional[int] = Field(
+        default=None,
+        foreign_key="service_tariff.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     title: str = Field(default="Смета услуг")
     comment: Optional[str] = Field(default=None)
 
@@ -169,10 +188,19 @@ class ServiceEstimateItem(SQLModel, table=True):
     __tablename__ = "service_estimate_item"
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    estimate_id: int = Field(foreign_key="service_estimate.id", index=True)
+    estimate_id: int = Field(
+        foreign_key="service_estimate.id",
+        ondelete="CASCADE",
+        index=True,
+    )
     source_type: str = Field(default="base", index=True)
     source_id: Optional[int] = Field(default=None)
-    service_id: Optional[int] = Field(default=None, foreign_key="service.id", index=True)
+    service_id: Optional[int] = Field(
+        default=None,
+        foreign_key="service.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     name: str
 
     qty: float = Field(default=1.0)
@@ -191,7 +219,10 @@ class OrderProposal(SQLModel, table=True):
     order_id: int = Field(foreign_key="order.id", index=True)
 
     name: str = Field(default="Основное")
-    status: str = Field(default="draft", sa_column=Column(String, default="draft"))
+    status: str = Field(
+        default="draft",
+        sa_column=Column(String, default="draft", nullable=False),
+    )
     is_selected: bool = Field(default=False, index=True)
     is_archived: bool = Field(default=False, index=True)
     sort_order: int = Field(default=0, index=True)
@@ -327,7 +358,12 @@ class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
-    customer_branch_id: Optional[int] = Field(default=None, foreign_key="customer_branches.id", index=True)
+    customer_branch_id: Optional[int] = Field(
+        default=None,
+        foreign_key="customer_branches.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     customer_contract_id: Optional[int] = Field(default=None, foreign_key="customer_contract.id", index=True)
 
     delivery_address: Optional[str] = None
@@ -335,7 +371,10 @@ class Order(SQLModel, table=True):
 
     user_id: Optional[int] = Field(default=None, index=True)
 
-    status: OrderStatus = Field(default=OrderStatus.NEW_LEAD, sa_column=Column(String, index=True))
+    status: OrderStatus = Field(
+        default=OrderStatus.NEW_LEAD,
+        sa_column=Column(String, index=True, nullable=False),
+    )
     lead_source: LeadSource = Field(default=LeadSource.MANAGER, sa_column=Column(String, index=True))
     title: Optional[str] = Field(default=None)
     comment: Optional[str] = Field(default=None)
@@ -353,7 +392,10 @@ class Order(SQLModel, table=True):
     is_paid: bool = Field(default=False) # Will be deprecated but left for now
 
     # Currency tracking
-    target_currency: Optional[PaymentCurrency] = Field(default=None) # 'USD' or 'EUR'
+    target_currency: Optional[PaymentCurrency] = Field(
+        default=None,
+        sa_column=Column(String, nullable=True),
+    )  # 'USD' or 'EUR'
     target_currency_amount: Optional[float] = Field(default=None) # The fixed total price in chosen currency
     target_currency_payments: Optional[float] = Field(default=0.0) # Payments made in chosen currency
 
@@ -372,7 +414,15 @@ class Order(SQLModel, table=True):
     measurer_id: Optional[int] = Field(default=None, index=True)
     measurement_result: Optional[str] = Field(default=None)
     additional_conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
-    negotiation_status: str = Field(default="awaiting_offer", sa_column=Column(String, default="awaiting_offer", index=True))
+    negotiation_status: str = Field(
+        default="awaiting_offer",
+        sa_column=Column(
+            String,
+            default="awaiting_offer",
+            index=True,
+            nullable=False,
+        ),
+    )
     negotiation_status_changed_at: Optional[datetime] = None
     proposal_status: str = Field(default="draft", sa_column=Column(String, default="draft", index=True))
     proposal_sent_at: Optional[datetime] = None
@@ -382,7 +432,15 @@ class Order(SQLModel, table=True):
     auto_close_on_payment: bool = Field(default=False, index=True)
 
     # --- Internal: Execution stage ---
-    execution_status: str = Field(default="needs_schedule", sa_column=Column(String, default="needs_schedule", index=True))
+    execution_status: str = Field(
+        default="needs_schedule",
+        sa_column=Column(
+            String,
+            default="needs_schedule",
+            index=True,
+            nullable=False,
+        ),
+    )
     execution_status_changed_at: Optional[datetime] = None
     works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
@@ -567,7 +625,7 @@ class BankReceipt(SQLModel, table=True):
     payment_document_raw: Optional[str] = None
     payment_document_number: Optional[str] = Field(default=None, index=True)
     payment_purpose: Optional[str] = None
-    account_balance_after: Optional[float] = None
+    account_balance_after: Optional[float] = Field(default=None, index=True)
 
     raw_body: str
     parse_error: Optional[str] = None

@@ -1,4 +1,3 @@
-import os
 from dotenv import load_dotenv
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -186,6 +185,16 @@ class Settings(BaseSettings):
 
     # Monitoring
     SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.0
+
+    @field_validator("SENTRY_TRACES_SAMPLE_RATE", "SENTRY_PROFILES_SAMPLE_RATE")
+    @classmethod
+    def _validate_sentry_sample_rate(cls, value: float) -> float:
+        normalized = float(value)
+        if normalized < 0 or normalized > 1:
+            raise ValueError("Sentry sample rates must be between 0 and 1")
+        return normalized
 
     # AI integrations
     DEEPSEEK_TOKEN: str = ""
@@ -199,6 +208,11 @@ class Settings(BaseSettings):
     GITHUB_OWNER: str = "mvnby"
     GITHUB_REPO: str = "air-api"
     WEB_REBUILD_CALLBACK_TOKEN: str = ""
+
+    # Destructive restore is intentionally disabled by default. Enabling this
+    # switch is only one part of the restore runbook: traffic must also be
+    # drained and a single active control-plane process must be guaranteed.
+    BACKUP_RESTORE_ENABLED: bool = False
 
     # Mail integration (Yandex Mail by default)
     MAIL_IMAP_HOST: str = "imap.yandex.ru"

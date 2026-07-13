@@ -83,6 +83,11 @@ The multi-origin API HA target and Cloudflare/DB/media runbook is documented in
 [`api-ha-runbook.md`](api-ha-runbook.md). Use `/api/health` for basic smoke
 checks and `/api/ready` for Cloudflare Load Balancer origin health.
 
+Google OAuth refresh state uses a writable directory mount, not a bind-mounted
+file. Prepare and verify it with
+[`google-oauth-token-runbook.md`](google-oauth-token-runbook.md) before manual
+deployments; automated deploy paths run the same fail-closed preparation.
+
 The backend deploy workflow is primary-host configurable. Keep sensitive values
 in GitHub secrets and non-secret routing values in GitHub variables.
 
@@ -167,6 +172,56 @@ as the active primary default.
 | --- | --- | --- | --- |
 | Primary/current production | `db`, `app`, `bot` | `APP_ROLE=primary` or unset; `SCHEDULER_ENABLED`/`BOT_ENABLED` unset or `true` | FastAPI starts scheduler loops; bot starts Telegram polling. |
 | Standby/passive API | `db`, `app` only | `APP_ROLE=standby`, `SCHEDULER_ENABLED=false`, `BOT_ENABLED=false` | FastAPI serves passive health/API checks without scheduler loops; bot must not be started. If started accidentally, it idles without polling. |
+
+During a blue-green overlap, an eligible API slot becomes ready without waiting
+for the scheduler advisory lock. Its background supervisor waits and starts the
+scheduler once the previous slot releases the lock. PostgreSQL runtime locks use
+one pinned `AUTOCOMMIT` connection for their full lifetime, so they are never
+returned to the pool while held and do not leave an idle transaction open. The
+scheduler probes that connection at least every five seconds while it runs; a
+probe is bounded to three seconds so a blackholed backend also stops the current
+loop. Ownership loss, a probe deadline, or an unexpected scheduler-loop exit is
+fail-stop: the API process records `faulted`, cancels the loop, and immediately
+sends itself `SIGKILL`. Docker restarts the container, which also guarantees that
+threads and subprocesses such as an in-flight backup cannot survive as a second
+scheduler owner. This is the safe temporary boundary until scheduler jobs move
+to a dedicated service with durable per-job fencing. A new owner holds the lock
+through a minimum twelve-second fencing grace before starting loops. Deployment
+also bounds scheduler-owner container shutdown to five seconds before Docker
+force-kills it. The fencing delay is therefore longer than both that kill
+deadline and the previous release's default shutdown/liveness window, including
+the first rollout where the old image does not yet have shutdown fail-stop.
+Normal application shutdown also sends `SIGKILL` before cancellation or runtime
+lock release once scheduler work has started. This applies even when the asyncio
+task already looks done or cancelled: cancellation of an `asyncio.to_thread`
+call does not stop its worker thread, and a cooperative unlock could otherwise
+let the next API slot start scheduler work while the old process is still
+draining. Shutdown remains graceful while the supervisor is only waiting for the
+lock or in the fencing delay, because no scheduler work has started in those
+states.
+`/api/ready.scheduler_runtime` exposes only the allowlisted ownership state;
+blue-green activation requires six consecutive `running` samples after the old
+slot has stopped and a monotonic stability window of at least nine seconds.
+Lowering the polling delay cannot shorten that safety window. Scheduler locking
+is fail-closed:
+`RUNTIME_DB_LOCKS_ENABLED=false` or a non-PostgreSQL database keeps scheduler
+loops stopped instead of permitting multiple owners.
+
+Catalog import startup is conservative: it may schedule a `queued` job only
+when the database contains no `running` job. A `running` job is never
+automatically moved back to `queued`, because the current job record has no
+durable owner lease proving that its worker is dead. Operators must investigate
+such a job; lease, heartbeat, and stale-owner reclaim remain a separate upgrade.
+
+Rollback after the old slot has already stopped uses the third free API slot as
+an API-only buffer. A temporary Compose override starts the previous image with
+database bootstrap, scheduler, and bot disabled; nginx routes to that ready
+buffer before the candidate is stopped. The old slot can then acquire the free
+scheduler lock and start normally. The buffer is removed only after a ready old
+slot, or a ready candidate with a stable scheduler, has received traffic. If
+neither recovers within the bounded checks, the managed buffer remains the live
+route and its override is preserved as `.rollback-api-buffer.compose.yml` for
+operator inspection instead of leaving a dead upstream.
 
 `SCHEDULER_ENABLED` and `BOT_ENABLED` are explicit overrides. If either is set
 to `false`, that process stays disabled even when `APP_ROLE=primary`; remove the
@@ -306,6 +361,12 @@ Application release and database maintenance are separate lifecycles:
 - `scripts/deploy_backend_blue_green.sh` starts the candidate on private port
   `18001` or `18002`, validates readiness/products/filters, and only then
   atomically reloads nginx to the candidate;
+- under the deployment lock, the active container's immutable
+  `Config.Image` is the rollback source of truth; normal deploys reconcile
+  `.env` to it before mutations, while bootstrap validation fails on drift;
+- the `already_active` shortcut also requires a matching running bot image, no
+  preserved rollback buffer, and a scheduler that passes the monotonic
+  stability gate; otherwise the normal activation path repairs the release;
 - the previous API slot remains available during validation and is stopped only
   after origin and public readiness pass; `.active-api-slot` records the result;
 - `scripts/deploy.sh` remains the app-only standby deploy path; both scripts use
@@ -319,10 +380,13 @@ Application release and database maintenance are separate lifecycles:
 - cleanup retains three backend releases and never runs a global
   `docker system prune -af`.
 
-Automatic rollback restores the previous application image only when the failed
-candidate was actually activated. It never downgrades the database schema. Use
-expand/contract migrations so both the new image and retained rollback images
-can run against the current schema.
+Before compose promotion, failed-candidate recovery restores the active runtime
+image and canonical compose together under the same deployment lock. After the
+Google token-directory migration, manual rollback accepts only images labeled
+with the `directory-v1` token contract and requires a durable Google backup probe;
+pre-hotfix images fail closed and must be replaced by a roll-forward release.
+Rollback never downgrades the database schema. Use expand/contract migrations so
+all retained directory-compatible images can run against the current schema.
 
 The primary compose keeps the legacy `app` service on port `8000` only for the
 first migration and emergency compatibility. Normal releases alternate between
@@ -333,12 +397,23 @@ requests continue on the old worker while new requests move to the candidate.
 Manual code rollback on the active API host:
 
 ```bash
-scp scripts/deploy_backend_blue_green.sh scripts/rollback_backend.sh mvn-api:/tmp/
-ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh /tmp/rollback_backend.sh && \
+scp scripts/deploy_backend_blue_green.sh scripts/deploy_backend_blue_green_safety.sh \
+  scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh mvn-api:/tmp/
+ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh \
+  /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh \
+  /tmp/rollback_backend.sh && \
   CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
   API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
+  API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh \
+  GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=/tmp/prepare_google_oauth_token_dir.sh \
   bash /tmp/rollback_backend.sh'
 ```
+
+This command refuses an unlabeled pre-hotfix image. It also restores the current
+image automatically if the post-activation Google durability probe fails.
+
+The old `deploy_api.sh` source-bind path is intentionally retired. Production
+changes must use the CI-tested immutable-image workflow.
 
 ### Web Release Safety
 

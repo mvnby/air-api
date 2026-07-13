@@ -125,27 +125,55 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     backend = jobs["deploy-backend"]
     standby = standby_workflow["jobs"]["deploy-api-standby"]
     rollback = _step(backend, "Roll Back Backend After Failed Activation")
+    primary_copy = _step(backend, "Copy Compose Files and Scripts to Server")
     primary_deploy = _step(backend, "Execute Deployment Script")
+    primary_smoke = _step(backend, "Post-Deploy Smoke Check")
     standby_deploy = _step(standby, "Deploy standby API app image")
     standby_rollback = _step(standby, "Roll Back Standby After Failed Activation")
     primary_prune = _step(backend, "Prune Unused Backend Docker Images")
     standby_prune = _step(standby, "Prune Unused Standby Docker Images")
 
     assert "steps.deploy_backend.outcome == 'failure'" in rollback["if"]
-    assert "steps.post_deploy_smoke.outcome == 'failure'" in rollback["if"]
+    assert "steps.post_deploy_smoke.outcome" not in rollback["if"]
     assert "EXPECTED_CURRENT_IMAGE=" in rollback["run"]
+    assert "API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true" in rollback["run"]
     assert "scripts/rollback_backend.sh" in rollback["run"]
-    assert "scripts/deploy_backend_blue_green.sh" in primary_deploy["run"]
-    assert 'case "${API_DEPLOY_STRATEGY}" in' in primary_deploy["run"]
-    assert "blue_green)" in primary_deploy["run"]
-    assert "in_place)" in primary_deploy["run"]
+    assert '.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in primary_copy["run"]
+    assert "scp \\" in primary_copy["run"]
+    assert 'cat "scripts/${script}"' in primary_deploy["run"]
+    assert "deploy_backend_blue_green.sh" in primary_deploy["run"]
+    assert "deploy_backend_blue_green_safety.sh" in primary_deploy["run"]
+    assert "compose_candidate_transaction.sh" in primary_deploy["run"]
+    assert "reconcile_backend_compose_runtime.sh" in primary_deploy["run"]
+    assert "deploy_backend_candidate_transaction.sh" in primary_deploy["run"]
+    assert "API_CANONICAL_COMPOSE_FILE=" in primary_deploy["run"]
+    assert "API_CANDIDATE_COMPOSE_FILE=" in primary_deploy["run"]
+    assert "API_COMPOSE_TRANSACTIONAL=" in primary_deploy["run"]
+    assert "API_SMOKE_SCRIPT='/tmp/post_deploy_smoke_check.sh'" in primary_deploy["run"]
+    assert "bash /tmp/deploy_backend_candidate_transaction.sh" in primary_deploy["run"]
     assert "API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}'" in primary_deploy["run"]
+    assert "smoke_status=passed" in primary_smoke["run"]
+    assert "compose promotion completed" in primary_smoke["run"]
     assert "scripts/deploy_backend_blue_green.sh" in rollback["run"]
+    assert "scripts/deploy_backend_blue_green_safety.sh" in rollback["run"]
+    safety_helper_env = (
+        "API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh'"
+    )
+    assert safety_helper_env in primary_deploy["run"]
+    assert safety_helper_env in rollback["run"]
     assert "scripts/deploy.sh" in standby_deploy["run"]
+    assert '.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in standby_deploy["run"]
+    assert "scripts/deploy_backend_candidate_transaction.sh" in standby_deploy["run"]
+    assert "API_COMPOSE_TRANSACTIONAL='${API_STANDBY_COPY_COMPOSE}'" in standby_deploy["run"]
+    assert "API_SMOKE_SCRIPT='/tmp/post_deploy_smoke_check.sh'" in standby_deploy["run"]
+    assert "bash /tmp/deploy_backend_candidate_transaction.sh" in standby_deploy["run"]
     assert "API_DEPLOY_SERVICES='app'" in standby_deploy["run"]
+    assert "API_ACTIVE_SLOT_FILE='${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled'" in standby_deploy["run"]
     assert "API_RUN_MIGRATIONS='false'" in standby_deploy["run"]
     assert "steps.deploy_standby.outcome == 'failure'" in standby_rollback["if"]
     assert "API_DEPLOY_SERVICES='app'" in standby_rollback["run"]
+    assert "API_ACTIVE_SLOT_FILE='${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled'" in standby_rollback["run"]
+    assert "API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true" in standby_rollback["run"]
     assert primary_prune["continue-on-error"] == "true"
     assert standby_prune["continue-on-error"] == "true"
     workflow_text = "\n".join(
@@ -154,6 +182,7 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     )
     assert "GHCR_PAT='${{ secrets.GHCR_PAT }}'" not in workflow_text
     assert "IFS= read -r GHCR_PAT" in workflow_text
+    assert ".rollback-candidate" not in workflow_text
 
 
 def test_production_compose_requires_backend_release_and_pins_postgres_digest():

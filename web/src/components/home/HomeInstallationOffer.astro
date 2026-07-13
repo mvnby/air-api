@@ -1,0 +1,203 @@
+---
+import { HOMEPAGE_ANALYTICS_EVENTS } from "../../config/homepage";
+
+interface Props {
+    minBundlePrice: number;
+}
+
+const { minBundlePrice } = Astro.props;
+---
+
+<section class="installation-offer" aria-labelledby="installation-offer-title">
+    <div class="container installation-offer__inner">
+        <div class="installation-offer__copy">
+            <p class="installation-offer__kicker">Понятный пакет работ</p>
+            <h2 id="installation-offer-title">
+                Стандартный монтаж от {minBundlePrice} <span class="price-byn"></span>
+            </h2>
+            <p>
+                Цена действует при покупке кондиционера у нас и стандартных
+                условиях установки. Перед началом работ уточняем объект и
+                согласуем итоговую смету.
+            </p>
+            <div class="installation-offer__actions">
+                <a class="btn installation-offer__outline" href="/montaj-konditionerov/">
+                    Что входит
+                </a>
+                <a
+                    class="btn btn-primary"
+                    href="/montaj-konditionerov/#installation-request"
+                    data-home-event={HOMEPAGE_ANALYTICS_EVENTS.heroInstallation}
+                    data-home-action="estimate"
+                    data-home-item="installation_offer"
+                    onclick="window.trackHomeConversion?.(this)"
+                >
+                    Рассчитать монтаж по фото
+                    <span class="material-icons-round" aria-hidden="true">arrow_forward</span>
+                </a>
+            </div>
+            <a class="installation-offer__own" href="/montaj-konditionerov/#installation-request">
+                Уже купили кондиционер? Рассчитать только монтаж
+            </a>
+        </div>
+
+        <ul class="installation-offer__list" aria-label="Что входит в стандартный монтаж">
+            <li>
+                <span class="material-icons-round" aria-hidden="true">route</span>
+                <span><strong>До 3 м трассы</strong><small>Медные трубки, изоляция, кабель и дренаж</small></span>
+            </li>
+            <li>
+                <span class="material-icons-round" aria-hidden="true">view_week</span>
+                <span><strong>До 2 м короба</strong><small>Для коммуникаций внутри помещения</small></span>
+            </li>
+            <li>
+                <span class="material-icons-round" aria-hidden="true">radio_button_unchecked</span>
+                <span><strong>Одно отверстие</strong><small>В наружной стене глубиной до 80 см</small></span>
+            </li>
+            <li>
+                <span class="material-icons-round" aria-hidden="true">power</span>
+                <span><strong>Питание и крепёж</strong><small>Провод до 5 м, кронштейны и монтажные материалы</small></span>
+            </li>
+        </ul>
+    </div>
+</section>
+
+<style>
+    .installation-offer {
+        padding: 4.5rem 0;
+        background: var(--secondary);
+    }
+
+    .installation-offer__inner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.8fr);
+        gap: 4rem;
+        align-items: center;
+    }
+
+    .installation-offer__kicker {
+        margin: 0 0 0.4rem;
+        color: var(--primary);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .installation-offer h2 {
+        margin: 0;
+        color: var(--text);
+        font-size: clamp(2rem, 4.5vw, 3.4rem);
+        font-weight: 800;
+        line-height: 1.05;
+    }
+
+    .installation-offer__copy > p:not(.installation-offer__kicker) {
+        max-width: 650px;
+        margin: 1rem 0 0;
+        color: var(--text-muted);
+        line-height: 1.65;
+    }
+
+    .installation-offer__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+    }
+
+    .installation-offer__actions .btn {
+        min-height: 50px;
+        border-radius: 8px;
+    }
+
+    .installation-offer__outline {
+        border: 1px solid var(--panel-input-border);
+        background: var(--panel-input-bg);
+        color: var(--text);
+    }
+
+    .installation-offer__own {
+        display: inline-block;
+        margin-top: 1rem;
+        color: var(--primary);
+        font-size: 0.88rem;
+        font-weight: 800;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+
+    .installation-offer a:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+    }
+
+    .installation-offer__list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0;
+        border-top: 1px solid var(--border);
+        border-left: 1px solid var(--border);
+    }
+
+    .installation-offer__list li {
+        display: flex;
+        gap: 0.75rem;
+        min-height: 132px;
+        padding: 1.15rem;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+    }
+
+    .installation-offer__list > li > .material-icons-round {
+        color: var(--primary);
+        font-size: 24px;
+    }
+
+    .installation-offer__list li > span:last-child {
+        display: grid;
+        align-content: start;
+        gap: 0.3rem;
+    }
+
+    .installation-offer__list strong {
+        color: var(--text);
+        line-height: 1.25;
+    }
+
+    .installation-offer__list small {
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        line-height: 1.45;
+    }
+
+    @media (max-width: 900px) {
+        .installation-offer__inner {
+            grid-template-columns: 1fr;
+            gap: 2.5rem;
+        }
+    }
+
+    @media (max-width: 560px) {
+        .installation-offer {
+            padding: 3.5rem 0;
+        }
+
+        .installation-offer__actions {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .installation-offer__actions .btn {
+            width: 100%;
+        }
+
+        .installation-offer__list {
+            grid-template-columns: 1fr;
+        }
+
+        .installation-offer__list li {
+            min-height: 0;
+        }
+    }
+</style>

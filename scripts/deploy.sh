@@ -3,6 +3,7 @@ set -euo pipefail
 
 echo "🚀 Starting deployment script on server..."
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
 DEPLOY_SERVICES="${API_DEPLOY_SERVICES:-app bot}"
@@ -11,6 +12,8 @@ RUN_MIGRATIONS="${API_RUN_MIGRATIONS:-true}"
 RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
+DEPLOY_LOCK_ALREADY_HELD="${API_DEPLOY_LOCK_ALREADY_HELD:-false}"
+GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/prepare_google_oauth_token_dir.sh}"
 
 if [[ ! "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]]; then
     echo "❌ BACKEND_IMAGE must use a 40-character Git SHA tag or sha256 digest" >&2
@@ -31,11 +34,20 @@ if [[ ! -f "${COMPOSE_FILE}" ]]; then
     exit 1
 fi
 
-exec 9>"${DEPLOY_LOCK_FILE}"
-if ! flock -n 9; then
-    echo "❌ Another deployment holds ${DEPLOY_LOCK_FILE}; refusing to overlap" >&2
+if [[ "${DEPLOY_LOCK_ALREADY_HELD}" != "true" ]]; then
+    exec 9>"${DEPLOY_LOCK_FILE}"
+    if ! flock -n 9; then
+        echo "❌ Another deployment holds ${DEPLOY_LOCK_FILE}; refusing to overlap" >&2
+        exit 1
+    fi
+fi
+
+if [[ ! -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]]; then
+    echo "❌ Google OAuth token preparation script not found: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" >&2
     exit 1
 fi
+GOOGLE_OAUTH_PROJECT_DIR="${PROJECT_DIR}" \
+    bash "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" prepare
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}")
 read -r -a deploy_services <<<"${DEPLOY_SERVICES}"

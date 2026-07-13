@@ -32,6 +32,10 @@ class AuthenticatedUser:
     display_name: str | None = None
 
 
+MANAGER_ACCESS_ROLES = frozenset({"owner", "admin", "manager"})
+OWNER_ACCESS_ROLES = frozenset({"owner", "admin"})
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a new JWT access token."""
     to_encode = data.copy()
@@ -99,7 +103,7 @@ async def get_current_auth_context(
         if username != settings.ADMIN_USERNAME:
              raise HTTPException(status_code=401, detail="Invalid user")
 
-        return AuthenticatedUser(username=username, auth_source="legacy")
+        return AuthenticatedUser(username=username, auth_source="legacy", role="owner")
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
@@ -107,11 +111,43 @@ async def get_current_auth_context(
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 
-async def get_current_user(
+def _normalized_role(auth: AuthenticatedUser) -> str:
+    return str(auth.role or "").strip().lower()
+
+
+async def require_manager_access(
     auth: AuthenticatedUser = Depends(get_current_auth_context),
+) -> AuthenticatedUser:
+    if _normalized_role(auth) not in MANAGER_ACCESS_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager access required",
+        )
+    return auth
+
+
+async def require_owner_access(
+    auth: AuthenticatedUser = Depends(get_current_auth_context),
+) -> AuthenticatedUser:
+    if _normalized_role(auth) not in OWNER_ACCESS_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access required",
+        )
+    return auth
+
+
+async def get_current_user(
+    auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> str:
     return auth.username
 
 
 # Alias for backward compatibility if needed, but we should refactor usages.
 get_current_username = get_current_user
+
+
+async def get_current_owner_username(
+    auth: AuthenticatedUser = Depends(require_owner_access),
+) -> str:
+    return auth.username

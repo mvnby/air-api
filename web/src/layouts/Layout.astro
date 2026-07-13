@@ -6,6 +6,7 @@ import HeaderCart from "../components/cart/HeaderCart.vue";
 import MobileMenu from "../components/ui/MobileMenu.vue";
 import ToastContainer from "../components/ui/ToastContainer.vue";
 import SEOHead from "../components/seo/SEOHead.astro";
+import ProductCompareBar from "../components/product/ProductCompareBar.astro";
 
 interface Props {
 	title: string;
@@ -17,6 +18,9 @@ interface Props {
 	articleDate?: string;
 	canonical?: string;
 	robots?: string;
+	availabilityStatus?: string | null;
+	vitebskQty?: number | null;
+	minskQty?: number | null;
 }
 // Читаем переменную из окружения (она прокидывается скриптом)
 const siteUrl = import.meta.env.PUBLIC_SITE_URL || "";
@@ -32,6 +36,9 @@ const {
 	articleDate,
 	canonical,
 	robots,
+	availabilityStatus,
+	vitebskQty,
+	minskQty,
 } = Astro.props;
 
 const config = await getGlobalConfig();
@@ -80,6 +87,9 @@ const address = config["address"] || SITE_CONFIG.address;
 			currency={currency}
 			canonical={canonical}
 			robots={robots}
+			availabilityStatus={availabilityStatus}
+			vitebskQty={vitebskQty}
+			minskQty={minskQty}
 		/>
 		<slot name="head" />
 
@@ -201,6 +211,7 @@ const address = config["address"] || SITE_CONFIG.address;
 			<slot />
 			<ToastContainer client:idle />
 		</main>
+		<ProductCompareBar />
 
 		<footer class="footer">
 			<div class="container footer-grid">
@@ -285,6 +296,21 @@ const address = config["address"] || SITE_CONFIG.address;
 		</footer>
 
 		<script>
+			const analyticsWindow = window as Window & {
+				dataLayer?: Array<Record<string, string>>;
+				trackHomeConversion?: (element: HTMLAnchorElement) => void;
+			};
+
+			analyticsWindow.trackHomeConversion = (element) => {
+				analyticsWindow.dataLayer = analyticsWindow.dataLayer || [];
+				analyticsWindow.dataLayer.push({
+					event: element.dataset.homeEvent || "home_click",
+					action: element.dataset.homeAction || "open",
+					item: element.dataset.homeItem || "",
+					destination: element.getAttribute("href") || "",
+				});
+			};
+
 			const themeToggle = document.getElementById("theme-toggle");
 			themeToggle?.addEventListener("click", () => {
 				const isDark =

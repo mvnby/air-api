@@ -317,15 +317,20 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
 
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
-          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "mkdir -p '${API_PROJECT_DIR}'"
+          SSH_OPTS=(
+            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v
+          )
+          # shellcheck disable=SC2029
+          ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "mkdir -p '${API_PROJECT_DIR}'"
 
           if [ "${API_COPY_COMPOSE}" = "true" ]; then
             if [ ! -f "${API_COMPOSE_SOURCE_FILE}" ]; then
               echo "::error::API_COMPOSE_SOURCE_FILE not found: ${API_COMPOSE_SOURCE_FILE}"
               exit 1
             fi
-            echo "📄 Copying ${API_COMPOSE_SOURCE_FILE} to ${API_PROJECT_DIR}/${API_COMPOSE_FILE}"
+            candidate_file="${API_COMPOSE_FILE}.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo "📄 Staging ${API_COMPOSE_SOURCE_FILE} as ${API_PROJECT_DIR}/${candidate_file}"
             scp \
               -i ~/.ssh/deploy_key \
               -o BatchMode=yes \
@@ -334,7 +339,7 @@ jobs:
               -o ServerAliveInterval=15 \
               -o ServerAliveCountMax=3 \
               -v "${API_COMPOSE_SOURCE_FILE}" \
-              "${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:${API_PROJECT_DIR}/${API_COMPOSE_FILE}"
+              "${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}:${API_PROJECT_DIR}/${candidate_file}"
           else
             echo "⏭️ API_COPY_COMPOSE=${API_COPY_COMPOSE}; keeping remote compose unchanged"
           fi
@@ -345,45 +350,54 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           set -euo pipefail
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
-
-          case "${API_DEPLOY_STRATEGY}" in
-            blue_green)
-              cat scripts/ha/mvn-primary-status.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "install -m 0755 /dev/stdin /usr/local/sbin/mvn-primary-status"
-              cat scripts/deploy_backend_blue_green.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green.sh"
-              printf '%s\n' "${GHCR_PAT}" | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-                chmod +x /tmp/deploy_backend_blue_green.sh && \
-                IFS= read -r GHCR_PAT && export GHCR_PAT && \
-                GITHUB_ACTOR='${{ github.actor }}' \
-                API_PROJECT_DIR='${API_PROJECT_DIR}' \
-                API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
-                API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
-                API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
-                BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
-                API_BLUE_GREEN_SUMMARY_FILE='/tmp/backend_blue_green_summary.txt' \
-                bash /tmp/deploy_backend_blue_green.sh && \
-                cat /tmp/backend_blue_green_summary.txt"
-              ;;
-            in_place)
-              cat scripts/deploy.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy.sh"
-              printf '%s\n' "${GHCR_PAT}" | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-                chmod +x /tmp/deploy.sh && \
-                IFS= read -r GHCR_PAT && export GHCR_PAT && \
-                GITHUB_ACTOR='${{ github.actor }}' \
-                API_PROJECT_DIR='${API_PROJECT_DIR}' \
-                API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
-                API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
-                API_MIGRATION_SERVICE='${API_MIGRATION_SERVICE}' \
-                API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
-                API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
-                BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
-                bash /tmp/deploy.sh"
-              ;;
-            *)
-              echo "::error::Unsupported API_DEPLOY_STRATEGY=${API_DEPLOY_STRATEGY}"
-              exit 1
-              ;;
-          esac 2>&1 | tee backend_deploy.log
+          SSH_OPTS=(
+            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v
+          )
+          candidate_file="${API_COMPOSE_FILE}"
+          if [ "${API_COPY_COMPOSE}" = "true" ]; then
+            candidate_file="${API_COMPOSE_FILE}.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fi
+          cat scripts/ha/mvn-primary-status.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "install -m 0755 /dev/stdin /usr/local/sbin/mvn-primary-status"
+          for script in deploy.sh deploy_backend_blue_green.sh deploy_backend_blue_green_safety.sh \
+            prepare_google_oauth_token_dir.sh post_deploy_smoke_check.sh \
+            compose_candidate_transaction.sh reconcile_backend_compose_runtime.sh \
+            deploy_backend_candidate_transaction.sh; do
+            # shellcheck disable=SC2029
+            cat "scripts/${script}" | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/${script}"
+          done
+          # shellcheck disable=SC2029
+          printf '%s\n' "${GHCR_PAT}" | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+            set -euo pipefail; \
+            chmod 0755 /tmp/deploy.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh /tmp/post_deploy_smoke_check.sh /tmp/compose_candidate_transaction.sh /tmp/reconcile_backend_compose_runtime.sh /tmp/deploy_backend_candidate_transaction.sh && \
+            IFS= read -r GHCR_PAT && export GHCR_PAT && \
+            GITHUB_ACTOR='${{ github.actor }}' \
+            API_PROJECT_DIR='${API_PROJECT_DIR}' \
+            API_CANONICAL_COMPOSE_FILE='${API_PROJECT_DIR}/${API_COMPOSE_FILE}' \
+            API_CANDIDATE_COMPOSE_FILE='${API_PROJECT_DIR}/${candidate_file}' \
+            API_COMPOSE_TRANSACTIONAL='${API_COPY_COMPOSE}' \
+            API_DEPLOY_STRATEGY='${API_DEPLOY_STRATEGY}' \
+            API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
+            API_MIGRATION_SERVICE='${API_MIGRATION_SERVICE}' \
+            API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
+            API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
+            API_BLUE_GREEN_SCRIPT='/tmp/deploy_backend_blue_green.sh' \
+            API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh' \
+            API_IN_PLACE_DEPLOY_SCRIPT='/tmp/deploy.sh' \
+            API_SMOKE_SCRIPT='/tmp/post_deploy_smoke_check.sh' \
+            API_RECONCILE_SCRIPT='/tmp/reconcile_backend_compose_runtime.sh' \
+            COMPOSE_CANDIDATE_TRANSACTION_SCRIPT='/tmp/compose_candidate_transaction.sh' \
+            GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT='/tmp/prepare_google_oauth_token_dir.sh' \
+            BASE_URL='${API_BASE_URL}' \
+            READY_URL='${API_READY_URL}' \
+            COMPOSE_SERVICE_CHECKS='${API_SMOKE_COMPOSE_SERVICE_CHECKS}' \
+            BOT_EXPECT_ENABLED='${API_BOT_EXPECT_ENABLED}' \
+            BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
+            API_BLUE_GREEN_SUMMARY_FILE='/tmp/backend_blue_green_summary.txt' \
+            SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
+            bash /tmp/deploy_backend_candidate_transaction.sh; \
+            cat /tmp/backend_blue_green_summary.txt 2>/dev/null || true; \
+            cat /tmp/smoke_summary.txt" 2>&1 | tee backend_deploy.log
 
       - name: Optional Post-Deploy Backend Ops
         id: post_deploy_ops
@@ -400,7 +414,10 @@ jobs:
           DRY_RUN: ${{ secrets.DRY_RUN }}
         run: |
           set -euo pipefail
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
+          SSH_OPTS=(
+            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v
+          )
           : "${RUN_POST_DEPLOY_OPS:=true}"
           : "${OPS_MODE:=report_only}"
           : "${RUN_NORMALIZE_LEGACY:=false}"
@@ -410,9 +427,10 @@ jobs:
           : "${RUN_CLEANUP_LEGACY_LINKS:=false}"
           : "${DRY_RUN:=true}"
 
-          cat scripts/ops_post_deploy.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/ops_post_deploy.sh"
+          cat scripts/ops_post_deploy.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/ops_post_deploy.sh"
 
-          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+          # shellcheck disable=SC2029
+          ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/ops_post_deploy.sh && \
             RUN_POST_DEPLOY_OPS='${RUN_POST_DEPLOY_OPS}' \
             OPS_MODE='${OPS_MODE}' \
@@ -433,31 +451,28 @@ jobs:
         id: post_deploy_smoke
         run: |
           set -euo pipefail
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
-          cat scripts/post_deploy_smoke_check.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/post_deploy_smoke_check.sh"
-          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-            chmod +x /tmp/post_deploy_smoke_check.sh && \
-            BASE_URL='${API_BASE_URL}' \
-            READY_URL='${API_READY_URL}' \
-            COMPOSE_FILE='${API_PROJECT_DIR}/${API_COMPOSE_FILE}' \
-            COMPOSE_SERVICE_CHECKS='${API_SMOKE_COMPOSE_SERVICE_CHECKS}' \
-            BOT_EXPECT_ENABLED='${API_BOT_EXPECT_ENABLED}' \
-            BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
-            SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
-            bash /tmp/post_deploy_smoke_check.sh && cat /tmp/smoke_summary.txt" | tee backend_smoke.log
+          grep -Fq 'smoke_status=passed' backend_deploy.log
+          grep -Fq 'backend candidate activation, smoke, and compose promotion completed' backend_deploy.log
+          cp backend_deploy.log backend_smoke.log
 
       - name: Roll Back Backend After Failed Activation
         id: rollback_backend
-        if: ${{ always() && (steps.deploy_backend.outcome == 'failure' || steps.post_deploy_smoke.outcome == 'failure') }}
+        if: ${{ always() && steps.deploy_backend.outcome == 'failure' }}
         env:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           set -euo pipefail
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
-          cat scripts/deploy_backend_blue_green.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green.sh"
-          cat scripts/rollback_backend.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/rollback_backend.sh"
-          printf '%s\n' "${GHCR_PAT}" | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-            chmod +x /tmp/rollback_backend.sh /tmp/deploy_backend_blue_green.sh && \
+          SSH_OPTS=(
+            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3
+          )
+          cat scripts/deploy_backend_blue_green.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green.sh"
+          cat scripts/deploy_backend_blue_green_safety.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green_safety.sh"
+          cat scripts/prepare_google_oauth_token_dir.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/prepare_google_oauth_token_dir.sh"
+          cat scripts/rollback_backend.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/rollback_backend.sh"
+          # shellcheck disable=SC2029
+          printf '%s\n' "${GHCR_PAT}" | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+            chmod +x /tmp/rollback_backend.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh && \
             IFS= read -r GHCR_PAT && export GHCR_PAT && \
             GITHUB_ACTOR='${{ github.actor }}' \
             CONFIRM_ROLLBACK=true \
@@ -465,6 +480,9 @@ jobs:
             API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
             API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
             API_READY_URL='${API_READY_URL}' \
+            API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh' \
+            GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT='/tmp/prepare_google_oauth_token_dir.sh' \
+            API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true \
             EXPECTED_CURRENT_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
             bash /tmp/rollback_backend.sh" | tee backend_rollback.log
 
@@ -473,9 +491,12 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          SSH_OPTS="-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v"
-          cat scripts/prune_unused_docker_images.sh | ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/prune_unused_docker_images.sh"
-          ssh ${SSH_OPTS} ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
+          SSH_OPTS=(
+            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v
+          )
+          cat scripts/prune_unused_docker_images.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/prune_unused_docker_images.sh"
+          ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
             chmod +x /tmp/prune_unused_docker_images.sh && \
             KEEP_BACKEND_IMAGES=3 bash /tmp/prune_unused_docker_images.sh" | tee backend_docker_prune.log
 

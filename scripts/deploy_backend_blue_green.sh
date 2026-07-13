@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
@@ -27,8 +29,12 @@ API_HOST="${API_HOST:-api.mvn.by}"
 PUBLIC_READY_URL="${API_PUBLIC_READY_URL:-https://${API_HOST}/api/ready}"
 HEALTH_ATTEMPTS="${API_HEALTH_ATTEMPTS:-45}"
 HEALTH_DELAY_SECONDS="${API_HEALTH_DELAY_SECONDS:-2}"
+SCHEDULER_READY_ATTEMPTS="${API_SCHEDULER_READY_ATTEMPTS:-${HEALTH_ATTEMPTS}}"
+SCHEDULER_STABILITY_SECONDS="${API_SCHEDULER_STABILITY_SECONDS:-9}"
+SERVICE_STOP_TIMEOUT_SECONDS="${API_SERVICE_STOP_TIMEOUT_SECONDS:-5}"
 DRAIN_SECONDS="${API_DRAIN_SECONDS:-5}"
 SUMMARY_FILE="${API_BLUE_GREEN_SUMMARY_FILE:-/tmp/backend_blue_green_summary.txt}"
+GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/prepare_google_oauth_token_dir.sh}"
 
 active_slot="legacy"
 active_service="app"
@@ -41,7 +47,7 @@ env_updated=false
 bot_update_attempted=false
 nginx_switch_attempted=false
 candidate_started=false
-old_service_stopped=false
+old_service_stop_started=false
 TMP_DIR=""
 
 log() {
@@ -384,6 +390,57 @@ wait_ready_url() {
   return 1
 }
 
+validate_scheduler_running_payload() {
+  local path="$1"
+  python3 - "${path}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+runtime = payload.get("scheduler_runtime")
+if not isinstance(runtime, dict):
+    raise SystemExit(f"scheduler runtime payload is missing: {payload}")
+if runtime.get("expected") is not True or runtime.get("status") != "running":
+    raise SystemExit(f"scheduler runtime is not active: {runtime}")
+PY
+}
+
+wait_scheduler_running_url() {
+  local label="$1"
+  local url="$2"
+  local output="${TMP_DIR}/${label//[^A-Za-z0-9]/_}.json"
+  local consecutive=0
+  local required_samples=6
+  local stable_since_ns=""
+  local current_ns=""
+
+  for attempt in $(seq 1 "${SCHEDULER_READY_ATTEMPTS}"); do
+    if curl -fsS "${url}" > "${output}" 2>/dev/null \
+      && validate_ready_payload "${output}" \
+      && validate_scheduler_running_payload "${output}"; then
+      consecutive=$((consecutive + 1))
+      current_ns="$(monotonic_now_ns)" || {
+        log error "could not read the monotonic clock for ${label}"
+        return 1
+      }
+      if (( consecutive == 1 )); then
+        stable_since_ns="${current_ns}"
+      fi
+      if (( consecutive >= required_samples )) \
+        && scheduler_stability_elapsed "${stable_since_ns}" "${current_ns}"; then
+        log smoke "${label} running for ${consecutive} consecutive samples and at least ${SCHEDULER_STABILITY_SECONDS}s (attempt ${attempt})"
+        return 0
+      fi
+    else
+      consecutive=0
+      stable_since_ns=""
+    fi
+    sleep "${HEALTH_DELAY_SECONDS}"
+  done
+  log error "${label} did not remain running for ${required_samples} consecutive samples and at least ${SCHEDULER_STABILITY_SECONDS}s: ${url}"
+  return 1
+}
+
 smoke_candidate() {
   local base_url="$1"
   local health_file="${TMP_DIR}/candidate-health.json"
@@ -427,47 +484,8 @@ wait_service_running() {
   return 1
 }
 
-rollback_on_error() {
-  local exit_code=$?
-  trap - ERR
-  set +e
-  log rollback "activation failed; restoring ${active_slot} on port ${active_port}"
-
-  if [[ "${env_updated}" == "true" ]] && is_immutable_image "${previous_image}"; then
-    export BACKEND_IMAGE="${previous_image}"
-    write_backend_image "${previous_image}"
-  fi
-  if [[ "${old_service_stopped}" == "true" ]] && is_immutable_image "${previous_image}"; then
-    export BACKEND_IMAGE="${previous_image}"
-    "${COMPOSE[@]}" up -d --no-deps "${active_service}"
-  fi
-
-  if [[ "${nginx_switch_attempted}" == "true" && -f "${NGINX_UPSTREAM_FILE}" ]]; then
-    write_upstream "${active_slot}"
-    reload_proxy
-  fi
-
-  if [[ "${bot_update_attempted}" == "true" ]] && is_immutable_image "${previous_image}"; then
-    export BACKEND_IMAGE="${previous_image}"
-    "${COMPOSE[@]}" up -d --no-deps --force-recreate bot
-  fi
-  if [[ "${candidate_started}" == "true" && -n "${candidate_service}" ]]; then
-    "${COMPOSE[@]}" stop "${candidate_service}"
-    "${COMPOSE[@]}" rm -f "${candidate_service}"
-  fi
-
-  if [[ "${active_slot}" == "legacy" ]]; then
-    rm -f "${ACTIVE_SLOT_FILE}"
-  else
-    atomic_write_line "${ACTIVE_SLOT_FILE}" "${active_slot}" 600
-  fi
-
-  summary "status=rolled_back"
-  summary "failed_candidate=${REQUESTED_IMAGE}"
-  summary "restored_slot=${active_slot}"
-  summary "restored_port=${active_port}"
-  exit "${exit_code}"
-}
+# shellcheck disable=SC1090,SC1091
+source "${API_BLUE_GREEN_SAFETY_HELPER:-${SCRIPT_DIR}/deploy_backend_blue_green_safety.sh}"
 
 required_commands=(docker curl python3 flock)
 if [[ "${PROXY_MODE}" == "host_nginx" ]]; then
@@ -485,6 +503,14 @@ docker compose version >/dev/null
   log error "BACKEND_IMAGE is required"
   exit 1
 }
+[[ "${SCHEDULER_STABILITY_SECONDS}" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
+  log error "API_SCHEDULER_STABILITY_SECONDS must be a non-negative number"
+  exit 1
+}
+if [[ ! "${SERVICE_STOP_TIMEOUT_SECONDS}" =~ ^([1-9]|10)$ ]]; then
+  log error "API_SERVICE_STOP_TIMEOUT_SECONDS must be an integer from 1 to 10"
+  exit 1
+fi
 is_immutable_image "${BACKEND_IMAGE}" || {
   log error "BACKEND_IMAGE must use a Git SHA tag or sha256 digest"
   exit 1
@@ -512,21 +538,31 @@ if [[ "${DEPLOY_LOCK_ALREADY_HELD}" != "true" ]]; then
   }
 fi
 
-mkdir -p media model-cache/u2net
+[[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
+  log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
+  exit 1
+}
+GOOGLE_OAUTH_PROJECT_DIR="${PROJECT_DIR}" \
+  bash "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" prepare
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 : > "${SUMMARY_FILE}"
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
 
 resolve_active_slot
-ensure_proxy
-previous_image="$(sed -n 's/^BACKEND_IMAGE=//p' "${ENV_FILE}" | tail -n 1)"
-is_immutable_image "${previous_image}" || {
-  log error "current BACKEND_IMAGE in ${ENV_FILE} is not immutable"
+configured_image="$(sed -n 's/^BACKEND_IMAGE=//p' "${ENV_FILE}" | tail -n 1)"
+previous_image="$(inspect_service_runtime_image "${active_service}")" || {
+  log error "active API runtime image could not be established"
   exit 1
 }
 
 if [[ "${BOOTSTRAP_ONLY}" == "true" ]]; then
+  if [[ "${configured_image}" != "${previous_image}" ]]; then
+    log error "BOOTSTRAP_ONLY refuses BACKEND_IMAGE drift: env=${configured_image:-missing} runtime=${previous_image}"
+    exit 1
+  fi
+  ensure_proxy
   smoke_candidate "http://127.0.0.1:${active_port}"
   wait_ready_url "internal_proxy" "http://127.0.0.1:${INTERNAL_PROXY_PORT}/api/ready"
   summary "status=bootstrap_complete"
@@ -537,16 +573,31 @@ if [[ "${BOOTSTRAP_ONLY}" == "true" ]]; then
   exit 0
 fi
 
-if [[ "${active_slot}" != "legacy" && "${BACKEND_IMAGE}" == "${previous_image}" ]]; then
-  smoke_candidate "http://127.0.0.1:${active_port}"
-  wait_ready_url "origin" "https://${API_HOST}/api/ready" --resolve "${API_HOST}:443:127.0.0.1"
-  wait_ready_url "public" "${PUBLIC_READY_URL}"
-  summary "status=already_active"
-  summary "active_slot=${active_slot}"
-  summary "active_port=${active_port}"
-  summary "backend_image=${BACKEND_IMAGE}"
-  log "done" "requested image is already active"
-  exit 0
+if [[ "${configured_image}" != "${previous_image}" ]]; then
+  log reconcile "restoring BACKEND_IMAGE from active runtime ${previous_image}"
+  write_backend_image "${previous_image}"
+fi
+mkdir -p media model-cache/u2net
+ensure_proxy
+
+if [[ "${active_slot}" != "legacy" \
+  && "${BACKEND_IMAGE}" == "${previous_image}" \
+  && ! -f "${PROJECT_DIR}/.rollback-api-buffer.compose.yml" ]]; then
+  if service_runtime_matches_image bot "${REQUESTED_IMAGE}"; then
+    smoke_candidate "http://127.0.0.1:${active_port}"
+    wait_ready_url "origin" "https://${API_HOST}/api/ready" --resolve "${API_HOST}:443:127.0.0.1"
+    wait_ready_url "public" "${PUBLIC_READY_URL}"
+    wait_scheduler_running_url \
+      "active_scheduler" \
+      "http://127.0.0.1:${active_port}/api/ready"
+    summary "status=already_active"
+    summary "active_slot=${active_slot}"
+    summary "active_port=${active_port}"
+    summary "backend_image=${BACKEND_IMAGE}"
+    log "done" "requested image is already active"
+    exit 0
+  fi
+  log reconcile "bot runtime does not match ${REQUESTED_IMAGE}; running a full activation"
 fi
 
 if [[ "${active_slot}" == "blue" ]]; then
@@ -593,11 +644,15 @@ wait_ready_url "origin" "https://${API_HOST}/api/ready" --resolve "${API_HOST}:4
 wait_ready_url "public" "${PUBLIC_READY_URL}"
 sleep "${DRAIN_SECONDS}"
 
-old_service_stopped=true
-"${COMPOSE[@]}" stop "${active_service}"
+old_service_stop_started=true
+"${COMPOSE[@]}" stop -t "${SERVICE_STOP_TIMEOUT_SECONDS}" "${active_service}"
 "${COMPOSE[@]}" rm -f "${active_service}"
-atomic_write_line "${PREVIOUS_IMAGE_FILE}" "${previous_image}" 600
 atomic_write_line "${ACTIVE_SLOT_FILE}" "${candidate_slot}" 600
+wait_scheduler_running_url \
+  "candidate_scheduler" \
+  "http://127.0.0.1:${candidate_port}/api/ready"
+rm -f "${PROJECT_DIR}/.rollback-api-buffer.compose.yml"
+atomic_write_line "${PREVIOUS_IMAGE_FILE}" "${previous_image}" 600
 
 trap - ERR
 summary "status=activated"

@@ -50,6 +50,7 @@ async def test_manager_backups_list(async_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_manager_backups_restore_start_and_status(async_client, monkeypatch):
     headers = await _auth_headers(async_client)
+    monkeypatch.setattr("routers.manager_backups.settings.BACKUP_RESTORE_ENABLED", True)
 
     async def _fake_start_restore(file_id: str):
         assert file_id == "db-restore-1"
@@ -94,6 +95,7 @@ async def test_manager_backups_restore_start_and_status(async_client, monkeypatc
 @pytest.mark.asyncio
 async def test_manager_backups_restore_conflict(async_client, monkeypatch):
     headers = await _auth_headers(async_client)
+    monkeypatch.setattr("routers.manager_backups.settings.BACKUP_RESTORE_ENABLED", True)
 
     async def _raise_conflict(_file_id: str):
         raise RestoreConflictError("Another restore job is already running")

@@ -1,15 +1,19 @@
 import re
 from typing import Optional
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 PHONE_ERROR = "Телефон должен быть в международном формате, например +375XXXXXXXXX или +7XXXXXXXXXX"
 UNP_ERROR = "УНП должен содержать 9 цифр"
 IBAN_ERROR = "IBAN должен быть валидным BY-счетом"
 BIC_ERROR = "BIC должен содержать 8-11 латинских символов/цифр"
+MANUAL_URL_ERROR = "Ссылка на инструкцию должна использовать HTTP(S) или локальный путь /media/"
 
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _PHONE_PATTERN = re.compile(r"^\+?[\d\s().-]+$")
 _BIC_PATTERN = re.compile(r"^[A-Z0-9]{8,11}$")
 _IBAN_BY_PATTERN = re.compile(r"^BY\d{2}[A-Z0-9]{24}$")
+_CONTROL_OR_SPACE_PATTERN = re.compile(r"[\x00-\x20\x7f]")
+_PUBLIC_MANUAL_RELATIVE_PREFIXES = ("/media/",)
 
 
 def clean_optional(value: Optional[str]) -> Optional[str]:
@@ -104,3 +108,32 @@ def validate_optional_bic(value: Optional[str]) -> Optional[str]:
     if not _BIC_PATTERN.match(bic):
         raise ValueError(BIC_ERROR)
     return bic
+
+
+def validate_public_manual_url(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw or _CONTROL_OR_SPACE_PATTERN.search(raw) or "\\" in raw:
+        raise ValueError(MANUAL_URL_ERROR)
+
+    parsed = urlsplit(raw)
+    scheme = parsed.scheme.lower()
+    if scheme:
+        if scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(MANUAL_URL_ERROR)
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError(MANUAL_URL_ERROR)
+        return urlunsplit((scheme, parsed.netloc, parsed.path, parsed.query, ""))
+
+    if parsed.netloc or not parsed.path.startswith("/") or parsed.path.startswith("//"):
+        raise ValueError(MANUAL_URL_ERROR)
+    if not parsed.path.startswith(_PUBLIC_MANUAL_RELATIVE_PREFIXES):
+        raise ValueError(MANUAL_URL_ERROR)
+
+    decoded_segments = [unquote(segment) for segment in parsed.path.split("/")]
+    if any(
+        segment in {".", ".."} or "/" in segment or "\\" in segment
+        for segment in decoded_segments
+    ):
+        raise ValueError(MANUAL_URL_ERROR)
+
+    return urlunsplit(("", "", parsed.path, parsed.query, ""))

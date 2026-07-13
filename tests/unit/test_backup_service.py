@@ -1,8 +1,10 @@
 import pytest
 import tarfile
+import io
 from pathlib import Path
 
-from services.backup_service import BackupService
+from services.backup_service import BackupConfigurationError, BackupService
+from services.google_oauth_credentials import GoogleTokenRefreshError
 
 
 def test_list_backups_classifies_and_sorts(monkeypatch):
@@ -51,6 +53,52 @@ def test_list_backups_classifies_and_sorts(monkeypatch):
     assert items[0]["created_at"] > items[1]["created_at"]
 
 
+def test_list_backups_propagates_google_auth_failure(monkeypatch):
+    service = BackupService()
+    service.backup_folder_id = "folder-id"
+
+    class _FailingGoogleService:
+        def list_files(self, _folder_id: str, limit: int = 20):
+            raise GoogleTokenRefreshError("Google OAuth token refresh failed")
+
+    monkeypatch.setattr(
+        "services.backup_service.get_google_service",
+        lambda: _FailingGoogleService(),
+    )
+
+    with pytest.raises(GoogleTokenRefreshError, match="token refresh failed"):
+        service.list_backups(limit=100)
+
+
+def test_list_backups_fails_closed_without_backup_folder_id():
+    service = BackupService()
+    service.backup_folder_id = None
+
+    with pytest.raises(BackupConfigurationError, match="BACKUP_FOLDER_ID"):
+        service.list_backups(limit=100)
+
+
+def test_production_backup_fails_before_dump_without_backup_folder_id(monkeypatch):
+    service = BackupService()
+    service.backup_folder_id = None
+    monkeypatch.setattr(
+        "services.backup_service.settings",
+        type(
+            "ProductionSettings",
+            (),
+            {"is_production": True, "ENVIRONMENT": "production"},
+        )(),
+    )
+    monkeypatch.setattr(
+        service,
+        "create_dump",
+        lambda: pytest.fail("dump must not start without a destination folder"),
+    )
+
+    with pytest.raises(BackupConfigurationError, match="BACKUP_FOLDER_ID"):
+        service.perform_backup()
+
+
 def test_sanitize_plain_sql_dump_removes_client_only_settings(tmp_path: Path):
     dump_path = tmp_path / "backup.sql"
     dump_path.write_text(
@@ -96,6 +144,9 @@ async def test_restore_from_file_async_uses_psql(monkeypatch):
     assert captured["args"][0] == "psql"
     assert "-f" in captured["args"]
     assert "/tmp/test_restore.sql" in captured["args"]
+    assert "--no-psqlrc" in captured["args"]
+    assert "--set=ON_ERROR_STOP=1" in captured["args"]
+    assert "--single-transaction" in captured["args"]
     assert captured["kwargs"]["env"]["PGPASSWORD"] == service.db_password
 
 
@@ -141,3 +192,33 @@ def test_restore_media_from_archive_restores_media_dir(monkeypatch, tmp_path: Pa
     assert safety_path.endswith("safety_media.tar.gz")
     assert (media_dir / "new.txt").read_text(encoding="utf-8") == "new"
     assert not (media_dir / "old.txt").exists()
+
+
+def test_safe_extract_tar_rejects_special_files(tmp_path: Path):
+    archive_path = tmp_path / "unsafe.tar"
+    with tarfile.open(archive_path, "w") as tar:
+        fifo = tarfile.TarInfo("media/pipe")
+        fifo.type = tarfile.FIFOTYPE
+        tar.addfile(fifo)
+
+    destination = tmp_path / "destination"
+    destination.mkdir()
+
+    with pytest.raises(Exception, match="special file"):
+        BackupService._safe_extract_tar(str(archive_path), str(destination))
+
+
+def test_safe_extract_tar_rejects_uncompressed_size_limit(monkeypatch, tmp_path: Path):
+    archive_path = tmp_path / "oversized.tar"
+    with tarfile.open(archive_path, "w") as tar:
+        content = b"too-large"
+        item = tarfile.TarInfo("media/file.bin")
+        item.size = len(content)
+        tar.addfile(item, io.BytesIO(content))
+
+    monkeypatch.setattr(BackupService, "_MAX_MEDIA_ARCHIVE_UNCOMPRESSED_BYTES", 1)
+    destination = tmp_path / "destination"
+    destination.mkdir()
+
+    with pytest.raises(Exception, match="uncompressed size"):
+        BackupService._safe_extract_tar(str(archive_path), str(destination))

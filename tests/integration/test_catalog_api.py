@@ -39,6 +39,14 @@ async def test_list_products(async_client: AsyncClient, seed_product):
     slugs = [item["slug"] for item in data["items"]]
     assert seed_product.slug in slugs
 
+
+@pytest.mark.asyncio
+async def test_public_catalog_rejects_limit_above_100(async_client: AsyncClient):
+    response = await async_client.get("/api/v1/catalog", params={"limit": 101})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Limit must be between 1 and 100"
+
 @pytest.mark.asyncio
 async def test_product_detail(async_client: AsyncClient, seed_product):
     """Test fetching a specific product by slug."""
@@ -212,6 +220,49 @@ async def test_public_product_search_returns_items_from_smart_search(async_clien
     assert response.status_code == 200, response.text
     items = response.json()["items"]
     assert any(item["id"] == product.id for item in items)
+
+
+@pytest.mark.asyncio
+async def test_public_catalog_search_count_matches_filtered_items(async_client: AsyncClient, db):
+    marker = "CATALOGCOUNTSEARCH987"
+    matching_products = [
+        Product(
+            title=f"{marker} Product {index}",
+            slug=f"{marker.lower()}-product-{index}",
+            price=1200 + index,
+            area=25,
+            is_published=True,
+        )
+        for index in range(2)
+    ]
+    db.add_all(
+        [
+            *matching_products,
+            Product(
+                title="Unrelated catalog count product",
+                slug="unrelated-catalog-count-product",
+                price=999,
+                area=20,
+                is_published=True,
+            ),
+        ]
+    )
+    await db.commit()
+
+    response = await async_client.get(
+        "/api/v1/catalog",
+        params={"q": marker, "limit": 1},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert len(payload["items"]) == 1
+    assert payload["meta"] == {
+        "total": 2,
+        "page": 1,
+        "limit": 1,
+        "pages": 2,
+    }
 
 
 @pytest.mark.asyncio

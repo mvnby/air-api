@@ -6,6 +6,19 @@ from .base import BaseParser
 
 class OnlinerParser(BaseParser):
     @staticmethod
+    def _infer_manufacturer(data: Dict[str, Any], title: str) -> str | None:
+        manufacturer = str((data.get("manufacturer") or {}).get("name") or "").strip()
+        if manufacturer:
+            return manufacturer
+
+        parts = str(title or "").split()
+        if not parts:
+            return None
+        if parts[0].lower() in {"кондиционер", "сплит-система"}:
+            return parts[1] if len(parts) > 1 else None
+        return parts[0]
+
+    @staticmethod
     def _extract_spec_value(cell) -> str:
         # Onliner uses icon-only values for boolean fields:
         # <span class="i-tip"></span> -> yes, <span class="i-x"></span> -> no.
@@ -78,7 +91,13 @@ class OnlinerParser(BaseParser):
             product_data = {}
             
             # Basic info from API (or fallback to HTML H1)
-            product_data['title'] = data.get('full_name') or data.get('name') or soup.find('h1').get_text(strip=True)
+            heading = soup.find('h1')
+            title = (
+                data.get('full_name')
+                or data.get('name')
+                or (heading.get_text(strip=True) if heading else slug)
+            )
+            product_data['title'] = title
             product_data['description'] = data.get('description', '')
             
             # Price
@@ -117,11 +136,13 @@ class OnlinerParser(BaseParser):
                         # Extract target fields logic
                         if 'Мощность охлаждения' in key:
                             match = re.search(r'([\d\.]+)', value)
-                            if match: target_specs['power_cooling'] = float(match.group(1))
+                            if match:
+                                target_specs['power_cooling'] = float(match.group(1))
                         
                         elif 'Мощность обогрева' in key:
                             match = re.search(r'([\d\.]+)', value)
-                            if match: target_specs['power_heating'] = float(match.group(1))
+                            if match:
+                                target_specs['power_heating'] = float(match.group(1))
                         
                         elif 'Площадь помещения' in key or 'Обслуживаемая площадь' in key:
                             match = re.search(r'(\d+)', value)
@@ -144,15 +165,7 @@ class OnlinerParser(BaseParser):
             # Auto-categories (Area tags are now handled by slug in ImporterService)
             # Add brand from title (simple heuristic)
             # manufacturer
-            manufacturer = data.get('manufacturer', {}).get('name')
-            if not manufacturer:
-                 # heuristic fallback
-                 parts = title.split()
-                 if len(parts) > 0:
-                     if parts[0].lower() in ['кондиционер', 'сплит-система']:
-                         if len(parts) > 1: manufacturer = parts[1]
-                     else:
-                         manufacturer = parts[0]
+            manufacturer = self._infer_manufacturer(data, title)
             
             if manufacturer:
                 categories.append(manufacturer)

@@ -8,5 +8,7 @@ export type ManagerGoogleAuthStatusResponse = {
     expired: boolean;
     expiry?: (string | null);
     scopes?: Array<string>;
+    persistence_ok: boolean;
+    persistence_error_code?: (string | null);
 };
 

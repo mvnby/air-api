@@ -118,22 +118,26 @@ class CatalogImportRuntimeService:
         if next_job_id:
             self._schedule_job(next_job_id)
 
-    async def resume_pending_jobs(self) -> None:
+    async def resume_pending_jobs(self) -> bool:
         async with async_session_maker() as session:
-            stale_running = (
+            running_job_id = (
                 await session.execute(
-                    select(CatalogImportJob).where(CatalogImportJob.status == "running")
+                    select(CatalogImportJob.job_id)
+                    .where(CatalogImportJob.status == "running")
+                    .order_by(CatalogImportJob.updated_at.desc())
                 )
-            ).scalars().all()
-            for job in stale_running:
-                job.status = "queued"
-                job.stage = "queued"
-                job.error = None
-                job.updated_at = datetime.now()
-                session.add(job)
-            await session.commit()
+            ).scalars().first()
+
+        if running_job_id:
+            logger.warning(
+                "Catalog import recovery skipped: running job %s has no durable "
+                "lease proof; leaving it unchanged to avoid duplicate execution.",
+                running_job_id,
+            )
+            return False
 
         await self._start_next_queued_job()
+        return True
 
     async def start_import(
         self,

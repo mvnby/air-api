@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import get_session
-from schemas import ProductAvailabilityLeadPayload, ProductAvailabilityLeadResponse
+from schemas import (
+    ProductAvailabilityLeadPayload,
+    ProductAvailabilityLeadResponse,
+    PublicContactLeadPayload,
+    PublicContactLeadResponse,
+)
 from services.repair_diagnostic_service import (
     RepairDiagnosticLeadResponse,
     RepairDiagnosticService,
@@ -16,6 +21,18 @@ from services.repair_diagnostic_service import (
 from services.website_lead_service import WebsiteLeadService
 
 router = APIRouter(tags=["api"])
+
+
+@router.post(
+    "/v1/leads/contact",
+    response_model=PublicContactLeadResponse,
+    operation_id="create_public_contact_lead",
+)
+async def create_public_contact_lead(
+    payload: PublicContactLeadPayload,
+    session: AsyncSession = Depends(get_session),
+):
+    return await WebsiteLeadService.create_contact_lead(session, payload)
 
 
 @router.post(

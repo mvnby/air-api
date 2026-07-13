@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_owner_username
 from routers.manager_operation_ids import CREATE_MANAGER_STAFF, LIST_MANAGER_STAFF, PATCH_MANAGER_STAFF
 from schemas import ManagerStaffCreatePayload, ManagerStaffListResponse, ManagerStaffResponse, ManagerStaffUpdatePayload
 from services.staff_user_service import StaffUserService
@@ -20,7 +20,7 @@ async def list_staff(
     limit: int = Query(100, ge=1, le=100),
     search: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_owner_username),
 ):
     return await StaffUserService.list_staff(session=session, page=page, limit=limit, search=search)
 
@@ -29,7 +29,7 @@ async def list_staff(
 async def create_staff(
     payload: ManagerStaffCreatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_owner_username),
 ):
     try:
         return await StaffUserService.create_staff(session=session, payload=payload)
@@ -46,7 +46,7 @@ async def patch_staff(
     staff_user_id: int,
     payload: ManagerStaffUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_owner_username),
 ):
     try:
         staff_user = await StaffUserService.update_staff(session=session, staff_user_id=staff_user_id, payload=payload)

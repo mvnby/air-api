@@ -22,12 +22,13 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db/${POSTGRES_DB:-air_conditioners}
+      GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
     ports:
       - "8000:8000"
     volumes:
       - .:/app
       - ./media:/app/media
-      - ./token.json:/app/token.json
+      - ./google-oauth:/app/google-oauth
 
   bot:
     build: .

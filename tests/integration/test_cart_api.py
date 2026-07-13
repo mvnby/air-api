@@ -1,6 +1,9 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from httpx import AsyncClient
-from models import Product
+from models import InstallationRate, Product
+from services.bot_service import BotService
 
 @pytest.fixture
 async def cart_product(db):
@@ -12,13 +15,23 @@ async def cart_product(db):
         area=35,
         is_published=True
     )
+    rate = InstallationRate(
+        category="Wall",
+        power_range="07-12",
+        base_price=250,
+        extra_pipe_price=50,
+        included_pipe_meters=3,
+        is_fixed=True,
+    )
     db.add(product)
+    db.add(rate)
     await db.commit()
     await db.refresh(product)
-    return product
+    await db.refresh(rate)
+    return product, rate
 
 @pytest.mark.asyncio
-async def test_checkout_flow(async_client: AsyncClient, cart_product):
+async def test_checkout_flow(async_client: AsyncClient, cart_product, monkeypatch):
     """
     Test the Checkout flow (Create Order).
     Note: The project uses a client-side cart (Nanostores). 
@@ -26,6 +39,10 @@ async def test_checkout_flow(async_client: AsyncClient, cart_product):
     The 'Cart' is fully passed to /api/v1/orders at checkout and
     should create a negotiation-stage order, not a raw inbox lead.
     """
+    telegram_send = AsyncMock(side_effect=AssertionError("checkout test attempted Telegram delivery"))
+    monkeypatch.setattr(BotService, "send_message", telegram_send)
+
+    product, rate = cart_product
     payload = {
         "customer": {
             "name": "Integration Tester",
@@ -36,9 +53,10 @@ async def test_checkout_flow(async_client: AsyncClient, cart_product):
         },
         "items": [
             {
-                "product_id": cart_product.id,
+                "product_id": product.id,
                 "quantity": 2,
                 "with_installation": True,
+                "installation_rate_id": rate.id,
                 "installation_price": 250,
                 "installation_meta": {"meters": 3},
                 "installation_options": []
@@ -56,9 +74,10 @@ async def test_checkout_flow(async_client: AsyncClient, cart_product):
     
     # Calculate expected total: (Product * 2) + (Install * 2)
     # 2000 * 2 + 250 * 2 = 4000 + 500 = 4500
-    expected_total = (cart_product.price * 2) + (250 * 2)
+    expected_total = (product.price * 2) + (250 * 2)
     assert data["total_amount"] == expected_total
     assert "margin" not in data
     assert "total_cost" not in data
     assert "technical_meta" not in data
     assert "cost" not in data
+    telegram_send.assert_not_awaited()

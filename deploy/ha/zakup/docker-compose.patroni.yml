@@ -16,11 +16,12 @@ x-api-app: &api-app
     BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS: ""
     BACKGROUND_REMOVAL_PROCESS_MAX_MEMORY_MB: "384"
     BACKGROUND_REMOVAL_PROCESS_MAX_CPU_SECONDS: "45"
+    GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
   volumes:
     - ./media:/app/media
     - ./postgres-wal-archive:/postgres-wal-archive
     - ./model-cache/u2net:/root/.u2net
-    - ./secrets/token.json:/app/token.json
+    - ./google-oauth:/app/google-oauth
     - ./secrets/client_secret.json:/app/client_secret.json:ro
     - ./secrets/credentials.json:/app/credentials.json:ro
     - ./secrets/g-vision-ocr.json:/app/g-vision-ocr.json:ro
@@ -119,7 +120,8 @@ services:
       - "127.0.0.1:18080:8000"
     volumes:
       - ./api-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./api-proxy/upstream.conf:/etc/nginx/conf.d/mvn-upstream.conf:ro
+      # Mount the directory so atomic upstream renames stay visible for graceful reloads.
+      - ./api-proxy:/etc/nginx/mvn-proxy:ro
     healthcheck:
       test: [CMD, nginx, -t]
       interval: 10s

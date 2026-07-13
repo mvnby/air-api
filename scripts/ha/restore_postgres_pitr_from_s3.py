@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -30,6 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 WAL_NAME_RE = re.compile(
     r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
 )
+DEFAULT_WAL_SEGMENT_SIZE_BYTES = 16 * 1024 * 1024
+DEFAULT_MIN_FREE_BYTES = 1024 * 1024 * 1024
 
 
 def _load_python_module_from_path(module_name: str, path: Path) -> Any | None:
@@ -93,6 +96,13 @@ class BasebackupManifest:
     payload: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class WalObject:
+    key: str
+    filename: str
+    size_bytes: int
+
+
 def _read_s3_body(body: Any) -> bytes:
     data = body.read()
     if isinstance(data, str):
@@ -132,18 +142,202 @@ def _list_manifest_keys(client: Any, bucket: str, prefix: str) -> list[str]:
     return sorted(keys)
 
 
-def _list_wal_keys(client: Any, config: Any) -> list[str]:
+def _list_wal_objects(client: Any, config: Any) -> list[WalObject]:
     prefix = f"{config.key_prefix}/{config.cluster}/wal/"
     paginator = client.get_paginator("list_objects_v2")
-    keys: list[str] = []
+    objects: list[WalObject] = []
     for page in paginator.paginate(Bucket=config.bucket, Prefix=prefix):
         for item in page.get("Contents", []):
             key = str(item.get("Key") or "")
             filename = key.rsplit("/", 1)[-1]
             if key.endswith("/") or not WAL_NAME_RE.match(filename):
                 continue
-            keys.append(key)
-    return sorted(keys)
+            objects.append(
+                WalObject(
+                    key=key,
+                    filename=filename,
+                    size_bytes=int(item.get("Size") or 0),
+                )
+            )
+    return sorted(objects, key=lambda item: item.filename)
+
+
+def _parse_lsn(value: str) -> int:
+    try:
+        high, low = value.split("/", 1)
+        return (int(high, 16) << 32) + int(low, 16)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise SystemExit(f"Invalid WAL LSN in backup_manifest: {value!r}") from exc
+
+
+def _wal_segment_name(*, timeline: int, lsn: str, segment_size_bytes: int) -> str:
+    if (
+        segment_size_bytes <= 0
+        or segment_size_bytes > 0x100000000
+        or 0x100000000 % segment_size_bytes != 0
+    ):
+        raise SystemExit(
+            "WAL segment size must be a positive divisor of 2^32 bytes; "
+            f"got {segment_size_bytes}"
+        )
+    if timeline <= 0:
+        raise SystemExit(f"Invalid WAL timeline in backup_manifest: {timeline}")
+
+    segments_per_log = 0x100000000 // segment_size_bytes
+    segment_number = _parse_lsn(lsn) // segment_size_bytes
+    log = segment_number // segments_per_log
+    segment = segment_number % segments_per_log
+    return f"{timeline:08X}{log:08X}{segment:08X}"
+
+
+def _backup_manifest_entry(manifest: BasebackupManifest) -> dict[str, Any]:
+    for item in manifest.payload.get("files") or []:
+        if isinstance(item, dict) and item.get("name") == "backup_manifest":
+            if item.get("key"):
+                return item
+            break
+    raise SystemExit(
+        f"Basebackup {manifest.backup_id} has no backup_manifest file; "
+        "cannot select a safe WAL range"
+    )
+
+
+def _load_postgres_backup_manifest(
+    client: Any, bucket: str, manifest: BasebackupManifest
+) -> dict[str, Any]:
+    entry = _backup_manifest_entry(manifest)
+    response = client.get_object(Bucket=bucket, Key=str(entry["key"]))
+    try:
+        payload = json.loads(_read_s3_body(response["Body"]).decode("utf-8"))
+    except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            f"Invalid PostgreSQL backup_manifest for {manifest.backup_id}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(
+            f"Invalid PostgreSQL backup_manifest for {manifest.backup_id}"
+        )
+    return payload
+
+
+def _backup_start_wal_name(
+    postgres_manifest: dict[str, Any], *, segment_size_bytes: int
+) -> str:
+    raw_ranges = postgres_manifest.get("WAL-Ranges")
+    if not isinstance(raw_ranges, list) or not raw_ranges:
+        raise SystemExit("PostgreSQL backup_manifest has no WAL-Ranges")
+
+    starts: list[tuple[int, int, str]] = []
+    for item in raw_ranges:
+        if not isinstance(item, dict):
+            raise SystemExit("PostgreSQL backup_manifest has an invalid WAL-Ranges entry")
+        try:
+            timeline = int(item.get("Timeline"))
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(
+                f"Invalid WAL timeline in backup_manifest: {item.get('Timeline')!r}"
+            ) from exc
+        start_lsn = str(item.get("Start-LSN") or "")
+        starts.append((timeline, _parse_lsn(start_lsn), start_lsn))
+
+    timeline, _numeric_lsn, start_lsn = min(starts)
+    return _wal_segment_name(
+        timeline=timeline,
+        lsn=start_lsn,
+        segment_size_bytes=segment_size_bytes,
+    )
+
+
+def _wal_position(filename: str) -> tuple[int, int, int] | None:
+    if filename.endswith(".history"):
+        return None
+    base = filename[:24]
+    if len(base) != 24:
+        return None
+    try:
+        return int(base[:8], 16), int(base[8:16], 16), int(base[16:24], 16)
+    except ValueError:
+        return None
+
+
+def _select_wal_objects(
+    objects: list[WalObject], *, start_wal_name: str
+) -> list[WalObject]:
+    start_position = _wal_position(start_wal_name)
+    if start_position is None:
+        raise SystemExit(f"Invalid start WAL filename: {start_wal_name}")
+    start_timeline = start_position[0]
+
+    selected: list[WalObject] = []
+    for item in objects:
+        if item.filename.endswith(".history"):
+            try:
+                history_timeline = int(item.filename[:8], 16)
+            except ValueError:
+                continue
+            if history_timeline >= start_timeline:
+                selected.append(item)
+            continue
+
+        position = _wal_position(item.filename)
+        if position is not None and position >= start_position:
+            selected.append(item)
+    return selected
+
+
+def _estimated_extracted_bytes(postgres_manifest: dict[str, Any]) -> int:
+    files = postgres_manifest.get("Files")
+    if not isinstance(files, list):
+        return 0
+    total = 0
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        try:
+            total += max(0, int(item.get("Size") or 0))
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _basebackup_download_bytes(files: list[Any]) -> int:
+    total = 0
+    for item in files:
+        if not isinstance(item, dict):
+            raise SystemExit(f"Basebackup manifest file entry is invalid: {item!r}")
+        try:
+            size_bytes = int(item.get("size_bytes"))
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(
+                f"Basebackup manifest has invalid size_bytes: {item!r}"
+            ) from exc
+        if size_bytes < 0:
+            raise SystemExit(f"Basebackup manifest has negative size_bytes: {item!r}")
+        total += size_bytes
+    return total
+
+
+def _ensure_restore_space(
+    target_dir: Path,
+    *,
+    basebackup_bytes: int,
+    extracted_bytes: int,
+    wal_bytes: int,
+    min_free_bytes: int,
+) -> tuple[int, int]:
+    if min_free_bytes < 0:
+        raise SystemExit("PITR restore minimum free bytes must not be negative")
+    available_bytes = shutil.disk_usage(target_dir).free
+    restore_bytes = basebackup_bytes + extracted_bytes + wal_bytes
+    required_bytes = restore_bytes + min_free_bytes
+    if available_bytes < required_bytes:
+        raise SystemExit(
+            "Insufficient free space for PITR prepare: "
+            f"available_bytes={available_bytes} required_bytes={required_bytes} "
+            f"basebackup_bytes={basebackup_bytes} extracted_bytes={extracted_bytes} "
+            f"wal_bytes={wal_bytes} reserve_bytes={min_free_bytes}"
+        )
+    return available_bytes, required_bytes
 
 
 def _load_manifest(client: Any, bucket: str, key: str) -> BasebackupManifest:
@@ -294,14 +488,51 @@ def command_prepare(args: argparse.Namespace) -> int:
         target_time=target_time,
     )
 
+    files = manifest.payload.get("files") or []
+    if not isinstance(files, list) or not files:
+        raise SystemExit(f"Basebackup manifest has no files: {manifest.key}")
+
+    postgres_manifest = _load_postgres_backup_manifest(client, config.bucket, manifest)
+    start_wal_name = _backup_start_wal_name(
+        postgres_manifest,
+        segment_size_bytes=args.wal_segment_size_bytes,
+    )
+    wal_objects: list[WalObject] = []
+    if args.wal_mode == "local":
+        wal_objects = _select_wal_objects(
+            _list_wal_objects(client, config),
+            start_wal_name=start_wal_name,
+        )
+
+    basebackup_bytes = _basebackup_download_bytes(files)
+    extracted_bytes = _estimated_extracted_bytes(postgres_manifest)
+    wal_bytes = sum(item.size_bytes for item in wal_objects)
+    available_bytes, required_bytes = _ensure_restore_space(
+        target_dir,
+        basebackup_bytes=basebackup_bytes,
+        extracted_bytes=extracted_bytes,
+        wal_bytes=wal_bytes,
+        min_free_bytes=args.min_free_bytes,
+    )
+    print(
+        json.dumps(
+            {
+                "status": "preflight",
+                "backup_id": manifest.backup_id,
+                "start_wal": start_wal_name,
+                "selected_wal": len(wal_objects),
+                "selected_wal_bytes": wal_bytes,
+                "available_bytes": available_bytes,
+                "required_bytes": required_bytes,
+            },
+            sort_keys=True,
+        )
+    )
+
     downloads_dir = target_dir / "downloads"
     data_dir = target_dir / "data"
     downloads_dir.mkdir(parents=True)
     data_dir.mkdir(parents=True)
-
-    files = manifest.payload.get("files") or []
-    if not isinstance(files, list) or not files:
-        raise SystemExit(f"Basebackup manifest has no files: {manifest.key}")
 
     downloaded: list[Path] = []
     for item in files:
@@ -328,9 +559,8 @@ def command_prepare(args: argparse.Namespace) -> int:
     if args.wal_mode == "local":
         wal_dir = target_dir / "wal"
         wal_dir.mkdir(parents=True)
-        for key in _list_wal_keys(client, config):
-            filename = key.rsplit("/", 1)[-1]
-            _download_file(client, config.bucket, key, wal_dir / filename)
+        for item in wal_objects:
+            _download_file(client, config.bucket, item.key, wal_dir / item.filename)
             downloaded_wal += 1
 
     manifest_path = target_dir / "manifest.json"
@@ -353,6 +583,8 @@ def command_prepare(args: argparse.Namespace) -> int:
                 "data_dir": str(data_dir),
                 "downloaded_files": len(downloaded),
                 "downloaded_wal": downloaded_wal,
+                "downloaded_wal_bytes": wal_bytes,
+                "start_wal": start_wal_name,
                 "wal_mode": args.wal_mode,
             },
             sort_keys=True,
@@ -414,6 +646,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "local downloads archived WAL into target-dir/wal and writes a cp restore_command; "
             "remote writes a Python/R2 restore_command for containers that include this helper and boto3."
         ),
+    )
+    prepare.add_argument(
+        "--wal-segment-size-bytes",
+        type=int,
+        default=int(
+            os.getenv(
+                "POSTGRES_WAL_SEGMENT_SIZE_BYTES",
+                str(DEFAULT_WAL_SEGMENT_SIZE_BYTES),
+            )
+        ),
+        help="WAL segment size used to convert backup Start-LSN into a WAL filename.",
+    )
+    prepare.add_argument(
+        "--min-free-bytes",
+        type=int,
+        default=int(
+            os.getenv("PITR_RESTORE_MIN_FREE_BYTES", str(DEFAULT_MIN_FREE_BYTES))
+        ),
+        help="Free disk space that must remain after estimated download and extraction.",
     )
     prepare.add_argument(
         "--restore-mount-path",

@@ -18,6 +18,7 @@ export type RepairMeta = {
   equipment_name: string;
   equipment_brand: string;
   equipment_model: string;
+  equipment_models?: string[];
   equipment_power: string;
   equipment_serial_number: string;
   equipment_inventory_number: string;
@@ -42,6 +43,9 @@ export type RepairMeta = {
   repair_estimate_text: string;
   risks?: string[];
   recommended_actions?: string[];
+  inspection_codes?: string[];
+  confirmed_facts?: string[];
+  decision?: 'repair' | 'write_off' | 'additional_diagnostics' | string;
   hidden_defects_possible?: boolean;
   structured_diagnosis?: Record<string, any>;
   defect_act_blocks?: Record<string, string>;
@@ -101,6 +105,7 @@ export const emptyRepairMeta = (): RepairMeta => ({
   equipment_name: '',
   equipment_brand: '',
   equipment_model: '',
+  equipment_models: [],
   equipment_power: '',
   equipment_serial_number: '',
   equipment_inventory_number: '',
@@ -125,6 +130,9 @@ export const emptyRepairMeta = (): RepairMeta => ({
   repair_estimate_text: '',
   risks: [],
   recommended_actions: [],
+  inspection_codes: [],
+  confirmed_facts: [],
+  decision: '',
   hidden_defects_possible: false,
   structured_diagnosis: {},
   defect_act_blocks: {},
@@ -170,9 +178,29 @@ export const REPAIR_AI_DEFECT_TYPES: RepairAiDefectType[] = [
     hint: 'шум, отсутствие вращения, перегрев, ошибка вентилятора',
   },
   {
+    value: 'compressor_short_circuit',
+    label: 'Короткое замыкание обмоток компрессора',
+    hint: 'низкое сопротивление обмоток, пробой на корпус, срабатывание автомата или защиты',
+  },
+  {
+    value: 'compressor_winding_open',
+    label: 'Обрыв обмотки компрессора',
+    hint: 'обрыв при прозвонке, компрессор не запускается, одна из обмоток не определяется',
+  },
+  {
+    value: 'compressor_mechanical_failure',
+    label: 'Механическая неисправность компрессора',
+    hint: 'стук или гул, заклинивание, повышенный ток, нет перепада давления',
+  },
+  {
     value: 'compressor_failure',
     label: 'Неисправность компрессора',
     hint: 'электрическая или механическая неисправность компрессора, срабатывание защиты',
+  },
+  {
+    value: 'heat_exchanger_multiple_leaks',
+    label: 'Множественная коррозионная перфорация теплообменника',
+    hint: 'сквозная коррозия и утечки в нескольких точках, новые свищи после опрессовки',
   },
   {
     value: 'heat_exchanger_damage',

@@ -76,6 +76,12 @@ unreviewed host-local compose edits:
 | Media sync helper/timer | `scripts/ha/media_sync_pull.sh`, `deploy/ha/systemd/mvn-media-sync.*` |
 | PostgreSQL quorum preparation | `docs/postgres-quorum-runbook.md`, `deploy/ha/quorum/`, `deploy/ha/patroni/`, `scripts/ha/generate_etcd_pki.sh`, `scripts/ha/check_etcd_quorum.sh`, `scripts/ha/patroni_role_agent.py` |
 
+Every API compose source mounts `<project>/google-oauth/` at
+`/app/google-oauth` and sets `GOOGLE_TOKEN_FILE=/app/google-oauth/token.json`.
+Follow [`google-oauth-token-runbook.md`](google-oauth-token-runbook.md) for the
+replica-first migration and restore-drill proof; never restore the old
+single-file token mount.
+
 ## Daily Status Checks
 
 Primary:
@@ -302,6 +308,13 @@ to `on` only after the private bucket/token are configured and the upload helper
 has passed a dry run. This prevents WAL files from accumulating locally before
 remote archive upload is ready.
 
+The strict PITR check verifies that R2 contains PostgreSQL's exact
+`last_archived_wal`. An old latest-WAL timestamp is reported as an `idle`
+warning, rather than a failure, only when that expected segment is present and
+there are no completed WAL files waiting for local upload. A missing expected
+segment, uploader backlog, archiver failure, or stale basebackup remains a hard
+failure.
+
 Enable on the current primary after the private bucket/token exist:
 
 ```bash
@@ -507,11 +520,14 @@ Expected deploy behavior:
   older than seven days;
 - frontend deploy is skipped unless explicitly requested.
 
-If primary activation or smoke checks fail, the workflow runs a guarded
-code-only rollback to `.previous-backend-image`. The guard verifies that the
-failed candidate was actually persisted before changing anything. Rollback does
-not downgrade Alembic, so every production migration must follow the
-expand/contract compatibility policy.
+If activation or smoke checks fail before compose promotion, the transactional
+handler restores the previous runtime image through the unchanged canonical
+compose while the deployment lock is still held. The later workflow guard then
+reconciles only when necessary. After the OAuth directory migration, a manual
+rollback accepts only a `directory-v1` image and must pass the durable Google
+backup probe; pre-hotfix images are roll-forward-only. Rollback does not
+downgrade Alembic, so every production migration must follow the expand/contract
+compatibility policy.
 
 Manual disk pressure check:
 
@@ -533,10 +549,15 @@ cat scripts/prune_unused_docker_images.sh | ssh zakup \
 Manual zero-downtime code rollback on the current primary:
 
 ```bash
-scp scripts/deploy_backend_blue_green.sh scripts/rollback_backend.sh mvn-api:/tmp/
-ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh /tmp/rollback_backend.sh && \
+scp scripts/deploy_backend_blue_green.sh scripts/deploy_backend_blue_green_safety.sh \
+  scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh mvn-api:/tmp/
+ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh \
+  /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh \
+  /tmp/rollback_backend.sh && \
   CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
   API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
+  API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh \
+  GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=/tmp/prepare_google_oauth_token_dir.sh \
   bash /tmp/rollback_backend.sh'
 ```
 
@@ -848,8 +869,15 @@ ssh mvn-api /usr/local/sbin/mvn-restore-drill-latest-db
 
 The drill downloads the latest DB backup through the app container, starts a
 disposable PostgreSQL container on the same Docker network, restores the dump
-there, checks that public tables exist, and then removes the disposable
-container. It does not touch the production or standby database.
+there, requires at least 64 public tables plus non-empty product/order data, and
+then removes the disposable container together with its dedicated Postgres data
+volume. Both disposable objects are labeled
+`com.mvn.purpose=api-restore-drill` and `com.mvn.run_id=<run>`; cleanup removes
+only objects whose exact names and run labels both match, while a hard-kill
+residue remains safely inventoryable by label. Every run also uses its own
+`/tmp/mvn-restore-drill/<run-id>` directory and removes only its three known
+files. The GitHub workflow serializes runs with the `api-restore-drill`
+concurrency group. It does not touch the production or standby database.
 
 GitHub also runs this daily:
 

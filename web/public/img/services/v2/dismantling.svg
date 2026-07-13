@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Демонтаж кондиционера</title>
+  <desc id="desc">Внутренний и наружный блоки сняты и отделены от трассы</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#24343A" flood-opacity=".12"/></filter>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF7F6"/></linearGradient>
+    <marker id="flow-teal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M2 1 L10 6 L2 11" fill="none" stroke="#11B8B2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="flow-amber" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M2 1 L10 6 L2 11" fill="none" stroke="#F2A93B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+  <rect width="1200" height="760" rx="48" fill="#F7F5F0"/>
+  <rect x="42" y="42" width="1116" height="676" rx="40" fill="url(#surface)" stroke="#C9D5D5" stroke-width="4"/>
+  <path d="M88 132 V88 H132 M1068 672 H1112 V628" fill="none" stroke="#F2A93B" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="1108" cy="92" r="13" fill="#F2A93B"/>
+  <g filter="url(#shadow)">
+      <rect x="175" y="190" width="305" height="104" rx="22" fill="#FFFFFF" stroke="#C9D5D5" stroke-width="3"/>
+      <path d="M193 279 H462" stroke="#24343A" stroke-width="7" stroke-linecap="round"/>
+    </g><g opacity="1" filter="url(#shadow)">
+      <rect x="740" y="205" width="220" height="220" rx="18" fill="#F2F4F3" stroke="#C9D5D5" stroke-width="3"/>
+      <circle cx="850.0" cy="315.0" r="68.2" fill="none" stroke="#075E63" stroke-width="7"/>
+      <circle cx="850.0" cy="315.0" r="8" fill="#075E63"/>
+      <path d="M850.0 255.6 Q898.4 297.4 850.0 315.0 Q801.6 332.6 850.0 374.4" fill="none" stroke="#075E63" stroke-width="5"/>
+    </g>
+      <path d="M325 330 V475 M850 435 V505" stroke="#11B8B2" stroke-width="12" stroke-linecap="round"/>
+      <path d="M295 445 l30 30 l30-30 M820 475 l30 30 l30-30" fill="none" stroke="#11B8B2" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M140 500 h370 l55 68 l-55 82 h-370 l-55-82 z" fill="#EAF7F6" stroke="#075E63" stroke-width="8"/>
+      <path d="M690 520 h330 l48 60 l-48 70 h-330 l-48-70 z" fill="#EAF7F6" stroke="#075E63" stroke-width="8"/>
+      <path d="M575 350 H628 M672 350 H725" stroke="#F2A93B" stroke-width="12" stroke-linecap="round"/>
+      <circle cx="635" cy="350" r="10" fill="#FFFFFF" stroke="#F2A93B" stroke-width="7"/><circle cx="665" cy="350" r="10" fill="#FFFFFF" stroke="#F2A93B" stroke-width="7"/>
+      <path d="M610 325 l18 25 l-18 25 M690 325 l-18 25 l18 25" fill="none" stroke="#F2A93B" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

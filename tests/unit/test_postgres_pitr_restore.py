@@ -6,6 +6,7 @@ import sys
 import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -32,16 +33,20 @@ class FakeBody:
 
 
 class FakePaginator:
-    def __init__(self, keys):
-        self.keys = keys
+    def __init__(self, objects):
+        self.objects = objects
 
     def paginate(self, **kwargs):
         prefix = kwargs["Prefix"]
         return [
             {
                 "Contents": [
-                    {"Key": key, "LastModified": datetime(2026, 7, 2, tzinfo=timezone.utc)}
-                    for key in self.keys
+                    {
+                        "Key": key,
+                        "Size": len(content),
+                        "LastModified": datetime(2026, 7, 2, tzinfo=timezone.utc),
+                    }
+                    for key, content in self.objects.items()
                     if key.startswith(prefix)
                 ]
             }
@@ -55,7 +60,7 @@ class FakeClient:
 
     def get_paginator(self, name):
         assert name == "list_objects_v2"
-        return FakePaginator(list(self.objects))
+        return FakePaginator(self.objects)
 
     def get_object(self, *, Bucket, Key):
         assert Bucket == FakeConfig.bucket
@@ -84,6 +89,25 @@ def _manifest(backup_id: str, created_at: str, files: list[dict]) -> bytes:
             "created_at": created_at,
             "cluster": "mvn-api",
             "files": files,
+        }
+    ).encode("utf-8")
+
+
+def _postgres_backup_manifest(*, timeline: int = 1, start_lsn: str = "0/A000000") -> bytes:
+    return json.dumps(
+        {
+            "PostgreSQL-Backup-Manifest-Version": 1,
+            "Files": [
+                {"Path": "PG_VERSION", "Size": 3},
+                {"Path": "postgresql.conf", "Size": 0},
+            ],
+            "WAL-Ranges": [
+                {
+                    "Timeline": timeline,
+                    "Start-LSN": start_lsn,
+                    "End-LSN": "0/A000100",
+                }
+            ],
         }
     ).encode("utf-8")
 
@@ -144,11 +168,53 @@ def test_select_manifest_uses_latest_basebackup_before_target_time():
     assert selected.backup_id == "old"
 
 
+def test_wal_selection_starts_at_basebackup_segment_and_keeps_future_timelines():
+    assert pitr_restore._wal_segment_name(
+        timeline=5,
+        lsn="4/EF000028",
+        segment_size_bytes=16 * 1024 * 1024,
+    ) == "0000000500000004000000EF"
+
+    objects = [
+        pitr_restore.WalObject("old", "0000000500000004000000EE", 10),
+        pitr_restore.WalObject("start", "0000000500000004000000EF", 20),
+        pitr_restore.WalObject("next", "0000000500000004000000F0", 30),
+        pitr_restore.WalObject("history", "00000006.history", 40),
+        pitr_restore.WalObject("future", "000000060000000000000001", 50),
+    ]
+
+    selected = pitr_restore._select_wal_objects(
+        objects,
+        start_wal_name="0000000500000004000000EF",
+    )
+
+    assert [item.key for item in selected] == ["start", "next", "history", "future"]
+
+
+def test_restore_space_preflight_fails_before_large_download(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        pitr_restore.shutil,
+        "disk_usage",
+        lambda _path: SimpleNamespace(free=1_000),
+    )
+
+    with pytest.raises(SystemExit, match="Insufficient free space"):
+        pitr_restore._ensure_restore_space(
+            tmp_path,
+            basebackup_bytes=400,
+            extracted_bytes=300,
+            wal_bytes=200,
+            min_free_bytes=200,
+        )
+
+
 def test_prepare_downloads_extracts_and_writes_recovery_files(monkeypatch, tmp_path):
     base_tar = _tar_gz({"PG_VERSION": b"15\n", "postgresql.conf": b""})
     wal_tar = _tar_gz({"00000001000000000000000A": b"wal"})
     metadata = b'{"backup_id":"backup-1"}'
+    backup_manifest = _postgres_backup_manifest()
     files = [
+        _file_entry("backup-1", "backup_manifest", backup_manifest),
         _file_entry("backup-1", "base.tar.gz", base_tar),
         _file_entry("backup-1", "pg_wal.tar.gz", wal_tar),
         _file_entry("backup-1", "metadata.json", metadata),
@@ -159,9 +225,11 @@ def test_prepare_downloads_extracts_and_writes_recovery_files(monkeypatch, tmp_p
             "2026-07-02T01:00:00+00:00",
             files,
         ),
+        "postgres/pitr/mvn-api/basebackups/backup-1/backup_manifest": backup_manifest,
         "postgres/pitr/mvn-api/basebackups/backup-1/base.tar.gz": base_tar,
         "postgres/pitr/mvn-api/basebackups/backup-1/pg_wal.tar.gz": wal_tar,
         "postgres/pitr/mvn-api/basebackups/backup-1/metadata.json": metadata,
+        "postgres/pitr/mvn-api/wal/00000001/000000010000000000000009": b"old-wal",
         "postgres/pitr/mvn-api/wal/00000001/00000001000000000000000B": b"archived-wal",
     }
     client = FakeClient(objects)
@@ -187,6 +255,9 @@ def test_prepare_downloads_extracts_and_writes_recovery_files(monkeypatch, tmp_p
     assert (
         tmp_path / "restore" / "wal" / "00000001000000000000000B"
     ).read_bytes() == b"archived-wal"
+    assert not (
+        tmp_path / "restore" / "wal" / "000000010000000000000009"
+    ).exists()
     assert (data_dir / "recovery.signal").exists()
     auto_conf = (data_dir / "postgresql.auto.conf").read_text()
     assert "restore_command" in auto_conf

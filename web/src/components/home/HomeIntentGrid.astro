@@ -1,0 +1,218 @@
+---
+import { HOMEPAGE_ANALYTICS_EVENTS, HOMEPAGE_INTENTS } from "../../config/homepage";
+---
+
+<section class="intent-section" aria-labelledby="intent-title">
+    <div class="container">
+        <div class="intent-section__heading">
+            <p>С чего начать</p>
+            <h2 id="intent-title">Выберите свою задачу</h2>
+        </div>
+
+        <div class="intent-grid">
+            {
+                HOMEPAGE_INTENTS.map((item) => (
+                    <a
+                        class="intent-card"
+                        href={item.href}
+                        data-home-event={HOMEPAGE_ANALYTICS_EVENTS.intent}
+                        data-home-action="open_intent"
+                        data-home-item={item.analyticsItem}
+                        onclick="window.trackHomeConversion?.(this)"
+                    >
+                        <span class="intent-card__visual" aria-hidden="true">
+                            <span class="material-icons-round">{item.icon}</span>
+                        </span>
+                        <span class="intent-card__body">
+                            <strong>{item.title}</strong>
+                            <span class="intent-card__description">{item.description}</span>
+                            <span class="intent-card__details">
+                                {item.details.map((detail) => <span>{detail}</span>)}
+                            </span>
+                            <span class="intent-card__cta">
+                                {item.cta}
+                                <span class="material-icons-round" aria-hidden="true">arrow_forward</span>
+                            </span>
+                        </span>
+                    </a>
+                ))
+            }
+        </div>
+    </div>
+</section>
+
+<style>
+    .intent-section {
+        padding: 2.5rem 0;
+    }
+
+    .intent-section__heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .intent-section__heading p {
+        color: var(--primary);
+        font-size: 0.8rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .intent-section__heading h2 {
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 2.7rem);
+    }
+
+    .intent-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .intent-card {
+        display: grid;
+        grid-template-rows: 104px 1fr;
+        min-width: 0;
+        min-height: 360px;
+        overflow: hidden;
+        border: 1px solid var(--panel-chip-border);
+        border-radius: 8px;
+        background: var(--panel-glass-bg);
+        box-shadow: var(--panel-glass-shadow);
+        color: var(--text);
+    }
+
+    .intent-card:hover {
+        border-color: var(--panel-chip-hover-border);
+        transform: translateY(-3px);
+    }
+
+    .intent-card:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+    }
+
+    .intent-card__visual {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 1.25rem;
+        background: var(--secondary);
+        color: var(--primary);
+    }
+
+    .intent-card__visual .material-icons-round {
+        font-size: 48px;
+    }
+
+    .intent-card__body {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        padding: 1.25rem;
+    }
+
+    .intent-card__body > strong {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.25rem;
+        line-height: 1.2;
+    }
+
+    .intent-card__description {
+        margin-top: 0.65rem;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+    }
+
+    .intent-card__details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: 1rem;
+    }
+
+    .intent-card__details > span {
+        padding: 0.3rem 0.5rem;
+        border: 1px solid var(--panel-chip-border);
+        border-radius: 999px;
+        background: var(--panel-pill-bg);
+        color: var(--text-muted);
+        font-size: 0.74rem;
+        font-weight: 700;
+    }
+
+    .intent-card__cta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-top: auto;
+        padding-top: 1.2rem;
+        color: var(--primary);
+        font-size: 0.88rem;
+        font-weight: 800;
+    }
+
+    .intent-card__cta .material-icons-round {
+        font-size: 19px;
+    }
+
+    @media (max-width: 1040px) {
+        .intent-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .intent-card {
+            min-height: 330px;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .intent-section {
+            padding-top: 1rem;
+        }
+
+        .intent-section__heading {
+            display: block;
+        }
+
+        .intent-section__heading h2 {
+            margin-top: 0.25rem;
+        }
+
+        .intent-grid {
+            grid-auto-columns: min(82vw, 320px);
+            grid-auto-flow: column;
+            grid-template-columns: none;
+            gap: 0.75rem;
+            padding-right: 1rem;
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            scroll-snap-type: x mandatory;
+            scrollbar-width: none;
+        }
+
+        .intent-grid::-webkit-scrollbar {
+            display: none;
+        }
+
+        .intent-card {
+            min-height: 340px;
+            scroll-snap-align: start;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .intent-card {
+            transition: none;
+        }
+
+        .intent-card:hover {
+            transform: none;
+        }
+    }
+</style>

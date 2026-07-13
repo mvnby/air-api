@@ -49,6 +49,7 @@ class MediaProcessingJob(SQLModel, table=True):
     priority: int = Field(default=100, index=True)
     attempts: int = Field(default=0)
     worker_id: Optional[str] = Field(default=None, index=True)
+    lease_token: Optional[str] = Field(default=None)
     request_payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     result_payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     error: Optional[str] = Field(default=None, sa_column=Column(String))

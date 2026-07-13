@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
@@ -46,8 +47,11 @@ from services.bank_statement_csv_service import BankStatementCsvService
 from services.email_lead_import_job_service import EmailLeadImportJobService, EmailLeadImportJobSnapshot
 from services.mail_imap_service import MailImapService
 from services.mail_smtp_service import MailSmtpService
+from services.notification_service import NotificationService
 from services.outgoing_email_service import OutgoingEmailService
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/manager/mail",
@@ -94,6 +98,17 @@ async def import_manager_bank_receipts(
 ):
     try:
         result = await MailImapService.import_bank_receipts(session, limit=limit)
+        if result.created_receipt_ids:
+            try:
+                await NotificationService.notify_admins_bank_receipts_imported(
+                    session,
+                    result.created_receipt_ids,
+                )
+            except Exception:
+                logger.exception(
+                    "MANUAL_BANK_RECEIPT_NOTIFY_FAILED receipt_ids=%s",
+                    result.created_receipt_ids,
+                )
         return BankReceiptImportResponse(**result.__dict__)
     except Exception as exc:
         raise manager_http_error(

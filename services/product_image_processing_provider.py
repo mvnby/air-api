@@ -222,12 +222,13 @@ class CommandProductImageProcessor:
             with open(input_path, "wb") as input_file:
                 input_file.write(source_content)
 
-            command = command_template.format(
-                input=shlex.quote(input_path),
-                output=shlex.quote(output_path),
+            command = _render_command_argv(
+                command_template,
+                input_path=input_path,
+                output_path=output_path,
             )
             try:
-                completed = _run_shell_command_with_timeout(
+                completed = _run_command_with_timeout(
                     command,
                     timeout=self.timeout_seconds,
                 )
@@ -465,14 +466,36 @@ def _run_rembg_subprocess(
             return output_file.read()
 
 
-def _run_shell_command_with_timeout(
-    command: str,
+def _render_command_argv(
+    command_template: str,
+    *,
+    input_path: str,
+    output_path: str,
+) -> list[str]:
+    if "{input}" not in command_template or "{output}" not in command_template:
+        raise RuntimeError("Background-removal command must contain {input} and {output}")
+
+    try:
+        template_argv = shlex.split(command_template, posix=os.name != "nt")
+        command = [
+            part.format(input=input_path, output=output_path)
+            for part in template_argv
+        ]
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError("Background-removal command template is invalid") from exc
+
+    if not command or not command[0].strip():
+        raise RuntimeError("Background-removal command is empty")
+    return command
+
+
+def _run_command_with_timeout(
+    command: list[str],
     *,
     timeout: int,
 ) -> subprocess.CompletedProcess[str]:
     process = subprocess.Popen(
         command,
-        shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

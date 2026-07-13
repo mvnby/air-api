@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Any, List, Optional
 from sqlmodel import select
@@ -238,6 +239,81 @@ class DefectActStrategy(GoogleDocStrategy):
             return first_link.product.title
         return self.order.title or ""
 
+    @staticmethod
+    def _clean_equipment_model(value: Any) -> str:
+        if isinstance(value, dict):
+            value = next(
+                (value.get(key) for key in ("model", "equipment_model", "name") if value.get(key)),
+                "",
+            )
+        text = re.sub(
+            r"\b(?:внутренний|наружный)\s+блок\b",
+            " ",
+            str(value or "").strip(),
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(r"\(\s*\)|\[\s*\]|\{\s*\}", " ", text)
+        return re.sub(r"\s+", " ", text).strip(" \t:;,/|—–-")
+
+    def _equipment_models(self) -> list[str]:
+        raw_models = self._meta_value("equipment_models")
+        values = raw_models if isinstance(raw_models, (list, tuple)) else []
+        if not values:
+            values = [self._meta_text("equipment_model", "model")]
+
+        models: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            model = self._clean_equipment_model(value)
+            identity = model.casefold()
+            if not model or identity in seen:
+                continue
+            seen.add(identity)
+            models.append(model)
+        return models
+
+    @staticmethod
+    def _without_leading_brand(model: str, brand: str) -> str:
+        if not brand:
+            return model
+        match = re.match(re.escape(brand), model, flags=re.IGNORECASE)
+        if not match:
+            return model
+        remainder = model[match.end():]
+        if remainder and not (remainder[0].isspace() or remainder[0] in ":;,/|—–-"):
+            return model
+        return remainder.lstrip(" \t:;,/|—–-")
+
+    def _format_equipment_name(self, brand: str, models: list[str]) -> str:
+        if not brand and not models:
+            equipment_name = self._clean_equipment_model(
+                self._meta_text("equipment_name", "defect_equipment_name")
+            )
+            fallback = equipment_name or self._clean_equipment_model(self._first_equipment_title())
+            generic_markers = ("ремонт", "диагностик", "сервис", "заявк", "заказ")
+            if fallback.casefold() == "оборудование" or any(
+                marker in fallback.casefold() for marker in generic_markers
+            ):
+                fallback = ""
+            if not fallback:
+                return "Кондиционер"
+            if fallback.casefold().startswith("кондиционер"):
+                return fallback[0].upper() + fallback[1:]
+            return f"Кондиционер {fallback}"
+
+        unique_models: list[str] = []
+        seen: set[str] = set()
+        for model in models:
+            model_without_brand = self._without_leading_brand(model, brand)
+            identity = model_without_brand.casefold()
+            if not model_without_brand or identity in seen:
+                continue
+            seen.add(identity)
+            unique_models.append(model_without_brand)
+
+        details = " ".join(part for part in (brand, " / ".join(unique_models)) if part)
+        return f"Кондиционер {details}" if details else "Кондиционер"
+
     @classmethod
     def _date_text(cls, value: Optional[datetime]) -> str:
         effective = value or datetime.now()
@@ -246,18 +322,11 @@ class DefectActStrategy(GoogleDocStrategy):
 
     def _add_specific_replacements(self, replacements: dict):
         document_date = datetime.strptime(replacements.get("{{date}}", ""), "%d.%m.%Y") if replacements.get("{{date}}") else datetime.now()
-        equipment_name = self._first_text(
-            self._meta_text("equipment_name", "defect_equipment_name"),
-            self._first_equipment_title(),
-            default="кондиционер",
-        )
         equipment_brand = self._meta_text("equipment_brand", "brand")
-        equipment_model = self._meta_text("equipment_model", "model")
+        equipment_models = self._equipment_models()
+        equipment_model = " / ".join(equipment_models)
+        equipment_name = self._format_equipment_name(equipment_brand, equipment_models)
         equipment_power = self._meta_text("equipment_power", "power")
-        if equipment_name == "кондиционер":
-            detailed_name = " ".join(part for part in [equipment_brand, equipment_model, equipment_power] if part)
-            if detailed_name:
-                equipment_name = detailed_name
         generated_repair_meta = RepairDefectTemplateService.build_document_fields(self._repair_meta())
         technical_condition = self._first_text(
             self._meta_text("technical_condition", "defect_technical_condition"),

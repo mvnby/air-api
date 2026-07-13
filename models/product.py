@@ -76,8 +76,18 @@ class Product(SQLModel, table=True):
     order_links: List["OrderProductLink"] = Relationship(back_populates="product")
     supplier_mappings: List["ProductSupplierMapping"] = Relationship(back_populates="product")
     local_stocks: List["ProductLocalStock"] = Relationship(back_populates="product")
-    brand_id: Optional[int] = Field(default=None, foreign_key="brand.id", index=True)
-    series_id: Optional[int] = Field(default=None, foreign_key="product_series.id", index=True)
+    brand_id: Optional[int] = Field(
+        default=None,
+        foreign_key="brand.id",
+        ondelete="SET NULL",
+        index=True,
+    )
+    series_id: Optional[int] = Field(
+        default=None,
+        foreign_key="product_series.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     brand: Optional["Brand"] = Relationship(back_populates="products")
     series: Optional["ProductSeries"] = Relationship(back_populates="products")
 
@@ -128,7 +138,11 @@ class ProductImageVariant(SQLModel, table=True):
         ),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
-    product_image_id: int = Field(foreign_key="product_image.id", index=True)
+    product_image_id: int = Field(
+        foreign_key="product_image.id",
+        ondelete="CASCADE",
+        index=True,
+    )
     variant_type: str = Field(index=True)
     url: Optional[str] = Field(default=None)
     storage_provider: str = Field(default="local", index=True)
@@ -175,12 +189,18 @@ class ProductMainImageCleanupItem(SQLModel, table=True):
     batch_id: Optional[int] = Field(
         default=None,
         foreign_key="product_main_image_cleanup_batch.id",
+        ondelete="SET NULL",
         index=True,
     )
-    product_id: int = Field(foreign_key="product.id", index=True)
+    product_id: int = Field(
+        foreign_key="product.id",
+        ondelete="CASCADE",
+        index=True,
+    )
     source_product_image_id: Optional[int] = Field(
         default=None,
         foreign_key="product_image.id",
+        ondelete="SET NULL",
         index=True,
     )
     original_image_url: str = Field(index=True)
@@ -210,7 +230,11 @@ class ProductAttachment(SQLModel, table=True):
         UniqueConstraint("product_id", "kind", "url", name="uq_product_attachment_product_kind_url"),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
-    product_id: int = Field(foreign_key="product.id", index=True)
+    product_id: int = Field(
+        foreign_key="product.id",
+        ondelete="CASCADE",
+        index=True,
+    )
     kind: str = Field(default="manual", index=True)
     title: str = Field(default="Инструкция")
     url: str
@@ -225,8 +249,17 @@ class ProductAttachment(SQLModel, table=True):
 
 class ImportMediaCache(SQLModel, table=True):
     __tablename__ = "import_media_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_url",
+            name="uq_import_media_cache_source_url",
+        ),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
-    source_url: str = Field(sa_column=Column(String, unique=True, nullable=False, index=True))
+    source_url: str = Field(
+        sa_column=Column(String, nullable=False, index=True),
+    )
     local_url: str = Field(nullable=False)
     content_hash: str = Field(index=True)
     created_at: datetime = Field(default_factory=datetime.now)

@@ -9,10 +9,98 @@ from core.database import get_session
 from crud.product import ProductDAO
 from main import app
 from models import Customer, LeadSource, Order, OrderStatus, Product
-from schemas import ProductAvailabilityLeadPayload, ProductAvailabilityLeadResponse
+from schemas import (
+    ProductAvailabilityLeadPayload,
+    ProductAvailabilityLeadResponse,
+    PublicContactLeadPayload,
+    PublicContactLeadResponse,
+)
 from services.bot_service import BotService
+from services.lead_service import LeadService
 from services.order_service import OrderService
+from services.staff_user_service import StaffUserService
 from services.website_lead_service import WebsiteLeadService
+
+
+@pytest.mark.asyncio
+async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(monkeypatch):
+    created_at = datetime.now()
+    captured = {}
+    messages = []
+
+    async def fake_create_lead(_session, payload):
+        captured["payload"] = payload
+        return {"id": 33, "status": "new", "created_at": created_at}
+
+    async def fake_recipients(_session):
+        return [1001, 1002]
+
+    async def fake_send_message(admin_id, text):
+        messages.append((admin_id, text))
+        return True
+
+    monkeypatch.setattr(LeadService, "create_lead", fake_create_lead)
+    monkeypatch.setattr(
+        StaffUserService,
+        "get_active_owner_admin_telegram_recipient_ids",
+        fake_recipients,
+    )
+    monkeypatch.setattr(BotService, "send_message", fake_send_message)
+
+    response = await WebsiteLeadService.create_contact_lead(
+        object(),
+        PublicContactLeadPayload(
+            name="Иван <b>",
+            phone="+375 (29) 111-22-33",
+            address="Минск",
+            message="Нужен монтаж <script>",
+        ),
+    )
+
+    assert response == PublicContactLeadResponse(
+        lead_id=33,
+        status="new",
+        created_at=created_at,
+    )
+    assert captured["payload"].source == "site"
+    assert "Адрес/район: Минск" in captured["payload"].request_text
+    assert [admin_id for admin_id, _text in messages] == [1001, 1002]
+    assert "&lt;b&gt;" in messages[0][1]
+    assert "&lt;script&gt;" in messages[0][1]
+
+
+@pytest.mark.asyncio
+async def test_public_contact_lead_endpoint_uses_dedicated_lead_contract(monkeypatch):
+    async def override_get_session():
+        yield object()
+
+    async def fake_create(_session, payload):
+        assert payload.name == "Иван"
+        return PublicContactLeadResponse(
+            lead_id=34,
+            status="new",
+            created_at=datetime.now(),
+        )
+
+    monkeypatch.setattr(WebsiteLeadService, "create_contact_lead", fake_create)
+    app.dependency_overrides[get_session] = override_get_session
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/leads/contact",
+                json={
+                    "name": "Иван",
+                    "phone": "+375 (29) 111-22-33",
+                    "address": "Минск",
+                    "message": "Нужна консультация",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["lead_id"] == 34
 
 
 @pytest.mark.asyncio
@@ -50,6 +138,7 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
 
     async def fake_send_message(admin_id, text):
         sent_messages.append((admin_id, text))
+        return True
 
     async def fake_commit():
         fake_session.commit_calls += 1
@@ -127,6 +216,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
 
     async def fake_send_message(admin_id, text):
         sent_messages.append((admin_id, text))
+        return True
 
     fake_session.commit = fake_commit
     fake_session.refresh = fake_refresh
@@ -196,6 +286,7 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
 
     async def fake_send_message(admin_id, text):
         sent_messages.append((admin_id, text))
+        return True
 
     fake_session.commit = fake_commit
     fake_session.refresh = fake_refresh

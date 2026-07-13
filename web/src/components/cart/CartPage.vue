@@ -2,6 +2,7 @@
 import { useStore } from '@nanostores/vue';
 import { cartItems, cartTotal, updateQuantity, removeItem, toggleInstallation, updateInstallationDetails } from '../../store/cart';
 import { installationOptions, fetchInstallationOptions } from '../../store/installation';
+import { calculateInstallationPrice as calculateInstallationQuote } from '../../utils/installation-pricing';
 // ... imports
 import { getInstallationRates, getGlobalConfig } from '../../utils/api';
 
@@ -32,43 +33,40 @@ onMounted(async () => {
     ]);
     rates.value = ratesData;
     discount.value = parseInt(configData.install_discount || "0", 10);
+
+    items.value.forEach((item) => {
+        if (!item.installationRateId) return;
+        const price = calculateItemInstallationPrice(
+            item,
+            item.installationMeters || 3,
+            item.installationOptions || [],
+        );
+        updateInstallationDetails(item.id, item.withInstallation, { price });
+    });
 });
 
-const calculateInstallationPrice = (meters, optionSlugs) => {
-    // Find generic rate (assume Wall for now as fallback)
-    const rate = rates.value.find(r => r.category === 'Wall') || rates.value[0];
-    let price = 0;
-    
-    if (rate) {
-        const extraMeters = Math.max(0, meters - rate.included_pipe_meters);
-        price = rate.base_price + (extraMeters * rate.extra_pipe_price);
-    }
-    
-    // Add options
-    if (optionSlugs && optionSlugs.length > 0) {
-        const optionsCost = optionSlugs.reduce((sum, slug) => {
-             const opt = options.value.find(o => o.slug === slug);
-             return sum + (opt ? opt.price : 0);
-        }, 0);
-        price += optionsCost;
-    }
-    
-    // Apply discount (Bundle Logic)
-    // We assume items in cart with installation act as bundles
-    // Only apply if base price > discount to avoid negative? Or just do it.
-    // User logic: 600 - 100 = 500.
-    if (discount.value > 0) {
-        price = Math.max(0, price - discount.value);
-    }
-    
-    return price;
+const calculateItemInstallationPrice = (item, meters, optionSlugs) => {
+    const rate = rates.value.find(candidate => (
+        Number(candidate.id) === Number(item.installationRateId)
+    ));
+    if (!rate) return item.installationPrice || 0;
+
+    const quote = calculateInstallationQuote({
+        rate,
+        meters,
+        options: options.value,
+        selectedOptionSlugs: optionSlugs,
+        bundleDiscount: discount.value,
+        applyBundleDiscount: true,
+    });
+    return quote.status === 'fixed' ? quote.total : (item.installationPrice || 0);
 };
 
 const updateMeters = (item, delta) => {
-    const newMeters = Math.max(1, (item.installationMeters || 3) + delta);
+    const newMeters = Math.min(50, Math.max(1, (item.installationMeters || 3) + delta));
     if (newMeters === item.installationMeters) return;
     
-    const newPrice = calculateInstallationPrice(newMeters, item.installationOptions);
+    const newPrice = calculateItemInstallationPrice(item, newMeters, item.installationOptions);
     
     updateInstallationDetails(item.id, item.withInstallation, {
         meters: newMeters,
@@ -85,7 +83,7 @@ const toggleOption = (item, opt) => {
         newOptions = [...currentOptions, opt.slug];
     }
     
-    const newPrice = calculateInstallationPrice(item.installationMeters || 3, newOptions);
+    const newPrice = calculateItemInstallationPrice(item, item.installationMeters || 3, newOptions);
     
     updateInstallationDetails(item.id, item.withInstallation, {
         options: newOptions,

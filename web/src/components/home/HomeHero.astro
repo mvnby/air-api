@@ -1,0 +1,321 @@
+---
+import { HOMEPAGE_ANALYTICS_EVENTS } from "../../config/homepage";
+---
+
+<section class="home-hero" aria-labelledby="home-hero-title">
+    <img
+        class="home-hero__image"
+        src="/img/hero/vitebsk-hero.jpg"
+        alt="Панорама Витебска"
+        width="1672"
+        height="941"
+        loading="eager"
+        fetchpriority="high"
+        decoding="async"
+    />
+    <div class="home-hero__veil" aria-hidden="true"></div>
+
+    <div class="container home-hero__inner">
+        <div class="home-hero__copy">
+            <p class="home-hero__badge">
+                <span class="material-icons-round" aria-hidden="true">location_on</span>
+                Витебск и Витебская область
+            </p>
+            <h1 id="home-hero-title">Кондиционеры в Витебске с подбором и монтажом</h1>
+            <p class="home-hero__lead">
+                Подберём варианты под помещение и бюджет. Установим новый или б/у
+                кондиционер, даже если он куплен не у нас. До начала работ согласуем
+                схему и стоимость.
+            </p>
+
+            <div class="home-hero__actions">
+                <a
+                    class="btn btn-primary home-hero__primary"
+                    href="#home-selector"
+                    data-home-event={HOMEPAGE_ANALYTICS_EVENTS.heroSelect}
+                    data-home-action="select"
+                    data-home-item="selector"
+                    onclick="window.trackHomeConversion?.(this)"
+                >
+                    Подобрать модели
+                    <span class="material-icons-round" aria-hidden="true">arrow_forward</span>
+                </a>
+                <a
+                    class="btn home-hero__secondary"
+                    href="/montaj-konditionerov/#installation-request"
+                    data-home-event={HOMEPAGE_ANALYTICS_EVENTS.heroInstallation}
+                    data-home-action="estimate"
+                    data-home-item="installation_photo"
+                    onclick="window.trackHomeConversion?.(this)"
+                >
+                    <span class="material-icons-round" aria-hidden="true">photo_camera</span>
+                    Рассчитать монтаж по фото
+                </a>
+            </div>
+
+            <a class="home-hero__service-link" href="/services/">
+                Нужен сервис или ремонт? <span>Записаться</span>
+                <span class="material-icons-round" aria-hidden="true">arrow_forward</span>
+            </a>
+
+            <ul class="home-hero__proof" aria-label="Как выполняем монтаж">
+                <li>Монтаж своего оборудования</li>
+                <li>Вакуумирование трассы</li>
+                <li>Смета до начала работ</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<style>
+    .home-hero {
+        position: relative;
+        isolation: isolate;
+        display: flex;
+        min-height: min(640px, calc(100svh - 72px));
+        overflow: hidden;
+        background: var(--surface);
+    }
+
+    .home-hero__image,
+    .home-hero__veil {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+    }
+
+    .home-hero__image {
+        z-index: -3;
+        object-fit: cover;
+        object-position: center 48%;
+    }
+
+    .home-hero__veil {
+        z-index: -2;
+        background: linear-gradient(
+            90deg,
+            rgba(var(--surface-rgb), 0.98) 0%,
+            rgba(var(--surface-rgb), 0.92) 48%,
+            rgba(var(--surface-rgb), 0.46) 76%,
+            rgba(var(--surface-rgb), 0.18) 100%
+        );
+    }
+
+    .home-hero__inner {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding-top: 3.75rem;
+        padding-bottom: 3.75rem;
+    }
+
+    .home-hero__copy {
+        width: min(760px, 70%);
+    }
+
+    .home-hero__badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-bottom: 1.25rem;
+        padding: 0.55rem 0.75rem;
+        border: 1px solid var(--panel-chip-border);
+        border-radius: 999px;
+        background: var(--panel-pill-bg);
+        color: var(--primary);
+        font-size: 0.82rem;
+        font-weight: 800;
+    }
+
+    .home-hero__badge .material-icons-round {
+        font-size: 18px;
+    }
+
+    h1 {
+        max-width: 760px;
+        margin: 0;
+        color: var(--text);
+        font-size: clamp(2.5rem, 5.5vw, 4.75rem);
+        font-weight: 800;
+        line-height: 1.02;
+        letter-spacing: 0;
+    }
+
+    .home-hero__lead {
+        max-width: 650px;
+        margin: 1.4rem 0 0;
+        color: var(--text-muted);
+        font-size: clamp(1.02rem, 1.7vw, 1.2rem);
+        line-height: 1.65;
+    }
+
+    .home-hero__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.75rem;
+    }
+
+    .home-hero__actions .btn {
+        min-height: 52px;
+        border-radius: 8px;
+    }
+
+    .home-hero__secondary {
+        border: 1px solid var(--panel-input-border);
+        background: var(--panel-input-bg);
+        color: var(--text);
+        box-shadow: var(--panel-glass-shadow);
+    }
+
+    .home-hero__secondary:hover {
+        border-color: var(--panel-chip-hover-border);
+        transform: translateY(-2px);
+    }
+
+    .home-hero__service-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 1rem;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+        font-weight: 600;
+    }
+
+    .home-hero__service-link span:not(.material-icons-round) {
+        color: var(--primary);
+    }
+
+    .home-hero__service-link .material-icons-round {
+        color: var(--primary);
+        font-size: 18px;
+    }
+
+    .home-hero__proof {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem 1.25rem;
+        margin-top: 1.5rem;
+        color: var(--text-muted);
+        font-size: 0.84rem;
+        font-weight: 700;
+    }
+
+    .home-hero__proof li {
+        position: relative;
+        padding-left: 1.1rem;
+    }
+
+    .home-hero__proof li::before {
+        position: absolute;
+        top: 0.45em;
+        left: 0;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--primary);
+        content: "";
+    }
+
+    .home-hero a:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+    }
+
+    @media (max-width: 900px) {
+        .home-hero {
+            min-height: auto;
+        }
+
+        .home-hero__image {
+            object-position: 62% center;
+        }
+
+        .home-hero__veil {
+            background: linear-gradient(
+                180deg,
+                rgba(var(--surface-rgb), 0.88) 0%,
+                rgba(var(--surface-rgb), 0.96) 62%,
+                rgba(var(--surface-rgb), 1) 100%
+            );
+        }
+
+        .home-hero__inner {
+            align-items: flex-end;
+            min-height: 610px;
+            padding-top: 5rem;
+            padding-bottom: 2.5rem;
+        }
+
+        .home-hero__copy {
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 560px) {
+        .home-hero__inner {
+            min-height: auto;
+            padding-top: 2rem;
+            padding-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 10.5vw, 2.55rem);
+        }
+
+        .home-hero__lead {
+            margin-top: 1rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .home-hero__actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+            margin-top: 1.2rem;
+        }
+
+        .home-hero__actions .btn {
+            width: 100%;
+            min-height: 48px;
+        }
+
+        .home-hero__service-link {
+            align-items: center;
+            flex-wrap: nowrap;
+            margin-top: 0.7rem;
+            font-size: 0.82rem;
+        }
+
+        .home-hero__proof {
+            flex-wrap: nowrap;
+            gap: 0.75rem;
+            margin-top: 0.85rem;
+            padding-bottom: 0.25rem;
+            overflow-x: auto;
+            font-size: 0.72rem;
+            scrollbar-width: none;
+        }
+
+        .home-hero__proof::-webkit-scrollbar {
+            display: none;
+        }
+
+        .home-hero__proof li {
+            flex: 0 0 auto;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .home-hero__actions .btn {
+            transition: none;
+        }
+
+        .home-hero__secondary:hover {
+            transform: none;
+        }
+    }
+</style>

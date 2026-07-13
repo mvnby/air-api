@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Какие зоны очищают при полноценном обслуживании</title>
+  <desc id="desc">Чистка внутреннего блока — это не только промывка фильтров</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#24343A" flood-opacity=".10"/></filter>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF7F6"/></linearGradient>
+    <style>
+      .title{font:700 34px Inter,Arial,sans-serif;fill:#24343A}
+      .subtitle{font:400 20px Inter,Arial,sans-serif;fill:#607277}
+      .label{font:700 25px Inter,Arial,sans-serif;fill:#24343A}
+      .note{font:500 18px Inter,Arial,sans-serif;fill:#607277}
+      .small{font:600 16px Inter,Arial,sans-serif;fill:#24343A}
+      .line{fill:none;stroke-linecap:round;stroke-linejoin:round}
+    </style>
+  </defs>
+  <rect width="1200" height="760" rx="40" fill="#F7F5F0"/>
+  <text x="600" y="58" text-anchor="middle" class="title">Какие зоны очищают при полноценном обслуживании</text>
+  <text x="600" y="96" text-anchor="middle" class="subtitle">Чистка внутреннего блока — это не только промывка фильтров</text>
+  <rect x="70" y="150" width="1060" height="500" rx="34" fill="url(#panel)" stroke="#C9D5D5" stroke-width="3"/>
+      <rect x="125" y="245" width="150" height="235" rx="18" fill="none" stroke="#075E63" stroke-width="6" stroke-dasharray="10 8"/>
+      <path d="M340 245 l150 0 l-30 235 l-150 0 z" fill="#EAF7F6" stroke="#11B8B2" stroke-width="6"/>
+      <circle cx="620" cy="360" r="90" fill="none" stroke="#075E63" stroke-width="8"/><circle cx="620" cy="360" r="15" fill="#075E63"/>
+      <path d="M620 285 q65 28 0 75 q-65 28 0 75 q65-28 0-75 q-65-28 0-75" fill="none" stroke="#075E63" stroke-width="7"/>
+      <path d="M770 430 H1015 L985 485 H800 z" fill="#EAF7F6" stroke="#F2A93B" stroke-width="6"/>
+      <path d="M985 485 q20 35 45 55" fill="none" stroke="#11B8B2" stroke-width="7" stroke-linecap="round"/>
+      <text x="200" y="550" text-anchor="middle" class="label">Фильтры</text>
+      <text x="400" y="550" text-anchor="middle" class="label">Теплообменник</text>
+      <text x="620" y="550" text-anchor="middle" class="label">Крыльчатка</text>
+      <text x="900" y="550" text-anchor="middle" class="label">Поддон и дренаж</text>
+      <path d="M275 360 H300 M490 360 H515 M710 360 H765" stroke="#11B8B2" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="200" cy="220" r="10" fill="#E56A5D"/><circle cx="400" cy="220" r="10" fill="#E56A5D"/><circle cx="620" cy="220" r="10" fill="#E56A5D"/><circle cx="900" cy="220" r="10" fill="#E56A5D"/>
+      <text x="600" y="615" text-anchor="middle" class="note">Запах и слабый поток часто остаются, если очистить только сетку</text>
+</svg>

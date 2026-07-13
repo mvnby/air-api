@@ -151,7 +151,7 @@ class ManagerCatalogService:
         product_id: int,
         data: ProductUpdate,
     ) -> Optional[Dict[str, Any]]:
-        update_data = data.dict(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True)
         tag_ids = update_data.pop("tag_ids", None)
         return await ProductService.update_product(session, product_id, update_data, tag_ids)
 

@@ -17,6 +17,7 @@ from pathlib import Path
 
 
 PRIMARY_ROLES = {"leader", "master", "primary"}
+REPLICA_ROLES = {"replica", "standby"}
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,11 @@ def fetch_patroni_role(url: str, *, timeout: float = 3.0) -> str:
     if payload.get("state") != "running":
         return "standby"
     role = str(payload.get("role") or "").strip().lower()
-    return "primary" if role in PRIMARY_ROLES else "standby"
+    if role in PRIMARY_ROLES:
+        return "primary"
+    if role in REPLICA_ROLES:
+        return "standby"
+    raise ValueError(f"unsupported Patroni role: {role or '<empty>'}")
 
 
 def app_service(config: AgentConfig) -> str:
@@ -139,14 +144,20 @@ def _run_compose(config: AgentConfig, *args: str, check: bool = True) -> subproc
     )
 
 
-def _runtime_matches(config: AgentConfig, role: str, service: str) -> bool:
+def _running_services(config: AgentConfig) -> set[str]:
     result = _run_compose(config, "ps", "--status", "running", "--services", check=False)
     if result.returncode != 0:
-        return False
-    running = set(result.stdout.splitlines())
-    if service not in running:
-        return False
-    return ("bot" in running) == (role == "primary")
+        error = (result.stderr or result.stdout or "docker compose ps failed").strip()
+        raise RuntimeError(error)
+    return set(result.stdout.splitlines())
+
+
+def _start_service(config: AgentConfig, service: str, *, recreate: bool) -> None:
+    args = ["up", "-d", "--no-deps"]
+    if recreate:
+        args.append("--force-recreate")
+    args.append(service)
+    _run_compose(config, *args)
 
 
 def _systemd_units_match(config: AgentConfig, role: str) -> bool:
@@ -205,13 +216,40 @@ def reconcile(config: AgentConfig, role: str) -> bool:
     app_matches = config.app_role_env.exists() and config.app_role_env.read_text(encoding="utf-8") == desired_app
     bot_matches = config.bot_role_env.exists() and config.bot_role_env.read_text(encoding="utf-8") == desired_bot
     service = app_service(config)
-    if (
-        current_state == role
-        and app_matches
-        and bot_matches
-        and _runtime_matches(config, role, service)
-    ):
-        if not _systemd_units_match(config, role):
+    running = _running_services(config)
+    role_changed = current_state != role
+    app_env_changed = not app_matches
+    bot_env_changed = not bot_matches
+    app_running = service in running
+    bot_running = "bot" in running
+    bot_expected = role == "primary"
+    systemd_matches = _systemd_units_match(config, role)
+
+    reasons: list[str] = []
+    if role_changed:
+        reasons.append("role_state")
+    if app_env_changed:
+        reasons.append("app_env")
+    if bot_env_changed:
+        reasons.append("bot_env")
+    if not app_running:
+        reasons.append("app_not_running")
+    if bot_expected and not bot_running:
+        reasons.append("bot_not_running")
+    if not bot_expected and bot_running:
+        reasons.append("bot_running_on_standby")
+    if not systemd_matches:
+        reasons.append("systemd_units")
+
+    needs_runtime_reconcile = (
+        role_changed
+        or app_env_changed
+        or bot_env_changed
+        or not app_running
+        or bot_running != bot_expected
+    )
+    if not needs_runtime_reconcile:
+        if not systemd_matches:
             _reconcile_primary_systemd_units(config, role)
         return False
 
@@ -223,26 +261,54 @@ def reconcile(config: AgentConfig, role: str) -> bool:
             print("patroni_role_agent_status=deferred reason=deployment_lock_busy", flush=True)
             return False
 
-        if role == "primary" and config.promotion_delay_seconds:
+        if role == "primary" and role_changed and config.promotion_delay_seconds:
             time.sleep(config.promotion_delay_seconds)
             if fetch_patroni_role(config.patroni_url) != "primary":
                 print("patroni_role_agent_status=deferred reason=primary_role_not_stable", flush=True)
                 return False
 
-        _atomic_write(config.app_role_env, desired_app)
-        _atomic_write(config.bot_role_env, desired_bot)
-        if role == "standby":
-            _reconcile_primary_systemd_units(config, role)
-            _run_compose(config, "stop", "bot", check=False)
-            _run_compose(config, "up", "-d", "--no-deps", "--force-recreate", service)
-        else:
-            _run_compose(config, "up", "-d", "--no-deps", "--force-recreate", service)
-            _wait_ready(config)
-            _run_compose(config, "up", "-d", "--no-deps", "--force-recreate", "bot")
-            _reconcile_primary_systemd_units(config, role)
+        actions: list[str] = []
+        if app_env_changed:
+            _atomic_write(config.app_role_env, desired_app)
+            actions.append("write_app_env")
+        if bot_env_changed:
+            _atomic_write(config.bot_role_env, desired_bot)
+            actions.append("write_bot_env")
 
-        _atomic_write(config.state_file, f"{role}\n")
-        print(f"patroni_role_agent_status=reconciled role={role} app_service={service}", flush=True)
+        app_needs_start = app_env_changed or not app_running
+        if role == "standby":
+            if not systemd_matches:
+                _reconcile_primary_systemd_units(config, role)
+                actions.append("stop_primary_units")
+            if bot_running:
+                _run_compose(config, "stop", "bot", check=False)
+                actions.append("stop_bot")
+            if app_needs_start:
+                _start_service(config, service, recreate=app_env_changed)
+                actions.append("recreate_app" if app_env_changed else "start_app")
+        else:
+            if app_needs_start:
+                _start_service(config, service, recreate=app_env_changed)
+                actions.append("recreate_app" if app_env_changed else "start_app")
+            bot_needs_start = bot_env_changed or not bot_running
+            if app_needs_start or bot_needs_start:
+                _wait_ready(config)
+                actions.append("wait_ready")
+            if bot_needs_start:
+                _start_service(config, "bot", recreate=bot_env_changed)
+                actions.append("recreate_bot" if bot_env_changed else "start_bot")
+            if not systemd_matches:
+                _reconcile_primary_systemd_units(config, role)
+                actions.append("start_primary_units")
+
+        if role_changed:
+            _atomic_write(config.state_file, f"{role}\n")
+            actions.append("write_role_state")
+        print(
+            f"patroni_role_agent_status=reconciled role={role} app_service={service} "
+            f"reasons={','.join(reasons)} actions={','.join(actions)}",
+            flush=True,
+        )
         return True
 
 

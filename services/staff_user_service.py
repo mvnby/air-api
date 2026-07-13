@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class StaffUserService:
+    DISABLED_BOT_TOKEN_PLACEHOLDER = "0:disabled-bot-token"
     ROLE_OWNER = "owner"
     ROLE_ADMIN = "admin"
     ROLE_MANAGER = "manager"
@@ -244,6 +245,10 @@ class StaffUserService:
         *,
         max_age: timedelta = timedelta(minutes=10),
     ) -> bool:
+        bot_token = str(settings.BOT_TOKEN or "").strip()
+        if not bot_token or bot_token == cls.DISABLED_BOT_TOKEN_PLACEHOLDER:
+            return False
+
         values = cls._telegram_payload_items(payload)
         received_hash = values.pop("hash", "")
         if not received_hash:
@@ -257,7 +262,7 @@ class StaffUserService:
             return False
 
         data_check_string = "\n".join(f"{key}={values[key]}" for key in sorted(values))
-        secret_key = hashlib.sha256(settings.BOT_TOKEN.encode("utf-8")).digest()
+        secret_key = hashlib.sha256(bot_token.encode("utf-8")).digest()
         expected_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected_hash, received_hash)
 

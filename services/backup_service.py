@@ -7,12 +7,17 @@ import tarfile
 import tempfile
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from core.config import settings
 from core.logger import logger
 from services.google_service import get_google_service
 
 BACKUP_DIR = "backups"
+
+
+class BackupConfigurationError(RuntimeError):
+    """Required production backup configuration is missing or invalid."""
 
 
 class BackupService:
@@ -22,6 +27,8 @@ class BackupService:
     _PLAIN_SQL_DUMP_SETTINGS_TO_STRIP = {
         "transaction_timeout",
     }
+    _MAX_MEDIA_ARCHIVE_MEMBERS = 100_000
+    _MAX_MEDIA_ARCHIVE_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024
 
     def __init__(self):
         self.db_user = os.getenv("POSTGRES_USER", "mvnadmin")
@@ -78,15 +85,18 @@ class BackupService:
         except (TypeError, ValueError):
             return None
 
+    def _require_backup_folder_id(self) -> str:
+        folder_id = (self.backup_folder_id or "").strip()
+        if not folder_id:
+            raise BackupConfigurationError("BACKUP_FOLDER_ID is not configured")
+        return folder_id
+
     def list_backups(self, limit: int = 50) -> List[Dict[str, Any]]:
         """
         Returns available backups from Google Drive folder with `db/media` classification.
         """
-        if not self.backup_folder_id:
-            logger.warning("BACKUP_FOLDER_ID not set. Returning empty backup list.")
-            return []
-
-        files = get_google_service().list_files(self.backup_folder_id, limit=limit)
+        folder_id = self._require_backup_folder_id()
+        files = get_google_service().list_files(folder_id, limit=limit)
         items: List[Dict[str, Any]] = []
         for item in files:
             name = item.get("name", "")
@@ -208,11 +218,10 @@ class BackupService:
         """
         Keeps only the latest 10 backup sets in Google Drive (db + media).
         """
-        if not self.backup_folder_id:
-            return
+        folder_id = self._require_backup_folder_id()
 
         try:
-            files = get_google_service().list_files(self.backup_folder_id, limit=50)
+            files = get_google_service().list_files(folder_id, limit=50)
             keep_limit = 10 * 2
 
             if len(files) > keep_limit:
@@ -242,9 +251,7 @@ class BackupService:
             )
             return False
 
-        if not self.backup_folder_id:
-            logger.warning("BACKUP_FOLDER_ID not set. Skipping upload.")
-            return
+        folder_id = self._require_backup_folder_id()
 
         created_files: List[str] = []
         try:
@@ -264,7 +271,7 @@ class BackupService:
                     file_path=filepath,
                     filename=filename,
                     mime_type=mime,
-                    folder_id=self.backup_folder_id,
+                    folder_id=folder_id,
                 )
                 uploaded_count += 1
 
@@ -309,13 +316,33 @@ class BackupService:
     def _safe_extract_tar(archive_path: str, destination_dir: str) -> None:
         destination_abs = os.path.abspath(destination_dir)
         with tarfile.open(archive_path, "r:*") as tar:
-            for member in tar.getmembers():
+            members = tar.getmembers()
+            if len(members) > BackupService._MAX_MEDIA_ARCHIVE_MEMBERS:
+                raise Exception("Media archive contains too many entries")
+
+            total_size = 0
+            for member in members:
                 if member.issym() or member.islnk():
                     raise Exception(f"Unsupported link in archive: {member.name}")
+                if not (member.isdir() or member.isreg()):
+                    raise Exception(f"Unsupported special file in archive: {member.name}")
+                total_size += max(0, int(member.size or 0))
+                if total_size > BackupService._MAX_MEDIA_ARCHIVE_UNCOMPRESSED_BYTES:
+                    raise Exception("Media archive exceeds the uncompressed size limit")
                 member_path = os.path.abspath(os.path.join(destination_dir, member.name))
                 if os.path.commonpath([destination_abs, member_path]) != destination_abs:
                     raise Exception(f"Unsafe path in archive: {member.name}")
-            tar.extractall(path=destination_dir)
+            tar.extractall(path=destination_dir, members=members, filter="data")
+
+    @staticmethod
+    def _copy_restore_tree(source_dir: str, staging_dir: str) -> None:
+        for item in os.listdir(source_dir):
+            source_path = os.path.join(source_dir, item)
+            destination_path = os.path.join(staging_dir, item)
+            if os.path.isdir(source_path):
+                shutil.copytree(source_path, destination_path)
+            else:
+                shutil.copy2(source_path, destination_path)
 
     def restore_media_from_archive(self, archive_path: str) -> str:
         """
@@ -327,6 +354,12 @@ class BackupService:
 
         safety_archive = self.create_media_archive()
         temp_dir = tempfile.mkdtemp(prefix="media_restore_", dir=BACKUP_DIR)
+        media_dir_abs = os.path.abspath(self.media_dir)
+        media_parent_dir = os.path.dirname(media_dir_abs)
+        os.makedirs(media_parent_dir, exist_ok=True)
+        staging_dir = tempfile.mkdtemp(prefix=".media_restore_staging_", dir=media_parent_dir)
+        previous_dir = f"{media_dir_abs}.restore-previous-{uuid4().hex}"
+        previous_moved = False
 
         try:
             self._safe_extract_tar(archive_path, temp_dir)
@@ -338,23 +371,43 @@ class BackupService:
                 # Fallback for archives with direct files at root.
                 restore_source = temp_dir
 
-            if os.path.exists(self.media_dir):
-                shutil.rmtree(self.media_dir)
+            self._copy_restore_tree(restore_source, staging_dir)
 
-            if restore_source == temp_dir:
-                os.makedirs(self.media_dir, exist_ok=True)
-                for item in os.listdir(temp_dir):
-                    item_path = os.path.join(temp_dir, item)
-                    if item_path == self.media_dir:
-                        continue
-                    shutil.move(item_path, os.path.join(self.media_dir, item))
-            else:
-                shutil.move(restore_source, self.media_dir)
+            if os.path.exists(media_dir_abs):
+                os.replace(media_dir_abs, previous_dir)
+                previous_moved = True
+
+            try:
+                os.replace(staging_dir, media_dir_abs)
+            except Exception:
+                if previous_moved and not os.path.exists(media_dir_abs):
+                    os.replace(previous_dir, media_dir_abs)
+                    previous_moved = False
+                raise
+
+            if previous_moved:
+                try:
+                    shutil.rmtree(previous_dir)
+                    previous_moved = False
+                except OSError:
+                    # The atomic swap already succeeded.  A cleanup failure
+                    # must not report the restore itself as failed or trigger
+                    # a misleading retry over the newly restored tree.
+                    logger.warning(
+                        "Previous media directory could not be removed after restore path=%s",
+                        previous_dir,
+                    )
 
             logger.info("Media restored successfully from %s", archive_path)
             return safety_archive or ""
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            if previous_moved and not os.path.exists(media_dir_abs) and os.path.exists(previous_dir):
+                os.replace(previous_dir, media_dir_abs)
+                previous_moved = False
+            if os.path.exists(previous_dir):
+                logger.warning("Previous media directory kept after restore at %s", previous_dir)
 
     async def restore_from_file_async(self, filepath: str):
         """
@@ -365,6 +418,9 @@ class BackupService:
         env["PGPASSWORD"] = self.db_password
         command = [
             "psql",
+            "--no-psqlrc",
+            "--set=ON_ERROR_STOP=1",
+            "--single-transaction",
             "-h",
             self.db_host,
             "-p",
@@ -418,6 +474,9 @@ class BackupService:
         env["PGPASSWORD"] = self.db_password
         command = [
             "psql",
+            "--no-psqlrc",
+            "--set=ON_ERROR_STOP=1",
+            "--single-transaction",
             "-h",
             self.db_host,
             "-p",
@@ -448,6 +507,9 @@ class BackupService:
         sql_command = "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;"
         command = [
             "psql",
+            "--no-psqlrc",
+            "--set=ON_ERROR_STOP=1",
+            "--single-transaction",
             "-h",
             self.db_host,
             "-p",

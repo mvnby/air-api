@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Как меняется температура после выхода на режим</title>
+  <desc id="desc">Инвертор снижает мощность, а On/Off продолжает работать циклами</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#24343A" flood-opacity=".10"/></filter>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF7F6"/></linearGradient>
+    <style>
+      .title{font:700 34px Inter,Arial,sans-serif;fill:#24343A}
+      .subtitle{font:400 20px Inter,Arial,sans-serif;fill:#607277}
+      .label{font:700 25px Inter,Arial,sans-serif;fill:#24343A}
+      .note{font:500 18px Inter,Arial,sans-serif;fill:#607277}
+      .small{font:600 16px Inter,Arial,sans-serif;fill:#24343A}
+      .line{fill:none;stroke-linecap:round;stroke-linejoin:round}
+    </style>
+  </defs>
+  <rect width="1200" height="760" rx="40" fill="#F7F5F0"/>
+  <text x="600" y="58" text-anchor="middle" class="title">Как меняется температура после выхода на режим</text>
+  <text x="600" y="96" text-anchor="middle" class="subtitle">Инвертор снижает мощность, а On/Off продолжает работать циклами</text>
+  <rect x="75" y="145" width="1050" height="500" rx="34" fill="url(#panel)" stroke="#C9D5D5" stroke-width="3"/>
+      <path d="M120 260 H1080" stroke="#C9D5D5" stroke-width="2" stroke-dasharray="8 10"/><path d="M120 350 H1080" stroke="#C9D5D5" stroke-width="2" stroke-dasharray="8 10"/><path d="M120 440 H1080" stroke="#C9D5D5" stroke-width="2" stroke-dasharray="8 10"/><path d="M120 530 H1080" stroke="#C9D5D5" stroke-width="2" stroke-dasharray="8 10"/>
+      <path d="M120 570 V210 M120 570 H1080" stroke="#24343A" stroke-width="4" stroke-linecap="round"/>
+      <path d="M120 395 H1080" stroke="#075E63" stroke-width="4" stroke-dasharray="14 12" opacity=".55"/>
+      <text x="135" y="380" class="small">Заданная температура</text>
+      <path d="M150 245 C210 245 220 530 300 530 S390 260 470 260 S560 520 640 520 S730 275 810 275 S900 505 980 505 S1040 300 1070 300" fill="none" stroke="#E56A5D" stroke-width="8" stroke-linecap="round"/>
+      <path d="M150 245 C260 250 285 390 390 405 C520 423 610 390 730 397 C850 403 930 394 1070 396" fill="none" stroke="#11B8B2" stroke-width="8" stroke-linecap="round"/>
+      <circle cx="290" cy="610" r="7" fill="#E56A5D"/><text x="310" y="617" class="note">On/Off: заметные циклы включения и остановки</text>
+      <circle cx="725" cy="610" r="7" fill="#11B8B2"/><text x="745" y="617" class="note">Инвертор: плавное удержание</text>
+      <text x="1060" y="555" text-anchor="end" class="small">Время →</text>
+</svg>

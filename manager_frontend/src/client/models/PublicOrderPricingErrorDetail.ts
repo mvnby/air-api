@@ -2,7 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type ManagerGoogleAuthExchangePayload = {
+export type PublicOrderPricingErrorDetail = {
     code: string;
+    message: string;
 };
 

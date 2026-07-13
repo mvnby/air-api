@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import ContactForm from "../components/ContactForm.vue";
+import TechnicalFigure from "../components/TechnicalFigure.astro";
 
 export const prerender = true;
 ---
@@ -90,6 +91,12 @@ export const prerender = true;
                     </li>
                 </ul>
             </div>
+
+            <TechnicalFigure
+                src="/img/blog/v2/inline/maintenance-cleaning-zones.svg"
+                alt="Зоны внутреннего блока, которые очищают при обслуживании: фильтры, теплообменник, крыльчатка, поддон и дренаж"
+                caption="Полноценное обслуживание не заканчивается на сетке: загрязнение теплообменника, крыльчатки и дренажа тоже снижает поток и вызывает запах."
+            />
 
             <section
                 class="repair-notice mb-8"

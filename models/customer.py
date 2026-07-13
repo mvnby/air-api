@@ -13,7 +13,10 @@ class Customer(SQLModel, table=True):
     name: str = Field(index=True)
     phone: str = Field(index=True)
     email: Optional[str] = None
-    type: CustomerType = Field(default=CustomerType.individual)
+    type: CustomerType = Field(
+        default=CustomerType.individual,
+        sa_column=Column(String, nullable=False),
+    )
 
     full_legal_name: Optional[str] = None
     inn: Optional[str] = Field(default=None, index=True)
@@ -83,7 +86,11 @@ class CustomerBranch(SQLModel, table=True):
     __tablename__ = "customer_branches"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    customer_id: int = Field(foreign_key="customer.id", index=True)
+    customer_id: int = Field(
+        foreign_key="customer.id",
+        ondelete="CASCADE",
+        index=True,
+    )
 
     name: Optional[str] = None
     delivery_address: str
