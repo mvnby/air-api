@@ -152,6 +152,22 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
         for index in delivery.indexes
     )
     assert any(
+        index.name == "ix_communication_delivery_channel_claim"
+        and [column.name for column in index.columns]
+        == ["channel", "priority", "available_at", "created_at", "delivery_id"]
+        and str(index.dialect_options["postgresql"]["where"])
+        == "status IN ('queued', 'retry')"
+        for index in delivery.indexes
+    )
+    assert any(
+        index.name == "ix_communication_delivery_channel_recovery"
+        and [column.name for column in index.columns]
+        == ["channel", "lease_expires_at", "created_at", "delivery_id"]
+        and str(index.dialect_options["postgresql"]["where"])
+        == "status = 'running'"
+        for index in delivery.indexes
+    )
+    assert any(
         isinstance(constraint, CheckConstraint)
         and constraint.name == "ck_outbox_status_valid"
         for constraint in outbox.constraints
@@ -161,3 +177,16 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
         and constraint.name == "ck_delivery_status_valid"
         for constraint in delivery.constraints
     )
+    for constraint_name in (
+        "ck_delivery_active_attempts_remaining",
+        "ck_delivery_attempt_phase",
+        "ck_delivery_attempts_within_max",
+        "ck_delivery_lease_state",
+        "ck_delivery_provider_message_state",
+        "ck_delivery_terminal_timestamps",
+    ):
+        assert any(
+            isinstance(constraint, CheckConstraint)
+            and constraint.name == constraint_name
+            for constraint in delivery.constraints
+        )

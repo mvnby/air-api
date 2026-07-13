@@ -57,7 +57,7 @@ MVN уже состоит из нескольких независимо раз�
 | JOB-002 | P1 | Media | Два worker'а могут атомарно незащищённо забрать одну media job | Закрыто и развернуто в API Wave 0: atomic claim, lease token, heartbeat; сам worker остаётся выключен до отдельного managed rollout |
 | COM-001 | P1 | Telegram | Ошибки проглатываются, попытка считается доставкой; живой log доказал ложный `notified_admins=2` при отказе | Закрыто в Wave 0 |
 | COM-002 | P1 | Telegram | Ручной bank import не вызывает notify, после dedupe уведомление теряется навсегда | Закрыто в Wave 0 |
-| COM-003 | P1 | Telegram/Email | Нет transactional outbox: события теряются/дублируются, внешние вызовы блокируют HTTP transaction | В работе: PR-A (#727) развернул выключенный additive outbox/inbox/per-recipient delivery foundation; PR-B добавляет атомарную материализацию deliveries+inbox без runtime/scheduler/provider; producer switch и сетевой worker ещё открыты |
+| COM-003 | P1 | Telegram/Email | Нет transactional outbox: события теряются/дублируются, внешние вызовы блокируют HTTP transaction | В работе: PR-A (#727) развернул выключенный additive foundation; PR-B добавил dispatcher/materializer; C1 добавляет выключенный per-recipient leased Telegram worker, provider result/retry/DLQ и lease fencing. Runtime/scheduler и атомарный producer switch намеренно остаются C2 после transaction review |
 | COM-004 | P1 | Tests | Integration checkout способен отправлять реальные Telegram-сообщения владельцам | Закрыто в Wave 0 |
 | PRIV-001 | P1 | Media | Реквизиты, order attachments и диагностические фото лежат в публичном `/media`/public R2 | Открыто |
 | WEB-001 | P1 | SSG | Build запрашивает только 1000 из 1117 товаров; product routes после 1000 отсутствуют и production URL отвечает 404 | Закрыто в Wave 0: пагинация, dedupe и hard-fail invariant |
@@ -236,7 +236,7 @@ Checkout, contact/availability leads, repair upload/AI и proxies не имею�
 
 На исходном срезе `BotService.send_message` глотал provider error, а callers увеличивали `sent_count` после любой попытки. В локальном operational log найдено пять реальных отказов, включая обоих текущих owners; рядом scheduler заявил двух уведомлённых. Это был доказанный false-success, а не теоретическая ветка.
 
-Wave 0 перевела текущий контракт на подтверждённый `bool`, сделала partial fan-out видимым и сохранила multi-recipient delivery; ручной bank import теперь также уведомляет. Полный structured `DeliveryResult` с provider message ID/error code/retry-after и durable retry queue остаётся частью Communications/outbox.
+Wave 0 перевела текущий production-контракт на подтверждённый `bool`, сделала partial fan-out видимым и сохранила multi-recipient delivery; ручной bank import теперь также уведомляет. C1 добавляет отдельный structured provider result с message ID/error code/retry-after и durable per-recipient retry/DLQ, но этот worker остаётся dormant и не меняет текущий production path до C2 rollout.
 
 ### 8.2 Outbox
 
@@ -252,7 +252,9 @@ Wave 0 перевела текущий контракт на подтвержд�
 - `installer.assigned`;
 - `work_stage.status_changed`.
 
-Delivery uniqueness: `(event_id, channel, recipient_id, template_version)`. Worker: `SKIP LOCKED`, backoff+jitter, Telegram `retry_after`, terminal blocked/403, chunking, fallback, DLQ, queue-age/delivery metrics.
+Delivery uniqueness: `(event_id, channel, recipient_key, template_version)`. C1 worker берёт только due `queued/retry` через `SKIP LOCKED`; claim коммитится до network, а renew/sent/retry/dead/cancel fenced по `worker_id + lease_token + unexpired lease`. Истёкший `running` сначала отдельно переводится в delayed retry/DLQ и не переотправляется тем же claim. Реализованы deterministic backoff+jitter, Telegram `retry_after`, terminal recipient errors, sanitized diagnostics, active-recipient revalidation и независимый partial fan-out. Chunking/fallback, queue-age/delivery metrics и managed runtime rollout остаются открыты.
+
+Семантика остаётся честной **at-least-once**: если Telegram принял сообщение, но ответ потерян/неоднозначен, либо process аварийно завершился до terminal DB commit, lease recovery может отправить дубликат. Fencing запрещает stale worker менять состояние, но без provider idempotency не превращает Telegram delivery в exactly-once; этот риск обязателен для C2 canary/runbook и метрик duplicate suspicion.
 
 ### 8.3 Access и privacy
 
@@ -345,7 +347,7 @@ Wave 0 подтверждена локально, в CI и production. Media pro
 
 ### Wave 1 — данные и надёжность
 
-- Transactional outbox/inbox + communications worker. PR-A развернул только выключенный additive persistence/contracts foundation. PR-B добавляет caller-owned single-transaction dispatcher (`FOR UPDATE SKIP LOCKED`, deterministic delivery upsert, inbox-last, retry/dead bookkeeping) без scheduler и сетевых вызовов. Leased provider worker и атомарное переключение producers выполняются следующими отдельными PR.
+- Transactional outbox/inbox + communications worker. PR-A развернул выключенный additive persistence/contracts foundation; PR-B добавил caller-owned single-transaction dispatcher (`FOR UPDATE SKIP LOCKED`, deterministic delivery upsert, inbox-last, retry/dead bookkeeping). C1 добавляет всё ещё выключенный provider worker с durable claim-before-network, token fencing, heartbeat, retry/DLQ и Telegram adapter. C2 отдельно проводит transaction review, атомарно переключает producers и только затем подключает managed runtime/scheduler.
 - Order version/409 и command-specific updates.
 - Canonical customer identity + checkout idempotency.
 - Public contact/availability lead abuse policy: edge+app rate limit, canonical phone/email, dedupe window, idempotency key и risk-based anti-bot.
