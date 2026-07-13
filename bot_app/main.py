@@ -6,6 +6,7 @@ from .handlers import admin, base, catalog, repair_context, work
 from core.config import settings
 from core.database import async_session_maker
 from core.logger import setup_logging
+from core.startup_checks import run_production_startup_checks
 from services.runtime_lock_service import RuntimeLockService
 
 # Setup logging with session-specific bot.log (cleared on restart)
@@ -44,6 +45,8 @@ async def main(*, wait_when_disabled: bool = True):
             logger.info("Bot process is idling without polling to avoid restart loops.")
             await _idle_when_disabled()
         return
+
+    await run_production_startup_checks(settings)
 
     if wait_when_disabled:
         runtime_lock = await RuntimeLockService.wait_until_acquired(

@@ -5,8 +5,8 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from core import config as config_module
 from core.config import Settings
+from core import startup_checks as startup_checks_module
 from services import private_attachment_storage_service as storage_module
 from services.private_attachment_storage_service import (
     S3PrivateAttachmentStorage,
@@ -135,7 +135,8 @@ def test_production_private_bucket_must_not_be_shared(public_bucket_setting):
         Settings(_env_file=None, **values)
 
 
-def test_local_settings_do_not_require_r2_or_run_startup_probe(monkeypatch):
+@pytest.mark.asyncio
+async def test_local_settings_do_not_require_r2_or_run_startup_probe(monkeypatch):
     local_settings = Settings(
         _env_file=None,
         SECRET_KEY="test",
@@ -151,22 +152,27 @@ def test_local_settings_do_not_require_r2_or_run_startup_probe(monkeypatch):
         calls.append,
     )
 
-    config_module._run_production_startup_checks(local_settings)
+    await startup_checks_module.run_production_startup_checks(local_settings)
 
     assert local_settings.SERVICE_ATTACHMENT_STORAGE_PROVIDER == "local"
     assert calls == []
 
 
-def test_production_startup_hook_invokes_private_storage_probe(monkeypatch):
+@pytest.mark.asyncio
+async def test_production_startup_hook_invokes_private_storage_probe(monkeypatch):
     configured = _startup_settings()
     calls = []
+
+    async def record_call(current_settings):
+        calls.append(current_settings)
+
     monkeypatch.setattr(
         storage_module,
         "verify_private_attachment_storage_startup",
-        calls.append,
+        record_call,
     )
 
-    config_module._run_production_startup_checks(configured)
+    await startup_checks_module.run_production_startup_checks(configured)
 
     assert calls == [configured]
 
@@ -183,10 +189,11 @@ def test_s3_storage_rejects_non_https_endpoint():
         )
 
 
-def test_startup_probe_writes_reads_deletes_and_confirms_cleanup():
+@pytest.mark.asyncio
+async def test_startup_probe_writes_reads_deletes_and_confirms_cleanup():
     client = _ProbeS3Client()
 
-    verify_private_attachment_storage_startup(
+    await verify_private_attachment_storage_startup(
         _startup_settings(),
         client=client,
     )
@@ -203,12 +210,13 @@ def test_startup_probe_writes_reads_deletes_and_confirms_cleanup():
     assert client.objects == {}
 
 
-def test_startup_probe_fails_closed_when_delete_does_not_remove_object():
+@pytest.mark.asyncio
+async def test_startup_probe_fails_closed_when_delete_does_not_remove_object():
     client = _ProbeS3Client(delete_objects=False)
     configured = _startup_settings()
 
     with pytest.raises(RuntimeError, match="startup probe failed") as error:
-        verify_private_attachment_storage_startup(configured, client=client)
+        await verify_private_attachment_storage_startup(configured, client=client)
 
     assert configured.SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY not in str(error.value)
 

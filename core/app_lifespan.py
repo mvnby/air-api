@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from core.config import settings
 from core.database import async_session_maker, init_db
 from core.logger import logger
+from core.startup_checks import run_production_startup_checks
 from services.runtime_lock_service import RuntimeLockService
 
 
@@ -469,6 +470,7 @@ async def _stop_scheduler_supervisor(app: FastAPI) -> None:
 async def app_lifespan(app: FastAPI):
     logger.info("Starting Application...")
 
+    await run_production_startup_checks(settings)
     await _bootstrap_database()
     _start_scheduler_supervisor(app)
 
