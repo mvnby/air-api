@@ -142,6 +142,7 @@ def test_local_settings_do_not_require_r2_or_run_startup_probe(monkeypatch):
         ADMIN_USERNAME="admin",
         ADMIN_PASSWORD="admin",
         ENVIRONMENT="local",
+        SERVICE_ATTACHMENT_STORAGE_PROVIDER="local",
     )
     calls = []
     monkeypatch.setattr(
