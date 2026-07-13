@@ -13,11 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import CommunicationDelivery
+from services.communications.delivery_attempt_service import (
+    CommunicationDeliveryAttemptService,
+)
 from services.communications.providers.base import (
     ProviderDeliveryDisposition,
     ProviderDeliveryResult,
 )
-
 
 DELIVERY_STATUS_QUEUED = "queued"
 DELIVERY_STATUS_RUNNING = "running"
@@ -140,8 +142,15 @@ class CommunicationDeliveryService:
 
         lease_token = secrets.token_urlsafe(32)
         lease_expires_at = claimed_at + timedelta(seconds=lease_duration)
+        next_attempt_no = int(delivery.attempts) + 1
+        await CommunicationDeliveryAttemptService.start(
+            session,
+            delivery=delivery,
+            attempt_no=next_attempt_no,
+            started_at=claimed_at,
+        )
         delivery.status = DELIVERY_STATUS_RUNNING
-        delivery.attempts = int(delivery.attempts) + 1
+        delivery.attempts = next_attempt_no
         delivery.worker_id = normalized_worker_id
         delivery.lease_token = lease_token
         delivery.lease_expires_at = lease_expires_at
@@ -203,6 +212,19 @@ class CommunicationDeliveryService:
         retry_count = 0
         dead_count = 0
         for delivery in deliveries:
+            await CommunicationDeliveryAttemptService.finish(
+                session,
+                delivery=delivery,
+                finished_at=recovered_at,
+                outcome=(
+                    DELIVERY_STATUS_DEAD
+                    if int(delivery.attempts) >= int(delivery.max_attempts)
+                    else DELIVERY_STATUS_RETRY
+                ),
+                error_category="lease",
+                error_code="lease_expired",
+                ambiguous=True,
+            )
             delivery.worker_id = None
             delivery.lease_token = None
             delivery.lease_expires_at = None
@@ -270,6 +292,7 @@ class CommunicationDeliveryService:
         worker_id: str,
         lease_token: str,
         provider_message_id: str,
+        provider_latency_ms: int | None = None,
         now: datetime | None = None,
     ) -> None:
         normalized_message_id = str(provider_message_id or "").strip()
@@ -284,6 +307,13 @@ class CommunicationDeliveryService:
             worker_id=worker_id,
             lease_token=lease_token,
             now=now,
+        )
+        await CommunicationDeliveryAttemptService.finish(
+            session,
+            delivery=delivery,
+            finished_at=completed_at,
+            outcome=DELIVERY_STATUS_SENT,
+            provider_latency_ms=provider_latency_ms,
         )
         delivery.status = DELIVERY_STATUS_SENT
         delivery.provider_message_id = normalized_message_id
@@ -308,6 +338,7 @@ class CommunicationDeliveryService:
         worker_id: str,
         lease_token: str,
         result: ProviderDeliveryResult,
+        provider_latency_ms: int | None = None,
         now: datetime | None = None,
     ) -> DeliveryFailureOutcome:
         if result.disposition == ProviderDeliveryDisposition.SENT:
@@ -321,24 +352,13 @@ class CommunicationDeliveryService:
             now=now,
         )
         category, code, message = cls._sanitize_provider_error(result)
-        delivery.last_error_category = category
-        delivery.last_error_code = code
-        delivery.last_error_message = message
-        delivery.provider_message_id = None
-        delivery.sent_at = None
-        delivery.worker_id = None
-        delivery.lease_token = None
-        delivery.lease_expires_at = None
-        delivery.updated_at = failed_at
-
         terminal = (
             result.disposition == ProviderDeliveryDisposition.PERMANENT_FAILURE
             or int(delivery.attempts) >= int(delivery.max_attempts)
         )
         next_attempt_at: datetime | None = None
         if terminal:
-            delivery.status = DELIVERY_STATUS_DEAD
-            delivery.finished_at = failed_at
+            failure_status = DELIVERY_STATUS_DEAD
         else:
             retry_delay = cls.retry_delay_seconds(
                 delivery_id=delivery.delivery_id,
@@ -350,10 +370,37 @@ class CommunicationDeliveryService:
                     max(1, int(result.retry_after_seconds)),
                 )
             next_attempt_at = failed_at + timedelta(seconds=retry_delay)
-            delivery.status = DELIVERY_STATUS_RETRY
-            delivery.available_at = next_attempt_at
-            delivery.finished_at = None
+            failure_status = DELIVERY_STATUS_RETRY
 
+        await CommunicationDeliveryAttemptService.finish(
+            session,
+            delivery=delivery,
+            finished_at=failed_at,
+            outcome=failure_status,
+            error_category=category,
+            error_code=code,
+            retry_after_seconds=result.retry_after_seconds,
+            provider_latency_ms=provider_latency_ms,
+            ambiguous=CommunicationDeliveryAttemptService.is_ambiguous_provider_failure(
+                result=result,
+                category=category,
+                code=code,
+            ),
+        )
+
+        delivery.status = failure_status
+        delivery.last_error_category = category
+        delivery.last_error_code = code
+        delivery.last_error_message = message
+        delivery.provider_message_id = None
+        delivery.sent_at = None
+        delivery.finished_at = failed_at if terminal else None
+        delivery.worker_id = None
+        delivery.lease_token = None
+        delivery.lease_expires_at = None
+        delivery.updated_at = failed_at
+        if next_attempt_at is not None:
+            delivery.available_at = next_attempt_at
         session.add(delivery)
         await session.flush()
         return DeliveryFailureOutcome(
@@ -382,10 +429,28 @@ class CommunicationDeliveryService:
             lease_token=lease_token,
             now=now,
         )
+        normalized_error_category = cls._sanitize_text(
+            error_category,
+            80,
+            "recipient",
+        )
+        normalized_error_code = cls._sanitize_text(
+            error_code,
+            100,
+            "recipient_inactive",
+        )
+        await CommunicationDeliveryAttemptService.finish(
+            session,
+            delivery=delivery,
+            finished_at=canceled_at,
+            outcome=DELIVERY_STATUS_CANCELED,
+            error_category=normalized_error_category,
+            error_code=normalized_error_code,
+        )
         delivery.status = DELIVERY_STATUS_CANCELED
         delivery.provider_message_id = None
-        delivery.last_error_category = cls._sanitize_text(error_category, 80, "recipient")
-        delivery.last_error_code = cls._sanitize_text(error_code, 100, "recipient_inactive")
+        delivery.last_error_category = normalized_error_category
+        delivery.last_error_code = normalized_error_code
         delivery.last_error_message = cls._sanitize_text(
             error_message,
             1000,

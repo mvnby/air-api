@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import CommunicationDelivery, StaffUser
+from models import CommunicationDelivery, CommunicationDeliveryAttempt, StaffUser
 from services.communications.contracts import PublicContactLeadCreatedPayloadV1
 from services.communications.delivery_service import (
     CommunicationDeliveryLeaseLost,
@@ -217,6 +217,14 @@ async def test_worker_commits_claim_before_provider_and_marks_sent(
         assert row.provider_message_id == "message-1"
         assert row.worker_id is None
         assert row.lease_token is None
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "sent"
+        assert attempt.provider_latency_ms is not None
+        assert attempt.provider_latency_ms >= 0
 
 
 @pytest.mark.asyncio
@@ -377,10 +385,18 @@ async def test_cancellation_inside_sent_finalizer_commits_then_propagates(
     release = asyncio.Event()
     original_mark_sent = worker._mark_sent
 
-    async def blocked_mark_sent(claim, provider_message_id):
+    async def blocked_mark_sent(
+        claim,
+        provider_message_id,
+        provider_latency_ms=None,
+    ):
         entered.set()
         await release.wait()
-        await original_mark_sent(claim, provider_message_id)
+        await original_mark_sent(
+            claim,
+            provider_message_id,
+            provider_latency_ms=provider_latency_ms,
+        )
 
     monkeypatch.setattr(worker, "_mark_sent", blocked_mark_sent)
     run_task = asyncio.create_task(worker.run_once())
@@ -419,10 +435,20 @@ async def test_cancellation_inside_failure_finalizer_commits_then_propagates(
     release = asyncio.Event()
     original_record_failure = worker._record_failure
 
-    async def blocked_record_failure(claim, result, recovery):
+    async def blocked_record_failure(
+        claim,
+        result,
+        recovery,
+        provider_latency_ms=None,
+    ):
         entered.set()
         await release.wait()
-        return await original_record_failure(claim, result, recovery)
+        return await original_record_failure(
+            claim,
+            result,
+            recovery,
+            provider_latency_ms=provider_latency_ms,
+        )
 
     monkeypatch.setattr(worker, "_record_failure", blocked_record_failure)
     run_task = asyncio.create_task(worker.run_once())
@@ -437,6 +463,15 @@ async def test_cancellation_inside_failure_finalizer_commits_then_propagates(
         assert row is not None
         assert row.status == "retry"
         assert row.last_error_code == "timeout"
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "retry"
+        assert attempt.provider_latency_ms is not None
+        assert attempt.provider_latency_ms >= 0
+        assert attempt.ambiguous is True
 
 
 @pytest.mark.asyncio
@@ -479,6 +514,13 @@ async def test_worker_revalidates_recipient_and_cancels_without_network(
         assert row.status == "canceled"
         assert row.last_error_code == "recipient_inactive"
         assert row.finished_at is not None
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "canceled"
+        assert attempt.provider_latency_ms is None
 
 
 @pytest.mark.asyncio
@@ -579,3 +621,12 @@ async def test_worker_converts_render_error_to_permanent_dead_letter(
         assert row.status == "dead"
         assert row.last_error_category == "template"
         assert row.last_error_message == "Communication template could not be rendered"
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "dead"
+        assert attempt.error_code == "template_render_failed"
+        assert attempt.provider_latency_ms is None
+        assert attempt.ambiguous is False
