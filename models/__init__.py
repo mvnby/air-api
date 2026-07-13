@@ -20,7 +20,7 @@ from .bot_fsm import BotFsmState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .content import Article, GlobalConfig
-from .communication import CommunicationDelivery
+from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
 from .media import MediaAsset, MediaProcessingJob
 from .staff import StaffUser
@@ -84,6 +84,7 @@ __all__ = [
     "BotFsmState",
     "CatalogImportJob",
     "CommunicationDelivery",
+    "CommunicationDeliveryAttempt",
     "ConsumerInbox",
     "Customer",
     "CustomerBranch",

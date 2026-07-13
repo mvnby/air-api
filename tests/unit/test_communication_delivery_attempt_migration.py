@@ -1,0 +1,356 @@
+import importlib.util
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+
+from models import CommunicationDelivery, CommunicationDeliveryAttempt
+from services.communications.delivery_service import CommunicationDeliveryService
+
+FOUNDATION_PATH = Path(
+    "alembic/versions/3f7a9c1d2e04_add_communications_outbox_foundation.py"
+)
+LEASE_PATH = Path(
+    "alembic/versions/4a8b1c2d3e05_harden_communication_delivery_leases.py"
+)
+ATTEMPT_REVISION = "5b9c2d3e4f06"
+ATTEMPT_PATH = Path(
+    "alembic/versions/5b9c2d3e4f06_add_communication_delivery_attempt_journal.py"
+)
+NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc).isoformat()
+SQLITE_RUNNING_NOW = "2026-07-13 12:00:00.000000"
+
+
+def _load_migration(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _insert_queued_delivery(connection, sequence: int) -> str:
+    delivery_id = f"{sequence:032x}"
+    connection.execute(
+        text("""
+            INSERT INTO communication_delivery (
+                delivery_id, event_id, channel, recipient_key, destination,
+                template_key, template_version, render_context, status,
+                priority, attempts, max_attempts, available_at,
+                created_at, updated_at
+            ) VALUES (
+                :delivery_id, :event_id, 'telegram', :recipient_key, :destination,
+                'telegram.website_contact_lead_created', 1, '{}', 'queued',
+                100, 0, 3, :now, :now, :now
+            )
+            """),
+        {
+            "delivery_id": delivery_id,
+            "event_id": f"{sequence + 1000:032x}",
+            "recipient_key": f"staff:{sequence}",
+            "destination": str(100000 + sequence),
+            "now": NOW,
+        },
+    )
+    return delivery_id
+
+
+def _insert_running_delivery(connection, sequence: int) -> str:
+    delivery_id = f"{sequence:032x}"
+    connection.execute(
+        text("""
+            INSERT INTO communication_delivery (
+                delivery_id, event_id, channel, recipient_key, destination,
+                template_key, template_version, render_context, status,
+                priority, attempts, max_attempts, available_at,
+                worker_id, lease_token, lease_expires_at,
+                created_at, updated_at
+            ) VALUES (
+                :delivery_id, :event_id, 'telegram', :recipient_key, :destination,
+                'telegram.website_contact_lead_created', 1, '{}', 'running',
+                100, 1, 3, :now,
+                'migration-worker', :lease_token, :lease_expires_at,
+                :now, :now
+            )
+            """),
+        {
+            "delivery_id": delivery_id,
+            "event_id": f"{sequence + 1000:032x}",
+            "recipient_key": f"staff:{sequence}",
+            "destination": str(100000 + sequence),
+            "lease_token": "migration-lease-token".ljust(40, "x"),
+            "lease_expires_at": "2026-07-13 12:05:00.000000",
+            "now": SQLITE_RUNNING_NOW,
+        },
+    )
+    return delivery_id
+
+
+def _insert_attempt(
+    connection,
+    *,
+    delivery_id: str,
+    attempt_no: int,
+    outcome: str,
+    finished_at: str | None = None,
+    error_category: str | None = None,
+    error_code: str | None = None,
+    retry_after_seconds: int | None = None,
+    provider_latency_ms: int | None = None,
+    ambiguous: bool = False,
+) -> None:
+    connection.execute(
+        text("""
+            INSERT INTO communication_delivery_attempt (
+                delivery_id, attempt_no, started_at, finished_at, outcome,
+                error_category, error_code, retry_after_seconds,
+                provider_latency_ms, ambiguous
+            ) VALUES (
+                :delivery_id, :attempt_no, :started_at, :finished_at, :outcome,
+                :error_category, :error_code, :retry_after_seconds,
+                :provider_latency_ms, :ambiguous
+            )
+            """),
+        {
+            "delivery_id": delivery_id,
+            "attempt_no": attempt_no,
+            "started_at": NOW,
+            "finished_at": finished_at,
+            "outcome": outcome,
+            "error_category": error_category,
+            "error_code": error_code,
+            "retry_after_seconds": retry_after_seconds,
+            "provider_latency_ms": provider_latency_ms,
+            "ambiguous": ambiguous,
+        },
+    )
+
+
+def test_attempt_journal_is_the_single_alembic_head_after_lease_hardening():
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    revision = script.get_revision(ATTEMPT_REVISION)
+
+    assert script.get_heads() == [ATTEMPT_REVISION]
+    assert revision is not None
+    assert revision.down_revision == "4a8b1c2d3e05"
+
+
+def test_attempt_journal_migration_replays_and_downgrades_on_sqlite():
+    foundation = _load_migration("foundation_for_attempt", FOUNDATION_PATH)
+    lease = _load_migration("lease_for_attempt", LEASE_PATH)
+    attempt = _load_migration("attempt_journal_migration", ATTEMPT_PATH)
+    engine = create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        foundation.op = operations
+        lease.op = operations
+        attempt.op = operations
+        foundation.upgrade()
+        delivery_id = _insert_queued_delivery(connection, 1)
+        running_delivery_id = _insert_running_delivery(connection, 2)
+        lease.upgrade()
+        attempt.upgrade()
+
+        inspector = inspect(connection)
+        assert "communication_delivery_attempt" in inspector.get_table_names()
+        assert connection.execute(
+            text(
+                "SELECT status, attempts FROM communication_delivery "
+                "WHERE delivery_id = :delivery_id"
+            ),
+            {"delivery_id": delivery_id},
+        ).one() == ("queued", 0)
+        assert connection.execute(
+            text(
+                "SELECT attempt_no, started_at, finished_at, outcome, ambiguous "
+                "FROM communication_delivery_attempt "
+                "WHERE delivery_id = :delivery_id"
+            ),
+            {"delivery_id": running_delivery_id},
+        ).one() == (1, SQLITE_RUNNING_NOW, None, "running", False)
+        assert connection.execute(
+            text(
+                "SELECT count(*) FROM communication_delivery_attempt "
+                "WHERE delivery_id = :delivery_id"
+            ),
+            {"delivery_id": delivery_id},
+        ).scalar_one() == 0
+
+        assert inspector.get_pk_constraint("communication_delivery_attempt")[
+            "constrained_columns"
+        ] == ["delivery_id", "attempt_no"]
+        foreign_keys = inspector.get_foreign_keys("communication_delivery_attempt")
+        assert len(foreign_keys) == 1
+        assert foreign_keys[0]["referred_table"] == "communication_delivery"
+        assert foreign_keys[0]["constrained_columns"] == ["delivery_id"]
+        constraint_names = {
+            item["name"]
+            for item in inspector.get_check_constraints(
+                "communication_delivery_attempt"
+            )
+        }
+        assert {
+            "ck_delivery_attempt_ambiguity_state",
+            "ck_delivery_attempt_error_state",
+            "ck_delivery_attempt_finish_state",
+            "ck_delivery_attempt_finished_after_started",
+            "ck_delivery_attempt_latency_non_negative",
+            "ck_delivery_attempt_latency_state",
+            "ck_delivery_attempt_no_positive",
+            "ck_delivery_attempt_outcome_valid",
+            "ck_delivery_attempt_retry_after_positive",
+            "ck_delivery_attempt_retry_after_state",
+        }.issubset(constraint_names)
+        assert {
+            "ix_delivery_attempt_ambiguous_finished",
+            "ix_delivery_attempt_error_finished",
+            "ix_delivery_attempt_outcome_started",
+        }.issubset(
+            item["name"]
+            for item in inspector.get_indexes("communication_delivery_attempt")
+        )
+
+        _insert_attempt(
+            connection,
+            delivery_id=delivery_id,
+            attempt_no=1,
+            outcome="running",
+        )
+        connection.execute(
+            text(
+                "UPDATE communication_delivery_attempt "
+                "SET outcome = 'sent', finished_at = :now, provider_latency_ms = 12 "
+                "WHERE delivery_id = :delivery_id AND attempt_no = 1"
+            ),
+            {"delivery_id": delivery_id, "now": NOW},
+        )
+        invalid_attempts = [
+            {"attempt_no": 2, "outcome": "sent"},
+            {"attempt_no": 3, "outcome": "retry", "finished_at": NOW},
+            {
+                "attempt_no": 8,
+                "outcome": "retry",
+                "finished_at": NOW,
+                "error_category": " ",
+                "error_code": "timeout",
+            },
+            {
+                "attempt_no": 4,
+                "outcome": "sent",
+                "finished_at": NOW,
+                "ambiguous": True,
+            },
+            {
+                "attempt_no": 5,
+                "outcome": "running",
+                "retry_after_seconds": 30,
+            },
+            {
+                "attempt_no": 6,
+                "outcome": "canceled",
+                "finished_at": NOW,
+                "error_category": "recipient",
+                "error_code": "inactive",
+                "provider_latency_ms": 1,
+            },
+            {
+                "attempt_no": 7,
+                "outcome": "retry",
+                "finished_at": NOW,
+                "error_category": "network",
+                "error_code": "timeout",
+                "provider_latency_ms": -1,
+            },
+        ]
+        for values in invalid_attempts:
+            with pytest.raises(IntegrityError):
+                with connection.begin_nested():
+                    _insert_attempt(
+                        connection,
+                        delivery_id=delivery_id,
+                        **values,
+                    )
+
+        attempt.downgrade()
+        downgraded = inspect(connection)
+        assert "communication_delivery_attempt" not in downgraded.get_table_names()
+        assert "communication_delivery" in downgraded.get_table_names()
+        assert connection.execute(
+            text(
+                "SELECT status, attempts FROM communication_delivery "
+                "WHERE delivery_id = :delivery_id"
+            ),
+            {"delivery_id": delivery_id},
+        ).one() == ("queued", 0)
+        assert connection.execute(
+            text(
+                "SELECT status, attempts FROM communication_delivery "
+                "WHERE delivery_id = :delivery_id"
+            ),
+            {"delivery_id": running_delivery_id},
+        ).one() == ("running", 1)
+
+        lease.downgrade()
+        assert "communication_delivery" in inspect(connection).get_table_names()
+        foundation.downgrade()
+        assert "communication_delivery" not in inspect(connection).get_table_names()
+
+
+@pytest.mark.asyncio
+async def test_attempt_journal_backfills_running_row_for_lease_recovery(tmp_path):
+    foundation = _load_migration("foundation_for_recovery", FOUNDATION_PATH)
+    lease = _load_migration("lease_for_recovery", LEASE_PATH)
+    attempt = _load_migration("attempt_journal_for_recovery", ATTEMPT_PATH)
+    database_path = tmp_path / "attempt-migration-recovery.sqlite3"
+    engine = create_engine(f"sqlite:///{database_path}")
+
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        foundation.op = operations
+        lease.op = operations
+        attempt.op = operations
+        foundation.upgrade()
+        delivery_id = _insert_running_delivery(connection, 9)
+        lease.upgrade()
+        attempt.upgrade()
+    engine.dispose()
+
+    async_engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}")
+    factory = sessionmaker(
+        async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    try:
+        async with factory() as session:
+            recovery = await CommunicationDeliveryService.recover_expired_leases(
+                session,
+                now=datetime(2026, 7, 13, 12, 6, tzinfo=timezone.utc),
+            )
+            await session.commit()
+            assert recovery.retry_count == 1
+            assert recovery.dead_count == 0
+
+        async with factory() as session:
+            delivery = await session.get(CommunicationDelivery, delivery_id)
+            journal = await session.get(
+                CommunicationDeliveryAttempt,
+                (delivery_id, 1),
+            )
+            assert delivery is not None and delivery.status == "retry"
+            assert journal is not None and journal.outcome == "retry"
+            assert journal.error_category == "lease"
+            assert journal.error_code == "lease_expired"
+            assert journal.ambiguous is True
+            assert journal.finished_at is not None
+    finally:
+        await async_engine.dispose()

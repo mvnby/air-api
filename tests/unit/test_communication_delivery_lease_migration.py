@@ -74,11 +74,10 @@ def _insert_delivery(
     )
 
 
-def test_delivery_lease_hardening_is_the_single_alembic_head():
+def test_delivery_lease_hardening_follows_communications_foundation():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(LEASE_REVISION)
 
-    assert script.get_heads() == [LEASE_REVISION]
     assert revision is not None
     assert revision.down_revision == "3f7a9c1d2e04"
 

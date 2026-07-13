@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import CommunicationDelivery
+from models import CommunicationDelivery, CommunicationDeliveryAttempt
 from services.communications.delivery_service import (
     CommunicationDeliveryLeaseLost,
     CommunicationDeliveryService,
@@ -35,6 +35,7 @@ async def communication_db_engine():
     )
     async with engine.begin() as connection:
         await connection.run_sync(CommunicationDelivery.__table__.create)
+        await connection.run_sync(CommunicationDeliveryAttempt.__table__.create)
     try:
         yield engine
     finally:
@@ -93,6 +94,15 @@ async def _seed_deliveries(
                     **running_values,
                 )
             )
+            if expired:
+                session.add(
+                    CommunicationDeliveryAttempt(
+                        delivery_id=f"{sequence:032x}",
+                        attempt_no=1,
+                        started_at=now - timedelta(minutes=1),
+                        outcome="running",
+                    )
+                )
         await session.commit()
 
 
@@ -137,6 +147,17 @@ async def test_postgres_claim_skips_locked_row_and_claims_distinct_delivery(
         ]
         assert all(row is not None and row.status == "running" for row in rows)
         assert [row.attempts for row in rows if row is not None] == [1, 1]
+        attempts = [
+            await verification.get(
+                CommunicationDeliveryAttempt,
+                (f"{sequence:032x}", 1),
+            )
+            for sequence in (1, 2)
+        ]
+        assert all(
+            attempt is not None and attempt.outcome == "running"
+            for attempt in attempts
+        )
 
 
 @pytest.mark.asyncio
@@ -181,6 +202,14 @@ async def test_postgres_locked_single_claim_rolls_back_without_consuming_attempt
         assert claim_after_rollback.lease_token != claim_a.lease_token
         await session_b.commit()
 
+    async with factory() as verification:
+        attempt = await verification.get(
+            CommunicationDeliveryAttempt,
+            (claim_a.delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == "running"
+
 
 @pytest.mark.asyncio
 async def test_postgres_concurrent_recovery_skips_locked_expired_delivery(
@@ -218,6 +247,20 @@ async def test_postgres_concurrent_recovery_skips_locked_expired_delivery(
         ]
         assert all(row is not None and row.status == "retry" for row in rows)
         assert [row.attempts for row in rows if row is not None] == [1, 1]
+        attempts = [
+            await verification.get(
+                CommunicationDeliveryAttempt,
+                (f"{sequence:032x}", 1),
+            )
+            for sequence in (1, 2)
+        ]
+        assert all(
+            attempt is not None
+            and attempt.outcome == "retry"
+            and attempt.error_code == "lease_expired"
+            and attempt.ambiguous is True
+            for attempt in attempts
+        )
 
 
 @pytest.mark.asyncio
@@ -276,6 +319,18 @@ async def test_postgres_recovery_rotates_token_and_fences_stale_attempt(
             now=retry_at + timedelta(seconds=1),
         )
         await session.commit()
+        attempts = [
+            await session.get(
+                CommunicationDeliveryAttempt,
+                (claim.delivery_id, attempt_no),
+            )
+            for attempt_no in (1, 2)
+        ]
+        assert [attempt.outcome for attempt in attempts if attempt is not None] == [
+            "retry",
+            "sent",
+        ]
+        assert attempts[0] is not None and attempts[0].ambiguous is True
 
 
 @pytest.mark.asyncio
@@ -355,3 +410,10 @@ async def test_postgres_concurrent_terminal_transitions_have_single_winner(
         assert row.worker_id is None
         assert row.lease_token is None
         assert row.lease_expires_at is None
+        attempt = await verification.get(
+            CommunicationDeliveryAttempt,
+            (claim.delivery_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.outcome == row.status
+        assert attempt.finished_at is not None
