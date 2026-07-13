@@ -16,14 +16,20 @@ inspect_object() {
   local kind="$1"
   local name="$2"
   local output=""
+  local output_lower=""
 
   if [[ "${kind}" == "container" ]]; then
     output="$(docker inspect "${name}" 2>&1)" && return 0
   else
     output="$(docker volume inspect "${name}" 2>&1)" && return 0
   fi
-  case "${output}" in
-    *"No such object"*|*"No such container"*|*"No such volume"*) return 1 ;;
+  # Docker CLI/daemon versions disagree on the capitalization of not-found
+  # errors (for example, `No such container` vs `no such object`). Normalize
+  # only for the known absence signatures; every other inspect failure remains
+  # fail-closed.
+  output_lower="$(printf '%s' "${output}" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
+  case "${output_lower}" in
+    *"no such object"*|*"no such container"*|*"no such volume"*) return 1 ;;
     *) log "cleanup_error=${kind}_inspect_failed name=${name}"; return 2 ;;
   esac
 }
