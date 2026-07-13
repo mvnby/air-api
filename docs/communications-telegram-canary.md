@@ -12,15 +12,42 @@ worker owns the writable-primary advisory lock, keep
 worker process. This follow-up has not itself performed a production deploy or
 live Telegram send.
 
-Run from the repository root on the writable primary application node:
+Production hosts are image-only and do not contain a Git checkout. Resolve the
+current Patroni primary from a trusted operator checkout first:
 
 ```bash
-python3 -c 'import uuid; print(uuid.uuid4())'
-python3 scripts/communications_telegram_canary.py --plan --run-id <uuid-v4>
-python3 scripts/communications_telegram_canary.py --execute --run-id <uuid-v4>
-python3 scripts/communications_telegram_canary.py --status --run-id <uuid-v4>
-python3 scripts/communications_telegram_canary.py --off
+python3 scripts/ha/check_patroni_production.py --resolve-primary
 ```
+
+SSH to the reported node (`mvn-api` uses `/opt/air-api`; `reserve`/`zakup` uses
+`/opt/mvn-reserve`). From that Compose project directory, resolve the exact
+active API slot and run the CLI **inside the CI-tested backend image**:
+
+```bash
+active_service=app
+if test -f .active-api-slot; then
+  active_slot="$(tr -d '\r\n' < .active-api-slot)"
+  case "${active_slot}" in
+    blue|green) active_service="app-${active_slot}" ;;
+    *) echo "invalid active API slot" >&2; exit 1 ;;
+  esac
+fi
+CANARY=(docker compose -f docker-compose.patroni.yml --profile bluegreen exec -T
+  "${active_service}" python3 scripts/communications_telegram_canary.py)
+
+run_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+"${CANARY[@]}" --plan --run-id "${run_id}"
+"${CANARY[@]}" --execute --run-id "${run_id}"
+"${CANARY[@]}" --status --run-id "${run_id}"
+"${CANARY[@]}" --off
+```
+
+Do not invoke `python3 scripts/communications_telegram_canary.py` on the host:
+the tracked script and its dependencies are supplied by the immutable backend
+image. The CLI rechecks `APP_ROLE` and PostgreSQL writability, so a Patroni role
+change between resolution and execution fails closed. If container replacement
+interrupts `--execute`, inspect the same run ID with `--status`; never generate
+a replacement ID merely because the SSH command outcome was ambiguous.
 
 `--plan`, `--execute`, and `--status` reject a noncanonical run ID and fail
 closed unless these runtime checks pass:
@@ -56,6 +83,23 @@ still requires `APP_ROLE=primary` and a writable primary PostgreSQL transaction.
 Repeated `--off` is idempotent. A real mode/scope transition increments the
 control revision, so a worker holding an older scope cannot resume after a fast
 `canary A -> off -> canary A` flip.
+
+Operate the canary under a single-operator/change-freeze rule. Do not run
+`--execute` concurrently with `--off`, and do not hold the deployment lock while
+waiting for delivery because that would delay Patroni role reconciliation. An
+`off` transaction cannot prohibit a different operator from deliberately
+executing a later transaction; after an emergency, first establish that no
+execute command remains in flight and then repeat `--off` on the current
+primary.
+
+`--off` prevents new claims and fences later state changes, but it cannot recall
+a Telegram request that already entered the provider call. Wait at least the
+bounded provider/shutdown window and verify the managed worker has stopped or
+reported disabled before treating the drain as complete. A delivery interrupted
+after claim may remain `running` with an expired lease while the scope is off.
+For this max-attempts-one canary, classify that historical result as ambiguous;
+do not re-arm, recover, requeue, or create a replacement run merely to make the
+status terminal.
 
 Direct `canary -> all`, `all -> canary`, and `canary A -> canary B` transitions
 are rejected; every scope change must pass through `off`. There is deliberately
