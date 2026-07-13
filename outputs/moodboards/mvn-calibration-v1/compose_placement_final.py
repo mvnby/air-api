@@ -52,11 +52,13 @@ def main():
         draw.line(scale_points(chevron, factor), fill=TEAL, width=8 * factor, joint="curve")
 
     # Wrong-position ghost: one outline and one X, with no airflow attached.
-    ghost_box = tuple(round(value * factor) for value in (155, 145, 405, 235))
+    # The unsafe position sits tight to the room corner above the bed approach:
+    # from here the supply jet would be directed into the sleeper's face zone.
+    ghost_box = tuple(round(value * factor) for value in (785, 145, 1035, 235))
     draw.rounded_rectangle(ghost_box, radius=24 * factor, outline=CORAL, width=4 * factor)
-    draw.line(scale_points([(185, 215), (375, 215)], factor), fill=CORAL, width=4 * factor)
-    draw.line(scale_points([(445, 165), (505, 225)], factor), fill=CORAL, width=9 * factor)
-    draw.line(scale_points([(505, 165), (445, 225)], factor), fill=CORAL, width=9 * factor)
+    draw.line(scale_points([(815, 215), (1005, 215)], factor), fill=CORAL, width=4 * factor)
+    draw.line(scale_points([(705, 160), (765, 220)], factor), fill=CORAL, width=9 * factor)
+    draw.line(scale_points([(765, 160), (705, 220)], factor), fill=CORAL, width=9 * factor)
 
     # MVN measurement point near pillow height.
     center = (1168 * factor, 485 * factor)
