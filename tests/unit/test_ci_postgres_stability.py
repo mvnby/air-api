@@ -15,6 +15,30 @@ def _executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
+def _linux_process_state(pid: int, *, proc_root: Path = Path("/proc")) -> str | None:
+    try:
+        stat = (proc_root / str(pid) / "stat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    command_end = stat.rfind(")")
+    if command_end < 0 or command_end + 2 >= len(stat):
+        raise AssertionError(f"malformed proc stat for pid {pid}: {stat!r}")
+    return stat[command_end + 2]
+
+
+def _process_is_live(pid: int, *, proc_root: Path = Path("/proc")) -> bool:
+    if proc_root.is_dir():
+        state = _linux_process_state(pid, proc_root=proc_root)
+        return state is not None and state not in {"Z", "X", "x"}
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def _run_waiter(
     tmp_path: Path,
     fake_docker: str,
@@ -152,16 +176,32 @@ printf '2026-07-13 20:04:00+00\n'
 
     child_pid = int((tmp_path / "docker-child-pid").read_text(encoding="utf-8"))
     cleanup_deadline = time.monotonic() + 0.5
-    while time.monotonic() < cleanup_deadline:
-        try:
-            os.kill(child_pid, 0)
-        except ProcessLookupError:
-            break
+    while _process_is_live(child_pid) and time.monotonic() < cleanup_deadline:
         time.sleep(0.02)
-    else:
+    if _process_is_live(child_pid):
         raise AssertionError(f"timed-out probe child {child_pid} is still running")
 
     assert not (tmp_path / "docker-marker").exists()
+
+
+def test_linux_proc_state_distinguishes_live_process_from_zombie(tmp_path):
+    proc_root = tmp_path / "proc"
+    live_pid = 101
+    zombie_pid = 202
+    (proc_root / str(live_pid)).mkdir(parents=True)
+    (proc_root / str(zombie_pid)).mkdir(parents=True)
+    (proc_root / str(live_pid) / "stat").write_text(
+        "101 (fake ) live child) S 1 2 3\n",
+        encoding="utf-8",
+    )
+    (proc_root / str(zombie_pid) / "stat").write_text(
+        "202 (fake zombie) Z 1 2 3\n",
+        encoding="utf-8",
+    )
+
+    assert _process_is_live(live_pid, proc_root=proc_root) is True
+    assert _process_is_live(zombie_pid, proc_root=proc_root) is False
+    assert _process_is_live(303, proc_root=proc_root) is False
 
 
 def test_ci_waits_for_both_postgres_services_with_sql_stability_gate():
