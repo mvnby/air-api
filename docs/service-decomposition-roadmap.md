@@ -6,7 +6,7 @@
 
 Сначала modular monolith, затем extraction. Storefront и Telegram process уже можно разворачивать отдельно, но это ещё не самостоятельные domain services: они используют общую backend-модель и не имеют устойчивых command/event contracts.
 
-Wave 0 закрыта, слита через PR #726 и развернута в production как SHA `886593e0`: единый CI дал **1177 passed**, migration/codegen gates, Patroni primary/replica deploy и storefront canary/VPS/Cloudflare smoke прошли. Декомпозиция этим не завершена. Outbox producer switch/consumer, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Wave 1 PR-A (#727, SHA `0c16ea38`) уже развернул выключенный additive outbox/inbox/delivery foundation; PR-B добавляет транзакционный dispatcher/materializer, но по-прежнему не включает scheduler, provider worker и producer switch, поэтому production notification path не меняется.
+Wave 0 закрыта, слита через PR #726 и развернута в production как SHA `886593e0`: единый CI дал **1177 passed**, migration/codegen gates, Patroni primary/replica deploy и storefront canary/VPS/Cloudflare smoke прошли. Декомпозиция этим не завершена. Outbox producer switch/consumer, optimistic concurrency, canonical customer identity, private media, lean DTO, dependency upgrades и общий durable job framework остаются открыты. Wave 1 PR-A (#727, SHA `0c16ea38`) уже развернул выключенный additive outbox/inbox/delivery foundation; PR-B добавил транзакционный dispatcher/materializer. C1 добавляет dormant leased Telegram provider worker, но не включает runtime/scheduler и не переключает producers, поэтому production notification path по-прежнему не меняется.
 
 ## Целевые bounded contexts
 
@@ -59,7 +59,11 @@ Rollback выполняется в обратном безопасном пор�
 
 Владеет templates, channel routing, deliveries, retry/DLQ и provider diagnostics. Producers не вызывают Telegram/SMTP напрямую; они пишут domain event/outbox.
 
-Можно выделять после стабилизации in-process worker: перенос worker не меняет producer contract.
+C1 формирует безопасное in-process ядро: immutable recipient snapshot, durable claim до network, per-recipient lease token/heartbeat, строго fenced terminal transitions, отдельное восстановление expired lease, deterministic retry с provider `retry_after`, DLQ и повторная проверка активного получателя. Ядро остаётся не подключённым к runtime.
+
+Delivery остаётся at-least-once: ambiguous provider timeout или hard crash после принятия Telegram-сообщения, но до terminal DB commit, может привести к повтору после lease recovery. Lease fencing защищает состояние от stale worker, но exactly-once невозможно без idempotency со стороны провайдера.
+
+C2 начинается только после review транзакций producer use cases: domain mutation и outbox event должны коммититься атомарно. Затем нужен managed single-active/canary rollout, метрики queue age/lease expiry/delivery outcome и rollback без mixed worker versions. Выделять Communications можно после этой стабилизации: перенос worker не меняет producer contract.
 
 ### Documents
 
@@ -146,7 +150,7 @@ flowchart LR
   H --> I["Re-evaluate CRM/Catalog physical split"]
 ```
 
-Wave 0 на этой диаграмме развернута. В Wave 1 отдельно входят public lead abuse/dedupe/rate-limit contract, checkout idempotency/canonical identity, order versioning, переключение producers/consumer на outbox и durable operations. Media worker в production пока отсутствует и остаётся выключен; extraction нельзя начинать только на основании уже реализованного lease claim.
+Wave 0 на этой диаграмме развернута. В Wave 1 отдельно входят public lead abuse/dedupe/rate-limit contract, checkout idempotency/canonical identity, order versioning, C2 transaction review и переключение producers/consumer на outbox, managed communications-worker rollout и durable operations. Media и Communications workers в production пока отсутствуют и остаются выключены; extraction нельзя начинать только на основании реализованного lease claim.
 
 ## Anti-goals
 

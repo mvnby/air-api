@@ -3,7 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    Index,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import Field, JSON, SQLModel
 
 
@@ -25,8 +33,43 @@ class CommunicationDelivery(SQLModel, table=True):
         CheckConstraint("attempts >= 0", name="ck_delivery_attempts_non_negative"),
         CheckConstraint("max_attempts > 0", name="ck_delivery_max_attempts_positive"),
         CheckConstraint(
+            "attempts <= max_attempts",
+            name="ck_delivery_attempts_within_max",
+        ),
+        CheckConstraint(
+            "status NOT IN ('queued', 'retry') OR attempts < max_attempts",
+            name="ck_delivery_active_attempts_remaining",
+        ),
+        CheckConstraint(
             "status IN ('queued', 'running', 'retry', 'sent', 'dead', 'canceled')",
             name="ck_delivery_status_valid",
+        ),
+        CheckConstraint(
+            "(status = 'running' AND worker_id IS NOT NULL "
+            "AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) "
+            "OR (status <> 'running' AND worker_id IS NULL "
+            "AND lease_token IS NULL AND lease_expires_at IS NULL)",
+            name="ck_delivery_lease_state",
+        ),
+        CheckConstraint(
+            "(status = 'sent' AND sent_at IS NOT NULL AND finished_at IS NOT NULL) "
+            "OR (status IN ('dead', 'canceled') AND sent_at IS NULL "
+            "AND finished_at IS NOT NULL) "
+            "OR (status IN ('queued', 'running', 'retry') AND sent_at IS NULL "
+            "AND finished_at IS NULL)",
+            name="ck_delivery_terminal_timestamps",
+        ),
+        CheckConstraint(
+            "(status = 'queued' AND attempts = 0) "
+            "OR (status IN ('running', 'retry', 'sent', 'dead', 'canceled') "
+            "AND attempts >= 1)",
+            name="ck_delivery_attempt_phase",
+        ),
+        CheckConstraint(
+            "(status = 'sent' AND provider_message_id IS NOT NULL "
+            "AND length(trim(provider_message_id)) > 0) "
+            "OR (status <> 'sent' AND provider_message_id IS NULL)",
+            name="ck_delivery_provider_message_state",
         ),
         Index(
             "ix_communication_delivery_claim",
@@ -34,6 +77,23 @@ class CommunicationDelivery(SQLModel, table=True):
             "available_at",
             "priority",
             "created_at",
+        ),
+        Index(
+            "ix_communication_delivery_channel_claim",
+            "channel",
+            "priority",
+            "available_at",
+            "created_at",
+            "delivery_id",
+            postgresql_where=text("status IN ('queued', 'retry')"),
+        ),
+        Index(
+            "ix_communication_delivery_channel_recovery",
+            "channel",
+            "lease_expires_at",
+            "created_at",
+            "delivery_id",
+            postgresql_where=text("status = 'running'"),
         ),
         Index("ix_communication_delivery_event_id", "event_id"),
     )
