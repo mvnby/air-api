@@ -64,6 +64,74 @@ def test_attestation_loader_uses_an_absolute_path_under_isolated_python(tmp_path
     assert result.returncode == 0, result.stderr
 
 
+def test_bounded_executor_preserves_explicit_transaction_operation_id():
+    namespace = {}
+    exec(
+        compile(
+            pitr_remote_executors.REMOTE_ASSET_ATTESTATION,
+            "<pitr-asset-attestation>",
+            "exec",
+        ),
+        namespace,
+    )
+    operation_id = "0123456789abcdef0123456789abcdef"
+
+    class Guard:
+        def list_records(self, **_kwargs):
+            return []
+
+        def run_guarded_process(self, args, **kwargs):
+            return args, kwargs
+
+    args, kwargs = namespace["run_bounded"](
+        ["/usr/local/sbin/mvn-postgres-pitr-bootstrap"],
+        environment={"PATH": "/usr/bin"},
+        pass_fds=(),
+        phase="configure-node",
+        project_dir="/opt/air-api",
+        timeout_seconds=900,
+        transient=True,
+        record_command="/usr/local/sbin/mvn-postgres-pitr-bootstrap",
+        guard_module=Guard(),
+        operation_id=operation_id,
+    )
+
+    assert kwargs["operation_id"] == operation_id
+    assert kwargs["unit"] == f"mvn-postgres-pitr-manual-{operation_id}.service"
+    assert f"--setenv=PITR_OPERATION_ID={operation_id}" in args
+
+
+@pytest.mark.parametrize("operation_id", ["", "g" * 32, "0" * 31])
+def test_bounded_executor_rejects_invalid_explicit_operation_id(operation_id):
+    namespace = {}
+    exec(
+        compile(
+            pitr_remote_executors.REMOTE_ASSET_ATTESTATION,
+            "<pitr-asset-attestation>",
+            "exec",
+        ),
+        namespace,
+    )
+
+    class Guard:
+        def list_records(self, **_kwargs):
+            return []
+
+    with pytest.raises(RuntimeError, match="invalid PITR operation ID"):
+        namespace["run_bounded"](
+            ["/usr/local/sbin/mvn-postgres-pitr-bootstrap"],
+            environment={"PATH": "/usr/bin"},
+            pass_fds=(),
+            phase="configure-node",
+            project_dir="/opt/air-api",
+            timeout_seconds=900,
+            transient=True,
+            record_command="/usr/local/sbin/mvn-postgres-pitr-bootstrap",
+            guard_module=Guard(),
+            operation_id=operation_id,
+        )
+
+
 def test_execution_module_preserves_executor_exports():
     assert (
         pitr_remote_execution.REMOTE_ASSET_ATTESTATION

@@ -121,11 +121,15 @@ def run_bounded(
     record_command,
     stdin_payload=None,
     guard_module=None,
+    operation_id=None,
 ):
     guard = guard_module or load_operation_guard()
     if guard.list_records(project_dir=project_dir):
         raise RuntimeError("another recorded PITR operation requires cleanup")
-    operation_id = secrets.token_hex(16)
+    if operation_id is None:
+        operation_id = secrets.token_hex(16)
+    elif re.fullmatch(r"[0-9a-f]{32}", operation_id) is None:
+        raise RuntimeError("invalid PITR operation ID")
     launch_args = args
     unit = ""
     if transient:

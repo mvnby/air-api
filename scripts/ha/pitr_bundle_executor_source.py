@@ -250,9 +250,14 @@ def file_generation(path, old, new_digest, new_mode):
         return "old" if not old["present"] else "unknown"
     digest = hashlib.sha256(content).hexdigest()
     mode = stat.S_IMODE(metadata.st_mode)
-    if digest == new_digest and mode == new_mode:
+    is_new = digest == new_digest and mode == new_mode
+    is_old = (old["present"] and digest == old["sha256"]
+              and mode == old["mode"])
+    if is_new and is_old:
+        return "both"
+    if is_new:
         return "new"
-    if old["present"] and digest == old["sha256"] and mode == old["mode"]:
+    if is_old:
         return "old"
     return "unknown"
 def write_journal(txdir, journal):
@@ -375,7 +380,7 @@ def rollback_transaction(txdir, journal):
                 fsync_dir(os.path.dirname(entry["path"]))
             else:
                 atomic_write(entry["path"], content, entry["old"]["mode"])
-        if file_generation(entry["path"], entry["old"], entry["sha256"], entry["mode"]) != "old":
+        if file_generation(entry["path"], entry["old"], entry["sha256"], entry["mode"]) not in {"old", "both"}:
             raise RuntimeError("release rollback verification failed: " + entry["path"])
 def safe_remove_transaction(txdir):
     metadata = os.lstat(txdir)
@@ -610,7 +615,7 @@ def execute(action, txid, project_dir, compose_file, payload):
                 remove_marker(txid)
                 return "rolled-back"
             for entry in journal["entries"]:
-                if file_generation(entry["path"], entry["old"], entry["sha256"], entry["mode"]) != "new":
+                if file_generation(entry["path"], entry["old"], entry["sha256"], entry["mode"]) not in {"new", "both"}:
                     raise RuntimeError("cannot finalize a non-current release")
             daemon_reload()
             atomic_write(RELEASE_MANIFEST, canonical(release_manifest(journal)) + b"\n", 0o600)
