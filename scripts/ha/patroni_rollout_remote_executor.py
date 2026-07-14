@@ -491,8 +491,11 @@ def main():
                     "helper_sha256": payload["helper_sha256"],
                     "legacy_command_sha256": payload["legacy_command_sha256"],
                     "maintenance_transaction_id": payload["maintenance_transaction_id"],
+                    "publish_run_attempt": payload["publish_run_attempt"],
+                    "publish_run_id": payload["publish_run_id"],
                     "role_agent_sha256": payload["role_agent_sha256"],
                     "role_identity_sha256": payload["role_identity_sha256"],
+                    "role_unit_sha256": payload["role_unit_sha256"],
                     "node": node, "operation": "idle", "target_image": payload["target_image"],
                     "transaction_id": txid, "version": 1}
                 save_journal(journal_path, journal)

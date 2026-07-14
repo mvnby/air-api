@@ -26,6 +26,8 @@ CONTRACTS = {"mvn-api": "4" * 64, "zakup": "5" * 64}
 def _inputs(*, resume=False) -> RolloutInputs:
     return RolloutInputs.validated(
         deploy_sha=DEPLOY_SHA,
+        publish_run_id="123456",
+        publish_run_attempt=1,
         transaction_id=TXID,
         maintenance_transaction_id="f" * 32,
         current_image=CURRENT,
@@ -314,9 +316,22 @@ def test_final_quorum_proof_precedes_shared_final_record_and_unfencing(tmp_path)
 
 def test_inputs_and_compiled_legacy_command_are_fail_closed():
     assert sha256_text(LEGACY_ARCHIVE_COMMAND) == LEGACY_ARCHIVE_COMMAND_SHA256
+    with pytest.raises(RuntimeError, match="publish run attempt"):
+        RolloutInputs.validated(
+            deploy_sha=DEPLOY_SHA,
+            publish_run_id="123456",
+            publish_run_attempt=0,
+            transaction_id=TXID,
+            maintenance_transaction_id="f" * 32,
+            current_image=CURRENT,
+            target_image=TARGET,
+            apply=True,
+        )
     with pytest.raises(RuntimeError, match="apply=true"):
         RolloutInputs.validated(
             deploy_sha=DEPLOY_SHA,
+            publish_run_id="123456",
+            publish_run_attempt=1,
             transaction_id=TXID,
             maintenance_transaction_id="f" * 32,
             current_image=CURRENT,
@@ -326,6 +341,8 @@ def test_inputs_and_compiled_legacy_command_are_fail_closed():
     with pytest.raises(RuntimeError, match="immutable reviewed digest"):
         RolloutInputs.validated(
             deploy_sha=DEPLOY_SHA,
+            publish_run_id="123456",
+            publish_run_attempt=1,
             transaction_id=TXID,
             maintenance_transaction_id="f" * 32,
             current_image="ghcr.io/other/image@sha256:" + "2" * 64,

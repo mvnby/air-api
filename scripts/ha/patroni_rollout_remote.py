@@ -142,6 +142,8 @@ def build_payload(
         "controller_sha256": hashlib.sha256(REMOTE_EXECUTOR.encode()).hexdigest(),
         "current_image": inputs.current_image,
         "deploy_sha": inputs.deploy_sha,
+        "publish_run_attempt": inputs.publish_run_attempt,
+        "publish_run_id": inputs.publish_run_id,
         "etcd_check_b64": base64.b64encode(etcd_source).decode("ascii"),
         "etcd_check_sha256": hashlib.sha256(etcd_source).hexdigest(),
         "helper_sha256": helper_sha256,

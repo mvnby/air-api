@@ -361,12 +361,21 @@ copy `archive_command`. This controller does not authorize an `off -> on` PITR
 migration or any other DCS edit.
 
 The approved workflow requires the tested `deploy_sha`, both immutable image
-digests, a new rollout transaction id, the exact transaction id already stored
-in `/run/mvn-postgres-pitr-maintenance`, `apply=true`, and `resume=false`. The
-existing PITR marker is retained throughout; its exact id is journal-bound,
+digests, the exact successful `Publish Patroni Image` `publish_run_id` and
+`publish_run_attempt`, a new
+rollout transaction id, the exact transaction id already stored in
+`/run/mvn-postgres-pitr-maintenance`, `apply=true`, and `resume=false`. Before
+opening SSH, the workflow proves the publish run's workflow identity, latest
+attempt, main SHA and successful conclusion; downloads its exact evidence
+artifact; binds the raw manifest and rehearsal log to the target digest;
+re-resolves the live `patroni:<deploy_sha>` tag; and independently rechecks
+registry provenance, SPDX SBOM and the GitHub SLSA attestation. A standalone
+failover rehearsal is never release evidence.
+
+The existing PITR marker is retained throughout; its exact id is journal-bound,
 and all PITR timers and services remain inactive. A retry must reuse every
-original input with `resume=true`. Never create a new transaction while either
-host has the old transaction marker or journal.
+original input, including both publish identifiers, with `resume=true`. Never create a
+new transaction while either host has the old transaction marker or journal.
 
 The controller performs this fixed sequence:
 

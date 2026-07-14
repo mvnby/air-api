@@ -28,6 +28,8 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--deploy-sha", required=True)
+    parser.add_argument("--publish-run-id", required=True)
+    parser.add_argument("--publish-run-attempt", required=True, type=int)
     parser.add_argument("--transaction-id", required=True)
     parser.add_argument("--maintenance-transaction-id", required=True)
     parser.add_argument("--current-image", required=True)
@@ -42,6 +44,8 @@ def main(rollout: Callable[..., object]) -> int:
     args = _arguments()
     inputs = RolloutInputs.validated(
         deploy_sha=args.deploy_sha,
+        publish_run_id=args.publish_run_id,
+        publish_run_attempt=args.publish_run_attempt,
         transaction_id=args.transaction_id,
         maintenance_transaction_id=args.maintenance_transaction_id,
         current_image=args.current_image,

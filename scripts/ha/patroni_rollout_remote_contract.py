@@ -5,7 +5,8 @@ def validate_payload(payload):
     required = {"compose_contract_sha256", "contract_helper_b64", "contract_helper_sha256",
                 "controller_sha256", "current_image", "deploy_sha", "helper_sha256",
                 "etcd_check_b64", "etcd_check_sha256", "legacy_command_sha256",
-                "maintenance_transaction_id", "resume", "role_agent_sha256",
+                "maintenance_transaction_id", "publish_run_attempt", "publish_run_id",
+                "resume", "role_agent_sha256",
                 "role_identity_sha256", "role_unit_sha256", "target_image"}
     if not isinstance(payload, dict) or not required.issubset(payload):
         die("invalid rollout payload")
@@ -24,6 +25,12 @@ def validate_payload(payload):
             die("invalid rollout digest: " + key)
     if not isinstance(payload["deploy_sha"], str) or not re.fullmatch(r"[0-9a-f]{40}", payload["deploy_sha"]):
         die("invalid tested deploy SHA")
+    if (not isinstance(payload["publish_run_id"], str)
+            or not re.fullmatch(r"[1-9][0-9]{5,14}", payload["publish_run_id"])):
+        die("invalid publish run ID")
+    if (type(payload["publish_run_attempt"]) is not int
+            or not 1 <= payload["publish_run_attempt"] <= 2147483647):
+        die("invalid publish run attempt")
     if not isinstance(payload["maintenance_transaction_id"], str) or not TX_RE.fullmatch(payload["maintenance_transaction_id"]):
         die("invalid PITR maintenance transaction ID")
     try:
@@ -44,7 +51,8 @@ def validate_action(action, payload):
     base = {"compose_contract_sha256", "contract_helper_b64", "contract_helper_sha256",
         "controller_sha256", "current_image", "deploy_sha", "etcd_check_b64",
         "etcd_check_sha256", "helper_sha256", "legacy_command_sha256", "resume",
-        "maintenance_transaction_id", "role_agent_sha256", "role_identity_sha256",
+        "maintenance_transaction_id", "publish_run_attempt", "publish_run_id",
+        "role_agent_sha256", "role_identity_sha256",
         "role_unit_sha256", "target_image"}
     extras = {
         "prepare": {"baseline_primary", "baseline_system_identifier", "baseline_timeline"},
@@ -125,6 +133,8 @@ def load_journal(path, node, txid, payload):
         "helper_sha256": payload["helper_sha256"],
         "legacy_command_sha256": payload["legacy_command_sha256"],
         "maintenance_transaction_id": payload["maintenance_transaction_id"],
+        "publish_run_attempt": payload["publish_run_attempt"],
+        "publish_run_id": payload["publish_run_id"],
         "role_agent_sha256": payload["role_agent_sha256"],
         "role_identity_sha256": payload["role_identity_sha256"],
         "role_unit_sha256": payload["role_unit_sha256"],

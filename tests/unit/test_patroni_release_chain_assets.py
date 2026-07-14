@@ -12,6 +12,7 @@ WORKFLOWS = [
     ROOT / ".github/workflows/deploy-web.yml",
     ROOT / ".github/workflows/publish-patroni-image.yml",
     ROOT / ".github/workflows/patroni-failover-rehearsal.yml",
+    ROOT / ".github/workflows/rollout-patroni-image.yml",
 ]
 SHA_ACTION = re.compile(r"^[^./][^@]*@[0-9a-f]{40}$")
 

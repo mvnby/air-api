@@ -113,18 +113,20 @@ def runtime_ownership_once(project, compose, expected_role):
     app = parse_role_env(project + "/.ha-app-role.env")
     bot = parse_role_env(project + "/.ha-bot-role.env")
     expected_app = {"APP_ROLE": expected_role, "API_READY_ENABLED": str(primary).lower(),
-        "DB_BOOTSTRAP_ENABLED": "false", "SCHEDULER_ENABLED": str(primary).lower()}
+        "BOT_ENABLED": "false", "DB_BOOTSTRAP_ENABLED": "false",
+        "SCHEDULER_ENABLED": str(primary).lower()}
     expected_bot = {"APP_ROLE": expected_role, "API_READY_ENABLED": "false",
         "BOT_ENABLED": str(primary).lower(), "DB_BOOTSTRAP_ENABLED": "false",
         "SCHEDULER_ENABLED": "false"}
-    if any(app.get(key) != value for key, value in expected_app.items()):
-        die("app role environment does not match Patroni ownership")
-    if any(bot.get(key) != value for key, value in expected_bot.items()):
-        die("bot role environment does not match Patroni ownership")
     if not primary:
-        for key in ("MAIL_IMAP_AUTO_IMPORT_ENABLED", "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED",
-                    "CLOUDFLARE_PURGE_ENABLED"):
-            if app.get(key) != "false": die("standby app has a primary-only capability")
+        standby_only = {"MAIL_IMAP_AUTO_IMPORT_ENABLED": "false",
+            "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED": "false",
+            "CLOUDFLARE_PURGE_ENABLED": "false", "CLOUDFLARE_PURGE_DRY_RUN": "true"}
+        expected_app.update(standby_only); expected_bot.update(standby_only)
+    if app != expected_app:
+        die("app role environment does not exactly match Patroni ownership")
+    if bot != expected_bot:
+        die("bot role environment does not exactly match Patroni ownership")
     services = set(run(compose_args(project, compose) + ["--profile", "bluegreen", "ps",
         "--status", "running", "--services"]).splitlines())
     if len(services.intersection({"app", "app-blue", "app-green"})) != 1:

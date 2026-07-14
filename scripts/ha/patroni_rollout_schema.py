@@ -17,6 +17,7 @@ IMAGE_RE = re.compile(
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 TRANSACTION_RE = re.compile(r"^[0-9a-f]{32}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+PUBLISH_RUN_RE = re.compile(r"^[1-9][0-9]{5,14}$")
 
 EXPECTED_SCOPE = "mvn-postgres"
 EXPECTED_PATRONI_VERSION = "4.1.4"
@@ -61,6 +62,8 @@ STAGES = (
 @dataclass(frozen=True)
 class RolloutInputs:
     deploy_sha: str
+    publish_run_id: str
+    publish_run_attempt: int
     transaction_id: str
     maintenance_transaction_id: str
     current_image: str
@@ -73,6 +76,8 @@ class RolloutInputs:
         cls,
         *,
         deploy_sha: str,
+        publish_run_id: str,
+        publish_run_attempt: int,
         transaction_id: str,
         maintenance_transaction_id: str,
         current_image: str,
@@ -82,6 +87,14 @@ class RolloutInputs:
     ) -> "RolloutInputs":
         if not COMMIT_RE.fullmatch(deploy_sha):
             raise RuntimeError("deploy SHA must be 40 lowercase hexadecimal characters")
+        if not PUBLISH_RUN_RE.fullmatch(publish_run_id):
+            raise RuntimeError("publish run ID must be 6-15 decimal digits without a leading zero")
+        if (
+            type(publish_run_attempt) is not int
+            or publish_run_attempt < 1
+            or publish_run_attempt > 2_147_483_647
+        ):
+            raise RuntimeError("publish run attempt must be a positive 32-bit integer")
         if not TRANSACTION_RE.fullmatch(transaction_id):
             raise RuntimeError(
                 "rollout transaction ID must be 32 lowercase hexadecimal characters"
@@ -101,6 +114,8 @@ class RolloutInputs:
             raise RuntimeError("production Patroni rollout requires apply=true")
         return cls(
             deploy_sha=deploy_sha,
+            publish_run_id=publish_run_id,
+            publish_run_attempt=publish_run_attempt,
             transaction_id=transaction_id,
             maintenance_transaction_id=maintenance_transaction_id,
             current_image=current_image,

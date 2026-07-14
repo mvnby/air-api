@@ -15,6 +15,14 @@ on:
         description: Exact immutable published Patroni digest to roll out
         required: true
         type: string
+      publish_run_id:
+        description: Exact successful Publish Patroni Image workflow run ID
+        required: true
+        type: string
+      publish_run_attempt:
+        description: Exact successful attempt number within the publish run
+        required: true
+        type: string
       transaction_id:
         description: Stable 32-character lowercase hexadecimal transaction ID
         required: true
@@ -42,6 +50,12 @@ on:
         required: true
         type: string
       target_image:
+        required: true
+        type: string
+      publish_run_id:
+        required: true
+        type: string
+      publish_run_attempt:
         required: true
         type: string
       transaction_id:
@@ -85,17 +99,26 @@ jobs:
           APPLY: ${{ inputs.apply }}
           CURRENT_IMAGE: ${{ inputs.current_image }}
           DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          PUBLISH_RUN_ATTEMPT: ${{ inputs.publish_run_attempt }}
+          PUBLISH_RUN_ID: ${{ inputs.publish_run_id }}
           TARGET_IMAGE: ${{ inputs.target_image }}
           TRANSACTION_ID: ${{ inputs.transaction_id }}
           MAINTENANCE_TRANSACTION_ID: ${{ inputs.maintenance_transaction_id }}
           RESUME: ${{ inputs.resume }}
         run: |
           set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ] || [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "::error::Patroni production rollout must be dispatched from main"
+            exit 1
+          fi
           test "${APPLY}" = "true" || {
             echo "::error::Patroni production rollout requires apply=true"
             exit 1
           }
           [[ "${DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "${PUBLISH_RUN_ATTEMPT}" =~ ^[1-9][0-9]{0,9}$ ]] || exit 1
+          (( 10#${PUBLISH_RUN_ATTEMPT} <= 2147483647 )) || exit 1
+          [[ "${PUBLISH_RUN_ID}" =~ ^[1-9][0-9]{5,14}$ ]] || exit 1
           [[ "${TRANSACTION_ID}" =~ ^[0-9a-f]{32}$ ]] || exit 1
           [[ "${MAINTENANCE_TRANSACTION_ID}" =~ ^[0-9a-f]{32}$ ]] || exit 1
           image_re='^ghcr\.io/mvnby/air-api/patroni@sha256:[0-9a-f]{64}$'
@@ -146,7 +169,138 @@ jobs:
             exit 1
           }
 
-      - name: Verify target provenance and SBOM attestations
+      - name: Log in to GHCR for immutable release verification
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx for registry evidence
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Verify exact successful publish run and evidence artifact
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_RUN_ATTEMPT: ${{ inputs.publish_run_attempt }}
+          PUBLISH_RUN_ID: ${{ inputs.publish_run_id }}
+          TARGET_IMAGE: ${{ inputs.target_image }}
+        run: |
+          set -euo pipefail
+          workflow_id="$(
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/publish-patroni-image.yml" \
+              --jq '.id'
+          )"
+          [[ "${workflow_id}" =~ ^[1-9][0-9]*$ ]] || exit 1
+          run_json="${RUNNER_TEMP}/patroni-publish-run.json"
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${PUBLISH_RUN_ID}/attempts/${PUBLISH_RUN_ATTEMPT}" \
+            > "${run_json}"
+          jq -e \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg sha "${DEPLOY_SHA}" \
+            --argjson run_id "${PUBLISH_RUN_ID}" \
+            --argjson run_attempt "${PUBLISH_RUN_ATTEMPT}" \
+            --argjson workflow_id "${workflow_id}" \
+            '.id == $run_id and
+             .workflow_id == $workflow_id and
+             .path == ".github/workflows/publish-patroni-image.yml" and
+             .event == "workflow_dispatch" and
+             .head_branch == "main" and
+             .head_sha == $sha and
+             .run_attempt == $run_attempt and
+             .status == "completed" and
+             .conclusion == "success" and
+             .repository.full_name == $repository and
+             .head_repository.full_name == $repository' \
+            "${run_json}" >/dev/null
+          artifact="patroni-release-evidence-${PUBLISH_RUN_ID}-${PUBLISH_RUN_ATTEMPT}"
+          evidence_dir="${RUNNER_TEMP}/patroni-release-evidence"
+          rm -rf "${evidence_dir}"
+          mkdir -m 0700 "${evidence_dir}"
+          gh run download "${PUBLISH_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${artifact}" \
+            --dir "${evidence_dir}"
+          python3 - "${evidence_dir}" "${TARGET_IMAGE}" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          target = sys.argv[2]
+          expected = {
+              "patroni-github-attestation.json",
+              "patroni-manifest.json",
+              "patroni-provenance.json",
+              "patroni-sbom.spdx.json",
+              "patroni_rehearsal.log",
+          }
+          entries = list(root.iterdir())
+          if {entry.name for entry in entries} != expected:
+              raise SystemExit("release evidence file set is not exact")
+          if any(not entry.is_file() or entry.is_symlink() or entry.stat().st_size <= 0 for entry in entries):
+              raise SystemExit("release evidence contains an unsafe or empty entry")
+          digest = target.rsplit("@", 1)[-1]
+          manifest_digest = "sha256:" + hashlib.sha256(
+              (root / "patroni-manifest.json").read_bytes()
+          ).hexdigest()
+          if manifest_digest != digest:
+              raise SystemExit("release evidence manifest differs from target digest")
+          log_lines = (root / "patroni_rehearsal.log").read_text(
+              encoding="utf-8"
+          ).splitlines()
+          start = (
+              "[patroni-rehearsal][start] pulling exact linux/amd64 Patroni image "
+              + target
+          )
+          done = (
+              "[patroni-rehearsal][done] exact-image identity, archive helper, "
+              "failover, data continuity, rejoin, and quorum passed"
+          )
+          if log_lines.count(start) != 1 or log_lines.count(done) != 1:
+              raise SystemExit("release evidence lacks the exact target rehearsal proof")
+          attestation = json.loads(
+              (root / "patroni-github-attestation.json").read_text(encoding="utf-8")
+          )
+          if not isinstance(attestation, list) or not attestation:
+              raise SystemExit("release evidence lacks GitHub attestation verification")
+          for name in ("patroni-provenance.json", "patroni-sbom.spdx.json"):
+              if not isinstance(json.loads((root / name).read_text(encoding="utf-8")), dict):
+                  raise SystemExit(name + " is not an evidence object")
+          PY
+
+      - name: Verify live SHA tag and registry provenance and SBOM
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          TARGET_IMAGE: ${{ inputs.target_image }}
+        run: |
+          set -euo pipefail
+          release_tag="ghcr.io/mvnby/air-api/patroni:${DEPLOY_SHA}"
+          tag_manifest="${RUNNER_TEMP}/patroni-release-tag-manifest.json"
+          docker buildx imagetools inspect "${release_tag}" --raw > "${tag_manifest}"
+          tag_digest="$(
+            python3 -c \
+              'import hashlib,sys; print("sha256:" + hashlib.sha256(sys.stdin.buffer.read()).hexdigest())' \
+              < "${tag_manifest}"
+          )"
+          target_digest="${TARGET_IMAGE##*@}"
+          test "${tag_digest}" = "${target_digest}" || {
+            echo "::error::Release SHA tag ${release_tag} points to ${tag_digest}, expected ${target_digest}"
+            exit 1
+          }
+          python3 scripts/ha/verify_patroni_release_image.py \
+            --image "${TARGET_IMAGE}" \
+            --expected-source "https://github.com/${GITHUB_REPOSITORY}" \
+            --expected-revision "${DEPLOY_SHA}" \
+            --manifest-out "${RUNNER_TEMP}/patroni-registry-manifest.json" \
+            --provenance-out "${RUNNER_TEMP}/patroni-registry-provenance.json" \
+            --sbom-out "${RUNNER_TEMP}/patroni-registry-sbom.spdx.json"
+
+      - name: Verify exact GitHub SLSA attestation identity
         env:
           DEPLOY_SHA: ${{ inputs.deploy_sha }}
           GH_TOKEN: ${{ github.token }}
@@ -159,16 +313,10 @@ jobs:
             --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/publish-patroni-image.yml" \
             --source-digest "${DEPLOY_SHA}" \
             --source-ref refs/heads/main \
+            --deny-self-hosted-runners \
             --format json > "${RUNNER_TEMP}/patroni-provenance.json"
-          gh attestation verify "oci://${TARGET_IMAGE}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --predicate-type 'https://spdx.dev/Document' \
-            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/publish-patroni-image.yml" \
-            --source-digest "${DEPLOY_SHA}" \
-            --source-ref refs/heads/main \
-            --format json > "${RUNNER_TEMP}/patroni-sbom.json"
-          jq -e '[.. | objects | .packages? // empty | select(type == "array" and length > 0)] | length > 0' \
-            "${RUNNER_TEMP}/patroni-sbom.json" >/dev/null
+          jq -e 'type == "array" and length > 0' \
+            "${RUNNER_TEMP}/patroni-provenance.json" >/dev/null
 
       - name: Install owner-only SSH identity
         env:
@@ -184,6 +332,8 @@ jobs:
         env:
           CURRENT_IMAGE: ${{ inputs.current_image }}
           DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          PUBLISH_RUN_ATTEMPT: ${{ inputs.publish_run_attempt }}
+          PUBLISH_RUN_ID: ${{ inputs.publish_run_id }}
           GHCR_TOKEN: ${{ github.token }}
           GHCR_USERNAME: ${{ github.actor }}
           RESUME: ${{ inputs.resume }}
@@ -195,6 +345,8 @@ jobs:
           test -n "${GHCR_TOKEN}"
           python3 scripts/ha/rollout_patroni_image.py \
             --deploy-sha "${DEPLOY_SHA}" \
+            --publish-run-id "${PUBLISH_RUN_ID}" \
+            --publish-run-attempt "${PUBLISH_RUN_ATTEMPT}" \
             --transaction-id "${TRANSACTION_ID}" \
             --maintenance-transaction-id "${MAINTENANCE_TRANSACTION_ID}" \
             --current-image "${CURRENT_IMAGE}" \
@@ -206,6 +358,8 @@ jobs:
       - name: Record immutable rollout result
         env:
           DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          PUBLISH_RUN_ATTEMPT: ${{ inputs.publish_run_attempt }}
+          PUBLISH_RUN_ID: ${{ inputs.publish_run_id }}
           TARGET_IMAGE: ${{ inputs.target_image }}
           TRANSACTION_ID: ${{ inputs.transaction_id }}
           MAINTENANCE_TRANSACTION_ID: ${{ inputs.maintenance_transaction_id }}
@@ -213,6 +367,8 @@ jobs:
           {
             echo '## Patroni production rollout'
             echo "- deploy_sha: ${DEPLOY_SHA}"
+            echo "- publish_run_id: ${PUBLISH_RUN_ID}"
+            echo "- publish_run_attempt: ${PUBLISH_RUN_ATTEMPT}"
             echo "- target_image: ${TARGET_IMAGE}"
             echo "- transaction_id: ${TRANSACTION_ID}"
             echo "- maintenance_transaction_id: ${MAINTENANCE_TRANSACTION_ID}"

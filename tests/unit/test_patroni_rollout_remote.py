@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 import stat
 import subprocess
@@ -21,6 +22,8 @@ TARGET = "ghcr.io/mvnby/air-api/patroni@sha256:" + "3" * 64
 def _inputs():
     return RolloutInputs.validated(
         deploy_sha="1" * 40,
+        publish_run_id="123456",
+        publish_run_attempt=1,
         transaction_id="0" * 32,
         maintenance_transaction_id="f" * 32,
         current_image=CURRENT,
@@ -43,6 +46,9 @@ def test_remote_executor_compiles_and_contains_required_fail_closed_contracts():
     assert "pg_is_in_recovery" in REMOTE_EXECUTOR
     assert "dcs_baseline_sha256" in REMOTE_EXECUTOR
     assert "role_unit_sha256" in REMOTE_EXECUTOR
+    assert "if app != expected_app" in REMOTE_EXECUTOR
+    assert "if bot != expected_bot" in REMOTE_EXECUTOR
+    assert '"CLOUDFLARE_PURGE_DRY_RUN": "true"' in REMOTE_EXECUTOR
 
 
 def _remote_namespace():
@@ -255,6 +261,23 @@ def test_payload_extras_cannot_override_immutable_transaction_fields():
             helper_sha256="5" * 64,
             extra={"target_image": CURRENT},
         )
+
+
+def test_publish_run_and_attempt_are_bound_to_every_remote_payload():
+    payload = json.loads(
+        build_payload(
+            inputs=_inputs(),
+            action="preflight",
+            compose_contract_sha256="4" * 64,
+            helper_sha256="5" * 64,
+        )
+    )
+
+    assert payload["publish_run_id"] == "123456"
+    assert payload["publish_run_attempt"] == 1
+    assert '"publish_run_id": payload["publish_run_id"]' in REMOTE_EXECUTOR
+    assert '"publish_run_attempt": payload["publish_run_attempt"]' in REMOTE_EXECUTOR
+    assert '"role_unit_sha256": payload["role_unit_sha256"]' in REMOTE_EXECUTOR
 
 
 def test_transport_uses_pinned_ssh_and_keeps_credentials_out_of_argv(tmp_path: Path):
