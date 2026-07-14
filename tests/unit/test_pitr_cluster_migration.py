@@ -52,6 +52,7 @@ class FakeOperations:
         self.release_failure = None
         self.secret_failure = None
         self.maintenance_failure = None
+        self.fenced_provision_failure = False
         self.role_agent_failure = None
         self.role_agent_fail_once = set()
         self.release_results = {}
@@ -135,6 +136,19 @@ class FakeOperations:
         if self.role_agent_failure == (phase, node.alias):
             raise RuntimeError("simulated role-agent phase failure")
 
+    def fenced_provision(
+        self,
+        *,
+        node,
+        context,
+        bootstrap_helper,
+        transaction_id,
+        runner,
+    ):
+        self.events.append(("fenced-provision", node.alias, transaction_id))
+        if self.fenced_provision_failure:
+            raise RuntimeError("simulated fenced provision failure")
+
     def dependencies(self):
         return MigrationDependencies(
             discover=self.discover,
@@ -142,6 +156,7 @@ class FakeOperations:
             release=self.release,
             secret=self.secret,
             maintenance=self.maintenance,
+            fenced_provision=self.fenced_provision,
             role_agent=self.role_agent,
         )
 
@@ -177,7 +192,7 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
         ("maintenance", "provision-node", "zakup", TXID),
         ("role-agent", "resume-standby", "zakup", TXID),
         ("role-agent", "quiesce-fenced", "mvn-api", TXID),
-        ("maintenance", "provision-node", "mvn-api", TXID),
+        ("fenced-provision", "mvn-api", TXID),
         ("role-agent", "resume-primary", "mvn-api", TXID),
         ("secret", "configure-node", "zakup", TXID, ENV_TEXT),
         ("secret", "configure-node", "mvn-api", TXID, ENV_TEXT),
@@ -260,8 +275,7 @@ def test_preflight_failure_rolls_back_assets_before_any_host_provision(tmp_path)
         )
 
     assert not any(
-        event[:3] == ("maintenance", "provision-node", "mvn-api")
-        for event in operations.events
+        event[0] == "fenced-provision" for event in operations.events
     )
     assert [event[1] for event in operations.events if event[0] == "release"] == [
         "inspect",
@@ -344,6 +358,28 @@ def test_ambiguous_failure_during_first_provision_never_rolls_back(tmp_path):
     ]
 
 
+def test_primary_fenced_provision_failure_recovers_agents_for_same_tx(tmp_path):
+    operations = FakeOperations()
+    operations.fenced_provision_failure = True
+
+    with pytest.raises(RuntimeError, match=f"resume with the same transaction ID {TXID}"):
+        migrate_cluster(
+            context=_context(tmp_path),
+            env_text=ENV_TEXT,
+            transaction_id=TXID,
+            runner=_unused_runner,
+            dependencies=operations.dependencies(),
+        )
+
+    assert ("fenced-provision", "mvn-api", TXID) in operations.events
+    role_events = [event for event in operations.events if event[0] == "role-agent"]
+    assert [event[1:3] for event in role_events[-2:]] == [
+        ("resume-standby", "zakup"),
+        ("resume-primary", "mvn-api"),
+    ]
+    assert not any(event[0] == "release" and event[1] == "rollback" for event in operations.events)
+
+
 def test_quiesce_is_standby_first_and_ambiguous_failure_recovers_both_agents(
     tmp_path,
 ):
@@ -373,8 +409,7 @@ def test_quiesce_is_standby_first_and_ambiguous_failure_recovers_both_agents(
         ("role-agent", "resume-primary", "mvn-api", TXID),
     ]
     assert not any(
-        event[:3] == ("maintenance", "provision-node", "mvn-api")
-        for event in operations.events
+        event[0] == "fenced-provision" for event in operations.events
     )
 
 

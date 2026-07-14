@@ -273,6 +273,42 @@ def test_transactional_host_provision_is_an_attested_maintenance_phase(tmp_path)
     assert command[5] == "provision-node"
     assert '"provision-node": 900' in pitr_remote_executors.REMOTE_MAINTENANCE_EXECUTOR
     assert '"provision-node"' in pitr_remote_executors.LOCKED_MAINTENANCE_WRAPPER
+    assert (
+        'PROVISION_HELPER = "/usr/local/sbin/mvn-postgres-pitr-provision-host"'
+        in pitr_remote_executors.LOCKED_MAINTENANCE_WRAPPER
+    )
+    assert 'if provision_mode == "fenced":' in (
+        pitr_remote_executors.LOCKED_MAINTENANCE_WRAPPER
+    )
+    assert "prove_fenced_provision_state(project_dir, compose_file)" in (
+        pitr_remote_executors.LOCKED_MAINTENANCE_WRAPPER
+    )
+    assert '"--transaction-id",\n                    transaction_id,' in (
+        pitr_remote_executors.LOCKED_MAINTENANCE_WRAPPER
+    )
+
+
+def test_primary_fenced_provision_uses_explicit_attested_mode(tmp_path):
+    captured = []
+
+    def runner(args, stdin):
+        captured.append((list(args), stdin))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    pitr_remote_execution.run_remote_fenced_provision_phase(
+        node=PATRONI_NODES[0],
+        context=_context(tmp_path),
+        bootstrap_helper="/usr/local/sbin/mvn-postgres-pitr-bootstrap",
+        transaction_id="0123456789abcdef0123456789abcdef",
+        runner=runner,
+    )
+
+    command = shlex.split(captured[0][0][-1])
+    assert command[5] == "provision-node"
+    assert command[8] == "fenced"
+    assert command[11] == pitr_remote_executors.LOCKED_MAINTENANCE_WRAPPER
+    assert command[12] == hashlib.sha256(command[11].encode()).hexdigest()
+    assert captured[0][1] is None
 
 
 def test_role_agent_remote_command_is_pinned_and_attests_exact_assets(tmp_path):

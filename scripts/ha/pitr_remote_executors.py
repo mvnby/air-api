@@ -8,6 +8,9 @@ host-side helpers by their attested absolute paths.
 from __future__ import annotations
 
 try:
+    from scripts.ha.pitr_fenced_provision_remote import (
+        FENCED_PROVISION_HELPERS,
+    )
     from scripts.ha.pitr_role_agent_process_attestation import (
         REMOTE_ROLE_AGENT_PROCESS_ATTESTATION,
     )
@@ -15,6 +18,9 @@ try:
         REMOTE_ROLE_AGENT_EXECUTOR_BODY,
     )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
+    from pitr_fenced_provision_remote import (  # type: ignore[no-redef]
+        FENCED_PROVISION_HELPERS,
+    )
     from pitr_role_agent_process_attestation import (  # type: ignore[no-redef]
         REMOTE_ROLE_AGENT_PROCESS_ATTESTATION,
     )
@@ -245,10 +251,13 @@ def attest_assets(raw_manifest, project_dir, compose_file):
 LOCKED_OPERATION_WRAPPER = (
     REMOTE_ASSET_ATTESTATION
     + "\n"
+    + FENCED_PROVISION_HELPERS
+    + "\n"
     + r'''
 import sys
 
 LOCK_PATH = "/run/lock/mvn-postgres-pitr-prerequisites.lock"
+PROVISION_HELPER = "/usr/local/sbin/mvn-postgres-pitr-provision-host"
 MAX_PAYLOAD_BYTES = 65536
 SECRET_PHASES = {"preflight", "configure-node"}
 MAINTENANCE_PHASES = {
@@ -385,8 +394,25 @@ def wrapper_main():
                 )
                 environment["ENV_INPUT_FILE"] = f"/proc/self/fd/{secret_fd}"
                 pass_fds = (deploy_fd, secret_fd)
+            provision_mode = os.environ.get("PITR_PROVISION_MODE", "standard")
+            if provision_mode not in {"standard", "fenced"}:
+                return wrapper_fail("invalid PITR provision mode", 78)
+            if provision_mode == "fenced" and phase != "provision-node":
+                return wrapper_fail("fenced mode requires provision-node", 78)
+            command = [bootstrap_helper, phase]
+            if provision_mode == "fenced":
+                prove_fenced_provision_state(project_dir, compose_file)
+                command = [
+                    PROVISION_HELPER,
+                    "--project-dir",
+                    project_dir,
+                    "--compose-file",
+                    compose_file,
+                    "--transaction-id",
+                    transaction_id,
+                ]
             result = subprocess.run(
-                [bootstrap_helper, phase],
+                command,
                 env=environment,
                 check=False,
                 pass_fds=pass_fds,
@@ -593,8 +619,10 @@ def main():
         return fail("unexpected bootstrap helper path", 64)
     if phase not in ALLOWED_PHASES:
         return fail("unsupported maintenance phase", 64)
-    if confirmed != "false":
+    if confirmed not in {"false", "fenced"}:
         return fail("unexpected maintenance confirmation value", 64)
+    if confirmed == "fenced" and phase != "provision-node":
+        return fail("fenced confirmation requires provision-node", 64)
     if re.fullmatch(r"[0-9a-f]{32}", transaction_id) is None:
         return fail("invalid PITR transaction ID", 64)
     if hashlib.sha256(locked_wrapper.encode()).hexdigest() != locked_wrapper_digest:
@@ -630,6 +658,7 @@ def main():
         "DOCKER_CONTEXT": "default",
         "PROJECT_DIR": project_dir,
         "COMPOSE_FILE": compose_file,
+        "PITR_PROVISION_MODE": "fenced" if confirmed == "fenced" else "standard",
     }
     return run_bounded(
         [

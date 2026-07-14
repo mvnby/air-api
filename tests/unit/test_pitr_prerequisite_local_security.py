@@ -2,6 +2,7 @@ import ast
 import pytest
 
 from scripts.ha import apply_postgres_pitr_primary_prerequisites as module
+from scripts.ha import pitr_remote_executors
 from scripts.ha.pitr_cluster_topology import ClusterTopology
 from scripts.ha.pitr_pinned_ssh import effective_config, ssh_args
 
@@ -89,10 +90,26 @@ def test_remote_maintenance_executor_has_literal_minimal_environment():
         "DOCKER_CONTEXT",
         "PROJECT_DIR",
         "COMPOSE_FILE",
+        "PITR_PROVISION_MODE",
     }
     assert "os.environ" not in module.REMOTE_MAINTENANCE_EXECUTOR
     assert "activate-archive" not in module.REMOTE_MAINTENANCE_EXECUTOR
     assert "docker-compose.prod.yml" not in module.REMOTE_MAINTENANCE_EXECUTOR
+
+
+def test_fenced_primary_provision_has_narrow_fail_closed_proofs():
+    source = pitr_remote_executors.LOCKED_MAINTENANCE_WRAPPER
+    ast.parse(source, "<locked-maintenance-wrapper>")
+    assert 'expected = b"fencing\\n"' in source
+    assert "before.st_uid != 0" in source
+    assert "before.st_gid != 0" in source
+    assert "before.st_nlink != 1" in source
+    assert "stat.S_IMODE(before.st_mode) != 0o600" in source
+    assert "os.O_NOFOLLOW" in source
+    assert 'result.stdout.strip() != "inactive"' in source
+    assert '"ps",\n            "--all",\n            "-q"' in source
+    assert "primary fenced runtime still has API or bot containers" in source
+    assert 'if provision_mode == "fenced":' in source
 
 
 @pytest.mark.parametrize("phase", ["restore-drill", "verify"])

@@ -20,6 +20,7 @@ try:
     )
     from scripts.ha.pitr_remote_execution import (
         prepare_host_release_bundles,
+        run_remote_fenced_provision_phase,
         run_remote_maintenance_phase,
         run_remote_release_action,
         run_remote_role_agent_phase,
@@ -37,6 +38,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
     )
     from pitr_remote_execution import (  # type: ignore[no-redef]
         prepare_host_release_bundles,
+        run_remote_fenced_provision_phase,
         run_remote_maintenance_phase,
         run_remote_release_action,
         run_remote_role_agent_phase,
@@ -50,6 +52,7 @@ ReleaseAction = Callable[..., str]
 ReleaseBundleBuilder = Callable[[Sequence[PatroniNode]], dict[str, str]]
 SecretPhase = Callable[..., None]
 MaintenancePhase = Callable[..., None]
+FencedProvisionPhase = Callable[..., None]
 RoleAgentPhase = Callable[..., None]
 
 TRANSACTION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -72,6 +75,7 @@ class MigrationDependencies:
     release: ReleaseAction = run_remote_release_action
     secret: SecretPhase = run_remote_secret_phase
     maintenance: MaintenancePhase = run_remote_maintenance_phase
+    fenced_provision: FencedProvisionPhase = run_remote_fenced_provision_phase
     role_agent: RoleAgentPhase = run_remote_role_agent_phase
 
 
@@ -211,6 +215,15 @@ class _MigrationOrchestrator:
             context=self.context,
             bootstrap_helper=self.bootstrap_helper,
             phase=phase,
+            transaction_id=self.transaction_id,
+            runner=self.runner,
+        )
+
+    def _fenced_provision(self, node: PatroniNode) -> None:
+        self.dependencies.fenced_provision(
+            node=node,
+            context=self.context,
+            bootstrap_helper=self.bootstrap_helper,
             transaction_id=self.transaction_id,
             runner=self.runner,
         )
@@ -362,11 +375,15 @@ class _MigrationOrchestrator:
                 # response cannot prove that it made no durable progress, so
                 # it remains inside the roll-forward boundary entered before
                 # the first role-agent quiesce attempt.
+                if node.alias == baseline.primary.alias:
+                    provision = lambda node=node: self._fenced_provision(node)
+                else:
+                    provision = lambda node=node: self._maintenance(
+                        "provision-node", node
+                    )
                 self._mutate(
                     stage=f"provision-node {node.alias}",
-                    action=lambda node=node: self._maintenance(
-                        "provision-node", node
-                    ),
+                    action=provision,
                     enter_roll_forward=True,
                 )
                 self._mutate(

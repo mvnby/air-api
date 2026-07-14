@@ -428,13 +428,14 @@ def run_remote_secret_phase(
     )
 
 
-def run_remote_maintenance_phase(
+def _run_remote_maintenance_phase(
     *,
     node: PatroniNode,
     context: PinnedSshContext,
     bootstrap_helper: str,
     phase: str,
     transaction_id: str,
+    confirmation: str,
     runner: Runner | None = None,
 ) -> None:
     if bootstrap_helper != "/usr/local/sbin/mvn-postgres-pitr-bootstrap":
@@ -451,6 +452,10 @@ def run_remote_maintenance_phase(
         raise RuntimeError(f"unsupported maintenance phase: {phase}")
     if not TRANSACTION_ID_RE.fullmatch(transaction_id):
         raise RuntimeError("PITR transaction ID must be 32 lowercase hexadecimal characters")
+    if confirmation not in {"false", "fenced"}:
+        raise RuntimeError("unsupported PITR maintenance confirmation")
+    if confirmation == "fenced" and phase != "provision-node":
+        raise RuntimeError("fenced maintenance is limited to provision-node")
     asset_manifest = render_host_asset_manifest(node)
     locked_wrapper_digest = hashlib.sha256(
         LOCKED_MAINTENANCE_WRAPPER.encode()
@@ -465,7 +470,7 @@ def run_remote_maintenance_phase(
             shlex.quote(phase),
             shlex.quote(node.project_dir),
             shlex.quote(node.compose_file),
-            "false",
+            confirmation,
             transaction_id,
             shlex.quote(asset_manifest),
             shlex.quote(LOCKED_MAINTENANCE_WRAPPER),
@@ -473,6 +478,45 @@ def run_remote_maintenance_phase(
         ]
     )
     _run_checked([*ssh_args(node, context), command], runner=runner)
+
+
+def run_remote_maintenance_phase(
+    *,
+    node: PatroniNode,
+    context: PinnedSshContext,
+    bootstrap_helper: str,
+    phase: str,
+    transaction_id: str,
+    runner: Runner | None = None,
+) -> None:
+    _run_remote_maintenance_phase(
+        node=node,
+        context=context,
+        bootstrap_helper=bootstrap_helper,
+        phase=phase,
+        transaction_id=transaction_id,
+        confirmation="false",
+        runner=runner,
+    )
+
+
+def run_remote_fenced_provision_phase(
+    *,
+    node: PatroniNode,
+    context: PinnedSshContext,
+    bootstrap_helper: str,
+    transaction_id: str,
+    runner: Runner | None = None,
+) -> None:
+    _run_remote_maintenance_phase(
+        node=node,
+        context=context,
+        bootstrap_helper=bootstrap_helper,
+        phase="provision-node",
+        transaction_id=transaction_id,
+        confirmation="fenced",
+        runner=runner,
+    )
 
 
 def run_remote_role_agent_phase(
