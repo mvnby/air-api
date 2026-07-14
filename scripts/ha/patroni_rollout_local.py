@@ -28,6 +28,7 @@ REVIEWED_ASSETS = (
     "scripts/ha/patroni_rollout_cli.py",
     "scripts/ha/patroni_rollout_journal.py",
     "scripts/ha/patroni_rollout_local.py",
+    "scripts/ha/patroni_rollout_model.py",
     "scripts/ha/patroni_rollout_remote.py",
     "scripts/ha/patroni_rollout_remote_contract.py",
     "scripts/ha/patroni_rollout_remote_executor.py",

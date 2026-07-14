@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import re
-import time
-from dataclasses import dataclass
-from typing import Callable, Mapping, Sequence
+from typing import Mapping
 
 try:
     from scripts.ha.patroni_rollout_journal import (
@@ -14,11 +12,12 @@ try:
         has_ambiguous_switchover_boundary,
         record_flags,
     )
-    from scripts.ha.patroni_rollout_remote import (
-        helper_source_sha256,
-        read_status,
-        run_remote_action,
+    from scripts.ha.patroni_rollout_model import (
+        RolloutDependencies,
+        RolloutResult,
+        Runner,
     )
+    from scripts.ha.patroni_rollout_remote import helper_source_sha256
     from scripts.ha.patroni_rollout_local import default_runner, local_contract_digests
     from scripts.ha.patroni_rollout_schema import RolloutInputs, SHA256_RE
     from scripts.ha.pitr_cluster_topology import ClusterTopology, discover_cluster_topology
@@ -33,11 +32,12 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
         has_ambiguous_switchover_boundary,
         record_flags,
     )
-    from patroni_rollout_remote import (  # type: ignore[no-redef]
-        helper_source_sha256,
-        read_status,
-        run_remote_action,
+    from patroni_rollout_model import (  # type: ignore[no-redef]
+        RolloutDependencies,
+        RolloutResult,
+        Runner,
     )
+    from patroni_rollout_remote import helper_source_sha256  # type: ignore[no-redef]
     from patroni_rollout_local import (  # type: ignore[no-redef]
         default_runner,
         local_contract_digests,
@@ -56,31 +56,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
         PinnedSshContext,
     )
 
-
-Runner = Callable[[Sequence[str], str | None], object]
-Discoverer = Callable[..., ClusterTopology]
-RemoteAction = Callable[..., str]
-StatusReader = Callable[..., dict[str, object]]
-Sleeper = Callable[[float], None]
 NODE_ALIASES = tuple(node.alias for node in PATRONI_NODES)
-
-
-@dataclass(frozen=True)
-class RolloutResult:
-    transaction_id: str
-    original_primary: str
-    final_primary: str
-    target_image: str
-    system_identifier: str
-    timeline: int
-
-
-@dataclass(frozen=True)
-class RolloutDependencies:
-    discover: Discoverer = discover_cluster_topology
-    remote: RemoteAction = run_remote_action
-    status: StatusReader = read_status
-    sleep: Sleeper = time.sleep
 
 
 class _SafeAbort(RuntimeError):

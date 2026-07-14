@@ -96,6 +96,7 @@ def test_rollout_modules_stay_small_and_all_composed_sources_are_reviewed():
     for required in (
         "scripts/ha/patroni_rollout_cli.py",
         "scripts/ha/patroni_rollout_journal.py",
+        "scripts/ha/patroni_rollout_model.py",
         "scripts/ha/patroni_rollout_remote_contract.py",
         "scripts/ha/patroni_rollout_remote_executor.py",
         "scripts/ha/patroni_rollout_remote_prelude.py",
