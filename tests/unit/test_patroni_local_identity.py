@@ -47,6 +47,38 @@ def test_systemd_query_timeout_is_not_treated_as_inactive(monkeypatch):
     assert patroni_local_identity.systemd_units_match(config, "standby") is False
 
 
+def test_standby_reconcile_clears_failed_service_latch(monkeypatch):
+    config = SimpleNamespace(primary_systemd_units=("wal.timer",))
+    active_states = {"wal.timer": "inactive", "wal.service": "failed"}
+    enabled_states = {"wal.timer": "disabled"}
+    calls: list[tuple[str, ...]] = []
+
+    def run(args, **_kwargs):
+        command = tuple(args)
+        calls.append(command)
+        unit = args[-1]
+        if args[1:4] == ["show", "--property=ActiveState", "--value"]:
+            return subprocess.CompletedProcess(args, 0, active_states[unit] + "\n", "")
+        if args[1:2] == ["is-enabled"]:
+            state = enabled_states[unit]
+            return subprocess.CompletedProcess(args, 1, state + "\n", "")
+        if args[1:3] == ["reset-failed", unit]:
+            if active_states[unit] == "failed":
+                active_states[unit] = "inactive"
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[1] in {"disable", "stop"}:
+            return subprocess.CompletedProcess(args, 0, "", "")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(patroni_local_identity.subprocess, "run", run)
+
+    patroni_local_identity.reconcile_primary_systemd_units(config, "standby")
+
+    assert ("systemctl", "reset-failed", "wal.timer") in calls
+    assert ("systemctl", "reset-failed", "wal.service") in calls
+    assert active_states == {"wal.timer": "inactive", "wal.service": "inactive"}
+
+
 class _PatroniResponse:
     def __init__(self, payload: dict[str, object]):
         self.payload = json.dumps(payload).encode()

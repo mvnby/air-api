@@ -195,6 +195,22 @@ def reconcile_primary_systemd_units(
         if result.returncode != 0:
             failures.append(unit)
     if role == "standby":
+        # ``systemctl stop`` deliberately does not clear a unit's failed latch.
+        # A failed one-shot PITR service has no running owner, but the strict
+        # steady-state probe still requires ``inactive``.  Clear only the
+        # recorded failure after every stop attempt, then let the exact state
+        # probe below prove that timers are disabled and every unit is inactive.
+        for unit in unique_units:
+            try:
+                subprocess.run(
+                    ["systemctl", "reset-failed", unit],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and not state_probe(config, role):
             time.sleep(0.1)
@@ -215,6 +231,13 @@ def reconcile_primary_systemd_units(
                 )
                 subprocess.run(
                     ["systemctl", "stop", "--no-block", unit],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                subprocess.run(
+                    ["systemctl", "reset-failed", unit],
                     check=False,
                     capture_output=True,
                     text=True,

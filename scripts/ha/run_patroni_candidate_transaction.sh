@@ -12,6 +12,7 @@ ROLE_AGENT_SOURCE="${PATRONI_ROLE_AGENT_SOURCE:-}"
 ROLE_AGENT_TARGET="${PATRONI_ROLE_AGENT_TARGET:-/usr/local/sbin/mvn-patroni-role-agent}"
 ROLE_IDENTITY_SOURCE="${PATRONI_ROLE_IDENTITY_SOURCE:-}"
 ROLE_IDENTITY_TARGET="${PATRONI_ROLE_IDENTITY_TARGET:-/usr/local/sbin/patroni_local_identity.py}"
+DB_CONTRACT_HELPER="${PATRONI_DB_CONTRACT_HELPER:-/tmp/patroni_compose_db_contract.py}"
 ROLE_AGENT_UNIT="${PATRONI_ROLE_AGENT_UNIT:-mvn-patroni-role-agent.service}"
 RECONCILE_SCRIPT="${API_RECONCILE_SCRIPT:-/tmp/reconcile_backend_compose_runtime.sh}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
@@ -166,6 +167,37 @@ else:
 '
 }
 
+db_contract_digest() {
+  local compose_file="$1"
+  local rendered=""
+
+  rendered="$(
+    docker compose -f "${compose_file}" config \
+      --no-env-resolution --no-interpolate --format json \
+      | python3 "${DB_CONTRACT_HELPER}"
+  )" || {
+    echo "could not render the complete Patroni db contract" >&2
+    return 1
+  }
+  [[ "${rendered}" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "invalid Patroni db contract digest" >&2
+    return 1
+  }
+  printf '%s\n' "${rendered}"
+}
+
+require_unchanged_db_contract() {
+  local canonical_hash=""
+  local candidate_hash=""
+
+  canonical_hash="$(db_contract_digest "${CANONICAL_FILE}")"
+  candidate_hash="$(db_contract_digest "${CANDIDATE_FILE}")"
+  [[ "${canonical_hash}" == "${candidate_hash}" ]] || {
+    echo "candidate changes the Patroni db contract; use the reviewed database rollout controller" >&2
+    return 1
+  }
+}
+
 fence_runtime_for_role_drift() {
   docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
     stop app app-blue app-green bot >/dev/null 2>&1
@@ -266,7 +298,6 @@ CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
   echo "compose transaction helper is missing: ${TRANSACTION_SCRIPT}" >&2
   exit 1
 }
-
 if [[ "${OPERATION}" == "migrate" ]]; then
   trap cleanup_migration_candidate EXIT
   API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
@@ -276,11 +307,16 @@ if [[ "${OPERATION}" == "migrate" ]]; then
 fi
 
 trap cleanup_candidate_only EXIT
+[[ -f "${DB_CONTRACT_HELPER}" && ! -L "${DB_CONTRACT_HELPER}" ]] || {
+  echo "Patroni db contract helper is missing or unsafe: ${DB_CONTRACT_HELPER}" >&2
+  exit 1
+}
 exec 9>"${DEPLOY_LOCK_FILE}"
 flock -n 9 || {
   echo "another deployment holds ${DEPLOY_LOCK_FILE}" >&2
   exit 1
 }
+require_unchanged_db_contract
 resolve_previous_backend_image
 backup_role_agent
 trap reconcile_failed_deploy EXIT
@@ -301,6 +337,7 @@ systemctl is-active --quiet "${ROLE_AGENT_UNIT}"
 API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
   API_DEPLOY_LOCK_ALREADY_HELD=true \
 bash "${DEPLOY_SCRIPT}"
+require_unchanged_db_contract
 transaction promote
 trap - EXIT
 [[ -z "${ROLE_AGENT_BACKUP}" ]] || rm -f -- "${ROLE_AGENT_BACKUP}" \
