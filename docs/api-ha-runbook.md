@@ -119,7 +119,7 @@ bash scripts/ha/check_active_passive.sh
 Media storage config check:
 
 ```bash
-ssh mvn-api 'cd /opt/air-api && app_service=app; if test -f .active-api-slot; then app_service="app-$(cat .active-api-slot)"; fi; docker compose -f docker-compose.prod.yml --profile bluegreen exec -T "$app_service" python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
+ssh mvn-api 'cd /opt/air-api && app_service=app; if test -f .active-api-slot; then app_service="app-$(cat .active-api-slot)"; fi; docker compose -f docker-compose.patroni.yml --profile bluegreen exec -T "$app_service" python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
 ```
 
 GitHub health check:
@@ -299,9 +299,12 @@ Do not use the public media bucket or a public `r2.dev`/CDN endpoint for PITR.
 The helper refuses that configuration because database WAL/basebackups must not
 share the public media surface.
 
-If `zakup` is promoted, change `POSTGRES_PITR_CLUSTER=zakup` on that host before
-enabling its PITR timers. The prefix can stay the same; cluster name separates
-the timelines.
+`POSTGRES_PITR_CLUSTER` is the stable object namespace for the logical Patroni
+cluster, not the physical hostname. Both reviewed nodes therefore keep the same
+value (`mvn-api` for the existing production archive). Do not change it during
+promotion: the pre-promotion basebackup and the new timeline's WAL must remain
+in one namespace for a continuous restore chain. Renaming that legacy namespace
+requires a separate migration with a new verified basebackup.
 
 `POSTGRES_PITR_ARCHIVE_MODE` intentionally defaults to `off` in compose. Set it
 to `on` only after the private bucket/token are configured and the upload helper
@@ -318,68 +321,124 @@ failure.
 Enable on the current primary after the private bucket/token exist:
 
 ```bash
-# From local repo checkout, copy/install repo-tracked PITR helpers as root on
-# the primary. The installer also creates postgres-wal-archive and chowns it to
-# the postgres container UID. No git checkout is required on production.
-tar -czf - \
-  scripts/ha/upload_postgres_pitr_to_s3.py \
-  scripts/ha/upload_postgres_pitr_wal.sh \
-  scripts/ha/create_postgres_pitr_basebackup.sh \
-  scripts/ha/configure_postgres_pitr_env.py \
-  scripts/ha/bootstrap_postgres_pitr.sh \
-  scripts/ha/restore_postgres_pitr_from_s3.py \
-  scripts/ha/restore_postgres_pitr_drill.sh \
-  scripts/ha/check_postgres_pitr_status.sh \
-  scripts/ha/check_postgres_pitr_remote.py \
-  scripts/ha/install_postgres_pitr_units.sh \
-  deploy/ha/systemd/mvn-postgres-wal-upload.service \
-  deploy/ha/systemd/mvn-postgres-wal-upload.timer \
-  deploy/ha/systemd/mvn-postgres-basebackup.service \
-  deploy/ha/systemd/mvn-postgres-basebackup.timer \
-| ssh mvn-api 'tmp="$(mktemp -d)" && tar -xzf - -C "$tmp" && cd "$tmp" && PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml bash scripts/ha/install_postgres_pitr_units.sh && rm -rf "$tmp"'
-
-# Copy deploy/ha/mvn-api/docker-compose.primary.yml through CI.
-gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
+# Host helper installation is a separate reviewed host-assets change. Transfer
+# one exact release bundle through the pinned SSH path; never pipe a root script
+# from the network. Before the first hardened install, stop the Patroni role
+# agent, disable both PITR timers, and stop both PITR services. The installer
+# checks this quiescent state both before and after copying and refuses any
+# enabled/running owner, any
+# compose other than docker-compose.patroni.yml, compose digest drift, a mutable
+# backend image, or a running app slot whose image differs from that digest.
+# It never enables timers. A partial install therefore stays inert and must be
+# completed by rerunning the same exact bundle before the pinned enable phase.
+# Restart the role agent only after pinned verify/enable has passed.
 
 # Put the private R2 credentials in local `.env` using the names above. The
-# helper loads only `POSTGRES_PITR_*` keys from that file, uploads a temporary
-# root-only env file to the primary, removes it after the remote phase, and
-# never prints access keys.
+# helper loads only `POSTGRES_PITR_*` keys from that file. For a live apply it
+# ignores the user's SSH config, pins both physical Patroni nodes to the
+# repository-tracked Ed25519 host identities, probes both nodes, and selects the
+# sole primary. It refuses an unreachable/ambiguous topology, attests every host
+# helper plus the node-specific canonical compose digest, and sends the new
+# payload over stdin into a locked Linux memfd. The secret is never linked into
+# the remote filesystem. Legacy secret copies are scrubbed only after the durable
+# root-owned config transaction succeeds. The shared lock prevents concurrent
+# install, maintenance, and scheduled jobs.
+# Both the local env and key must be owner-only regular non-symlink files.
+chmod 600 .env "$HOME/.ssh/id_ed25519"
+export HA_SSH_IDENTITY_FILE="$HOME/.ssh/id_ed25519"
 
-# First verify the local input shape without touching the primary.
-python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --env-file .env --dry-run --no-prompt
+# Prove both pinned host identities and exactly one Patroni primary without
+# loading or transferring PITR secrets.
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --probe-only
 
-# Then upload the temporary env file and run the remote preflight. This does not
-# write the production .env, upload a basebackup, or recreate the database.
-python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --env-file .env --phase preflight --no-prompt
+# Generate one cluster transaction ID and record it in the operator log. Reuse
+# this exact value after any interrupted migration; never start a second
+# transaction to work around an ambiguous result.
+export PITR_TRANSACTION_ID="$(openssl rand -hex 16)"
 
-# Finally validate credentials, write PITR env with archive mode still off,
-# upload a physical basebackup, and stage archive_mode=on for the next DB
-# recreate. This still does not recreate the database.
-python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --env-file .env --phase bootstrap-before-maintenance --no-prompt
+# First verify the local input shape without touching either node.
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
+  --env-file .env \
+  --phase migrate-cluster \
+  --transaction-id "${PITR_TRANSACTION_ID}" \
+  --dry-run \
+  --no-prompt
 
-# In a short maintenance window, recreate db so archive_mode=on and the
-# /postgres-wal-archive mount become active. The helper also resets historical
-# archiver counters, forces one WAL switch, and proves one WAL upload before
-# timers are enabled.
-ssh mvn-api 'CONFIRM_RECREATE_DB=true /usr/local/sbin/mvn-postgres-pitr-bootstrap activate-archive'
+# Run the complete two-node transaction. It attests and installs the exact
+# helper bundle standby-first, validates the private destination from both
+# nodes, and then provisions both hosts. Provisioning is the roll-forward
+# boundary because a lost remote response cannot prove that root-owned state was
+# untouched. The transaction then commits resumable root-only config, removes
+# legacy secret copies, stages the final archive env on both nodes, takes and
+# uploads a lineage-bound basebackup on the proved primary, and completes the
+# disposable physical restore drill before either release is finalized. Only
+# then does it finalize both bundles, enable timers on the proved primary, and
+# run the strict final verification.
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
+  --env-file .env \
+  --phase migrate-cluster \
+  --transaction-id "${PITR_TRANSACTION_ID}" \
+  --no-prompt
 
-# Then enable recurring PITR.
-ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap enable-timers'
+# A failure before the first provision attempt rolls the attempted asset bundles
+# back. From the first provision attempt onward the command deliberately enters
+# roll-forward, including an ambiguous timeout or lost SSH response: repair the
+# reported cause and rerun the same command with the same transaction ID. Do not
+# manually roll back files, config, archive state, or timers in that state.
+
+# PostgreSQL archive parameters are Patroni DCS configuration for an existing
+# cluster. The migration requires the reviewed archive settings to be active on
+# both nodes before it writes PITR config; it never mutates DCS or restarts
+# PostgreSQL. If that gate fails, stop and perform the separately reviewed
+# standby-first DCS update and rolling restart first.
+
+# Independent post-migration checks each get a fresh operation ID and still
+# prove the same two-node topology before and after the operation.
+VERIFY_OPERATION_ID="$(openssl rand -hex 16)"
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
+  --phase verify \
+  --transaction-id "${VERIFY_OPERATION_ID}" \
+  --no-prompt
+
+RESTORE_OPERATION_ID="$(openssl rand -hex 16)"
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
+  --phase restore-drill \
+  --transaction-id "${RESTORE_OPERATION_ID}" \
+  --no-prompt
 
 # Finally make the scheduled GitHub PITR check strict, but only after
-# `mvn-postgres-pitr-bootstrap verify` and one physical restore drill have both
-# passed with archived WAL present.
+# both pinned commands above pass with archived WAL present and the scheduled
+# workflows have been migrated to pinned host identities.
 gh variable set POSTGRES_PITR_REQUIRED --repo mvnby/air-api --body true
 ```
+
+The helper has no `--ssh-host`, `--project-dir`, `--compose-file`, remote env
+path, or remote helper override.
+The reviewed physical-node inventory maps `mvn-api` to `/opt/air-api` and
+`zakup` to `/opt/mvn-reserve`; both use the canonical
+`docker-compose.patroni.yml`. Update that inventory and its tracked host key in
+a reviewed change if a physical node is replaced. Never pass a raw address or
+fall back to `ssh-keyscan` for this secret-bearing operation.
+
+The two systemd services require `/etc/mvn-postgres-pitr.env`, start through a
+minimal `env -i` boundary, and call the reviewed scheduled runner. That runner
+holds the same hardened nonblocking host lock for the complete job. Exit `75`
+means an intentional collision skip and is accepted by systemd; WAL retries on
+the next minute, while a manual bootstrap already supplies the basebackup that
+can cause a daily backup collision. Every containerized Python operation binds
+the attested host helper read-only, runs Python in isolated mode, forces the
+already verified immutable `BACKEND_IMAGE`, and uses `--pull never`. Code from
+the backend image is therefore only the pinned dependency runtime, not the PITR
+control plane.
 
 Quick PITR status:
 
 ```bash
-ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml PITR_REQUIRED=true /usr/local/sbin/mvn-postgres-pitr-status'
-ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'
-ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml exec -T db sh -lc '\''psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -c "select archived_count,last_archived_wal,last_archived_time,failed_count,last_failed_wal,last_failed_time from pg_stat_archiver;"'\'''
-ssh mvn-api 'systemctl list-timers --all | grep mvn-postgres'
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --probe-only
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
+  --phase verify \
+  --transaction-id "$(openssl rand -hex 16)" \
+  --no-prompt
 ```
 
 Manual GitHub monitor run:
@@ -404,7 +463,10 @@ replication password.
 Physical PITR restore drill after the first private basebackup and WAL upload:
 
 ```bash
-ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml /usr/local/sbin/mvn-postgres-pitr-restore-drill'
+python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
+  --phase restore-drill \
+  --transaction-id "$(openssl rand -hex 16)" \
+  --no-prompt
 ```
 
 The drill:
@@ -418,15 +480,9 @@ The drill:
 - removes the temporary container and files by default;
 - never mounts or modifies the production or standby PostgreSQL volumes.
 
-Optional point-in-time target:
-
-```bash
-ssh mvn-api 'PROJECT_DIR=/opt/air-api COMPOSE_FILE=docker-compose.prod.yml TARGET_TIME=2026-07-02T18:30:00Z /usr/local/sbin/mvn-postgres-pitr-restore-drill'
-```
-
-With `TARGET_TIME`, the drill expects PostgreSQL recovery to pause at the target
-time. Use this for periodic manual PITR proof after the scheduled latest-backup
-drill is green.
+An optional point-in-time target remains available through the reviewed
+`postgres-pitr-restore-drill.yml` workflow input after that workflow's SSH trust
+path is pinned. Do not pass it through an ad-hoc root SSH command.
 
 Manual GitHub restore-drill run:
 
@@ -448,7 +504,7 @@ SSH_HOST_API=185.250.45.54
 API_PRIMARY_ORIGIN=185.250.45.54
 API_STANDBY_ORIGIN=193.47.42.213
 API_PROJECT_DIR=/opt/air-api
-API_COMPOSE_FILE=docker-compose.prod.yml
+API_COMPOSE_FILE=docker-compose.patroni.yml
 API_COMPOSE_SOURCE_FILE=deploy/ha/mvn-api/docker-compose.primary.yml
 API_COPY_COMPOSE=true
 API_DEPLOY_STRATEGY=blue_green
@@ -462,7 +518,7 @@ API_COMPOSE_SERVICE_CHECKS=app bot db
 API_BOT_EXPECT_ENABLED=true
 API_STANDBY_HOST=193.47.42.213
 API_STANDBY_PROJECT_DIR=/opt/mvn-reserve
-API_STANDBY_COMPOSE_FILE=docker-compose.reserve.yml
+API_STANDBY_COMPOSE_FILE=docker-compose.patroni.yml
 API_STANDBY_COPY_COMPOSE=true
 API_STANDBY_COMPOSE_SOURCE_FILE=deploy/ha/zakup/docker-compose.standby.yml
 API_STANDBY_HEALTH_URL=http://localhost:18000/api/health
@@ -724,7 +780,7 @@ The manual steps below are the same procedure expanded for review.
 1. Fence the old primary first if reachable:
 
    ```bash
-   ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.prod.yml stop app bot'
+   ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.patroni.yml stop app bot'
    ```
 
 2. Confirm standby is caught up:
@@ -812,7 +868,7 @@ SSH_HOST_API=193.47.42.213
 API_PRIMARY_ORIGIN=193.47.42.213
 API_STANDBY_ORIGIN=185.250.45.54
 API_PROJECT_DIR=/opt/mvn-reserve
-API_COMPOSE_FILE=docker-compose.reserve.yml
+API_COMPOSE_FILE=docker-compose.patroni.yml
 API_COMPOSE_SOURCE_FILE=deploy/ha/zakup/docker-compose.primary.yml
 API_COPY_COMPOSE=true
 API_DEPLOY_STRATEGY=in_place
@@ -826,7 +882,7 @@ API_COMPOSE_SERVICE_CHECKS=app bot db
 API_BOT_EXPECT_ENABLED=true
 API_STANDBY_HOST=185.250.45.54
 API_STANDBY_PROJECT_DIR=/opt/air-api
-API_STANDBY_COMPOSE_FILE=docker-compose.prod.yml
+API_STANDBY_COMPOSE_FILE=docker-compose.patroni.yml
 API_STANDBY_COPY_COMPOSE=true
 API_STANDBY_COMPOSE_SOURCE_FILE=deploy/ha/mvn-api/docker-compose.standby.yml
 API_STANDBY_HEALTH_URL=http://localhost:8000/api/health
@@ -861,29 +917,30 @@ Required steps:
 Backups are stored in Google Drive. Freshness alone is not enough; periodically
 prove that the latest DB dump restores.
 
-Run on the current primary:
-
-```bash
-ssh mvn-api /usr/local/sbin/mvn-restore-drill-latest-db
-```
-
-The drill downloads the latest DB backup through the app container, starts a
-disposable PostgreSQL container on the same Docker network, restores the dump
-there, requires at least 64 public tables plus non-empty product/order data, and
-then removes the disposable container together with its dedicated Postgres data
-volume. Both disposable objects are labeled
-`com.mvn.purpose=api-restore-drill` and `com.mvn.run_id=<run>`; cleanup removes
-only objects whose exact names and run labels both match, while a hard-kill
-residue remains safely inventoryable by label. Every run also uses its own
-`/tmp/mvn-restore-drill/<run-id>` directory and removes only its three known
-files. The GitHub workflow serializes runs with the `api-restore-drill`
-concurrency group. It does not touch the production or standby database.
-
-GitHub also runs this daily:
+Run through the scheduled/manual GitHub workflow. It creates an owner-only
+temporary SSH context from `SSH_KEY`, trusts only the tracked Ed25519 keys for
+the reviewed `mvn-api` and `zakup` aliases, proves the two-node Patroni
+topology before and after the drill, and invokes the installed guarded runner
+on the proven primary:
 
 ```bash
 gh workflow run api-restore-drill.yml --repo mvnby/air-api --ref main
 ```
+
+The drill streams the latest DB backup through the app container into a counted
+owner-only file, starts a network-isolated, capability-dropped PostgreSQL
+container with a hard-bounded tmpfs data directory, restores the dump there
+with a generated drill-only password, requires at least 64 public tables plus
+non-empty product/order data, and then removes the disposable container. The
+download must be newer than 36 hours, match its remote size and MD5 checksum,
+and remain below both the compressed, decompressed, and free-space bounds. The
+container carries the exact `com.mvn.pitr.operation=<32-lowercase-hex>` label.
+State lives only under the
+root-owned `/var/lib/mvn-postgres-pitr/logical-restore-drills/<operation-id>`
+directory. Normal cleanup and the operation guard remove only objects and
+files bound to that ID; unknown artifacts fail closed. The workflow serializes
+runs with the `api-restore-drill` concurrency group and never copies checkout
+scripts to production. It does not touch the live primary or standby database.
 
 ## Hard Rules
 

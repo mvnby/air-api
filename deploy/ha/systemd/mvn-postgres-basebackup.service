@@ -2,10 +2,15 @@
 Description=MVN PostgreSQL PITR physical basebackup upload
 Wants=network-online.target docker.service
 After=network-online.target docker.service
+StartLimitIntervalSec=30min
+StartLimitBurst=4
 
 [Service]
 Type=oneshot
-Environment=PROJECT_DIR=/opt/air-api
-Environment=COMPOSE_FILE=docker-compose.prod.yml
-EnvironmentFile=-/etc/mvn-postgres-pitr.env
-ExecStart=/usr/local/sbin/mvn-postgres-pitr-basebackup
+EnvironmentFile=/etc/mvn-postgres-pitr.env
+TimeoutStartSec=2h
+TimeoutStopSec=2min
+KillMode=control-group
+Restart=on-failure
+RestartSec=5min
+ExecStart=/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C LC_ALL=C /usr/bin/python3 -I /usr/local/sbin/mvn-postgres-pitr-scheduled-runner --phase basebackup --project-dir ${PROJECT_DIR} --compose-file ${COMPOSE_FILE}

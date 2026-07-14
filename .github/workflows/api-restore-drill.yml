@@ -15,122 +15,53 @@ env:
 jobs:
   restore-drill:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     permissions:
       contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup API SSH Key
-        env:
-          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
-          SSH_USER_API: ${{ secrets.SSH_USER_API }}
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+      - name: Require Reviewed Main Ref
         run: |
           set -euo pipefail
-          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
-            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
-            exit 1
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Secret-bearing restore workflows run only from refs/heads/main"
+            exit 64
           fi
 
-          mkdir -p ~/.ssh
-          printf '%s\n' "${SSH_KEY}" > ~/.ssh/api_restore_drill_key
-          chmod 600 ~/.ssh/api_restore_drill_key
-          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
-          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
-      - name: Run restore drill on current API primary
+      - name: Run logical restore drill on the proven Patroni primary
         env:
-          API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
-          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
-          SSH_USER_API: ${{ secrets.SSH_USER_API }}
-          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
-          API_STANDBY_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
-          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
-          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
-          API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
           set -euo pipefail
-          SSH_OPTIONS=(
-            -i ~/.ssh/api_restore_drill_key
-            -o BatchMode=yes
-            -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20
-            -o ServerAliveInterval=15
-            -o ServerAliveCountMax=3
-          )
-          export SSH_OPTS="${SSH_OPTIONS[*]}"
-          target_host="${SSH_HOST_API}"
-          target_user="${SSH_USER_API}"
-          target_project_dir="${API_PROJECT_DIR}"
-          target_compose_file="${API_COMPOSE_FILE}"
-          target_label=api
-
-          case "${API_DB_HA_MODE}" in
-            patroni)
-              export API_NODE_SSH="${SSH_USER_API}@${SSH_HOST_API}"
-              export RESERVE_NODE_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
-              primary_label="$(python3 scripts/ha/check_patroni_production.py --resolve-primary)"
-              case "${primary_label}" in
-                api)
-                  target_project_dir="${API_PROJECT_DIR}"
-                  ;;
-                reserve)
-                  target_host="${API_STANDBY_HOST}"
-                  target_user="${API_STANDBY_USER}"
-                  target_project_dir="${API_STANDBY_PROJECT_DIR}"
-                  target_label=reserve
-                  ;;
-                *)
-                  echo "::error::Unexpected Patroni primary label: ${primary_label:-empty}"
-                  exit 1
-                  ;;
-              esac
-              target_compose_file=docker-compose.patroni.yml
-              ;;
-            physical) ;;
-            *)
-              echo "::error::API_DB_HA_MODE must be physical or patroni"
-              exit 1
-              ;;
-          esac
-
-          quote() {
-            printf '%q' "$1"
-          }
-          remote_target="${target_user}@${target_host}"
-          remote_script="/tmp/mvn-api-restore-drill-${GITHUB_RUN_ID}.sh"
-          remote_cleanup_script="/tmp/mvn-api-restore-drill-cleanup-${GITHUB_RUN_ID}.sh"
-          echo "[restore-drill][info] selected_node=${target_label} ha_mode=${API_DB_HA_MODE}" | tee api-restore-drill.log
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "cat > $(quote "${remote_script}") && chmod +x $(quote "${remote_script}")" \
-            < scripts/ha/restore_drill_latest_db.sh
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "cat > $(quote "${remote_cleanup_script}") && chmod +x $(quote "${remote_cleanup_script}")" \
-            < scripts/ha/cleanup_restore_drill_runtime.sh
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "\
-            PROJECT_DIR=$(quote "${target_project_dir}") \
-            COMPOSE_FILE=$(quote "${target_compose_file}") \
-            RESTORE_DRILL_CLEANUP_SCRIPT=$(quote "${remote_cleanup_script}") \
-            bash $(quote "${remote_script}"); \
-            status=\$?; \
-            rm -f $(quote "${remote_script}") $(quote "${remote_cleanup_script}"); \
-            exit \${status}" | tee -a api-restore-drill.log
+          umask 077
+          if [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing required SSH_KEY secret"
+            exit 1
+          fi
+          ssh_identity="${SSH_KEY}"
+          unset SSH_KEY
+          trap 'ssh_identity=' EXIT
+          printf '%s\n' "${ssh_identity}" \
+            | python3 -I scripts/ha/run_postgres_pitr_workflow.py \
+                --phase logical-restore-drill 2>&1 \
+            | tee api-restore-drill.log
 
       - name: Upload restore drill log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: api-restore-drill-log-${{ github.run_id }}
           path: api-restore-drill.log
           if-no-files-found: warn
 
       - name: Notify HA failure
-        if: failure()
+        if: failure() && github.ref == 'refs/heads/main'
         uses: ./.github/actions/notify-ha-failure
         with:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}

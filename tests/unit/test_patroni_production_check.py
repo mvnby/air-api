@@ -343,10 +343,10 @@ def test_pitr_workflow_resolves_the_current_patroni_primary():
         if step.get("name") == "Run PostgreSQL PITR Check"
     )
 
-    assert "check_patroni_production.py --resolve-primary" in run
-    assert "target_label=reserve" in run
-    assert "target_compose_file=docker-compose.patroni.yml" in run
-    assert "API_DB_HA_MODE must be physical or patroni" in run
+    assert "run_postgres_pitr_workflow.py --phase verify" in run
+    assert "check_patroni_production.py" not in run
+    assert "ssh-keyscan" not in run
+    assert "API_DB_HA_MODE" not in run
 
 
 def test_api_vps_health_workflow_targets_current_patroni_primary():

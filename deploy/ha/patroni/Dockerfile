@@ -13,9 +13,13 @@ RUN apk add --no-cache \
     && patroni --version
 
 COPY deploy/ha/patroni/render_patroni_config.py /usr/local/bin/render-patroni-config
+COPY deploy/ha/patroni/archive_wal.py /usr/local/bin/mvn-patroni-archive-wal
 COPY deploy/ha/patroni/patroni-entrypoint.sh /usr/local/bin/patroni-entrypoint
 
-RUN chmod 0755 /usr/local/bin/render-patroni-config /usr/local/bin/patroni-entrypoint \
+RUN chmod 0755 \
+      /usr/local/bin/render-patroni-config \
+      /usr/local/bin/mvn-patroni-archive-wal \
+      /usr/local/bin/patroni-entrypoint \
     && mkdir -p /etc/patroni /var/run/postgresql \
     && chown postgres:postgres /etc/patroni /var/run/postgresql
 

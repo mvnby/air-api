@@ -6,29 +6,29 @@ on:
   workflow_dispatch:
     inputs:
       required:
-        description: "Run the drill even if POSTGRES_PITR_REQUIRED is not enabled"
+        description: "Run the strict physical PITR restore drill"
         type: boolean
         required: false
-        default: false
+        default: true
       backup_id:
-        description: "Optional PITR basebackup id to restore"
+        description: "Optional canonical PITR basebackup id"
         type: string
         required: false
         default: ""
       target_time:
-        description: "Optional UTC point-in-time target, for example 2026-07-02T18:30:00Z"
+        description: "Optional canonical UTC target (YYYY-MM-DDTHH:MM:SSZ)"
         type: string
         required: false
         default: ""
       require_wal:
-        description: "Fail if no archived WAL files are downloaded"
+        description: "Require a complete archived WAL chain (must stay enabled)"
         type: boolean
         required: false
         default: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-  PITR_RESTORE_DRILL_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && inputs.required || vars.POSTGRES_PITR_REQUIRED || 'false' }}
+  PITR_RESTORE_DRILL_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.required) || vars.POSTGRES_PITR_REQUIRED || 'false' }}
   PITR_RESTORE_BACKUP_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.backup_id || '' }}
   PITR_RESTORE_TARGET_TIME: ${{ github.event_name == 'workflow_dispatch' && inputs.target_time || '' }}
   PITR_RESTORE_REQUIRE_WAL: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.require_wal) || 'true' }}
@@ -36,156 +36,97 @@ env:
 jobs:
   pitr-restore-drill:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 150
     permissions:
       contents: read
 
     steps:
+      - name: Require Reviewed Main Ref
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Secret-bearing PITR workflows run only from refs/heads/main"
+            exit 64
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Decide Whether To Run
         id: gate
         run: |
           set -euo pipefail
           case "${PITR_RESTORE_DRILL_REQUIRED}" in
-            true|TRUE|True|1|yes|YES|Yes|on|ON|On)
-              echo "run=true" >> "$GITHUB_OUTPUT"
+            true)
+              if [ "${PITR_RESTORE_REQUIRE_WAL}" != "true" ]; then
+                echo "::error::Strict PITR restore drills cannot disable the WAL-chain proof"
+                exit 64
+              fi
+              echo "run=true" >> "${GITHUB_OUTPUT}"
+              ;;
+            false)
+              echo "run=false" >> "${GITHUB_OUTPUT}"
+              printf '%s\n' "PITR restore drill skipped because POSTGRES_PITR_REQUIRED is false." \
+                | tee postgres-pitr-restore-drill.log
               ;;
             *)
-              echo "run=false" >> "$GITHUB_OUTPUT"
-              echo "PITR restore drill skipped because POSTGRES_PITR_REQUIRED is not true."
-              printf '%s\n' "PITR restore drill skipped because POSTGRES_PITR_REQUIRED is not true." > postgres-pitr-restore-drill.log
+              echo "::error::POSTGRES_PITR_REQUIRED must be exactly true or false"
+              exit 64
               ;;
           esac
-
-      - name: Checkout
-        if: steps.gate.outputs.run == 'true'
-        uses: actions/checkout@v6
-
-      - name: Setup API SSH Key
-        if: steps.gate.outputs.run == 'true'
-        env:
-          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
-          SSH_USER_API: ${{ secrets.SSH_USER_API }}
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
-            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
-            exit 1
-          fi
-
-          mkdir -p ~/.ssh
-          printf '%s\n' "${SSH_KEY}" > ~/.ssh/postgres_pitr_restore_drill_key
-          chmod 600 ~/.ssh/postgres_pitr_restore_drill_key
-          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
-          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
 
       - name: Run PostgreSQL PITR Restore Drill
         if: steps.gate.outputs.run == 'true'
         env:
-          API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
-          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
-          SSH_USER_API: ${{ secrets.SSH_USER_API }}
-          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
-          API_STANDBY_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
-          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
-          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
-          API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
           set -euo pipefail
-          SSH_OPTIONS=(
-            -i ~/.ssh/postgres_pitr_restore_drill_key
-            -o BatchMode=yes
-            -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20
-            -o ServerAliveInterval=15
-            -o ServerAliveCountMax=3
-          )
-          export SSH_OPTS="${SSH_OPTIONS[*]}"
-          target_host="${SSH_HOST_API}"
-          target_user="${SSH_USER_API}"
-          target_project_dir="${API_PROJECT_DIR}"
-          target_compose_file="${API_COMPOSE_FILE}"
-          target_label=api
-
-          case "${API_DB_HA_MODE}" in
-            patroni)
-              export API_NODE_SSH="${SSH_USER_API}@${SSH_HOST_API}"
-              export RESERVE_NODE_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
-              primary_label="$(python3 scripts/ha/check_patroni_production.py --resolve-primary)"
-              case "${primary_label}" in
-                api)
-                  target_project_dir="${API_PROJECT_DIR}"
-                  ;;
-                reserve)
-                  target_host="${API_STANDBY_HOST}"
-                  target_user="${API_STANDBY_USER}"
-                  target_project_dir="${API_STANDBY_PROJECT_DIR}"
-                  target_label=reserve
-                  ;;
-                *)
-                  echo "::error::Unexpected Patroni primary label: ${primary_label:-empty}"
-                  exit 1
-                  ;;
-              esac
-              target_compose_file=docker-compose.patroni.yml
-              ;;
-            physical) ;;
-            *)
-              echo "::error::API_DB_HA_MODE must be physical or patroni"
-              exit 1
-              ;;
-          esac
-
-          remote_script="/tmp/mvn-postgres-pitr-restore-drill-${GITHUB_RUN_ID}.sh"
-          quote() {
-            printf '%q' "$1"
-          }
-          remote_target="${target_user}@${target_host}"
-          echo "[pitr-restore-drill][info] selected_node=${target_label} ha_mode=${API_DB_HA_MODE}" | tee postgres-pitr-restore-drill.log
-
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "cat > $(quote "${remote_script}") && chmod +x $(quote "${remote_script}")" \
-            < scripts/ha/restore_postgres_pitr_drill.sh
-
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "\
-            PROJECT_DIR=$(quote "${target_project_dir}") \
-            COMPOSE_FILE=$(quote "${target_compose_file}") \
-            BACKUP_ID=$(quote "${PITR_RESTORE_BACKUP_ID}") \
-            TARGET_TIME=$(quote "${PITR_RESTORE_TARGET_TIME}") \
-            REQUIRE_WAL=$(quote "${PITR_RESTORE_REQUIRE_WAL}") \
-            bash $(quote "${remote_script}"); \
-            status=\$?; \
-            rm -f $(quote "${remote_script}"); \
-            exit \${status}" | tee -a postgres-pitr-restore-drill.log
+          umask 077
+          if [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing required SSH_KEY secret"
+            exit 1
+          fi
+          ssh_identity="${SSH_KEY}"
+          unset SSH_KEY
+          trap 'ssh_identity=' EXIT
+          args=(--phase restore-drill)
+          if [ -n "${PITR_RESTORE_BACKUP_ID}" ]; then
+            args+=(--backup-id "${PITR_RESTORE_BACKUP_ID}")
+          fi
+          if [ -n "${PITR_RESTORE_TARGET_TIME}" ]; then
+            args+=(--target-time "${PITR_RESTORE_TARGET_TIME}")
+          fi
+          printf '%s\n' "${ssh_identity}" \
+            | python3 -I scripts/ha/run_postgres_pitr_workflow.py "${args[@]}" 2>&1 \
+            | tee postgres-pitr-restore-drill.log
 
       - name: Write Summary
         if: always()
         run: |
           {
             echo "## PostgreSQL PITR Restore Drill"
-            echo "- ha_mode: ${{ vars.API_DB_HA_MODE || 'physical' }}"
-            echo "- required: ${PITR_RESTORE_DRILL_REQUIRED}"
+            echo "- strict_required: ${PITR_RESTORE_DRILL_REQUIRED}"
             echo "- ran: ${{ steps.gate.outputs.run || 'false' }}"
-            echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
-            echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
-            echo "- backup_id: ${PITR_RESTORE_BACKUP_ID:-latest}"
-            echo "- target_time: ${PITR_RESTORE_TARGET_TIME:-latest}"
-            echo "- require_wal: ${PITR_RESTORE_REQUIRE_WAL}"
+            echo "- topology: pinned mvn-api + zakup Patroni cluster"
+            echo "- backup_selector: ${{ env.PITR_RESTORE_BACKUP_ID != '' && 'explicit canonical id' || 'latest valid backup' }}"
+            echo "- recovery_target: ${{ env.PITR_RESTORE_TARGET_TIME != '' && 'explicit canonical UTC' || 'server-generated restore point' }}"
+            echo "- require_wal: true"
             echo "- log_artifact: postgres-pitr-restore-drill-log-${{ github.run_id }}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload PITR Restore Drill Log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: postgres-pitr-restore-drill-log-${{ github.run_id }}
           path: postgres-pitr-restore-drill.log
           if-no-files-found: warn
 
       - name: Notify HA failure
-        if: failure()
+        if: failure() && github.ref == 'refs/heads/main'
         uses: ./.github/actions/notify-ha-failure
         with:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}

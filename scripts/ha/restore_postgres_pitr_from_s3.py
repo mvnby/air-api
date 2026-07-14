@@ -1,38 +1,34 @@
 #!/usr/bin/env python3
 """Prepare an isolated PostgreSQL PITR restore from private S3/R2 artifacts.
 
-This helper never touches the production data directory. It downloads a chosen
-physical basebackup into an operator-supplied empty target directory, extracts it
-under `data/`, and writes recovery settings that fetch archived WAL from the
-private PITR bucket.
+The restore path treats every remote object as untrusted.  A restore is prepared
+only from the exact outer manifest schema, the expected PostgreSQL system
+identifier, a matching PostgreSQL ``backup_manifest`` lineage, and one complete
+timeline-history-proven WAL chain ending at an operator-supplied WAL segment.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.machinery
 import importlib.util
-import io
 import json
 import os
-import re
-import shlex
 import shutil
 import sys
-import tarfile
-import tempfile
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-WAL_NAME_RE = re.compile(
-    r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
-)
 DEFAULT_WAL_SEGMENT_SIZE_BYTES = 16 * 1024 * 1024
 DEFAULT_MIN_FREE_BYTES = 1024 * 1024 * 1024
+MAX_BASEBACKUP_MANIFEST_BYTES = 1024 * 1024
+MAX_LISTED_MANIFESTS = 4096
+MAX_LISTED_WAL_OBJECTS = 262144
+MAX_RESTORE_TAR_MEMBERS = 250000
 
 
 def _load_python_module_from_path(module_name: str, path: Path) -> Any | None:
@@ -49,167 +45,298 @@ def _load_python_module_from_path(module_name: str, path: Path) -> Any | None:
     return module
 
 
-def _load_upload_helpers() -> tuple[Any, Any, Any]:
-    try:
-        from scripts.ha.upload_postgres_pitr_to_s3 import (
-            build_client,
-            load_config,
-            sha256_file,
+def _load_upload_helpers() -> tuple[Any, Any]:
+    explicit = os.getenv("POSTGRES_PITR_UPLOAD_HELPER", "").strip()
+    if explicit:
+        helper_path = Path(explicit)
+        if not helper_path.is_absolute() or not helper_path.is_file():
+            raise SystemExit("Explicit PostgreSQL PITR upload helper is invalid")
+        module = _load_python_module_from_path(
+            "mvn_postgres_pitr_upload_helper",
+            helper_path,
         )
+        if module is None:
+            raise SystemExit("Explicit PostgreSQL PITR upload helper could not be loaded")
+        return module.build_client, module.load_config
 
-        return build_client, load_config, sha256_file
+    try:
+        from scripts.ha.upload_postgres_pitr_to_s3 import build_client, load_config
+
+        return build_client, load_config
     except ModuleNotFoundError:
         pass
 
-    candidates = [
-        os.getenv("POSTGRES_PITR_UPLOAD_HELPER", ""),
-        str(Path(__file__).with_name("upload_postgres_pitr_to_s3.py")),
-        "/opt/air-api/scripts/ha/upload_postgres_pitr_to_s3.py",
-        "/usr/local/sbin/mvn-postgres-pitr-upload",
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        helper_path = Path(candidate)
-        if not helper_path.is_file():
-            continue
-        module_name = "mvn_postgres_pitr_upload_helper"
-        module = _load_python_module_from_path(module_name, helper_path)
-        if module is None:
-            continue
-        return module.build_client, module.load_config, module.sha256_file
-
     raise SystemExit(
         "Could not load PostgreSQL PITR upload helper. "
-        "Run from the repo root, set POSTGRES_PITR_UPLOAD_HELPER, or install /usr/local/sbin/mvn-postgres-pitr-upload."
+        "Run from the repo root or set POSTGRES_PITR_UPLOAD_HELPER."
     )
 
 
-build_client, load_config, sha256_file = _load_upload_helpers()
+def _load_support_module(
+    *, env_name: str, module_name: str, repository_name: str, label: str
+) -> Any:
+    explicit = os.getenv(env_name, "").strip()
+    if explicit:
+        helper_path = Path(explicit)
+        if not helper_path.is_absolute() or not helper_path.is_file():
+            raise SystemExit(f"Explicit PITR {label} helper is invalid")
+        module = _load_python_module_from_path(module_name, helper_path)
+        if module is None:
+            raise SystemExit(f"Explicit PITR {label} helper could not be loaded")
+        return module
+    try:
+        return importlib.import_module(f"scripts.ha.{repository_name}")
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            f"Could not load PITR {label} helper. Run from the repo root or set "
+            f"{env_name}."
+        ) from exc
 
 
-@dataclass(frozen=True)
-class BasebackupManifest:
-    backup_id: str
-    created_at: datetime
-    key: str
-    payload: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class WalObject:
-    key: str
-    filename: str
-    size_bytes: int
-
-
-def _read_s3_body(body: Any) -> bytes:
-    data = body.read()
-    if isinstance(data, str):
-        return data.encode("utf-8")
-    return bytes(data)
-
-
-def _parse_datetime(value: str) -> datetime:
-    raw = str(value or "").strip()
-    if not raw:
-        raise ValueError("empty datetime")
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    parsed = datetime.fromisoformat(raw)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+build_client, load_config = _load_upload_helpers()
+artifact_security = _load_support_module(
+    env_name="POSTGRES_PITR_ARTIFACT_SECURITY_HELPER",
+    module_name="mvn_postgres_pitr_artifact_security",
+    repository_name="postgres_pitr_artifact_security",
+    label="artifact security",
+)
+wal_lineage = _load_support_module(
+    env_name="POSTGRES_PITR_WAL_LINEAGE_HELPER",
+    module_name="mvn_postgres_pitr_wal_lineage",
+    repository_name="postgres_pitr_wal_lineage",
+    label="WAL lineage",
+)
+recovery_config = _load_support_module(
+    env_name="POSTGRES_PITR_RECOVERY_CONFIG_HELPER",
+    module_name="mvn_postgres_pitr_recovery_config",
+    repository_name="postgres_pitr_recovery_config",
+    label="recovery config",
+)
+BasebackupManifest = artifact_security.BasebackupManifest
+WalObject = wal_lineage.WalObject
+WalSelection = wal_lineage.WalSelection
+WAL_NAME_RE = wal_lineage.WAL_NAME_RE
+WAL_SEGMENT_RE = wal_lineage.WAL_SEGMENT_RE
+RESTORE_POINT_RE = artifact_security.RESTORE_POINT_RE
+SHA256_RE = artifact_security.SHA256_RE
+OUTER_MANIFEST_KEYS = artifact_security.OUTER_MANIFEST_KEYS
+OUTER_FILE_KEYS = artifact_security.OUTER_FILE_KEYS
+_parse_canonical_utc = artifact_security.parse_canonical_utc
+_parse_canonical_lsn = artifact_security.parse_canonical_lsn
+_validate_system_identifier = artifact_security.validate_system_identifier
+_validate_postgres_manifest_lineage = (
+    artifact_security.validate_postgres_manifest_lineage
+)
+_wal_segment_name = wal_lineage.wal_segment_name
+_wal_segment_position = wal_lineage.wal_segment_position
+_select_wal_objects = wal_lineage.select_wal_objects
 
 
 def _manifest_prefix(config: Any) -> str:
     return f"{config.key_prefix}/{config.cluster}/basebackups/"
 
 
+def _wal_prefix(config: Any) -> str:
+    return f"{config.key_prefix}/{config.cluster}/wal/"
+
+
 def _wal_key(config: Any, wal_name: str) -> str:
-    timeline = wal_name[:8]
-    return f"{config.key_prefix}/{config.cluster}/wal/{timeline}/{wal_name}"
+    return f"{_wal_prefix(config)}{wal_name[:8]}/{wal_name}"
 
 
 def _list_manifest_keys(client: Any, bucket: str, prefix: str) -> list[str]:
     paginator = client.get_paginator("list_objects_v2")
     keys: list[str] = []
+    seen_keys: set[str] = set()
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for item in page.get("Contents", []):
             key = str(item.get("Key") or "")
             if key.endswith("/manifest.json"):
+                if key in seen_keys:
+                    raise SystemExit(f"Duplicate PITR basebackup manifest key: {key}")
+                seen_keys.add(key)
                 keys.append(key)
+                if len(keys) > MAX_LISTED_MANIFESTS:
+                    raise SystemExit("Too many PITR basebackup manifests")
     return sorted(keys)
 
 
 def _list_wal_objects(client: Any, config: Any) -> list[WalObject]:
-    prefix = f"{config.key_prefix}/{config.cluster}/wal/"
-    paginator = client.get_paginator("list_objects_v2")
-    objects: list[WalObject] = []
-    for page in paginator.paginate(Bucket=config.bucket, Prefix=prefix):
-        for item in page.get("Contents", []):
-            key = str(item.get("Key") or "")
-            filename = key.rsplit("/", 1)[-1]
-            if key.endswith("/") or not WAL_NAME_RE.match(filename):
-                continue
-            objects.append(
-                WalObject(
-                    key=key,
-                    filename=filename,
-                    size_bytes=int(item.get("Size") or 0),
-                )
-            )
-    return sorted(objects, key=lambda item: item.filename)
+    return wal_lineage.list_wal_objects(
+        client,
+        bucket=config.bucket,
+        prefix=_wal_prefix(config),
+        max_objects=MAX_LISTED_WAL_OBJECTS,
+    )
 
 
-def _parse_lsn(value: str) -> int:
+def _read_verified_history(client: Any, config: Any, item: WalObject) -> bytes:
+    digest = artifact_security.object_sha256(
+        client,
+        bucket=config.bucket,
+        key=item.key,
+        expected_size=item.size_bytes,
+    )
+    return artifact_security.read_verified_object(
+        client,
+        bucket=config.bucket,
+        key=item.key,
+        expected_size=item.size_bytes,
+        expected_sha256=digest,
+        maximum_size=wal_lineage.MAX_TIMELINE_HISTORY_BYTES,
+        label=f"PostgreSQL timeline history {item.filename}",
+    )
+
+
+def _validate_outer_manifest(
+    *,
+    payload: dict[str, Any],
+    manifest_key: str,
+    config: Any,
+    expected_system_identifier: str | None,
+) -> BasebackupManifest:
+    return artifact_security.validate_outer_manifest(
+        payload=payload,
+        manifest_key=manifest_key,
+        key_prefix=config.key_prefix,
+        cluster=config.cluster,
+        expected_system_identifier=expected_system_identifier,
+    )
+
+
+def _load_manifest(
+    client: Any,
+    config: Any,
+    key: str,
+    *,
+    expected_system_identifier: str | None,
+) -> BasebackupManifest | None:
+    head = client.head_object(Bucket=config.bucket, Key=key)
     try:
-        high, low = value.split("/", 1)
-        return (int(high, 16) << 32) + int(low, 16)
-    except (AttributeError, TypeError, ValueError) as exc:
-        raise SystemExit(f"Invalid WAL LSN in backup_manifest: {value!r}") from exc
-
-
-def _wal_segment_name(*, timeline: int, lsn: str, segment_size_bytes: int) -> str:
-    if (
-        segment_size_bytes <= 0
-        or segment_size_bytes > 0x100000000
-        or 0x100000000 % segment_size_bytes != 0
-    ):
-        raise SystemExit(
-            "WAL segment size must be a positive divisor of 2^32 bytes; "
-            f"got {segment_size_bytes}"
+        expected_size = int(head["ContentLength"])
+        metadata = head.get("Metadata") or {}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SystemExit(f"Basebackup manifest metadata is incomplete: {key}") from exc
+    if not isinstance(metadata, dict) or expected_size <= 0:
+        raise SystemExit(f"Basebackup manifest metadata is incomplete: {key}")
+    digest_value = metadata.get("sha256")
+    expected_sha256 = digest_value if isinstance(digest_value, str) else ""
+    if digest_value is not None and digest_value != "" and not SHA256_RE.fullmatch(expected_sha256):
+        raise SystemExit(f"Basebackup manifest digest metadata is invalid: {key}")
+    reader = (
+        artifact_security.read_verified_object
+        if expected_sha256
+        else artifact_security.read_bounded_object_without_digest
+    )
+    reader_args = dict(
+        bucket=config.bucket,
+        key=key,
+        expected_size=expected_size,
+        maximum_size=MAX_BASEBACKUP_MANIFEST_BYTES,
+        label="Basebackup manifest",
+    )
+    if expected_sha256:
+        reader_args["expected_sha256"] = expected_sha256
+    raw_payload = reader(client, **reader_args)
+    try:
+        payload = json.loads(raw_payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"Basebackup manifest is invalid JSON: {key}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"Basebackup manifest is not a JSON object: {key}")
+    # Manifests written before the lineage-bound v1 contract had no explicit
+    # schema version and cannot be restored safely.  They are still common in
+    # an upgraded bucket, so consume them only through the same bounded,
+    # digest-verified read above and omit them from selection.  Anything that
+    # claims a schema version is authoritative input: unsupported or malformed
+    # claimed-v1 payloads must fail the whole inventory instead of being
+    # silently downgraded to legacy data.
+    if "schema_version" not in payload:
+        artifact_security.validate_legacy_v0_manifest(
+            payload=payload,
+            manifest_key=key,
+            key_prefix=config.key_prefix,
+            cluster=config.cluster,
         )
-    if timeline <= 0:
-        raise SystemExit(f"Invalid WAL timeline in backup_manifest: {timeline}")
+        return None
+    if not expected_sha256:
+        raise SystemExit(f"Versioned basebackup manifest has no digest metadata: {key}")
+    return _validate_outer_manifest(
+        payload=payload,
+        manifest_key=key,
+        config=config,
+        expected_system_identifier=expected_system_identifier,
+    )
 
-    segments_per_log = 0x100000000 // segment_size_bytes
-    segment_number = _parse_lsn(lsn) // segment_size_bytes
-    log = segment_number // segments_per_log
-    segment = segment_number % segments_per_log
-    return f"{timeline:08X}{log:08X}{segment:08X}"
+
+def list_manifests(
+    client: Any,
+    config: Any,
+    *,
+    expected_system_identifier: str | None = None,
+) -> list[BasebackupManifest]:
+    keys = _list_manifest_keys(client, config.bucket, _manifest_prefix(config))
+    loaded = [
+        _load_manifest(
+            client,
+            config,
+            key,
+            expected_system_identifier=expected_system_identifier,
+        )
+        for key in keys
+    ]
+    manifests = [manifest for manifest in loaded if manifest is not None]
+    return sorted(manifests, key=lambda item: item.completed_at)
 
 
-def _backup_manifest_entry(manifest: BasebackupManifest) -> dict[str, Any]:
-    for item in manifest.payload.get("files") or []:
-        if isinstance(item, dict) and item.get("name") == "backup_manifest":
-            if item.get("key"):
-                return item
-            break
+def select_manifest(
+    manifests: list[BasebackupManifest],
+    *,
+    backup_id: str = "",
+    target_time: datetime | None,
+) -> BasebackupManifest:
+    eligible = manifests if target_time is None else [
+        manifest for manifest in manifests if manifest.completed_at <= target_time
+    ]
+    if backup_id:
+        for manifest in eligible:
+            if manifest.backup_id == backup_id:
+                return manifest
+        raise SystemExit(f"Eligible basebackup not found: {backup_id}")
+    if not eligible:
+        suffix = f" before target time {target_time.isoformat()}" if target_time else ""
+        raise SystemExit(f"No eligible basebackup{suffix}")
+    return eligible[-1]
+
+
+def _backup_manifest_entry(manifest: BasebackupManifest) -> Any:
+    for item in manifest.files:
+        if item.name == "backup_manifest":
+            return item
     raise SystemExit(
         f"Basebackup {manifest.backup_id} has no backup_manifest file; "
-        "cannot select a safe WAL range"
+        "cannot prove its WAL lineage"
     )
 
 
 def _load_postgres_backup_manifest(
-    client: Any, bucket: str, manifest: BasebackupManifest
+    client: Any,
+    config: Any,
+    manifest: BasebackupManifest,
 ) -> dict[str, Any]:
     entry = _backup_manifest_entry(manifest)
-    response = client.get_object(Bucket=bucket, Key=str(entry["key"]))
+    raw_payload = artifact_security.read_verified_object(
+        client,
+        bucket=config.bucket,
+        key=entry.key,
+        expected_size=entry.size_bytes,
+        expected_sha256=entry.sha256,
+        maximum_size=artifact_security.MAX_POSTGRES_MANIFEST_BYTES,
+        label="PostgreSQL backup_manifest",
+    )
     try:
-        payload = json.loads(_read_s3_body(response["Body"]).decode("utf-8"))
-    except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        payload = json.loads(raw_payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SystemExit(
             f"Invalid PostgreSQL backup_manifest for {manifest.backup_id}"
         ) from exc
@@ -218,241 +345,6 @@ def _load_postgres_backup_manifest(
             f"Invalid PostgreSQL backup_manifest for {manifest.backup_id}"
         )
     return payload
-
-
-def _backup_start_wal_name(
-    postgres_manifest: dict[str, Any], *, segment_size_bytes: int
-) -> str:
-    raw_ranges = postgres_manifest.get("WAL-Ranges")
-    if not isinstance(raw_ranges, list) or not raw_ranges:
-        raise SystemExit("PostgreSQL backup_manifest has no WAL-Ranges")
-
-    starts: list[tuple[int, int, str]] = []
-    for item in raw_ranges:
-        if not isinstance(item, dict):
-            raise SystemExit("PostgreSQL backup_manifest has an invalid WAL-Ranges entry")
-        try:
-            timeline = int(item.get("Timeline"))
-        except (TypeError, ValueError) as exc:
-            raise SystemExit(
-                f"Invalid WAL timeline in backup_manifest: {item.get('Timeline')!r}"
-            ) from exc
-        start_lsn = str(item.get("Start-LSN") or "")
-        starts.append((timeline, _parse_lsn(start_lsn), start_lsn))
-
-    timeline, _numeric_lsn, start_lsn = min(starts)
-    return _wal_segment_name(
-        timeline=timeline,
-        lsn=start_lsn,
-        segment_size_bytes=segment_size_bytes,
-    )
-
-
-def _wal_position(filename: str) -> tuple[int, int, int] | None:
-    if filename.endswith(".history"):
-        return None
-    base = filename[:24]
-    if len(base) != 24:
-        return None
-    try:
-        return int(base[:8], 16), int(base[8:16], 16), int(base[16:24], 16)
-    except ValueError:
-        return None
-
-
-def _select_wal_objects(
-    objects: list[WalObject], *, start_wal_name: str
-) -> list[WalObject]:
-    start_position = _wal_position(start_wal_name)
-    if start_position is None:
-        raise SystemExit(f"Invalid start WAL filename: {start_wal_name}")
-    start_timeline = start_position[0]
-
-    selected: list[WalObject] = []
-    for item in objects:
-        if item.filename.endswith(".history"):
-            try:
-                history_timeline = int(item.filename[:8], 16)
-            except ValueError:
-                continue
-            if history_timeline >= start_timeline:
-                selected.append(item)
-            continue
-
-        position = _wal_position(item.filename)
-        if position is not None and position >= start_position:
-            selected.append(item)
-    return selected
-
-
-def _estimated_extracted_bytes(postgres_manifest: dict[str, Any]) -> int:
-    files = postgres_manifest.get("Files")
-    if not isinstance(files, list):
-        return 0
-    total = 0
-    for item in files:
-        if not isinstance(item, dict):
-            continue
-        try:
-            total += max(0, int(item.get("Size") or 0))
-        except (TypeError, ValueError):
-            continue
-    return total
-
-
-def _basebackup_download_bytes(files: list[Any]) -> int:
-    total = 0
-    for item in files:
-        if not isinstance(item, dict):
-            raise SystemExit(f"Basebackup manifest file entry is invalid: {item!r}")
-        try:
-            size_bytes = int(item.get("size_bytes"))
-        except (TypeError, ValueError) as exc:
-            raise SystemExit(
-                f"Basebackup manifest has invalid size_bytes: {item!r}"
-            ) from exc
-        if size_bytes < 0:
-            raise SystemExit(f"Basebackup manifest has negative size_bytes: {item!r}")
-        total += size_bytes
-    return total
-
-
-def _ensure_restore_space(
-    target_dir: Path,
-    *,
-    basebackup_bytes: int,
-    extracted_bytes: int,
-    wal_bytes: int,
-    min_free_bytes: int,
-) -> tuple[int, int]:
-    if min_free_bytes < 0:
-        raise SystemExit("PITR restore minimum free bytes must not be negative")
-    available_bytes = shutil.disk_usage(target_dir).free
-    restore_bytes = basebackup_bytes + extracted_bytes + wal_bytes
-    required_bytes = restore_bytes + min_free_bytes
-    if available_bytes < required_bytes:
-        raise SystemExit(
-            "Insufficient free space for PITR prepare: "
-            f"available_bytes={available_bytes} required_bytes={required_bytes} "
-            f"basebackup_bytes={basebackup_bytes} extracted_bytes={extracted_bytes} "
-            f"wal_bytes={wal_bytes} reserve_bytes={min_free_bytes}"
-        )
-    return available_bytes, required_bytes
-
-
-def _load_manifest(client: Any, bucket: str, key: str) -> BasebackupManifest:
-    response = client.get_object(Bucket=bucket, Key=key)
-    payload = json.loads(_read_s3_body(response["Body"]).decode("utf-8"))
-    backup_id = str(payload.get("backup_id") or key.rstrip("/").split("/")[-2])
-    created_at = _parse_datetime(str(payload.get("created_at") or backup_id))
-    return BasebackupManifest(
-        backup_id=backup_id,
-        created_at=created_at,
-        key=key,
-        payload=payload,
-    )
-
-
-def list_manifests(client: Any, config: Any) -> list[BasebackupManifest]:
-    keys = _list_manifest_keys(client, config.bucket, _manifest_prefix(config))
-    manifests = [_load_manifest(client, config.bucket, key) for key in keys]
-    return sorted(manifests, key=lambda item: item.created_at)
-
-
-def select_manifest(
-    manifests: list[BasebackupManifest],
-    *,
-    backup_id: str = "",
-    target_time: datetime | None = None,
-) -> BasebackupManifest:
-    if backup_id:
-        for manifest in manifests:
-            if manifest.backup_id == backup_id:
-                return manifest
-        raise SystemExit(f"Basebackup not found: {backup_id}")
-
-    if not manifests:
-        raise SystemExit("No PITR basebackup manifests found")
-
-    if target_time is None:
-        return manifests[-1]
-
-    eligible = [manifest for manifest in manifests if manifest.created_at <= target_time]
-    if not eligible:
-        raise SystemExit(
-            "No basebackup exists before target time "
-            f"{target_time.isoformat()}"
-        )
-    return eligible[-1]
-
-
-def _ensure_empty_target_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    if any(path.iterdir()):
-        raise SystemExit(f"Target directory must be empty: {path}")
-
-
-def _download_file(client: Any, bucket: str, key: str, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = destination.with_name(f".{destination.name}.tmp")
-    client.download_file(bucket, key, str(tmp_path))
-    tmp_path.replace(destination)
-
-
-def _verify_download(path: Path, expected_sha256: str) -> None:
-    actual = sha256_file(path)
-    if actual != expected_sha256:
-        path.unlink(missing_ok=True)
-        raise SystemExit(
-            f"Checksum mismatch for {path.name}: expected {expected_sha256}, got {actual}"
-        )
-
-
-def _safe_extract_tar_gz(tar_path: Path, destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(tar_path, "r:gz") as tar:
-        root = destination.resolve()
-        for member in tar.getmembers():
-            member_path = (destination / member.name).resolve()
-            if member_path != root and root not in member_path.parents:
-                raise SystemExit(f"Unsafe tar member path in {tar_path.name}: {member.name}")
-        tar.extractall(destination)
-
-
-def _postgres_conf_quote(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-def _write_recovery_settings(
-    *,
-    data_dir: Path,
-    target_time: datetime | None,
-    wal_mode: str,
-    restore_mount_path: str,
-    restore_helper_path: str,
-) -> None:
-    if wal_mode == "local":
-        restore_command = f"cp {shlex.quote(restore_mount_path.rstrip('/') + '/wal/%f')} %p"
-    elif wal_mode == "remote":
-        restore_command = (
-            f"python3 {shlex.quote(restore_helper_path)} "
-            "fetch-wal --wal-name %f --destination %p"
-        )
-    else:
-        raise ValueError(f"Unsupported wal_mode={wal_mode!r}")
-    lines = [
-        "",
-        "# MVN PITR restore settings",
-        f"restore_command = {_postgres_conf_quote(restore_command)}",
-        "recovery_target_action = 'pause'",
-    ]
-    if target_time is not None:
-        lines.append(f"recovery_target_time = {_postgres_conf_quote(target_time.isoformat())}")
-
-    auto_conf = data_dir / "postgresql.auto.conf"
-    with auto_conf.open("a", encoding="utf-8") as fh:
-        fh.write("\n".join(lines) + "\n")
-    (data_dir / "recovery.signal").touch()
 
 
 def command_list(args: argparse.Namespace) -> int:
@@ -464,9 +356,11 @@ def command_list(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "backup_id": manifest.backup_id,
-                    "created_at": manifest.created_at.isoformat(),
+                    "completed_at": manifest.completed_at.isoformat(),
                     "manifest_key": manifest.key,
-                    "files": len(manifest.payload.get("files") or []),
+                    "system_identifier": manifest.system_identifier,
+                    "timeline": manifest.timeline,
+                    "files": len(manifest.files),
                 },
                 sort_keys=True,
             )
@@ -476,38 +370,89 @@ def command_list(args: argparse.Namespace) -> int:
 
 
 def command_prepare(args: argparse.Namespace) -> int:
-    target_dir = Path(args.target_dir).resolve()
-    _ensure_empty_target_dir(target_dir)
+    expected_system_identifier = _validate_system_identifier(
+        args.expected_system_identifier,
+        label="Expected PostgreSQL system identifier",
+    )
+    if not WAL_SEGMENT_RE.fullmatch(args.required_end_wal):
+        raise SystemExit("Required end WAL is invalid")
+    if bool(args.target_time) == bool(args.target_name) or bool(args.target_name) != bool(args.target_lsn):
+        raise SystemExit("Specify either target time or target name with its exact LSN")
+    target_time = (
+        _parse_canonical_utc(args.target_time, label="Restore target time")
+        if args.target_time
+        else None
+    )
+    if target_time and target_time >= datetime.now(timezone.utc):
+        raise SystemExit("Restore target time must be in the past")
+    if args.target_name and not RESTORE_POINT_RE.fullmatch(args.target_name):
+        raise SystemExit("Restore target name is invalid")
+    target_lsn_value = (
+        _parse_canonical_lsn(args.target_lsn, label="Restore target LSN")
+        if args.target_lsn
+        else None
+    )
 
-    target_time = _parse_datetime(args.target_time) if args.target_time else None
+    target_dir = Path(args.target_dir).resolve()
+    artifact_security.ensure_empty_target_dir(target_dir)
     config = load_config()
     client = build_client(config)
     manifest = select_manifest(
-        list_manifests(client, config),
+        list_manifests(
+            client,
+            config,
+            expected_system_identifier=expected_system_identifier,
+        ),
         backup_id=args.backup_id,
         target_time=target_time,
     )
-
-    files = manifest.payload.get("files") or []
-    if not isinstance(files, list) or not files:
-        raise SystemExit(f"Basebackup manifest has no files: {manifest.key}")
-
-    postgres_manifest = _load_postgres_backup_manifest(client, config.bucket, manifest)
-    start_wal_name = _backup_start_wal_name(
+    postgres_manifest = _load_postgres_backup_manifest(client, config, manifest)
+    postgres_start_lsn, postgres_end_lsn = _validate_postgres_manifest_lineage(
+        manifest,
         postgres_manifest,
+    )
+    start_wal_name = _wal_segment_name(
+        timeline=manifest.timeline,
+        lsn=postgres_start_lsn,
         segment_size_bytes=args.wal_segment_size_bytes,
     )
-    wal_objects: list[WalObject] = []
-    if args.wal_mode == "local":
-        wal_objects = _select_wal_objects(
-            _list_wal_objects(client, config),
-            start_wal_name=start_wal_name,
-        )
+    minimum_end_value = max(
+        _parse_canonical_lsn(postgres_end_lsn, label="PostgreSQL backup end LSN"),
+        _parse_canonical_lsn(manifest.end_lsn, label="Basebackup end LSN"),
+    )
+    if target_lsn_value is not None:
+        if target_lsn_value < minimum_end_value:
+            raise SystemExit("Restore target LSN precedes the completed basebackup")
+        minimum_end_value = target_lsn_value
+    minimum_end_wal = _wal_segment_name(
+        timeline=manifest.timeline,
+        lsn=f"{minimum_end_value >> 32:X}/{minimum_end_value & 0xFFFFFFFF:X}",
+        segment_size_bytes=args.wal_segment_size_bytes,
+    )
+    _, minimum_end_position = _wal_segment_position(
+        minimum_end_wal,
+        segment_size_bytes=args.wal_segment_size_bytes,
+    )
+    _, required_end_position = _wal_segment_position(
+        args.required_end_wal,
+        segment_size_bytes=args.wal_segment_size_bytes,
+    )
+    if required_end_position < minimum_end_position:
+        raise SystemExit("Required end WAL does not cover the completed basebackup")
 
-    basebackup_bytes = _basebackup_download_bytes(files)
-    extracted_bytes = _estimated_extracted_bytes(postgres_manifest)
+    selection = _select_wal_objects(
+        _list_wal_objects(client, config),
+        start_wal_name=start_wal_name,
+        start_lsn=postgres_start_lsn,
+        required_end_wal=args.required_end_wal,
+        segment_size_bytes=args.wal_segment_size_bytes,
+        history_loader=lambda item: _read_verified_history(client, config, item),
+    )
+    wal_objects = selection.objects if args.wal_mode == "local" else ()
+    basebackup_bytes = sum(item.size_bytes for item in manifest.files)
+    extracted_bytes = artifact_security.estimated_extracted_bytes(postgres_manifest)
     wal_bytes = sum(item.size_bytes for item in wal_objects)
-    available_bytes, required_bytes = _ensure_restore_space(
+    available_bytes, required_bytes = artifact_security.ensure_restore_space(
         target_dir,
         basebackup_bytes=basebackup_bytes,
         extracted_bytes=extracted_bytes,
@@ -519,8 +464,12 @@ def command_prepare(args: argparse.Namespace) -> int:
             {
                 "status": "preflight",
                 "backup_id": manifest.backup_id,
+                "system_identifier": manifest.system_identifier,
+                "timeline": manifest.timeline,
                 "start_wal": start_wal_name,
-                "selected_wal": len(wal_objects),
+                "required_end_wal": args.required_end_wal,
+                "selected_segments": len(selection.segments),
+                "selected_history": len(selection.history_files),
                 "selected_wal_bytes": wal_bytes,
                 "available_bytes": available_bytes,
                 "required_bytes": required_bytes,
@@ -533,58 +482,108 @@ def command_prepare(args: argparse.Namespace) -> int:
     data_dir = target_dir / "data"
     downloads_dir.mkdir(parents=True)
     data_dir.mkdir(parents=True)
+    for item in manifest.files:
+        artifact_security.download_verified_object(
+            client,
+            bucket=config.bucket,
+            key=item.key,
+            destination=downloads_dir / item.name,
+            expected_size=item.size_bytes,
+            expected_sha256=item.sha256,
+        )
 
-    downloaded: list[Path] = []
-    for item in files:
-        name = str(item.get("name") or "")
-        key = str(item.get("key") or "")
-        expected_sha256 = str(item.get("sha256") or "")
-        if not name or not key or not expected_sha256:
-            raise SystemExit(f"Basebackup manifest file entry is incomplete: {item!r}")
-        destination = downloads_dir / name
-        _download_file(client, config.bucket, key, destination)
-        _verify_download(destination, expected_sha256)
-        downloaded.append(destination)
-
-    base_tar = downloads_dir / "base.tar.gz"
-    if not base_tar.is_file():
-        raise SystemExit("Downloaded basebackup is missing base.tar.gz")
-    _safe_extract_tar_gz(base_tar, data_dir)
-
+    postgres_files = postgres_manifest.get("Files")
+    postgres_file_count = len(postgres_files) if isinstance(postgres_files, list) else 0
+    if postgres_file_count > MAX_RESTORE_TAR_MEMBERS - 1024:
+        raise SystemExit("PostgreSQL backup manifest has too many files")
+    max_tar_members = max(1024, postgres_file_count + 1024)
+    extraction_budget = max(0, available_bytes - args.min_free_bytes - wal_bytes)
+    artifact_security.safe_extract_tar_gz(
+        downloads_dir / "base.tar.gz",
+        data_dir,
+        max_members=max_tar_members,
+        max_expanded_bytes=extraction_budget,
+    )
     wal_tar = downloads_dir / "pg_wal.tar.gz"
     if wal_tar.is_file():
-        _safe_extract_tar_gz(wal_tar, data_dir / "pg_wal")
+        remaining_budget = max(
+            0,
+            shutil.disk_usage(target_dir).free - args.min_free_bytes - wal_bytes,
+        )
+        artifact_security.safe_extract_tar_gz(
+            wal_tar,
+            data_dir / "pg_wal",
+            max_members=max_tar_members,
+            max_expanded_bytes=remaining_budget,
+        )
 
     downloaded_wal = 0
     if args.wal_mode == "local":
         wal_dir = target_dir / "wal"
         wal_dir.mkdir(parents=True)
         for item in wal_objects:
-            _download_file(client, config.bucket, item.key, wal_dir / item.filename)
+            expected_sha256 = artifact_security.object_sha256(
+                client,
+                bucket=config.bucket,
+                key=item.key,
+                expected_size=item.size_bytes,
+            )
+            artifact_security.download_verified_object(
+                client,
+                bucket=config.bucket,
+                key=item.key,
+                destination=wal_dir / item.filename,
+                expected_size=item.size_bytes,
+                expected_sha256=expected_sha256,
+            )
             downloaded_wal += 1
 
-    manifest_path = target_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest.payload, indent=2, sort_keys=True) + "\n")
-    _write_recovery_settings(
+    (target_dir / "manifest.json").write_text(
+        json.dumps(manifest.payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (target_dir / "restore-contract.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "backup_id": manifest.backup_id,
+                "expected_system_identifier": expected_system_identifier,
+                "timeline": manifest.timeline,
+                "target_mode": "time" if target_time else "name",
+                "target_time": args.target_time,
+                "target_name": args.target_name,
+                "target_lsn": args.target_lsn,
+                "start_wal": start_wal_name,
+                "required_end_wal": args.required_end_wal,
+                "selected_segments": len(selection.segments),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    recovery_config.write_recovery_settings(
         data_dir=data_dir,
+        control_dir=target_dir / "control",
         target_time=target_time,
+        target_name=args.target_name,
         wal_mode=args.wal_mode,
         restore_mount_path=args.restore_mount_path,
         restore_helper_path=args.restore_helper_path,
     )
-
     print(
         json.dumps(
             {
                 "status": "prepared",
                 "backup_id": manifest.backup_id,
-                "created_at": manifest.created_at.isoformat(),
                 "target_dir": str(target_dir),
                 "data_dir": str(data_dir),
-                "downloaded_files": len(downloaded),
+                "downloaded_files": len(manifest.files),
                 "downloaded_wal": downloaded_wal,
                 "downloaded_wal_bytes": wal_bytes,
                 "start_wal": start_wal_name,
+                "required_end_wal": args.required_end_wal,
                 "wal_mode": args.wal_mode,
             },
             sort_keys=True,
@@ -595,25 +594,31 @@ def command_prepare(args: argparse.Namespace) -> int:
 
 def command_fetch_wal(args: argparse.Namespace) -> int:
     wal_name = str(args.wal_name or "").strip()
-    if not WAL_NAME_RE.match(wal_name):
+    if not WAL_NAME_RE.fullmatch(wal_name):
         raise SystemExit(f"Invalid WAL filename: {wal_name}")
-
     destination = Path(args.destination)
     config = load_config()
     client = build_client(config)
     key = _wal_key(config, wal_name)
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(dir=str(destination.parent), delete=False) as tmp:
-        tmp_path = Path(tmp.name)
+    head = client.head_object(Bucket=config.bucket, Key=key)
     try:
-        client.download_file(config.bucket, key, str(tmp_path))
-        if tmp_path.stat().st_size <= 0:
-            raise SystemExit(f"Downloaded WAL file is empty: {wal_name}")
-        tmp_path.replace(destination)
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
+        expected_size = int(head["ContentLength"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SystemExit(f"PITR WAL metadata is incomplete: {wal_name}") from exc
+    expected_sha256 = artifact_security.object_sha256(
+        client,
+        bucket=config.bucket,
+        key=key,
+        expected_size=expected_size,
+    )
+    artifact_security.download_verified_object(
+        client,
+        bucket=config.bucket,
+        key=key,
+        destination=destination,
+        expected_size=expected_size,
+        expected_sha256=expected_sha256,
+    )
     print(json.dumps({"status": "fetched", "wal_name": wal_name, "key": key}, sort_keys=True))
     return 0
 
@@ -624,7 +629,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    list_cmd = subparsers.add_parser("list-basebackups", help="List remote basebackup manifests")
+    list_cmd = subparsers.add_parser("list-basebackups", help="List validated manifests")
     list_cmd.set_defaults(func=command_list)
 
     prepare = subparsers.add_parser(
@@ -633,19 +638,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     prepare.add_argument("--target-dir", required=True)
     prepare.add_argument("--backup-id", default="")
-    prepare.add_argument(
-        "--target-time",
-        default="",
-        help="UTC restore target timestamp. The newest basebackup at or before this time is selected.",
-    )
+    prepare.add_argument("--target-time", default="")
+    prepare.add_argument("--target-name", default="")
+    prepare.add_argument("--target-lsn", default="")
+    prepare.add_argument("--expected-system-identifier", required=True)
+    prepare.add_argument("--required-end-wal", required=True)
     prepare.add_argument(
         "--wal-mode",
         choices=("local", "remote"),
         default="local",
-        help=(
-            "local downloads archived WAL into target-dir/wal and writes a cp restore_command; "
-            "remote writes a Python/R2 restore_command for containers that include this helper and boto3."
-        ),
     )
     prepare.add_argument(
         "--wal-segment-size-bytes",
@@ -656,33 +657,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                 str(DEFAULT_WAL_SEGMENT_SIZE_BYTES),
             )
         ),
-        help="WAL segment size used to convert backup Start-LSN into a WAL filename.",
     )
     prepare.add_argument(
         "--min-free-bytes",
         type=int,
-        default=int(
-            os.getenv("PITR_RESTORE_MIN_FREE_BYTES", str(DEFAULT_MIN_FREE_BYTES))
-        ),
-        help="Free disk space that must remain after estimated download and extraction.",
+        default=int(os.getenv("PITR_RESTORE_MIN_FREE_BYTES", str(DEFAULT_MIN_FREE_BYTES))),
     )
-    prepare.add_argument(
-        "--restore-mount-path",
-        default="/pitr-restore",
-        help="Path where target-dir will be mounted inside the restore PostgreSQL container in local WAL mode.",
-    )
+    prepare.add_argument("--restore-mount-path", default="/pitr-restore")
     prepare.add_argument(
         "--restore-helper-path",
         default="/app/scripts/ha/restore_postgres_pitr_from_s3.py",
-        help="Path visible inside the restore PostgreSQL container for restore_command.",
     )
     prepare.set_defaults(func=command_prepare)
 
-    fetch_wal = subparsers.add_parser("fetch-wal", help="Fetch one WAL file for restore_command")
+    fetch_wal = subparsers.add_parser("fetch-wal", help="Fetch one verified WAL file")
     fetch_wal.add_argument("--wal-name", required=True)
     fetch_wal.add_argument("--destination", required=True)
     fetch_wal.set_defaults(func=command_fetch_wal)
-
     return parser.parse_args(argv)
 
 

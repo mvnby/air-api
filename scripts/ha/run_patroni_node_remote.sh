@@ -19,6 +19,9 @@ KNOWN_HOSTS_PATH="${KEY_PATH}.known_hosts"
 ROLE_AGENT_SOURCE="scripts/ha/patroni_role_agent.py"
 ROLE_AGENT_REMOTE="/tmp/mvn-patroni-role-agent-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}"
 ROLE_AGENT_TARGET="/usr/local/sbin/mvn-patroni-role-agent"
+ROLE_IDENTITY_SOURCE="scripts/ha/patroni_local_identity.py"
+ROLE_IDENTITY_REMOTE="/tmp/patroni-local-identity-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}.py"
+ROLE_IDENTITY_TARGET="/usr/local/sbin/patroni_local_identity.py"
 ROLE_AGENT_UNIT="mvn-patroni-role-agent.service"
 CANDIDATE_RUNNER_SOURCE="scripts/ha/run_patroni_candidate_transaction.sh"
 TRANSACTION_SOURCE="scripts/compose_candidate_transaction.sh"
@@ -78,8 +81,9 @@ if [[ "${OPERATION}" == "deploy" ]]; then
     log error "API_NODE_PROXY_MODE must be host_nginx or container_nginx"
     exit 1
   }
-  [[ -f "${ROLE_AGENT_SOURCE}" ]] || {
-    log error "role agent source is missing: ${ROLE_AGENT_SOURCE}"
+  [[ -f "${ROLE_AGENT_SOURCE}" && ! -L "${ROLE_AGENT_SOURCE}" \
+    && -f "${ROLE_IDENTITY_SOURCE}" && ! -L "${ROLE_IDENTITY_SOURCE}" ]] || {
+    log error "role agent source bundle is incomplete"
     exit 1
   }
 fi
@@ -172,7 +176,10 @@ scp "${SSH_OPTS[@]}" scripts/ha/run_patroni_migrations.sh \
   "${CANDIDATE_RUNNER_SOURCE}" "${TRANSACTION_SOURCE}" \
   "${REMOTE}:/tmp/"
 if [[ "${OPERATION}" == "deploy" ]]; then
-  scp "${SSH_OPTS[@]}" "${ROLE_AGENT_SOURCE}" "${REMOTE}:${ROLE_AGENT_REMOTE}"
+  scp "${SSH_OPTS[@]}" "${ROLE_AGENT_SOURCE}" \
+    "${REMOTE}:${ROLE_AGENT_REMOTE}"
+  scp "${SSH_OPTS[@]}" "${ROLE_IDENTITY_SOURCE}" \
+    "${REMOTE}:${ROLE_IDENTITY_REMOTE}"
 fi
 
 if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
@@ -215,6 +222,8 @@ printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   PATRONI_CANDIDATE_COMPOSE_FILE=$(quote "${PROJECT_DIR}/${REMOTE_COMPOSE_FILE}") \
   PATRONI_ROLE_AGENT_SOURCE=$(quote "${ROLE_AGENT_REMOTE}") \
   PATRONI_ROLE_AGENT_TARGET=$(quote "${ROLE_AGENT_TARGET}") \
+  PATRONI_ROLE_IDENTITY_SOURCE=$(quote "${ROLE_IDENTITY_REMOTE}") \
+  PATRONI_ROLE_IDENTITY_TARGET=$(quote "${ROLE_IDENTITY_TARGET}") \
   PATRONI_ROLE_AGENT_UNIT=$(quote "${ROLE_AGENT_UNIT}") \
   ${proxy_env} \
   bash /tmp/run_patroni_candidate_transaction.sh

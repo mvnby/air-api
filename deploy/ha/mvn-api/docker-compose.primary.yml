@@ -15,7 +15,6 @@ x-api-app: &api-app
     GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
   volumes:
     - ./media:/app/media
-    - ./postgres-wal-archive:/postgres-wal-archive
     - ./model-cache/u2net:/root/.u2net
     - ./google-oauth:/app/google-oauth
     - ./client_secret.json:/app/client_secret.json:ro
@@ -35,7 +34,8 @@ services:
       - -c
       - "archive_timeout=${POSTGRES_PITR_ARCHIVE_TIMEOUT:-0}"
       - -c
-      - "archive_command=test ! -f /postgres-wal-archive/%f && cp %p /postgres-wal-archive/%f || test -f /postgres-wal-archive/%f"
+      - >-
+        archive_command=sh -ec 'src="$$1"; dst="/postgres-wal-archive/$$2"; tmp="$${dst}.tmp.$$$$"; cleanup(){ rm -f "$$tmp"; }; trap cleanup EXIT HUP INT TERM; umask 077; cp "$$src" "$$tmp"; sync; if ln "$$tmp" "$$dst" 2>/dev/null; then sync; exit 0; fi; cmp -s "$$src" "$$dst"' sh "%p" "%f"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
