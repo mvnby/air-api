@@ -159,6 +159,25 @@ class FakeOperations:
         )
 
 
+class LostCompletedActionOperations(FakeOperations):
+    def __init__(self, action, *, switched=False, existing=False):
+        super().__init__(switched=switched, existing=existing)
+        self.lost_action = action
+        self.lose_response = True
+
+    def remote(self, *, action, node, extra=None, **kwargs):
+        should_lose = (
+            self.lose_response
+            and action == self.lost_action
+            and (action != "prepare" or node.alias == "zakup")
+        )
+        result = super().remote(action=action, node=node, extra=extra, **kwargs)
+        if should_lose:
+            self.lose_response = False
+            raise RuntimeError(f"lost response after completed {action}")
+        return result
+
+
 def _orchestrator(
     tmp_path: Path, operations: FakeOperations, *, resume=False
 ) -> _Orchestrator:
@@ -176,6 +195,75 @@ def _orchestrator(
 
 def _mutation_names(events):
     return [event[0] for event in events if event[0] != "topology"]
+
+
+def _mark_post_switchover(operations):
+    records = (
+        "record:baseline-primary-mvn-api",
+        "record:standby-updated",
+        "record:switched-over",
+        "record:former-primary-updated",
+    )
+    for status in operations.statuses.values():
+        status["completed"].extend(records)
+
+
+def test_lost_completed_prepare_on_resume_never_aborts_existing_transaction(tmp_path):
+    operations = LostCompletedActionOperations(
+        "prepare", switched=True, existing=True
+    )
+    _mark_post_switchover(operations)
+
+    with pytest.raises(RuntimeError, match="existing transaction remains fenced"):
+        _orchestrator(tmp_path, operations, resume=True).run()
+    assert "abort" not in _mutation_names(operations.events)
+
+    result = _orchestrator(tmp_path, operations, resume=True).run()
+    assert result.final_primary == "zakup"
+    assert "abort" not in _mutation_names(operations.events)
+
+
+def test_lost_completed_stage_after_switchover_rolls_forward_without_abort(tmp_path):
+    operations = LostCompletedActionOperations("stage", switched=True, existing=True)
+    _mark_post_switchover(operations)
+
+    with pytest.raises(RuntimeError, match="roll-forward state"):
+        _orchestrator(tmp_path, operations, resume=True).run()
+    assert "abort" not in _mutation_names(operations.events)
+
+    result = _orchestrator(tmp_path, operations, resume=True).run()
+    assert result.final_primary == "zakup"
+    assert "abort" not in _mutation_names(operations.events)
+
+
+def test_new_transaction_prepare_failure_still_cleans_prepared_node(tmp_path):
+    operations = LostCompletedActionOperations("prepare")
+
+    with pytest.raises(RuntimeError, match="could not prepare both rollout journals"):
+        _orchestrator(tmp_path, operations).run()
+
+    abort_nodes = [event[1] for event in operations.events if event[0] == "abort"]
+    assert abort_nodes == ["mvn-api"]
+
+
+@pytest.mark.parametrize(
+    ("completed", "operation"),
+    [
+        (["record:standby-updated"], "idle"),
+        (["switchover"], "idle"),
+        ([], "switchover"),
+        (["record:switched-over"], "idle"),
+    ],
+)
+def test_resume_conservatively_detects_ambiguous_switchover_boundary(
+    tmp_path, completed, operation
+):
+    operations = FakeOperations(existing=True)
+    operations.statuses["mvn-api"]["completed"].extend(completed)
+    operations.statuses["mvn-api"]["operation"] = operation
+    controller = _orchestrator(tmp_path, operations, resume=True)
+
+    assert controller._has_ambiguous_switchover_boundary(operations.statuses)
 
 
 def test_rollout_orders_both_images_before_archive_command(tmp_path):

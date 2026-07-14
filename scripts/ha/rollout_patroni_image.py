@@ -167,6 +167,19 @@ class _Orchestrator:
     def _has_record(self, statuses: Mapping[str, Mapping[str, object]], name: str) -> bool:
         return all(self._record_flags(statuses, name))
 
+    def _has_ambiguous_switchover_boundary(
+        self, statuses: Mapping[str, Mapping[str, object]]
+    ) -> bool:
+        if any(self._record_flags(statuses, "standby-updated")) or any(
+            self._record_flags(statuses, "switched-over")
+        ):
+            return True
+        return any(
+            statuses[node.alias].get("operation") == "switchover"
+            or "switchover" in statuses[node.alias]["completed"]
+            for node in PATRONI_NODES
+        )
+
     def _complete_interrupted_records(
         self, statuses: dict[str, dict[str, object]]
     ) -> dict[str, dict[str, object]]:
@@ -318,6 +331,11 @@ class _Orchestrator:
                 self._remote("prepare", node, extra=extra)
                 prepared.append(node)
         except BaseException as exc:
+            if self.inputs.resume:
+                raise RuntimeError(
+                    f"could not resume both rollout journals: {exc}; "
+                    "existing transaction remains fenced"
+                ) from exc
             cleanup_errors = []
             for node in reversed(prepared):
                 try:
@@ -427,6 +445,8 @@ class _Orchestrator:
         if finalized is not None:
             return finalized
         statuses = self._resume_terminal_operations(statuses)
+        if self.inputs.resume and self._has_ambiguous_switchover_boundary(statuses):
+            self.roll_forward = True
         try:
             statuses = self._ensure_record(statuses, baseline_record)
             for node in PATRONI_NODES:
