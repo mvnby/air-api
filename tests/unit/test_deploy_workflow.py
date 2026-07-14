@@ -68,13 +68,23 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     for job_name, environment in expected_environments.items():
         job = jobs[job_name]
         assert job["environment"] == environment
-        checkout = next(step for step in job["steps"] if step.get("uses") == "actions/checkout@v6")
+        checkout = next(
+            step
+            for step in job["steps"]
+            if step.get("uses")
+            == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+        )
         assert checkout["with"]["ref"] == "${{ needs.release-gate.outputs.deploy_sha }}"
 
     standby_workflow = _workflow(".github/workflows/deploy-api-standby.yml")
     standby = standby_workflow["jobs"]["deploy-api-standby"]
     assert standby["environment"] == "standby-api"
-    checkout = next(step for step in standby["steps"] if step.get("uses") == "actions/checkout@v6")
+    checkout = next(
+        step
+        for step in standby["steps"]
+        if step.get("uses")
+        == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+    )
     assert checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
     standby_call = jobs["deploy-api-standby"]
     assert standby_call["uses"] == "./.github/workflows/deploy-api-standby.yml"
@@ -87,7 +97,12 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     web_workflow = _workflow(".github/workflows/deploy-web.yml")
     web_job = web_workflow["jobs"]["production-web"]
     assert web_job["environment"] == "production-web"
-    web_checkout = next(step for step in web_job["steps"] if step.get("uses") == "actions/checkout@v6")
+    web_checkout = next(
+        step
+        for step in web_job["steps"]
+        if step.get("uses")
+        == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+    )
     assert web_checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
     web_call = jobs["deploy-frontend"]
     assert web_call["uses"] == "./.github/workflows/deploy-web.yml"

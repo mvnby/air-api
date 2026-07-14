@@ -36,11 +36,13 @@ networking so it can bind directly to each node's WireGuard address.
 - `scripts/ha/check_etcd_quorum.sh`: member, leader, Raft lag, and health check.
 - `deploy/ha/patroni/`: pinned PostgreSQL/Patroni image, validated config renderer,
   role-agent unit, and isolated rehearsal cluster;
-- `scripts/ha/rehearse_patroni_failover.sh`: disposable failover/rejoin drill;
+- `scripts/ha/rehearse_patroni_failover.sh`: disposable failover/rejoin drill
+  that can either build source locally or fail closed around one exact published
+  `linux/amd64` digest and prove both running image IDs plus archive behavior;
 - `scripts/ha/patroni_role_agent.py` + `scripts/ha/patroni_local_identity.py`:
   local API/scheduler/bot role reconciler with strict local DCS leader-lock proof.
-- `.github/workflows/patroni-failover-rehearsal.yml`: weekly isolated drill and
-  retained diagnostic log.
+- `.github/workflows/patroni-failover-rehearsal.yml`: weekly source-only drill
+  (`release_evidence=false`) plus manual exact-digest rehearsal and retained log.
 - `.github/workflows/publish-patroni-image.yml`: manual, CI-gated publication of
   the production Patroni image with provenance, SBOM, and immutable digest.
 - `deploy/ha/mvn-api/docker-compose.patroni.yml` and
@@ -159,15 +161,28 @@ PITR remains the final recovery layer.
 
 ## Immutable Patroni Image
 
-Publish only a CI-tested `main` revision:
+Publish only a CI-tested `main` revision. The workflow accepts only an exact
+successful `push` CI run for the same SHA, builds a run-scoped candidate,
+validates the registry digest, `linux/amd64` runtime, BuildKit provenance and
+non-empty SPDX SBOM, creates and verifies a GitHub attestation, then rehearses
+that exact digest. Only after all of those checks does it create the SHA tag:
 
 ```bash
 gh workflow run publish-patroni-image.yml --ref main
 ```
 
-Copy the resulting `ghcr.io/.../patroni@sha256:...` reference into the protected
+The SHA tag is only a discoverability alias; the workflow proves that it has
+the same top-level digest and refuses to overwrite a conflicting tag. Copy the
+resulting `ghcr.io/.../patroni@sha256:...` reference into the protected
 `.env` on both database hosts as `PATRONI_IMAGE`. Never use a mutable Patroni
 tag in production. Publishing the image does not restart or alter PostgreSQL.
+
+To repeat a release-evidence rehearsal without publishing or changing a tag:
+
+```bash
+gh workflow run patroni-failover-rehearsal.yml \
+  -f image_digest=sha256:<64-hex-digest>
+```
 
 Before any Compose validation, both hosts must also have:
 
