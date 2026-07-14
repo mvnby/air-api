@@ -48,6 +48,7 @@ def test_downstream_deploys_reject_forged_fd_without_open_lock(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     _executable(fake_bin / "docker", "#!/usr/bin/env bash\nexit 0\n")
+    _executable(fake_bin / "curl", "#!/usr/bin/env bash\nexit 0\n")
     (project / "compose.yml").write_text("services: {}\n", encoding="utf-8")
     (project / ".deploy.lock").touch(mode=0o600)
     common = {
