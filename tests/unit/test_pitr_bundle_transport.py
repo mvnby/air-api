@@ -224,7 +224,7 @@ def test_apply_resumes_mixed_old_new_generation_and_finalize(tmp_path):
     assert namespace["execute"]("apply", TXID, str(project), compose.name, payload) == "applied"
     _write(tool, b"old-tool", 0o755)
     assert compose.read_bytes() == b"new-compose"
-    assert namespace["execute"]("apply", TXID, str(project), compose.name, payload) == "applied"
+    assert namespace["execute"]("apply", TXID, str(project), compose.name, payload) == "resumed"
     assert tool.read_bytes() == b"new-tool"
 
     assert namespace["execute"]("finalize", TXID, str(project), compose.name, b"") == "finalized"
@@ -264,7 +264,7 @@ def test_apply_and_finalize_accept_identical_old_and_new_generation(tmp_path):
     _write(tool, b"old-tool", 0o755)
     assert namespace["execute"](
         "apply", TXID, str(project), compose.name, payload
-    ) == "applied"
+    ) == "resumed"
     assert tool.read_bytes() == b"new-tool"
     assert namespace["execute"](
         "finalize", TXID, str(project), compose.name, b""

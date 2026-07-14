@@ -106,31 +106,31 @@ def _read_local_asset(path: Path) -> bytes:
         return b"".join(chunks)
     finally:
         os.close(descriptor)
-def build_release_bundle(node: PatroniNode, assets: Sequence[object]) -> str:
-    """Build one canonical, complete node release bundle from reviewed assets."""
+def _render_prepared_bundle(
+    node: PatroniNode,
+    prepared_assets: Sequence[tuple[object, object, bytes]],
+) -> str:
     expected = expected_remote_asset_modes(node)
     node_assets = [
-        *assets,
-        type("NodeComposeAsset", (), {
-            "source": node.compose_source,
-            "remote_path": f"{node.project_dir}/{node.compose_file}",
-            "mode": 0o644,
-        })(),
+        *prepared_assets,
+        (
+            f"{node.project_dir}/{node.compose_file}",
+            0o644,
+            _read_local_asset(Path(node.compose_source)),
+        ),
     ]
-    by_path: dict[str, object] = {}
-    for asset in node_assets:
-        remote_path = getattr(asset, "remote_path", None)
-        mode = getattr(asset, "mode", None)
+    by_path: dict[str, tuple[int, bytes]] = {}
+    for remote_path, mode, content in node_assets:
         if remote_path not in expected or mode != expected.get(remote_path):
             raise RuntimeError(f"unreviewed PITR release asset: {remote_path}")
         if remote_path in by_path:
             raise RuntimeError(f"duplicate PITR release asset: {remote_path}")
-        by_path[remote_path] = asset
+        by_path[remote_path] = (mode, content)
     if set(by_path) != set(expected):
         raise RuntimeError("PITR release bundle has a missing or extra path")
     files = []
     for remote_path in sorted(by_path):
-        content = _read_local_asset(Path(getattr(by_path[remote_path], "source")))
+        _, content = by_path[remote_path]
         files.append(
             {
                 "content": base64.b64encode(content).decode("ascii"),
@@ -145,6 +145,29 @@ def build_release_bundle(node: PatroniNode, assets: Sequence[object]) -> str:
     if not rendered or len(rendered) > MAX_RELEASE_BUNDLE_BYTES:
         raise RuntimeError("PITR release bundle exceeds the transport limit")
     return rendered.decode("ascii")
+def prepare_release_bundles(
+    nodes: Sequence[PatroniNode], assets: Sequence[object]
+) -> dict[str, str]:
+    """Pin shared asset bytes once and render one exact payload per node."""
+    prepared_assets = [
+        (
+            getattr(asset, "remote_path", None),
+            getattr(asset, "mode", None),
+            _read_local_asset(Path(getattr(asset, "source"))),
+        )
+        for asset in assets
+    ]
+    bundles: dict[str, str] = {}
+    for node in nodes:
+        if node.project_dir in bundles:
+            raise RuntimeError("duplicate PITR release node project")
+        bundles[node.project_dir] = _render_prepared_bundle(node, prepared_assets)
+    if not bundles:
+        raise RuntimeError("PITR release requires at least one node")
+    return bundles
+def build_release_bundle(node: PatroniNode, assets: Sequence[object]) -> str:
+    """Build one canonical, complete node release bundle from reviewed assets."""
+    return prepare_release_bundles((node,), assets)[node.project_dir]
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
 def _default_runner(args: Sequence[str], stdin: str | None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -162,17 +185,29 @@ def run_remote_release_action(
     action: str,
     txid: str,
     assets: Sequence[object],
+    release_bundle: str | None = None,
     runner: Runner | None = None,
 ) -> str:
     """Apply, roll back, or finalize one release over pinned SSH."""
-    if action not in {"apply", "rollback", "finalize"}:
+    if action not in {"apply", "inspect", "rollback", "finalize"}:
         raise RuntimeError("unsupported release transaction action")
     if not re.fullmatch(r"[0-9a-f]{32}", txid):
         raise RuntimeError("transaction id must be 32 lowercase hexadecimal characters")
     # An explicit empty payload is required for actions without a bundle.  If
     # stdin is left as None, subprocess.run() inherits the controller's stdin
     # and the remote executor blocks forever while waiting for EOF.
-    stdin = build_release_bundle(node, assets) if action == "apply" else ""
+    if action in {"apply", "inspect"}:
+        stdin = (
+            release_bundle
+            if release_bundle is not None
+            else build_release_bundle(node, assets)
+        )
+        if not isinstance(stdin, str) or not stdin or len(stdin.encode()) > MAX_RELEASE_BUNDLE_BYTES:
+            raise RuntimeError("pinned PITR release bundle is invalid")
+    else:
+        if release_bundle is not None:
+            raise RuntimeError("release bundle is only accepted for inspect or apply")
+        stdin = ""
     command = " ".join(
         [
             "/usr/bin/python3",
@@ -190,7 +225,8 @@ def run_remote_release_action(
         detail = (result.stderr or result.stdout or "remote release action failed").strip()
         raise RuntimeError(detail)
     expected = {
-        "apply": {"applied\n", "reopened\n"},
+        "apply": {"applied\n", "resumed\n", "reopened\n"},
+        "inspect": {"fresh\n", "matching-active\n", "matching-finalized\n"},
         "rollback": {"rolled-back\n", "already-rolled-back\n"},
         "finalize": {"finalized\n", "already-finalized\n"},
     }[action]
