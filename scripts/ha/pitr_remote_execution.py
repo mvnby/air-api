@@ -17,6 +17,7 @@ try:
     from scripts.ha.pitr_bundle_transport import (
         REMOTE_RELEASE_BUNDLE_EXECUTOR,
         build_release_bundle as _build_release_bundle,
+        prepare_release_bundles as _prepare_release_bundles,
         _read_local_asset as _read_release_asset,
         run_remote_release_action as _run_remote_release_action,
     )
@@ -32,6 +33,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
     from pitr_bundle_transport import (  # type: ignore[no-redef]
         REMOTE_RELEASE_BUNDLE_EXECUTOR,
         build_release_bundle as _build_release_bundle,
+        prepare_release_bundles as _prepare_release_bundles,
         _read_local_asset as _read_release_asset,
         run_remote_release_action as _run_remote_release_action,
     )
@@ -328,6 +330,13 @@ def build_host_release_bundle(
     return _build_release_bundle(node, assets)
 
 
+def prepare_host_release_bundles(
+    nodes: Sequence[PatroniNode],
+    assets: Sequence[PitrHostAsset] = PITR_HOST_ASSETS,
+) -> dict[str, str]:
+    return _prepare_release_bundles(nodes, assets)
+
+
 def run_remote_release_action(
     *,
     node: PatroniNode,
@@ -335,6 +344,7 @@ def run_remote_release_action(
     action: str,
     txid: str,
     assets: Sequence[PitrHostAsset] = PITR_HOST_ASSETS,
+    release_bundle: str | None = None,
     runner: Runner | None = None,
 ) -> str:
     return _run_remote_release_action(
@@ -343,6 +353,7 @@ def run_remote_release_action(
         action=action,
         txid=txid,
         assets=assets,
+        release_bundle=release_bundle,
         runner=runner,
     )
 

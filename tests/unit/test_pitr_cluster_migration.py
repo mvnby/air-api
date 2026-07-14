@@ -55,6 +55,7 @@ class FakeOperations:
         self.role_agent_failure = None
         self.role_agent_fail_once = set()
         self.release_results = {}
+        self.release_payloads = []
         self.discover_calls = 0
         self.discover_failures = set()
 
@@ -67,12 +68,21 @@ class FakeOperations:
             return self.topologies.pop(0)
         return _topology()
 
-    def release(self, *, node, context, action, txid, runner):
+    def bundles(self, nodes):
+        return {node.project_dir: f"pinned:{node.alias}" for node in nodes}
+
+    def release(self, *, node, context, action, txid, release_bundle, runner):
         event = ("release", action, node.alias, txid)
         self.events.append(event)
+        self.release_payloads.append((action, node.alias, release_bundle))
+        if action in {"inspect", "apply"}:
+            assert release_bundle == f"pinned:{node.alias}"
+        else:
+            assert release_bundle is None
         if self.release_failure == (action, node.alias):
             raise RuntimeError("simulated release failure")
         return self.release_results.get((action, node.alias), {
+            "inspect": "fresh",
             "apply": "applied",
             "rollback": "rolled-back",
             "finalize": "finalized",
@@ -128,6 +138,7 @@ class FakeOperations:
     def dependencies(self):
         return MigrationDependencies(
             discover=self.discover,
+            bundles=self.bundles,
             release=self.release,
             secret=self.secret,
             maintenance=self.maintenance,
@@ -156,6 +167,8 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
     assert result.standby_alias == "zakup"
     assert result.transaction_id == TXID
     assert _mutation_events(operations.events) == [
+        ("release", "inspect", "zakup", TXID),
+        ("release", "inspect", "mvn-api", TXID),
         ("release", "apply", "zakup", TXID),
         ("release", "apply", "mvn-api", TXID),
         ("secret", "preflight", "zakup", TXID, ENV_TEXT),
@@ -180,7 +193,7 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
         ("role-agent", "resume-primary", "mvn-api", TXID),
         ("maintenance", "verify", "mvn-api", TXID),
     ]
-    assert len(operations.events) == 1 + 3 * 23
+    assert len(operations.events) == 1 + 3 * 25
     assert operations.events[0] == ("topology",)
     for index in range(1, len(operations.events), 3):
         assert operations.events[index] == ("topology",)
@@ -188,13 +201,13 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
         assert operations.events[index + 2] == ("topology",)
 
 
-def test_partial_bundle_apply_failure_rolls_back_all_attempted_nodes_in_reverse(
+def test_bundle_apply_failure_preserves_all_journals_for_exact_resume(
     tmp_path,
 ):
     operations = FakeOperations()
     operations.release_failure = ("apply", "mvn-api")
 
-    with pytest.raises(RuntimeError, match="release bundles were rolled back"):
+    with pytest.raises(RuntimeError, match=f"resume with the same transaction ID {TXID}"):
         migrate_cluster(
             context=_context(tmp_path),
             env_text=ENV_TEXT,
@@ -205,12 +218,32 @@ def test_partial_bundle_apply_failure_rolls_back_all_attempted_nodes_in_reverse(
 
     release_events = [event for event in operations.events if event[0] == "release"]
     assert release_events == [
+        ("release", "inspect", "zakup", TXID),
+        ("release", "inspect", "mvn-api", TXID),
         ("release", "apply", "zakup", TXID),
         ("release", "apply", "mvn-api", TXID),
-        ("release", "rollback", "mvn-api", TXID),
-        ("release", "rollback", "zakup", TXID),
     ]
     assert len([event for event in operations.events if event[0] == "topology"]) == 9
+
+
+def test_first_bundle_digest_rejection_never_authorizes_rollback(tmp_path):
+    operations = FakeOperations()
+    operations.release_failure = ("apply", "zakup")
+
+    with pytest.raises(RuntimeError, match=f"resume with the same transaction ID {TXID}"):
+        migrate_cluster(
+            context=_context(tmp_path),
+            env_text=ENV_TEXT,
+            transaction_id=TXID,
+            runner=_unused_runner,
+            dependencies=operations.dependencies(),
+        )
+
+    assert [event for event in operations.events if event[0] == "release"] == [
+        ("release", "inspect", "zakup", TXID),
+        ("release", "inspect", "mvn-api", TXID),
+        ("release", "apply", "zakup", TXID),
+    ]
 
 
 def test_preflight_failure_rolls_back_assets_before_any_host_provision(tmp_path):
@@ -231,6 +264,8 @@ def test_preflight_failure_rolls_back_assets_before_any_host_provision(tmp_path)
         for event in operations.events
     )
     assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
         "apply",
         "apply",
         "rollback",
@@ -240,6 +275,7 @@ def test_preflight_failure_rolls_back_assets_before_any_host_provision(tmp_path)
 
 def test_reopened_finalized_node_forces_roll_forward_before_preflight(tmp_path):
     operations = FakeOperations()
+    operations.release_results[("inspect", "zakup")] = "matching-finalized"
     operations.release_results[("apply", "zakup")] = "reopened"
     operations.secret_failure = ("preflight", "mvn-api")
 
@@ -253,6 +289,31 @@ def test_reopened_finalized_node_forces_roll_forward_before_preflight(tmp_path):
         )
 
     assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
+        "apply",
+        "apply",
+    ]
+
+
+def test_resumed_active_node_forces_roll_forward_before_preflight(tmp_path):
+    operations = FakeOperations()
+    operations.release_results[("inspect", "zakup")] = "matching-active"
+    operations.release_results[("apply", "zakup")] = "resumed"
+    operations.secret_failure = ("preflight", "mvn-api")
+
+    with pytest.raises(RuntimeError, match=f"resume with the same transaction ID {TXID}"):
+        migrate_cluster(
+            context=_context(tmp_path),
+            env_text=ENV_TEXT,
+            transaction_id=TXID,
+            runner=_unused_runner,
+            dependencies=operations.dependencies(),
+        )
+
+    assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
         "apply",
         "apply",
     ]
@@ -272,6 +333,8 @@ def test_ambiguous_failure_during_first_provision_never_rolls_back(tmp_path):
         )
 
     assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
         "apply",
         "apply",
     ]
@@ -335,6 +398,8 @@ def test_role_agent_recovery_failure_is_reported_without_rolling_assets_back(
         )
 
     assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
         "apply",
         "apply",
     ]
@@ -366,8 +431,8 @@ def test_recovery_keeps_both_nodes_fenced_when_fresh_topology_is_unavailable(
 ):
     operations = FakeOperations()
     operations.maintenance_failure = ("provision-node", "zakup")
-    # Baseline + six successful before/after mutations + failed provision proof.
-    operations.discover_failures.add(14)
+    # The compatibility barrier adds two proved read-only operations.
+    operations.discover_failures.add(18)
 
     with pytest.raises(RuntimeError, match="neither node was resumed"):
         migrate_cluster(
@@ -384,7 +449,7 @@ def test_recovery_keeps_both_nodes_fenced_when_fresh_topology_is_unavailable(
 
 def test_topology_failure_before_first_provision_still_rolls_back_assets(tmp_path):
     operations = FakeOperations()
-    operations.topologies = [_topology()] * 9 + [_topology(timeline=10)]
+    operations.topologies = [_topology()] * 13 + [_topology(timeline=10)]
 
     with pytest.raises(RuntimeError, match="release bundles were rolled back"):
         migrate_cluster(
@@ -400,6 +465,8 @@ def test_topology_failure_before_first_provision_still_rolls_back_assets(tmp_pat
         for event in operations.events
     )
     assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
         "apply",
         "apply",
         "rollback",
@@ -423,7 +490,7 @@ def test_failure_after_first_successful_configuration_never_rolls_back(tmp_path)
     release_actions = [
         event[1] for event in operations.events if event[0] == "release"
     ]
-    assert release_actions == ["apply", "apply"]
+    assert release_actions == ["inspect", "inspect", "apply", "apply"]
 
 
 def test_ambiguous_failure_during_first_configuration_never_rolls_back(tmp_path):
@@ -440,6 +507,8 @@ def test_ambiguous_failure_during_first_configuration_never_rolls_back(tmp_path)
         )
 
     assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
         "apply",
         "apply",
     ]
@@ -475,7 +544,7 @@ def test_lineage_or_primary_drift_aborts_before_another_mutation(
         )
 
     assert [event for event in operations.events if event[0] == "release"] == [
-        ("release", "apply", "zakup", TXID)
+        ("release", "inspect", "zakup", TXID)
     ]
 
 

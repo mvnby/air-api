@@ -535,11 +535,41 @@ def clear_completed_marker(txid):
     if marker != txid:
         raise RuntimeError("another release transaction owns the maintenance marker")
     remove_marker(txid)
+def inspect_release(txid, project_dir, modes, release, descriptors):
+    txdir = os.path.join(TRANSACTION_ROOT, txid)
+    has_tx = transaction_exists(txdir)
+    marker = marker_value()
+    expected = [{key: item[key] for key in ("mode", "path", "sha256")} for item in descriptors]
+    try:
+        read_rollback_receipt(txid, project_dir, modes)
+    except FileNotFoundError:
+        pass
+    else:
+        raise RuntimeError("release transaction id already has a rollback receipt")
+    if has_tx:
+        if marker != txid:
+            raise RuntimeError("active release transaction is missing its exact marker")
+        journal = read_journal(txdir)
+        validate_journal(journal, txid, project_dir, release, descriptors)
+        for entry in journal["entries"]:
+            if file_generation(entry["path"], entry["old"], entry["sha256"], entry["mode"]) == "unknown":
+                raise RuntimeError("active release transaction has an unknown generation")
+        return "matching-active"
+    completed = read_release_manifest(modes, project_dir, allow_previous=True)
+    if completed is not None and completed["txid"] == txid:
+        if completed["release_sha256"] != release or completed["files"] != expected:
+            raise RuntimeError("transaction id already finalized another release")
+        if marker not in {None, txid}:
+            raise RuntimeError("another release transaction owns the maintenance marker")
+        return "matching-finalized"
+    if marker is not None:
+        raise RuntimeError("maintenance marker has no compatible release transaction")
+    return "fresh"
 def execute(action, txid, project_dir, compose_file, payload):
     validate_txid(txid)
     modes = expected_modes(project_dir, compose_file)
     release = decoded = descriptors = None
-    if action == "apply":
+    if action in {"apply", "inspect"}:
         release, decoded, descriptors = decode_bundle(payload, project_dir, compose_file)
     elif action not in {"rollback", "finalize"}:
         raise RuntimeError("unsupported release transaction action")
@@ -547,6 +577,9 @@ def execute(action, txid, project_dir, compose_file, payload):
     deploy_fd = None
     try:
         deploy_fd = open_lock(os.path.join(project_dir, ".deploy.lock"))
+        if action == "inspect":
+            reject_operation_records()
+            return inspect_release(txid, project_dir, modes, release, descriptors)
         ensure_roots()
         reject_operation_records()
         txdir = os.path.join(TRANSACTION_ROOT, txid)
@@ -603,7 +636,7 @@ def execute(action, txid, project_dir, compose_file, payload):
                 validate_journal(journal, txid, project_dir, release, descriptors)
                 apply_transaction(txdir, journal, decoded)
                 daemon_reload()
-                return "applied"
+                return "resumed" if has_tx else "applied"
             if not has_tx:
                 raise RuntimeError("release transaction does not exist")
             journal = read_journal(txdir)
@@ -644,7 +677,7 @@ def main():
         return 77
     action, txid, project_dir, compose_file = sys.argv[1:]
     try:
-        payload = read_payload(sys.stdin.buffer, action == "apply")
+        payload = read_payload(sys.stdin.buffer, action in {"apply", "inspect"})
         result = execute(action, txid, project_dir, compose_file, payload)
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         print("PITR release transport: " + str(exc), file=sys.stderr)

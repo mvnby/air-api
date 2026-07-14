@@ -19,6 +19,7 @@ try:
         ssh_args,
     )
     from scripts.ha.pitr_remote_execution import (
+        prepare_host_release_bundles,
         run_remote_maintenance_phase,
         run_remote_release_action,
         run_remote_role_agent_phase,
@@ -35,6 +36,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
         ssh_args,
     )
     from pitr_remote_execution import (  # type: ignore[no-redef]
+        prepare_host_release_bundles,
         run_remote_maintenance_phase,
         run_remote_release_action,
         run_remote_role_agent_phase,
@@ -45,6 +47,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
 TopologyDiscoverer = Callable[..., ClusterTopology]
 ReleaseAction = Callable[..., str]
+ReleaseBundleBuilder = Callable[[Sequence[PatroniNode]], dict[str, str]]
 SecretPhase = Callable[..., None]
 MaintenancePhase = Callable[..., None]
 RoleAgentPhase = Callable[..., None]
@@ -65,6 +68,7 @@ class MigrationResult:
 @dataclass(frozen=True)
 class MigrationDependencies:
     discover: TopologyDiscoverer = discover_cluster_topology
+    bundles: ReleaseBundleBuilder = prepare_host_release_bundles
     release: ReleaseAction = run_remote_release_action
     secret: SecretPhase = run_remote_secret_phase
     maintenance: MaintenancePhase = run_remote_maintenance_phase
@@ -104,7 +108,8 @@ class _MigrationOrchestrator:
         self.bootstrap_helper = bootstrap_helper
         self.baseline: ClusterTopology | None = None
         self.roll_forward = False
-        self.attempted_bundle_nodes: list[PatroniNode] = []
+        self.owned_bundle_nodes: list[PatroniNode] = []
+        self.release_bundles: dict[str, str] = {}
         self.role_agent_window_open = False
 
     def _discover(self) -> ClusterTopology:
@@ -161,16 +166,33 @@ class _MigrationOrchestrator:
         if action_error is not None:
             raise action_error
 
-    def _release(self, action: str, node: PatroniNode) -> None:
-        result = self.dependencies.release(
-            node=node,
-            context=self.context,
-            action=action,
-            txid=self.transaction_id,
-            runner=self.runner,
-        )
-        if action == "apply" and result == "reopened":
-            self.roll_forward = True
+    def _release(self, action: str, node: PatroniNode) -> str:
+        try:
+            result = self.dependencies.release(
+                node=node,
+                context=self.context,
+                action=action,
+                txid=self.transaction_id,
+                release_bundle=(
+                    self.release_bundles[node.project_dir]
+                    if action in {"inspect", "apply"}
+                    else None
+                ),
+                runner=self.runner,
+            )
+        except BaseException:
+            if action == "apply":
+                # A lost response or a rejected pre-existing journal does not
+                # prove that this controller owns a rollback. Preserve every
+                # durable journal and marker for an exact same-tx replay.
+                self.roll_forward = True
+            raise
+        if action == "apply":
+            if result == "applied":
+                self.owned_bundle_nodes.append(node)
+            elif result in {"resumed", "reopened"}:
+                self.roll_forward = True
+        return result
 
     def _secret(self, phase: str, node: PatroniNode) -> None:
         self.dependencies.secret(
@@ -202,9 +224,9 @@ class _MigrationOrchestrator:
             runner=self.runner,
         )
 
-    def _rollback_attempted_bundles(self, original_error: BaseException) -> None:
+    def _rollback_owned_bundles(self, original_error: BaseException) -> None:
         failures: list[str] = []
-        for node in reversed(self.attempted_bundle_nodes):
+        for node in reversed(self.owned_bundle_nodes):
             try:
                 self._mutate(
                     stage=f"bundle rollback {node.alias}",
@@ -288,9 +310,27 @@ class _MigrationOrchestrator:
     def run(self) -> MigrationResult:
         baseline = self._guard_topology(stage="baseline")
         ordered_nodes = (baseline.standby, baseline.primary)
+        self.release_bundles = self.dependencies.bundles(ordered_nodes)
+        if set(self.release_bundles) != {node.project_dir for node in ordered_nodes}:
+            raise RuntimeError("pinned release bundle set does not match cluster nodes")
+        compatibility: dict[str, str] = {}
+        for node in ordered_nodes:
+            self._mutate(
+                stage=f"bundle compatibility {node.alias}",
+                action=lambda node=node: compatibility.__setitem__(
+                    node.alias, self._release("inspect", node)
+                ),
+            )
+        if any(state != "fresh" for state in compatibility.values()):
+            self.roll_forward = True
+        release_nodes = tuple(
+            sorted(
+                ordered_nodes,
+                key=lambda node: compatibility[node.alias] == "fresh",
+            )
+        )
         try:
-            for node in ordered_nodes:
-                self.attempted_bundle_nodes.append(node)
+            for node in release_nodes:
                 self._mutate(
                     stage=f"bundle apply {node.alias}",
                     action=lambda node=node: self._release("apply", node),
@@ -393,7 +433,7 @@ class _MigrationOrchestrator:
             )
         except BaseException as exc:
             if not self.roll_forward:
-                self._rollback_attempted_bundles(exc)
+                self._rollback_owned_bundles(exc)
                 raise RuntimeError(
                     f"cluster migration failed before configuration and release bundles "
                     f"were rolled back: {exc}"
