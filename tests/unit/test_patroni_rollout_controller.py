@@ -2,7 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from scripts.ha.patroni_rollout_journal import has_ambiguous_switchover_boundary
 from scripts.ha.patroni_rollout_schema import (
+    EXPECTED_ARCHIVE_COMMAND,
     LEGACY_ARCHIVE_COMMAND,
     LEGACY_ARCHIVE_COMMAND_SHA256,
     RolloutInputs,
@@ -76,9 +78,11 @@ class FakeOperations:
             for node in PATRONI_NODES
         }
         self.fail_action = None
+        self.lose_response_after_completion = None
         self.ambiguous_switch = False
         self.fail_discover = False
         self.lose_after_completion = []
+        self.archive_command = LEGACY_ARCHIVE_COMMAND
         self.prepared = {node.alias for node in PATRONI_NODES} if existing else set()
         standby = "zakup" if baseline_primary == "mvn-api" else "mvn-api"
         self.images = {node.alias: CURRENT for node in PATRONI_NODES}
@@ -106,6 +110,16 @@ class FakeOperations:
 
     def remote(self, *, action, node, extra=None, **_kwargs):
         self.events.append((action, node.alias, dict(extra or {})))
+        if (
+            action == "check-legacy-dcs"
+            and self.archive_command != LEGACY_ARCHIVE_COMMAND
+        ):
+            raise RuntimeError("legacy DCS archive command drifted")
+        if (
+            action == "check-target-dcs"
+            and self.archive_command != EXPECTED_ARCHIVE_COMMAND
+        ):
+            raise RuntimeError("target DCS archive command is not applied")
         if action == "prepare":
             self.prepared.add(node.alias)
             return "prepared"
@@ -138,11 +152,17 @@ class FakeOperations:
             raise RuntimeError("runtime is not the target image generation")
         if action == "revert-archive-command" and self.statuses[node.alias]["operation"] == "prove-archive":
             self.statuses[node.alias]["operation"] = "idle"
+        if action == "apply-archive-command":
+            self.archive_command = EXPECTED_ARCHIVE_COMMAND
+        if action == "revert-archive-command":
+            self.archive_command = LEGACY_ARCHIVE_COMMAND
         if action in self.JOURNAL_ACTIONS:
             self.statuses[node.alias]["operation"] = "idle"
             if action not in self.statuses[node.alias]["completed"]:
                 self.statuses[node.alias]["completed"].append(action)
             self._lose_completed_response(action, node, extra)
+        if action == self.lose_response_after_completion:
+            raise RuntimeError("lost SSH response after completed operation")
         return action + "=passed"
 
     def status(self, *, node, **_kwargs):
@@ -262,9 +282,8 @@ def test_resume_conservatively_detects_ambiguous_switchover_boundary(
     operations = FakeOperations(existing=True)
     operations.statuses["mvn-api"]["completed"].extend(completed)
     operations.statuses["mvn-api"]["operation"] = operation
-    controller = _orchestrator(tmp_path, operations, resume=True)
-
-    assert controller._has_ambiguous_switchover_boundary(operations.statuses)
+    aliases = tuple(node.alias for node in PATRONI_NODES)
+    assert has_ambiguous_switchover_boundary(operations.statuses, aliases)
 
 
 def test_rollout_orders_both_images_before_archive_command(tmp_path):
@@ -394,6 +413,72 @@ def test_compensated_archive_proof_converges_on_one_resume(tmp_path):
 
     assert result.final_primary == "zakup"
     assert _mutation_names(operations.events).count("prove-archive") == 2
+
+
+def test_completed_dcs_compensation_reconciles_and_stays_converged_on_two_resumes(
+    tmp_path,
+):
+    operations = FakeOperations()
+    operations.fail_action = "prove-archive"
+    operations.lose_response_after_completion = "revert-archive-command"
+
+    with pytest.raises(RuntimeError, match="reversion could not be proved"):
+        _orchestrator(tmp_path, operations).run()
+
+    primary = "zakup"
+    assert "revert-archive-command" in operations.statuses[primary]["completed"]
+    assert not any(
+        "record:archive-command-reverted" in status["completed"]
+        for status in operations.statuses.values()
+    )
+    assert operations.archive_command == LEGACY_ARCHIVE_COMMAND
+
+    operations.fail_action = None
+    first_resume = _orchestrator(tmp_path, operations, resume=True).run()
+    mutations_after_first_resume = list(_mutation_names(operations.events))
+
+    second_resume = _orchestrator(tmp_path, operations, resume=True).run()
+    mutations_after_second_resume = _mutation_names(operations.events)
+
+    assert first_resume.final_primary == primary
+    assert second_resume == first_resume
+    assert operations.archive_command == EXPECTED_ARCHIVE_COMMAND
+    assert mutations_after_first_resume.count("apply-archive-command") == 2
+    assert mutations_after_second_resume.count("apply-archive-command") == 2
+    assert mutations_after_second_resume.count("revert-archive-command") == 1
+    for status in operations.statuses.values():
+        assert "record:archive-command-reverted" in status["completed"]
+    reverted_records = [
+        index
+        for index, event in enumerate(operations.events)
+        if event[0] == "record"
+        and event[2].get("record") == "archive-command-reverted"
+    ]
+    reapplied = [
+        index
+        for index, event in enumerate(operations.events)
+        if event[0] == "apply-archive-command"
+    ]
+    assert len(reverted_records) == 2
+    assert max(reverted_records) < reapplied[-1]
+
+
+def test_completed_dcs_compensation_rejects_conflicting_interrupted_operation(
+    tmp_path,
+):
+    operations = FakeOperations(switched=True, existing=True)
+    operations.statuses["zakup"]["completed"].append("revert-archive-command")
+    operations.statuses["mvn-api"]["operation"] = "update-node"
+    operations.archive_command = LEGACY_ARCHIVE_COMMAND
+
+    with pytest.raises(RuntimeError, match="conflicts with another interrupted operation"):
+        _orchestrator(tmp_path, operations, resume=True).run()
+
+    assert not any(
+        event[0] == "record"
+        and event[2].get("record") == "archive-command-reverted"
+        for event in operations.events
+    )
 
 
 @pytest.mark.parametrize(

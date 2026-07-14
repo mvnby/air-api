@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, Sequence
 
 try:
+    from scripts.ha.patroni_rollout_journal import (
+        completed_flags,
+        has_ambiguous_switchover_boundary,
+        record_flags,
+    )
     from scripts.ha.patroni_rollout_remote import (
         helper_source_sha256,
         read_status,
@@ -23,6 +28,11 @@ try:
         PinnedSshContext,
     )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
+    from patroni_rollout_journal import (  # type: ignore[no-redef]
+        completed_flags,
+        has_ambiguous_switchover_boundary,
+        record_flags,
+    )
     from patroni_rollout_remote import (  # type: ignore[no-redef]
         helper_source_sha256,
         read_status,
@@ -52,6 +62,7 @@ Discoverer = Callable[..., ClusterTopology]
 RemoteAction = Callable[..., str]
 StatusReader = Callable[..., dict[str, object]]
 Sleeper = Callable[[float], None]
+NODE_ALIASES = tuple(node.alias for node in PATRONI_NODES)
 
 
 @dataclass(frozen=True)
@@ -142,43 +153,16 @@ class _Orchestrator:
     def _statuses(self) -> dict[str, dict[str, object]]:
         return {node.alias: self._status(node) for node in PATRONI_NODES}
 
-    def _record_flags(
-        self, statuses: Mapping[str, Mapping[str, object]], name: str
-    ) -> list[bool]:
-        key = "record:" + name
-        flags = []
-        for node in PATRONI_NODES:
-            completed = statuses[node.alias].get("completed")
-            if not isinstance(completed, list) or any(
-                not isinstance(item, str) for item in completed
-            ):
-                raise RuntimeError("remote rollout journal completed list is invalid")
-            flags.append(key in completed)
-        return flags
-
     def _ensure_record(
         self, statuses: dict[str, dict[str, object]], name: str
     ) -> dict[str, dict[str, object]]:
-        if not all(self._record_flags(statuses, name)):
+        if not all(record_flags(statuses, NODE_ALIASES, name)):
             self._record(name)
             return self._statuses()
         return statuses
 
     def _has_record(self, statuses: Mapping[str, Mapping[str, object]], name: str) -> bool:
-        return all(self._record_flags(statuses, name))
-
-    def _has_ambiguous_switchover_boundary(
-        self, statuses: Mapping[str, Mapping[str, object]]
-    ) -> bool:
-        if any(self._record_flags(statuses, "standby-updated")) or any(
-            self._record_flags(statuses, "switched-over")
-        ):
-            return True
-        return any(
-            statuses[node.alias].get("operation") == "switchover"
-            or "switchover" in statuses[node.alias]["completed"]
-            for node in PATRONI_NODES
-        )
+        return all(record_flags(statuses, NODE_ALIASES, name))
 
     def _complete_interrupted_records(
         self, statuses: dict[str, dict[str, object]]
@@ -194,13 +178,29 @@ class _Orchestrator:
         self, statuses: dict[str, dict[str, object]]
     ) -> dict[str, dict[str, object]]:
         operations = {node.alias: statuses[node.alias].get("operation") for node in PATRONI_NODES}
-        if "revert-archive-command" in operations.values():
+        revert_in_progress = "revert-archive-command" in operations.values()
+        revert_completed = any(
+            completed_flags(statuses, NODE_ALIASES, "revert-archive-command")
+        )
+        if revert_in_progress or revert_completed:
+            conflicting = {
+                node: operation
+                for node, operation in operations.items()
+                if operation not in {"idle", "revert-archive-command"}
+            }
+            if conflicting:
+                raise RuntimeError(
+                    "DCS compensation journal conflicts with another interrupted operation"
+                )
             for node in PATRONI_NODES:
                 if operations[node.alias] == "revert-archive-command":
                     self._remote("revert-archive-command", node)
-            return self._ensure_record(
-                self._statuses(), "archive-command-reverted"
-            )
+            reconciled = self._statuses()
+            if not any(
+                completed_flags(reconciled, NODE_ALIASES, "revert-archive-command")
+            ):
+                raise RuntimeError("DCS compensation did not reach a completed journal state")
+            return self._ensure_record(reconciled, "archive-command-reverted")
         abort_completed = any(
             "abort" in statuses[node.alias].get("completed", [])
             for node in PATRONI_NODES
@@ -445,7 +445,9 @@ class _Orchestrator:
         if finalized is not None:
             return finalized
         statuses = self._resume_terminal_operations(statuses)
-        if self.inputs.resume and self._has_ambiguous_switchover_boundary(statuses):
+        if self.inputs.resume and has_ambiguous_switchover_boundary(
+            statuses, NODE_ALIASES
+        ):
             self.roll_forward = True
         try:
             statuses = self._ensure_record(statuses, baseline_record)
@@ -586,7 +588,7 @@ class _Orchestrator:
                     },
                 )
             command_was_reverted = any(
-                self._record_flags(statuses, "archive-command-reverted")
+                record_flags(statuses, NODE_ALIASES, "archive-command-reverted")
             )
             if command_was_reverted or not self._has_record(
                 statuses, "archive-command-applied"
