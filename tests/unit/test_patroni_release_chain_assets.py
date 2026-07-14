@@ -57,6 +57,8 @@ def test_publish_orders_verification_rehearsal_before_sha_tag_promotion():
     )
     assert evidence["with"]["if-no-files-found"] == "error"
     assert "release-manifest.json" not in evidence["with"]["path"]
+    summary = next(step for step in steps if step["name"] == "Patroni release summary")
+    assert summary["continue-on-error"] == "true"
     promotion = next(
         step for step in steps if step["name"] == "Promote immutable digest to release SHA tag"
     )["run"]

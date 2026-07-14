@@ -211,6 +211,7 @@ jobs:
 
       - name: Patroni release summary
         if: ${{ always() }}
+        continue-on-error: true
         env:
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           PROMOTION_OUTCOME: ${{ steps.promotion.outcome }}
