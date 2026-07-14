@@ -521,11 +521,27 @@ def test_installer_and_blue_green_siblings_are_attested():
         "/usr/local/libexec/mvn-pitr/run_postgres_pitr_install_locked.py",
         "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh",
         "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh",
+        "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
         "/usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh",
     }
     assert expected <= set(manifest)
+    helper_path = "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py"
+    helper_source = Path(pitr_remote_execution.REPO_ROOT) / "scripts/ha/safe_deploy_lock.py"
+    assert manifest[helper_path] == hashlib.sha256(helper_source.read_bytes()).hexdigest()
+    release = json.loads(
+        pitr_remote_execution.build_host_release_bundle(PATRONI_NODES[0])
+    )
+    helper_entry = next(item for item in release["files"] if item["path"] == helper_path)
+    assert helper_entry["mode"] == 0o755
+    assert helper_entry["sha256"] == manifest[helper_path]
     for path in expected:
         assert f'"{path}": 0o755' in pitr_remote_execution.REMOTE_ASSET_ATTESTATION
+    wrapper = pitr_remote_execution.LOCKED_MAINTENANCE_WRAPPER
+    assert '"API_DEPLOY_LOCK_FD": "9"' in wrapper
+    assert '"API_DEPLOY_LOCK_FILE": os.path.join(project_dir, ".deploy.lock")' in wrapper
+    assert '"API_DEPLOY_LOCK_HELPER": "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py"' in wrapper
+    assert "os.dup2(deploy_fd, 9, inheritable=True)" in wrapper
+    assert "pass_fds = (deploy_fd, secret_fd)" in wrapper
     execute_source = bundle.REMOTE_RELEASE_BUNDLE_EXECUTOR.split("def execute(", 1)[1]
     assert execute_source.index("global_fd = open_lock") < execute_source.index(
         "deploy_fd = open_lock"

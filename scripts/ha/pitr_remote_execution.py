@@ -196,6 +196,11 @@ PITR_HOST_ASSETS = (
         0o755,
     ),
     PitrHostAsset(
+        REPO_ROOT / "scripts/ha/safe_deploy_lock.py",
+        "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
+        0o755,
+    ),
+    PitrHostAsset(
         REPO_ROOT / "scripts/prepare_google_oauth_token_dir.sh",
         "/usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh",
         0o755,

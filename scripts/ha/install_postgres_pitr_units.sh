@@ -155,6 +155,11 @@ install -o root -g root -m 0755 scripts/ha/postgres_pitr_wal_lineage.py /usr/loc
 install -o root -g root -m 0755 scripts/ha/postgres_pitr_recovery_config.py /usr/local/sbin/mvn-postgres-pitr-recovery-config
 install -o root -g root -m 0755 scripts/ha/pitr_operation_guard.py /usr/local/sbin/mvn_postgres_pitr_operation_guard.py
 install -o root -g root -m 0755 scripts/ha/pitr_operation_cleanup.py /usr/local/sbin/mvn_postgres_pitr_operation_cleanup.py
+install -d -o root -g root -m 0755 /usr/local/libexec/mvn-pitr
+install -o root -g root -m 0755 scripts/deploy_backend_blue_green.sh /usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh
+install -o root -g root -m 0755 scripts/deploy_backend_blue_green_safety.sh /usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh
+install -o root -g root -m 0755 scripts/prepare_google_oauth_token_dir.sh /usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh
+install -o root -g root -m 0755 scripts/ha/safe_deploy_lock.py /usr/local/libexec/mvn-pitr/safe_deploy_lock.py
 install -o root -g root -m 0644 deploy/ha/systemd/mvn-postgres-wal-upload.service /etc/systemd/system/mvn-postgres-wal-upload.service
 install -o root -g root -m 0644 deploy/ha/systemd/mvn-postgres-wal-upload.timer /etc/systemd/system/mvn-postgres-wal-upload.timer
 install -o root -g root -m 0644 deploy/ha/systemd/mvn-postgres-basebackup.service /etc/systemd/system/mvn-postgres-basebackup.service

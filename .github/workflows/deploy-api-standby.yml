@@ -49,6 +49,7 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
       - name: Deploy standby API app image
         id: deploy_standby
@@ -79,68 +80,67 @@ jobs:
 
           cat scripts/ha/promote_local_standby.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-promote-local-standby"
           cat scripts/ha/mvn-standby-status.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "install -m 0755 /dev/stdin /usr/local/sbin/mvn-standby-status"
-          cat scripts/deploy.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/deploy.sh"
-          cat scripts/prepare_google_oauth_token_dir.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/prepare_google_oauth_token_dir.sh"
-          cat scripts/post_deploy_smoke_check.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/post_deploy_smoke_check.sh"
-          cat scripts/compose_candidate_transaction.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/compose_candidate_transaction.sh"
-          cat scripts/reconcile_backend_compose_runtime.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/reconcile_backend_compose_runtime.sh"
-          cat scripts/deploy_backend_candidate_transaction.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/deploy_backend_candidate_transaction.sh"
+          bundle_sources=(
+            scripts/deploy.sh scripts/prepare_google_oauth_token_dir.sh
+            scripts/post_deploy_smoke_check.sh scripts/compose_candidate_transaction.sh
+            scripts/reconcile_backend_compose_runtime.sh
+            scripts/deploy_backend_candidate_transaction.sh
+            scripts/ha/safe_deploy_lock.py
+          )
+          lock_helper_sha256="$(sha256sum scripts/ha/safe_deploy_lock.py | awk '{print $1}')"
 
-          # shellcheck disable=SC2029
-          printf '%s\n' "${GHCR_PAT}" | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
-            set -euo pipefail; \
-            chmod +x /tmp/deploy.sh /tmp/prepare_google_oauth_token_dir.sh /tmp/post_deploy_smoke_check.sh /tmp/compose_candidate_transaction.sh /tmp/reconcile_backend_compose_runtime.sh /tmp/deploy_backend_candidate_transaction.sh && \
-            IFS= read -r GHCR_PAT && export GHCR_PAT && \
-            GITHUB_ACTOR='${{ github.actor }}' \
-            API_PROJECT_DIR='${API_STANDBY_PROJECT_DIR}' \
-            API_ACTIVE_SLOT_FILE='${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled' \
-            API_CANONICAL_COMPOSE_FILE='${API_STANDBY_PROJECT_DIR}/${API_STANDBY_COMPOSE_FILE}' \
-            API_CANDIDATE_COMPOSE_FILE='${API_STANDBY_PROJECT_DIR}/${deploy_compose_file}' \
-            API_COMPOSE_TRANSACTIONAL='${API_STANDBY_COPY_COMPOSE}' \
-            API_DEPLOY_STRATEGY=in_place \
-            API_DEPLOY_SERVICES='app' \
-            API_MIGRATION_SERVICE='app' \
-            API_RUN_MIGRATIONS='false' \
-            API_RUN_DEFAULTS='false' \
-            API_STOP_SERVICES_AFTER_DEPLOY=bot \
-            API_IN_PLACE_DEPLOY_SCRIPT='/tmp/deploy.sh' \
-            API_SMOKE_SCRIPT='/tmp/post_deploy_smoke_check.sh' \
-            API_RECONCILE_SCRIPT='/tmp/reconcile_backend_compose_runtime.sh' \
-            COMPOSE_CANDIDATE_TRANSACTION_SCRIPT='/tmp/compose_candidate_transaction.sh' \
-            GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT='/tmp/prepare_google_oauth_token_dir.sh' \
-            BASE_URL='${API_STANDBY_HEALTH_URL%/api/health}' \
-            READY_URL='${API_STANDBY_HEALTH_URL%/api/health}/api/ready' \
-            READY_EXPECTATION=fenced \
-            COMPOSE_SERVICE_CHECKS='app' \
-            BOT_EXPECT_ENABLED=false \
-            API_READY_URL='${API_STANDBY_HEALTH_URL}' \
-            BACKEND_IMAGE='${BACKEND_IMAGE}' \
-            SMOKE_SUMMARY_FILE='/tmp/standby_smoke_summary.txt' \
-            bash /tmp/deploy_backend_candidate_transaction.sh; \
-            cat /tmp/standby_smoke_summary.txt"
+          python3 scripts/ha/run_verified_remote_bundle.py \
+            --remote "${API_STANDBY_USER}@${API_STANDBY_HOST}" \
+            --identity-file ~/.ssh/deploy_key --known-hosts-file ~/.ssh/known_hosts \
+            --prefix mvn-standby-deploy --entry deploy_backend_candidate_transaction.sh \
+            --secret-env GHCR_PAT --print-required standby_smoke_summary.txt \
+            --env "GITHUB_ACTOR=${{ github.actor }}" \
+            --env "API_PROJECT_DIR=${API_STANDBY_PROJECT_DIR}" \
+            --env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled" \
+            --env "API_CANONICAL_COMPOSE_FILE=${API_STANDBY_PROJECT_DIR}/${API_STANDBY_COMPOSE_FILE}" \
+            --env "API_CANDIDATE_COMPOSE_FILE=${API_STANDBY_PROJECT_DIR}/${deploy_compose_file}" \
+            --env "API_COMPOSE_TRANSACTIONAL=${API_STANDBY_COPY_COMPOSE}" \
+            --env API_DEPLOY_STRATEGY=in_place --env API_DEPLOY_SERVICES=app \
+            --env API_MIGRATION_SERVICE=app --env API_RUN_MIGRATIONS=false \
+            --env API_RUN_DEFAULTS=false --env API_STOP_SERVICES_AFTER_DEPLOY=bot \
+            --env API_IN_PLACE_DEPLOY_SCRIPT=__MVN_BUNDLE__/deploy.sh \
+            --env API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh \
+            --env API_RECONCILE_SCRIPT=__MVN_BUNDLE__/reconcile_backend_compose_runtime.sh \
+            --env API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py \
+            --env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}" \
+            --env COMPOSE_CANDIDATE_TRANSACTION_SCRIPT=__MVN_BUNDLE__/compose_candidate_transaction.sh \
+            --env GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=__MVN_BUNDLE__/prepare_google_oauth_token_dir.sh \
+            --env "BASE_URL=${API_STANDBY_HEALTH_URL%/api/health}" \
+            --env "READY_URL=${API_STANDBY_HEALTH_URL%/api/health}/api/ready" \
+            --env READY_EXPECTATION=fenced --env COMPOSE_SERVICE_CHECKS=app \
+            --env BOT_EXPECT_ENABLED=false --env "API_READY_URL=${API_STANDBY_HEALTH_URL}" \
+            --env "BACKEND_IMAGE=${BACKEND_IMAGE}" \
+            --env SMOKE_SUMMARY_FILE=__MVN_BUNDLE__/standby_smoke_summary.txt \
+            "${bundle_sources[@]}"
 
       - name: Roll Back Standby After Failed Activation
         id: rollback_standby
         if: ${{ always() && steps.deploy_standby.outcome == 'failure' }}
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           set -euo pipefail
-          SSH_OPTS=(
-            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3
-          )
-          cat scripts/rollback_backend.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/rollback_backend.sh"
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
-            chmod +x /tmp/rollback_backend.sh && \
-            CONFIRM_ROLLBACK=true \
-            API_PROJECT_DIR='${API_STANDBY_PROJECT_DIR}' \
-            API_ACTIVE_SLOT_FILE='${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled' \
-            API_COMPOSE_FILE='${API_STANDBY_COMPOSE_FILE}' \
-            API_DEPLOY_SERVICES='app' \
-            API_READY_URL='${API_STANDBY_HEALTH_URL}' \
-            API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true \
-            EXPECTED_CURRENT_IMAGE='${{ inputs.backend_image }}' \
-            bash /tmp/rollback_backend.sh" | tee standby_rollback.log
+          bundle_sources=(scripts/rollback_backend.sh scripts/ha/safe_deploy_lock.py)
+          lock_helper_sha256="$(sha256sum scripts/ha/safe_deploy_lock.py | awk '{print $1}')"
+          python3 scripts/ha/run_verified_remote_bundle.py \
+            --remote "${API_STANDBY_USER}@${API_STANDBY_HOST}" \
+            --identity-file ~/.ssh/deploy_key --known-hosts-file ~/.ssh/known_hosts \
+            --prefix mvn-standby-rollback --entry rollback_backend.sh \
+            --secret-env GHCR_PAT --env CONFIRM_ROLLBACK=true \
+            --env "API_PROJECT_DIR=${API_STANDBY_PROJECT_DIR}" \
+            --env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled" \
+            --env "API_COMPOSE_FILE=${API_STANDBY_COMPOSE_FILE}" \
+            --env API_DEPLOY_SERVICES=app --env "API_READY_URL=${API_STANDBY_HEALTH_URL}" \
+            --env API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true \
+            --env API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py \
+            --env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}" \
+            --env 'EXPECTED_CURRENT_IMAGE=${{ inputs.backend_image }}' \
+            "${bundle_sources[@]}" | tee standby_rollback.log
 
       - name: Post-Standby Active-Passive Invariant Check
         id: standby_active_passive
@@ -156,14 +156,12 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          SSH_OPTS=(
-            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3
-          )
-          cat scripts/prune_unused_docker_images.sh | ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "cat > /tmp/prune_unused_docker_images.sh"
-          ssh "${SSH_OPTS[@]}" "${API_STANDBY_USER}@${API_STANDBY_HOST}" "\
-            chmod +x /tmp/prune_unused_docker_images.sh && \
-            KEEP_BACKEND_IMAGES=3 bash /tmp/prune_unused_docker_images.sh" | tee standby_docker_prune.log
+          python3 scripts/ha/run_verified_remote_bundle.py \
+            --remote "${API_STANDBY_USER}@${API_STANDBY_HOST}" \
+            --identity-file ~/.ssh/deploy_key --known-hosts-file ~/.ssh/known_hosts \
+            --prefix mvn-standby-prune --entry prune_unused_docker_images.sh \
+            --env KEEP_BACKEND_IMAGES=3 scripts/prune_unused_docker_images.sh \
+            | tee standby_docker_prune.log
 
       - name: Upload Standby Deploy Logs
         if: always()

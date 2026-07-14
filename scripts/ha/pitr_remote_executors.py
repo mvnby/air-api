@@ -50,6 +50,7 @@ EXPECTED_ASSET_MODES = {
     "/usr/local/libexec/mvn-pitr/run_postgres_pitr_install_locked.py": 0o755,
     "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh": 0o755,
     "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh": 0o755,
+    "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py": 0o755,
     "/usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh": 0o755,
     "/etc/systemd/system/mvn-postgres-wal-upload.service": 0o644,
     "/etc/systemd/system/mvn-postgres-wal-upload.timer": 0o644,
@@ -216,6 +217,7 @@ def attest_assets(raw_manifest, project_dir, compose_file):
             os.close(descriptor)
         if hasher.hexdigest() != digest:
             raise RuntimeError(f"host asset digest mismatch: {path}")
+    return manifest
 '''.strip()
 
 
@@ -295,7 +297,7 @@ def wrapper_main():
         except RuntimeError as exc:
             return wrapper_fail(str(exc), 78)
         try:
-            attest_assets(asset_manifest, project_dir, compose_file)
+            manifest = attest_assets(asset_manifest, project_dir, compose_file)
             guard = load_operation_guard()
             records = guard.list_records(project_dir=project_dir)
             if (
@@ -317,12 +319,24 @@ def wrapper_main():
             "COMPOSE_FILE": compose_file,
             "PITR_OPERATION_ID": operation_id,
             "PITR_TRANSACTION_ID": transaction_id,
+            "API_DEPLOY_LOCK_FD": "9",
+            "API_DEPLOY_LOCK_FILE": os.path.join(project_dir, ".deploy.lock"),
+            "API_DEPLOY_LOCK_HELPER": "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
+            "API_DEPLOY_LOCK_HELPER_SHA256": manifest[
+                "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py"
+            ],
         }
         secret_fd = None
         payload = None
         payload_view = None
         try:
-            pass_fds = ()
+            if deploy_fd != 9:
+                os.dup2(deploy_fd, 9, inheritable=True)
+                os.close(deploy_fd)
+                deploy_fd = 9
+            else:
+                os.set_inheritable(deploy_fd, True)
+            pass_fds = (deploy_fd,)
             if phase in SECRET_PHASES:
                 payload = bytearray(sys.stdin.buffer.read(MAX_PAYLOAD_BYTES + 1))
                 if not payload or len(payload) > MAX_PAYLOAD_BYTES:
@@ -349,7 +363,7 @@ def wrapper_main():
                     | fcntl.F_SEAL_SEAL,
                 )
                 environment["ENV_INPUT_FILE"] = f"/proc/self/fd/{secret_fd}"
-                pass_fds = (secret_fd,)
+                pass_fds = (deploy_fd, secret_fd)
             result = subprocess.run(
                 [bootstrap_helper, phase],
                 env=environment,

@@ -56,6 +56,7 @@ BASE_MODES = {
     LIBEXEC_DIR + "/run_postgres_pitr_install_locked.py": 0o755,
     LIBEXEC_DIR + "/deploy_backend_blue_green.sh": 0o755,
     LIBEXEC_DIR + "/deploy_backend_blue_green_safety.sh": 0o755,
+    LIBEXEC_DIR + "/safe_deploy_lock.py": 0o755,
     LIBEXEC_DIR + "/prepare_google_oauth_token_dir.sh": 0o755,
     "/etc/systemd/system/mvn-postgres-wal-upload.service": 0o644,
     "/etc/systemd/system/mvn-postgres-wal-upload.timer": 0o644,

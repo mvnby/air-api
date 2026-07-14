@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ORIGINAL_ARGS=("$@")
+ORIGINAL_ARG_COUNT="$#"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
 DEPLOY_SERVICES="${API_DEPLOY_SERVICES:-app bot}"
@@ -9,8 +12,11 @@ ROLLBACK_TARGET="${BACKEND_ROLLBACK_TARGET:-}"
 EXPECTED_CURRENT_IMAGE="${EXPECTED_CURRENT_IMAGE:-}"
 CONFIRM_ROLLBACK="${CONFIRM_ROLLBACK:-false}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
+DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
+DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/ha/safe_deploy_lock.py}"
+DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
-BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-/tmp/deploy_backend_blue_green.sh}"
+BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-${SCRIPT_DIR}/deploy_backend_blue_green.sh}"
 FORCE_COMPOSE_RECONCILE_ON_NOOP="${API_FORCE_COMPOSE_RECONCILE_ON_NOOP:-false}"
 GOOGLE_TOKEN_CONTRACT_LABEL="org.mvn.google-oauth-token-contract"
 GOOGLE_TOKEN_CONTRACT_REQUIRED="directory-v1"
@@ -58,11 +64,41 @@ if [[ ! -f "${COMPOSE_FILE}" ]]; then
   exit 1
 fi
 
-exec 9>"${DEPLOY_LOCK_FILE}"
-if ! flock -n 9; then
-  echo "Another deployment holds ${DEPLOY_LOCK_FILE}; refusing to overlap" >&2
-  exit 1
+[[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "Safe deployment lock helper digest is missing" >&2; exit 1;
+}
+python3 - "${DEPLOY_LOCK_HELPER}" "${DEPLOY_LOCK_HELPER_SHA256}" <<'PY'
+import hashlib, os, stat, sys
+path, expected = sys.argv[1:]
+before = os.lstat(path)
+if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
+        or before.st_uid != os.geteuid() or before.st_nlink != 1
+        or before.st_mode & 0o022):
+    raise SystemExit("safe deployment lock helper metadata is unsafe")
+fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(fd); data = b""
+    while True:
+        chunk = os.read(fd, 131072)
+        if not chunk: break
+        data += chunk
+finally: os.close(fd)
+if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        or hashlib.sha256(data).hexdigest() != expected):
+    raise SystemExit("safe deployment lock helper source is unreviewed")
+PY
+if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
+  if (( ORIGINAL_ARG_COUNT > 0 )); then
+    exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" \
+      bash "$0" "${ORIGINAL_ARGS[@]}"
+  fi
+  exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0"
 fi
+[[ "${DEPLOY_LOCK_FD}" == "9" ]] || {
+  echo "Rollback requires inherited deployment lock fd 9" >&2
+  exit 1
+}
+python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
 
 ENV_FILE="${PROJECT_DIR}/.env"
 PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
@@ -70,7 +106,7 @@ touch "${ENV_FILE}"
 current_image="$(sed -n 's/^BACKEND_IMAGE=//p' "${ENV_FILE}" | tail -n 1)"
 
 reconcile_current_compose() {
-  local service active_slot
+  local service active_slot ready_payload
   local resolved_services=()
   [[ "${current_image}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]] || {
     echo "Cannot reconcile compose without an immutable current image" >&2
@@ -91,8 +127,8 @@ reconcile_current_compose() {
   docker compose -f "${COMPOSE_FILE}" --profile bluegreen \
     up -d --no-deps --force-recreate "${resolved_services[@]}"
   for _ in $(seq 1 30); do
-    if curl -fsS "${READY_URL}" >/tmp/mvn-backend-compose-reconcile.out; then
-      cat /tmp/mvn-backend-compose-reconcile.out
+    if ready_payload="$(curl -fsS "${READY_URL}")"; then
+      printf '%s\n' "${ready_payload}"
       printf '\n'
       echo "Canonical compose runtime reconciled"
       return 0
@@ -168,7 +204,9 @@ restore_current_image_after_failed_probe() {
       API_RUN_MIGRATIONS=false \
       API_RUN_DEFAULTS=false \
       API_DRAIN_SECONDS=0 \
-      API_DEPLOY_LOCK_ALREADY_HELD=true \
+      API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+      API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
+      API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
       bash "${BLUE_GREEN_SCRIPT}"
     return
   fi
@@ -246,7 +284,9 @@ if [[ -f "${ACTIVE_SLOT_FILE}" ]]; then
     API_RUN_MIGRATIONS=false \
     API_RUN_DEFAULTS=false \
     API_DRAIN_SECONDS=0 \
-    API_DEPLOY_LOCK_ALREADY_HELD=true \
+    API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+    API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
+    API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
     bash "${BLUE_GREEN_SCRIPT}"
   if ! probe_google_backups; then
     restore_current_image_or_critical || exit $?
@@ -275,8 +315,8 @@ echo "Recreating application services with rollback image: ${ROLLBACK_TARGET}"
 "${COMPOSE[@]}" up -d --no-deps --force-recreate "${deploy_services[@]}"
 
 for _ in $(seq 1 30); do
-  if curl -fsS "${READY_URL}" >/tmp/mvn-backend-rollback-ready.out; then
-    cat /tmp/mvn-backend-rollback-ready.out
+  if rollback_ready_payload="$(curl -fsS "${READY_URL}")"; then
+    printf '%s\n' "${rollback_ready_payload}"
     printf '\n'
     if [[ -n "${current_image}" ]]; then
       printf '%s\n' "${current_image}" > "${PREVIOUS_IMAGE_FILE}"

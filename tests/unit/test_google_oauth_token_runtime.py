@@ -217,7 +217,7 @@ def test_deploy_paths_run_token_preparation_before_compose_activation():
         encoding="utf-8"
     )
     assert "scripts/prepare_google_oauth_token_dir.sh" in remote
-    assert "GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=/tmp/prepare_google_oauth_token_dir.sh" in remote
+    assert 'GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/prepare_google_oauth_token_dir.sh")' in remote
     assert 'candidate_id="$(printf' in remote
     assert 'REMOTE_COMPOSE_FILE="docker-compose.patroni.candidate.${candidate_id}.yml"' in remote
     assert "run_patroni_candidate_transaction.sh" in remote

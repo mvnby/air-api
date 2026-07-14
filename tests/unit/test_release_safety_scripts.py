@@ -1,3 +1,4 @@
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -7,6 +8,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 OLD_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "1" * 40
 NEW_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "2" * 40
 OTHER_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "3" * 40
+LOCK_HELPER = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
+LOCK_HELPER_SHA256 = hashlib.sha256(LOCK_HELPER.read_bytes()).hexdigest()
 
 
 def _executable(path: Path, content: str) -> None:
@@ -57,6 +60,8 @@ exit 0
             "GHCR_PAT": "test-token",
             "GITHUB_ACTOR": "test-user",
             "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
+            "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+            "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
         }
     )
     return fake_bin, env, docker_log
@@ -108,6 +113,26 @@ def test_deploy_changes_only_application_services_and_records_rollback(tmp_path)
     assert "system prune" not in calls
     assert (project / ".previous-backend-image").read_text(encoding="utf-8").strip() == OLD_IMAGE
     assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+
+
+def test_deploy_rejects_forged_legacy_lock_boolean_before_lock_or_docker(tmp_path):
+    _, env, docker_log = _fake_environment(tmp_path)
+    project = _project(tmp_path)
+    env.update(
+        {
+            "API_PROJECT_DIR": str(project),
+            "BACKEND_IMAGE": NEW_IMAGE,
+            "API_DEPLOY_LOCK_ALREADY_HELD": "true",
+            "API_DEPLOY_LOCK_FD": "",
+        }
+    )
+
+    result = _run("scripts/deploy.sh", env)
+
+    assert result.returncode != 0
+    assert "boolean cannot replace an inherited descriptor" in result.stderr
+    assert not (project / ".deploy.lock").exists()
+    assert docker_log.read_text(encoding="utf-8") == ""
 
 
 def test_failed_migration_does_not_activate_candidate(tmp_path):
@@ -306,7 +331,7 @@ def test_rollback_delegates_to_blue_green_when_active_slot_exists(tmp_path):
     delegate = tmp_path / "blue-green.sh"
     _executable(
         delegate,
-        "#!/usr/bin/env bash\nprintf '%s|%s|%s\\n' \"$BACKEND_IMAGE\" \"$API_RUN_MIGRATIONS\" \"$API_DEPLOY_LOCK_ALREADY_HELD\" > \"$DELEGATE_LOG\"\n",
+        "#!/usr/bin/env bash\nprintf '%s|%s|%s|%s|%s\\n' \"$BACKEND_IMAGE\" \"$API_RUN_MIGRATIONS\" \"${API_DEPLOY_LOCK_FD:-}\" \"${API_DEPLOY_LOCK_HELPER:-}\" \"${API_DEPLOY_LOCK_HELPER_SHA256:-}\" > \"$DELEGATE_LOG\"\n",
     )
     env.update(
         {
@@ -321,7 +346,9 @@ def test_rollback_delegates_to_blue_green_when_active_slot_exists(tmp_path):
     result = _run("scripts/rollback_backend.sh", env)
 
     assert result.returncode == 0, result.stderr
-    assert delegate_log.read_text(encoding="utf-8").strip() == f"{OLD_IMAGE}|false|true"
+    assert delegate_log.read_text(encoding="utf-8").strip() == (
+        f"{OLD_IMAGE}|false|9|{LOCK_HELPER}|{LOCK_HELPER_SHA256}"
+    )
     calls = docker_log.read_text(encoding="utf-8")
     assert "google-oauth-token-contract" in calls
     assert "exec -T app-blue python3 -" in calls

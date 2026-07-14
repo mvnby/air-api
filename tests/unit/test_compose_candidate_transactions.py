@@ -120,7 +120,7 @@ fi
 set -euo pipefail
 grep -Fq '/app/token.json' "$API_PROJECT_DIR/compose.yml"
 grep -Fq '/app/google-oauth' "$API_PROJECT_DIR/$API_COMPOSE_FILE"
-printf 'child:%s:lock=%s\n' "$API_COMPOSE_FILE" "$API_DEPLOY_LOCK_ALREADY_HELD" >> "$ORDER_LOG"
+printf 'child:%s:fd=%s\n' "$API_COMPOSE_FILE" "${{API_DEPLOY_LOCK_FD:-}}" >> "$ORDER_LOG"
 exit {child_exit}
 """,
     )
@@ -202,7 +202,7 @@ def test_backend_failure_cleans_candidate_and_force_reconciles_canonical(
     assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
     assert not (project / "compose.yml.candidate").exists()
     assert order_log.read_text(encoding="utf-8").splitlines() == [
-        "child:compose.yml.candidate:lock=true",
+        "child:compose.yml.candidate:fd=9",
         "reconcile:compose.yml",
     ]
 
@@ -215,7 +215,7 @@ def test_backend_promotes_only_after_candidate_smoke_succeeds(tmp_path, strategy
     assert "/app/google-oauth" in (project / "compose.yml").read_text(encoding="utf-8")
     assert not (project / "compose.yml.candidate").exists()
     assert order_log.read_text(encoding="utf-8").splitlines() == [
-        "child:compose.yml.candidate:lock=true",
+        "child:compose.yml.candidate:fd=9",
         f"smoke:{project / 'compose.yml.candidate'}",
     ]
 
@@ -235,7 +235,7 @@ def test_backend_smoke_failure_cleans_candidate_and_reconciles_canonical(
     assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
     assert not (project / "compose.yml.candidate").exists()
     assert order_log.read_text(encoding="utf-8").splitlines() == [
-        "child:compose.yml.candidate:lock=true",
+        "child:compose.yml.candidate:fd=9",
         f"smoke:{project / 'compose.yml.candidate'}",
         "reconcile:compose.yml",
     ]

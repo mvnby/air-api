@@ -9,7 +9,6 @@ ENV_INPUT_FILE="${ENV_INPUT_FILE:-}"
 PITR_REQUIRED="${PITR_REQUIRED:-true}"
 PITR_SYSTEMD_ENV_FILE="${PITR_SYSTEMD_ENV_FILE:-/etc/mvn-postgres-pitr.env}"
 PITR_SYSTEMD_UNIT_DIR="${PITR_SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
-
 CONFIGURE_HELPER="${CONFIGURE_HELPER:-/usr/local/sbin/mvn-postgres-pitr-configure-env}"
 PROVISION_HELPER="${PROVISION_HELPER:-/usr/local/sbin/mvn-postgres-pitr-provision-host}"
 BASEBACKUP_HELPER="${BASEBACKUP_HELPER:-/usr/local/sbin/mvn-postgres-pitr-basebackup}"
@@ -19,8 +18,10 @@ RESTORE_DRILL_HELPER="${RESTORE_DRILL_HELPER:-/usr/local/sbin/mvn-postgres-pitr-
 RUNTIME_CHECK_HELPER="${RUNTIME_CHECK_HELPER:-/usr/local/sbin/mvn-postgres-pitr-runtime-check}"
 TOOL_RUNNER_HELPER="${TOOL_RUNNER_HELPER:-/usr/local/sbin/mvn-postgres-pitr-tool-runner}"
 BLUE_GREEN_HELPER="${BLUE_GREEN_HELPER:-/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh}"
+DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-/usr/local/libexec/mvn-pitr/safe_deploy_lock.py}"
+DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
+DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 PITR_TRANSACTION_ID="${PITR_TRANSACTION_ID:-${PITR_OPERATION_ID:-}}"
-
 phase="${1:-preflight}"
 
 log() {
@@ -450,7 +451,19 @@ scrub_node() {
   in_recovery="$(read_in_recovery)"
   case "${in_recovery}" in
     f)
+      [[ "${BLUE_GREEN_HELPER}" == "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh" ]] ||
+        die "unreviewed PITR blue-green helper path"
+      [[ "${DEPLOY_LOCK_FD}" == "9" ]] ||
+        die "PITR scrub requires inherited deployment lock fd 9"
+      [[ "${DEPLOY_LOCK_HELPER}" == "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py" ]] ||
+        die "unreviewed PITR deploy-lock helper path"
+      [[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] ||
+        die "PITR deploy-lock helper digest is missing"
       require_executable "${BLUE_GREEN_HELPER}"
+      require_executable "${DEPLOY_LOCK_HELPER}"
+      python3 "${DEPLOY_LOCK_HELPER}" verify \
+        "${PROJECT_DIR}/.deploy.lock" "${DEPLOY_LOCK_FD}" ||
+        die "PITR inherited deployment lock verification failed"
       curl -fsS --max-time 5 http://127.0.0.1:8008/leader >/dev/null ||
         die "local Patroni node does not hold the DCS leader lock"
       proxy_mode=host_nginx
@@ -465,7 +478,11 @@ scrub_node() {
         API_LEGACY_PORT=18000 \
         API_INTERNAL_PROXY_PORT=18080 \
         API_PUBLIC_READY_URL=https://api.mvn.by/api/ready \
-        API_DEPLOY_LOCK_ALREADY_HELD=true \
+        API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+        API_DEPLOY_LOCK_FILE="${PROJECT_DIR}/.deploy.lock" \
+        API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
+        API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
+        API_BLUE_GREEN_SUMMARY_FILE=/dev/null \
         API_RUN_MIGRATIONS=false \
         API_RUN_DEFAULTS=false \
         API_FORCE_ACTIVATION=true \
