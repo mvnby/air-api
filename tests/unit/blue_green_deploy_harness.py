@@ -1,3 +1,4 @@
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -6,6 +7,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts/deploy_backend_blue_green.sh"
 SAFETY_SCRIPT = REPO_ROOT / "scripts/deploy_backend_blue_green_safety.sh"
+LOCK_HELPER = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
+LOCK_HELPER_SHA256 = hashlib.sha256(LOCK_HELPER.read_bytes()).hexdigest()
 OLD_IMAGE = "ghcr.io/mvnby/air-api/backend@sha256:" + "1" * 64
 NEW_IMAGE = "ghcr.io/mvnby/air-api/backend@sha256:" + "2" * 64
 
@@ -210,6 +213,8 @@ exit 0
             "FAKE_RUNTIME_BOT_IMAGE": OLD_IMAGE,
             "API_PROJECT_DIR": str(project),
             "API_COMPOSE_FILE": "docker-compose.prod.yml",
+            "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+            "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
             "API_NGINX_SITE_FILE": str(site),
             "API_NGINX_UPSTREAM_FILE": str(upstream),
             "API_NGINX_INTERNAL_FILE": str(nginx_dir / "conf.d/mvn-api-internal.conf"),
