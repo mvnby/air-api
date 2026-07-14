@@ -78,7 +78,18 @@ class FakeOperations:
         self.fail_action = None
         self.ambiguous_switch = False
         self.fail_discover = False
+        self.lose_after_completion = []
         self.prepared = {node.alias for node in PATRONI_NODES} if existing else set()
+        standby = "zakup" if baseline_primary == "mvn-api" else "mvn-api"
+        self.images = {node.alias: CURRENT for node in PATRONI_NODES}
+        if switched:
+            self.images[standby] = TARGET
+
+    def _lose_completed_response(self, action, node, extra):
+        response = (action, node.alias, (extra or {}).get("record"))
+        if response in self.lose_after_completion:
+            self.lose_after_completion.remove(response)
+            raise RuntimeError("lost SSH response after remote completion")
 
     def discover(self, **_kwargs):
         if self.fail_discover:
@@ -105,6 +116,7 @@ class FakeOperations:
                 self.statuses[node.alias]["completed"].append("switchover")
             if record not in self.statuses[node.alias]["completed"]:
                 self.statuses[node.alias]["completed"].append(record)
+            self._lose_completed_response(action, node, extra)
             return extra["record"]
         if action == "switchover":
             self.switched = True
@@ -118,12 +130,19 @@ class FakeOperations:
         if action == "rollback-node" and self.statuses[node.alias]["operation"] == "update-node":
             self.statuses[node.alias]["operation"] = "idle"
             self.statuses[node.alias]["completed"].append("update-node")
+        if action == "update-node":
+            self.images[node.alias] = TARGET
+        if action == "rollback-node":
+            self.images[node.alias] = CURRENT
+        if action == "attest-target-runtime" and self.images[node.alias] != TARGET:
+            raise RuntimeError("runtime is not the target image generation")
         if action == "revert-archive-command" and self.statuses[node.alias]["operation"] == "prove-archive":
             self.statuses[node.alias]["operation"] = "idle"
         if action in self.JOURNAL_ACTIONS:
             self.statuses[node.alias]["operation"] = "idle"
             if action not in self.statuses[node.alias]["completed"]:
                 self.statuses[node.alias]["completed"].append(action)
+            self._lose_completed_response(action, node, extra)
         return action + "=passed"
 
     def status(self, *, node, **_kwargs):
@@ -210,6 +229,56 @@ def test_pre_switchover_failure_restores_old_generation_and_unfences(tmp_path):
     names = _mutation_names(operations.events)
     assert "switchover" not in names
     assert "rollback-node" in names
+    assert names.count("abort") == 2
+
+
+def test_completed_rollback_with_lost_response_is_terminal_across_two_resumes(
+    tmp_path,
+):
+    operations = FakeOperations()
+    operations.lose_after_completion = [
+        ("record", "zakup", "standby-updated"),
+        ("rollback-node", "zakup", None),
+    ]
+
+    with pytest.raises(RuntimeError, match="safe rollback could not be proved"):
+        _orchestrator(tmp_path, operations).run()
+
+    for status in operations.statuses.values():
+        assert "record:standby-updated" in status["completed"]
+    assert "rollback-node" in operations.statuses["zakup"]["completed"]
+    assert operations.statuses["zakup"]["operation"] == "idle"
+    assert "switchover" not in _mutation_names(operations.events)
+
+    with pytest.raises(
+        RuntimeError, match="interrupted pre-switchover rollback was reconciled"
+    ):
+        _orchestrator(tmp_path, operations, resume=True).run()
+
+    assert all(
+        "abort" in operations.statuses[node.alias]["completed"]
+        for node in PATRONI_NODES
+    )
+    assert "switchover" not in _mutation_names(operations.events)
+
+    with pytest.raises(RuntimeError, match="aborted .* reconciled"):
+        _orchestrator(tmp_path, operations, resume=True).run()
+
+    assert "switchover" not in _mutation_names(operations.events)
+
+
+def test_stale_standby_record_cannot_switchover_candidate_on_current_image(tmp_path):
+    operations = FakeOperations(existing=True)
+    for status in operations.statuses.values():
+        status["completed"].append("record:standby-updated")
+
+    with pytest.raises(RuntimeError, match="old image/DCS generation was restored"):
+        _orchestrator(tmp_path, operations, resume=True).run()
+
+    names = _mutation_names(operations.events)
+    assert operations.images["zakup"] == CURRENT
+    assert "attest-target-runtime" in names
+    assert "switchover" not in names
     assert names.count("abort") == 2
 
 

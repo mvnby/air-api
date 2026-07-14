@@ -197,7 +197,11 @@ class _Orchestrator:
             for node in (self.original.standby, self.original.primary):
                 self._remote("abort", node)
             raise RuntimeError("aborted Patroni rollout transaction was reconciled")
-        if "rollback-node" in operations.values():
+        rollback_completed = any(
+            "rollback-node" in statuses[node.alias].get("completed", [])
+            for node in PATRONI_NODES
+        )
+        if "rollback-node" in operations.values() or rollback_completed:
             assert self.original is not None
             self._remote(
                 "rollback-node",
@@ -507,6 +511,7 @@ class _Orchestrator:
                     timeline=original.timeline,
                 )
                 statuses = self._ensure_record(self._statuses(), "standby-updated")
+                self._remote("attest-target-runtime", original.standby)
                 # A lost response can hide a committed switchover. From this
                 # point onward rollback is forbidden; discovery decides resume.
                 self.roll_forward = True
