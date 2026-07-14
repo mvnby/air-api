@@ -25,6 +25,7 @@ try:
         LOCKED_MAINTENANCE_WRAPPER,
         REMOTE_ASSET_ATTESTATION,
         REMOTE_MAINTENANCE_EXECUTOR,
+        REMOTE_ROLE_AGENT_EXECUTOR,
         REMOTE_SECRET_EXECUTOR,
     )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
@@ -43,6 +44,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
         LOCKED_MAINTENANCE_WRAPPER,
         REMOTE_ASSET_ATTESTATION,
         REMOTE_MAINTENANCE_EXECUTOR,
+        REMOTE_ROLE_AGENT_EXECUTOR,
         REMOTE_SECRET_EXECUTOR,
     )
 
@@ -50,6 +52,12 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRANSACTION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+ROLE_AGENT_PHASES = {
+    "quiesce-fenced",
+    "quiesce-standby",
+    "resume-primary",
+    "resume-standby",
+}
 
 
 @dataclass(frozen=True)
@@ -227,6 +235,34 @@ PITR_HOST_ASSETS = (
     ),
 )
 
+ROLE_AGENT_ASSETS = (
+    PitrHostAsset(
+        REPO_ROOT / "scripts/ha/patroni_role_agent.py",
+        "/usr/local/sbin/mvn-patroni-role-agent",
+        0o755,
+    ),
+    PitrHostAsset(
+        REPO_ROOT / "scripts/ha/patroni_local_identity.py",
+        "/usr/local/sbin/patroni_local_identity.py",
+        0o644,
+    ),
+    PitrHostAsset(
+        REPO_ROOT / "deploy/ha/patroni/mvn-patroni-role-agent.service",
+        "/etc/systemd/system/mvn-patroni-role-agent.service",
+        0o644,
+    ),
+    PitrHostAsset(
+        REPO_ROOT / "scripts/ha/pitr_operation_guard.py",
+        "/usr/local/sbin/mvn_postgres_pitr_operation_guard.py",
+        0o755,
+    ),
+    PitrHostAsset(
+        REPO_ROOT / "scripts/ha/pitr_operation_cleanup.py",
+        "/usr/local/sbin/mvn_postgres_pitr_operation_cleanup.py",
+        0o755,
+    ),
+)
+
 
 def render_host_asset_manifest(
     node: PatroniNode,
@@ -249,6 +285,26 @@ def render_host_asset_manifest(
             raise RuntimeError(f"PITR host asset has unsafe ownership or mode: {asset.source}")
         if asset.remote_path in manifest:
             raise RuntimeError(f"duplicate PITR host asset path: {asset.remote_path}")
+        manifest[asset.remote_path] = hashlib.sha256(
+            _read_release_asset(asset.source)
+        ).hexdigest()
+    return json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+
+
+def render_role_agent_asset_manifest(
+    assets: Sequence[PitrHostAsset] = ROLE_AGENT_ASSETS,
+) -> str:
+    manifest: dict[str, str] = {}
+    for asset in assets:
+        metadata = asset.source.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise RuntimeError(
+                f"role-agent asset must be a regular non-symlink: {asset.source}"
+            )
+        if metadata.st_uid != os.geteuid() or metadata.st_mode & 0o022:
+            raise RuntimeError(f"role-agent asset has unsafe ownership or mode: {asset.source}")
+        if asset.remote_path in manifest:
+            raise RuntimeError(f"duplicate role-agent asset path: {asset.remote_path}")
         manifest[asset.remote_path] = hashlib.sha256(
             _read_release_asset(asset.source)
         ).hexdigest()
@@ -393,6 +449,35 @@ def run_remote_maintenance_phase(
             shlex.quote(asset_manifest),
             shlex.quote(LOCKED_MAINTENANCE_WRAPPER),
             locked_wrapper_digest,
+        ]
+    )
+    _run_checked([*ssh_args(node, context), command], runner=runner)
+
+
+def run_remote_role_agent_phase(
+    *,
+    node: PatroniNode,
+    context: PinnedSshContext,
+    phase: str,
+    transaction_id: str,
+    runner: Runner | None = None,
+) -> None:
+    """Quiesce or safely reconcile the pinned Patroni role agent."""
+
+    if phase not in ROLE_AGENT_PHASES:
+        raise RuntimeError(f"unsupported role-agent phase: {phase}")
+    if not TRANSACTION_ID_RE.fullmatch(transaction_id):
+        raise RuntimeError("PITR transaction ID must be 32 lowercase hexadecimal characters")
+    command = " ".join(
+        [
+            "/usr/bin/python3",
+            "-I",
+            "-c",
+            shlex.quote(REMOTE_ROLE_AGENT_EXECUTOR),
+            shlex.quote(phase),
+            shlex.quote(node.project_dir),
+            transaction_id,
+            shlex.quote(render_role_agent_asset_manifest()),
         ]
     )
     _run_checked([*ssh_args(node, context), command], runner=runner)

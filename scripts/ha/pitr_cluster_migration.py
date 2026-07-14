@@ -21,6 +21,7 @@ try:
     from scripts.ha.pitr_remote_execution import (
         run_remote_maintenance_phase,
         run_remote_release_action,
+        run_remote_role_agent_phase,
         run_remote_secret_phase,
     )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
@@ -36,6 +37,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
     from pitr_remote_execution import (  # type: ignore[no-redef]
         run_remote_maintenance_phase,
         run_remote_release_action,
+        run_remote_role_agent_phase,
         run_remote_secret_phase,
     )
 
@@ -45,6 +47,7 @@ TopologyDiscoverer = Callable[..., ClusterTopology]
 ReleaseAction = Callable[..., str]
 SecretPhase = Callable[..., None]
 MaintenancePhase = Callable[..., None]
+RoleAgentPhase = Callable[..., None]
 
 TRANSACTION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 DEFAULT_BOOTSTRAP_HELPER = "/usr/local/sbin/mvn-postgres-pitr-bootstrap"
@@ -65,6 +68,7 @@ class MigrationDependencies:
     release: ReleaseAction = run_remote_release_action
     secret: SecretPhase = run_remote_secret_phase
     maintenance: MaintenancePhase = run_remote_maintenance_phase
+    role_agent: RoleAgentPhase = run_remote_role_agent_phase
 
 
 def validate_transaction_id(transaction_id: str) -> str:
@@ -101,6 +105,7 @@ class _MigrationOrchestrator:
         self.baseline: ClusterTopology | None = None
         self.roll_forward = False
         self.attempted_bundle_nodes: list[PatroniNode] = []
+        self.role_agent_window_open = False
 
     def _discover(self) -> ClusterTopology:
         return self.dependencies.discover(
@@ -188,6 +193,15 @@ class _MigrationOrchestrator:
             runner=self.runner,
         )
 
+    def _role_agent(self, phase: str, node: PatroniNode) -> None:
+        self.dependencies.role_agent(
+            node=node,
+            context=self.context,
+            phase=phase,
+            transaction_id=self.transaction_id,
+            runner=self.runner,
+        )
+
     def _rollback_attempted_bundles(self, original_error: BaseException) -> None:
         failures: list[str] = []
         for node in reversed(self.attempted_bundle_nodes):
@@ -203,6 +217,73 @@ class _MigrationOrchestrator:
                 f"cluster migration failed before configuration: {original_error}; "
                 "bundle rollback was incomplete: " + "; ".join(failures)
             ) from original_error
+
+    def _resume_role_agents_after_failure(
+        self,
+        baseline: ClusterTopology,
+        original_error: BaseException,
+    ) -> RuntimeError:
+        fence_failures: list[str] = []
+        # Fence the former primary first, then the peer. These local actions do
+        # not trust the baseline role; each removes app, bot, and PITR owners
+        # before the controller attempts to discover a fresh topology.
+        for node in (baseline.primary, baseline.standby):
+            try:
+                self._role_agent("quiesce-fenced", node)
+            except BaseException as exc:
+                fence_failures.append(f"{node.alias}: {exc}")
+
+        if fence_failures:
+            return RuntimeError(
+                "cluster migration entered roll-forward state; do not roll back; "
+                f"resume with the same transaction ID {self.transaction_id}: "
+                f"{original_error}; pinned recovery could not prove both runtime "
+                "fences and therefore did not resume either node: "
+                + "; ".join(fence_failures)
+            )
+
+        try:
+            fresh = self._discover()
+            recovery_nodes = (fresh.standby, fresh.primary)
+            topology_detail = (
+                f"fresh topology standby={fresh.standby.alias} "
+                f"primary={fresh.primary.alias}"
+            )
+        except BaseException as exc:
+            return RuntimeError(
+                "cluster migration entered roll-forward state; do not roll back; "
+                f"resume with the same transaction ID {self.transaction_id}: "
+                f"{original_error}; both runtimes are fenced, but fresh topology "
+                f"is unavailable and neither node was resumed: {exc}"
+            )
+
+        failures: list[str] = []
+        for node in recovery_nodes:
+            try:
+                expected_role = (
+                    "standby" if node.alias == fresh.standby.alias else "primary"
+                )
+                self._role_agent(f"resume-{expected_role}", node)
+                proved = self._discover()
+                if proved != fresh:
+                    raise RuntimeError("fresh topology changed during role-agent recovery")
+            except BaseException as exc:
+                failures.append(f"{node.alias}: {exc}")
+                break
+        recovery_problems = [
+            *(f"resume {failure}" for failure in failures),
+        ]
+        detail = (
+            "; pinned role-agent safety recovery failed: "
+            + "; ".join(recovery_problems)
+            if recovery_problems
+            else "; pinned role agents were safely fenced, freshly ordered, and restarted"
+        )
+        return RuntimeError(
+            "cluster migration entered roll-forward state; do not roll back; "
+            f"resume with the same transaction ID {self.transaction_id}: "
+            f"{original_error}; {topology_detail}{detail}"
+        )
 
     def run(self) -> MigrationResult:
         baseline = self._guard_topology(stage="baseline")
@@ -220,10 +301,27 @@ class _MigrationOrchestrator:
                     action=lambda node=node: self._secret("preflight", node),
                 )
             for node in ordered_nodes:
+                # Provision each node inside its own minimal role-agent window.
+                # The standby is already traffic-fenced. The current primary
+                # is explicitly fenced before its agent is stopped, accepting
+                # a short write outage rather than an unfenced former primary.
+                quiesce_phase = (
+                    "quiesce-standby"
+                    if node.alias == baseline.standby.alias
+                    else "quiesce-fenced"
+                )
+                self.role_agent_window_open = True
+                self._mutate(
+                    stage=f"role-agent quiesce {node.alias}",
+                    action=lambda node=node, phase=quiesce_phase: self._role_agent(
+                        phase, node
+                    ),
+                    enter_roll_forward=True,
+                )
                 # Provisioning mutates root-owned host state. A lost remote
                 # response cannot prove that it made no durable progress, so
-                # every failure from the first provision attempt onward must
-                # resume the same transaction rather than roll assets back.
+                # it remains inside the roll-forward boundary entered before
+                # the first role-agent quiesce attempt.
                 self._mutate(
                     stage=f"provision-node {node.alias}",
                     action=lambda node=node: self._maintenance(
@@ -231,6 +329,18 @@ class _MigrationOrchestrator:
                     ),
                     enter_roll_forward=True,
                 )
+                self._mutate(
+                    stage=f"role-agent resume {node.alias}",
+                    action=lambda node=node: self._role_agent(
+                        (
+                            "resume-standby"
+                            if node.alias == baseline.standby.alias
+                            else "resume-primary"
+                        ),
+                        node,
+                    ),
+                )
+                self.role_agent_window_open = False
             for node in ordered_nodes:
                 self._mutate(
                     stage=f"configure-node {node.alias}",
@@ -261,10 +371,22 @@ class _MigrationOrchestrator:
                     stage=f"bundle finalize {node.alias}",
                     action=lambda node=node: self._release("finalize", node),
                 )
-            self._mutate(
-                stage=f"enable-timers {baseline.primary.alias}",
-                action=lambda: self._maintenance("enable-timers", baseline.primary),
-            )
+            for node in ordered_nodes:
+                # Finalization removes the maintenance marker. The sole active
+                # role agent now owns timer activation/fencing. Re-running its
+                # pinned convergence proof is idempotent and bounded; there is
+                # no second controller timer owner racing systemd.
+                self._mutate(
+                    stage=f"role-agent final convergence {node.alias}",
+                    action=lambda node=node: self._role_agent(
+                        (
+                            "resume-standby"
+                            if node.alias == baseline.standby.alias
+                            else "resume-primary"
+                        ),
+                        node,
+                    ),
+                )
             self._mutate(
                 stage=f"verify {baseline.primary.alias}",
                 action=lambda: self._maintenance("verify", baseline.primary),
@@ -275,6 +397,10 @@ class _MigrationOrchestrator:
                 raise RuntimeError(
                     f"cluster migration failed before configuration and release bundles "
                     f"were rolled back: {exc}"
+                ) from exc
+            if self.role_agent_window_open:
+                raise self._resume_role_agents_after_failure(
+                    baseline, exc
                 ) from exc
             raise RuntimeError(
                 "cluster migration entered roll-forward state; do not roll back; "
