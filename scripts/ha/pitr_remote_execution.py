@@ -204,6 +204,16 @@ PITR_HOST_ASSETS = (
         0o755,
     ),
     PitrHostAsset(
+        REPO_ROOT / "scripts/ha/require_deploy_capacity.sh",
+        "/usr/local/libexec/mvn-pitr/require_deploy_capacity.sh",
+        0o755,
+    ),
+    PitrHostAsset(
+        REPO_ROOT / "scripts/ha/verify_pitr_maintenance_marker.py",
+        "/usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py",
+        0o755,
+    ),
+    PitrHostAsset(
         REPO_ROOT / "scripts/ha/safe_deploy_lock.py",
         "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
         0o755,

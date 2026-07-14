@@ -125,6 +125,8 @@ def test_installer_keeps_blue_green_and_safe_lock_helper_in_one_libexec_generati
     for asset in (
         "deploy_backend_blue_green.sh",
         "deploy_backend_blue_green_safety.sh",
+        "require_deploy_capacity.sh",
+        "verify_pitr_maintenance_marker.py",
         "prepare_google_oauth_token_dir.sh",
         "safe_deploy_lock.py",
     ):
@@ -603,7 +605,22 @@ def test_scrub_node_uses_attested_inherited_deploy_lock_without_tmp_summary():
         "API_DEPLOY_LOCK_FILE",
         "API_DEPLOY_LOCK_HELPER",
         "API_DEPLOY_LOCK_HELPER_SHA256",
+        "API_BLUE_GREEN_SAFETY_HELPER",
+        "API_DEPLOY_CAPACITY_HELPER",
+        "API_DEPLOY_CAPACITY_PROFILE",
+        "API_PITR_MAINTENANCE_MARKER_VALIDATOR",
+        "API_PITR_MAINTENANCE_TRANSACTION_ID",
     ):
         assert variable in scrub
+    for pinned_helper in (
+        "deploy_backend_blue_green.sh",
+        "deploy_backend_blue_green_safety.sh",
+        "safe_deploy_lock.py",
+        "require_deploy_capacity.sh",
+        "verify_pitr_maintenance_marker.py",
+    ):
+        assert f"/usr/local/libexec/mvn-pitr/{pinned_helper}" in source
+    assert 'python3 "${PITR_MARKER_VALIDATOR}" runtime' in scrub
+    assert "capacity_profile=reserve" in scrub
     assert "API_BLUE_GREEN_SUMMARY_FILE=/dev/null" in scrub
     assert "/tmp/backend_blue_green_summary" not in scrub

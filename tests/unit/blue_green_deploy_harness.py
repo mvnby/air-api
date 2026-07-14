@@ -201,6 +201,11 @@ exit 0
 """,
     )
 
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemAvailable: 2097152 kB\nSwapTotal: 524288 kB\nSwapFree: 524288 kB\n",
+        encoding="utf-8",
+    )
     env = os.environ.copy()
     env.update(
         {
@@ -215,6 +220,7 @@ exit 0
             "API_COMPOSE_FILE": "docker-compose.prod.yml",
             "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
             "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
+            "API_DEPLOY_MEMINFO_FILE": str(meminfo),
             "API_NGINX_SITE_FILE": str(site),
             "API_NGINX_UPSTREAM_FILE": str(upstream),
             "API_NGINX_INTERNAL_FILE": str(nginx_dir / "conf.d/mvn-api-internal.conf"),

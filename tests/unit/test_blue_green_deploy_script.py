@@ -162,6 +162,61 @@ def test_first_deploy_activates_blue_without_touching_database(tmp_path):
     assert "include " in site.read_text(encoding="utf-8")
 
 
+def test_deploy_refuses_low_capacity_before_proxy_or_container_mutation(tmp_path):
+    env, project, site, command_log = _environment(tmp_path)
+    Path(env["API_DEPLOY_MEMINFO_FILE"]).write_text(
+        "MemAvailable: 200000 kB\nSwapTotal: 524288 kB\nSwapFree: 1000 kB\n",
+        encoding="utf-8",
+    )
+    original_site = site.read_text(encoding="utf-8")
+
+    result = _run(env)
+
+    assert result.returncode != 0
+    assert "insufficient memory headroom" in result.stderr
+    assert site.read_text(encoding="utf-8") == original_site
+    assert not (project / ".active-api-slot").exists()
+    commands = command_log.read_text(encoding="utf-8")
+    assert " pull " not in commands
+    assert " up " not in commands
+    assert "systemctl reload nginx" not in commands
+
+
+def test_canonical_pitr_marker_has_only_narrow_attested_scrub_exception():
+    deploy_source = SCRIPT.read_text(encoding="utf-8")
+    safety_source = SAFETY_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'PITR_MAINTENANCE_MARKER="/run/mvn-postgres-pitr-maintenance"' in deploy_source
+    assert "API_PITR_MAINTENANCE_MARKER:-" not in deploy_source
+    lock_verify = deploy_source.index(
+        'python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"'
+    )
+    marker_gate = deploy_source.index(
+        "require_pitr_maintenance_clear_or_attested_scrub"
+    )
+    assert lock_verify < marker_gate
+    pre_source_gate = deploy_source.index(
+        "verify_pitr_maintenance_marker.py pre-source"
+    )
+    safety_source_load = deploy_source.index('source "${SAFETY_HELPER}"')
+    capacity_source_load = deploy_source.index('source "${CAPACITY_HELPER}"')
+    assert pre_source_gate < safety_source_load < capacity_source_load < lock_verify
+    assert 'if [[ -z "${transaction_id}" ]]' in safety_source
+    for pinned_path in (
+        "deploy_backend_blue_green.sh",
+        "deploy_backend_blue_green_safety.sh",
+        "safe_deploy_lock.py",
+        "require_deploy_capacity.sh",
+        "verify_pitr_maintenance_marker.py",
+    ):
+        assert f'"${{pinned_root}}/{pinned_path}"' in safety_source
+    assert '"${DEPLOY_LOCK_FD}" == "9"' in safety_source
+    assert (
+        'python3 "${PITR_MARKER_VALIDATOR}" marker "${transaction_id}"'
+        in safety_source
+    )
+
+
 @pytest.mark.parametrize(
     "stop_timeout",
     ["0", "11", "not-an-int", "999999999999999999999999999999999999999"],

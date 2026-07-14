@@ -323,6 +323,8 @@ def validate_journal(journal, txid, project_dir, release=None, descriptors=None)
             or set(journal) != {"entries", "project_dir", "release_sha256", "state", "txid", "version"}
             or journal["version"] != 1 or journal["txid"] != txid
             or journal["project_dir"] != project_dir or journal["state"] not in {"prepared", "applied"}
+            or not isinstance(journal["release_sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", journal["release_sha256"])
             or not isinstance(journal["entries"], list)):
         raise RuntimeError("release transaction journal contract is invalid")
     if release is not None and journal["release_sha256"] != release:
@@ -515,8 +517,11 @@ def read_release_manifest(modes, project_dir, allow_previous=False):
             raise RuntimeError("release manifest file contract is invalid")
         files.append(item)
     paths = [item["path"] for item in files]
-    if (paths != sorted(modes) and not
-            (allow_previous and paths == sorted(set(modes) - PREVIOUS_RELEASE_ADDITIONS))):
+    missing = set(modes) - set(paths)
+    previous_is_valid = (allow_previous and missing
+                         and missing <= PREVIOUS_RELEASE_ADDITIONS
+                         and paths == sorted(set(modes) - missing))
+    if paths != sorted(modes) and not previous_is_valid:
         raise RuntimeError("release manifest path set is incomplete")
     for item in files:
         content, _ = read_regular(item["path"], exact_mode=item["mode"])

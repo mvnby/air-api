@@ -158,6 +158,8 @@ install -o root -g root -m 0755 scripts/ha/pitr_operation_cleanup.py /usr/local/
 install -d -o root -g root -m 0755 /usr/local/libexec/mvn-pitr
 install -o root -g root -m 0755 scripts/deploy_backend_blue_green.sh /usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh
 install -o root -g root -m 0755 scripts/deploy_backend_blue_green_safety.sh /usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh
+install -o root -g root -m 0755 scripts/ha/require_deploy_capacity.sh /usr/local/libexec/mvn-pitr/require_deploy_capacity.sh
+install -o root -g root -m 0755 scripts/ha/verify_pitr_maintenance_marker.py /usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py
 install -o root -g root -m 0755 scripts/prepare_google_oauth_token_dir.sh /usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh
 install -o root -g root -m 0755 scripts/ha/safe_deploy_lock.py /usr/local/libexec/mvn-pitr/safe_deploy_lock.py
 install -o root -g root -m 0644 deploy/ha/systemd/mvn-postgres-wal-upload.service /etc/systemd/system/mvn-postgres-wal-upload.service

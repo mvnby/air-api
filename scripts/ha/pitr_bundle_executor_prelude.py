@@ -53,6 +53,8 @@ BASE_MODES = {
     LIBEXEC_DIR + "/run_postgres_pitr_install_locked.py": 0o755,
     LIBEXEC_DIR + "/deploy_backend_blue_green.sh": 0o755,
     LIBEXEC_DIR + "/deploy_backend_blue_green_safety.sh": 0o755,
+    LIBEXEC_DIR + "/require_deploy_capacity.sh": 0o755,
+    LIBEXEC_DIR + "/verify_pitr_maintenance_marker.py": 0o755,
     LIBEXEC_DIR + "/safe_deploy_lock.py": 0o755,
     LIBEXEC_DIR + "/prepare_google_oauth_token_dir.sh": 0o755,
     "/etc/systemd/system/mvn-postgres-wal-upload.service": 0o644,
@@ -60,7 +62,11 @@ BASE_MODES = {
     "/etc/systemd/system/mvn-postgres-basebackup.service": 0o644,
     "/etc/systemd/system/mvn-postgres-basebackup.timer": 0o644,
 }
-PREVIOUS_RELEASE_ADDITIONS = {LIBEXEC_DIR + "/safe_deploy_lock.py"}
+PREVIOUS_RELEASE_ADDITIONS = {
+    LIBEXEC_DIR + "/require_deploy_capacity.sh",
+    LIBEXEC_DIR + "/safe_deploy_lock.py",
+    LIBEXEC_DIR + "/verify_pitr_maintenance_marker.py",
+}
 PROJECT_COMPOSE = {
     "/opt/air-api": "/opt/air-api/docker-compose.patroni.yml",
     "/opt/mvn-reserve": "/opt/mvn-reserve/docker-compose.patroni.yml",

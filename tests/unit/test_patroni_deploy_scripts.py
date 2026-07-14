@@ -104,7 +104,12 @@ def test_migration_script_requires_primary_and_never_manages_database_service(tm
             "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
             "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
             "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
+            "API_DEPLOY_MEMINFO_FILE": str(tmp_path / "meminfo"),
         }
+    )
+    (tmp_path / "meminfo").write_text(
+        "MemAvailable: 1572864 kB\nSwapTotal: 524288 kB\nSwapFree: 524288 kB\n",
+        encoding="utf-8",
     )
 
     result = subprocess.run(
@@ -118,6 +123,103 @@ def test_migration_script_requires_primary_and_never_manages_database_service(tm
     assert "ensure_global_config_defaults.py" in commands
     assert " up " not in commands
     assert " db" not in commands
+
+
+def test_migration_refuses_low_memory_before_docker_mutation(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "compose.yml").write_text("services: {}\n", encoding="utf-8")
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemAvailable: 201868 kB\nSwapTotal: 2621432 kB\nSwapFree: 3804 kB\n",
+        encoding="utf-8",
+    )
+    command_log = tmp_path / "commands.log"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _executable(
+        fake_bin / "curl",
+        "#!/usr/bin/env bash\nprintf '{\"state\":\"running\",\"role\":\"primary\"}\\n'\n",
+    )
+    _executable(
+        fake_bin / "docker",
+        '#!/usr/bin/env bash\nprintf "docker %s\\n" "$*" >> "$COMMAND_LOG"\n',
+    )
+
+    result = subprocess.run(
+        ["bash", str(MIGRATE)],
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "COMMAND_LOG": str(command_log),
+            "API_PROJECT_DIR": str(project),
+            "API_COMPOSE_FILE": "compose.yml",
+            "BACKEND_IMAGE": IMAGE,
+            "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
+            "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+            "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
+            "API_DEPLOY_MEMINFO_FILE": str(meminfo),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "insufficient memory headroom" in result.stderr
+    assert not command_log.exists()
+
+
+def test_migration_rechecks_memory_after_image_pull_before_container_start(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "compose.yml").write_text("services: {}\n", encoding="utf-8")
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemAvailable: 1572864 kB\nSwapTotal: 524288 kB\nSwapFree: 524288 kB\n",
+        encoding="utf-8",
+    )
+    command_log = tmp_path / "commands.log"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _executable(
+        fake_bin / "curl",
+        "#!/usr/bin/env bash\nprintf '{\"state\":\"running\",\"role\":\"primary\"}\\n'\n",
+    )
+    _executable(
+        fake_bin / "docker",
+        "#!/usr/bin/env bash\n"
+        'printf "docker %s\\n" "$*" >> "$COMMAND_LOG"\n'
+        'if [[ "$*" == *" pull app-blue" ]]; then\n'
+        "  printf 'MemAvailable: 200000 kB\\nSwapTotal: 524288 kB\\nSwapFree: 524288 kB\\n' > \"$MEMINFO_FILE\"\n"
+        "fi\n",
+    )
+
+    result = subprocess.run(
+        ["bash", str(MIGRATE)],
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "COMMAND_LOG": str(command_log),
+            "MEMINFO_FILE": str(meminfo),
+            "API_PROJECT_DIR": str(project),
+            "API_COMPOSE_FILE": "compose.yml",
+            "BACKEND_IMAGE": IMAGE,
+            "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
+            "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+            "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
+            "API_DEPLOY_MEMINFO_FILE": str(meminfo),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "insufficient memory headroom" in result.stderr
+    commands = command_log.read_text(encoding="utf-8")
+    assert "pull app-blue" in commands
+    assert " run " not in commands
 
 
 def test_deploy_and_migration_scripts_reject_unknown_running_patroni_role(tmp_path):

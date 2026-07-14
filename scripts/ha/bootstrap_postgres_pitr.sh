@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 PROJECT_DIR="${PROJECT_DIR:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-}"
 APP_SERVICE="${APP_SERVICE:-app}"
@@ -18,21 +17,21 @@ RESTORE_DRILL_HELPER="${RESTORE_DRILL_HELPER:-/usr/local/sbin/mvn-postgres-pitr-
 RUNTIME_CHECK_HELPER="${RUNTIME_CHECK_HELPER:-/usr/local/sbin/mvn-postgres-pitr-runtime-check}"
 TOOL_RUNNER_HELPER="${TOOL_RUNNER_HELPER:-/usr/local/sbin/mvn-postgres-pitr-tool-runner}"
 BLUE_GREEN_HELPER="${BLUE_GREEN_HELPER:-/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh}"
+BLUE_GREEN_SAFETY_HELPER="${API_BLUE_GREEN_SAFETY_HELPER:-/usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-/usr/local/libexec/mvn-pitr/safe_deploy_lock.py}"
+DEPLOY_CAPACITY_HELPER="${API_DEPLOY_CAPACITY_HELPER:-/usr/local/libexec/mvn-pitr/require_deploy_capacity.sh}"
+PITR_MARKER_VALIDATOR="${API_PITR_MAINTENANCE_MARKER_VALIDATOR:-/usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 PITR_TRANSACTION_ID="${PITR_TRANSACTION_ID:-${PITR_OPERATION_ID:-}}"
 phase="${1:-preflight}"
-
 log() {
   printf '[pitr-bootstrap] %s\n' "$*"
 }
-
 die() {
   printf '[pitr-bootstrap][fail] %s\n' "$*" >&2
   exit 1
 }
-
 usage() {
   cat <<'EOF'
 Usage:
@@ -58,12 +57,10 @@ Common environment:
   COMPOSE_FILE=docker-compose.patroni.yml
 EOF
 }
-
 if [[ "${phase}" == "help" || "${phase}" == "--help" || "${phase}" == "-h" ]]; then
   usage
   exit 0
 fi
-
 cd_project() {
   [[ -n "${PROJECT_DIR}" ]] || die "PROJECT_DIR must be set explicitly"
   [[ -n "${COMPOSE_FILE}" ]] || die "COMPOSE_FILE must be set explicitly"
@@ -71,19 +68,15 @@ cd_project() {
   [[ -f "${PROJECT_DIR}/${COMPOSE_FILE}" ]] || die "compose file not found: ${PROJECT_DIR}/${COMPOSE_FILE}"
   cd "${PROJECT_DIR}"
 }
-
 compose() {
   docker compose -f "${COMPOSE_FILE}" "$@"
 }
-
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
-
 require_executable() {
   [[ -x "$1" ]] || die "required helper is not executable: $1"
 }
-
 require_active_patroni_compose() {
   local db_container managed_configs runtime_policy target_config
   runtime_policy="${1:-operational}"
@@ -432,7 +425,7 @@ PY
 }
 
 scrub_node() {
-  local active_service in_recovery proxy_mode slot
+  local active_service capacity_profile=primary in_recovery proxy_mode slot
   require_root_for_write_phase
   require_transaction_id
   if BACKEND_IMAGE="$(
@@ -455,12 +448,14 @@ scrub_node() {
         die "unreviewed PITR blue-green helper path"
       [[ "${DEPLOY_LOCK_FD}" == "9" ]] ||
         die "PITR scrub requires inherited deployment lock fd 9"
-      [[ "${DEPLOY_LOCK_HELPER}" == "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py" ]] ||
-        die "unreviewed PITR deploy-lock helper path"
+      [[ "${PITR_MARKER_VALIDATOR}" == "/usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py" ]] ||
+        die "unreviewed PITR maintenance marker validator path"
       [[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] ||
         die "PITR deploy-lock helper digest is missing"
-      require_executable "${BLUE_GREEN_HELPER}"
-      require_executable "${DEPLOY_LOCK_HELPER}"
+      python3 "${PITR_MARKER_VALIDATOR}" runtime \
+        "${BLUE_GREEN_HELPER}" "${DEPLOY_LOCK_HELPER}" \
+        "${BLUE_GREEN_SAFETY_HELPER}" "${DEPLOY_CAPACITY_HELPER}" ||
+        die "unreviewed PITR scrub runtime helpers"
       python3 "${DEPLOY_LOCK_HELPER}" verify \
         "${PROJECT_DIR}/.deploy.lock" "${DEPLOY_LOCK_FD}" ||
         die "PITR inherited deployment lock verification failed"
@@ -469,6 +464,7 @@ scrub_node() {
       proxy_mode=host_nginx
       if [[ "${PROJECT_DIR}" == "/opt/mvn-reserve" ]]; then
         proxy_mode=container_nginx
+        capacity_profile=reserve
       fi
       API_PROJECT_DIR="${PROJECT_DIR}" \
         API_COMPOSE_FILE="${COMPOSE_FILE}" \
@@ -482,6 +478,11 @@ scrub_node() {
         API_DEPLOY_LOCK_FILE="${PROJECT_DIR}/.deploy.lock" \
         API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
         API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
+        API_BLUE_GREEN_SAFETY_HELPER="${BLUE_GREEN_SAFETY_HELPER}" \
+        API_DEPLOY_CAPACITY_HELPER="${DEPLOY_CAPACITY_HELPER}" \
+        API_DEPLOY_CAPACITY_PROFILE="${capacity_profile}" \
+        API_PITR_MAINTENANCE_MARKER_VALIDATOR="${PITR_MARKER_VALIDATOR}" \
+        API_PITR_MAINTENANCE_TRANSACTION_ID="${PITR_TRANSACTION_ID}" \
         API_BLUE_GREEN_SUMMARY_FILE=/dev/null \
         API_RUN_MIGRATIONS=false \
         API_RUN_DEFAULTS=false \
