@@ -208,7 +208,8 @@ def validate_compose(project, compose, compose_project, volume, expected_image, 
     if db.get("image") != expected_image:
         die("resolved Compose db image drifted")
     mounts = [item for item in db.get("volumes", []) if item.get("target") == "/var/lib/postgresql/data"]
-    if len(mounts) != 1 or mounts[0].get("source") != volume or mounts[0].get("type") != "volume":
+    if (len(mounts) != 1 or mounts[0].get("source") != "postgres_data"
+            or mounts[0].get("type") != "volume"):
         die("reviewed external PGDATA volume drifted")
     top = config.get("volumes", {}).get("postgres_data", {})
     if top.get("name") != volume or top.get("external") is not True:

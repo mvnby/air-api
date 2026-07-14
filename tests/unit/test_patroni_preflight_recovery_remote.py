@@ -1,3 +1,6 @@
+import base64
+import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -6,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.ha import patroni_preflight_recovery_remote as remote
+from scripts.ha.patroni_rollout_schema import NODE_CONTRACTS
 from scripts.ha.pitr_pinned_ssh import PATRONI_NODES
 
 
@@ -151,3 +155,97 @@ def test_remote_executor_rejects_an_unsafe_existing_receipt_root(tmp_path, monke
 
     with pytest.raises(RuntimeError, match="unsafe incident recovery directory"):
         namespace["ensure_receipt_root"]()
+
+
+def _recovery_compose_case(node):
+    namespace = _remote_namespace()
+    contract = NODE_CONTRACTS[node.alias]
+    project = str(contract["project_dir"])
+    image = "ghcr.io/mvnby/air-api/patroni@sha256:" + "1" * 64
+    source = b"reviewed compose bytes"
+    contract_digest = "2" * 64
+    config = {
+        "name": contract["compose_project"],
+        "services": {
+            "db": {
+                "image": image,
+                "volumes": [
+                    {
+                        "type": "volume",
+                        "source": "postgres_data",
+                        "target": "/var/lib/postgresql/data",
+                    }
+                ],
+            }
+        },
+        "volumes": {
+            "postgres_data": {
+                "external": True,
+                "name": contract["data_volume"],
+            }
+        },
+    }
+    namespace["stable_file"] = lambda *_args, **_kwargs: source
+
+    def fake_run(args, **_kwargs):
+        if args[:3] == ["/usr/bin/python3", "-I", "-c"]:
+            return contract_digest
+        return json.dumps(config)
+
+    namespace["run"] = fake_run
+    payload = {
+        "compose_contract_sha256": contract_digest,
+        "compose_source_sha256": hashlib.sha256(source).hexdigest(),
+        "contract_helper_b64": base64.b64encode(b"pass").decode("ascii"),
+        "current_image": image,
+    }
+    arguments = (
+        project,
+        str(contract["compose_file"]),
+        str(contract["compose_project"]),
+        str(contract["data_volume"]),
+        payload,
+    )
+    return namespace, config, arguments
+
+
+def _mutate_pgdata_identity(config, mutation):
+    mount = config["services"]["db"]["volumes"][0]
+    if mutation == "duplicate-pgdata":
+        config["services"]["db"]["volumes"].append(copy.deepcopy(mount))
+    elif mutation == "bind-pgdata":
+        mount["type"] = "bind"
+    elif mutation == "top-name":
+        config["volumes"]["postgres_data"]["name"] = "wrong-postgres-data"
+    elif mutation == "external-false":
+        config["volumes"]["postgres_data"]["external"] = False
+    elif mutation == "wrong-source":
+        mount["source"] = config["volumes"]["postgres_data"]["name"]
+    else:
+        raise AssertionError(f"unknown mutation: {mutation}")
+
+
+@pytest.mark.parametrize("node", PATRONI_NODES, ids=lambda node: node.alias)
+def test_recovery_compose_proof_accepts_exact_logical_pgdata_identity(node):
+    namespace, _config, arguments = _recovery_compose_case(node)
+
+    namespace["prove_compose"](*arguments)
+
+
+@pytest.mark.parametrize("node", PATRONI_NODES, ids=lambda node: node.alias)
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "duplicate-pgdata",
+        "bind-pgdata",
+        "top-name",
+        "external-false",
+        "wrong-source",
+    ),
+)
+def test_recovery_compose_proof_rejects_pgdata_identity_drift(node, mutation):
+    namespace, config, arguments = _recovery_compose_case(node)
+    _mutate_pgdata_identity(config, mutation)
+
+    with pytest.raises(RuntimeError, match="resolved Compose identity drifted"):
+        namespace["prove_compose"](*arguments)
