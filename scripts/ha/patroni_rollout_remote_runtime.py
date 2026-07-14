@@ -96,13 +96,42 @@ def validate_role_agent_runtime(project, node):
     if run(["systemctl", "show", "--property=MainPID", "--value", unit]) != pid:
         die("role-agent MainPID changed during attestation")
 
-def parse_role_env(path):
-    content = read_root_file(path).decode("utf-8")
+def canonical_role_env(role, bot_process):
+    primary = role == "primary"
     values = {}
-    for line in content.splitlines():
-        if line and not line.startswith("#") and "=" in line:
-            name, value = line.split("=", 1); values[name.strip()] = value.strip()
-    return values
+    values["APP_ROLE"] = role
+    values["API_READY_ENABLED"] = "false" if bot_process else str(primary).lower()
+    values["BOT_ENABLED"] = str(primary and bot_process).lower()
+    values["DB_BOOTSTRAP_ENABLED"] = "false"
+    values["SCHEDULER_ENABLED"] = str(primary and not bot_process).lower()
+    if not primary:
+        values.update({"MAIL_IMAP_AUTO_IMPORT_ENABLED": "false",
+            "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED": "false",
+            "CLOUDFLARE_PURGE_ENABLED": "false", "CLOUDFLARE_PURGE_DRY_RUN": "true"})
+    content = "".join(name + "=" + value + "\n" for name, value in values.items())
+    return content, values
+
+def exact_role_env(path, role, bot_process):
+    expected_content, expected_values = canonical_role_env(role, bot_process)
+    if read_root_file(path) != expected_content.encode("ascii"):
+        die("role environment file is not the exact canonical generation: " + path)
+    return expected_values
+
+def attest_container_role_environment(project, compose, service, expected):
+    identifiers = run(compose_args(project, compose) + ["ps", "-q", service]).splitlines()
+    if len(identifiers) != 1 or not re.fullmatch(r"[0-9a-f]{12,64}", identifiers[0]):
+        die("role-owned service must resolve to exactly one container: " + service)
+    inspected = json.loads(run(["docker", "inspect", identifiers[0]]))
+    if (not isinstance(inspected, list) or len(inspected) != 1
+            or inspected[0].get("State", {}).get("Running") is not True):
+        die("role-owned service container is not running: " + service)
+    entries = inspected[0].get("Config", {}).get("Env")
+    if not isinstance(entries, list) or any(not isinstance(item, str) for item in entries):
+        die("role-owned service environment is invalid: " + service)
+    for name, value in expected.items():
+        matches = [item.split("=", 1)[1] for item in entries if item.startswith(name + "=")]
+        if matches != [value]:
+            die("live container role environment differs: " + service + ":" + name)
 
 def runtime_ownership_once(project, compose, expected_role):
     if expected_role not in {"primary", "standby"} or local_patroni_role() != expected_role:
@@ -110,28 +139,17 @@ def runtime_ownership_once(project, compose, expected_role):
     role = read_root_file(project + "/.ha-runtime-role").decode("ascii").strip()
     if role != expected_role: die("role-agent applied state is stale")
     primary = expected_role == "primary"
-    app = parse_role_env(project + "/.ha-app-role.env")
-    bot = parse_role_env(project + "/.ha-bot-role.env")
-    expected_app = {"APP_ROLE": expected_role, "API_READY_ENABLED": str(primary).lower(),
-        "BOT_ENABLED": "false", "DB_BOOTSTRAP_ENABLED": "false",
-        "SCHEDULER_ENABLED": str(primary).lower()}
-    expected_bot = {"APP_ROLE": expected_role, "API_READY_ENABLED": "false",
-        "BOT_ENABLED": str(primary).lower(), "DB_BOOTSTRAP_ENABLED": "false",
-        "SCHEDULER_ENABLED": "false"}
-    if not primary:
-        standby_only = {"MAIL_IMAP_AUTO_IMPORT_ENABLED": "false",
-            "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED": "false",
-            "CLOUDFLARE_PURGE_ENABLED": "false", "CLOUDFLARE_PURGE_DRY_RUN": "true"}
-        expected_app.update(standby_only); expected_bot.update(standby_only)
-    if app != expected_app:
-        die("app role environment does not exactly match Patroni ownership")
-    if bot != expected_bot:
-        die("bot role environment does not exactly match Patroni ownership")
+    expected_app = exact_role_env(project + "/.ha-app-role.env", expected_role, False)
+    expected_bot = exact_role_env(project + "/.ha-bot-role.env", expected_role, True)
     services = set(run(compose_args(project, compose) + ["--profile", "bluegreen", "ps",
         "--status", "running", "--services"]).splitlines())
     if len(services.intersection({"app", "app-blue", "app-green"})) != 1:
         die("exactly one API service must be running")
     if ("bot" in services) != primary: die("bot singleton ownership is incorrect")
+    app_service = next(iter(services.intersection({"app", "app-blue", "app-green"})))
+    attest_container_role_environment(project, compose, app_service, expected_app)
+    if primary:
+        attest_container_role_environment(project, compose, "bot", expected_bot)
     response = run(["curl", "-sS", "--max-time", "5", "-w", "\n%{http_code}",
         "http://127.0.0.1:18080/api/ready"])
     lines = response.rstrip().splitlines()

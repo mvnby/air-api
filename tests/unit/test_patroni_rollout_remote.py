@@ -46,8 +46,8 @@ def test_remote_executor_compiles_and_contains_required_fail_closed_contracts():
     assert "pg_is_in_recovery" in REMOTE_EXECUTOR
     assert "dcs_baseline_sha256" in REMOTE_EXECUTOR
     assert "role_unit_sha256" in REMOTE_EXECUTOR
-    assert "if app != expected_app" in REMOTE_EXECUTOR
-    assert "if bot != expected_bot" in REMOTE_EXECUTOR
+    assert "exact_role_env" in REMOTE_EXECUTOR
+    assert "attest_container_role_environment" in REMOTE_EXECUTOR
     assert '"CLOUDFLARE_PURGE_DRY_RUN": "true"' in REMOTE_EXECUTOR
 
 
@@ -95,6 +95,35 @@ def test_role_agent_live_generation_rejects_old_process_and_stale_environment(mo
     )
     with pytest.raises(RuntimeError, match="live role-agent environment differs"):
         namespace["validate_role_process_generation"]("123", expected)
+
+
+def test_role_env_rejects_compose_colon_syntax_and_unknown_keys():
+    namespace = _remote_namespace()
+    canonical, expected = namespace["canonical_role_env"]("standby", False)
+    namespace["read_root_file"] = lambda _path: canonical.encode("ascii")
+    assert namespace["exact_role_env"]("/role.env", "standby", False) == expected
+
+    hidden_extra = canonical + "COMMUNICATIONS_WORKER_ENABLED: true\n"
+    namespace["read_root_file"] = lambda _path: hidden_extra.encode("ascii")
+    with pytest.raises(RuntimeError, match="exact canonical generation"):
+        namespace["exact_role_env"]("/role.env", "standby", False)
+
+
+def test_live_container_role_env_rejects_duplicate_or_overridden_values():
+    namespace = _remote_namespace()
+    expected = {"APP_ROLE": "standby", "SCHEDULER_ENABLED": "false"}
+    namespace["compose_args"] = lambda *_args: ["docker", "compose"]
+    inspected = [{"State": {"Running": True}, "Config": {"Env": [
+        "APP_ROLE=standby", "SCHEDULER_ENABLED=false", "SCHEDULER_ENABLED=true"
+    ]}}]
+    namespace["run"] = lambda args, **_kwargs: (
+        "a" * 12 if args[:3] == ["docker", "compose", "ps"] else json.dumps(inspected)
+    )
+
+    with pytest.raises(RuntimeError, match="live container role environment differs"):
+        namespace["attest_container_role_environment"](
+            "/opt/air-api", "compose.yml", "app", expected
+        )
 
 
 def test_remote_shared_lock_normalizes_only_safe_legacy_inode(monkeypatch):
