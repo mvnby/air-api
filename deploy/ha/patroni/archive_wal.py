@@ -15,13 +15,15 @@ from pathlib import Path
 
 
 ARCHIVE_ROOT = Path("/postgres-wal-archive")
-WAL_RE = re.compile(
-    r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
+ARCHIVABLE_WAL_RE = re.compile(
+    r"^(?:[0-9A-F]{24}(?:\.partial)?|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
 )
+WAL_SEGMENT_ARCHIVE_RE = re.compile(r"^[0-9A-F]{24}(?:\.partial)?$")
+WAL_SEGMENT_BYTES = 16 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 LOCK_NAME = ".mvn-pitr-archive.lock"
 TEMP_RE = re.compile(
-    r"^\.((?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history))"
+    r"^\.((?:[0-9A-F]{24}(?:\.partial)?|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history))"
     r"\.tmp\.[0-9]+\.[0-9a-f]{32}$"
 )
 
@@ -171,7 +173,7 @@ def _archive_wal_locked(source: Path, name: str, archive_root: Path) -> None:
             source_before.st_ctime_ns,
         ) or source_size != source_before.st_size:
             raise RuntimeError("WAL archive source changed during copy")
-        if len(name) == 24 and source_size != 16 * 1024 * 1024:
+        if WAL_SEGMENT_ARCHIVE_RE.fullmatch(name) and source_size != WAL_SEGMENT_BYTES:
             raise RuntimeError("WAL segment size is not canonical")
         os.fsync(temporary_fd)
         destination = archive_root / name
@@ -192,7 +194,7 @@ def _archive_wal_locked(source: Path, name: str, archive_root: Path) -> None:
                 ):
                     raise RuntimeError("existing WAL archive destination is unsafe")
                 existing_size, existing_hash = _hash_fd(destination_fd)
-                if WAL_RE.fullmatch(name) and len(name) == 24 and existing_size != 16 * 1024 * 1024:
+                if WAL_SEGMENT_ARCHIVE_RE.fullmatch(name) and existing_size != WAL_SEGMENT_BYTES:
                     raise RuntimeError("existing WAL segment size is not canonical")
                 if (
                     existing_size != source_size
@@ -218,7 +220,7 @@ def _archive_wal_locked(source: Path, name: str, archive_root: Path) -> None:
 def archive_wal(source: Path, name: str, *, archive_root: Path = ARCHIVE_ROOT) -> None:
     if not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("required file protection is unavailable")
-    if not WAL_RE.fullmatch(name) or source.name != name:
+    if not ARCHIVABLE_WAL_RE.fullmatch(name) or source.name != name:
         raise RuntimeError("WAL archive name is not canonical")
     root_metadata = archive_root.lstat()
     if (

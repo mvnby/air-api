@@ -24,9 +24,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Iterator
 
-WAL_NAME_RE = re.compile(
-    r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
+ARCHIVABLE_WAL_NAME_RE = re.compile(
+    r"^(?:[0-9A-F]{24}(?:\.partial)?|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
 )
+PARTIAL_WAL_NAME_RE = re.compile(r"^[0-9A-F]{24}\.partial$")
+WAL_SEGMENT_BYTES = 16 * 1024 * 1024
 BACKUP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 TRANSACTION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 SYSTEM_IDENTIFIER_RE = re.compile(r"^[1-9][0-9]{15,19}$")
@@ -249,8 +251,10 @@ def iter_wal_files(archive_dir: Path) -> Iterable[Path]:
         if (
             stat.S_ISREG(metadata.st_mode)
             and metadata.st_nlink == 1
-            and WAL_NAME_RE.match(path.name)
+            and ARCHIVABLE_WAL_NAME_RE.fullmatch(path.name)
         ):
+            if PARTIAL_WAL_NAME_RE.fullmatch(path.name) and metadata.st_size != WAL_SEGMENT_BYTES:
+                raise RuntimeError(f"partial WAL segment size is not canonical: {path}")
             yield path
 
 

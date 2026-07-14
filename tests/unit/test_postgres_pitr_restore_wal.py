@@ -299,3 +299,19 @@ def test_fetch_wal_rejects_invalid_wal_name(monkeypatch, tmp_path):
                 str(tmp_path / "bad"),
             ]
         )
+
+
+def test_fetch_wal_explicitly_rejects_archived_partial(monkeypatch, tmp_path):
+    monkeypatch.setattr(pitr_restore, "load_config", lambda: FakeConfig)
+    monkeypatch.setattr(pitr_restore, "build_client", lambda config: FakeClient({}))
+
+    with pytest.raises(SystemExit, match="Invalid WAL filename"):
+        pitr_restore.main(
+            [
+                "fetch-wal",
+                "--wal-name",
+                "00000007000000000000004B.partial",
+                "--destination",
+                str(tmp_path / "partial"),
+            ]
+        )

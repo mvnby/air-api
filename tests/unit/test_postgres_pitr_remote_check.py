@@ -222,6 +222,114 @@ def test_latest_object_rejects_ambiguous_equal_timestamps():
         )
 
 
+def test_latest_wal_filters_junk_but_keeps_canonical_partial():
+    older = datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc)
+    newer = datetime(2026, 7, 1, 11, 0, tzinfo=timezone.utc)
+    prefix = "postgres/pitr/mvn-api/wal/"
+    partial = "00000007000000000000004B.partial"
+    client = FakeClient(
+        [
+            {
+                "Contents": [
+                    {"Key": prefix + "junk/newest", "LastModified": newer},
+                    {
+                        "Key": f"{prefix}00000007/{partial}",
+                        "LastModified": older,
+                        "Size": pitr_remote.WAL_SEGMENT_BYTES,
+                    },
+                ]
+            }
+        ]
+    )
+
+    item = pitr_remote._latest_object(
+        client, "private", prefix, canonical_wal=True
+    )
+
+    assert item["Key"] == f"{prefix}00000007/{partial}"
+
+
+def test_latest_wal_does_not_treat_history_as_a_restorable_segment():
+    prefix = "postgres/pitr/mvn-api/wal/"
+    client = FakeClient(
+        [
+            {
+                "Contents": [
+                    {
+                        "Key": prefix + "00000008/00000008.history",
+                        "LastModified": datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc),
+                        "Size": 42,
+                    },
+                    {
+                        "Key": prefix + "00000008/00000008000000000000004B",
+                        "LastModified": datetime(2026, 7, 1, 11, 0, tzinfo=timezone.utc),
+                        "Size": pitr_remote.WAL_SEGMENT_BYTES,
+                    },
+                ]
+            }
+        ]
+    )
+
+    item = pitr_remote._latest_object(
+        client, "private", prefix, canonical_wal=True
+    )
+    assert item["Key"].endswith("00000008000000000000004B")
+
+
+def test_latest_wal_preserves_equal_timestamp_ambiguity_after_filtering():
+    modified = datetime(2026, 7, 1, 11, 0, tzinfo=timezone.utc)
+    prefix = "postgres/pitr/mvn-api/wal/"
+    client = FakeClient(
+        [
+            {
+                "Contents": [
+                    {
+                        "Key": prefix + "00000007/00000007000000000000004B.partial",
+                        "LastModified": modified,
+                        "Size": pitr_remote.WAL_SEGMENT_BYTES,
+                    },
+                    {
+                        "Key": prefix + "00000008/00000008000000000000004B",
+                        "LastModified": modified,
+                        "Size": pitr_remote.WAL_SEGMENT_BYTES,
+                    },
+                ]
+            }
+        ]
+    )
+
+    with pytest.raises(pitr_remote.StatusProofError, match="ambiguous"):
+        pitr_remote._latest_object(
+            client, "private", prefix, canonical_wal=True
+        )
+
+
+@pytest.mark.parametrize(
+    "size",
+    [pitr_remote.WAL_SEGMENT_BYTES - 1, pitr_remote.WAL_SEGMENT_BYTES + 1],
+)
+def test_latest_wal_rejects_noncanonical_segment_size(size):
+    prefix = "postgres/pitr/mvn-api/wal/"
+    client = FakeClient(
+        [
+            {
+                "Contents": [
+                    {
+                        "Key": prefix + "00000007/00000007000000000000004B.partial",
+                        "LastModified": datetime(2026, 7, 1, tzinfo=timezone.utc),
+                        "Size": size,
+                    }
+                ]
+            }
+        ]
+    )
+
+    with pytest.raises(pitr_remote.StatusProofError, match="size is not canonical"):
+        pitr_remote._latest_object(
+            client, "private", prefix, canonical_wal=True
+        )
+
+
 def test_manifest_proof_downloads_bounded_body_and_validates_exact_schema():
     payload = _manifest_payload()
     client, key, raw = _manifest_client(payload)
@@ -435,7 +543,7 @@ def test_main_reports_idle_when_expected_wal_is_present_and_queue_is_empty(
     item = {
         "Key": expected_key,
         "LastModified": datetime.now(timezone.utc),
-        "Size": 16,
+        "Size": pitr_remote.WAL_SEGMENT_BYTES,
     }
     client = PrefixClient(
         {
@@ -519,7 +627,7 @@ def test_main_fails_when_expected_wal_is_missing(monkeypatch, capsys):
     latest_item = {
         "Key": f"{wal_prefix}00000001/000000010000000000000009",
         "LastModified": datetime.now(timezone.utc),
-        "Size": 16,
+        "Size": pitr_remote.WAL_SEGMENT_BYTES,
     }
     client = PrefixClient(
         {

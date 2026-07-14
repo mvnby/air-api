@@ -78,6 +78,7 @@ print_prefixed() {
 is_uploadable_wal_name() {
   local filename="$1"
   [[ "${filename}" =~ ^[0-9A-F]{24}$ \
+    || "${filename}" =~ ^[0-9A-F]{24}\.partial$ \
     || "${filename}" =~ ^[0-9A-F]{24}\.[0-9A-F]{8}\.backup$ \
     || "${filename}" =~ ^[0-9A-F]{8}\.history$ ]]
 }

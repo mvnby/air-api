@@ -63,6 +63,7 @@ def _load_upload_helpers() -> tuple[Any, Any]:
 build_client, load_config = _load_upload_helpers()
 
 WAL_SEGMENT_RE = re.compile(r"^[0-9A-F]{24}$")
+REMOTE_WAL_SEGMENT_RE = re.compile(r"^[0-9A-F]{24}(?:\.partial)?$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SYSTEM_IDENTIFIER_RE = re.compile(r"^[1-9][0-9]{15,19}$")
 BACKUP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -105,7 +106,9 @@ class ManifestProof:
     timeline: int
 
 
-def _latest_object(client: Any, bucket: str, prefix: str, suffix: str = "") -> dict[str, Any] | None:
+def _latest_object(
+    client: Any, bucket: str, prefix: str, suffix: str = "", *, canonical_wal: bool = False
+) -> dict[str, Any] | None:
     paginator = client.get_paginator("list_objects_v2")
     latest: dict[str, Any] | None = None
     pages = 0
@@ -126,6 +129,20 @@ def _latest_object(client: Any, bucket: str, prefix: str, suffix: str = "") -> d
             key = str(item.get("Key") or "")
             if suffix and not key.endswith(suffix):
                 continue
+            filename = key.rsplit("/", 1)[-1]
+            if canonical_wal and (
+                not REMOTE_WAL_SEGMENT_RE.fullmatch(filename)
+                or key != f"{prefix}{filename[:8]}/{filename}"
+            ):
+                continue
+            if canonical_wal:
+                size = item.get("Size")
+                if (
+                    isinstance(size, bool)
+                    or not isinstance(size, int)
+                    or size != WAL_SEGMENT_BYTES
+                ):
+                    raise StatusProofError("remote WAL segment size is not canonical")
             if key.endswith("/"):
                 continue
             last_modified = item.get("LastModified")
@@ -599,6 +616,7 @@ def main() -> int:
                 client,
                 config.bucket,
                 wal_prefix,
+                canonical_wal=True,
             )
             if latest_wal is None:
                 print(f"pitr_remote_wal status=missing prefix={wal_prefix}")

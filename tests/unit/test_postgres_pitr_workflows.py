@@ -56,6 +56,7 @@ def test_postgres_pitr_status_uses_activity_aware_remote_wal_gate():
     )
 
     assert "is_uploadable_wal_name" in script
+    assert "^[0-9A-F]{24}\\.partial$" in script
     assert '--local-pending-wal-count "${wal_count}"' in script
     assert "SELECT pg_walfile_name(pg_switch_wal())" in script
     assert "pg_create_restore_point" in script

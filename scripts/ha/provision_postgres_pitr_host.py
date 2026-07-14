@@ -19,9 +19,10 @@ from typing import Callable, Mapping, Sequence
 
 
 TRANSACTION_RE = re.compile(r"^[0-9a-f]{32}$")
-WAL_RE = re.compile(
-    r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
+ARCHIVABLE_WAL_RE = re.compile(
+    r"^(?:[0-9A-F]{24}(?:\.partial)?|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
 )
+WAL_SEGMENT_ARCHIVE_RE = re.compile(r"^[0-9A-F]{24}(?:\.partial)?$")
 MAX_ARCHIVE_ENTRIES = 8192
 WAL_SEGMENT_BYTES = 16 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
@@ -249,14 +250,17 @@ def _provision_archive(
                         ):
                             raise RuntimeError("PITR WAL archive lock generation changed")
                         continue
-                    if not WAL_RE.fullmatch(entry.name):
+                    if not ARCHIVABLE_WAL_RE.fullmatch(entry.name):
                         raise RuntimeError(
                             f"PITR WAL archive contains an unexpected entry: {entry.name}"
                         )
                     item = entry.stat(follow_symlinks=False)
                     if not stat.S_ISREG(item.st_mode) or item.st_nlink != 1:
                         raise RuntimeError(f"unsafe PITR WAL archive entry: {entry.name}")
-                    if len(entry.name) == 24 and item.st_size != WAL_SEGMENT_BYTES:
+                    if (
+                        WAL_SEGMENT_ARCHIVE_RE.fullmatch(entry.name)
+                        and item.st_size != WAL_SEGMENT_BYTES
+                    ):
                         raise RuntimeError(f"invalid PITR WAL segment size: {entry.name}")
                     if item.st_size <= 0 or item.st_size > MAX_ARCHIVE_BYTES:
                         raise RuntimeError(f"invalid PITR WAL archive entry size: {entry.name}")

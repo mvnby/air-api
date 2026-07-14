@@ -21,19 +21,38 @@ def test_wal_filename_filter_accepts_postgres_archive_files(tmp_path):
     accepted = [
         "00000001000000000000000A",
         "00000001000000000000000A.00000028.backup",
+        "00000001000000000000000A.partial",
         "00000002.history",
     ]
     rejected = [
         ".hidden",
-        "00000001000000000000000A.partial",
         "README",
         "00000001000000000000000",
     ]
 
     for name in accepted + rejected:
-        (tmp_path / name).write_bytes(b"x")
+        path = tmp_path / name
+        path.write_bytes(b"x")
+        if name.endswith(".partial"):
+            with path.open("wb") as stream:
+                stream.truncate(pitr.WAL_SEGMENT_BYTES)
 
     assert [path.name for path in pitr.iter_wal_files(tmp_path)] == accepted
+
+
+@pytest.mark.parametrize(
+    "size",
+    [pitr.WAL_SEGMENT_BYTES - 1, pitr.WAL_SEGMENT_BYTES + 1],
+)
+def test_wal_filename_filter_rejects_noncanonical_partial_size(tmp_path, size):
+    partial = tmp_path / "00000007000000000000004B.partial"
+    with partial.open("wb") as stream:
+        stream.truncate(size)
+
+    with pytest.raises(
+        RuntimeError, match="partial WAL segment size is not canonical"
+    ):
+        list(pitr.iter_wal_files(tmp_path))
 
 
 def test_wal_key_groups_by_cluster_and_timeline():
@@ -277,9 +296,10 @@ def test_basebackup_lineage_rejects_noncanonical_values(
 def test_wal_upload_is_create_only_and_idempotent_for_identical_content(
     monkeypatch, tmp_path
 ):
-    wal_name = "00000007000000010000000A"
+    wal_name = "00000007000000010000000A.partial"
     wal_path = tmp_path / wal_name
-    wal_path.write_bytes(b"reviewed-wal")
+    with wal_path.open("wb") as stream:
+        stream.truncate(pitr.WAL_SEGMENT_BYTES)
     config = pitr.PitrS3Config(
         "private", "https://example.invalid", "auto", "key", "secret", "pitr", "mvn-api"
     )
@@ -328,7 +348,8 @@ def test_wal_upload_is_create_only_and_idempotent_for_identical_content(
     assert pitr.upload_wal(args) == 0
     assert client.put_calls == 1
 
-    wal_path.write_bytes(b"different-wal")
+    with wal_path.open("r+b") as stream:
+        stream.write(b"different-wal")
     with pytest.raises(RuntimeError, match="Refusing to overwrite"):
         pitr.upload_wal(args)
     assert client.put_calls == 1

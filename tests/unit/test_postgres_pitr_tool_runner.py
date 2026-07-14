@@ -301,3 +301,33 @@ def test_archive_directory_requires_exact_owner_modes_and_wal_size(
     wal.chmod(0o644)
     with pytest.raises(RuntimeError, match="entry ownership or mode"):
         tool._validate_archive_directory(archive)
+
+
+@pytest.mark.parametrize(
+    ("size", "accepted"),
+    [
+        (16 * 1024 * 1024, True),
+        (16 * 1024 * 1024 - 1, False),
+        (16 * 1024 * 1024 + 1, False),
+    ],
+)
+def test_archive_directory_validates_promotion_partial_size(
+    monkeypatch, tmp_path, size, accepted
+):
+    archive = tmp_path / "archive"
+    archive.mkdir(mode=0o700)
+    partial = archive / "00000007000000000000004B.partial"
+    with partial.open("wb") as stream:
+        stream.truncate(size)
+    partial.chmod(0o600)
+    lock = archive / ".mvn-pitr-archive.lock"
+    lock.touch(mode=0o600)
+    monkeypatch.setattr(tool, "ARCHIVE_UID", os.getuid())
+    monkeypatch.setattr(tool, "ARCHIVE_GID", os.getgid())
+    monkeypatch.setattr(tool, "_validate_directory", lambda path, **_kwargs: path)
+
+    if accepted:
+        assert tool._validate_archive_directory(archive)[0] == archive
+    else:
+        with pytest.raises(RuntimeError, match="WAL segment size is invalid"):
+            tool._validate_archive_directory(archive)
