@@ -38,7 +38,7 @@ EXPECTED_PITR_CLUSTERS = {
     "/opt/mvn-reserve/docker-compose.patroni.yml": "mvn-api",
 }
 EXPECTED_DESTINATION_FINGERPRINT = (
-    "f7dce2229a1d299e9403d4eb639106727676e587b333745c792bff0eacb16f8d"
+    "3c6e78da6f79b317f8b62d3f979bb69dba1f2821e473a670be30ec08310f458b"
 )
 SECRET_PITR_KEYS = {
     "POSTGRES_PITR_CLUSTER",

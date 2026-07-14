@@ -198,7 +198,7 @@ def test_expected_compose_digests_match_reviewed_sources():
         ).hexdigest()
     assert set(runtime.EXPECTED_PITR_CLUSTERS.values()) == {"mvn-api"}
     assert PRODUCTION_DESTINATION_FINGERPRINT == (
-        "f7dce2229a1d299e9403d4eb639106727676e587b333745c792bff0eacb16f8d"
+        "3c6e78da6f79b317f8b62d3f979bb69dba1f2821e473a670be30ec08310f458b"
     )
 
 
