@@ -59,6 +59,35 @@ def _remote_namespace():
     return namespace
 
 
+def test_production_prepare_payload_is_accepted_only_with_exact_contract():
+    namespace = _remote_namespace()
+    payload = json.loads(
+        build_payload(
+            inputs=_inputs(),
+            action="prepare",
+            compose_contract_sha256="4" * 64,
+            helper_sha256="5" * 64,
+            extra={
+                "baseline_primary": "mvn-api",
+                "baseline_system_identifier": "7423456789012345678",
+                "baseline_timeline": "9",
+            },
+        )
+    )
+
+    namespace["validate_payload"](payload)
+    namespace["validate_action"]("prepare", payload)
+
+    missing = dict(payload)
+    missing.pop("baseline_timeline")
+    with pytest.raises(RuntimeError, match="unsupported rollout action or payload fields"):
+        namespace["validate_action"]("prepare", missing)
+
+    extra = {**payload, "unreviewed": "value"}
+    with pytest.raises(RuntimeError, match="unsupported rollout action or payload fields"):
+        namespace["validate_action"]("prepare", extra)
+
+
 def test_rollout_modules_stay_small_and_all_composed_sources_are_reviewed():
     rollout_modules = sorted(
         (Path(__file__).resolve().parents[2] / "scripts/ha").glob("patroni_rollout_*.py")

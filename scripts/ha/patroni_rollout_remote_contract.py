@@ -65,7 +65,7 @@ def validate_action(action, payload):
     allowed = {"abort", "apply-archive-command", "attest-archive-runtime",
         "attest-current-runtime", "attest-runtime-ownership", "attest-target-runtime",
         "check-legacy-dcs", "check-target-dcs", "finalize",
-        "journal-status", "preflight", "prove-archive", "prove-etcd", "record",
+        "journal-status", "prepare", "preflight", "prove-archive", "prove-etcd", "record",
         "revert-archive-command", "rollback-node", "stage", "status", "switchover", "update-node"}
     if action not in allowed or set(payload) != base | extras.get(action, set()):
         die("unsupported rollout action or payload fields")
