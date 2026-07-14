@@ -1,5 +1,4 @@
 """Self-contained production source for the pinned PITR release executor."""
-
 from __future__ import annotations
 REMOTE_RELEASE_BUNDLE_EXECUTOR = r'''
 import base64
@@ -15,10 +14,8 @@ import stat
 import subprocess
 import sys
 import tempfile
-MAX_BUNDLE = 2097152
-MAX_ASSET = 1048576
-ROOT_UID = 0
-ROOT_GID = 0
+MAX_BUNDLE, MAX_ASSET = 2097152, 1048576
+ROOT_UID = ROOT_GID = 0
 LOCK_PATH = "/run/lock/mvn-postgres-pitr-prerequisites.lock"
 STATE_ROOT = "/var/lib/mvn-postgres-pitr"
 TRANSACTION_ROOT = STATE_ROOT + "/release-transactions"
@@ -63,6 +60,7 @@ BASE_MODES = {
     "/etc/systemd/system/mvn-postgres-basebackup.service": 0o644,
     "/etc/systemd/system/mvn-postgres-basebackup.timer": 0o644,
 }
+PREVIOUS_RELEASE_ADDITIONS = {LIBEXEC_DIR + "/safe_deploy_lock.py"}
 PROJECT_COMPOSE = {
     "/opt/air-api": "/opt/air-api/docker-compose.patroni.yml",
     "/opt/mvn-reserve": "/opt/mvn-reserve/docker-compose.patroni.yml",
@@ -533,7 +531,7 @@ def verify_rollback_generations(receipt):
         if (not generation["present"]
                 or hashlib.sha256(content).hexdigest() != generation["sha256"]):
             raise RuntimeError("recorded rollback generation does not match: " + generation["path"])
-def read_release_manifest(modes, project_dir):
+def read_release_manifest(modes, project_dir, allow_previous=False):
     try:
         content, _ = read_regular(RELEASE_MANIFEST, exact_mode=0o600, max_bytes=MAX_BUNDLE)
     except FileNotFoundError:
@@ -565,7 +563,9 @@ def read_release_manifest(modes, project_dir):
                 or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])):
             raise RuntimeError("release manifest file contract is invalid")
         files.append(item)
-    if [item["path"] for item in files] != sorted(modes):
+    paths = [item["path"] for item in files]
+    if (paths != sorted(modes) and not
+            (allow_previous and paths == sorted(set(modes) - PREVIOUS_RELEASE_ADDITIONS))):
         raise RuntimeError("release manifest path set is incomplete")
     for item in files:
         content, _ = read_regular(item["path"], exact_mode=item["mode"])
@@ -595,7 +595,9 @@ def execute(action, txid, project_dir, compose_file, payload):
         reject_operation_records()
         txdir = os.path.join(TRANSACTION_ROOT, txid)
         has_tx = transaction_exists(txdir)
-        completed = None if has_tx else read_release_manifest(modes, project_dir)
+        completed = None if has_tx else read_release_manifest(
+            modes, project_dir, allow_previous=action == "apply"
+        )
         if completed is not None and completed["txid"] == txid:
             if has_tx:
                 raise RuntimeError("completed release still has a transaction directory")
@@ -606,9 +608,7 @@ def execute(action, txid, project_dir, compose_file, payload):
                 if (completed["release_sha256"] != release
                         or completed["files"] != expected_files):
                     raise RuntimeError("transaction id already finalized another release")
-                # Re-open the same completed transaction's maintenance fence so
-                # a controller can safely replay idempotent host phases after a
-                # crash between the two node finalizations.
+                # Re-open the fence for idempotent controller replay after a crash.
                 ensure_marker(txid)
                 return "reopened"
             clear_completed_marker(txid)

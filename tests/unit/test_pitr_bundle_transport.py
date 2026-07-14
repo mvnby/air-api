@@ -233,6 +233,61 @@ def test_apply_resumes_mixed_old_new_generation_and_finalize(tmp_path):
     assert not Path(namespace["MAINTENANCE_MARKER"]).exists()
 
 
+def test_apply_accepts_only_exact_previous_manifest_missing_new_safe_lock_helper(tmp_path):
+    namespace, project, compose, tool = _remote_namespace(tmp_path)
+    _write(compose, b"old-compose", 0o644)
+    _write(tool, b"old-tool", 0o755)
+    old_payload, _ = _payload(namespace, project, compose, tool)
+    old_txid = "1" * 32
+    assert namespace["execute"](
+        "apply", old_txid, str(project), compose.name, old_payload
+    ) == "applied"
+    assert namespace["execute"](
+        "finalize", old_txid, str(project), compose.name, b""
+    ) == "finalized"
+
+    helper = tool.parent / "safe_deploy_lock.py"
+    helper_content = b"new-helper"
+    namespace["BASE_MODES"][str(helper)] = 0o755
+    namespace["PREVIOUS_RELEASE_ADDITIONS"] = {str(helper)}
+    value = json.loads(old_payload)
+    value["files"].append(
+        {
+            "content": base64.b64encode(helper_content).decode("ascii"),
+            "mode": 0o755,
+            "path": str(helper),
+            "sha256": hashlib.sha256(helper_content).hexdigest(),
+        }
+    )
+    value["files"].sort(key=lambda item: item["path"])
+    body = {
+        "files": value["files"],
+        "project_dir": str(project),
+        "version": 1,
+    }
+    value["release_sha256"] = hashlib.sha256(
+        namespace["canonical"](body)
+    ).hexdigest()
+    new_payload = namespace["canonical"](value)
+
+    assert namespace["execute"](
+        "apply", "2" * 32, str(project), compose.name, new_payload
+    ) == "applied"
+    assert helper.read_bytes() == helper_content
+
+    manifest = json.loads(Path(namespace["RELEASE_MANIFEST"]).read_text())
+    manifest["files"].pop()
+    Path(namespace["RELEASE_MANIFEST"]).write_bytes(
+        namespace["canonical"](manifest) + b"\n"
+    )
+    with pytest.raises(RuntimeError, match="path set is incomplete"):
+        namespace["read_release_manifest"](
+            namespace["expected_modes"](str(project), compose.name),
+            str(project),
+            allow_previous=True,
+        )
+
+
 def test_finalized_transaction_rejects_changed_release_and_manifest_drift(tmp_path):
     namespace, project, compose, tool = _remote_namespace(tmp_path)
     _write(compose, b"old-compose", 0o644)
