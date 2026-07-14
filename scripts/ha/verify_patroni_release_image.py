@@ -16,6 +16,7 @@ IMMUTABLE_IMAGE_RE = re.compile(
     r"^ghcr\.io/[a-z0-9._/-]+/patroni@(?P<digest>sha256:[0-9a-f]{64})$"
 )
 ATTESTATION_TYPE = "attestation-manifest"
+COMMAND_TIMEOUT_SECONDS = 120
 
 
 class VerificationError(RuntimeError):
@@ -24,8 +25,13 @@ class VerificationError(RuntimeError):
 
 def _run(command: list[str]) -> bytes:
     try:
-        completed = subprocess.run(command, check=True, capture_output=True)
-    except (OSError, subprocess.CalledProcessError) as exc:
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         stderr = getattr(exc, "stderr", b"") or b""
         detail = stderr.decode("utf-8", errors="replace").strip()
         raise VerificationError(f"command failed: {' '.join(command)}: {detail}") from exc
@@ -189,7 +195,12 @@ def verify_release_image(
     return manifest_raw, provenance_raw, sbom_raw
 
 
-def _write(path: Path, payload: bytes) -> None:
+def _write_raw(path: Path, payload: bytes) -> None:
+    """Preserve registry bytes so the evidence file hashes to the OCI digest."""
+    path.write_bytes(payload)
+
+
+def _write_json(path: Path, payload: bytes) -> None:
     path.write_bytes(payload.rstrip(b"\n") + b"\n")
 
 
@@ -211,9 +222,9 @@ def main() -> int:
     except VerificationError as exc:
         print(f"Patroni release image verification failed: {exc}")
         return 1
-    _write(args.manifest_out, manifest)
-    _write(args.provenance_out, provenance)
-    _write(args.sbom_out, sbom)
+    _write_raw(args.manifest_out, manifest)
+    _write_json(args.provenance_out, provenance)
+    _write_json(args.sbom_out, sbom)
     print("Patroni release image manifest, linux/amd64 runtime, provenance, and SBOM passed")
     return 0
 

@@ -156,13 +156,32 @@ jobs:
           jq -e 'length > 0' patroni-github-attestation.json >/dev/null
 
       - name: Rehearse exact published digest
+        id: rehearsal
         run: |
           set -euo pipefail
           PATRONI_REHEARSAL_TIMEOUT=180 \
           PATRONI_REHEARSAL_IMAGE='${{ steps.image.outputs.reference }}' \
             bash scripts/ha/rehearse_patroni_failover.sh | tee patroni_rehearsal.log
+          grep -Fqx \
+            '[patroni-rehearsal][done] exact-image identity, archive helper, failover, data continuity, rejoin, and quorum passed' \
+            patroni_rehearsal.log
+
+      - name: Upload complete pre-promotion release evidence
+        id: evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: patroni-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            patroni-manifest.json
+            patroni-provenance.json
+            patroni-sbom.spdx.json
+            patroni-github-attestation.json
+            patroni_rehearsal.log
 
       - name: Promote immutable digest to release SHA tag
+        id: promotion
         run: |
           set -euo pipefail
           release_tag='${{ steps.image.outputs.release_tag }}'
@@ -190,31 +209,31 @@ jobs:
             exit 1
           fi
 
-      - name: Upload Patroni release evidence
-        if: ${{ always() }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: patroni-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: warn
-          retention-days: 90
-          path: |
-            patroni-manifest.json
-            patroni-provenance.json
-            patroni-sbom.spdx.json
-            patroni-github-attestation.json
-            patroni_rehearsal.log
-            release-manifest.json
-
       - name: Patroni release summary
         if: ${{ always() }}
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          PROMOTION_OUTCOME: ${{ steps.promotion.outcome }}
+          REHEARSAL_OUTCOME: ${{ steps.rehearsal.outcome }}
         run: |
+          rehearsed=false
+          promoted=false
+          if [ "${REHEARSAL_OUTCOME}" = "success" ]; then
+            rehearsed="${IMAGE_DIGEST}"
+          fi
+          if [ "${PROMOTION_OUTCOME}" = "success" ]; then
+            promoted=true
+          fi
           {
             echo "## Patroni Image Release"
+            echo "- run_id: ${GITHUB_RUN_ID}"
+            echo "- run_attempt: ${GITHUB_RUN_ATTEMPT}"
             echo "- tested_sha: ${GITHUB_SHA}"
             echo "- candidate_tag: ${{ steps.candidate.outputs.tag }}"
             echo "- immutable_image: ${{ steps.image.outputs.reference }}"
             echo "- release_tag: ${{ steps.image.outputs.release_tag }}"
             echo "- attestation_url: ${{ steps.attest.outputs.attestation-url }}"
-            echo "- exact_digest_rehearsed: ${{ steps.image.outputs.digest }}"
+            echo "- exact_digest_rehearsed: ${rehearsed}"
+            echo "- release_tag_promoted: ${promoted}"
             echo "- production_deployed: false"
           } >> "${GITHUB_STEP_SUMMARY}"

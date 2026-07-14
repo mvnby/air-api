@@ -120,3 +120,13 @@ def test_sbom_requires_nonempty_spdx_packages():
     valid["SPDX"]["packages"] = []
     with pytest.raises(verify.VerificationError, match="no packages"):
         verify.verify_sbom(valid)
+
+
+def test_manifest_evidence_preserves_exact_registry_bytes(tmp_path):
+    payload = b'{"schemaVersion":2}'
+    target = tmp_path / "manifest.json"
+
+    verify._write_raw(target, payload)
+
+    assert target.read_bytes() == payload
+    assert _digest(target.read_bytes()) == _digest(payload)

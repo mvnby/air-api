@@ -45,14 +45,35 @@ def test_publish_orders_verification_rehearsal_before_sha_tag_promotion():
         "Rehearse exact published digest"
     )
     assert names.index("Rehearse exact published digest") < names.index(
+        "Upload complete pre-promotion release evidence"
+    )
+    assert names.index("Upload complete pre-promotion release evidence") < names.index(
         "Promote immutable digest to release SHA tag"
     )
+    evidence = next(
+        step
+        for step in steps
+        if step["name"] == "Upload complete pre-promotion release evidence"
+    )
+    assert evidence["with"]["if-no-files-found"] == "error"
+    assert "release-manifest.json" not in evidence["with"]["path"]
     promotion = next(
         step for step in steps if step["name"] == "Promote immutable digest to release SHA tag"
     )["run"]
     assert "imagetools create --tag" in promotion
     assert "already points to" in promotion
     assert 'promoted}" != "${expected}' in promotion
+
+
+def test_standalone_rehearsal_is_not_mislabelled_as_release_evidence():
+    path = ROOT / ".github/workflows/patroni-failover-rehearsal.yml"
+    workflow = yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    steps = workflow["jobs"]["rehearse"]["steps"]
+    summary = next(step for step in steps if step["name"] == "Rehearsal summary")["run"]
+
+    assert "source_bound_release_evidence: false" in summary
+    assert "release_evidence=true" not in summary
+    assert 'REHEARSAL_RESULT}" = "success"' in summary
 
 
 def test_exact_rehearsal_has_no_build_or_cached_tag_bypass():

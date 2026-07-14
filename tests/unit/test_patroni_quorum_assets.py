@@ -146,7 +146,7 @@ def test_rehearsal_workflow_is_scheduled_and_keeps_logs():
     assert "rehearse_patroni_failover.sh" in steps["Run isolated Patroni failover rehearsal"]["run"]
     assert steps["Upload rehearsal log"]["if"] == "${{ always() }}"
     assert "production_data_touched: false" in steps["Rehearsal summary"]["run"]
-    assert "release_evidence=false" in steps["Rehearsal summary"]["run"]
+    assert "source_bound_release_evidence: false" in steps["Rehearsal summary"]["run"]
     assert "image_digest" in workflow["on"]["workflow_dispatch"]["inputs"]
 
 

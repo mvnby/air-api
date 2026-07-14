@@ -75,20 +75,25 @@ jobs:
         if: ${{ always() }}
         env:
           INPUT_IMAGE_DIGEST: ${{ inputs.image_digest }}
+          REHEARSAL_RESULT: ${{ job.status }}
         run: |
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             image="ghcr.io/mvnby/air-api/patroni@${INPUT_IMAGE_DIGEST}"
-            release_evidence=true
+            exact_digest_rehearsal=false
+            if [ "${REHEARSAL_RESULT}" = "success" ]; then
+              exact_digest_rehearsal=true
+            fi
           else
             image=source-only-local-build
-            release_evidence=false
+            exact_digest_rehearsal=false
           fi
           {
             echo '## Patroni Failover Rehearsal'
             echo "- run_id: ${GITHUB_RUN_ID}"
-            echo "- result: ${{ job.status }}"
+            echo "- result: ${REHEARSAL_RESULT}"
             echo "- image: ${image}"
-            echo "- release_evidence: ${release_evidence}"
+            echo "- exact_digest_rehearsal: ${exact_digest_rehearsal}"
+            echo '- source_bound_release_evidence: false'
             echo '- topology: 3 isolated etcd members, 2 isolated PostgreSQL nodes'
             echo '- production_data_touched: false'
           } >> "${GITHUB_STEP_SUMMARY}"
