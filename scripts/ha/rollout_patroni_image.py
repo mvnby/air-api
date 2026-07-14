@@ -494,15 +494,15 @@ class _Orchestrator:
                 self._remote("check-legacy-dcs", current.primary)
                 if not self._has_record(statuses, "standby-updated"):
                     self.db_mutation_attempted = True
-                    self._remote(
-                        "update-node",
-                        original.standby,
-                        extra={
-                            "expected_primary": original.primary.alias,
-                            "expected_role": "standby",
-                            "update_phase": "standby",
-                        },
-                    )
+                self._remote(
+                    "update-node",
+                    original.standby,
+                    extra={
+                        "expected_primary": original.primary.alias,
+                        "expected_role": "standby",
+                        "update_phase": "standby",
+                    },
+                )
                 self._wait_topology(
                     primary_alias=original.primary.alias,
                     system_identifier=original.system_identifier,

@@ -375,19 +375,26 @@ def test_completed_rollback_with_lost_response_is_terminal_across_two_resumes(
     assert "switchover" not in _mutation_names(operations.events)
 
 
-def test_stale_standby_record_fences_candidate_on_current_image(tmp_path):
+def test_stale_standby_record_reupdates_candidate_and_converges_on_resume(tmp_path):
     operations = FakeOperations(existing=True)
     for status in operations.statuses.values():
         status["completed"].append("record:standby-updated")
+    operations.lose_after_completion = [("update-node", "zakup", None)]
 
     with pytest.raises(RuntimeError, match="roll-forward state"):
         _orchestrator(tmp_path, operations, resume=True).run()
 
+    first_names = _mutation_names(operations.events)
+    assert operations.images["zakup"] == TARGET
+    assert "switchover" not in first_names
+    assert "abort" not in first_names
+
+    result = _orchestrator(tmp_path, operations, resume=True).run()
     names = _mutation_names(operations.events)
-    assert operations.images["zakup"] == CURRENT
-    assert "attest-target-runtime" in names
-    assert "switchover" not in names
+
+    assert result.final_primary == "zakup"
     assert "abort" not in names
+    assert names.index("attest-target-runtime") < names.index("switchover")
 
 
 def test_archive_proof_failure_compensates_exact_legacy_command(tmp_path):
