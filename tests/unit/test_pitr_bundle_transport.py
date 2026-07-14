@@ -13,7 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.ha import pitr_bundle_executor_source, pitr_bundle_transport as bundle
+from scripts.ha import pitr_bundle_executor_prelude, pitr_bundle_executor_source
+from scripts.ha import pitr_bundle_transport as bundle
 from scripts.ha import pitr_remote_execution
 from scripts.ha.pitr_pinned_ssh import PATRONI_NODES, PinnedSshContext
 
@@ -97,6 +98,7 @@ def test_embedded_release_executor_is_valid_isolated_python():
     )
     assert len(Path(bundle.__file__).read_text().splitlines()) < 700
     assert len(Path(pitr_bundle_executor_source.__file__).read_text().splitlines()) < 700
+    assert len(Path(pitr_bundle_executor_prelude.__file__).read_text().splitlines()) < 700
     ast.parse(bundle.REMOTE_RELEASE_BUNDLE_EXECUTOR)
     result = subprocess.run(
         [sys.executable, "-I", "-c", bundle.REMOTE_RELEASE_BUNDLE_EXECUTOR],
