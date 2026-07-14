@@ -2,16 +2,16 @@
 """Apply PostgreSQL PITR primary prerequisites without printing secrets.
 
 The helper probes both reviewed physical Patroni nodes through repository-pinned
-SSH host identities, selects the sole writable primary, uploads a temporary
-root-only env file there, runs a safe bootstrap phase, and removes the temporary
-file even when upload or bootstrap fails.
+SSH host identities, selects the sole writable primary, removes any legacy
+disk-based secret file, and runs the bootstrap phase with an in-memory Linux
+memfd payload protected by a host lock.
 """
 
 from __future__ import annotations
 
 import argparse
 import getpass
-import json
+import hashlib
 import os
 import re
 import shlex
@@ -22,30 +22,51 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
-from urllib.parse import urlsplit
 
 try:
     from scripts.ha.pitr_pinned_ssh import (
         PATRONI_NODES,
-        PatroniNode,
-        PinnedSshContext,
         create_context,
-        ssh_args,
         validate_effective_config,
+    )
+    from scripts.ha.pitr_cluster_topology import ClusterTopology, discover_cluster_topology
+    from scripts.ha.pitr_cluster_migration import (
+        migrate_cluster,
+        validate_transaction_id,
+    )
+    from scripts.ha.pitr_remote_execution import (
+        REMOTE_MAINTENANCE_EXECUTOR,
+        REMOTE_SECRET_EXECUTOR,
+        run_remote_maintenance_phase,
     )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
     from pitr_pinned_ssh import (  # type: ignore[no-redef]
         PATRONI_NODES,
-        PatroniNode,
-        PinnedSshContext,
         create_context,
-        ssh_args,
         validate_effective_config,
+    )
+    from pitr_cluster_topology import (  # type: ignore[no-redef]
+        ClusterTopology,
+        discover_cluster_topology,
+    )
+    from pitr_cluster_migration import (  # type: ignore[no-redef]
+        migrate_cluster,
+        validate_transaction_id,
+    )
+    from pitr_remote_execution import (  # type: ignore[no-redef]
+        REMOTE_MAINTENANCE_EXECUTOR,
+        REMOTE_SECRET_EXECUTOR,
+        run_remote_maintenance_phase,
     )
 
 
-DEFAULT_REMOTE_ENV_FILE = "/root/mvn-postgres-pitr.env"
 DEFAULT_BOOTSTRAP_HELPER = "/usr/local/sbin/mvn-postgres-pitr-bootstrap"
+EXPECTED_LOGICAL_PITR_CLUSTER = "mvn-api"
+EXPECTED_DESTINATION_FINGERPRINT = (
+    "f7dce2229a1d299e9403d4eb639106727676e587b333745c792bff0eacb16f8d"
+)
+SECRET_PHASES = {"migrate-cluster"}
+MAINTENANCE_PHASES = {"restore-drill", "verify"}
 
 BUCKET_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 PITR_ENV_NAMES = {
@@ -59,6 +80,17 @@ PITR_ENV_NAMES = {
 }
 
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
+
+
+def subprocess_environment(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    source = environ if environ is not None else os.environ
+    allowed = ("PATH", "HOME", "LANG", "LC_ALL", "USER", "LOGNAME", "TMPDIR")
+    clean = {name: source[name] for name in allowed if source.get(name)}
+    clean.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+    clean.setdefault("HOME", str(Path.home()))
+    clean.setdefault("LANG", "C")
+    clean.setdefault("LC_ALL", "C")
+    return clean
 
 
 @dataclass(frozen=True)
@@ -83,25 +115,8 @@ def _run_subprocess(args: Sequence[str], stdin: str | None = None) -> subprocess
         text=True,
         capture_output=True,
         check=False,
+        env=subprocess_environment(),
     )
-
-
-def run_checked(
-    args: Sequence[str],
-    *,
-    stdin: str | None = None,
-    runner: Runner | None = None,
-    print_output: bool = True,
-) -> str:
-    actual_runner = runner or _run_subprocess
-    result = actual_runner(args, stdin)
-    if result.returncode != 0:
-        output = (result.stderr or result.stdout or "").strip()
-        raise RuntimeError(output or f"command failed: {' '.join(args)}")
-    output = result.stdout.strip()
-    if output and print_output:
-        print(output)
-    return output
 
 
 def _clean(value: object | None) -> str:
@@ -140,6 +155,8 @@ def _validate_owner_only_regular_file(path: Path, *, label: str) -> os.stat_resu
         raise RuntimeError(f"{label} not found: {path}") from exc
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
         raise RuntimeError(f"{label} must be a regular non-symlink file")
+    if metadata.st_nlink != 1:
+        raise RuntimeError(f"{label} must have exactly one filesystem link")
     if metadata.st_uid != os.geteuid():
         raise RuntimeError(f"{label} must be owned by the current user")
     if stat.S_IMODE(metadata.st_mode) & 0o077:
@@ -147,20 +164,64 @@ def _validate_owner_only_regular_file(path: Path, *, label: str) -> os.stat_resu
     return metadata
 
 
-def load_env_file(path: Path, *, allowed_names: set[str] = PITR_ENV_NAMES) -> None:
-    _validate_owner_only_regular_file(path, label="PITR env file")
-    loaded = 0
-    for line in path.read_text(encoding="utf-8").splitlines():
+def _read_owner_only_file(path: Path, *, label: str, limit: int = 65536) -> str:
+    before = _validate_owner_only_regular_file(path, label=label)
+    descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        opened = os.fstat(descriptor)
+        fields = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_uid",
+            "st_nlink",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if tuple(getattr(opened, name) for name in fields) != tuple(
+            getattr(before, name) for name in fields
+        ):
+            raise RuntimeError(f"{label} changed while opening")
+        payload = bytearray()
+        while True:
+            chunk = os.read(descriptor, min(131072, limit + 1 - len(payload)))
+            if not chunk:
+                break
+            payload.extend(chunk)
+            if len(payload) > limit:
+                raise RuntimeError(f"{label} is too large")
+        after = os.fstat(descriptor)
+        if tuple(getattr(after, name) for name in fields) != tuple(
+            getattr(opened, name) for name in fields
+        ):
+            raise RuntimeError(f"{label} changed while reading")
+    finally:
+        os.close(descriptor)
+    try:
+        return bytes(payload).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(f"{label} must be UTF-8") from exc
+
+
+def load_env_file(
+    path: Path, *, allowed_names: set[str] = PITR_ENV_NAMES
+) -> dict[str, str]:
+    parsed_values: dict[str, str] = {}
+    payload = _read_owner_only_file(path, label="PITR env file")
+    for line in payload.splitlines():
         parsed = _parse_env_line(line)
         if parsed is None:
             continue
         key, value = parsed
         if key not in allowed_names:
             continue
-        if key not in os.environ:
-            os.environ[key] = value
-            loaded += 1
-    log("ok", f"loaded env file: {path} keys={loaded}")
+        if key in parsed_values:
+            raise RuntimeError(f"PITR env file contains duplicate key: {key}")
+        parsed_values[key] = value
+
+    log("ok", f"loaded env file: {path} keys={len(parsed_values)}")
+    return parsed_values
 
 
 def _prompt(name: str, *, secret: bool, no_prompt: bool) -> str:
@@ -189,7 +250,7 @@ def collect_inputs(
     environ: Mapping[str, str] | None = None,
     no_prompt: bool = False,
 ) -> PitrInput:
-    source = environ or os.environ
+    source = environ if environ is not None else os.environ
     config = PitrInput(
         cluster=_value(
             environ=source,
@@ -243,31 +304,20 @@ def validate_input(config: PitrInput) -> None:
     ]
     if missing:
         raise RuntimeError("missing required PITR settings: " + ", ".join(missing))
+    if config.cluster != EXPECTED_LOGICAL_PITR_CLUSTER:
+        raise RuntimeError(
+            "POSTGRES_PITR_CLUSTER must use the reviewed logical namespace "
+            f"({EXPECTED_LOGICAL_PITR_CLUSTER})"
+        )
 
     if not BUCKET_RE.match(config.bucket):
         raise RuntimeError(
             "POSTGRES_PITR_S3_BUCKET must be an R2/S3 bucket name with lowercase letters, numbers, and hyphens"
         )
-    try:
-        endpoint = urlsplit(config.endpoint_url)
-        endpoint_port = endpoint.port
-    except ValueError as exc:
-        raise RuntimeError("POSTGRES_PITR_S3_ENDPOINT_URL is invalid") from exc
-    endpoint_host = endpoint.hostname or ""
-    valid_endpoint_host = re.fullmatch(
-        r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.r2\.cloudflarestorage\.com",
-        endpoint_host,
+    if not re.fullmatch(
+        r"https://[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.r2\.cloudflarestorage\.com",
+        config.endpoint_url,
         flags=re.IGNORECASE,
-    )
-    if (
-        endpoint.scheme.lower() != "https"
-        or valid_endpoint_host is None
-        or endpoint.username is not None
-        or endpoint.password is not None
-        or endpoint_port not in {None, 443}
-        or endpoint.path not in {"", "/"}
-        or endpoint.query
-        or endpoint.fragment
     ):
         raise RuntimeError(
             "POSTGRES_PITR_S3_ENDPOINT_URL must look like https://<account-id>.r2.cloudflarestorage.com"
@@ -286,6 +336,16 @@ def validate_input(config: PitrInput) -> None:
             raise RuntimeError(f"{name} must be a single-line value")
         if value != value.strip() or any(ch.isspace() for ch in value) or "#" in value or "'" in value or '"' in value:
             raise RuntimeError(f"{name} must not contain whitespace, quotes, or #")
+    destination = "\n".join(
+        (
+            config.bucket,
+            config.endpoint_url,
+            config.region,
+            config.key_prefix,
+        )
+    ) + "\n"
+    if hashlib.sha256(destination.encode()).hexdigest() != EXPECTED_DESTINATION_FINGERPRINT:
+        raise RuntimeError("PITR destination does not match the reviewed production archive")
 
 
 def render_env(config: PitrInput, *, redact: bool = False) -> str:
@@ -317,209 +377,6 @@ def validate_identity_file(raw_path: str) -> Path:
     return path
 
 
-def _patroni_role(payload: object, node: PatroniNode) -> str:
-    if not isinstance(payload, Mapping):
-        raise RuntimeError(f"{node.alias}: invalid Patroni response")
-    state = _clean(payload.get("state")).lower()
-    role = _clean(payload.get("role")).lower()
-    patroni = payload.get("patroni")
-    nested_name = patroni.get("name") if isinstance(patroni, Mapping) else ""
-    actual_name = _clean(payload.get("name") or nested_name)
-    unsafe_flags = {
-        "pending_restart": "pending restart",
-        "pause": "cluster pause",
-        "cluster_unlocked": "missing DCS leader lock",
-        "failsafe_mode_is_active": "DCS failsafe mode",
-    }
-    if state != "running":
-        raise RuntimeError(f"{node.alias}: Patroni is not running")
-    if actual_name != node.alias:
-        raise RuntimeError(
-            f"{node.alias}: Patroni node identity is {actual_name or '<empty>'}, expected {node.alias}"
-        )
-    for field, description in unsafe_flags.items():
-        if payload.get(field) is True:
-            raise RuntimeError(f"{node.alias}: Patroni reports {description}")
-    if role in {"leader", "master", "primary"}:
-        return "primary"
-    if role in {"replica", "standby"}:
-        return "standby"
-    raise RuntimeError(f"{node.alias}: unsupported Patroni role: {role or '<empty>'}")
-
-
-def discover_primary(
-    *,
-    context: PinnedSshContext,
-    nodes: Sequence[PatroniNode] = PATRONI_NODES,
-    runner: Runner | None = None,
-) -> PatroniNode:
-    roles: dict[str, str] = {}
-    for node in nodes:
-        output = run_checked(
-            [
-                *ssh_args(node, context),
-                "curl -fsS --max-time 5 http://127.0.0.1:8008/patroni",
-            ],
-            runner=runner,
-            print_output=False,
-        )
-        try:
-            payload = json.loads(output)
-        except ValueError as exc:
-            raise RuntimeError(f"{node.alias}: invalid Patroni JSON") from exc
-        roles[node.alias] = _patroni_role(payload, node)
-        log("probe", f"{node.alias} role={roles[node.alias]}")
-    primaries = [node for node in nodes if roles.get(node.alias) == "primary"]
-    standbys = [node for node in nodes if roles.get(node.alias) == "standby"]
-    if len(primaries) != 1 or len(standbys) != len(nodes) - 1:
-        rendered = " ".join(
-            f"{node.alias}={roles.get(node.alias, 'unknown')}" for node in nodes
-        )
-        raise RuntimeError(f"unsafe Patroni topology: {rendered}")
-    primary = primaries[0]
-    log("ok", f"selected Patroni primary: {primary.alias}")
-    return primary
-
-
-REMOTE_SECRET_EXECUTOR = r"""
-import fcntl
-import os
-import stat
-import subprocess
-import sys
-
-MAX_PAYLOAD_BYTES = 65536
-LOCK_PATH = "/run/lock/mvn-postgres-pitr-prerequisites.lock"
-
-
-def fail(message, status=70):
-    print(f"pitr secret executor: {message}", file=sys.stderr)
-    return status
-
-
-def main():
-    if len(sys.argv) != 5:
-        return fail("invalid invocation", 64)
-    if os.geteuid() != 0:
-        return fail("root execution is required", 77)
-    if not hasattr(os, "memfd_create") or not hasattr(os, "O_NOFOLLOW"):
-        return fail("required Linux secret transport is unavailable")
-    bootstrap_helper, phase, project_dir, compose_file = sys.argv[1:]
-    os.umask(0o077)
-    lock_flags = os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW
-    lock_fd = os.open(LOCK_PATH, lock_flags, 0o600)
-    try:
-        lock_metadata = os.fstat(lock_fd)
-        if (
-            not stat.S_ISREG(lock_metadata.st_mode)
-            or lock_metadata.st_uid != os.geteuid()
-            or lock_metadata.st_nlink != 1
-        ):
-            return fail("lock file metadata is unsafe")
-        os.fchmod(lock_fd, 0o600)
-        try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return fail("another PITR prerequisite apply is active", 75)
-        payload = bytearray(sys.stdin.buffer.read(MAX_PAYLOAD_BYTES + 1))
-        if not payload or len(payload) > MAX_PAYLOAD_BYTES:
-            return fail("secret payload size is invalid", 65)
-        secret_fd = os.memfd_create("mvn-postgres-pitr-env", flags=0)
-        payload_view = memoryview(payload)
-        try:
-            os.fchmod(secret_fd, 0o600)
-            offset = 0
-            while offset < len(payload_view):
-                written = os.write(secret_fd, payload_view[offset:])
-                if written <= 0:
-                    return fail("could not stage secret payload")
-                offset += written
-            os.lseek(secret_fd, 0, os.SEEK_SET)
-            environment = os.environ.copy()
-            for name in (
-                "BASH_ENV",
-                "CDPATH",
-                "ENV",
-                "LD_AUDIT",
-                "LD_LIBRARY_PATH",
-                "LD_PRELOAD",
-                "PYTHONHOME",
-                "PYTHONINSPECT",
-                "PYTHONPATH",
-                "PYTHONSTARTUP",
-            ):
-                environment.pop(name, None)
-            environment.update(
-                {
-                    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                    "PROJECT_DIR": project_dir,
-                    "COMPOSE_FILE": compose_file,
-                    "ENV_INPUT_FILE": f"/proc/self/fd/{secret_fd}",
-                }
-            )
-            result = subprocess.run(
-                [bootstrap_helper, phase],
-                env=environment,
-                pass_fds=(secret_fd, lock_fd),
-                check=False,
-            )
-            return result.returncode
-        finally:
-            payload_view[:] = b"\0" * len(payload_view)
-            payload_view.release()
-            os.close(secret_fd)
-    finally:
-        os.close(lock_fd)
-
-
-raise SystemExit(main())
-""".strip()
-
-
-def run_remote_secret_phase(
-    *,
-    node: PatroniNode,
-    context: PinnedSshContext,
-    env_text: str,
-    bootstrap_helper: str,
-    phase: str,
-    runner: Runner | None = None,
-) -> None:
-    command = " ".join(
-        [
-            "/usr/bin/python3",
-            "-I",
-            "-c",
-            shlex.quote(REMOTE_SECRET_EXECUTOR),
-            shlex.quote(bootstrap_helper),
-            shlex.quote(phase),
-            shlex.quote(node.project_dir),
-            shlex.quote(node.compose_file),
-        ]
-    )
-    run_checked(
-        [*ssh_args(node, context), command],
-        stdin=env_text,
-        runner=runner,
-    )
-    log("ok", f"remote PITR phase passed: {phase}")
-
-
-def cleanup_remote_env(
-    *,
-    node: PatroniNode,
-    context: PinnedSshContext,
-    remote_env_file: str,
-    runner: Runner | None = None,
-) -> None:
-    remote_file = shlex.quote(remote_env_file)
-    run_checked(
-        [*ssh_args(node, context), f"rm -f -- {remote_file}"],
-        runner=runner,
-    )
-    log("ok", f"temporary PITR env absent on {node.alias}")
-
-
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Prepare current PostgreSQL primary for private R2/S3 PITR without printing secrets."
@@ -536,9 +393,20 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--phase",
-        choices=("preflight", "bootstrap-before-maintenance"),
-        default="preflight",
-        help="Use preflight first. bootstrap-before-maintenance writes PITR env and uploads the first basebackup.",
+        choices=tuple(sorted(SECRET_PHASES | MAINTENANCE_PHASES)),
+        default="migrate-cluster",
+        help=(
+            "Use preflight first. Maintenance phases run through the same pinned "
+            "primary discovery and canonical node mapping."
+        ),
+    )
+    parser.add_argument(
+        "--transaction-id",
+        default=os.environ.get("PITR_TRANSACTION_ID") or "",
+        help=(
+            "Required 32-character lowercase hexadecimal cluster transaction ID "
+            "for every live or dry-run mutation phase. Reuse it to resume."
+        ),
     )
     execution_mode = parser.add_mutually_exclusive_group()
     execution_mode.add_argument("--dry-run", action="store_true")
@@ -555,20 +423,56 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _require_same_topology(
+    before: ClusterTopology,
+    after: ClusterTopology,
+    *,
+    stage: str,
+) -> None:
+    fields = (
+        ("system_identifier", before.system_identifier, after.system_identifier),
+        ("timeline", before.timeline, after.timeline),
+        ("primary", before.primary.alias, after.primary.alias),
+        ("standby", before.standby.alias, after.standby.alias),
+    )
+    drift = [name for name, expected, actual in fields if actual != expected]
+    if drift:
+        raise RuntimeError(f"topology drift after {stage}: " + ", ".join(drift))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv or sys.argv[1:])
+    args = parse_args(argv if argv is not None else sys.argv[1:])
     try:
-        config: PitrInput | None = None
+        transaction_id = ""
         if not args.probe_only:
+            transaction_id = validate_transaction_id(args.transaction_id)
+        secret_phase = args.phase in SECRET_PHASES
+        config: PitrInput | None = None
+        if not args.probe_only and secret_phase:
+            input_environment = dict(os.environ)
             if args.env_file:
-                load_env_file(Path(args.env_file))
-            config = collect_inputs(no_prompt=args.no_prompt)
+                file_values = load_env_file(Path(args.env_file))
+                for key, value in file_values.items():
+                    if key in input_environment and input_environment[key] != value:
+                        raise RuntimeError(
+                            f"ambient environment conflicts with PITR env file key: {key}"
+                        )
+                    input_environment.setdefault(key, value)
+            config = collect_inputs(
+                environ=input_environment,
+                no_prompt=args.no_prompt,
+            )
             log("info", f"phase={args.phase}")
             log("info", "PITR R2 access key values will not be printed")
+        elif not args.probe_only:
+            if args.env_file:
+                raise RuntimeError("--env-file is not accepted for maintenance phases")
+            log("info", f"maintenance phase={args.phase}")
 
-        if args.dry_run and config is not None:
-            log("dry-run", "would upload this redacted env to the primary:")
-            print(render_env(config, redact=True).rstrip())
+        if args.dry_run:
+            if config is not None:
+                log("dry-run", "would send this redacted env to the primary:")
+                print(render_env(config, redact=True).rstrip())
             aliases = ", ".join(node.alias for node in PATRONI_NODES)
             log("dry-run", f"would probe pinned Patroni nodes: {aliases}")
             log(
@@ -582,31 +486,65 @@ def main(argv: Sequence[str] | None = None) -> int:
             context = create_context(Path(temporary_dir), identity_file)
             for node in PATRONI_NODES:
                 validate_effective_config(node, context)
-            primary = discover_primary(context=context)
             if args.probe_only:
-                log("ok", "pinned SSH and Patroni primary probe passed")
-                return 0
-            if config is None:
-                raise RuntimeError("PITR input was not loaded")
-            if config.cluster != primary.alias:
-                raise RuntimeError(
-                    "POSTGRES_PITR_CLUSTER must match the selected Patroni primary "
-                    f"({primary.alias})"
-                )
-            for node in PATRONI_NODES:
-                cleanup_remote_env(
-                    node=node,
+                topology = discover_cluster_topology(
                     context=context,
-                    remote_env_file=DEFAULT_REMOTE_ENV_FILE,
+                    runner=_run_subprocess,
                 )
-            env_text = render_env(config)
-            run_remote_secret_phase(
-                node=primary,
+                log("ok", f"selected Patroni primary: {topology.primary.alias}")
+                log("ok", "pinned SSH and Patroni topology probe passed")
+                return 0
+            if args.phase == "migrate-cluster":
+                if config is None:
+                    raise RuntimeError("PITR input was not loaded")
+                result = migrate_cluster(
+                    context=context,
+                    env_text=render_env(config),
+                    transaction_id=transaction_id,
+                    runner=_run_subprocess,
+                    bootstrap_helper=DEFAULT_BOOTSTRAP_HELPER,
+                )
+                log(
+                    "ok",
+                    "cluster PITR migration passed: "
+                    f"primary={result.primary_alias} standby={result.standby_alias} "
+                    f"timeline={result.timeline}",
+                )
+                return 0
+            topology = discover_cluster_topology(
                 context=context,
-                env_text=env_text,
-                bootstrap_helper=DEFAULT_BOOTSTRAP_HELPER,
-                phase=args.phase,
+                runner=_run_subprocess,
             )
+            primary = topology.primary
+            log("ok", f"selected Patroni primary: {primary.alias}")
+            action_error: BaseException | None = None
+            try:
+                run_remote_maintenance_phase(
+                    node=primary,
+                    context=context,
+                    bootstrap_helper=DEFAULT_BOOTSTRAP_HELPER,
+                    phase=args.phase,
+                    transaction_id=transaction_id,
+                    runner=_run_subprocess,
+                )
+            except BaseException as exc:
+                action_error = exc
+            try:
+                after = discover_cluster_topology(
+                    context=context,
+                    runner=_run_subprocess,
+                )
+                _require_same_topology(topology, after, stage=args.phase)
+            except BaseException as topology_error:
+                if action_error is not None:
+                    raise RuntimeError(
+                        f"{args.phase} failed: {action_error}; topology proof after "
+                        f"the attempted operation also failed: {topology_error}"
+                    ) from topology_error
+                raise
+            if action_error is not None:
+                raise action_error
+            log("ok", f"remote PITR phase passed: {args.phase}")
         return 0
     except RuntimeError as exc:
         log("fail", str(exc))

@@ -19,7 +19,6 @@ x-api-app: &api-app
     GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
   volumes:
     - ./media:/app/media
-    - ./postgres-wal-archive:/postgres-wal-archive
     - ./model-cache/u2net:/root/.u2net
     - ./google-oauth:/app/google-oauth
     - ./secrets/client_secret.json:/app/client_secret.json:ro
@@ -53,7 +52,7 @@ services:
       PATRONI_MAX_CONNECTIONS: "100"
       PATRONI_ARCHIVE_MODE: ${POSTGRES_PITR_ARCHIVE_MODE:-off}
       PATRONI_ARCHIVE_TIMEOUT: ${POSTGRES_PITR_ARCHIVE_TIMEOUT:-300}
-      PATRONI_ARCHIVE_COMMAND: test ! -f /postgres-wal-archive/%f && cp %p /postgres-wal-archive/%f || test -f /postgres-wal-archive/%f
+      PATRONI_ARCHIVE_COMMAND: /usr/local/bin/mvn-patroni-archive-wal "%p" "%f"
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-air_conditioners}

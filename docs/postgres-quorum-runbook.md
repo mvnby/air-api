@@ -37,7 +37,8 @@ networking so it can bind directly to each node's WireGuard address.
 - `deploy/ha/patroni/`: pinned PostgreSQL/Patroni image, validated config renderer,
   role-agent unit, and isolated rehearsal cluster;
 - `scripts/ha/rehearse_patroni_failover.sh`: disposable failover/rejoin drill;
-- `scripts/ha/patroni_role_agent.py`: local API/scheduler/bot role reconciler.
+- `scripts/ha/patroni_role_agent.py` + `scripts/ha/patroni_local_identity.py`:
+  local API/scheduler/bot role reconciler with strict local DCS leader-lock proof.
 - `.github/workflows/patroni-failover-rehearsal.yml`: weekly isolated drill and
   retained diagnostic log.
 - `.github/workflows/publish-patroni-image.yml`: manual, CI-gated publication of
@@ -227,6 +228,14 @@ delay, recreates only the active API slot with scheduler enabled, requires
 writable `/api/ready=200`, and then starts the bot. It never runs `compose up`
 for `db` and shares the existing `.deploy.lock` with application releases.
 
+Demotion first writes `.ha-runtime-role=fencing`. That durable intermediate
+state survives process crashes, Docker inventory failures, and a concurrent
+deploy. The agent commits `standby` only while holding `.deploy.lock`, after it
+has repeated exact-name fencing, force-recreated the selected app from the
+standby env, and proved the final Docker and systemd postconditions. Treat a
+persistent `fencing` value as an incomplete demotion; never overwrite it by
+hand, because the next agent poll must resume the fence.
+
 The same role transition disables IMAP imports and Cloudflare purge on a
 replica. `mvn-postgres-wal-upload.timer` and
 `mvn-postgres-basebackup.timer` are stopped on a replica and started only after
@@ -243,6 +252,8 @@ Install the agent only during the Patroni migration window:
 ```bash
 install -m 0755 scripts/ha/patroni_role_agent.py \
   /usr/local/sbin/mvn-patroni-role-agent
+install -m 0644 scripts/ha/patroni_local_identity.py \
+  /usr/local/sbin/patroni_local_identity.py
 install -m 0644 deploy/ha/patroni/mvn-patroni-role-agent.service \
   /etc/systemd/system/mvn-patroni-role-agent.service
 install -m 0600 deploy/ha/patroni/role-agent.env.example \
@@ -251,6 +262,12 @@ install -m 0600 deploy/ha/patroni/role-agent.env.example \
 
 Edit the non-secret host paths/ports in `/etc/default/mvn-patroni-role-agent`,
 run `--once`, verify the generated role files, and only then enable the unit.
+During a PITR host transaction, the installer owns the root-only regular file
+`/run/mvn-postgres-pitr-maintenance` in mode `0600`; its exact content is the
+32-character lowercase hexadecimal transaction id plus one newline. The role
+agent continues reconciling primary app/bot traffic while this marker is valid,
+but keeps all PITR timers and their services fenced. Unsafe marker metadata or
+content causes a full standby fence.
 
 ## Production Cutover
 

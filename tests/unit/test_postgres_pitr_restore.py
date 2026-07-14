@@ -1,124 +1,19 @@
 import hashlib
-import importlib.util
-import io
 import json
-import sys
-import tarfile
 from datetime import datetime, timezone
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-MODULE_PATH = Path(__file__).resolve().parents[2] / "scripts/ha/restore_postgres_pitr_from_s3.py"
-SPEC = importlib.util.spec_from_file_location("restore_postgres_pitr_from_s3", MODULE_PATH)
-pitr_restore = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-sys.modules[SPEC.name] = pitr_restore
-SPEC.loader.exec_module(pitr_restore)
-
-
-class FakeConfig:
-    bucket = "private-pitr"
-    key_prefix = "postgres/pitr"
-    cluster = "mvn-api"
-
-
-class FakeBody:
-    def __init__(self, payload: bytes):
-        self.payload = payload
-
-    def read(self):
-        return self.payload
-
-
-class FakePaginator:
-    def __init__(self, objects):
-        self.objects = objects
-
-    def paginate(self, **kwargs):
-        prefix = kwargs["Prefix"]
-        return [
-            {
-                "Contents": [
-                    {
-                        "Key": key,
-                        "Size": len(content),
-                        "LastModified": datetime(2026, 7, 2, tzinfo=timezone.utc),
-                    }
-                    for key, content in self.objects.items()
-                    if key.startswith(prefix)
-                ]
-            }
-        ]
-
-
-class FakeClient:
-    def __init__(self, objects: dict[str, bytes]):
-        self.objects = objects
-        self.downloads = []
-
-    def get_paginator(self, name):
-        assert name == "list_objects_v2"
-        return FakePaginator(self.objects)
-
-    def get_object(self, *, Bucket, Key):
-        assert Bucket == FakeConfig.bucket
-        return {"Body": FakeBody(self.objects[Key])}
-
-    def download_file(self, bucket, key, filename):
-        assert bucket == FakeConfig.bucket
-        Path(filename).write_bytes(self.objects[key])
-        self.downloads.append((key, filename))
-
-
-def _tar_gz(files: dict[str, bytes]) -> bytes:
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
-        for name, content in files.items():
-            info = tarfile.TarInfo(name)
-            info.size = len(content)
-            tar.addfile(info, io.BytesIO(content))
-    return buffer.getvalue()
-
-
-def _manifest(backup_id: str, created_at: str, files: list[dict]) -> bytes:
-    return json.dumps(
-        {
-            "backup_id": backup_id,
-            "created_at": created_at,
-            "cluster": "mvn-api",
-            "files": files,
-        }
-    ).encode("utf-8")
-
-
-def _postgres_backup_manifest(*, timeline: int = 1, start_lsn: str = "0/A000000") -> bytes:
-    return json.dumps(
-        {
-            "PostgreSQL-Backup-Manifest-Version": 1,
-            "Files": [
-                {"Path": "PG_VERSION", "Size": 3},
-                {"Path": "postgresql.conf", "Size": 0},
-            ],
-            "WAL-Ranges": [
-                {
-                    "Timeline": timeline,
-                    "Start-LSN": start_lsn,
-                    "End-LSN": "0/A000100",
-                }
-            ],
-        }
-    ).encode("utf-8")
-
-
-def _file_entry(backup_id: str, name: str, content: bytes) -> dict:
-    return {
-        "name": name,
-        "key": f"postgres/pitr/mvn-api/basebackups/{backup_id}/{name}",
-        "size_bytes": len(content),
-        "sha256": hashlib.sha256(content).hexdigest(),
-    }
+from tests.unit.postgres_pitr_restore_test_support import (
+    FakeClient,
+    FakeConfig,
+    OTHER_SYSTEM_IDENTIFIER,
+    SYSTEM_IDENTIFIER,
+    _manifest_key,
+    _manifest_record,
+    _minimal_payload,
+    pitr_restore,
+)
 
 
 def test_load_python_module_from_path_supports_extensionless_helper(tmp_path):
@@ -127,9 +22,7 @@ def test_load_python_module_from_path_supports_extensionless_helper(tmp_path):
         "def build_client(config):\n"
         "    return ('client', config)\n"
         "def load_config():\n"
-        "    return 'config'\n"
-        "def sha256_file(path):\n"
-        "    return 'sha256'\n",
+        "    return 'config'\n",
         encoding="utf-8",
     )
 
@@ -141,164 +34,183 @@ def test_load_python_module_from_path_supports_extensionless_helper(tmp_path):
     assert module is not None
     assert module.load_config() == "config"
     assert module.build_client("cfg") == ("client", "cfg")
-    assert module.sha256_file("/tmp/file") == "sha256"
 
 
-def test_select_manifest_uses_latest_basebackup_before_target_time():
-    manifests = [
-        pitr_restore.BasebackupManifest(
-            backup_id="old",
-            created_at=datetime(2026, 7, 2, 1, tzinfo=timezone.utc),
-            key="old/manifest.json",
-            payload={"files": []},
-        ),
-        pitr_restore.BasebackupManifest(
-            backup_id="new",
-            created_at=datetime(2026, 7, 2, 3, tzinfo=timezone.utc),
-            key="new/manifest.json",
-            payload={"files": []},
-        ),
-    ]
+def test_outer_manifest_accepts_only_the_fixed_v1_schema():
+    payload = _minimal_payload()
+
+    manifest = pitr_restore._validate_outer_manifest(
+        payload=payload,
+        manifest_key=_manifest_key("backup-1"),
+        config=FakeConfig,
+        expected_system_identifier=SYSTEM_IDENTIFIER,
+    )
+
+    assert set(payload) == set(pitr_restore.OUTER_MANIFEST_KEYS)
+    assert all(
+        set(entry) == set(pitr_restore.OUTER_FILE_KEYS)
+        for entry in payload["files"]
+    )
+    assert manifest.system_identifier == SYSTEM_IDENTIFIER
+    assert manifest.timeline == 1
+    assert manifest.start_lsn == "0/0"
+    assert manifest.end_lsn == "0/800"
+
+
+@pytest.mark.parametrize("mutation", ["extra", "missing"])
+def test_outer_manifest_rejects_top_level_schema_drift(mutation):
+    payload = _minimal_payload()
+    if mutation == "extra":
+        payload["unexpected"] = True
+    else:
+        del payload["source_node"]
+
+    with pytest.raises(SystemExit, match="exact schema"):
+        pitr_restore._validate_outer_manifest(
+            payload=payload,
+            manifest_key=_manifest_key("backup-1"),
+            config=FakeConfig,
+            expected_system_identifier=SYSTEM_IDENTIFIER,
+        )
+
+def test_outer_manifest_rejects_file_entry_schema_drift():
+    payload = _minimal_payload()
+    payload["files"][0]["etag"] = "untrusted"
+
+    with pytest.raises(SystemExit, match="file entry.*exact schema"):
+        pitr_restore._validate_outer_manifest(
+            payload=payload,
+            manifest_key=_manifest_key("backup-1"),
+            config=FakeConfig,
+            expected_system_identifier=SYSTEM_IDENTIFIER,
+        )
+
+
+def test_outer_manifest_rejects_wrong_cluster_identity():
+    payload = _minimal_payload()
+
+    with pytest.raises(SystemExit, match="expected cluster"):
+        pitr_restore._validate_outer_manifest(
+            payload=payload,
+            manifest_key=_manifest_key("backup-1"),
+            config=FakeConfig,
+            expected_system_identifier=OTHER_SYSTEM_IDENTIFIER,
+        )
+
+
+def test_outer_manifest_rejects_non_string_source_node_cleanly():
+    payload = _minimal_payload()
+    payload["source_node"] = ["mvn-api"]
+
+    with pytest.raises(SystemExit, match="source node is invalid"):
+        pitr_restore._validate_outer_manifest(
+            payload=payload,
+            manifest_key=_manifest_key("backup-1"),
+            config=FakeConfig,
+            expected_system_identifier=SYSTEM_IDENTIFIER,
+        )
+
+
+def test_manifest_inventory_skips_bounded_legacy_v0_and_keeps_valid_v1():
+    current = _minimal_payload("current")
+    legacy = {
+        "backup_id": "legacy",
+        "created_at": "2026-07-01T01:00:00+00:00",
+        "cluster": "mvn-api",
+        "hostname": "old-primary",
+        "files": [],
+    }
+    objects = {
+        _manifest_key("legacy"): json.dumps(legacy).encode(),
+        _manifest_key("current"): json.dumps(current).encode(),
+    }
+
+    manifests = pitr_restore.list_manifests(
+        FakeClient(objects, metadata={_manifest_key("current"): {
+            "sha256": hashlib.sha256(objects[_manifest_key("current")]).hexdigest()
+        }}),
+        FakeConfig,
+        expected_system_identifier=SYSTEM_IDENTIFIER,
+    )
+
+    assert [manifest.backup_id for manifest in manifests] == ["current"]
+
+
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        {"backup_id": "legacy"},
+        {
+            "backup_id": "legacy",
+            "created_at": "2026-07-01T01:00:00+00:00",
+            "cluster": "mvn-api",
+            "hostname": "old-primary",
+            "files": [{"name": "base.tar.gz"}],
+        },
+        {
+            "backup_id": "other",
+            "created_at": "2026-07-01T01:00:00+00:00",
+            "cluster": "mvn-api",
+            "hostname": "old-primary",
+            "files": [],
+        },
+    ],
+)
+def test_manifest_inventory_rejects_malformed_unversioned_payload(legacy):
+    client = FakeClient({_manifest_key("legacy"): json.dumps(legacy).encode()})
+
+    with pytest.raises(SystemExit, match="historical v0|Historical v0"):
+        pitr_restore.list_manifests(client, FakeConfig)
+
+
+def test_manifest_inventory_rejects_claimed_v1_without_digest_metadata():
+    payload = _minimal_payload()
+    key = _manifest_key("backup-1")
+    client = FakeClient({key: json.dumps(payload).encode()}, metadata={key: {}})
+
+    with pytest.raises(SystemExit, match="Versioned.*no digest metadata"):
+        pitr_restore.list_manifests(client, FakeConfig)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda payload: payload.update(schema_version=2),
+        lambda payload: payload.pop("source_node"),
+    ],
+)
+def test_manifest_inventory_never_skips_invalid_claimed_schema(mutation):
+    payload = _minimal_payload()
+    mutation(payload)
+    client = FakeClient({_manifest_key("backup-1"): json.dumps(payload).encode()})
+
+    with pytest.raises(SystemExit, match="schema_version|exact schema"):
+        pitr_restore.list_manifests(
+            client,
+            FakeConfig,
+            expected_system_identifier=SYSTEM_IDENTIFIER,
+        )
+
+
+def test_select_manifest_uses_latest_completed_backup_before_target():
+    old = _manifest_record(
+        backup_id="old",
+        completed_at=datetime(2026, 7, 2, 1, tzinfo=timezone.utc),
+    )
+    future = _manifest_record(
+        backup_id="future",
+        completed_at=datetime(2026, 7, 2, 3, tzinfo=timezone.utc),
+    )
 
     selected = pitr_restore.select_manifest(
-        manifests,
+        [old, future],
         target_time=datetime(2026, 7, 2, 2, tzinfo=timezone.utc),
     )
 
     assert selected.backup_id == "old"
-
-
-def test_wal_selection_starts_at_basebackup_segment_and_keeps_future_timelines():
-    assert pitr_restore._wal_segment_name(
-        timeline=5,
-        lsn="4/EF000028",
-        segment_size_bytes=16 * 1024 * 1024,
-    ) == "0000000500000004000000EF"
-
-    objects = [
-        pitr_restore.WalObject("old", "0000000500000004000000EE", 10),
-        pitr_restore.WalObject("start", "0000000500000004000000EF", 20),
-        pitr_restore.WalObject("next", "0000000500000004000000F0", 30),
-        pitr_restore.WalObject("history", "00000006.history", 40),
-        pitr_restore.WalObject("future", "000000060000000000000001", 50),
-    ]
-
-    selected = pitr_restore._select_wal_objects(
-        objects,
-        start_wal_name="0000000500000004000000EF",
-    )
-
-    assert [item.key for item in selected] == ["start", "next", "history", "future"]
-
-
-def test_restore_space_preflight_fails_before_large_download(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        pitr_restore.shutil,
-        "disk_usage",
-        lambda _path: SimpleNamespace(free=1_000),
-    )
-
-    with pytest.raises(SystemExit, match="Insufficient free space"):
-        pitr_restore._ensure_restore_space(
-            tmp_path,
-            basebackup_bytes=400,
-            extracted_bytes=300,
-            wal_bytes=200,
-            min_free_bytes=200,
-        )
-
-
-def test_prepare_downloads_extracts_and_writes_recovery_files(monkeypatch, tmp_path):
-    base_tar = _tar_gz({"PG_VERSION": b"15\n", "postgresql.conf": b""})
-    wal_tar = _tar_gz({"00000001000000000000000A": b"wal"})
-    metadata = b'{"backup_id":"backup-1"}'
-    backup_manifest = _postgres_backup_manifest()
-    files = [
-        _file_entry("backup-1", "backup_manifest", backup_manifest),
-        _file_entry("backup-1", "base.tar.gz", base_tar),
-        _file_entry("backup-1", "pg_wal.tar.gz", wal_tar),
-        _file_entry("backup-1", "metadata.json", metadata),
-    ]
-    objects = {
-        "postgres/pitr/mvn-api/basebackups/backup-1/manifest.json": _manifest(
-            "backup-1",
-            "2026-07-02T01:00:00+00:00",
-            files,
-        ),
-        "postgres/pitr/mvn-api/basebackups/backup-1/backup_manifest": backup_manifest,
-        "postgres/pitr/mvn-api/basebackups/backup-1/base.tar.gz": base_tar,
-        "postgres/pitr/mvn-api/basebackups/backup-1/pg_wal.tar.gz": wal_tar,
-        "postgres/pitr/mvn-api/basebackups/backup-1/metadata.json": metadata,
-        "postgres/pitr/mvn-api/wal/00000001/000000010000000000000009": b"old-wal",
-        "postgres/pitr/mvn-api/wal/00000001/00000001000000000000000B": b"archived-wal",
-    }
-    client = FakeClient(objects)
-    monkeypatch.setattr(pitr_restore, "load_config", lambda: FakeConfig)
-    monkeypatch.setattr(pitr_restore, "build_client", lambda config: client)
-
-    exit_code = pitr_restore.main(
-        [
-            "prepare",
-            "--target-dir",
-            str(tmp_path / "restore"),
-            "--backup-id",
-            "backup-1",
-            "--target-time",
-            "2026-07-02T02:30:00Z",
-        ]
-    )
-
-    data_dir = tmp_path / "restore" / "data"
-    assert exit_code == 0
-    assert (data_dir / "PG_VERSION").read_text() == "15\n"
-    assert (data_dir / "pg_wal" / "00000001000000000000000A").read_bytes() == b"wal"
-    assert (
-        tmp_path / "restore" / "wal" / "00000001000000000000000B"
-    ).read_bytes() == b"archived-wal"
-    assert not (
-        tmp_path / "restore" / "wal" / "000000010000000000000009"
-    ).exists()
-    assert (data_dir / "recovery.signal").exists()
-    auto_conf = (data_dir / "postgresql.auto.conf").read_text()
-    assert "restore_command" in auto_conf
-    assert "cp /pitr-restore/wal/%f %p" in auto_conf
-    assert "recovery_target_time = '2026-07-02T02:30:00+00:00'" in auto_conf
-    assert (tmp_path / "restore" / "manifest.json").exists()
-
-
-def test_prepare_refuses_non_empty_target_dir(monkeypatch, tmp_path):
-    target = tmp_path / "restore"
-    target.mkdir()
-    (target / "existing").write_text("do not overwrite")
-    monkeypatch.setattr(pitr_restore, "load_config", lambda: FakeConfig)
-    monkeypatch.setattr(pitr_restore, "build_client", lambda config: FakeClient({}))
-
-    with pytest.raises(SystemExit, match="Target directory must be empty"):
-        pitr_restore.main(["prepare", "--target-dir", str(target)])
-
-
-def test_fetch_wal_downloads_expected_timeline_key(monkeypatch, tmp_path):
-    wal_name = "00000001000000000000000A"
-    key = f"postgres/pitr/mvn-api/wal/00000001/{wal_name}"
-    client = FakeClient({key: b"wal-bytes"})
-    monkeypatch.setattr(pitr_restore, "load_config", lambda: FakeConfig)
-    monkeypatch.setattr(pitr_restore, "build_client", lambda config: client)
-
-    destination = tmp_path / "pg_wal" / wal_name
-    exit_code = pitr_restore.main(
-        ["fetch-wal", "--wal-name", wal_name, "--destination", str(destination)]
-    )
-
-    assert exit_code == 0
-    assert destination.read_bytes() == b"wal-bytes"
-    assert client.downloads[0][0] == key
-
-
-def test_fetch_wal_rejects_invalid_wal_name(monkeypatch, tmp_path):
-    monkeypatch.setattr(pitr_restore, "load_config", lambda: FakeConfig)
-    monkeypatch.setattr(pitr_restore, "build_client", lambda config: FakeClient({}))
-
-    with pytest.raises(SystemExit, match="Invalid WAL filename"):
-        pitr_restore.main(
-            ["fetch-wal", "--wal-name", "../../bad", "--destination", str(tmp_path / "bad")]
+    with pytest.raises(SystemExit, match="Eligible basebackup not found"):
+        pitr_restore.select_manifest(
+            [old, future],
+            backup_id="future",
+            target_time=datetime(2026, 7, 2, 2, tzinfo=timezone.utc),
         )

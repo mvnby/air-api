@@ -10,6 +10,7 @@ REQUESTED_IMAGE="${BACKEND_IMAGE}"
 RUN_MIGRATIONS="${API_RUN_MIGRATIONS:-true}"
 RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
 BOOTSTRAP_ONLY="${API_BLUE_GREEN_BOOTSTRAP_ONLY:-false}"
+FORCE_ACTIVATION="${API_FORCE_ACTIVATION:-false}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 DEPLOY_LOCK_ALREADY_HELD="${API_DEPLOY_LOCK_ALREADY_HELD:-false}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
@@ -582,6 +583,7 @@ ensure_proxy
 
 if [[ "${active_slot}" != "legacy" \
   && "${BACKEND_IMAGE}" == "${previous_image}" \
+  && "${FORCE_ACTIVATION}" != "true" \
   && ! -f "${PROJECT_DIR}/.rollback-api-buffer.compose.yml" ]]; then
   if service_runtime_matches_image bot "${REQUESTED_IMAGE}"; then
     smoke_candidate "http://127.0.0.1:${active_port}"

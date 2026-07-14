@@ -197,7 +197,7 @@ def test_patroni_image_updater_rejects_mutable_or_foreign_images(tmp_path):
         assert "immutable MVN Patroni GHCR digest" in result.stderr
 
 
-def test_pitr_env_updater_allows_only_backup_keys_and_prepares_role_target(tmp_path):
+def test_legacy_pitr_env_updater_is_disabled_without_mutating_files(tmp_path):
     app_env = tmp_path / ".env"
     systemd_env = tmp_path / "mvn-postgres-pitr.env"
     app_env.write_text(
@@ -205,17 +205,7 @@ def test_pitr_env_updater_allows_only_backup_keys_and_prepares_role_target(tmp_p
         encoding="utf-8",
     )
     app_env.chmod(0o600)
-    payload = (
-        "POSTGRES_PITR_ARCHIVE_MODE=on\n"
-        "POSTGRES_PITR_ARCHIVE_TIMEOUT=300\n"
-        "POSTGRES_PITR_CLUSTER=mvn\n"
-        "POSTGRES_PITR_S3_ACCESS_KEY_ID=key\n"
-        "POSTGRES_PITR_S3_SECRET_ACCESS_KEY=secret\n"
-        "POSTGRES_PITR_S3_BUCKET=mvn-postgres-pitr\n"
-        "POSTGRES_PITR_S3_ENDPOINT_URL=https://example.invalid\n"
-        "POSTGRES_PITR_S3_KEY_PREFIX=postgres\n"
-        "POSTGRES_PITR_S3_REGION=auto\n"
-    )
+    original = app_env.read_text(encoding="utf-8")
 
     result = subprocess.run(
         ["bash", str(CONFIGURE_PITR)],
@@ -225,38 +215,13 @@ def test_pitr_env_updater_allows_only_backup_keys_and_prepares_role_target(tmp_p
             "PATRONI_SYSTEMD_ENV_FILE": str(systemd_env),
             "PATRONI_PROJECT_DIR": "/opt/mvn-reserve",
         },
-        input=payload,
+        input="POSTGRES_PITR_S3_SECRET_ACCESS_KEY=secret\n",
         text=True,
         capture_output=True,
         check=False,
     )
 
-    assert result.returncode == 0, result.stderr
-    updated = app_env.read_text(encoding="utf-8")
-    assert updated.count("POSTGRES_PITR_S3_BUCKET=") == 1
-    assert "POSTGRES_PITR_S3_BUCKET=mvn-postgres-pitr" in updated
-    assert systemd_env.read_text(encoding="utf-8") == (
-        "PROJECT_DIR=/opt/mvn-reserve\nCOMPOSE_FILE=docker-compose.patroni.yml\n"
-    )
-    assert systemd_env.stat().st_mode & 0o777 == 0o600
-
-
-def test_pitr_env_updater_rejects_unrelated_keys(tmp_path):
-    app_env = tmp_path / ".env"
-    app_env.write_text("POSTGRES_USER=postgres\n", encoding="utf-8")
-    result = subprocess.run(
-        ["bash", str(CONFIGURE_PITR)],
-        env={
-            **os.environ,
-            "PATRONI_APP_ENV_FILE": str(app_env),
-            "PATRONI_SYSTEMD_ENV_FILE": str(tmp_path / "pitr.env"),
-            "PATRONI_PROJECT_DIR": "/opt/mvn-reserve",
-        },
-        input="BOT_TOKEN=forbidden\n",
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode != 0
-    assert "unsupported PITR env key" in result.stderr
+    assert result.returncode == 64
+    assert "permanently disabled" in result.stderr
+    assert app_env.read_text(encoding="utf-8") == original
+    assert not systemd_env.exists()

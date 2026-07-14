@@ -6,158 +6,97 @@ on:
   workflow_dispatch:
     inputs:
       required:
-        description: "Fail if PITR is not fully enabled"
+        description: "Run the strict PITR proof"
         type: boolean
         required: false
-        default: false
-      max_wal_age_minutes:
-        description: "Max remote WAL object age once PITR is required"
-        type: string
-        required: false
-        default: "180"
-      max_basebackup_age_hours:
-        description: "Max remote physical basebackup age once PITR is required"
-        type: string
-        required: false
-        default: "30"
+        default: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  PITR_CHECK_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.required) || vars.POSTGRES_PITR_REQUIRED || 'false' }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup API SSH Key
-        env:
-          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
-          SSH_USER_API: ${{ secrets.SSH_USER_API }}
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+      - name: Require Reviewed Main Ref
         run: |
           set -euo pipefail
-          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
-            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
-            exit 1
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Secret-bearing PITR workflows run only from refs/heads/main"
+            exit 64
           fi
 
-          mkdir -p ~/.ssh
-          printf '%s\n' "${SSH_KEY}" > ~/.ssh/postgres_pitr_key
-          chmod 600 ~/.ssh/postgres_pitr_key
-          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
-          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
-      - name: Run PostgreSQL PITR Check
-        env:
-          API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
-          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
-          SSH_USER_API: ${{ secrets.SSH_USER_API }}
-          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
-          API_STANDBY_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
-          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
-          API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
-          API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
-          PITR_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && inputs.required || vars.POSTGRES_PITR_REQUIRED || 'false' }}
-          PITR_MAX_WAL_AGE_MINUTES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_wal_age_minutes || vars.POSTGRES_PITR_MAX_WAL_AGE_MINUTES || '180' }}
-          PITR_MAX_BASEBACKUP_AGE_HOURS: ${{ github.event_name == 'workflow_dispatch' && inputs.max_basebackup_age_hours || vars.POSTGRES_PITR_MAX_BASEBACKUP_AGE_HOURS || '30' }}
+      - name: Decide Whether To Run
+        id: gate
         run: |
           set -euo pipefail
-          SSH_OPTIONS=(
-            -i ~/.ssh/postgres_pitr_key
-            -o BatchMode=yes
-            -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20
-            -o ServerAliveInterval=15
-            -o ServerAliveCountMax=3
-          )
-          export SSH_OPTS="${SSH_OPTIONS[*]}"
-          target_host="${SSH_HOST_API}"
-          target_user="${SSH_USER_API}"
-          target_project_dir="${API_PROJECT_DIR}"
-          target_compose_file="${API_COMPOSE_FILE}"
-          target_label=api
-
-          case "${API_DB_HA_MODE}" in
-            patroni)
-              export API_NODE_SSH="${SSH_USER_API}@${SSH_HOST_API}"
-              export RESERVE_NODE_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
-              primary_label="$(python3 scripts/ha/check_patroni_production.py --resolve-primary)"
-              case "${primary_label}" in
-                api)
-                  target_project_dir="${API_PROJECT_DIR}"
-                  ;;
-                reserve)
-                  target_host="${API_STANDBY_HOST}"
-                  target_user="${API_STANDBY_USER}"
-                  target_project_dir="${API_STANDBY_PROJECT_DIR}"
-                  target_label=reserve
-                  ;;
-                *)
-                  echo "::error::Unexpected Patroni primary label: ${primary_label:-empty}"
-                  exit 1
-                  ;;
-              esac
-              target_compose_file=docker-compose.patroni.yml
+          case "${PITR_CHECK_REQUIRED}" in
+            true)
+              echo "run=true" >> "${GITHUB_OUTPUT}"
               ;;
-            physical) ;;
+            false)
+              echo "run=false" >> "${GITHUB_OUTPUT}"
+              printf '%s\n' "Strict PITR check skipped because POSTGRES_PITR_REQUIRED is false." \
+                | tee postgres-pitr-check.log
+              ;;
             *)
-              echo "::error::API_DB_HA_MODE must be physical or patroni"
-              exit 1
+              echo "::error::POSTGRES_PITR_REQUIRED must be exactly true or false"
+              exit 64
               ;;
           esac
 
-          quote() {
-            printf '%q' "$1"
-          }
-          remote_target="${target_user}@${target_host}"
-          remote_script="/tmp/mvn-postgres-pitr-check-${GITHUB_RUN_ID}.sh"
-          echo "[postgres-pitr][info] selected_node=${target_label} ha_mode=${API_DB_HA_MODE}" | tee postgres-pitr-check.log
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "cat > $(quote "${remote_script}") && chmod +x $(quote "${remote_script}")" \
-            < scripts/ha/check_postgres_pitr_status.sh | tee -a postgres-pitr-check.log
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTIONS[@]}" "${remote_target}" "\
-            PROJECT_DIR=$(quote "${target_project_dir}") \
-            COMPOSE_FILE=$(quote "${target_compose_file}") \
-            PITR_REQUIRED=$(quote "${PITR_REQUIRED}") \
-            PITR_MAX_WAL_AGE_MINUTES=$(quote "${PITR_MAX_WAL_AGE_MINUTES}") \
-            PITR_MAX_BASEBACKUP_AGE_HOURS=$(quote "${PITR_MAX_BASEBACKUP_AGE_HOURS}") \
-            bash $(quote "${remote_script}"); \
-            status=\$?; \
-            rm -f $(quote "${remote_script}"); \
-            exit \${status}" | tee -a postgres-pitr-check.log
+      - name: Run PostgreSQL PITR Check
+        if: steps.gate.outputs.run == 'true'
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing required SSH_KEY secret"
+            exit 1
+          fi
+          ssh_identity="${SSH_KEY}"
+          unset SSH_KEY
+          trap 'ssh_identity=' EXIT
+          printf '%s\n' "${ssh_identity}" \
+            | python3 -I scripts/ha/run_postgres_pitr_workflow.py --phase verify 2>&1 \
+            | tee postgres-pitr-check.log
 
       - name: Write Summary
         if: always()
         run: |
           {
             echo "## PostgreSQL PITR Check"
-            echo "- ha_mode: ${{ vars.API_DB_HA_MODE || 'physical' }}"
-            echo "- pitr_required: ${{ github.event_name == 'workflow_dispatch' && inputs.required || vars.POSTGRES_PITR_REQUIRED || 'false' }}"
-            echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
-            echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
-            echo "- max_wal_age_minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.max_wal_age_minutes || vars.POSTGRES_PITR_MAX_WAL_AGE_MINUTES || '180' }}"
-            echo "- max_basebackup_age_hours: ${{ github.event_name == 'workflow_dispatch' && inputs.max_basebackup_age_hours || vars.POSTGRES_PITR_MAX_BASEBACKUP_AGE_HOURS || '30' }}"
+            echo "- strict_required: ${PITR_CHECK_REQUIRED}"
+            echo "- ran: ${{ steps.gate.outputs.run || 'false' }}"
+            echo "- topology: pinned mvn-api + zakup Patroni cluster"
+            echo "- max_wal_age_minutes: 180 (installed strict runner)"
+            echo "- max_basebackup_age_hours: 30 (installed strict runner)"
             echo "- log_artifact: postgres-pitr-check-log-${{ github.run_id }}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload PITR Check Log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: postgres-pitr-check-log-${{ github.run_id }}
           path: postgres-pitr-check.log
           if-no-files-found: warn
 
       - name: Notify HA failure
-        if: failure()
+        if: failure() && github.ref == 'refs/heads/main'
         uses: ./.github/actions/notify-ha-failure
         with:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}

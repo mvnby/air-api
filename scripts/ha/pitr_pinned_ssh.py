@@ -22,6 +22,7 @@ class PatroniNode:
     user: str
     project_dir: str
     compose_file: str
+    compose_source: Path
     host_key_source: Path
 
 
@@ -39,6 +40,7 @@ PATRONI_NODES = (
         user="root",
         project_dir="/opt/air-api",
         compose_file="docker-compose.patroni.yml",
+        compose_source=REPO_ROOT / "deploy/ha/mvn-api/docker-compose.patroni.yml",
         host_key_source=REPO_ROOT / "deploy/ha/security/mvn-api-ssh-host-key.pub",
     ),
     PatroniNode(
@@ -47,9 +49,20 @@ PATRONI_NODES = (
         user="root",
         project_dir="/opt/mvn-reserve",
         compose_file="docker-compose.patroni.yml",
+        compose_source=REPO_ROOT / "deploy/ha/zakup/docker-compose.patroni.yml",
         host_key_source=REPO_ROOT / "deploy/ha/security/zakup-ssh-host-key.pub",
     ),
 )
+
+
+def ssh_subprocess_environment() -> dict[str, str]:
+    allowed = ("PATH", "HOME", "LANG", "LC_ALL", "USER", "LOGNAME", "TMPDIR")
+    environment = {name: os.environ[name] for name in allowed if os.environ.get(name)}
+    environment.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+    environment.setdefault("HOME", str(Path.home()))
+    environment.setdefault("LANG", "C")
+    environment.setdefault("LC_ALL", "C")
+    return environment
 
 
 def _read_ssh_wire_string(blob: bytes, offset: int) -> tuple[bytes, int]:
@@ -237,6 +250,7 @@ def effective_config(node: PatroniNode, context: PinnedSshContext) -> dict[str, 
         text=True,
         capture_output=True,
         check=False,
+        env=ssh_subprocess_environment(),
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "ssh -G failed").strip()

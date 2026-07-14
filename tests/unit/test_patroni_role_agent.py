@@ -1,3 +1,6 @@
+import fcntl
+import subprocess
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,10 +10,16 @@ from scripts.ha import patroni_role_agent
 from scripts.ha.patroni_role_agent import (
     AgentConfig,
     app_service,
-    fetch_patroni_role,
     reconcile,
     role_env,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_host_maintenance_marker(monkeypatch):
+    monkeypatch.setattr(
+        patroni_role_agent, "read_maintenance_transaction_id", lambda: None
+    )
 
 
 def _config(tmp_path: Path, *, app_service_override: str = "") -> AgentConfig:
@@ -18,6 +27,9 @@ def _config(tmp_path: Path, *, app_service_override: str = "") -> AgentConfig:
         project_dir=tmp_path,
         compose_file="compose.yml",
         patroni_url="http://127.0.0.1:8008/patroni",
+        patroni_scope="mvn-postgres",
+        patroni_name="mvn-api",
+        max_dcs_age_seconds=20,
         ready_url="http://127.0.0.1:18080/api/ready",
         app_role_env=tmp_path / ".ha-app-role.env",
         bot_role_env=tmp_path / ".ha-bot-role.env",
@@ -32,49 +44,45 @@ def _config(tmp_path: Path, *, app_service_override: str = "") -> AgentConfig:
     )
 
 
-class _PatroniResponse:
-    def __init__(self, payload: str):
-        self.payload = payload.encode("utf-8")
+def test_load_config_binds_production_path_to_exact_identity(monkeypatch):
+    monkeypatch.setenv("HA_PROJECT_DIR", "/opt/mvn-reserve")
+    monkeypatch.delenv("HA_PATRONI_NAME", raising=False)
 
-    def __enter__(self):
-        return self
+    config = patroni_role_agent.load_config()
 
-    def __exit__(self, *_args):
-        return False
+    assert config.patroni_name == "zakup"
+    assert config.patroni_scope == "mvn-postgres"
+    assert config.patroni_url == "http://127.0.0.1:8008/patroni"
 
-    def read(self) -> bytes:
-        return self.payload
+    monkeypatch.setenv("HA_PATRONI_NAME", "mvn-api")
+    with pytest.raises(ValueError, match="must be zakup"):
+        patroni_role_agent.load_config()
 
 
 @pytest.mark.parametrize(
-    ("reported_role", "expected_role"),
-    [("leader", "primary"), ("primary", "primary"), ("replica", "standby")],
+    ("name", "value", "message"),
+    [
+        ("HA_PATRONI_URL", "http://localhost:8008/patroni", "must be http"),
+        ("HA_PATRONI_SCOPE", "other", "must be mvn-postgres"),
+        ("HA_PATRONI_MAX_DCS_AGE_SECONDS", "21", "20s bound"),
+        ("HA_PROJECT_DIR", "/srv/unknown", "not a reviewed Patroni node"),
+    ],
 )
-def test_fetch_patroni_role_uses_explicit_role_whitelist(
-    monkeypatch, reported_role, expected_role
+def test_load_config_rejects_unreviewed_identity_inputs(
+    monkeypatch, name, value, message
 ):
-    response = _PatroniResponse(
-        f'{{"state":"running","role":"{reported_role}"}}'
-    )
-    monkeypatch.setattr(
-        patroni_role_agent.urllib.request,
-        "urlopen",
-        lambda *_args, **_kwargs: response,
-    )
+    for variable in (
+        "HA_PATRONI_URL",
+        "HA_PATRONI_SCOPE",
+        "HA_PATRONI_NAME",
+        "HA_PATRONI_MAX_DCS_AGE_SECONDS",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("HA_PROJECT_DIR", "/opt/air-api")
+    monkeypatch.setenv(name, value)
 
-    assert fetch_patroni_role("http://patroni.invalid/patroni") == expected_role
-
-
-def test_fetch_patroni_role_rejects_unknown_running_role(monkeypatch):
-    response = _PatroniResponse('{"state":"running","role":"mystery"}')
-    monkeypatch.setattr(
-        patroni_role_agent.urllib.request,
-        "urlopen",
-        lambda *_args, **_kwargs: response,
-    )
-
-    with pytest.raises(ValueError, match="unsupported Patroni role: mystery"):
-        fetch_patroni_role("http://patroni.invalid/patroni")
+    with pytest.raises(ValueError, match=message):
+        patroni_role_agent.load_config()
 
 
 def test_role_env_opens_api_and_singleton_processes_only_on_primary():
@@ -112,113 +120,455 @@ def test_app_service_override_supports_in_place_standby(tmp_path):
     assert app_service(_config(tmp_path, app_service_override="app")) == "app"
 
 
-def test_reconcile_standby_stops_bot_before_recreating_app(tmp_path, monkeypatch):
-    config = _config(tmp_path, app_service_override="app")
-    calls: list[tuple[str, ...]] = []
+class _ComposeRuntime:
+    def __init__(self, *services: str):
+        self.services = set(services)
+        self.calls: list[tuple[str, ...]] = []
 
-    def fake_compose(_config, *args, check=True):
-        calls.append(args)
+    def __call__(self, _config, *args, check=True, timeout=60):
+        del check, timeout
+        self.calls.append(args)
         if args[:3] == ("ps", "--status", "running"):
-            return SimpleNamespace(returncode=0, stdout="app\nbot\n")
-        return SimpleNamespace(returncode=0, stdout="")
+            return SimpleNamespace(returncode=0, stdout="\n".join(sorted(self.services)) + "\n")
+        if args[:3] == ("ps", "--all", "--quiet"):
+            service = args[-1]
+            output = f"id-{service}\n" if service in self.services else ""
+            return SimpleNamespace(returncode=0, stdout=output, stderr="")
+        if args[0] == "up":
+            self.services.add(args[-1])
+        elif args[0] in {"rm", "kill", "stop"}:
+            self.services.discard(args[-1])
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(patroni_role_agent, "_run_compose", fake_compose)
+
+def _mock_primary_proof(monkeypatch, calls: list[str] | None = None):
+    def proof(_config, boundary):
+        if calls is not None:
+            calls.append(boundary)
+
+    monkeypatch.setattr(patroni_role_agent, "_require_fresh_primary_or_fence", proof)
+
+
+def test_reconcile_standby_fences_bot_and_apps_before_restarting_safe_app(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    runtime = _ComposeRuntime("app", "bot")
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
 
     assert reconcile(config, "standby") is True
-    assert calls[-2] == ("stop", "bot")
-    assert calls[-1] == ("up", "-d", "--no-deps", "--force-recreate", "app")
-    assert "API_READY_ENABLED=false" in config.app_role_env.read_text(encoding="utf-8")
-    assert config.state_file.read_text(encoding="utf-8") == "standby\n"
-
-
-def test_reconcile_primary_waits_for_ready_before_starting_bot(tmp_path, monkeypatch):
-    config = _config(tmp_path, app_service_override="app")
-    calls: list[tuple[str, ...] | tuple[str]] = []
-
-    def fake_compose(_config, *args, check=True):
-        calls.append(args)
-        if args[:3] == ("ps", "--status", "running"):
-            return SimpleNamespace(returncode=0, stdout="app\n")
-        return SimpleNamespace(returncode=0, stdout="")
-
-    monkeypatch.setattr(patroni_role_agent, "_run_compose", fake_compose)
-    monkeypatch.setattr(
-        patroni_role_agent,
-        "_wait_ready",
-        lambda _config: calls.append(("wait-ready",)),
+    bot_remove = runtime.calls.index(("rm", "--stop", "--force", "bot"))
+    app_start = runtime.calls.index(
+        ("up", "-d", "--no-deps", "--force-recreate", "app")
     )
+    assert bot_remove < app_start
+    assert runtime.services == {"app"}
+    assert "API_READY_ENABLED=false" in config.app_role_env.read_text()
+    assert config.state_file.read_text() == "standby\n"
+
+
+def test_standby_fences_docker_and_operations_before_fallible_systemd_query(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    config = AgentConfig(
+        **{**config.__dict__, "primary_systemd_units": ("wal.timer",)}
+    )
+    runtime = _ComposeRuntime("app", "bot")
+    events = []
+
+    def units_match(_config, _role):
+        events.append(("systemd_query", set(runtime.services)))
+        raise subprocess.TimeoutExpired("systemctl", 10)
+
+    def cancel(_config):
+        events.append(("cancel_pitr", set(runtime.services)))
+        return []
+
+    def reconcile_units(_config, role, *, primary_guard=None):
+        assert role == "standby"
+        assert primary_guard is None
+        units_match(_config, role)
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_systemd_units_match", units_match)
+    monkeypatch.setattr(
+        patroni_role_agent, "_reconcile_primary_systemd_units", reconcile_units
+    )
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", cancel)
+
+    with pytest.raises(RuntimeError, match="standby fence incomplete"):
+        reconcile(config, "standby")
+
+    assert events == [
+        ("cancel_pitr", set()),
+        ("systemd_query", set()),
+    ]
+    assert runtime.services == set()
+    assert "API_READY_ENABLED=false" in config.app_role_env.read_text()
+    assert "BOT_ENABLED=false" in config.bot_role_env.read_text()
+
+
+@pytest.mark.parametrize("inventory_failure", ["error", "timeout"])
+def test_standby_fast_fence_precedes_failed_or_hung_compose_inventory(
+    tmp_path, monkeypatch, inventory_failure
+):
+    config = _config(tmp_path, app_service_override="app")
+    config.app_role_env.write_text(role_env("primary", bot_process=False))
+    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.state_file.write_text("primary\n")
+    calls: list[tuple[str, ...]] = []
+
+    def compose(_config, *args, **_kwargs):
+        calls.append(args)
+        if args[:3] == ("ps", "--all", "--quiet"):
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if args[:3] == ("ps", "--status", "running"):
+            if inventory_failure == "timeout":
+                raise subprocess.TimeoutExpired("docker compose ps", 60)
+            return SimpleNamespace(returncode=1, stdout="", stderr="docker busy")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", compose)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+
+    with pytest.raises((RuntimeError, subprocess.TimeoutExpired)):
+        reconcile(config, "standby")
+
+    inventory_index = calls.index(("ps", "--status", "running", "--services"))
+    removed = [call[-1] for call in calls[:inventory_index] if call[:3] == ("rm", "--stop", "--force")]
+    assert removed == ["bot", "app", "app-blue", "app-green"]
+    assert config.app_role_env.read_text() == role_env("standby", bot_process=False)
+    assert config.bot_role_env.read_text() == role_env("standby", bot_process=True)
+    assert config.state_file.read_text() == "fencing\n"
+
+
+def test_incomplete_standby_fence_persists_retry_state_until_exact_retry_succeeds(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    config.app_role_env.write_text(role_env("primary", bot_process=False))
+    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.state_file.write_text("standby\n")
+
+    class RetryRuntime:
+        def __init__(self):
+            self.services = {"app", "bot"}
+            self.fail_app = True
+            self.calls: list[tuple[str, ...]] = []
+
+        def __call__(self, _config, *args, **_kwargs):
+            self.calls.append(args)
+            service = args[-1]
+            if args[:3] == ("ps", "--status", "running"):
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout="\n".join(sorted(self.services)) + "\n",
+                    stderr="",
+                )
+            if args[:3] == ("ps", "--all", "--quiet"):
+                output = f"id-{service}\n" if service in self.services else ""
+                return SimpleNamespace(returncode=0, stdout=output, stderr="")
+            if service == "app" and self.fail_app and args[0] in {"rm", "kill"}:
+                return SimpleNamespace(returncode=1, stdout="", stderr="docker busy")
+            if args[0] == "up":
+                self.services.add(service)
+            elif args[0] in {"rm", "kill", "stop"}:
+                self.services.discard(service)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    runtime = RetryRuntime()
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+
+    with pytest.raises(RuntimeError, match="standby fence incomplete"):
+        reconcile(config, "standby")
+
+    assert config.state_file.read_text() == "fencing\n"
+    assert runtime.services == {"app"}
+    assert config.app_role_env.read_text() == role_env("standby", bot_process=False)
+
+    runtime.fail_app = False
+    assert reconcile(config, "standby") is True
+
+    app_fence_attempts = [
+        call
+        for call in runtime.calls
+        if call == ("rm", "--stop", "--force", "app")
+    ]
+    assert len(app_fence_attempts) == 2
+    assert runtime.services == {"app"}
+    assert config.state_file.read_text() == "standby\n"
+
+
+def test_busy_deploy_lock_keeps_fencing_state_until_raced_app_is_recreated(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    config.app_role_env.write_text(role_env("primary", bot_process=False))
+    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.state_file.write_text("standby\n")
+    runtime = _ComposeRuntime("app", "bot")
+    lock_attempts = 0
+
+    def flock(_descriptor, operation):
+        nonlocal lock_attempts
+        if operation & fcntl.LOCK_NB:
+            lock_attempts += 1
+            if lock_attempts == 1:
+                # Model a deploy that parsed the old primary env before the
+                # fast fence and creates that container just before deferral.
+                runtime.services.add("app")
+                raise BlockingIOError
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+    monkeypatch.setattr(patroni_role_agent.fcntl, "flock", flock)
+
+    assert reconcile(config, "standby") is False
+    assert config.state_file.read_text() == "fencing\n"
+    assert runtime.services == {"app"}
+
+    assert reconcile(config, "standby") is True
+    app_fence_attempts = [
+        call
+        for call in runtime.calls
+        if call == ("rm", "--stop", "--force", "app")
+    ]
+    assert len(app_fence_attempts) == 2
+    assert runtime.services == {"app"}
+    assert config.app_role_env.read_text() == role_env("standby", bot_process=False)
+    assert config.state_file.read_text() == "standby\n"
+
+
+def test_fast_fence_removes_app_that_appears_during_first_inventory(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    config.app_role_env.write_text(role_env("standby", bot_process=False))
+    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.state_file.write_text("standby\n")
+    runtime = _ComposeRuntime("bot")
+    injected = False
+
+    def compose(_config, *args, **kwargs):
+        nonlocal injected
+        if args[:3] == ("ps", "--status", "running") and not injected:
+            injected = True
+            runtime.services.add("app")
+        return runtime(_config, *args, **kwargs)
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", compose)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+
+    assert reconcile(config, "standby") is True
+
+    app_fence_attempts = [
+        call
+        for call in runtime.calls
+        if call == ("rm", "--stop", "--force", "app")
+    ]
+    assert len(app_fence_attempts) == 2
+    assert runtime.services == {"app"}
+    assert config.state_file.read_text() == "standby\n"
+
+
+def test_app_appearing_at_lock_handoff_is_force_recreated_after_fast_fence(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    config.app_role_env.write_text(role_env("standby", bot_process=False))
+    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.state_file.write_text("standby\n")
+    runtime = _ComposeRuntime("bot")
+
+    def flock(_descriptor, operation):
+        if operation & fcntl.LOCK_NB:
+            # The deploy parsed the old primary env earlier and publishes the
+            # container immediately before yielding the lock to the role agent.
+            runtime.services.add("app")
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+    monkeypatch.setattr(patroni_role_agent.fcntl, "flock", flock)
+
+    assert reconcile(config, "standby") is True
+
+    assert (
+        "up",
+        "-d",
+        "--no-deps",
+        "--force-recreate",
+        "app",
+    ) in runtime.calls
+    assert runtime.services == {"app"}
+    assert config.state_file.read_text() == "standby\n"
+
+
+def test_reconcile_primary_checks_fresh_role_before_bot_activation(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    runtime = _ComposeRuntime("app")
+    events: list[str | tuple[str, ...]] = []
+
+    def compose(_config, *args, **kwargs):
+        events.append(args)
+        return runtime(_config, *args, **kwargs)
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", compose)
+    monkeypatch.setattr(
+        patroni_role_agent, "_wait_ready", lambda _config: events.append("wait_ready")
+    )
+    _mock_primary_proof(monkeypatch, events)
 
     assert reconcile(config, "primary") is True
-    assert calls[-3] == ("up", "-d", "--no-deps", "--force-recreate", "app")
-    assert calls[-2] == ("wait-ready",)
-    assert calls[-1] == ("up", "-d", "--no-deps", "--force-recreate", "bot")
-    assert "SCHEDULER_ENABLED=true" in config.app_role_env.read_text(encoding="utf-8")
-    assert "BOT_ENABLED=true" in config.bot_role_env.read_text(encoding="utf-8")
+    assert events.index("bot_activation") < events.index(
+        ("up", "-d", "--no-deps", "--force-recreate", "bot")
+    )
+    assert events.index("wait_ready") < events.index("bot_activation")
+    assert runtime.services == {"app", "bot"}
 
 
-def test_primary_only_systemd_units_follow_role_without_recreating_matching_runtime(
+def test_systemd_only_repair_is_guarded_and_reported_as_reconcile(
     tmp_path, monkeypatch
 ):
     config = _config(tmp_path, app_service_override="app")
     config = AgentConfig(**{**config.__dict__, "primary_systemd_units": ("wal.timer",)})
-    config.app_role_env.write_text(role_env("primary", bot_process=False), encoding="utf-8")
-    config.bot_role_env.write_text(role_env("primary", bot_process=True), encoding="utf-8")
-    config.state_file.write_text("primary\n", encoding="utf-8")
-    compose_calls: list[tuple[str, ...]] = []
-    systemctl_calls: list[tuple[str, ...]] = []
+    config.app_role_env.write_text(role_env("primary", bot_process=False))
+    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.state_file.write_text("primary\n")
+    runtime = _ComposeRuntime("app", "bot")
+    active = False
+    guards: list[str] = []
 
-    def fake_compose(_config, *args, check=True):
-        compose_calls.append(args)
-        return SimpleNamespace(returncode=0, stdout="app\nbot\n")
+    def units_match(_config, role):
+        return active is (role == "primary")
 
-    def fake_run(command, **_kwargs):
-        systemctl_calls.append(tuple(command))
-        if command[1:3] == ["is-active", "--quiet"]:
-            return SimpleNamespace(returncode=3, stdout="", stderr="")
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    def reconcile_units(_config, role, *, primary_guard=None):
+        nonlocal active
+        if role == "primary":
+            assert primary_guard is not None
+            primary_guard("wal.timer")
+            active = True
+        else:
+            active = False
 
-    monkeypatch.setattr(patroni_role_agent, "_run_compose", fake_compose)
-    monkeypatch.setattr(patroni_role_agent.subprocess, "run", fake_run)
-
-    assert reconcile(config, "primary") is False
-    assert compose_calls == [("ps", "--status", "running", "--services")]
-    assert systemctl_calls == [
-        ("systemctl", "is-active", "--quiet", "wal.timer"),
-        ("systemctl", "start", "wal.timer"),
-    ]
-
-
-def test_reconcile_primary_starts_missing_bot_without_recreating_app(
-    tmp_path, monkeypatch, capsys
-):
-    config = _config(tmp_path, app_service_override="app")
-    config.app_role_env.write_text(role_env("primary", bot_process=False), encoding="utf-8")
-    config.bot_role_env.write_text(role_env("primary", bot_process=True), encoding="utf-8")
-    config.state_file.write_text("primary\n", encoding="utf-8")
-    calls: list[tuple[str, ...] | tuple[str]] = []
-
-    def fake_compose(_config, *args, check=True):
-        calls.append(args)
-        if args[:3] == ("ps", "--status", "running"):
-            return SimpleNamespace(returncode=0, stdout="app\n")
-        return SimpleNamespace(returncode=0, stdout="")
-
-    monkeypatch.setattr(patroni_role_agent, "_run_compose", fake_compose)
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_systemd_units_match", units_match)
     monkeypatch.setattr(
-        patroni_role_agent,
-        "_wait_ready",
-        lambda _config: calls.append(("wait-ready",)),
+        patroni_role_agent, "_reconcile_primary_systemd_units", reconcile_units
     )
+    _mock_primary_proof(monkeypatch, guards)
 
     assert reconcile(config, "primary") is True
-    assert calls == [
-        ("ps", "--status", "running", "--services"),
-        ("wait-ready",),
-        ("up", "-d", "--no-deps", "bot"),
-    ]
-    output = capsys.readouterr().out
-    assert "reasons=bot_not_running" in output
-    assert "actions=wait_ready,start_bot" in output
+    assert guards == ["systemd_activation:wal.timer", "primary_postcondition"]
+    assert active is True
+    assert not any(call[0] == "up" for call in runtime.calls)
+
+
+def test_valid_maintenance_marker_keeps_pitr_fenced_but_reconciles_primary_app_and_bot(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    config = AgentConfig(**{**config.__dict__, "primary_systemd_units": ("wal.timer",)})
+    runtime = _ComposeRuntime()
+    systemd_active = True
+    systemd_roles: list[str] = []
+
+    def units_match(_config, role):
+        return systemd_active == (role == "primary")
+
+    def reconcile_units(_config, role, *, primary_guard=None):
+        nonlocal systemd_active
+        systemd_roles.append(role)
+        assert role == "standby"
+        assert primary_guard is None
+        systemd_active = False
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "read_maintenance_transaction_id",
+        lambda: "a" * 32,
+    )
+    monkeypatch.setattr(
+        patroni_role_agent, "_fetch_configured_patroni_role", lambda _config: "primary"
+    )
+    monkeypatch.setattr(patroni_role_agent, "_systemd_units_match", units_match)
+    monkeypatch.setattr(
+        patroni_role_agent, "_reconcile_primary_systemd_units", reconcile_units
+    )
+    monkeypatch.setattr(patroni_role_agent, "_wait_ready", lambda _config: None)
+
+    assert reconcile(config, "primary") is True
+    assert runtime.services == {"app", "bot"}
+    assert systemd_active is False
+    assert systemd_roles and set(systemd_roles) == {"standby"}
+    assert config.state_file.read_text() == "primary\n"
+
+
+def test_unsafe_maintenance_marker_fail_closed_fences_all_runtime(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    runtime = _ComposeRuntime("app", "bot")
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "read_maintenance_transaction_id",
+        lambda: (_ for _ in ()).throw(RuntimeError("bad owner")),
+    )
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+
+    with pytest.raises(RuntimeError, match="unsafe PITR maintenance marker"):
+        reconcile(config, "primary")
+
+    assert runtime.services == set()
+    assert config.app_role_env.read_text() == role_env("standby", bot_process=False)
+    assert config.bot_role_env.read_text() == role_env("standby", bot_process=True)
+    assert config.state_file.read_text() == "fencing\n"
+
+
+def test_marker_appearing_at_pitr_activation_boundary_stops_units_without_stopping_app(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path, app_service_override="app")
+    config = AgentConfig(**{**config.__dict__, "primary_systemd_units": ("wal.timer",)})
+    runtime = _ComposeRuntime("app", "bot")
+    systemd_active = True
+    roles: list[str] = []
+
+    def units_match(_config, role):
+        return systemd_active == (role == "primary")
+
+    def reconcile_units(_config, role, *, primary_guard=None):
+        nonlocal systemd_active
+        roles.append(role)
+        assert role == "standby"
+        systemd_active = False
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "read_maintenance_transaction_id",
+        lambda: "b" * 32,
+    )
+    monkeypatch.setattr(
+        patroni_role_agent, "_fetch_configured_patroni_role", lambda _config: "primary"
+    )
+    monkeypatch.setattr(patroni_role_agent, "_systemd_units_match", units_match)
+    monkeypatch.setattr(
+        patroni_role_agent, "_reconcile_primary_systemd_units", reconcile_units
+    )
+
+    with pytest.raises(RuntimeError, match="maintenance marker appeared"):
+        patroni_role_agent._guard_pitr_activation(config, "wal.timer")
+
+    assert systemd_active is False
+    assert roles == ["standby"]
+    assert runtime.services == {"app", "bot"}
 
 
 def test_reconcile_does_not_recreate_services_when_compose_ps_fails(
@@ -227,7 +577,7 @@ def test_reconcile_does_not_recreate_services_when_compose_ps_fails(
     config = _config(tmp_path, app_service_override="app")
     calls: list[tuple[str, ...]] = []
 
-    def fake_compose(_config, *args, check=True):
+    def fake_compose(_config, *args, **_kwargs):
         calls.append(args)
         return SimpleNamespace(returncode=1, stdout="", stderr="docker busy")
 
@@ -235,5 +585,113 @@ def test_reconcile_does_not_recreate_services_when_compose_ps_fails(
 
     with pytest.raises(RuntimeError, match="docker busy"):
         reconcile(config, "primary")
-
     assert calls == [("ps", "--status", "running", "--services")]
+
+
+def test_network_error_is_treated_as_standby(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    roles: list[str] = []
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_fetch_configured_patroni_role",
+        lambda _config: (_ for _ in ()).throw(urllib.error.URLError("offline")),
+    )
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "reconcile",
+        lambda _config, role: roles.append(role),
+    )
+
+    assert patroni_role_agent.run(config, once=True) == 0
+    assert roles == ["standby"]
+
+
+PRIMARY_ACTIVATION_BOUNDARIES = [
+    "primary_app_env",
+    "primary_bot_env",
+    "app_activation",
+    "bot_activation",
+    "systemd_activation:wal.timer",
+    "systemd_activation:base.timer",
+    "primary_postcondition",
+    "primary_state",
+]
+
+
+@pytest.mark.parametrize("flip_boundary", PRIMARY_ACTIVATION_BOUNDARIES)
+def test_primary_flip_at_each_activation_boundary_immediately_fences_runtime(
+    tmp_path, monkeypatch, flip_boundary
+):
+    config = _config(tmp_path, app_service_override="app")
+    config = AgentConfig(
+        **{
+            **config.__dict__,
+            "primary_systemd_units": ("wal.timer", "base.timer"),
+        }
+    )
+    config.app_role_env.write_text(role_env("standby", bot_process=False))
+    config.bot_role_env.write_text(role_env("standby", bot_process=True))
+    config.state_file.write_text("standby\n")
+    runtime = _ComposeRuntime()
+    systemd_active = False
+    probe_index = 0
+    expected_index = PRIMARY_ACTIVATION_BOUNDARIES.index(flip_boundary)
+
+    def fetch_role(_config):
+        nonlocal probe_index
+        role = "standby" if probe_index == expected_index else "primary"
+        probe_index += 1
+        return role
+
+    def units_match(_config, role):
+        return systemd_active is (role == "primary")
+
+    def reconcile_units(_config, role, *, primary_guard=None):
+        nonlocal systemd_active
+        if role == "primary":
+            assert primary_guard is not None
+            for unit in config.primary_systemd_units:
+                primary_guard(unit)
+                systemd_active = True
+        else:
+            systemd_active = False
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_fetch_configured_patroni_role", fetch_role)
+    monkeypatch.setattr(patroni_role_agent, "_systemd_units_match", units_match)
+    monkeypatch.setattr(
+        patroni_role_agent, "_reconcile_primary_systemd_units", reconcile_units
+    )
+    monkeypatch.setattr(patroni_role_agent, "_wait_ready", lambda _config: None)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+
+    with pytest.raises(RuntimeError, match=flip_boundary):
+        reconcile(config, "primary")
+
+    assert runtime.services == set()
+    assert systemd_active is False
+    assert config.app_role_env.read_text() == role_env("standby", bot_process=False)
+    assert config.bot_role_env.read_text() == role_env("standby", bot_process=True)
+    assert config.state_file.read_text() == "fencing\n"
+
+
+def test_network_loss_at_activation_boundary_also_fences(tmp_path, monkeypatch):
+    config = _config(tmp_path, app_service_override="app")
+    config.app_role_env.write_text(role_env("primary", bot_process=False))
+    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.state_file.write_text("primary\n")
+    runtime = _ComposeRuntime("app")
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(patroni_role_agent, "_wait_ready", lambda _config: None)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_fetch_configured_patroni_role",
+        lambda _config: (_ for _ in ()).throw(urllib.error.URLError("lost DCS")),
+    )
+
+    with pytest.raises(RuntimeError, match="bot_activation"):
+        reconcile(config, "primary")
+
+    assert runtime.services == set()
+    assert config.state_file.read_text() == "fencing\n"

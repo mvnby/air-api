@@ -1,7 +1,9 @@
 import base64
 import hashlib
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -187,8 +189,12 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
         "API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh" in text
     )
     assert "scripts/ha/patroni_role_agent.py" in text
+    assert "scripts/ha/patroni_local_identity.py" in text
     assert "/usr/local/sbin/mvn-patroni-role-agent" in text
+    assert "/usr/local/sbin/patroni_local_identity.py" in text
     transaction_runner = TRANSACTION_RUNNER.read_text(encoding="utf-8")
+    assert "PATRONI_ROLE_IDENTITY_SOURCE" in transaction_runner
+    assert 'install -m 0644 "${ROLE_IDENTITY_SOURCE}"' in transaction_runner
     assert "systemctl restart" in transaction_runner
     assert "systemctl is-active --quiet" in transaction_runner
     assert "API_DEPLOY_LOCK_ALREADY_HELD=true" in transaction_runner
@@ -206,6 +212,24 @@ def test_remote_orchestrator_passes_token_over_stdin_not_command_line():
     assert "IFS= read -r GHCR_PAT" in text
     assert "export GHCR_PAT" in text
     assert "GHCR_PAT='" not in text
+
+
+def test_installed_role_agent_loads_its_pinned_sibling_module(tmp_path):
+    target = tmp_path / "mvn-patroni-role-agent"
+    identity = tmp_path / "patroni_local_identity.py"
+    shutil.copy2(REPO_ROOT / "scripts/ha/patroni_role_agent.py", target)
+    shutil.copy2(REPO_ROOT / "scripts/ha/patroni_local_identity.py", identity)
+
+    result = subprocess.run(
+        [sys.executable, "-E", str(target), "--help"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--once" in result.stdout
 
 
 def test_remote_probe_normalizes_replica_to_standby(tmp_path):

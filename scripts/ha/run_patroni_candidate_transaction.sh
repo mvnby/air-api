@@ -10,6 +10,8 @@ MIGRATION_SCRIPT="${PATRONI_MIGRATION_SCRIPT:-/tmp/run_patroni_migrations.sh}"
 DEPLOY_SCRIPT="${PATRONI_DEPLOY_SCRIPT:-/tmp/deploy_patroni_api_node.sh}"
 ROLE_AGENT_SOURCE="${PATRONI_ROLE_AGENT_SOURCE:-}"
 ROLE_AGENT_TARGET="${PATRONI_ROLE_AGENT_TARGET:-/usr/local/sbin/mvn-patroni-role-agent}"
+ROLE_IDENTITY_SOURCE="${PATRONI_ROLE_IDENTITY_SOURCE:-}"
+ROLE_IDENTITY_TARGET="${PATRONI_ROLE_IDENTITY_TARGET:-/usr/local/sbin/patroni_local_identity.py}"
 ROLE_AGENT_UNIT="${PATRONI_ROLE_AGENT_UNIT:-mvn-patroni-role-agent.service}"
 RECONCILE_SCRIPT="${API_RECONCILE_SCRIPT:-/tmp/reconcile_backend_compose_runtime.sh}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
@@ -17,6 +19,8 @@ ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_BACKEND_IMAGE="${API_PREVIOUS_BACKEND_IMAGE:-}"
 ROLE_AGENT_BACKUP=""
 ROLE_AGENT_PREEXISTED=false
+ROLE_IDENTITY_BACKUP=""
+ROLE_IDENTITY_PREEXISTED=false
 ROLE_AGENT_CHANGED=false
 CANDIDATE_CHECKSUM=""
 PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
@@ -84,30 +88,60 @@ backup_role_agent() {
       echo "existing Patroni role agent target is unsafe" >&2
       return 1
     }
+  fi
+  if [[ -e "${ROLE_IDENTITY_TARGET}" || -L "${ROLE_IDENTITY_TARGET}" ]]; then
+    [[ -f "${ROLE_IDENTITY_TARGET}" && ! -L "${ROLE_IDENTITY_TARGET}" ]] || {
+      echo "existing Patroni identity helper target is unsafe" >&2
+      return 1
+    }
+  fi
+  if [[ -f "${ROLE_AGENT_TARGET}" ]]; then
     systemctl is-active --quiet "${ROLE_AGENT_UNIT}" || {
       echo "existing Patroni role agent unit is not active" >&2
       return 1
     }
     ROLE_AGENT_BACKUP="$(mktemp "${PROJECT_DIR}/.patroni-role-agent.backup.XXXXXX")"
-    cp -p -- "${ROLE_AGENT_TARGET}" "${ROLE_AGENT_BACKUP}"
+    if ! cp -p -- "${ROLE_AGENT_TARGET}" "${ROLE_AGENT_BACKUP}"; then
+      rm -f -- "${ROLE_AGENT_BACKUP}"
+      ROLE_AGENT_BACKUP=""
+      return 1
+    fi
     ROLE_AGENT_PREEXISTED=true
+  fi
+  if [[ -f "${ROLE_IDENTITY_TARGET}" ]]; then
+    ROLE_IDENTITY_BACKUP="$(mktemp "${PROJECT_DIR}/.patroni-role-identity.backup.XXXXXX")"
+    if ! cp -p -- "${ROLE_IDENTITY_TARGET}" "${ROLE_IDENTITY_BACKUP}"; then
+      rm -f -- "${ROLE_AGENT_BACKUP}" "${ROLE_IDENTITY_BACKUP}"
+      ROLE_AGENT_BACKUP=""
+      ROLE_AGENT_PREEXISTED=false
+      ROLE_IDENTITY_BACKUP=""
+      return 1
+    fi
+    ROLE_IDENTITY_PREEXISTED=true
   fi
 }
 
 restore_role_agent() {
   [[ "${ROLE_AGENT_CHANGED}" == "true" ]] || return 0
-  if [[ "${ROLE_AGENT_PREEXISTED}" == "true" ]]; then
-    cp -p -- "${ROLE_AGENT_BACKUP}" "${ROLE_AGENT_TARGET}" || return 1
-    systemctl restart "${ROLE_AGENT_UNIT}" || return 1
-    systemctl is-active --quiet "${ROLE_AGENT_UNIT}" || return 1
+  local failed=false
+  if [[ "${ROLE_IDENTITY_PREEXISTED}" == "true" ]]; then
+    cp -p -- "${ROLE_IDENTITY_BACKUP}" "${ROLE_IDENTITY_TARGET}" || failed=true
   else
-    systemctl stop "${ROLE_AGENT_UNIT}" >/dev/null 2>&1 || return 1
+    rm -f -- "${ROLE_IDENTITY_TARGET}" || failed=true
+  fi
+  if [[ "${ROLE_AGENT_PREEXISTED}" == "true" ]]; then
+    cp -p -- "${ROLE_AGENT_BACKUP}" "${ROLE_AGENT_TARGET}" || failed=true
+    systemctl restart "${ROLE_AGENT_UNIT}" || failed=true
+    systemctl is-active --quiet "${ROLE_AGENT_UNIT}" || failed=true
+  else
+    systemctl stop "${ROLE_AGENT_UNIT}" >/dev/null 2>&1 || failed=true
     if systemctl is-active --quiet "${ROLE_AGENT_UNIT}"; then
       echo "new Patroni role agent unit remained active after stop" >&2
-      return 1
+      failed=true
     fi
-    rm -f -- "${ROLE_AGENT_TARGET}" || return 1
+    rm -f -- "${ROLE_AGENT_TARGET}" || failed=true
   fi
+  [[ "${failed}" == "false" ]]
 }
 
 current_patroni_role() {
@@ -147,6 +181,7 @@ reconcile_failed_deploy() {
   if promotion_committed; then
     echo "Patroni candidate compose promotion committed; preserving the consistent new runtime" >&2
     [[ -z "${ROLE_AGENT_BACKUP}" ]] || rm -f -- "${ROLE_AGENT_BACKUP}"
+    [[ -z "${ROLE_IDENTITY_BACKUP}" ]] || rm -f -- "${ROLE_IDENTITY_BACKUP}"
     exit "${status}"
   fi
   transaction cleanup || restoration_failed=true
@@ -182,11 +217,15 @@ reconcile_failed_deploy() {
     fi
   fi
   [[ -z "${ROLE_AGENT_SOURCE}" ]] || rm -f -- "${ROLE_AGENT_SOURCE}"
-  if [[ -n "${ROLE_AGENT_BACKUP}" ]]; then
+  [[ -z "${ROLE_IDENTITY_SOURCE}" ]] || rm -f -- "${ROLE_IDENTITY_SOURCE}"
+  if [[ -n "${ROLE_AGENT_BACKUP}" || -n "${ROLE_IDENTITY_BACKUP}" ]]; then
     if [[ "${role_agent_restore_failed}" == "true" ]]; then
-      echo "CRITICAL: previous Patroni role agent backup retained at ${ROLE_AGENT_BACKUP}" >&2
+      echo "CRITICAL: previous Patroni role asset backups retained" >&2
     else
-      rm -f -- "${ROLE_AGENT_BACKUP}" || restoration_failed=true
+      [[ -z "${ROLE_AGENT_BACKUP}" ]] \
+        || rm -f -- "${ROLE_AGENT_BACKUP}" || restoration_failed=true
+      [[ -z "${ROLE_IDENTITY_BACKUP}" ]] \
+        || rm -f -- "${ROLE_IDENTITY_BACKUP}" || restoration_failed=true
     fi
   fi
   if [[ "${restoration_failed}" == "true" ]]; then
@@ -247,13 +286,15 @@ backup_role_agent
 trap reconcile_failed_deploy EXIT
 transaction stage
 
-[[ -f "${ROLE_AGENT_SOURCE}" ]] || {
-  echo "Patroni role agent source is missing: ${ROLE_AGENT_SOURCE}" >&2
+[[ -f "${ROLE_AGENT_SOURCE}" && ! -L "${ROLE_AGENT_SOURCE}" \
+  && -f "${ROLE_IDENTITY_SOURCE}" && ! -L "${ROLE_IDENTITY_SOURCE}" ]] || {
+  echo "Patroni role agent source bundle is incomplete" >&2
   exit 1
 }
-install -m 0755 "${ROLE_AGENT_SOURCE}" "${ROLE_AGENT_TARGET}"
 ROLE_AGENT_CHANGED=true
-rm -f -- "${ROLE_AGENT_SOURCE}"
+install -m 0644 "${ROLE_IDENTITY_SOURCE}" "${ROLE_IDENTITY_TARGET}"
+install -m 0755 "${ROLE_AGENT_SOURCE}" "${ROLE_AGENT_TARGET}"
+rm -f -- "${ROLE_AGENT_SOURCE}" "${ROLE_IDENTITY_SOURCE}"
 systemctl restart "${ROLE_AGENT_UNIT}"
 systemctl is-active --quiet "${ROLE_AGENT_UNIT}"
 
@@ -264,3 +305,5 @@ transaction promote
 trap - EXIT
 [[ -z "${ROLE_AGENT_BACKUP}" ]] || rm -f -- "${ROLE_AGENT_BACKUP}" \
   || echo "warning: stale Patroni role agent backup remains at ${ROLE_AGENT_BACKUP}" >&2
+[[ -z "${ROLE_IDENTITY_BACKUP}" ]] || rm -f -- "${ROLE_IDENTITY_BACKUP}" \
+  || echo "warning: stale Patroni identity backup remains at ${ROLE_IDENTITY_BACKUP}" >&2

@@ -14,7 +14,6 @@ x-api-app: &api-app
     SERVICE_ATTACHMENT_STORAGE_PROVIDER: r2
   volumes:
     - ./media:/app/media
-    - ./postgres-wal-archive:/postgres-wal-archive
     - ./model-cache/u2net:/root/.u2net
     - ./google-oauth:/app/google-oauth
     - ./client_secret.json:/app/client_secret.json:ro
@@ -45,7 +44,7 @@ services:
       PATRONI_MAXIMUM_LAG_ON_FAILOVER: "1048576"
       PATRONI_ARCHIVE_MODE: ${POSTGRES_PITR_ARCHIVE_MODE:-off}
       PATRONI_ARCHIVE_TIMEOUT: ${POSTGRES_PITR_ARCHIVE_TIMEOUT:-300}
-      PATRONI_ARCHIVE_COMMAND: test ! -f /postgres-wal-archive/%f && cp %p /postgres-wal-archive/%f || test -f /postgres-wal-archive/%f
+      PATRONI_ARCHIVE_COMMAND: /usr/local/bin/mvn-patroni-archive-wal "%p" "%f"
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-air_conditioners}
