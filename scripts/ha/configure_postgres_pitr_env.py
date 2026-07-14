@@ -43,7 +43,7 @@ LINE_RE = re.compile(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 BUCKET_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 EXPECTED_LOGICAL_PITR_CLUSTER = "mvn-api"
 EXPECTED_DESTINATION_FINGERPRINT = (
-    "f7dce2229a1d299e9403d4eb639106727676e587b333745c792bff0eacb16f8d"
+    "3c6e78da6f79b317f8b62d3f979bb69dba1f2821e473a670be30ec08310f458b"
 )
 DESTINATION_KEYS = (
     "POSTGRES_PITR_S3_BUCKET",

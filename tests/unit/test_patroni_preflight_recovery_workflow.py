@@ -67,3 +67,19 @@ def test_recovery_workflow_pins_checkout_and_invokes_only_reviewed_recovery():
         assert forbidden not in source
     summary = _step(job, "Record immutable recovery result")["run"]
     assert "PITR_maintenance_fence: retained" in summary
+
+
+def test_recovery_workflow_retries_public_readiness_and_reports_final_body():
+    workflow = _workflow()
+    readiness = _step(
+        workflow["jobs"]["recover"], "Prove public API remained ready"
+    )["run"]
+
+    assert "for attempt in $(seq 1 12)" in readiness
+    assert 'if test "${attempt}" -lt 12' in readiness
+    assert "sleep 5" in readiness
+    assert 'test "${code}" = "200"' in readiness
+    assert '.api == "ready" and .traffic == "enabled"' in readiness
+    assert 'test "${ready}" != "true"' in readiness
+    assert "after 12 attempts" in readiness
+    assert 'cat "${ready_file}"' in readiness

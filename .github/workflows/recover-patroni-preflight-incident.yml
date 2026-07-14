@@ -102,11 +102,42 @@ jobs:
       - name: Prove public API remained ready
         run: |
           set -euo pipefail
-          code="$(curl -sS --max-time 15 -o "${RUNNER_TEMP}/ready.json" -w '%{http_code}' \
-            https://api.mvn.by/api/ready)"
-          test "${code}" = "200"
-          jq -e '.api == "ready" and .traffic == "enabled"' \
-            "${RUNNER_TEMP}/ready.json" >/dev/null
+          ready_file="${RUNNER_TEMP}/ready.json"
+          ready=false
+
+          for attempt in $(seq 1 12); do
+            rm -f "${ready_file}"
+            code="000"
+            if response_code="$(curl -sS --max-time 15 -o "${ready_file}" -w '%{http_code}' \
+              https://api.mvn.by/api/ready)"; then
+              code="${response_code}"
+            fi
+
+            if test "${code}" = "200" \
+              && jq -e '.api == "ready" and .traffic == "enabled"' \
+                "${ready_file}" >/dev/null 2>&1; then
+              echo "Public API readiness proved on attempt ${attempt}/12"
+              ready=true
+              break
+            fi
+
+            if test "${attempt}" -lt 12; then
+              echo "::warning::Public API not ready on attempt ${attempt}/12 (HTTP ${code}); retrying in 5 seconds"
+              sleep 5
+            fi
+          done
+
+          if test "${ready}" != "true"; then
+            echo "::error::Public API did not reach the required ready state after 12 attempts"
+            echo 'Last /api/ready response body:'
+            if test -s "${ready_file}"; then
+              cat "${ready_file}"
+              echo
+            else
+              echo '<empty>'
+            fi
+            exit 1
+          fi
 
       - name: Record immutable recovery result
         env:

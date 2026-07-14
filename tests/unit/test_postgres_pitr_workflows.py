@@ -18,6 +18,7 @@ def _step(workflow: dict, job_name: str, step_name: str) -> dict:
 
 def test_postgres_pitr_check_workflow_preserves_strict_remote_gate():
     workflow = _workflow(".github/workflows/check-postgres-pitr.yml")
+    check_job = workflow["jobs"]["check"]
     checkout_step = _step(workflow, "check", "Checkout")
     dispatch_inputs = workflow["on"]["workflow_dispatch"]["inputs"]
     gate_step = _step(workflow, "check", "Decide Whether To Run")
@@ -25,6 +26,7 @@ def test_postgres_pitr_check_workflow_preserves_strict_remote_gate():
     summary_step = _step(workflow, "check", "Write Summary")
     artifact_step = _step(workflow, "check", "Upload PITR Check Log")
 
+    assert int(check_job["timeout-minutes"]) >= 30
     assert dispatch_inputs == {"required": dispatch_inputs["required"]}
     assert checkout_step["uses"] == f"actions/checkout@{CHECKOUT_SHA}"
     assert checkout_step["with"] == {
