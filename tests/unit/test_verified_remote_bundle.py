@@ -23,6 +23,7 @@ def _args(tmp_path: Path, files: list[Path]) -> Namespace:
         print_required=["summary.txt"],
         print_optional=[],
         env=["API_PROJECT_DIR=/opt/air-api"],
+        secret_env="",
     )
 
 
@@ -66,6 +67,10 @@ def test_local_inputs_reject_duplicate_source_name_and_symlinked_ssh_input(
         bundle.validate_local_inputs(args)
 
     args.files = [str(first)]
+    args.secret_env = "GHCR_PAT;touch /tmp/injected"
+    with pytest.raises(RuntimeError, match="secret environment name is invalid"):
+        bundle.validate_local_inputs(args)
+    args.secret_env = "GHCR_PAT"
     identity = Path(args.identity_file)
     target = tmp_path / "real-key"
     identity.rename(target)

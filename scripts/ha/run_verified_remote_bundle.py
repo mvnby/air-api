@@ -78,6 +78,8 @@ def run_checked(args: list[str], **kwargs: object) -> subprocess.CompletedProces
 def validate_local_inputs(args: argparse.Namespace) -> tuple[list[Path], dict[str, str]]:
     if not REMOTE_RE.fullmatch(args.remote) or not PREFIX_RE.fullmatch(args.prefix):
         raise RuntimeError("remote bundle destination is invalid")
+    if args.secret_env and not NAME_RE.fullmatch(args.secret_env):
+        raise RuntimeError("remote bundle secret environment name is invalid")
     sources = [Path(value).resolve() for value in args.files]
     for path in sources:
         try:
