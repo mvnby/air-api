@@ -120,8 +120,19 @@ jobs:
           )
 
       - name: Run Pytest
-        # using the 'app' service where the code lives
-        run: docker compose exec -T app pytest -v
+        # Test the immutable image rather than the bind-mounted development
+        # checkout. This preserves root-only control-plane ownership checks
+        # while sharing the already-started app container's database network.
+        run: |
+          app_container="$(docker compose ps -q app)"
+          app_image="$(docker inspect --format '{{.Image}}' "${app_container}")"
+          docker run --rm \
+            --network "container:${app_container}" \
+            --mount "type=bind,src=${PWD}/.github,dst=/app/.github,readonly" \
+            --env-file .env \
+            -e SCHEDULER_ENABLED=false \
+            "${app_image}" \
+            sh -ec 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-client; export TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db_test:5432/air_conditioners_test"; pytest -v'
 
       - name: Stop CI Services
         if: always()

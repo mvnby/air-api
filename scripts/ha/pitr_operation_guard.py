@@ -552,7 +552,7 @@ def run_guarded_process(
     barrier_read, barrier_write = _cloexec_pipe()
     process = subprocess.Popen(
         [
-            "/usr/bin/python3",
+            sys.executable,
             "-I",
             "-c",
             PARENT_BOUND_LAUNCHER,
