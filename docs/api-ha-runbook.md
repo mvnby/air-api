@@ -323,15 +323,33 @@ Enable on the current primary after the private bucket/token exist:
 ```bash
 # Host helper installation is a separate reviewed host-assets change. Transfer
 # one exact release bundle through the pinned SSH path; never pipe a root script
-# from the network. Before the first hardened install, stop the Patroni role
-# agent, disable both PITR timers, and stop both PITR services. The installer
-# checks this quiescent state both before and after copying and refuses any
+# from the network. Do not stop or restart the Patroni role agent manually. The
+# cluster controller provisions one node at a time. It first proves the standby
+# runtime is traffic-fenced, stops only that exact attested agent, provisions the
+# standby, and immediately restores and proves the sole main agent. Before the
+# primary's short window, the pinned agent code writes the durable `fencing`
+# state and removes every app, bot, and PITR owner under the deployment lock;
+# only then may the exact main agent stop for primary provisioning. The primary
+# agent is restored and fully converged immediately afterward. Both agents stay
+# active throughout configure, scrub, basebackup, restore, finalize, and verify.
+# The installer checks the short per-node quiescent state and refuses any
 # enabled/running owner, any
 # compose other than docker-compose.patroni.yml, compose digest drift, a mutable
 # backend image, or a running app slot whose image differs from that digest.
 # It never enables timers. A partial install therefore stays inert and must be
 # completed by rerunning the same exact bundle before the pinned enable phase.
-# Restart the role agent only after pinned verify/enable has passed.
+# The pinned executor attests the agent, identity helper, systemd unit, operation
+# guard, and cleanup code by digest before execution and again under both locks.
+# It waits a bounded interval for same-transaction transient work, then may reap
+# or cancel only a record whose operation ID is the exact migration transaction
+# ID; a foreign record is never mutated. On an ambiguous error inside a short
+# stop window, recovery fences both runtimes former-primary first, requires a
+# fresh unchanged topology, and only then restores current standby before
+# current primary. If either fence or fresh topology is unproved, neither node
+# is activated. A node
+# whose maintenance fence was already finalized must prove the matching release
+# manifest before its agent can restart. Never remove a fence or start an agent
+# by hand to work around a failed transaction.
 
 # Put the private R2 credentials in local `.env` using the names above. The
 # helper loads only `POSTGRES_PITR_*` keys from that file. For a live apply it
@@ -366,25 +384,32 @@ python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
 
 # Run the complete two-node transaction. It attests and installs the exact
 # helper bundle standby-first, validates the private destination from both
-# nodes, and then provisions both hosts. Provisioning is the roll-forward
-# boundary because a lost remote response cannot prove that root-owned state was
-# untouched. The transaction then commits resumable root-only config, removes
+# nodes, then runs a separate quiesce/provision/resume window for the standby and
+# a fail-closed-fence/provision/resume window for the primary. The first
+# role-agent stop attempt is the roll-forward boundary because
+# a lost remote response cannot prove the exact service state; the controller
+# runs the strict fenced recovery above before reporting an interrupted window.
+# The transaction then commits resumable root-only config, removes
 # legacy secret copies, stages the final archive env on both nodes, takes and
 # uploads a lineage-bound basebackup on the proved primary, and completes the
 # disposable physical restore drill before either release is finalized. Only
-# then does it finalize both bundles, enable timers on the proved primary, and
-# run the strict final verification.
+# then does it finalize both bundles. Marker removal delegates timer ownership
+# to the already active sole role agents; the controller waits for and proves
+# standby timer fencing and primary timer activation before strict verification.
 python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
   --env-file .env \
   --phase migrate-cluster \
   --transaction-id "${PITR_TRANSACTION_ID}" \
   --no-prompt
 
-# A failure before the first provision attempt rolls the attempted asset bundles
-# back. From the first provision attempt onward the command deliberately enters
-# roll-forward, including an ambiguous timeout or lost SSH response: repair the
-# reported cause and rerun the same command with the same transaction ID. Do not
-# manually roll back files, config, archive state, or timers in that state.
+# A failure before the first pinned role-agent stop attempt rolls the attempted
+# asset bundles back. From that first stop attempt onward the command
+# deliberately enters roll-forward, including an ambiguous timeout or lost SSH
+# response: repair the reported cause and rerun the same command with the same
+# transaction ID. If the interrupted per-node window cannot prove both fences
+# and a fresh unchanged topology, it deliberately leaves the runtime fenced and
+# names the exact failed proof. Do not manually roll back files, config,
+# archive state, agents, fences, or timers in that state.
 
 # PostgreSQL archive parameters are Patroni DCS configuration for an existing
 # cluster. The migration requires the reviewed archive settings to be active on
