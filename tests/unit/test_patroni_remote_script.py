@@ -183,6 +183,10 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
     assert 'candidate_id="$(printf' in text
     assert 'REMOTE_COMPOSE_FILE="docker-compose.patroni.candidate.${candidate_id}.yml"' in text
     assert "run_patroni_candidate_transaction.sh" in text
+    assert "scripts/ha/patroni_compose_db_contract.py" in text
+    assert "PATRONI_DB_CONTRACT_HELPER=" in text
+    assert "mktemp -d /tmp/mvn-patroni-db-contract.XXXXXXXX" in text
+    assert "patroni-compose-db-contract-${GITHUB_RUN_ID" not in text
     assert "compose_candidate_transaction.sh" in text
     assert "reconcile_backend_compose_runtime.sh" in text
     assert (

@@ -1,3 +1,5 @@
+import copy
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -9,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TRANSACTION = REPO_ROOT / "scripts/compose_candidate_transaction.sh"
 PATRONI_RUNNER = REPO_ROOT / "scripts/ha/run_patroni_candidate_transaction.sh"
 PREVIOUS_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "1" * 40
+DB_CONTRACT_HELPER = REPO_ROOT / "scripts/ha/patroni_compose_db_contract.py"
 
 
 def _executable(path: Path, content: str) -> None:
@@ -28,6 +31,37 @@ def _compose_pair(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return project
+
+
+def _db_compose_config() -> dict:
+    return {
+        "name": "mvn-api",
+        "services": {
+            "db": {
+                "image": "${PATRONI_IMAGE:?set immutable PATRONI_IMAGE}",
+                "networks": {"default": None},
+                "volumes": [
+                    {
+                        "source": "postgres_data",
+                        "target": "/var/lib/postgresql/data",
+                        "type": "volume",
+                        "volume": {},
+                    }
+                ],
+            }
+        },
+        "networks": {"default": {"name": "mvn-api_default"}},
+        "volumes": {
+            "postgres_data": {
+                "external": True,
+                "name": "air-api_postgres_data",
+            }
+        },
+    }
+
+
+def _write_json(path: Path, value: dict) -> None:
+    path.write_text(json.dumps(value), encoding="utf-8")
 
 
 def _patroni_runner_env(
@@ -50,12 +84,26 @@ def _patroni_runner_env(
     systemctl_log.touch()
     systemctl_state = tmp_path / "systemctl-state"
     systemctl_state.write_text("active\n", encoding="utf-8")
+    canonical_contract = tmp_path / "canonical-contract.json"
+    candidate_contract = tmp_path / "candidate-contract.json"
+    _write_json(canonical_contract, _db_compose_config())
+    _write_json(candidate_contract, copy.deepcopy(_db_compose_config()))
     _executable(
         fake_bin / "docker",
         """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$PATRONI_COMMAND_LOG"
-if [[ "$1" == "compose" && "$*" == *" ps -q app-green" ]]; then
+if [[ "$1" == "compose" && "$*" == *" config --no-env-resolution --no-interpolate --format json" ]]; then
+  if [[ "$*" == *"compose.yml.candidate"* ]]; then
+    config_path="$CANDIDATE_DB_CONTRACT"
+    if [[ -e "$DEPLOY_CHILD_RAN" && -n "${CANDIDATE_DB_CONTRACT_AFTER_DEPLOY:-}" ]]; then
+      config_path="$CANDIDATE_DB_CONTRACT_AFTER_DEPLOY"
+    fi
+  else
+    config_path="$CANONICAL_DB_CONTRACT"
+  fi
+  exec /bin/cat "$config_path"
+elif [[ "$1" == "compose" && "$*" == *" ps -q app-green" ]]; then
   printf 'active-green-container\n'
 elif [[ "$1" == "inspect" && "$*" == *" active-green-container" ]]; then
   printf '%s\n' "$EXPECTED_PREVIOUS_IMAGE"
@@ -104,6 +152,7 @@ esac
 set -euo pipefail
 grep -Fq '/app/token.json' "$API_PROJECT_DIR/compose.yml"
 printf "%s|%s\n" "$API_COMPOSE_FILE" "$API_DEPLOY_LOCK_ALREADY_HELD" > "$CHILD_LOG"
+: > "$DEPLOY_CHILD_RAN"
 exit {child_exit}
 ''',
     )
@@ -139,6 +188,7 @@ exit 0
         "PATRONI_ROLE_AGENT_TARGET": str(tmp_path / "installed-role-agent"),
         "PATRONI_ROLE_IDENTITY_SOURCE": str(role_identity),
         "PATRONI_ROLE_IDENTITY_TARGET": str(tmp_path / "installed-role-identity.py"),
+        "PATRONI_DB_CONTRACT_HELPER": str(DB_CONTRACT_HELPER),
         "PATRONI_ROLE_AGENT_UNIT": "test.service",
         "CHILD_LOG": str(tmp_path / "child.log"),
         "RECONCILE_LOG": str(tmp_path / "reconcile.log"),
@@ -146,6 +196,9 @@ exit 0
         "SYSTEMCTL_LOG": str(systemctl_log),
         "SYSTEMCTL_STATE": str(systemctl_state),
         "SYSTEMCTL_RESTART_COUNT": str(tmp_path / "systemctl-restart-count"),
+        "CANONICAL_DB_CONTRACT": str(canonical_contract),
+        "CANDIDATE_DB_CONTRACT": str(candidate_contract),
+        "DEPLOY_CHILD_RAN": str(tmp_path / "deploy-child-ran"),
         "API_PREVIOUS_BACKEND_IMAGE": "" if discover_previous else PREVIOUS_IMAGE,
         "EXPECTED_PREVIOUS_IMAGE": PREVIOUS_IMAGE,
     }
@@ -189,6 +242,137 @@ def test_patroni_candidate_promotes_only_after_success(tmp_path):
     assert not (tmp_path / "reconcile.log").exists()
     assert Path(env["PATRONI_ROLE_IDENTITY_TARGET"]).read_text() == (
         "# new identity helper\n"
+    )
+
+
+def test_patroni_candidate_rejects_db_service_drift_before_host_mutation(tmp_path):
+    env, project = _patroni_runner_env(tmp_path, child_exit=0)
+    old = (project / "compose.yml").read_text(encoding="utf-8")
+    candidate = json.loads(Path(env["CANDIDATE_DB_CONTRACT"]).read_text())
+    candidate["services"]["db"]["image"] = "other-patroni-image"
+    _write_json(Path(env["CANDIDATE_DB_CONTRACT"]), candidate)
+
+    result = subprocess.run(
+        ["bash", str(PATRONI_RUNNER)],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "candidate changes the Patroni db contract" in result.stderr
+    assert (project / "compose.yml").read_text(encoding="utf-8") == old
+    assert not (project / "compose.yml.candidate").exists()
+    assert not (tmp_path / "child.log").exists()
+    assert not (tmp_path / "systemctl.log").read_text(encoding="utf-8")
+    assert not Path(env["PATRONI_ROLE_AGENT_TARGET"]).exists()
+    assert not Path(env["PATRONI_ROLE_IDENTITY_TARGET"]).exists()
+
+
+@pytest.mark.parametrize("unsafe_helper", ["missing", "symlink"])
+def test_patroni_candidate_cleans_up_when_db_contract_helper_is_unsafe(
+    tmp_path, unsafe_helper
+):
+    env, project = _patroni_runner_env(tmp_path, child_exit=0)
+    old = (project / "compose.yml").read_text(encoding="utf-8")
+    helper = tmp_path / "unsafe-contract-helper.py"
+    if unsafe_helper == "symlink":
+        helper.symlink_to(DB_CONTRACT_HELPER)
+    env["PATRONI_DB_CONTRACT_HELPER"] = str(helper)
+
+    result = subprocess.run(
+        ["bash", str(PATRONI_RUNNER)],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "db contract helper is missing or unsafe" in result.stderr
+    assert (project / "compose.yml").read_text(encoding="utf-8") == old
+    assert not (project / "compose.yml.candidate").exists()
+    assert not (tmp_path / "child.log").exists()
+    assert not (tmp_path / "systemctl.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("drift", ["project_name", "external_volume"])
+def test_patroni_candidate_rejects_db_resource_identity_drift_before_host_mutation(
+    tmp_path, drift
+):
+    env, project = _patroni_runner_env(tmp_path, child_exit=0)
+    old = (project / "compose.yml").read_text(encoding="utf-8")
+    candidate = json.loads(Path(env["CANDIDATE_DB_CONTRACT"]).read_text())
+    if drift == "project_name":
+        candidate["name"] = "mvn-api-shadow"
+    else:
+        candidate["volumes"]["postgres_data"]["name"] = "other-postgres-data"
+        candidate["volumes"]["postgres_data"]["driver_opts"] = {"type": "tmpfs"}
+    _write_json(Path(env["CANDIDATE_DB_CONTRACT"]), candidate)
+
+    result = subprocess.run(
+        ["bash", str(PATRONI_RUNNER)],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "candidate changes the Patroni db contract" in result.stderr
+    assert (project / "compose.yml").read_text(encoding="utf-8") == old
+    assert not (tmp_path / "child.log").exists()
+    assert not (tmp_path / "systemctl.log").read_text(encoding="utf-8")
+
+
+def test_patroni_candidate_rejects_latent_db_interpolation_drift(tmp_path):
+    env, project = _patroni_runner_env(tmp_path, child_exit=0)
+    old = (project / "compose.yml").read_text(encoding="utf-8")
+    candidate = json.loads(Path(env["CANDIDATE_DB_CONTRACT"]).read_text())
+    candidate["services"]["db"]["image"] = (
+        "${BACKEND_IMAGE:?set immutable BACKEND_IMAGE}"
+    )
+    _write_json(Path(env["CANDIDATE_DB_CONTRACT"]), candidate)
+
+    result = subprocess.run(
+        ["bash", str(PATRONI_RUNNER)],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "candidate changes the Patroni db contract" in result.stderr
+    assert (project / "compose.yml").read_text(encoding="utf-8") == old
+    assert not (tmp_path / "child.log").exists()
+
+
+def test_patroni_candidate_rechecks_db_contract_immediately_before_promotion(tmp_path):
+    env, project = _patroni_runner_env(tmp_path, child_exit=0)
+    old = (project / "compose.yml").read_text(encoding="utf-8")
+    drifted_contract = tmp_path / "candidate-contract-after-deploy.json"
+    candidate = json.loads(Path(env["CANDIDATE_DB_CONTRACT"]).read_text())
+    candidate["volumes"]["postgres_data"]["name"] = "late-postgres-data"
+    _write_json(drifted_contract, candidate)
+    env["CANDIDATE_DB_CONTRACT_AFTER_DEPLOY"] = str(drifted_contract)
+
+    result = subprocess.run(
+        ["bash", str(PATRONI_RUNNER)],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "candidate changes the Patroni db contract" in result.stderr
+    assert (project / "compose.yml").read_text(encoding="utf-8") == old
+    assert not (project / "compose.yml.candidate").exists()
+    assert (tmp_path / "child.log").exists()
+    assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == (
+        "compose.yml|app bot"
     )
 
 

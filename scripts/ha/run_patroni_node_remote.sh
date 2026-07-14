@@ -24,6 +24,9 @@ ROLE_IDENTITY_REMOTE="/tmp/patroni-local-identity-${GITHUB_RUN_ID:-local}-${GITH
 ROLE_IDENTITY_TARGET="/usr/local/sbin/patroni_local_identity.py"
 ROLE_AGENT_UNIT="mvn-patroni-role-agent.service"
 CANDIDATE_RUNNER_SOURCE="scripts/ha/run_patroni_candidate_transaction.sh"
+DB_CONTRACT_HELPER_SOURCE="scripts/ha/patroni_compose_db_contract.py"
+DB_CONTRACT_HELPER_REMOTE_DIR=""
+DB_CONTRACT_HELPER_REMOTE=""
 TRANSACTION_SOURCE="scripts/compose_candidate_transaction.sh"
 
 log() {
@@ -36,6 +39,15 @@ usage() {
 
 quote() {
   printf '%q' "$1"
+}
+
+cleanup() {
+  if [[ -n "${DB_CONTRACT_HELPER_REMOTE_DIR}" ]]; then
+    ssh "${SSH_OPTS[@]}" "${REMOTE}" \
+      "rm -f -- $(quote "${DB_CONTRACT_HELPER_REMOTE}"); rmdir -- $(quote "${DB_CONTRACT_HELPER_REMOTE_DIR}")" \
+      >/dev/null 2>&1 || true
+  fi
+  rm -f "${KEY_PATH}" "${KNOWN_HOSTS_PATH}"
 }
 
 [[ "${OPERATION}" == "probe" || "${OPERATION}" == "migrate" || "${OPERATION}" == "deploy" ]] || {
@@ -93,6 +105,13 @@ if [[ "${OPERATION}" != "probe" ]]; then
     exit 1
   }
 fi
+if [[ "${OPERATION}" == "deploy" ]]; then
+  [[ -f "${DB_CONTRACT_HELPER_SOURCE}" \
+    && ! -L "${DB_CONTRACT_HELPER_SOURCE}" ]] || {
+    log error "Patroni db contract helper is missing or unsafe"
+    exit 1
+  }
+fi
 
 required_commands=(ssh ssh-keygen)
 if [[ "${OPERATION}" != "probe" ]]; then
@@ -105,7 +124,7 @@ for command in "${required_commands[@]}"; do
   }
 done
 
-trap 'rm -f "${KEY_PATH}" "${KNOWN_HOSTS_PATH}"' EXIT
+trap cleanup EXIT
 printf '%s\n' "${SSH_PRIVATE_KEY}" > "${KEY_PATH}"
 chmod 600 "${KEY_PATH}"
 : > "${KNOWN_HOSTS_PATH}"
@@ -167,6 +186,19 @@ ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p $(quote "${PROJECT_DIR}")"
 CANONICAL_REMOTE_COMPOSE_FILE="docker-compose.patroni.yml"
 candidate_id="$(printf '%s' "${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}-${OPERATION}-$$" | tr -c 'A-Za-z0-9_.-' '-')"
 REMOTE_COMPOSE_FILE="docker-compose.patroni.candidate.${candidate_id}.yml"
+if [[ "${OPERATION}" == "deploy" ]]; then
+  remote_helper_dir="$(
+    ssh "${SSH_OPTS[@]}" "${REMOTE}" \
+      "umask 077; mktemp -d /tmp/mvn-patroni-db-contract.XXXXXXXX"
+  )"
+  [[ "${remote_helper_dir}" \
+    =~ ^/tmp/mvn-patroni-db-contract\.[A-Za-z0-9]{8}$ ]] || {
+    log error "remote Patroni db contract directory is invalid"
+    exit 1
+  }
+  DB_CONTRACT_HELPER_REMOTE_DIR="${remote_helper_dir}"
+  DB_CONTRACT_HELPER_REMOTE="${DB_CONTRACT_HELPER_REMOTE_DIR}/contract.py"
+fi
 scp "${SSH_OPTS[@]}" "${COMPOSE_SOURCE}" \
   "${REMOTE}:${PROJECT_DIR}/${REMOTE_COMPOSE_FILE}"
 scp "${SSH_OPTS[@]}" scripts/ha/run_patroni_migrations.sh \
@@ -176,6 +208,8 @@ scp "${SSH_OPTS[@]}" scripts/ha/run_patroni_migrations.sh \
   "${CANDIDATE_RUNNER_SOURCE}" "${TRANSACTION_SOURCE}" \
   "${REMOTE}:/tmp/"
 if [[ "${OPERATION}" == "deploy" ]]; then
+  scp "${SSH_OPTS[@]}" "${DB_CONTRACT_HELPER_SOURCE}" \
+    "${REMOTE}:${DB_CONTRACT_HELPER_REMOTE}"
   scp "${SSH_OPTS[@]}" "${ROLE_AGENT_SOURCE}" \
     "${REMOTE}:${ROLE_AGENT_REMOTE}"
   scp "${SSH_OPTS[@]}" "${ROLE_IDENTITY_SOURCE}" \
@@ -200,10 +234,15 @@ if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
 fi
 
 log "${OPERATION}" "running ${OPERATION} on ${NODE_HOST}"
+remote_helper_cleanup=":"
+if [[ "${OPERATION}" == "deploy" ]]; then
+  remote_helper_cleanup="rm -f -- $(quote "${DB_CONTRACT_HELPER_REMOTE}"); rmdir -- $(quote "${DB_CONTRACT_HELPER_REMOTE_DIR}")"
+fi
 printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   set -euo pipefail
   IFS= read -r GHCR_PAT
   export GHCR_PAT
+  trap $(quote "${remote_helper_cleanup}") EXIT
   chmod 0755 /tmp/run_patroni_migrations.sh /tmp/deploy_patroni_api_node.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh /tmp/reconcile_backend_compose_runtime.sh /tmp/run_patroni_candidate_transaction.sh /tmp/compose_candidate_transaction.sh
   API_PROJECT_DIR=$(quote "${PROJECT_DIR}") \
   API_EXPECTED_PATRONI_ROLE=$(quote "${EXPECTED_ROLE}") \
@@ -224,8 +263,11 @@ printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   PATRONI_ROLE_AGENT_TARGET=$(quote "${ROLE_AGENT_TARGET}") \
   PATRONI_ROLE_IDENTITY_SOURCE=$(quote "${ROLE_IDENTITY_REMOTE}") \
   PATRONI_ROLE_IDENTITY_TARGET=$(quote "${ROLE_IDENTITY_TARGET}") \
+  PATRONI_DB_CONTRACT_HELPER=$(quote "${DB_CONTRACT_HELPER_REMOTE}") \
   PATRONI_ROLE_AGENT_UNIT=$(quote "${ROLE_AGENT_UNIT}") \
   ${proxy_env} \
   bash /tmp/run_patroni_candidate_transaction.sh
 "
+DB_CONTRACT_HELPER_REMOTE_DIR=""
+DB_CONTRACT_HELPER_REMOTE=""
 log "done" "${OPERATION} completed on ${NODE_HOST}"
