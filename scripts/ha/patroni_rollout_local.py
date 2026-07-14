@@ -35,6 +35,8 @@ REVIEWED_ASSETS = (
     "scripts/ha/patroni_rollout_remote_prelude.py",
     "scripts/ha/patroni_rollout_remote_runtime.py",
     "scripts/ha/patroni_rollout_schema.py",
+    "scripts/ha/patroni_preflight_incident_recovery.py",
+    "scripts/ha/patroni_preflight_recovery_remote.py",
     "scripts/ha/pitr_cluster_topology.py",
     "scripts/ha/pitr_pinned_ssh.py",
     "scripts/ha/patroni_role_agent.py",
@@ -43,6 +45,8 @@ REVIEWED_ASSETS = (
     "deploy/ha/security/mvn-api-ssh-host-key.pub",
     "deploy/ha/security/zakup-ssh-host-key.pub",
     "scripts/ha/rollout_patroni_image.py",
+    "scripts/ha/recover_patroni_preflight_incident.py",
+    "deploy/ha/patroni/incidents/1053e46eb933ebaaffed042ac1b73170.json",
 )
 
 
@@ -89,13 +93,17 @@ def local_contract_digests(deploy_sha: str) -> dict[str, str]:
     _prove_reviewed_checkout(repo_root, deploy_sha)
     digests: dict[str, str] = {}
     for node in PATRONI_NODES:
-        project_name = str(NODE_CONTRACTS[node.alias]["compose_project"])
+        node_contract = NODE_CONTRACTS[node.alias]
+        project_name = str(node_contract["compose_project"])
+        project_dir = str(node_contract["project_dir"])
         result = subprocess.run(
             [
                 "docker",
                 "compose",
                 "--project-name",
                 project_name,
+                "--project-directory",
+                project_dir,
                 "-f",
                 str(node.compose_source),
                 "config",

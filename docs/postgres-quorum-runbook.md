@@ -401,6 +401,26 @@ marker exists. Resume reconciles interrupted node updates, switchover records,
 DCS compensation, abort, and partial finalization from the journals before
 requiring a fully healthy topology.
 
+Both local and remote Compose contract renders must use the canonical project
+directory (`/opt/air-api` for `mvn-api`, `/opt/mvn-reserve` for `zakup`). Relative
+bind mounts are contract data, so rendering them relative to a CI checkout
+produces a different and invalid contract even when the tracked Compose bytes
+are identical.
+
+Transaction `1053e46eb933ebaaffed042ac1b73170` is a reviewed preflight-only incident:
+its journals contain only the baseline-primary record and no image, PostgreSQL,
+switchover, or DCS mutation. Recover it only with the manual
+`Recover Patroni Preflight Incident` workflow from the exact current tested
+`main` SHA. The workflow accepts the exact before/after journal hashes, proves
+the old runtime image, corrected Compose contracts, legacy DCS generation,
+topology, disabled PITR units, and both maintenance markers under the rollout
+and deploy locks. It then atomically appends only `abort`, writes immutable
+root-only receipts, re-proves both nodes, and removes only the two cutover
+markers. It never removes `/run/mvn-postgres-pitr-maintenance`; never edits
+`.env`, Compose, DCS, or images; and is safe to retry after either journal or
+marker boundary. Never continue that incident with the normal rollout workflow;
+start the next rollout with a new transaction id and new publish evidence.
+
 Before the switchover boundary, failure restores the old standby image and
 legacy DCS generation before removing either marker. After the boundary, the
 only permitted direction is roll-forward. If the new archive helper proof

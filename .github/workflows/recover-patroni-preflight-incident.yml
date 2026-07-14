@@ -1,0 +1,124 @@
+name: Recover Patroni Preflight Incident
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_sha:
+        description: Exact tested recovery commit from current main
+        required: true
+        type: string
+      apply:
+        description: Explicit production recovery confirmation
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  recover:
+    environment: production-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Require exact current main recovery SHA
+        env:
+          APPLY: ${{ inputs.apply }}
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_REF_NAME}" = "main"
+          test "${APPLY}" = "true" || {
+            echo "::error::Patroni incident recovery requires apply=true"
+            exit 1
+          }
+          [[ "${DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+
+      - name: Checkout exact tested recovery SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Require current main SHA and successful CI
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${DEPLOY_SHA}"
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "${DEPLOY_SHA}" || {
+            echo "::error::Recovery deploy_sha must be the current main commit"
+            exit 1
+          }
+          count="$({
+            gh run list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --workflow ci.yml \
+              --branch main \
+              --commit "${DEPLOY_SHA}" \
+              --limit 20 \
+              --json conclusion,event,headBranch,headSha \
+              --jq '[.[] | select(.conclusion == "success" and .event == "push" and .headBranch == "main" and .headSha == env.DEPLOY_SHA)] | length'
+          })"
+          test "${count}" -ge 1 || {
+            echo "::error::No successful main CI found for ${DEPLOY_SHA}"
+            exit 1
+          }
+
+      - name: Install owner-only SSH identity
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${SSH_KEY}"
+          umask 077
+          printf '%s\n' "${SSH_KEY}" > "${RUNNER_TEMP}/patroni-recovery-key"
+          chmod 600 "${RUNNER_TEMP}/patroni-recovery-key"
+
+      - name: Terminalize exact preflight journals and remove only cutover markers
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ha/recover_patroni_preflight_incident.py \
+            --deploy-sha "${DEPLOY_SHA}" \
+            --identity-file "${RUNNER_TEMP}/patroni-recovery-key" \
+            --apply true
+
+      - name: Prove public API remained ready
+        run: |
+          set -euo pipefail
+          code="$(curl -sS --max-time 15 -o "${RUNNER_TEMP}/ready.json" -w '%{http_code}' \
+            https://api.mvn.by/api/ready)"
+          test "${code}" = "200"
+          jq -e '.api == "ready" and .traffic == "enabled"' \
+            "${RUNNER_TEMP}/ready.json" >/dev/null
+
+      - name: Record immutable recovery result
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+        run: |
+          {
+            echo '## Patroni preflight incident recovery'
+            echo "- recovery_deploy_sha: ${DEPLOY_SHA}"
+            echo '- incident_transaction_id: 1053e46eb933ebaaffed042ac1b73170'
+            echo '- journal_result: exact abort receipt on both nodes'
+            echo '- cutover_markers: absent'
+            echo '- database_image_and_dcs: unchanged and re-attested'
+            echo '- PITR_maintenance_fence: retained'
+            echo '- result: passed'
+          } >> "${GITHUB_STEP_SUMMARY}"
