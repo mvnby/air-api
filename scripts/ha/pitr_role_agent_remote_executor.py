@@ -25,11 +25,6 @@ ROLE_ASSET_MODES = {
     OPERATION_GUARD_PATH: 0o755,
     OPERATION_CLEANUP_PATH: 0o755,
 }
-ROLE_PROCESS_ASSETS = {
-    ROLE_AGENT_PATH,
-    ROLE_IDENTITY_PATH,
-    ROLE_UNIT_PATH,
-}
 NODE_CONTRACTS = {
     "/opt/air-api": "mvn-api",
     "/opt/mvn-reserve": "zakup",
@@ -444,80 +439,6 @@ def prove_safe_state(role_agent, config, *, required, expected_role=None):
     return role
 
 
-def read_proc_file(path, maximum=131072):
-    descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0:
-            raise RuntimeError("role-agent process metadata is unsafe")
-        content = os.read(descriptor, maximum + 1)
-        if len(content) > maximum or os.read(descriptor, 1):
-            raise RuntimeError("role-agent process metadata exceeds limit")
-        return content
-    finally:
-        os.close(descriptor)
-
-
-def process_start_ns(pid):
-    raw = read_proc_file(f"/proc/{pid}/stat", 8192).decode("ascii")
-    boundary = raw.rfind(") ")
-    fields = raw[boundary + 2:].split() if boundary > 0 else []
-    if len(fields) <= 19 or not fields[19].isdigit():
-        raise RuntimeError("role-agent process start metadata is invalid")
-    boot = []
-    for line in read_proc_file("/proc/stat", 1048576).decode("ascii").splitlines():
-        if line.startswith("btime "):
-            boot.append(line.split())
-    if len(boot) != 1 or len(boot[0]) != 2 or not boot[0][1].isdigit():
-        raise RuntimeError("kernel boot-time metadata is invalid")
-    ticks = os.sysconf("SC_CLK_TCK")
-    if not isinstance(ticks, int) or ticks <= 0:
-        raise RuntimeError("kernel clock-tick metadata is invalid")
-    return ((int(boot[0][1]) * ticks + int(fields[19])) * 1000000000) // ticks
-
-
-def attest_live_process(expected_environment, manifest):
-    pid = checked([
-        "/usr/bin/systemctl", "show", "--property=MainPID", "--value",
-        ROLE_AGENT_UNIT,
-    ])
-    if re.fullmatch(r"[1-9][0-9]*", pid) is None:
-        raise RuntimeError("role-agent MainPID is invalid")
-    if read_proc_file(f"/proc/{pid}/cmdline", 4096) != (
-        b"/usr/bin/python3\0/usr/local/sbin/mvn-patroni-role-agent\0"
-    ):
-        raise RuntimeError("live role-agent command line is unreviewed")
-    live = {}
-    for entry in read_proc_file(f"/proc/{pid}/environ").split(b"\0"):
-        if not entry:
-            continue
-        try:
-            name, value = entry.decode("utf-8").split("=", 1)
-        except (UnicodeDecodeError, ValueError) as exc:
-            raise RuntimeError("live role-agent environment is invalid") from exc
-        if name.startswith("HA_"):
-            if name in live:
-                raise RuntimeError("live role-agent environment has a duplicate key")
-            live[name] = value
-    if live != expected_environment:
-        raise RuntimeError("live role-agent environment differs from the reviewed contract")
-    newest_asset = 0
-    for path in ROLE_PROCESS_ASSETS:
-        content, metadata = read_root_file(path, mode=ROLE_ASSET_MODES[path])
-        if hashlib.sha256(content).hexdigest() != manifest[path]:
-            raise RuntimeError(f"role-agent digest changed during restart: {path}")
-        newest_asset = max(newest_asset, metadata.st_ctime_ns)
-    _, environment_metadata = read_root_file(ROLE_ENV_PATH, mode=0o600, maximum=16384)
-    newest_asset = max(newest_asset, environment_metadata.st_ctime_ns)
-    if process_start_ns(pid) < newest_asset:
-        raise RuntimeError("live role-agent predates the attested on-disk generation")
-    if checked([
-        "/usr/bin/systemctl", "show", "--property=MainPID", "--value",
-        ROLE_AGENT_UNIT,
-    ]) != pid:
-        raise RuntimeError("role-agent MainPID changed during attestation")
-
-
 def quiesce(phase, project_dir, transaction_id, raw_manifest):
     manifest, expected, guard, role_agent, config = attest_contract(
         raw_manifest, project_dir
@@ -535,20 +456,33 @@ def quiesce(phase, project_dir, transaction_id, raw_manifest):
             project_dir, transaction_id, guard, wait_seconds=0
         )
         require_fence(project_dir, transaction_id, allow_finalized=False)
-        if unit_state("is-active") == "active":
-            attest_live_process(expected, manifest)
+        active_state = unit_state("is-active")
+        enabled_state = unit_state("is-enabled")
+        if active_state == "active":
+            # Prove the pre-restart state safe first.  While the project lock
+            # is held, the agent cannot activate runtime owners; the exact
+            # maintenance marker also keeps primary-only PITR timers stopped.
+            if phase == "quiesce-fenced":
+                role_agent._fence_lost_primary(config)
+                prove_safe_state(role_agent, config, required="fenced")
+            else:
+                prove_safe_state(role_agent, config, required="standby")
+            # Do not compare wall-clock file timestamps with coarse kernel
+            # boot time.  A controlled restart instead proves that systemd
+            # loaded the unchanged, attested generation by a strictly newer
+            # clock-free /proc start-tick identity.
+            refresh_live_process(
+                expected,
+                manifest,
+                expected_enabled=enabled_state,
+            )
+            require_fence(project_dir, transaction_id, allow_finalized=False)
         if phase == "quiesce-fenced":
             role_agent._fence_lost_primary(config)
             prove_safe_state(role_agent, config, required="fenced")
         else:
             prove_safe_state(role_agent, config, required="standby")
-        checked(["/usr/bin/systemctl", "disable", ROLE_AGENT_UNIT])
-        checked(["/usr/bin/systemctl", "stop", ROLE_AGENT_UNIT])
-        checked(["/usr/bin/systemctl", "reset-failed", ROLE_AGENT_UNIT])
-        if unit_state("is-active") != "inactive":
-            raise RuntimeError("role-agent remained active after maintenance quiesce")
-        if unit_state("is-enabled") != "disabled":
-            raise RuntimeError("role-agent remained enabled after maintenance quiesce")
+        stop_disable_role_agent()
         required = "fenced" if phase == "quiesce-fenced" else "standby"
         prove_safe_state(role_agent, config, required=required)
         require_fence(project_dir, transaction_id, allow_finalized=False)
@@ -599,13 +533,74 @@ def resume(project_dir, transaction_id, raw_manifest, expected_role):
         )
         if fence_state != initial_fence_state:
             raise RuntimeError("PITR fence state changed before role-agent resume")
-        checked(["/usr/bin/systemctl", "enable", ROLE_AGENT_UNIT])
-        checked(["/usr/bin/systemctl", "start", ROLE_AGENT_UNIT])
-        if unit_state("is-active") != "active":
-            raise RuntimeError("role-agent did not become active")
-        if unit_state("is-enabled") != "enabled":
-            raise RuntimeError("role-agent did not become enabled")
-        attest_live_process(expected, manifest)
+        active_state = unit_state("is-active")
+        enabled_state = unit_state("is-enabled")
+        if (active_state, enabled_state) in {
+            ("active", "disabled"),
+            ("inactive", "enabled"),
+        }:
+            # These are owned crash boundaries from stop/disable or
+            # enable/start.  Converge them to the sole restartable baseline
+            # without trusting which mutation returned to the controller.
+            role_agent._fence_lost_primary(config)
+            prove_safe_state(role_agent, config, required="fenced")
+            if active_state == "active":
+                refresh_live_process(
+                    expected,
+                    manifest,
+                    expected_enabled=enabled_state,
+                )
+            if require_fence(
+                project_dir,
+                transaction_id,
+                allow_finalized=True,
+            ) != fence_state:
+                raise RuntimeError(
+                    "PITR fence state changed during mixed-state recovery"
+                )
+            stop_disable_role_agent()
+            if require_fence(
+                project_dir,
+                transaction_id,
+                allow_finalized=True,
+            ) != fence_state:
+                raise RuntimeError(
+                    "PITR fence state changed after mixed-state recovery"
+                )
+            active_state = "inactive"
+            enabled_state = "disabled"
+        if (active_state, enabled_state) == ("inactive", "disabled"):
+            generation = snapshot_role_generation(manifest)
+            checked(["/usr/bin/systemctl", "enable", ROLE_AGENT_UNIT])
+            checked(["/usr/bin/systemctl", "start", ROLE_AGENT_UNIT])
+            prove_live_generation(
+                expected,
+                manifest,
+                generation,
+                "maintenance resume",
+            )
+        elif (active_state, enabled_state) == ("active", "enabled"):
+            prove_safe_state(
+                role_agent,
+                config,
+                required="live",
+                expected_role=expected_role,
+            )
+            generation = refresh_live_process(expected, manifest)
+            if require_fence(
+                project_dir,
+                transaction_id,
+                allow_finalized=True,
+            ) != fence_state:
+                raise RuntimeError("PITR fence state changed during role-agent refresh")
+            prove_safe_state(
+                role_agent,
+                config,
+                required="live",
+                expected_role=expected_role,
+            )
+        else:
+            raise RuntimeError("role-agent systemd state is not replay-convergent")
         os.close(deploy_fd)
         deploy_fd = None
         wait_for_convergence(role_agent, config, expected_role)
@@ -613,7 +608,12 @@ def resume(project_dir, transaction_id, raw_manifest, expected_role):
         manifest, expected, guard, role_agent, config = attest_contract(
             raw_manifest, project_dir
         )
-        attest_live_process(expected, manifest)
+        prove_live_generation(
+            expected,
+            manifest,
+            generation,
+            "maintenance resume convergence",
+        )
         prove_safe_state(
             role_agent,
             config,
