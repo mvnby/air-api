@@ -206,6 +206,7 @@ def _mark_post_switchover(operations):
     )
     for status in operations.statuses.values():
         status["completed"].extend(records)
+    operations.images = {node.alias: TARGET for node in PATRONI_NODES}
 
 
 def test_lost_completed_prepare_on_resume_never_aborts_existing_transaction(tmp_path):
@@ -355,19 +356,19 @@ def test_completed_rollback_with_lost_response_is_terminal_across_two_resumes(
     assert "switchover" not in _mutation_names(operations.events)
 
 
-def test_stale_standby_record_cannot_switchover_candidate_on_current_image(tmp_path):
+def test_stale_standby_record_fences_candidate_on_current_image(tmp_path):
     operations = FakeOperations(existing=True)
     for status in operations.statuses.values():
         status["completed"].append("record:standby-updated")
 
-    with pytest.raises(RuntimeError, match="old image/DCS generation was restored"):
+    with pytest.raises(RuntimeError, match="roll-forward state"):
         _orchestrator(tmp_path, operations, resume=True).run()
 
     names = _mutation_names(operations.events)
     assert operations.images["zakup"] == CURRENT
     assert "attest-target-runtime" in names
     assert "switchover" not in names
-    assert names.count("abort") == 2
+    assert "abort" not in names
 
 
 def test_archive_proof_failure_compensates_exact_legacy_command(tmp_path):
