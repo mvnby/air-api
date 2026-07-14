@@ -140,5 +140,4 @@ def stop_disable_role_agent():
     checked(["/usr/bin/systemctl", "disable", ROLE_AGENT_UNIT])
     if unit_state("is-enabled") != "disabled":
         raise RuntimeError("role-agent remained enabled after maintenance disable")
-    checked(["/usr/bin/systemctl", "reset-failed", ROLE_AGENT_UNIT])
 '''

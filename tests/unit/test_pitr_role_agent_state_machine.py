@@ -38,6 +38,34 @@ def test_role_agent_executor_keeps_quiesce_fenced_and_resume_fail_closed():
     ) < source.index('["/usr/bin/systemctl", "disable", ROLE_AGENT_UNIT]')
     assert "open_deploy_lock_bounded(project_dir)" in source
     assert "wait_for_convergence(role_agent, config, expected_role)" in source
+    assert '"reset-failed"' not in source
+
+
+def test_stop_disable_does_not_reset_an_unloaded_inactive_unit():
+    namespace = _role_executor_namespace()
+    events = []
+    state = {"active": "active", "enabled": "enabled"}
+
+    def checked(args, **_kwargs):
+        action = args[1]
+        events.append(action)
+        if action == "stop":
+            state["active"] = "inactive"
+        elif action == "disable":
+            state["enabled"] = "disabled"
+        else:
+            raise AssertionError(f"unexpected systemctl action: {action}")
+        return ""
+
+    namespace["checked"] = checked
+    namespace["unit_state"] = lambda kind: state[
+        "active" if kind == "is-active" else "enabled"
+    ]
+
+    namespace["stop_disable_role_agent"]()
+
+    assert events == ["stop", "disable"]
+    assert state == {"active": "inactive", "enabled": "disabled"}
 
 
 def _role_executor_namespace():
