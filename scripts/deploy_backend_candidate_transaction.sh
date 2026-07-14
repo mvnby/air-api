@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 CANONICAL_FILE="${API_CANONICAL_COMPOSE_FILE:-${PROJECT_DIR}/docker-compose.prod.yml}"
 CANDIDATE_FILE="${API_CANDIDATE_COMPOSE_FILE:-}"
 TRANSACTION_ENABLED="${API_COMPOSE_TRANSACTIONAL:-true}"
 DEPLOY_STRATEGY="${API_DEPLOY_STRATEGY:-blue_green}"
-TRANSACTION_SCRIPT="${COMPOSE_CANDIDATE_TRANSACTION_SCRIPT:-/tmp/compose_candidate_transaction.sh}"
-BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-/tmp/deploy_backend_blue_green.sh}"
-IN_PLACE_SCRIPT="${API_IN_PLACE_DEPLOY_SCRIPT:-/tmp/deploy.sh}"
-SMOKE_SCRIPT="${API_SMOKE_SCRIPT:-/tmp/post_deploy_smoke_check.sh}"
-RECONCILE_SCRIPT="${API_RECONCILE_SCRIPT:-/tmp/reconcile_backend_compose_runtime.sh}"
+TRANSACTION_SCRIPT="${COMPOSE_CANDIDATE_TRANSACTION_SCRIPT:-${SCRIPT_DIR}/compose_candidate_transaction.sh}"
+BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-${SCRIPT_DIR}/deploy_backend_blue_green.sh}"
+IN_PLACE_SCRIPT="${API_IN_PLACE_DEPLOY_SCRIPT:-${SCRIPT_DIR}/deploy.sh}"
+SMOKE_SCRIPT="${API_SMOKE_SCRIPT:-${SCRIPT_DIR}/post_deploy_smoke_check.sh}"
+RECONCILE_SCRIPT="${API_RECONCILE_SCRIPT:-${SCRIPT_DIR}/reconcile_backend_compose_runtime.sh}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
+DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
+DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/ha/safe_deploy_lock.py}"
+DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 STOP_SERVICES_AFTER_DEPLOY="${API_STOP_SERVICES_AFTER_DEPLOY:-}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_BACKEND_IMAGE="${API_PREVIOUS_BACKEND_IMAGE:-}"
@@ -115,11 +119,37 @@ fi
 
 mkdir -p "${PROJECT_DIR}"
 trap cleanup_candidate_only EXIT
-exec 9>"${DEPLOY_LOCK_FILE}"
-flock -n 9 || {
-  echo "another deployment holds ${DEPLOY_LOCK_FILE}" >&2
+[[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "safe deployment lock helper digest is missing" >&2; exit 1;
+}
+python3 - "${DEPLOY_LOCK_HELPER}" "${DEPLOY_LOCK_HELPER_SHA256}" <<'PY'
+import hashlib, os, stat, sys
+path, expected = sys.argv[1:]
+before = os.lstat(path)
+if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
+        or before.st_uid != os.geteuid() or before.st_nlink != 1
+        or before.st_mode & 0o022):
+    raise SystemExit("safe deployment lock helper metadata is unsafe")
+fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(fd); data = b""
+    while True:
+        chunk = os.read(fd, 131072)
+        if not chunk: break
+        data += chunk
+finally: os.close(fd)
+if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        or hashlib.sha256(data).hexdigest() != expected):
+    raise SystemExit("safe deployment lock helper source is unreviewed")
+PY
+if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
+  exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@"
+fi
+[[ "${DEPLOY_LOCK_FD}" == "9" ]] || {
+  echo "candidate transaction requires inherited deployment lock fd 9" >&2
   exit 1
 }
+python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
 resolve_previous_backend_image
 
 if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
@@ -134,12 +164,16 @@ candidate_name="$(basename "${CANDIDATE_FILE}")"
 case "${DEPLOY_STRATEGY}" in
   blue_green)
     API_COMPOSE_FILE="${candidate_name}" \
-      API_DEPLOY_LOCK_ALREADY_HELD=true \
+      API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+      API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
+      API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
       bash "${BLUE_GREEN_SCRIPT}"
     ;;
   in_place)
     API_COMPOSE_FILE="${candidate_name}" \
-      API_DEPLOY_LOCK_ALREADY_HELD=true \
+      API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+      API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
+      API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
       bash "${IN_PLACE_SCRIPT}"
     ;;
   *)

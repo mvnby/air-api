@@ -119,8 +119,21 @@ def test_rehearsal_is_isolated_and_exercises_failover_and_rejoin():
     assert 'exec -T \\\n    -e "PGOPTIONS=' in text
     assert "replica was not registered as synchronous" in text
     assert "pg_stat_replication" in text
+    assert "failover-safe synchronous standby" in text
+    assert "http://127.0.0.1:8008/sync" in text
     assert "former leader did not rejoin" in text
     assert "stop etcd3" in text
+    assert "up -d --wait --no-build --pull never" in text
+    assert "PULLED_IMAGE_ID" in text
+    assert "running_image_id" in text
+    assert "destination differs" in text
+    assert "16777216" in text
+    assert compose["services"]["pg1"]["platform"] == (
+        "${PATRONI_REHEARSAL_PLATFORM:-linux/amd64}"
+    )
+    assert compose["services"]["pg1"]["image"] == (
+        "${PATRONI_REHEARSAL_IMAGE:-mvn-patroni-rehearsal:local}"
+    )
 
 
 def test_rehearsal_workflow_is_scheduled_and_keeps_logs():
@@ -133,6 +146,8 @@ def test_rehearsal_workflow_is_scheduled_and_keeps_logs():
     assert "rehearse_patroni_failover.sh" in steps["Run isolated Patroni failover rehearsal"]["run"]
     assert steps["Upload rehearsal log"]["if"] == "${{ always() }}"
     assert "production_data_touched: false" in steps["Rehearsal summary"]["run"]
+    assert "source_bound_release_evidence: false" in steps["Rehearsal summary"]["run"]
+    assert "image_digest" in workflow["on"]["workflow_dispatch"]["inputs"]
 
 
 def test_production_patroni_composes_are_role_driven_and_private():
@@ -179,11 +194,26 @@ def test_patroni_image_publish_is_manual_sha_gated_and_digest_pinned():
     steps = {step["name"]: step for step in job["steps"]}
 
     assert set(workflow["on"]) == {"workflow_dispatch"}
-    assert "No successful CI run found" in steps["Require tested main SHA"]["run"]
+    gate = steps["Require exact successful push CI on main"]["run"]
+    assert "No exact successful push CI run found" in gate
+    assert "--event push" in gate
+    assert '.headSha == $sha' in gate
+    assert '.headBranch == "main"' in gate
+    assert '.event == "push"' in gate
+    assert '.conclusion == "success"' in gate
     assert steps["Checkout exact tested SHA"]["with"]["ref"] == "${{ github.sha }}"
-    build = steps["Build and push Patroni"]["with"]
+    assert steps["Checkout exact tested SHA"]["with"]["persist-credentials"] == "false"
+    build = steps["Build and push run-scoped Patroni candidate"]["with"]
     assert build["file"] == "deploy/ha/patroni/Dockerfile"
     assert build["platforms"] == "linux/amd64"
     assert build["provenance"] == "mode=max"
     assert build["sbom"] == "true"
-    assert "patroni@${digest}" in steps["Resolve immutable image"]["run"]
+    assert "patroni@${digest}" not in steps["Resolve immutable candidate"]["run"]
+    assert "@${digest}" in steps["Resolve immutable candidate"]["run"]
+    assert workflow["concurrency"]["group"] == "production-release"
+    assert "verify_patroni_release_image.py" in steps[
+        "Verify registry manifest, provenance, and SBOM"
+    ]["run"]
+    assert "gh attestation verify" in steps["Verify exact GitHub attestation identity"]["run"]
+    assert "rehearse_patroni_failover.sh" in steps["Rehearse exact published digest"]["run"]
+    assert "already points to" in steps["Promote immutable digest to release SHA tag"]["run"]

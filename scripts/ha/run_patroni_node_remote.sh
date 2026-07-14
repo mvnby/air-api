@@ -17,17 +17,17 @@ SSH_HOST_KEY_SOURCE="${API_NODE_SSH_HOST_KEY_SOURCE:-}"
 KEY_PATH="${RUNNER_TEMP:-/tmp}/mvn-patroni-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}.key"
 KNOWN_HOSTS_PATH="${KEY_PATH}.known_hosts"
 ROLE_AGENT_SOURCE="scripts/ha/patroni_role_agent.py"
-ROLE_AGENT_REMOTE="/tmp/mvn-patroni-role-agent-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}"
 ROLE_AGENT_TARGET="/usr/local/sbin/mvn-patroni-role-agent"
 ROLE_IDENTITY_SOURCE="scripts/ha/patroni_local_identity.py"
-ROLE_IDENTITY_REMOTE="/tmp/patroni-local-identity-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}.py"
 ROLE_IDENTITY_TARGET="/usr/local/sbin/patroni_local_identity.py"
 ROLE_AGENT_UNIT="mvn-patroni-role-agent.service"
 CANDIDATE_RUNNER_SOURCE="scripts/ha/run_patroni_candidate_transaction.sh"
+DEPLOY_LOCK_HELPER_SOURCE="scripts/ha/safe_deploy_lock.py"
+DEPLOY_LOCK_HELPER_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${DEPLOY_LOCK_HELPER_SOURCE}")"
 DB_CONTRACT_HELPER_SOURCE="scripts/ha/patroni_compose_db_contract.py"
-DB_CONTRACT_HELPER_REMOTE_DIR=""
-DB_CONTRACT_HELPER_REMOTE=""
 TRANSACTION_SOURCE="scripts/compose_candidate_transaction.sh"
+BUNDLE_VERIFIER_SOURCE="scripts/ha/verify_patroni_remote_bundle.py"
+REMOTE_BUNDLE_DIR=""
 
 log() {
   printf '[patroni-remote][%s] %s\n' "$1" "$2"
@@ -42,9 +42,9 @@ quote() {
 }
 
 cleanup() {
-  if [[ -n "${DB_CONTRACT_HELPER_REMOTE_DIR}" ]]; then
+  if [[ -n "${REMOTE_BUNDLE_DIR}" ]]; then
     ssh "${SSH_OPTS[@]}" "${REMOTE}" \
-      "rm -f -- $(quote "${DB_CONTRACT_HELPER_REMOTE}"); rmdir -- $(quote "${DB_CONTRACT_HELPER_REMOTE_DIR}")" \
+      "rm -rf -- $(quote "${REMOTE_BUNDLE_DIR}")" \
       >/dev/null 2>&1 || true
   fi
   rm -f "${KEY_PATH}" "${KNOWN_HOSTS_PATH}"
@@ -100,7 +100,8 @@ if [[ "${OPERATION}" == "deploy" ]]; then
   }
 fi
 if [[ "${OPERATION}" != "probe" ]]; then
-  [[ -f "${CANDIDATE_RUNNER_SOURCE}" && -f "${TRANSACTION_SOURCE}" ]] || {
+  [[ -f "${CANDIDATE_RUNNER_SOURCE}" && -f "${TRANSACTION_SOURCE}" \
+    && -f "${DEPLOY_LOCK_HELPER_SOURCE}" && -f "${BUNDLE_VERIFIER_SOURCE}" ]] || {
     log error "compose candidate transaction scripts are missing"
     exit 1
   }
@@ -186,35 +187,40 @@ ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p $(quote "${PROJECT_DIR}")"
 CANONICAL_REMOTE_COMPOSE_FILE="docker-compose.patroni.yml"
 candidate_id="$(printf '%s' "${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}-${OPERATION}-$$" | tr -c 'A-Za-z0-9_.-' '-')"
 REMOTE_COMPOSE_FILE="docker-compose.patroni.candidate.${candidate_id}.yml"
+REMOTE_BUNDLE_DIR="$(
+  ssh "${SSH_OPTS[@]}" "${REMOTE}" \
+    "umask 077; mktemp -d /tmp/mvn-patroni-release.XXXXXXXX"
+)"
+[[ "${REMOTE_BUNDLE_DIR}" =~ ^/tmp/mvn-patroni-release\.[A-Za-z0-9]{8}$ ]] || {
+  log error "remote Patroni release bundle directory is invalid"
+  exit 1
+}
+BUNDLE_SOURCES=(
+  scripts/ha/run_patroni_migrations.sh
+  scripts/ha/deploy_patroni_api_node.sh
+  scripts/deploy_backend_blue_green.sh
+  scripts/deploy_backend_blue_green_safety.sh
+  scripts/prepare_google_oauth_token_dir.sh
+  scripts/reconcile_backend_compose_runtime.sh
+  "${CANDIDATE_RUNNER_SOURCE}"
+  "${DEPLOY_LOCK_HELPER_SOURCE}"
+  "${TRANSACTION_SOURCE}"
+)
 if [[ "${OPERATION}" == "deploy" ]]; then
-  remote_helper_dir="$(
-    ssh "${SSH_OPTS[@]}" "${REMOTE}" \
-      "umask 077; mktemp -d /tmp/mvn-patroni-db-contract.XXXXXXXX"
-  )"
-  [[ "${remote_helper_dir}" \
-    =~ ^/tmp/mvn-patroni-db-contract\.[A-Za-z0-9]{8}$ ]] || {
-    log error "remote Patroni db contract directory is invalid"
-    exit 1
-  }
-  DB_CONTRACT_HELPER_REMOTE_DIR="${remote_helper_dir}"
-  DB_CONTRACT_HELPER_REMOTE="${DB_CONTRACT_HELPER_REMOTE_DIR}/contract.py"
+  BUNDLE_SOURCES+=(
+    "${DB_CONTRACT_HELPER_SOURCE}"
+    "${ROLE_AGENT_SOURCE}"
+    "${ROLE_IDENTITY_SOURCE}"
+  )
 fi
+BUNDLE_MANIFEST_B64="$(python3 "${BUNDLE_VERIFIER_SOURCE}" manifest "${BUNDLE_SOURCES[@]}")"
+BUNDLE_VERIFIER_CODE="$(<"${BUNDLE_VERIFIER_SOURCE}")"
+ROLE_AGENT_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_role_agent.py"
+ROLE_IDENTITY_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_local_identity.py"
+DB_CONTRACT_HELPER_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_compose_db_contract.py"
 scp "${SSH_OPTS[@]}" "${COMPOSE_SOURCE}" \
   "${REMOTE}:${PROJECT_DIR}/${REMOTE_COMPOSE_FILE}"
-scp "${SSH_OPTS[@]}" scripts/ha/run_patroni_migrations.sh \
-  scripts/ha/deploy_patroni_api_node.sh scripts/deploy_backend_blue_green.sh \
-  scripts/deploy_backend_blue_green_safety.sh scripts/prepare_google_oauth_token_dir.sh \
-  scripts/reconcile_backend_compose_runtime.sh \
-  "${CANDIDATE_RUNNER_SOURCE}" "${TRANSACTION_SOURCE}" \
-  "${REMOTE}:/tmp/"
-if [[ "${OPERATION}" == "deploy" ]]; then
-  scp "${SSH_OPTS[@]}" "${DB_CONTRACT_HELPER_SOURCE}" \
-    "${REMOTE}:${DB_CONTRACT_HELPER_REMOTE}"
-  scp "${SSH_OPTS[@]}" "${ROLE_AGENT_SOURCE}" \
-    "${REMOTE}:${ROLE_AGENT_REMOTE}"
-  scp "${SSH_OPTS[@]}" "${ROLE_IDENTITY_SOURCE}" \
-    "${REMOTE}:${ROLE_IDENTITY_REMOTE}"
-fi
+scp "${SSH_OPTS[@]}" "${BUNDLE_SOURCES[@]}" "${REMOTE}:${REMOTE_BUNDLE_DIR}/"
 
 if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
   ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p $(quote "${PROJECT_DIR}/api-proxy")"
@@ -234,40 +240,43 @@ if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
 fi
 
 log "${OPERATION}" "running ${OPERATION} on ${NODE_HOST}"
-remote_helper_cleanup=":"
-if [[ "${OPERATION}" == "deploy" ]]; then
-  remote_helper_cleanup="rm -f -- $(quote "${DB_CONTRACT_HELPER_REMOTE}"); rmdir -- $(quote "${DB_CONTRACT_HELPER_REMOTE_DIR}")"
-fi
 printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   set -euo pipefail
   IFS= read -r GHCR_PAT
   export GHCR_PAT
-  trap $(quote "${remote_helper_cleanup}") EXIT
-  chmod 0755 /tmp/run_patroni_migrations.sh /tmp/deploy_patroni_api_node.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh /tmp/reconcile_backend_compose_runtime.sh /tmp/run_patroni_candidate_transaction.sh /tmp/compose_candidate_transaction.sh
+  trap $(quote "rm -rf -- ${REMOTE_BUNDLE_DIR}") EXIT
+  python3 -I -c $(quote "${BUNDLE_VERIFIER_CODE}") verify \
+    $(quote "${REMOTE_BUNDLE_DIR}") $(quote "${BUNDLE_MANIFEST_B64}")
+  chmod 0755 $(quote "${REMOTE_BUNDLE_DIR}")/*.sh \
+    $(quote "${REMOTE_BUNDLE_DIR}/safe_deploy_lock.py")
   API_PROJECT_DIR=$(quote "${PROJECT_DIR}") \
   API_EXPECTED_PATRONI_ROLE=$(quote "${EXPECTED_ROLE}") \
   API_READY_URL=http://127.0.0.1:18080/api/ready \
   API_HEALTH_URL=http://127.0.0.1:18080/api/health \
   API_INTERNAL_PROXY_PORT=18080 \
-  API_BLUE_GREEN_SCRIPT=/tmp/deploy_backend_blue_green.sh \
-  API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh \
-  GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=/tmp/prepare_google_oauth_token_dir.sh \
-  API_RECONCILE_SCRIPT=/tmp/reconcile_backend_compose_runtime.sh \
+  API_BLUE_GREEN_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/deploy_backend_blue_green.sh") \
+  API_BLUE_GREEN_SAFETY_HELPER=$(quote "${REMOTE_BUNDLE_DIR}/deploy_backend_blue_green_safety.sh") \
+  GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/prepare_google_oauth_token_dir.sh") \
+  API_RECONCILE_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/reconcile_backend_compose_runtime.sh") \
   API_PUBLIC_READY_URL=https://api.mvn.by/api/ready \
   BACKEND_IMAGE=$(quote "${BACKEND_IMAGE}") \
   GITHUB_ACTOR=$(quote "${GITHUB_ACTOR:-github-actions}") \
   PATRONI_CANDIDATE_OPERATION=$(quote "${OPERATION}") \
   PATRONI_CANONICAL_COMPOSE_FILE=$(quote "${PROJECT_DIR}/${CANONICAL_REMOTE_COMPOSE_FILE}") \
   PATRONI_CANDIDATE_COMPOSE_FILE=$(quote "${PROJECT_DIR}/${REMOTE_COMPOSE_FILE}") \
+  PATRONI_MIGRATION_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/run_patroni_migrations.sh") \
+  PATRONI_DEPLOY_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/deploy_patroni_api_node.sh") \
+  COMPOSE_CANDIDATE_TRANSACTION_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/compose_candidate_transaction.sh") \
   PATRONI_ROLE_AGENT_SOURCE=$(quote "${ROLE_AGENT_REMOTE}") \
   PATRONI_ROLE_AGENT_TARGET=$(quote "${ROLE_AGENT_TARGET}") \
   PATRONI_ROLE_IDENTITY_SOURCE=$(quote "${ROLE_IDENTITY_REMOTE}") \
   PATRONI_ROLE_IDENTITY_TARGET=$(quote "${ROLE_IDENTITY_TARGET}") \
   PATRONI_DB_CONTRACT_HELPER=$(quote "${DB_CONTRACT_HELPER_REMOTE}") \
   PATRONI_ROLE_AGENT_UNIT=$(quote "${ROLE_AGENT_UNIT}") \
+  API_DEPLOY_LOCK_HELPER=$(quote "${REMOTE_BUNDLE_DIR}/safe_deploy_lock.py") \
+  API_DEPLOY_LOCK_HELPER_SHA256=$(quote "${DEPLOY_LOCK_HELPER_SHA256}") \
   ${proxy_env} \
-  bash /tmp/run_patroni_candidate_transaction.sh
+  bash $(quote "${REMOTE_BUNDLE_DIR}/run_patroni_candidate_transaction.sh")
 "
-DB_CONTRACT_HELPER_REMOTE_DIR=""
-DB_CONTRACT_HELPER_REMOTE=""
+REMOTE_BUNDLE_DIR=""
 log "done" "${OPERATION} completed on ${NODE_HOST}"

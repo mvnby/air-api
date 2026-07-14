@@ -68,13 +68,23 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     for job_name, environment in expected_environments.items():
         job = jobs[job_name]
         assert job["environment"] == environment
-        checkout = next(step for step in job["steps"] if step.get("uses") == "actions/checkout@v6")
+        checkout = next(
+            step
+            for step in job["steps"]
+            if step.get("uses")
+            == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+        )
         assert checkout["with"]["ref"] == "${{ needs.release-gate.outputs.deploy_sha }}"
 
     standby_workflow = _workflow(".github/workflows/deploy-api-standby.yml")
     standby = standby_workflow["jobs"]["deploy-api-standby"]
     assert standby["environment"] == "standby-api"
-    checkout = next(step for step in standby["steps"] if step.get("uses") == "actions/checkout@v6")
+    checkout = next(
+        step
+        for step in standby["steps"]
+        if step.get("uses")
+        == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+    )
     assert checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
     standby_call = jobs["deploy-api-standby"]
     assert standby_call["uses"] == "./.github/workflows/deploy-api-standby.yml"
@@ -87,7 +97,12 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     web_workflow = _workflow(".github/workflows/deploy-web.yml")
     web_job = web_workflow["jobs"]["production-web"]
     assert web_job["environment"] == "production-web"
-    web_checkout = next(step for step in web_job["steps"] if step.get("uses") == "actions/checkout@v6")
+    web_checkout = next(
+        step
+        for step in web_job["steps"]
+        if step.get("uses")
+        == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+    )
     assert web_checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
     web_call = jobs["deploy-frontend"]
     assert web_call["uses"] == "./.github/workflows/deploy-web.yml"
@@ -102,7 +117,7 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert "backend:${{ github.sha }}" not in workflow_text
     assert "backend:${GITHUB_SHA}" not in workflow_text
     assert "tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}" in workflow_text
-    assert "BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}'" in workflow_text
+    assert "BACKEND_IMAGE=${{ steps.resolve_backend_image.outputs.reference }}" in workflow_text
     assert 'reference="ghcr.io/${{ steps.prep.outputs.repo }}/backend@${digest}"' in workflow_text
 
 
@@ -140,7 +155,7 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "scripts/rollback_backend.sh" in rollback["run"]
     assert '.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in primary_copy["run"]
     assert "scp \\" in primary_copy["run"]
-    assert 'cat "scripts/${script}"' in primary_deploy["run"]
+    assert "scripts/ha/run_verified_remote_bundle.py" in primary_deploy["run"]
     assert "deploy_backend_blue_green.sh" in primary_deploy["run"]
     assert "deploy_backend_blue_green_safety.sh" in primary_deploy["run"]
     assert "compose_candidate_transaction.sh" in primary_deploy["run"]
@@ -149,31 +164,40 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "API_CANONICAL_COMPOSE_FILE=" in primary_deploy["run"]
     assert "API_CANDIDATE_COMPOSE_FILE=" in primary_deploy["run"]
     assert "API_COMPOSE_TRANSACTIONAL=" in primary_deploy["run"]
-    assert "API_SMOKE_SCRIPT='/tmp/post_deploy_smoke_check.sh'" in primary_deploy["run"]
-    assert "bash /tmp/deploy_backend_candidate_transaction.sh" in primary_deploy["run"]
-    assert "API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}'" in primary_deploy["run"]
+    assert "API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh" in primary_deploy["run"]
+    assert "--entry deploy_backend_candidate_transaction.sh" in primary_deploy["run"]
+    assert '--env "API_RUN_MIGRATIONS=${API_RUN_MIGRATIONS}"' in primary_deploy["run"]
     assert "smoke_status=passed" in primary_smoke["run"]
     assert "compose promotion completed" in primary_smoke["run"]
     assert "scripts/deploy_backend_blue_green.sh" in rollback["run"]
     assert "scripts/deploy_backend_blue_green_safety.sh" in rollback["run"]
     safety_helper_env = (
-        "API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh'"
+        "API_BLUE_GREEN_SAFETY_HELPER=__MVN_BUNDLE__/deploy_backend_blue_green_safety.sh"
     )
     assert safety_helper_env in primary_deploy["run"]
     assert safety_helper_env in rollback["run"]
     assert "scripts/deploy.sh" in standby_deploy["run"]
     assert '.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in standby_deploy["run"]
     assert "scripts/deploy_backend_candidate_transaction.sh" in standby_deploy["run"]
-    assert "API_COMPOSE_TRANSACTIONAL='${API_STANDBY_COPY_COMPOSE}'" in standby_deploy["run"]
-    assert "API_SMOKE_SCRIPT='/tmp/post_deploy_smoke_check.sh'" in standby_deploy["run"]
-    assert "bash /tmp/deploy_backend_candidate_transaction.sh" in standby_deploy["run"]
-    assert "API_DEPLOY_SERVICES='app'" in standby_deploy["run"]
-    assert "API_ACTIVE_SLOT_FILE='${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled'" in standby_deploy["run"]
-    assert "API_RUN_MIGRATIONS='false'" in standby_deploy["run"]
+    assert '--env "API_COMPOSE_TRANSACTIONAL=${API_STANDBY_COPY_COMPOSE}"' in standby_deploy["run"]
+    assert "API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh" in standby_deploy["run"]
+    assert "--entry deploy_backend_candidate_transaction.sh" in standby_deploy["run"]
+    assert "--env API_DEPLOY_SERVICES=app" in standby_deploy["run"]
+    assert "scripts/ha/safe_deploy_lock.py" in standby_deploy["run"]
+    assert "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py" in standby_deploy["run"]
+    assert '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"' in standby_deploy["run"]
+    assert '--env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled"' in standby_deploy["run"]
+    assert "--env API_RUN_MIGRATIONS=false" in standby_deploy["run"]
     assert "steps.deploy_standby.outcome == 'failure'" in standby_rollback["if"]
-    assert "API_DEPLOY_SERVICES='app'" in standby_rollback["run"]
-    assert "API_ACTIVE_SLOT_FILE='${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled'" in standby_rollback["run"]
+    assert "--env API_DEPLOY_SERVICES=app" in standby_rollback["run"]
+    assert '--env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled"' in standby_rollback["run"]
     assert "API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true" in standby_rollback["run"]
+    assert "scripts/ha/safe_deploy_lock.py" in standby_rollback["run"]
+    assert "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py" in standby_rollback["run"]
+    assert '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"' in standby_rollback["run"]
+    assert "scripts/ha/safe_deploy_lock.py" in rollback["run"]
+    assert "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py" in rollback["run"]
+    assert '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"' in rollback["run"]
     assert primary_prune["continue-on-error"] == "true"
     assert standby_prune["continue-on-error"] == "true"
     workflow_text = "\n".join(
@@ -181,8 +205,15 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
         for path in (".github/workflows/deploy.yml", ".github/workflows/deploy-api-standby.yml")
     )
     assert "GHCR_PAT='${{ secrets.GHCR_PAT }}'" not in workflow_text
-    assert "IFS= read -r GHCR_PAT" in workflow_text
+    assert "--secret-env GHCR_PAT" in workflow_text
     assert ".rollback-candidate" not in workflow_text
+    assert "cat > /tmp/" not in workflow_text
+    assert "/tmp/safe_deploy_lock.py" not in workflow_text
+    assert "/tmp/backend_blue_green_summary" not in workflow_text
+    for step in (primary_deploy, rollback, standby_deploy, standby_rollback):
+        assert "cat > /tmp/" not in step["run"]
+        assert "/tmp/safe_deploy_lock.py" not in step["run"]
+        assert "run_verified_remote_bundle.py" in step["run"]
 
 
 def test_production_compose_requires_backend_release_and_pins_postgres_digest():

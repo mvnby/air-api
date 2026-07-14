@@ -4,12 +4,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: publish-patroni-image
+  group: production-release
   cancel-in-progress: false
 
 permissions:
   actions: read
+  attestations: write
   contents: read
+  id-token: write
   packages: write
 
 env:
@@ -18,68 +20,92 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     outputs:
       image: ${{ steps.image.outputs.reference }}
 
     steps:
-      - name: Require tested main SHA
+      - name: Require exact successful push CI on main
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_REF_NAME}" != "main" ]; then
-            echo "::error::Patroni images may be published only from main"
+          if [ "${GITHUB_REF}" != "refs/heads/main" ] || [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "::error::Patroni images may be published only from refs/heads/main"
             exit 1
           fi
-          count="$(
+          runs="$(
             gh run list \
               --repo "${GITHUB_REPOSITORY}" \
               --workflow ci.yml \
               --branch main \
               --commit "${GITHUB_SHA}" \
+              --event push \
               --status success \
-              --limit 1 \
-              --json databaseId \
-              --jq 'length'
+              --limit 20 \
+              --json conclusion,event,headBranch,headSha,status
           )"
-          if [ "${count}" != "1" ]; then
-            echo "::error::No successful CI run found for ${GITHUB_SHA}"
+          matches="$(
+            jq --arg sha "${GITHUB_SHA}" \
+              '[.[] | select(
+                .headSha == $sha and
+                .headBranch == "main" and
+                .event == "push" and
+                .status == "completed" and
+                .conclusion == "success"
+              )] | length' <<<"${runs}"
+          )"
+          if [ "${matches}" -lt 1 ]; then
+            echo "::error::No exact successful push CI run found for main SHA ${GITHUB_SHA}"
             exit 1
           fi
 
       - name: Checkout exact tested SHA
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact checkout
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [ "${checked_out_sha}" != "${GITHUB_SHA}" ]; then
+            echo "::error::Checked out ${checked_out_sha}, expected ${GITHUB_SHA}"
+            exit 1
+          fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Resolve image tag
-        id: tag
-        run: echo "tag=ghcr.io/${GITHUB_REPOSITORY,,}/patroni:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Resolve candidate tag
+        id: candidate
+        run: |
+          set -euo pipefail
+          image_name="ghcr.io/${GITHUB_REPOSITORY,,}/patroni"
+          echo "image_name=${image_name}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${image_name}:candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build and push Patroni
+      - name: Build and push run-scoped Patroni candidate
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: deploy/ha/patroni/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.tag.outputs.tag }}
+          tags: ${{ steps.candidate.outputs.tag }}
           provenance: mode=max
           sbom: true
 
-      - name: Resolve immutable image
+      - name: Resolve immutable candidate
         id: image
         run: |
           set -euo pipefail
@@ -88,11 +114,127 @@ jobs:
             echo "::error::Invalid Patroni image digest: ${digest:-empty}"
             exit 1
           fi
-          reference="ghcr.io/${GITHUB_REPOSITORY,,}/patroni@${digest}"
-          echo "reference=${reference}" >> "$GITHUB_OUTPUT"
+          reference="${{ steps.candidate.outputs.image_name }}@${digest}"
           {
-            echo "## Patroni Image"
+            echo "digest=${digest}"
+            echo "reference=${reference}"
+            echo "release_tag=${{ steps.candidate.outputs.image_name }}:${GITHUB_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Verify registry manifest, provenance, and SBOM
+        run: |
+          set -euo pipefail
+          python3 scripts/ha/verify_patroni_release_image.py \
+            --image '${{ steps.image.outputs.reference }}' \
+            --expected-source "https://github.com/${GITHUB_REPOSITORY}" \
+            --expected-revision "${GITHUB_SHA}" \
+            --manifest-out patroni-manifest.json \
+            --provenance-out patroni-provenance.json \
+            --sbom-out patroni-sbom.spdx.json
+
+      - name: Create GitHub artifact attestation
+        id: attest
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-name: ${{ steps.candidate.outputs.image_name }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: true
+
+      - name: Verify exact GitHub attestation identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify \
+            "oci://${{ steps.image.outputs.reference }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/publish-patroni-image.yml" \
+            --source-digest "${GITHUB_SHA}" \
+            --source-ref refs/heads/main \
+            --format json > patroni-github-attestation.json
+          jq -e 'length > 0' patroni-github-attestation.json >/dev/null
+
+      - name: Rehearse exact published digest
+        id: rehearsal
+        run: |
+          set -euo pipefail
+          PATRONI_REHEARSAL_TIMEOUT=180 \
+          PATRONI_REHEARSAL_IMAGE='${{ steps.image.outputs.reference }}' \
+            bash scripts/ha/rehearse_patroni_failover.sh | tee patroni_rehearsal.log
+          grep -Fqx \
+            '[patroni-rehearsal][done] exact-image identity, archive helper, failover, data continuity, rejoin, and quorum passed' \
+            patroni_rehearsal.log
+
+      - name: Upload complete pre-promotion release evidence
+        id: evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: patroni-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            patroni-manifest.json
+            patroni-provenance.json
+            patroni-sbom.spdx.json
+            patroni-github-attestation.json
+            patroni_rehearsal.log
+
+      - name: Promote immutable digest to release SHA tag
+        id: promotion
+        run: |
+          set -euo pipefail
+          release_tag='${{ steps.image.outputs.release_tag }}'
+          immutable='${{ steps.image.outputs.reference }}'
+          expected='${{ steps.image.outputs.digest }}'
+
+          manifest_digest() {
+            python3 -c 'import hashlib,sys; print("sha256:" + hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+          }
+
+          if docker buildx imagetools inspect "${release_tag}" --raw > existing-release-manifest.json 2>/dev/null; then
+            existing="$(manifest_digest < existing-release-manifest.json)"
+            if [ "${existing}" != "${expected}" ]; then
+              echo "::error::Release tag ${release_tag} already points to ${existing}, expected ${expected}"
+              exit 1
+            fi
+          else
+            docker buildx imagetools create --tag "${release_tag}" "${immutable}"
+          fi
+
+          docker buildx imagetools inspect "${release_tag}" --raw > release-manifest.json
+          promoted="$(manifest_digest < release-manifest.json)"
+          if [ "${promoted}" != "${expected}" ]; then
+            echo "::error::Promoted tag digest ${promoted} differs from ${expected}"
+            exit 1
+          fi
+
+      - name: Patroni release summary
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          PROMOTION_OUTCOME: ${{ steps.promotion.outcome }}
+          REHEARSAL_OUTCOME: ${{ steps.rehearsal.outcome }}
+        run: |
+          rehearsed=false
+          promoted=false
+          if [ "${REHEARSAL_OUTCOME}" = "success" ]; then
+            rehearsed="${IMAGE_DIGEST}"
+          fi
+          if [ "${PROMOTION_OUTCOME}" = "success" ]; then
+            promoted=true
+          fi
+          {
+            echo "## Patroni Image Release"
+            echo "- run_id: ${GITHUB_RUN_ID}"
+            echo "- run_attempt: ${GITHUB_RUN_ATTEMPT}"
             echo "- tested_sha: ${GITHUB_SHA}"
-            echo "- immutable_image: ${reference}"
+            echo "- candidate_tag: ${{ steps.candidate.outputs.tag }}"
+            echo "- immutable_image: ${{ steps.image.outputs.reference }}"
+            echo "- release_tag: ${{ steps.image.outputs.release_tag }}"
+            echo "- attestation_url: ${{ steps.attest.outputs.attestation-url }}"
+            echo "- exact_digest_rehearsed: ${rehearsed}"
+            echo "- release_tag_promoted: ${promoted}"
             echo "- production_deployed: false"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "${GITHUB_STEP_SUMMARY}"

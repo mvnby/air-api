@@ -120,6 +120,17 @@ def test_installer_never_enables_timers_directly(tmp_path):
     assert "PITR_INSTALL_LOCK_HELD" not in source
 
 
+def test_installer_keeps_blue_green_and_safe_lock_helper_in_one_libexec_generation():
+    source = INSTALLER.read_text(encoding="utf-8")
+    for asset in (
+        "deploy_backend_blue_green.sh",
+        "deploy_backend_blue_green_safety.sh",
+        "prepare_google_oauth_token_dir.sh",
+        "safe_deploy_lock.py",
+    ):
+        assert f"/usr/local/libexec/mvn-pitr/{asset}" in source
+
+
 def test_bootstrap_rejects_same_project_container_from_wrong_compose(tmp_path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -579,3 +590,20 @@ esac
     assert "legacy combined PITR phases are disabled" in result.stderr
     assert not backup_log.exists()
     assert not runtime_log.exists()
+
+
+def test_scrub_node_uses_attested_inherited_deploy_lock_without_tmp_summary():
+    source = BOOTSTRAP.read_text(encoding="utf-8")
+    scrub = source.split("scrub_node() {", 1)[1].split("enable_archive_env() {", 1)[0]
+    assert "API_DEPLOY_LOCK_ALREADY_HELD" not in scrub
+    assert '[[ "${DEPLOY_LOCK_FD}" == "9" ]]' in scrub
+    assert '"${DEPLOY_LOCK_HELPER}" verify' in scrub
+    for variable in (
+        "API_DEPLOY_LOCK_FD",
+        "API_DEPLOY_LOCK_FILE",
+        "API_DEPLOY_LOCK_HELPER",
+        "API_DEPLOY_LOCK_HELPER_SHA256",
+    ):
+        assert variable in scrub
+    assert "API_BLUE_GREEN_SUMMARY_FILE=/dev/null" in scrub
+    assert "/tmp/backend_blue_green_summary" not in scrub

@@ -248,6 +248,40 @@ def test_provision_rejects_unknown_archive_entry_before_quiescing(tmp_path):
     )
 
 
+@pytest.mark.parametrize(
+    ("size", "accepted"),
+    [
+        (provision.WAL_SEGMENT_BYTES, True),
+        (provision.WAL_SEGMENT_BYTES - 1, False),
+        (provision.WAL_SEGMENT_BYTES + 1, False),
+    ],
+)
+def test_provision_validates_promotion_partial_as_exact_wal_segment(
+    tmp_path, size, accepted
+):
+    archive = tmp_path / "archive"
+    archive.mkdir(mode=0o700)
+    partial = archive / "00000007000000000000004B.partial"
+    with partial.open("wb") as stream:
+        stream.truncate(size)
+    partial.chmod(0o600)
+
+    if accepted:
+        provision._provision_archive(
+            archive,
+            archive_uid=os.geteuid(),
+            archive_gid=os.getegid(),
+        )
+        assert partial.stat().st_size == provision.WAL_SEGMENT_BYTES
+    else:
+        with pytest.raises(RuntimeError, match="invalid PITR WAL segment size"):
+            provision._provision_archive(
+                archive,
+                archive_uid=os.geteuid(),
+                archive_gid=os.getegid(),
+            )
+
+
 @pytest.mark.parametrize("state", ["active", "activating", "failed", "unknown"])
 def test_role_agent_must_be_exactly_inactive_before_host_state_mutation(
     tmp_path, state

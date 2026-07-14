@@ -4,7 +4,10 @@ set -euo pipefail
 COMPOSE_FILE="${PATRONI_REHEARSAL_COMPOSE_FILE:-deploy/ha/patroni/rehearsal/docker-compose.yml}"
 KEEP="${PATRONI_REHEARSAL_KEEP:-false}"
 TIMEOUT="${PATRONI_REHEARSAL_TIMEOUT:-120}"
+IMAGE="${PATRONI_REHEARSAL_IMAGE:-}"
+BUILD_LOCAL="${PATRONI_REHEARSAL_BUILD_LOCAL:-false}"
 COMPOSE=(docker compose -f "${COMPOSE_FILE}")
+PULLED_IMAGE_ID=""
 
 log() {
   printf '[patroni-rehearsal][%s] %s\n' "$1" "$2"
@@ -70,6 +73,122 @@ sql() {
     psql -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "${statement}"
 }
 
+prepare_images() {
+  local docker_architecture=""
+  local pulled_platform=""
+  if [[ -n "${IMAGE}" ]]; then
+    [[ "${BUILD_LOCAL}" == "false" ]] || {
+      log error "exact-image and local-build modes are mutually exclusive"
+      return 1
+    }
+    [[ "${IMAGE}" =~ ^ghcr\.io/mvnby/air-api/patroni@sha256:[0-9a-f]{64}$ ]] || {
+      log error "PATRONI_REHEARSAL_IMAGE must be the immutable MVN Patroni image"
+      return 1
+    }
+    export PATRONI_REHEARSAL_PLATFORM=linux/amd64
+    log start "pulling exact linux/amd64 Patroni image ${IMAGE}"
+    docker pull --platform linux/amd64 "${IMAGE}"
+    PULLED_IMAGE_ID="$(docker image inspect --format '{{.Id}}' "${IMAGE}")"
+    pulled_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${IMAGE}")"
+    [[ "${PULLED_IMAGE_ID}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+      log error "could not resolve the pulled image ID"
+      return 1
+    }
+    [[ "${pulled_platform}" == "linux/amd64" ]] || {
+      log error "pulled image platform ${pulled_platform} is not linux/amd64"
+      return 1
+    }
+    "${COMPOSE[@]}" pull etcd1 etcd2 etcd3
+    return 0
+  fi
+
+  [[ "${BUILD_LOCAL}" == "true" ]] || {
+    log error "set an immutable PATRONI_REHEARSAL_IMAGE or explicitly opt into PATRONI_REHEARSAL_BUILD_LOCAL=true"
+    return 1
+  }
+  if [[ -z "${PATRONI_REHEARSAL_PLATFORM:-}" ]]; then
+    docker_architecture="$(docker info --format '{{.Architecture}}')"
+    PATRONI_REHEARSAL_PLATFORM="linux/${docker_architecture}"
+    export PATRONI_REHEARSAL_PLATFORM
+  fi
+  log start "building source-only local Patroni rehearsal image"
+  "${COMPOSE[@]}" build pg1
+}
+
+start_cluster() {
+  if [[ -n "${IMAGE}" ]]; then
+    log start "starting exact image with builds and implicit pulls disabled"
+    "${COMPOSE[@]}" up -d --wait --no-build --pull never
+  else
+    log start "starting source-only local rehearsal cluster"
+    "${COMPOSE[@]}" up -d --wait
+  fi
+}
+
+verify_running_image_ids() {
+  [[ -n "${IMAGE}" ]] || return 0
+  local service container_id running_image_id
+  for service in pg1 pg2; do
+    container_id="$("${COMPOSE[@]}" ps -q "${service}")"
+    [[ -n "${container_id}" ]] || {
+      log error "${service} has no running container"
+      return 1
+    }
+    running_image_id="$(docker inspect --format '{{.Image}}' "${container_id}")"
+    if [[ "${running_image_id}" != "${PULLED_IMAGE_ID}" ]]; then
+      log error "${service} image ID ${running_image_id} differs from pulled ${PULLED_IMAGE_ID}"
+      return 1
+    fi
+  done
+  log check "both Patroni containers use pulled image ID ${PULLED_IMAGE_ID}"
+}
+
+archive_helper_probe() {
+  local service="pg1"
+  "${COMPOSE[@]}" exec -T --user root "${service}" sh -euc '
+    install -d -o postgres -g postgres -m 0700 /postgres-wal-archive /tmp/mvn-wal-source
+    rm -f /postgres-wal-archive/0000000A.history /tmp/mvn-wal-source/0000000A.history
+  '
+  # The single-quoted program is intentionally expanded only inside the container.
+  # shellcheck disable=SC2016
+  "${COMPOSE[@]}" exec -T --user postgres "${service}" sh -euc '
+    umask 077
+    source=/tmp/mvn-wal-source/0000000A.history
+    printf "release-rehearsal\n" > "${source}"
+    mvn-patroni-archive-wal "${source}" 0000000A.history
+    mvn-patroni-archive-wal "${source}" 0000000A.history
+    cmp "${source}" /postgres-wal-archive/0000000A.history
+    printf "collision\n" > "${source}"
+    if mvn-patroni-archive-wal "${source}" 0000000A.history >/tmp/collision.out 2>&1; then
+      echo "archive helper accepted a different-content collision" >&2
+      exit 1
+    fi
+    grep -F "destination differs" /tmp/collision.out >/dev/null
+    printf "release-rehearsal\n" | cmp - /postgres-wal-archive/0000000A.history
+  '
+
+  if grep -F '.partial' deploy/ha/patroni/archive_wal.py >/dev/null; then
+    "${COMPOSE[@]}" exec -T --user root "${service}" sh -euc '
+      rm -f /postgres-wal-archive/00000001000000000000000A.partial \
+        /tmp/mvn-wal-source/00000001000000000000000A.partial
+    '
+    # The single-quoted program is intentionally expanded only inside the container.
+    # shellcheck disable=SC2016
+    "${COMPOSE[@]}" exec -T --user postgres "${service}" sh -euc '
+      umask 077
+      source=/tmp/mvn-wal-source/00000001000000000000000A.partial
+      dd if=/dev/zero of="${source}" bs=1M count=16 status=none
+      mvn-patroni-archive-wal "${source}" "$(basename "${source}")"
+      mvn-patroni-archive-wal "${source}" "$(basename "${source}")"
+      test "$(wc -c < /postgres-wal-archive/$(basename "${source}"))" = 16777216
+    '
+    log check "archive helper accepted an exact 16 MiB .partial WAL idempotently"
+  else
+    log check "archive helper source does not yet advertise .partial support; partial probe skipped"
+  fi
+  log check "archive helper is idempotent and rejects different-content collisions"
+}
+
 [[ "${TIMEOUT}" =~ ^[1-9][0-9]*$ ]] || {
   log error "PATRONI_REHEARSAL_TIMEOUT must be a positive integer"
   exit 1
@@ -79,11 +198,11 @@ command -v docker >/dev/null 2>&1 || {
   exit 1
 }
 
-log start "building isolated Patroni image"
-"${COMPOSE[@]}" build pg1
-log start "starting three etcd members and two PostgreSQL nodes"
-"${COMPOSE[@]}" up -d --wait
+prepare_images
+start_cluster
+verify_running_image_ids
 wait_for_roles 1 1 >/dev/null
+archive_helper_probe
 
 leader="$(leader_service)"
 replica="$(other_service "${leader}")"
@@ -107,7 +226,16 @@ until [[ "$(sql "${leader}" "select sync_state from pg_stat_replication where ap
   }
   sleep 2
 done
-log check "synchronous standby=${replica}"
+deadline=$((SECONDS + TIMEOUT))
+until "${COMPOSE[@]}" exec -T "${replica}" \
+  curl -fsS http://127.0.0.1:8008/sync >/dev/null 2>&1; do
+  (( SECONDS < deadline )) || {
+    log error "Patroni did not publish ${replica} as the failover-safe synchronous standby"
+    exit 1
+  }
+  sleep 2
+done
+log check "DCS-confirmed synchronous standby=${replica}"
 
 log failover "stopping leader ${leader}"
 "${COMPOSE[@]}" stop "${leader}"
@@ -142,4 +270,8 @@ sleep 8
   exit 1
 }
 
-log "done" "automatic failover, data continuity, rejoin, and one-member quorum loss passed"
+if [[ -n "${IMAGE}" ]]; then
+  log "done" "exact-image identity, archive helper, failover, data continuity, rejoin, and quorum passed"
+else
+  log "done" "source-only archive helper, failover, data continuity, rejoin, and quorum passed; release_evidence=false"
+fi

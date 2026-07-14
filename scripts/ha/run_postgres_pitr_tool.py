@@ -20,9 +20,11 @@ BACKEND_IMAGE_RE = re.compile(
 )
 OPERATION_RE = re.compile(r"^[0-9a-f]{32}$")
 SYSTEM_IDENTIFIER_RE = re.compile(r"^[1-9][0-9]{15,19}$")
-WAL_RE = re.compile(
-    r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
+ARCHIVABLE_WAL_RE = re.compile(
+    r"^(?:[0-9A-F]{24}(?:\.partial)?|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
 )
+WAL_SEGMENT_ARCHIVE_RE = re.compile(r"^[0-9A-F]{24}(?:\.partial)?$")
+RESTORABLE_WAL_SEGMENT_RE = re.compile(r"^[0-9A-F]{24}$")
 LSN_RE = re.compile(r"^[0-9A-F]{1,8}/[0-9A-F]{1,8}$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 RESTORE_POINT_RE = re.compile(r"^mvn_pitr_[0-9a-f]{32}$")
@@ -231,7 +233,7 @@ def _validate_archive_directory(path: Path) -> tuple[Path, int, int]:
     for count, entry in enumerate(os.scandir(directory), start=1):
         if count > MAX_ARCHIVE_ENTRIES:
             raise RuntimeError("PITR archive directory has too many entries")
-        if entry.name != ".mvn-pitr-archive.lock" and not WAL_RE.fullmatch(entry.name):
+        if entry.name != ".mvn-pitr-archive.lock" and not ARCHIVABLE_WAL_RE.fullmatch(entry.name):
             raise RuntimeError("PITR archive directory contains an unreviewed entry")
         item = entry.stat(follow_symlinks=False)
         if (
@@ -242,7 +244,7 @@ def _validate_archive_directory(path: Path) -> tuple[Path, int, int]:
             or item.st_nlink != 1
         ):
             raise RuntimeError("PITR archive entry ownership or mode is unsafe")
-        if len(entry.name) == 24 and item.st_size != 16 * 1024 * 1024:
+        if WAL_SEGMENT_ARCHIVE_RE.fullmatch(entry.name) and item.st_size != 16 * 1024 * 1024:
             raise RuntimeError("PITR archive WAL segment size is invalid")
         if entry.name != ".mvn-pitr-archive.lock" and item.st_size <= 0:
             raise RuntimeError("PITR archive entry is empty")
@@ -399,7 +401,7 @@ def _tool_command(
             args.expected_system_identifier,
         ]
         if args.expected_wal:
-            if not WAL_RE.fullmatch(args.expected_wal):
+            if not RESTORABLE_WAL_SEGMENT_RE.fullmatch(args.expected_wal):
                 raise RuntimeError("expected WAL name is invalid")
             tool_args += ["--expected-wal", args.expected_wal]
     else:

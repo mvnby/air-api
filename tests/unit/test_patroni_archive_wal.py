@@ -66,6 +66,56 @@ def test_archives_canonical_16_mib_segment_with_bounded_latency(tmp_path):
     assert time.monotonic() - started < 10
 
 
+def test_archives_promotion_partial_immutably_and_recovers_its_temporary(tmp_path):
+    source_root, archive_root = _directories(tmp_path)
+    name = "00000007000000000000004B.partial"
+    source = source_root / name
+    with source.open("wb") as stream:
+        stream.truncate(archive.WAL_SEGMENT_BYTES)
+    source.chmod(0o600)
+    stale = archive_root / f".{name}.tmp.123.{'a' * 32}"
+    stale.write_bytes(b"stale")
+    stale.chmod(0o600)
+
+    archive.archive_wal(source, name, archive_root=archive_root)
+    archive.archive_wal(source, name, archive_root=archive_root)
+
+    assert (archive_root / name).stat().st_size == archive.WAL_SEGMENT_BYTES
+    assert not stale.exists()
+
+
+@pytest.mark.parametrize(
+    "size",
+    [archive.WAL_SEGMENT_BYTES - 1, archive.WAL_SEGMENT_BYTES + 1],
+)
+def test_rejects_noncanonical_partial_segment_size(tmp_path, size):
+    source_root, archive_root = _directories(tmp_path)
+    name = "00000007000000000000004B.partial"
+    source = source_root / name
+    with source.open("wb") as stream:
+        stream.truncate(size)
+    source.chmod(0o600)
+
+    with pytest.raises(RuntimeError, match="segment size is not canonical"):
+        archive.archive_wal(source, name, archive_root=archive_root)
+
+
+def test_partial_collision_refuses_different_same_size_content(tmp_path):
+    source_root, archive_root = _directories(tmp_path)
+    name = "00000007000000000000004B.partial"
+    source = source_root / name
+    destination = archive_root / name
+    for path in (source, destination):
+        with path.open("wb") as stream:
+            stream.truncate(archive.WAL_SEGMENT_BYTES)
+        path.chmod(0o600)
+    with destination.open("r+b") as stream:
+        stream.write(b"different")
+
+    with pytest.raises(RuntimeError, match="destination differs"):
+        archive.archive_wal(source, name, archive_root=archive_root)
+
+
 def test_rejects_noncanonical_segment_size(tmp_path):
     source_root, archive_root = _directories(tmp_path)
     name = "00000001000000000000000A"

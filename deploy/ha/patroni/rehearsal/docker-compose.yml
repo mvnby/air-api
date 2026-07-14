@@ -13,7 +13,8 @@ x-etcd: &etcd
     retries: 20
 
 x-patroni: &patroni
-  image: mvn-patroni-rehearsal:local
+  image: ${PATRONI_REHEARSAL_IMAGE:-mvn-patroni-rehearsal:local}
+  platform: ${PATRONI_REHEARSAL_PLATFORM:-linux/amd64}
   build:
     context: ../../../..
     dockerfile: deploy/ha/patroni/Dockerfile
@@ -106,7 +107,9 @@ services:
     ports:
       - 127.0.0.1:55431:5432
       - 127.0.0.1:18008:8008
-    volumes: [pg1_data:/var/lib/postgresql/data]
+    volumes:
+      - pg1_data:/var/lib/postgresql/data
+      - pg1_archive:/postgres-wal-archive
 
   pg2:
     <<: *patroni
@@ -118,7 +121,9 @@ services:
     ports:
       - 127.0.0.1:55432:5432
       - 127.0.0.1:18009:8008
-    volumes: [pg2_data:/var/lib/postgresql/data]
+    volumes:
+      - pg2_data:/var/lib/postgresql/data
+      - pg2_archive:/postgres-wal-archive
 
 networks:
   ha:
@@ -130,3 +135,5 @@ volumes:
   etcd3_data:
   pg1_data:
   pg2_data:
+  pg1_archive:
+  pg2_archive:

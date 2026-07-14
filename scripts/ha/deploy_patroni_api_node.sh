@@ -13,7 +13,9 @@ BLUE_GREEN_SCRIPT="${API_BLUE_GREEN_SCRIPT:-/tmp/deploy_backend_blue_green.sh}"
 PROXY_MODE="${API_PROXY_MODE:-host_nginx}"
 PROXY_SERVICE="${API_PROXY_SERVICE:-api-proxy}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
-DEPLOY_LOCK_ALREADY_HELD="${API_DEPLOY_LOCK_ALREADY_HELD:-false}"
+DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
+DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
+DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 MAINTENANCE_MARKER="${API_MAINTENANCE_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
@@ -29,6 +31,11 @@ TMP_DIR=""
 log() {
   printf '[patroni-node-deploy][%s] %s\n' "$1" "$2"
 }
+
+if [[ "${API_DEPLOY_LOCK_ALREADY_HELD:-false}" == "true" && -z "${DEPLOY_LOCK_FD}" ]]; then
+  log error "legacy deploy-lock boolean cannot replace an inherited descriptor"
+  exit 1
+fi
 
 local_role() {
   curl -fsS --max-time 5 "${PATRONI_URL}" | python3 -c '
@@ -143,7 +150,7 @@ rollback_standby() {
   exit "${exit_code}"
 }
 
-for command in docker curl python3 flock; do
+for command in docker curl python3; do
   command -v "${command}" >/dev/null 2>&1 || {
     log error "required command is missing: ${command}"
     exit 1
@@ -171,13 +178,36 @@ done
 }
 
 cd "${PROJECT_DIR}"
-if [[ "${DEPLOY_LOCK_ALREADY_HELD}" != "true" ]]; then
-  exec 9>"${DEPLOY_LOCK_FILE}"
-  flock -n 9 || {
-    log error "another deployment holds ${DEPLOY_LOCK_FILE}"
-    exit 1
-  }
+[[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  log error "safe deployment lock helper digest is missing"; exit 1;
+}
+python3 - "${DEPLOY_LOCK_HELPER}" "${DEPLOY_LOCK_HELPER_SHA256}" <<'PY'
+import hashlib, os, stat, sys
+path, expected = sys.argv[1:]
+before = os.lstat(path)
+if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
+        or before.st_uid != os.geteuid() or before.st_nlink != 1
+        or before.st_mode & 0o022):
+    raise SystemExit("safe deployment lock helper metadata is unsafe")
+fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(fd); data = b""
+    while True:
+        chunk = os.read(fd, 131072)
+        if not chunk: break
+        data += chunk
+finally: os.close(fd)
+if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        or hashlib.sha256(data).hexdigest() != expected):
+    raise SystemExit("safe deployment lock helper source is unreviewed")
+PY
+if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
+  exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@"
 fi
+[[ "${DEPLOY_LOCK_FD}" == "9" && "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  log error "deploy requires the exact inherited deployment lock fd"; exit 1;
+}
+python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
 require_expected_role
 [[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
   log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
@@ -192,7 +222,9 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
     exit 1
   }
   log primary "deploying through the inactive API slot"
-  API_DEPLOY_LOCK_ALREADY_HELD=true \
+  API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+    API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
+    API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
     API_RUN_MIGRATIONS=false \
     API_RUN_DEFAULTS=false \
     bash "${BLUE_GREEN_SCRIPT}"

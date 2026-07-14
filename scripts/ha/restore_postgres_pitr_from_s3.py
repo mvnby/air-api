@@ -115,7 +115,7 @@ recovery_config = _load_support_module(
 BasebackupManifest = artifact_security.BasebackupManifest
 WalObject = wal_lineage.WalObject
 WalSelection = wal_lineage.WalSelection
-WAL_NAME_RE = wal_lineage.WAL_NAME_RE
+WAL_RESTORABLE_RE = wal_lineage.WAL_RESTORABLE_RE
 WAL_SEGMENT_RE = wal_lineage.WAL_SEGMENT_RE
 RESTORE_POINT_RE = artifact_security.RESTORE_POINT_RE
 SHA256_RE = artifact_security.SHA256_RE
@@ -594,7 +594,7 @@ def command_prepare(args: argparse.Namespace) -> int:
 
 def command_fetch_wal(args: argparse.Namespace) -> int:
     wal_name = str(args.wal_name or "").strip()
-    if not WAL_NAME_RE.fullmatch(wal_name):
+    if not WAL_RESTORABLE_RE.fullmatch(wal_name):
         raise SystemExit(f"Invalid WAL filename: {wal_name}")
     destination = Path(args.destination)
     config = load_config()

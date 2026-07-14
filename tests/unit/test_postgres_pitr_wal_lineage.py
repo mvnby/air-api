@@ -23,6 +23,13 @@ def _segment(timeline: int, position: int) -> lineage.WalObject:
     return lineage.WalObject(f"segment-{timeline}-{position}", name, SEGMENT_SIZE)
 
 
+def _partial(
+    timeline: int, position: int, *, size: int = SEGMENT_SIZE
+) -> lineage.WalObject:
+    name = _name(timeline, position) + ".partial"
+    return lineage.WalObject(f"partial-{timeline}-{position}", name, size)
+
+
 def _history(timeline: int, payload: bytes) -> lineage.WalObject:
     return lineage.WalObject(
         f"history-{timeline}", f"{timeline:08X}.history", len(payload)
@@ -63,7 +70,6 @@ def test_selects_strict_cross_timeline_chain_after_two_promotions():
         "segment-1-2",
         "segment-3-3",
         "segment-3-4",
-        "segment-3-5",
         "segment-5-5",
         "segment-5-6",
     ]
@@ -127,6 +133,85 @@ def test_accepts_basebackup_lsn_at_exact_descendant_timeline_birth():
     )
 
     assert selected.segments[0].filename == _name(3, 3)
+
+
+def test_mid_segment_switch_assigns_switch_segment_only_to_child_timeline():
+    history = b"1\t0/580\tpromoted mid-segment\n"
+    objects = [
+        _history(3, history),
+        *(_segment(1, position) for position in (3, 4)),
+        _segment(3, 5),
+    ]
+
+    selected = lineage.select_wal_objects(
+        objects,
+        start_wal_name=_name(1, 3),
+        start_lsn="0/300",
+        required_end_wal=_name(3, 5),
+        segment_size_bytes=SEGMENT_SIZE,
+        history_loader=lambda _item: history,
+    )
+
+    assert [item.filename for item in selected.segments] == [
+        _name(1, 3),
+        _name(1, 4),
+        _name(3, 5),
+    ]
+
+
+def test_live_shaped_partial_is_counted_but_child_full_segment_is_selected():
+    history_7 = b"1\t0/4000\tpromoted to timeline 7\n"
+    history_8 = history_7 + b"7\t0/4B80\tpromoted to timeline 8\n"
+    payloads = {
+        "00000007.history": history_7,
+        "00000008.history": history_8,
+    }
+    objects = [
+        _history(7, history_7),
+        _history(8, history_8),
+        _partial(7, 75),
+        _segment(8, 75),
+    ]
+
+    selected = lineage.select_wal_objects(
+        objects,
+        start_wal_name=_name(7, 75),
+        start_lsn="0/4B40",
+        required_end_wal=_name(8, 75),
+        segment_size_bytes=SEGMENT_SIZE,
+        history_loader=lambda item: payloads[item.filename],
+    )
+
+    assert [item.filename for item in selected.segments] == [_name(8, 75)]
+    assert _partial(7, 75).filename not in [
+        item.filename for item in selected.objects
+    ]
+
+
+def test_rejects_basebackup_start_after_parent_switchpoint():
+    history = b"1\t0/580\tpromoted mid-segment\n"
+
+    with pytest.raises(SystemExit, match="after its timeline switchpoint"):
+        lineage.select_wal_objects(
+            [_history(3, history), _segment(3, 5)],
+            start_wal_name=_name(1, 5),
+            start_lsn="0/581",
+            required_end_wal=_name(3, 5),
+            segment_size_bytes=SEGMENT_SIZE,
+            history_loader=lambda _item: history,
+        )
+
+
+@pytest.mark.parametrize("size", [SEGMENT_SIZE - 1, SEGMENT_SIZE + 1])
+def test_rejects_noncanonical_partial_size_even_outside_selected_timeline(size):
+    with pytest.raises(SystemExit, match="partial WAL segment has an invalid size"):
+        lineage.select_wal_objects(
+            [_segment(1, 1), _partial(7, 75, size=size)],
+            start_wal_name=_name(1, 1),
+            start_lsn="0/100",
+            required_end_wal=_name(1, 1),
+            segment_size_bytes=SEGMENT_SIZE,
+        )
 
 
 def test_rejects_gap_on_intermediate_timeline():
@@ -206,4 +291,27 @@ def test_rejects_history_payload_that_differs_from_listed_size():
             required_end_wal=_name(3, 3),
             segment_size_bytes=SEGMENT_SIZE,
             history_loader=lambda _item: history,
+        )
+
+
+def test_inventory_recognizes_partial_and_counts_it_toward_limit():
+    filename = _name(7, 75) + ".partial"
+    key = f"pitr/wal/{filename[:8]}/{filename}"
+
+    class Paginator:
+        def paginate(self, **_kwargs):
+            return [{"Contents": [{"Key": key, "Size": SEGMENT_SIZE}]}]
+
+    class Client:
+        def get_paginator(self, _name):
+            return Paginator()
+
+    listed = lineage.list_wal_objects(
+        Client(), bucket="private", prefix="pitr/wal/", max_objects=1
+    )
+    assert listed == [lineage.WalObject(key, filename, SEGMENT_SIZE)]
+
+    with pytest.raises(SystemExit, match="Too many PITR WAL objects"):
+        lineage.list_wal_objects(
+            Client(), bucket="private", prefix="pitr/wal/", max_objects=0
         )

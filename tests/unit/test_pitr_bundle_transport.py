@@ -13,7 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.ha import pitr_bundle_executor_source, pitr_bundle_transport as bundle
+from scripts.ha import pitr_bundle_executor_prelude, pitr_bundle_executor_source
+from scripts.ha import pitr_bundle_transport as bundle
 from scripts.ha import pitr_remote_execution
 from scripts.ha.pitr_pinned_ssh import PATRONI_NODES, PinnedSshContext
 
@@ -97,6 +98,7 @@ def test_embedded_release_executor_is_valid_isolated_python():
     )
     assert len(Path(bundle.__file__).read_text().splitlines()) < 700
     assert len(Path(pitr_bundle_executor_source.__file__).read_text().splitlines()) < 700
+    assert len(Path(pitr_bundle_executor_prelude.__file__).read_text().splitlines()) < 700
     ast.parse(bundle.REMOTE_RELEASE_BUNDLE_EXECUTOR)
     result = subprocess.run(
         [sys.executable, "-I", "-c", bundle.REMOTE_RELEASE_BUNDLE_EXECUTOR],
@@ -231,6 +233,61 @@ def test_apply_resumes_mixed_old_new_generation_and_finalize(tmp_path):
     assert Path(namespace["MAINTENANCE_MARKER"]).read_text() == TXID + "\n"
     assert namespace["execute"]("finalize", TXID, str(project), compose.name, b"") == "already-finalized"
     assert not Path(namespace["MAINTENANCE_MARKER"]).exists()
+
+
+def test_apply_accepts_only_exact_previous_manifest_missing_new_safe_lock_helper(tmp_path):
+    namespace, project, compose, tool = _remote_namespace(tmp_path)
+    _write(compose, b"old-compose", 0o644)
+    _write(tool, b"old-tool", 0o755)
+    old_payload, _ = _payload(namespace, project, compose, tool)
+    old_txid = "1" * 32
+    assert namespace["execute"](
+        "apply", old_txid, str(project), compose.name, old_payload
+    ) == "applied"
+    assert namespace["execute"](
+        "finalize", old_txid, str(project), compose.name, b""
+    ) == "finalized"
+
+    helper = tool.parent / "safe_deploy_lock.py"
+    helper_content = b"new-helper"
+    namespace["BASE_MODES"][str(helper)] = 0o755
+    namespace["PREVIOUS_RELEASE_ADDITIONS"] = {str(helper)}
+    value = json.loads(old_payload)
+    value["files"].append(
+        {
+            "content": base64.b64encode(helper_content).decode("ascii"),
+            "mode": 0o755,
+            "path": str(helper),
+            "sha256": hashlib.sha256(helper_content).hexdigest(),
+        }
+    )
+    value["files"].sort(key=lambda item: item["path"])
+    body = {
+        "files": value["files"],
+        "project_dir": str(project),
+        "version": 1,
+    }
+    value["release_sha256"] = hashlib.sha256(
+        namespace["canonical"](body)
+    ).hexdigest()
+    new_payload = namespace["canonical"](value)
+
+    assert namespace["execute"](
+        "apply", "2" * 32, str(project), compose.name, new_payload
+    ) == "applied"
+    assert helper.read_bytes() == helper_content
+
+    manifest = json.loads(Path(namespace["RELEASE_MANIFEST"]).read_text())
+    manifest["files"].pop()
+    Path(namespace["RELEASE_MANIFEST"]).write_bytes(
+        namespace["canonical"](manifest) + b"\n"
+    )
+    with pytest.raises(RuntimeError, match="path set is incomplete"):
+        namespace["read_release_manifest"](
+            namespace["expected_modes"](str(project), compose.name),
+            str(project),
+            allow_previous=True,
+        )
 
 
 def test_finalized_transaction_rejects_changed_release_and_manifest_drift(tmp_path):
@@ -521,11 +578,27 @@ def test_installer_and_blue_green_siblings_are_attested():
         "/usr/local/libexec/mvn-pitr/run_postgres_pitr_install_locked.py",
         "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh",
         "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh",
+        "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
         "/usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh",
     }
     assert expected <= set(manifest)
+    helper_path = "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py"
+    helper_source = Path(pitr_remote_execution.REPO_ROOT) / "scripts/ha/safe_deploy_lock.py"
+    assert manifest[helper_path] == hashlib.sha256(helper_source.read_bytes()).hexdigest()
+    release = json.loads(
+        pitr_remote_execution.build_host_release_bundle(PATRONI_NODES[0])
+    )
+    helper_entry = next(item for item in release["files"] if item["path"] == helper_path)
+    assert helper_entry["mode"] == 0o755
+    assert helper_entry["sha256"] == manifest[helper_path]
     for path in expected:
         assert f'"{path}": 0o755' in pitr_remote_execution.REMOTE_ASSET_ATTESTATION
+    wrapper = pitr_remote_execution.LOCKED_MAINTENANCE_WRAPPER
+    assert '"API_DEPLOY_LOCK_FD": "9"' in wrapper
+    assert '"API_DEPLOY_LOCK_FILE": os.path.join(project_dir, ".deploy.lock")' in wrapper
+    assert '"API_DEPLOY_LOCK_HELPER": "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py"' in wrapper
+    assert "os.dup2(deploy_fd, 9, inheritable=True)" in wrapper
+    assert "pass_fds = (deploy_fd, secret_fd)" in wrapper
     execute_source = bundle.REMOTE_RELEASE_BUNDLE_EXECUTOR.split("def execute(", 1)[1]
     assert execute_source.index("global_fd = open_lock") < execute_source.index(
         "deploy_fd = open_lock"

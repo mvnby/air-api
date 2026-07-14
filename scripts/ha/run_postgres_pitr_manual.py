@@ -67,6 +67,7 @@ BASE_RELEASE_MODES = {
     "/usr/local/libexec/mvn-pitr/run_postgres_pitr_install_locked.py": 0o755,
     "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh": 0o755,
     "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh": 0o755,
+    "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py": 0o755,
     "/usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh": 0o755,
     "/etc/systemd/system/mvn-postgres-wal-upload.service": 0o644,
     "/etc/systemd/system/mvn-postgres-wal-upload.timer": 0o644,

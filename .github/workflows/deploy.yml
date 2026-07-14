@@ -99,7 +99,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ needs.release-gate.outputs.deploy_sha }}
           fetch-depth: 0
@@ -201,19 +201,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ needs.release-gate.outputs.deploy_sha }}
 
       - name: Log in to the Container registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '20'
 
@@ -232,7 +232,7 @@ jobs:
       - name: Build and push Backend (App + Bot) [Attempt 1]
         id: backend_push_1
         continue-on-error: true
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           push: true
@@ -242,7 +242,7 @@ jobs:
         id: backend_push_2
         if: steps.backend_push_1.outcome == 'failure'
         continue-on-error: true
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           push: true
@@ -251,7 +251,7 @@ jobs:
       - name: Build and push Backend (App + Bot) [Attempt 3]
         id: backend_push_3
         if: steps.backend_push_1.outcome == 'failure' && steps.backend_push_2.outcome == 'failure'
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           push: true
@@ -316,6 +316,7 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H ${{ secrets.SSH_HOST_API }} >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
           SSH_OPTS=(
             -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
@@ -359,45 +360,48 @@ jobs:
             candidate_file="${API_COMPOSE_FILE}.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           fi
           cat scripts/ha/mvn-primary-status.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "install -m 0755 /dev/stdin /usr/local/sbin/mvn-primary-status"
-          for script in deploy.sh deploy_backend_blue_green.sh deploy_backend_blue_green_safety.sh \
-            prepare_google_oauth_token_dir.sh post_deploy_smoke_check.sh \
-            compose_candidate_transaction.sh reconcile_backend_compose_runtime.sh \
-            deploy_backend_candidate_transaction.sh; do
-            # shellcheck disable=SC2029
-            cat "scripts/${script}" | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/${script}"
-          done
-          # shellcheck disable=SC2029
-          printf '%s\n' "${GHCR_PAT}" | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-            set -euo pipefail; \
-            chmod 0755 /tmp/deploy.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh /tmp/post_deploy_smoke_check.sh /tmp/compose_candidate_transaction.sh /tmp/reconcile_backend_compose_runtime.sh /tmp/deploy_backend_candidate_transaction.sh && \
-            IFS= read -r GHCR_PAT && export GHCR_PAT && \
-            GITHUB_ACTOR='${{ github.actor }}' \
-            API_PROJECT_DIR='${API_PROJECT_DIR}' \
-            API_CANONICAL_COMPOSE_FILE='${API_PROJECT_DIR}/${API_COMPOSE_FILE}' \
-            API_CANDIDATE_COMPOSE_FILE='${API_PROJECT_DIR}/${candidate_file}' \
-            API_COMPOSE_TRANSACTIONAL='${API_COPY_COMPOSE}' \
-            API_DEPLOY_STRATEGY='${API_DEPLOY_STRATEGY}' \
-            API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
-            API_MIGRATION_SERVICE='${API_MIGRATION_SERVICE}' \
-            API_RUN_MIGRATIONS='${API_RUN_MIGRATIONS}' \
-            API_RUN_DEFAULTS='${API_RUN_DEFAULTS}' \
-            API_BLUE_GREEN_SCRIPT='/tmp/deploy_backend_blue_green.sh' \
-            API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh' \
-            API_IN_PLACE_DEPLOY_SCRIPT='/tmp/deploy.sh' \
-            API_SMOKE_SCRIPT='/tmp/post_deploy_smoke_check.sh' \
-            API_RECONCILE_SCRIPT='/tmp/reconcile_backend_compose_runtime.sh' \
-            COMPOSE_CANDIDATE_TRANSACTION_SCRIPT='/tmp/compose_candidate_transaction.sh' \
-            GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT='/tmp/prepare_google_oauth_token_dir.sh' \
-            BASE_URL='${API_BASE_URL}' \
-            READY_URL='${API_READY_URL}' \
-            COMPOSE_SERVICE_CHECKS='${API_SMOKE_COMPOSE_SERVICE_CHECKS}' \
-            BOT_EXPECT_ENABLED='${API_BOT_EXPECT_ENABLED}' \
-            BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
-            API_BLUE_GREEN_SUMMARY_FILE='/tmp/backend_blue_green_summary.txt' \
-            SMOKE_SUMMARY_FILE='/tmp/smoke_summary.txt' \
-            bash /tmp/deploy_backend_candidate_transaction.sh; \
-            cat /tmp/backend_blue_green_summary.txt 2>/dev/null || true; \
-            cat /tmp/smoke_summary.txt" 2>&1 | tee backend_deploy.log
+          bundle_sources=(
+            scripts/deploy.sh scripts/deploy_backend_blue_green.sh
+            scripts/deploy_backend_blue_green_safety.sh
+            scripts/prepare_google_oauth_token_dir.sh
+            scripts/post_deploy_smoke_check.sh scripts/compose_candidate_transaction.sh
+            scripts/reconcile_backend_compose_runtime.sh
+            scripts/deploy_backend_candidate_transaction.sh
+            scripts/ha/safe_deploy_lock.py
+          )
+          lock_helper_sha256="$(sha256sum scripts/ha/safe_deploy_lock.py | awk '{print $1}')"
+          python3 scripts/ha/run_verified_remote_bundle.py \
+            --remote '${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}' \
+            --identity-file ~/.ssh/deploy_key --known-hosts-file ~/.ssh/known_hosts \
+            --prefix mvn-backend-deploy --entry deploy_backend_candidate_transaction.sh \
+            --secret-env GHCR_PAT --print-required smoke_summary.txt \
+            --print-optional backend_blue_green_summary.txt \
+            --env "GITHUB_ACTOR=${{ github.actor }}" \
+            --env "API_PROJECT_DIR=${API_PROJECT_DIR}" \
+            --env "API_CANONICAL_COMPOSE_FILE=${API_PROJECT_DIR}/${API_COMPOSE_FILE}" \
+            --env "API_CANDIDATE_COMPOSE_FILE=${API_PROJECT_DIR}/${candidate_file}" \
+            --env "API_COMPOSE_TRANSACTIONAL=${API_COPY_COMPOSE}" \
+            --env "API_DEPLOY_STRATEGY=${API_DEPLOY_STRATEGY}" \
+            --env "API_DEPLOY_SERVICES=${API_DEPLOY_SERVICES}" \
+            --env "API_MIGRATION_SERVICE=${API_MIGRATION_SERVICE}" \
+            --env "API_RUN_MIGRATIONS=${API_RUN_MIGRATIONS}" \
+            --env "API_RUN_DEFAULTS=${API_RUN_DEFAULTS}" \
+            --env API_BLUE_GREEN_SCRIPT=__MVN_BUNDLE__/deploy_backend_blue_green.sh \
+            --env API_BLUE_GREEN_SAFETY_HELPER=__MVN_BUNDLE__/deploy_backend_blue_green_safety.sh \
+            --env API_IN_PLACE_DEPLOY_SCRIPT=__MVN_BUNDLE__/deploy.sh \
+            --env API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh \
+            --env API_RECONCILE_SCRIPT=__MVN_BUNDLE__/reconcile_backend_compose_runtime.sh \
+            --env API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py \
+            --env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}" \
+            --env COMPOSE_CANDIDATE_TRANSACTION_SCRIPT=__MVN_BUNDLE__/compose_candidate_transaction.sh \
+            --env GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=__MVN_BUNDLE__/prepare_google_oauth_token_dir.sh \
+            --env "BASE_URL=${API_BASE_URL}" --env "READY_URL=${API_READY_URL}" \
+            --env "COMPOSE_SERVICE_CHECKS=${API_SMOKE_COMPOSE_SERVICE_CHECKS}" \
+            --env "BOT_EXPECT_ENABLED=${API_BOT_EXPECT_ENABLED}" \
+            --env 'BACKEND_IMAGE=${{ steps.resolve_backend_image.outputs.reference }}' \
+            --env API_BLUE_GREEN_SUMMARY_FILE=__MVN_BUNDLE__/backend_blue_green_summary.txt \
+            --env SMOKE_SUMMARY_FILE=__MVN_BUNDLE__/smoke_summary.txt \
+            "${bundle_sources[@]}" 2>&1 | tee backend_deploy.log
 
       - name: Optional Post-Deploy Backend Ops
         id: post_deploy_ops
@@ -414,10 +418,6 @@ jobs:
           DRY_RUN: ${{ secrets.DRY_RUN }}
         run: |
           set -euo pipefail
-          SSH_OPTS=(
-            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v
-          )
           : "${RUN_POST_DEPLOY_OPS:=true}"
           : "${OPS_MODE:=report_only}"
           : "${RUN_NORMALIZE_LEGACY:=false}"
@@ -427,25 +427,23 @@ jobs:
           : "${RUN_CLEANUP_LEGACY_LINKS:=false}"
           : "${DRY_RUN:=true}"
 
-          cat scripts/ops_post_deploy.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/ops_post_deploy.sh"
-
-          # shellcheck disable=SC2029
-          ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-            chmod +x /tmp/ops_post_deploy.sh && \
-            RUN_POST_DEPLOY_OPS='${RUN_POST_DEPLOY_OPS}' \
-            OPS_MODE='${OPS_MODE}' \
-            RUN_NORMALIZE_LEGACY='${RUN_NORMALIZE_LEGACY}' \
-            RUN_BACKFILL_BRAND_SERIES='${RUN_BACKFILL_BRAND_SERIES}' \
-            RUN_SAFE_BRAND_CLEANUP='${RUN_SAFE_BRAND_CLEANUP}' \
-            HIDE_LEGACY_GROUPS='${HIDE_LEGACY_GROUPS}' \
-            RUN_REPORT_LEGACY_LINKS='${RUN_REPORT_LEGACY_LINKS}' \
-            RUN_CLEANUP_LEGACY_LINKS='${RUN_CLEANUP_LEGACY_LINKS}' \
-            DRY_RUN='${DRY_RUN}' \
-            API_PROJECT_DIR='${API_PROJECT_DIR}' \
-            API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
-            BACKEND_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
-            OPS_SUMMARY_FILE='/tmp/ops_summary.txt' \
-            bash /tmp/ops_post_deploy.sh && cat /tmp/ops_summary.txt" | tee backend_ops.log
+          python3 scripts/ha/run_verified_remote_bundle.py \
+            --remote '${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}' \
+            --identity-file ~/.ssh/deploy_key --known-hosts-file ~/.ssh/known_hosts \
+            --prefix mvn-backend-ops --entry ops_post_deploy.sh \
+            --print-required ops_summary.txt \
+            --env "RUN_POST_DEPLOY_OPS=${RUN_POST_DEPLOY_OPS}" \
+            --env "OPS_MODE=${OPS_MODE}" --env "RUN_NORMALIZE_LEGACY=${RUN_NORMALIZE_LEGACY}" \
+            --env "RUN_BACKFILL_BRAND_SERIES=${RUN_BACKFILL_BRAND_SERIES}" \
+            --env "RUN_SAFE_BRAND_CLEANUP=${RUN_SAFE_BRAND_CLEANUP}" \
+            --env "HIDE_LEGACY_GROUPS=${HIDE_LEGACY_GROUPS}" \
+            --env "RUN_REPORT_LEGACY_LINKS=${RUN_REPORT_LEGACY_LINKS}" \
+            --env "RUN_CLEANUP_LEGACY_LINKS=${RUN_CLEANUP_LEGACY_LINKS}" \
+            --env "DRY_RUN=${DRY_RUN}" --env "API_PROJECT_DIR=${API_PROJECT_DIR}" \
+            --env "API_COMPOSE_FILE=${API_COMPOSE_FILE}" \
+            --env 'BACKEND_IMAGE=${{ steps.resolve_backend_image.outputs.reference }}' \
+            --env OPS_SUMMARY_FILE=__MVN_BUNDLE__/ops_summary.txt \
+            scripts/ops_post_deploy.sh | tee backend_ops.log
 
       - name: Post-Deploy Smoke Check
         id: post_deploy_smoke
@@ -462,47 +460,47 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           set -euo pipefail
-          SSH_OPTS=(
-            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3
+          bundle_sources=(
+            scripts/deploy_backend_blue_green.sh
+            scripts/deploy_backend_blue_green_safety.sh
+            scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh
+            scripts/ha/safe_deploy_lock.py
           )
-          cat scripts/deploy_backend_blue_green.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green.sh"
-          cat scripts/deploy_backend_blue_green_safety.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/deploy_backend_blue_green_safety.sh"
-          cat scripts/prepare_google_oauth_token_dir.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/prepare_google_oauth_token_dir.sh"
-          cat scripts/rollback_backend.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/rollback_backend.sh"
-          # shellcheck disable=SC2029
-          printf '%s\n' "${GHCR_PAT}" | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-            chmod +x /tmp/rollback_backend.sh /tmp/deploy_backend_blue_green.sh /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh && \
-            IFS= read -r GHCR_PAT && export GHCR_PAT && \
-            GITHUB_ACTOR='${{ github.actor }}' \
-            CONFIRM_ROLLBACK=true \
-            API_PROJECT_DIR='${API_PROJECT_DIR}' \
-            API_COMPOSE_FILE='${API_COMPOSE_FILE}' \
-            API_DEPLOY_SERVICES='${API_DEPLOY_SERVICES}' \
-            API_READY_URL='${API_READY_URL}' \
-            API_BLUE_GREEN_SAFETY_HELPER='/tmp/deploy_backend_blue_green_safety.sh' \
-            GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT='/tmp/prepare_google_oauth_token_dir.sh' \
-            API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true \
-            EXPECTED_CURRENT_IMAGE='${{ steps.resolve_backend_image.outputs.reference }}' \
-            bash /tmp/rollback_backend.sh" | tee backend_rollback.log
+          lock_helper_sha256="$(sha256sum scripts/ha/safe_deploy_lock.py | awk '{print $1}')"
+          python3 scripts/ha/run_verified_remote_bundle.py \
+            --remote '${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}' \
+            --identity-file ~/.ssh/deploy_key --known-hosts-file ~/.ssh/known_hosts \
+            --prefix mvn-backend-rollback --entry rollback_backend.sh \
+            --secret-env GHCR_PAT --env "GITHUB_ACTOR=${{ github.actor }}" \
+            --env CONFIRM_ROLLBACK=true --env "API_PROJECT_DIR=${API_PROJECT_DIR}" \
+            --env "API_COMPOSE_FILE=${API_COMPOSE_FILE}" \
+            --env "API_DEPLOY_SERVICES=${API_DEPLOY_SERVICES}" \
+            --env "API_READY_URL=${API_READY_URL}" \
+            --env API_BLUE_GREEN_SCRIPT=__MVN_BUNDLE__/deploy_backend_blue_green.sh \
+            --env API_BLUE_GREEN_SAFETY_HELPER=__MVN_BUNDLE__/deploy_backend_blue_green_safety.sh \
+            --env API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py \
+            --env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}" \
+            --env GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT=__MVN_BUNDLE__/prepare_google_oauth_token_dir.sh \
+            --env API_BLUE_GREEN_SUMMARY_FILE=__MVN_BUNDLE__/rollback_blue_green_summary.txt \
+            --env API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true \
+            --env 'EXPECTED_CURRENT_IMAGE=${{ steps.resolve_backend_image.outputs.reference }}' \
+            "${bundle_sources[@]}" | tee backend_rollback.log
 
       - name: Prune Unused Backend Docker Images
         id: prune_backend_images
         continue-on-error: true
         run: |
           set -euo pipefail
-          SSH_OPTS=(
-            -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes
-            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -v
-          )
-          cat scripts/prune_unused_docker_images.sh | ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "cat > /tmp/prune_unused_docker_images.sh"
-          ssh "${SSH_OPTS[@]}" ${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }} "\
-            chmod +x /tmp/prune_unused_docker_images.sh && \
-            KEEP_BACKEND_IMAGES=3 bash /tmp/prune_unused_docker_images.sh" | tee backend_docker_prune.log
+          python3 scripts/ha/run_verified_remote_bundle.py \
+            --remote '${{ secrets.SSH_USER_API }}@${{ secrets.SSH_HOST_API }}' \
+            --identity-file ~/.ssh/deploy_key --known-hosts-file ~/.ssh/known_hosts \
+            --prefix mvn-backend-prune --entry prune_unused_docker_images.sh \
+            --env KEEP_BACKEND_IMAGES=3 scripts/prune_unused_docker_images.sh \
+            | tee backend_docker_prune.log
 
       - name: Upload Backend Ops Logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: backend-ops-logs-${{ github.run_id }}
           path: |

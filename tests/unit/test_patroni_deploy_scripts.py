@@ -1,4 +1,5 @@
 import os
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -6,16 +7,74 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATE = REPO_ROOT / "scripts/ha/run_patroni_migrations.sh"
 DEPLOY = REPO_ROOT / "scripts/ha/deploy_patroni_api_node.sh"
+BLUE_GREEN = REPO_ROOT / "scripts/deploy_backend_blue_green.sh"
 CONFIGURE_ENV = REPO_ROOT / "scripts/ha/configure_patroni_replication_env.sh"
 CONFIGURE_PITR = REPO_ROOT / "scripts/ha/configure_patroni_pitr_env.sh"
 CONFIGURE_IMAGE = REPO_ROOT / "scripts/ha/configure_patroni_image_env.sh"
 IMAGE = "ghcr.io/mvnby/air-api/backend@sha256:" + "4" * 64
 PATRONI_IMAGE = "ghcr.io/mvnby/air-api/patroni@sha256:" + "5" * 64
+LOCK_HELPER = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
+LOCK_HELPER_SHA256 = hashlib.sha256(LOCK_HELPER.read_bytes()).hexdigest()
 
 
 def _executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     path.chmod(0o755)
+
+
+def test_downstream_deploys_reject_forged_legacy_lock_boolean(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    for script in (DEPLOY, BLUE_GREEN):
+        result = subprocess.run(
+            ["bash", str(script)],
+            env={
+                **os.environ,
+                "API_PROJECT_DIR": str(project),
+                "API_DEPLOY_LOCK_ALREADY_HELD": "true",
+            },
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "boolean cannot replace an inherited descriptor" in result.stdout
+    assert not (project / ".deploy.lock").exists()
+
+
+def test_downstream_deploys_reject_forged_fd_without_open_lock(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _executable(fake_bin / "docker", "#!/usr/bin/env bash\nexit 0\n")
+    _executable(fake_bin / "curl", "#!/usr/bin/env bash\nexit 0\n")
+    (project / "compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (project / ".deploy.lock").touch(mode=0o600)
+    common = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "API_PROJECT_DIR": str(project),
+        "API_COMPOSE_FILE": "compose.yml",
+        "API_DEPLOY_LOCK_FD": "9",
+        "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+        "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
+        "BACKEND_IMAGE": IMAGE,
+    }
+    cases = (
+        (DEPLOY, {"API_EXPECTED_PATRONI_ROLE": "standby"}),
+        (BLUE_GREEN, {"API_PROXY_MODE": "container_nginx"}),
+    )
+    for script, extra in cases:
+        result = subprocess.run(
+            ["bash", str(script)],
+            env={**common, **extra},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "Bad file descriptor" in result.stderr
 
 
 def test_migration_script_requires_primary_and_never_manages_database_service(tmp_path):
@@ -43,6 +102,8 @@ def test_migration_script_requires_primary_and_never_manages_database_service(tm
             "API_COMPOSE_FILE": "compose.yml",
             "BACKEND_IMAGE": IMAGE,
             "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
+            "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+            "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
         }
     )
 
@@ -83,6 +144,8 @@ def test_deploy_and_migration_scripts_reject_unknown_running_patroni_role(tmp_pa
         "API_COMPOSE_FILE": "compose.yml",
         "BACKEND_IMAGE": IMAGE,
         "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
+        "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+        "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
     }
 
     deploy = subprocess.run(

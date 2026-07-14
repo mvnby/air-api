@@ -1,72 +1,17 @@
 """Self-contained production source for the pinned PITR release executor."""
-
 from __future__ import annotations
-REMOTE_RELEASE_BUNDLE_EXECUTOR = r'''
-import base64
-import binascii
-import fcntl
-import hashlib
-import json
-import os
-import re
-import secrets
-import shutil
-import stat
-import subprocess
-import sys
-import tempfile
-MAX_BUNDLE = 2097152
-MAX_ASSET = 1048576
-ROOT_UID = 0
-ROOT_GID = 0
-LOCK_PATH = "/run/lock/mvn-postgres-pitr-prerequisites.lock"
-STATE_ROOT = "/var/lib/mvn-postgres-pitr"
-TRANSACTION_ROOT = STATE_ROOT + "/release-transactions"
-ROLLBACK_RECEIPT_ROOT = STATE_ROOT + "/rollback-receipts"
-RELEASE_MANIFEST = STATE_ROOT + "/release-manifest.json"
-MAINTENANCE_MARKER = "/run/mvn-postgres-pitr-maintenance"
-OPERATION_ROOT = "/run/mvn-postgres-pitr-operations"
-LIBEXEC_DIR = "/usr/local/libexec/mvn-pitr"
-LIBEXEC_PARENT = "/usr/local/libexec"
-BASE_MODES = {
-    "/usr/local/sbin/mvn-postgres-pitr-upload": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-immutable-upload": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-upload-wal": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-basebackup": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-configure-env": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-provision-host": 0o755,
-    "/usr/local/sbin/mvn_postgres_pitr_config_transaction.py": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-restore": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-restore-drill": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-status": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-remote-status": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-bootstrap": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-runtime-check": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-scheduled-runner": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-manual-runner": 0o755,
-    "/usr/local/sbin/mvn-restore-drill-latest-db": 0o755,
-    "/usr/local/sbin/mvn-restore-drill-latest-db-cleanup": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-tool-runner": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-artifact-security": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-wal-lineage": 0o755,
-    "/usr/local/sbin/mvn-postgres-pitr-recovery-config": 0o755,
-    "/usr/local/sbin/mvn_postgres_pitr_operation_guard.py": 0o755,
-    "/usr/local/sbin/mvn_postgres_pitr_operation_cleanup.py": 0o755,
-    LIBEXEC_DIR + "/install_postgres_pitr_units.sh": 0o755,
-    LIBEXEC_DIR + "/run_postgres_pitr_install_locked.py": 0o755,
-    LIBEXEC_DIR + "/deploy_backend_blue_green.sh": 0o755,
-    LIBEXEC_DIR + "/deploy_backend_blue_green_safety.sh": 0o755,
-    LIBEXEC_DIR + "/prepare_google_oauth_token_dir.sh": 0o755,
-    "/etc/systemd/system/mvn-postgres-wal-upload.service": 0o644,
-    "/etc/systemd/system/mvn-postgres-wal-upload.timer": 0o644,
-    "/etc/systemd/system/mvn-postgres-basebackup.service": 0o644,
-    "/etc/systemd/system/mvn-postgres-basebackup.timer": 0o644,
-}
-PROJECT_COMPOSE = {
-    "/opt/air-api": "/opt/air-api/docker-compose.patroni.yml",
-    "/opt/mvn-reserve": "/opt/mvn-reserve/docker-compose.patroni.yml",
-}
-def canonical(value):
+
+try:
+    from scripts.ha.pitr_bundle_executor_prelude import (
+        REMOTE_RELEASE_BUNDLE_PRELUDE,
+    )
+except ModuleNotFoundError:  # pragma: no cover - direct script import fallback
+    from pitr_bundle_executor_prelude import (  # type: ignore[no-redef]
+        REMOTE_RELEASE_BUNDLE_PRELUDE,
+    )
+
+
+REMOTE_RELEASE_BUNDLE_EXECUTOR = REMOTE_RELEASE_BUNDLE_PRELUDE + r'''def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("ascii")
 def expected_modes(project_dir, compose_file):
     compose = PROJECT_COMPOSE.get(project_dir)
@@ -532,7 +477,7 @@ def verify_rollback_generations(receipt):
         if (not generation["present"]
                 or hashlib.sha256(content).hexdigest() != generation["sha256"]):
             raise RuntimeError("recorded rollback generation does not match: " + generation["path"])
-def read_release_manifest(modes, project_dir):
+def read_release_manifest(modes, project_dir, allow_previous=False):
     try:
         content, _ = read_regular(RELEASE_MANIFEST, exact_mode=0o600, max_bytes=MAX_BUNDLE)
     except FileNotFoundError:
@@ -564,7 +509,9 @@ def read_release_manifest(modes, project_dir):
                 or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])):
             raise RuntimeError("release manifest file contract is invalid")
         files.append(item)
-    if [item["path"] for item in files] != sorted(modes):
+    paths = [item["path"] for item in files]
+    if (paths != sorted(modes) and not
+            (allow_previous and paths == sorted(set(modes) - PREVIOUS_RELEASE_ADDITIONS))):
         raise RuntimeError("release manifest path set is incomplete")
     for item in files:
         content, _ = read_regular(item["path"], exact_mode=item["mode"])
@@ -594,7 +541,9 @@ def execute(action, txid, project_dir, compose_file, payload):
         reject_operation_records()
         txdir = os.path.join(TRANSACTION_ROOT, txid)
         has_tx = transaction_exists(txdir)
-        completed = None if has_tx else read_release_manifest(modes, project_dir)
+        completed = None if has_tx else read_release_manifest(
+            modes, project_dir, allow_previous=action == "apply"
+        )
         if completed is not None and completed["txid"] == txid:
             if has_tx:
                 raise RuntimeError("completed release still has a transaction directory")
@@ -605,9 +554,7 @@ def execute(action, txid, project_dir, compose_file, payload):
                 if (completed["release_sha256"] != release
                         or completed["files"] != expected_files):
                     raise RuntimeError("transaction id already finalized another release")
-                # Re-open the same completed transaction's maintenance fence so
-                # a controller can safely replay idempotent host phases after a
-                # crash between the two node finalizations.
+                # Re-open the fence for idempotent controller replay after a crash.
                 ensure_marker(txid)
                 return "reopened"
             clear_completed_marker(txid)

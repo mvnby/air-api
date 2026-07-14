@@ -12,6 +12,7 @@ TRANSACTION = REPO_ROOT / "scripts/compose_candidate_transaction.sh"
 PATRONI_RUNNER = REPO_ROOT / "scripts/ha/run_patroni_candidate_transaction.sh"
 PREVIOUS_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "1" * 40
 DB_CONTRACT_HELPER = REPO_ROOT / "scripts/ha/patroni_compose_db_contract.py"
+DEPLOY_LOCK_HELPER = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
 
 
 def _executable(path: Path, content: str) -> None:
@@ -151,7 +152,7 @@ esac
         f'''#!/usr/bin/env bash
 set -euo pipefail
 grep -Fq '/app/token.json' "$API_PROJECT_DIR/compose.yml"
-printf "%s|%s\n" "$API_COMPOSE_FILE" "$API_DEPLOY_LOCK_ALREADY_HELD" > "$CHILD_LOG"
+printf "%s|%s\n" "$API_COMPOSE_FILE" "${{API_DEPLOY_LOCK_FD:-}}" > "$CHILD_LOG"
 : > "$DEPLOY_CHILD_RAN"
 exit {child_exit}
 ''',
@@ -201,6 +202,10 @@ exit 0
         "DEPLOY_CHILD_RAN": str(tmp_path / "deploy-child-ran"),
         "API_PREVIOUS_BACKEND_IMAGE": "" if discover_previous else PREVIOUS_IMAGE,
         "EXPECTED_PREVIOUS_IMAGE": PREVIOUS_IMAGE,
+        "API_DEPLOY_LOCK_HELPER": str(DEPLOY_LOCK_HELPER),
+        "API_DEPLOY_LOCK_HELPER_SHA256": __import__("hashlib").sha256(
+            DEPLOY_LOCK_HELPER.read_bytes()
+        ).hexdigest(),
     }
     return env, project
 
@@ -220,7 +225,7 @@ def test_patroni_candidate_failure_leaves_canonical_old(tmp_path):
     assert result.returncode == 42
     assert (project / "compose.yml").read_text(encoding="utf-8") == old
     assert not (project / "compose.yml.candidate").exists()
-    assert (tmp_path / "child.log").read_text(encoding="utf-8").strip() == "compose.yml.candidate|true"
+    assert (tmp_path / "child.log").read_text(encoding="utf-8").strip() == "compose.yml.candidate|9"
     assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == "compose.yml|app bot"
 
 
@@ -573,6 +578,9 @@ def test_patroni_migration_always_cleans_candidate_without_promoting(
     old = (project / "compose.yml").read_text(encoding="utf-8")
     migration_log = tmp_path / "migration.log"
     migration = tmp_path / "migration.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _executable(fake_bin / "flock", "#!/usr/bin/env bash\nexit 0\n")
     _executable(
         migration,
         f"""#!/usr/bin/env bash
@@ -586,13 +594,18 @@ exit {migration_exit}
         ["bash", str(PATRONI_RUNNER)],
         env={
             **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
             "PATRONI_CANDIDATE_OPERATION": "migrate",
             "API_PROJECT_DIR": str(project),
             "PATRONI_CANONICAL_COMPOSE_FILE": str(project / "compose.yml"),
             "PATRONI_CANDIDATE_COMPOSE_FILE": str(project / "compose.yml.candidate"),
             "COMPOSE_CANDIDATE_TRANSACTION_SCRIPT": str(TRANSACTION),
             "PATRONI_MIGRATION_SCRIPT": str(migration),
-            "MIGRATION_LOG": str(migration_log),
+                "MIGRATION_LOG": str(migration_log),
+                "API_DEPLOY_LOCK_HELPER": str(DEPLOY_LOCK_HELPER),
+                "API_DEPLOY_LOCK_HELPER_SHA256": __import__("hashlib").sha256(
+                    DEPLOY_LOCK_HELPER.read_bytes()
+                ).hexdigest(),
         },
         text=True,
         capture_output=True,
@@ -653,3 +666,28 @@ def test_legacy_source_bind_deploy_is_retired():
     assert result.returncode != 0
     assert "retired" in result.stderr
     assert "GitHub Actions image workflow" in result.stderr
+
+
+@pytest.mark.parametrize("operation", ["deploy", "migrate"])
+def test_patroni_candidate_rejects_database_rollout_marker_before_mutation(
+    tmp_path, operation
+):
+    env, project = _patroni_runner_env(tmp_path, child_exit=0)
+    marker = project / ".patroni-cutover-in-progress"
+    marker.write_text("0" * 32 + "\n", encoding="ascii")
+    env["PATRONI_CANDIDATE_OPERATION"] = operation
+    if operation == "migrate":
+        env["PATRONI_MIGRATION_SCRIPT"] = env["PATRONI_DEPLOY_SCRIPT"]
+
+    result = subprocess.run(
+        ["bash", str(PATRONI_RUNNER)],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Patroni database rollout is in progress" in result.stderr
+    assert not (tmp_path / "child.log").exists()
+    assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")

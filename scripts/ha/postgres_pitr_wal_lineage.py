@@ -8,10 +8,14 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 
-WAL_NAME_RE = re.compile(
+WAL_ARCHIVE_NAME_RE = re.compile(
+    r"^(?:[0-9A-F]{24}(?:\.partial)?|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
+)
+WAL_RESTORABLE_RE = re.compile(
     r"^(?:[0-9A-F]{24}|[0-9A-F]{24}\.[0-9A-F]{8}\.backup|[0-9A-F]{8}\.history)$"
 )
 WAL_SEGMENT_RE = re.compile(r"^[0-9A-F]{24}$")
+WAL_PARTIAL_RE = re.compile(r"^[0-9A-F]{24}\.partial$")
 WAL_HISTORY_RE = re.compile(r"^[0-9A-F]{8}\.history$")
 WAL_BACKUP_HISTORY_RE = re.compile(r"^[0-9A-F]{24}\.[0-9A-F]{8}\.backup$")
 LSN_RE = re.compile(rb"(?:0|[1-9A-F][0-9A-F]{0,7})/(?:0|[1-9A-F][0-9A-F]{0,7})")
@@ -63,7 +67,7 @@ def list_wal_objects(
         for raw in page.get("Contents", []):
             key = str(raw.get("Key") or "")
             filename = key.rsplit("/", 1)[-1]
-            if not WAL_NAME_RE.fullmatch(filename):
+            if not WAL_ARCHIVE_NAME_RE.fullmatch(filename):
                 continue
             if key != f"{prefix}{filename[:8]}/{filename}":
                 raise SystemExit(f"Noncanonical PITR WAL object key: {key}")
@@ -261,10 +265,11 @@ def select_wal_objects(
     range_start = start_position
     for timeline in active_lineage[:-1]:
         switch_lsn = switches[timeline]
-        range_end = (switch_lsn - 1) // segment_size_bytes
-        if range_end < range_start:
+        if timeline == start_timeline and start_lsn_value > switch_lsn:
             raise SystemExit("Basebackup WAL start is after its timeline switchpoint")
-        ranges.append((timeline, range_start, range_end))
+        range_end = switch_lsn // segment_size_bytes - 1
+        if range_end >= range_start:
+            ranges.append((timeline, range_start, range_end))
         range_start = switch_lsn // segment_size_bytes
     if end_position < range_start:
         raise SystemExit("Required end WAL precedes the descendant timeline start")
@@ -277,6 +282,10 @@ def select_wal_objects(
     backup_histories: list[WalObject] = []
     for item in objects:
         if WAL_HISTORY_RE.fullmatch(item.filename):
+            continue
+        if WAL_PARTIAL_RE.fullmatch(item.filename):
+            if item.size_bytes != segment_size_bytes:
+                raise SystemExit(f"partial WAL segment has an invalid size: {item.filename}")
             continue
         timeline = int(item.filename[:8], 16)
         selected_range = by_timeline.get(timeline)
