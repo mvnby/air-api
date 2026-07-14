@@ -167,7 +167,10 @@ def run_remote_release_action(
         raise RuntimeError("unsupported release transaction action")
     if not re.fullmatch(r"[0-9a-f]{32}", txid):
         raise RuntimeError("transaction id must be 32 lowercase hexadecimal characters")
-    stdin = build_release_bundle(node, assets) if action == "apply" else None
+    # An explicit empty payload is required for actions without a bundle.  If
+    # stdin is left as None, subprocess.run() inherits the controller's stdin
+    # and the remote executor blocks forever while waiting for EOF.
+    stdin = build_release_bundle(node, assets) if action == "apply" else ""
     command = " ".join(
         [
             "/usr/bin/python3",

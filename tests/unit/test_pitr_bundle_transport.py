@@ -235,6 +235,37 @@ def test_apply_resumes_mixed_old_new_generation_and_finalize(tmp_path):
     assert not Path(namespace["MAINTENANCE_MARKER"]).exists()
 
 
+def test_apply_and_finalize_accept_identical_old_and_new_generation(tmp_path):
+    namespace, project, compose, tool = _remote_namespace(tmp_path)
+    _write(compose, b"new-compose", 0o644)
+    _write(tool, b"old-tool", 0o755)
+    payload, _ = _payload(namespace, project, compose, tool)
+
+    assert namespace["execute"](
+        "apply", TXID, str(project), compose.name, payload
+    ) == "applied"
+    txdir = Path(namespace["TRANSACTION_ROOT"]) / TXID
+    journal = json.loads((txdir / "journal.json").read_text())
+    compose_entry = next(
+        entry for entry in journal["entries"] if entry["path"] == str(compose)
+    )
+    assert namespace["file_generation"](
+        str(compose),
+        compose_entry["old"],
+        compose_entry["sha256"],
+        compose_entry["mode"],
+    ) == "both"
+
+    _write(tool, b"old-tool", 0o755)
+    assert namespace["execute"](
+        "apply", TXID, str(project), compose.name, payload
+    ) == "applied"
+    assert tool.read_bytes() == b"new-tool"
+    assert namespace["execute"](
+        "finalize", TXID, str(project), compose.name, b""
+    ) == "finalized"
+
+
 def test_apply_accepts_only_exact_previous_manifest_missing_new_safe_lock_helper(tmp_path):
     namespace, project, compose, tool = _remote_namespace(tmp_path)
     _write(compose, b"old-compose", 0o644)
@@ -340,6 +371,30 @@ def test_rollback_restores_exact_snapshot_and_absence(tmp_path):
     assert namespace["execute"]("rollback", TXID, str(project), compose.name, b"") == "already-rolled-back"
     with pytest.raises(RuntimeError, match="already has a rollback receipt"):
         namespace["execute"]("apply", TXID, str(project), compose.name, payload)
+
+
+def test_rollback_accepts_identical_old_and_new_generation(tmp_path):
+    namespace, project, compose, tool = _remote_namespace(tmp_path)
+    _write(compose, b"new-compose", 0o644)
+    _write(tool, b"old-tool", 0o755)
+    payload, _ = _payload(namespace, project, compose, tool)
+
+    assert namespace["execute"](
+        "apply", TXID, str(project), compose.name, payload
+    ) == "applied"
+    assert namespace["execute"](
+        "rollback", TXID, str(project), compose.name, b""
+    ) == "rolled-back"
+    assert compose.read_bytes() == b"new-compose"
+    assert tool.read_bytes() == b"old-tool"
+    assert not Path(namespace["MAINTENANCE_MARKER"]).exists()
+    receipt = json.loads(
+        (Path(namespace["ROLLBACK_RECEIPT_ROOT"]) / f"{TXID}.json").read_text()
+    )
+    compose_generation = next(
+        item for item in receipt["old_generations"] if item["path"] == str(compose)
+    )
+    assert compose_generation["sha256"] == hashlib.sha256(b"new-compose").hexdigest()
 
 
 def test_rollback_without_transaction_or_receipt_keeps_marker_fenced(tmp_path):
@@ -453,7 +508,7 @@ def test_hardlink_and_operation_record_block_release(tmp_path):
         namespace["execute"]("apply", TXID, str(project), compose.name, payload)
 
 
-def test_remote_action_uses_pinned_ssh_and_stdin_only_for_apply(tmp_path):
+def test_remote_action_uses_pinned_ssh_and_closes_stdin_without_apply_payload(tmp_path):
     captured = []
 
     def runner(args, stdin):
@@ -490,7 +545,25 @@ def test_remote_action_uses_pinned_ssh_and_stdin_only_for_apply(tmp_path):
         txid=TXID,
         runner=runner,
     )
-    assert captured[-1][1] is None
+    assert captured[-1][1] == ""
+
+
+def test_default_runner_closes_stdin_for_empty_payload(monkeypatch):
+    captured = {}
+
+    def run(args, **kwargs):
+        captured["args"] = args
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(args, 0, stdout="finalized\n", stderr="")
+
+    monkeypatch.setattr(bundle.subprocess, "run", run)
+
+    result = bundle._default_runner(["ssh", "node", "command"], "")
+
+    assert result.returncode == 0
+    assert captured["input"] == ""
+    assert captured["text"] is True
+    assert captured["capture_output"] is True
 
 
 @pytest.mark.parametrize(
