@@ -412,6 +412,14 @@ python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
 gh variable set POSTGRES_PITR_REQUIRED --repo mvnby/air-api --body true
 ```
 
+For the prerequisite standby-first image/DCS transition, use only the exact
+rolling transaction documented in `docs/postgres-quorum-runbook.md`. It keeps
+the existing PITR maintenance transaction id and inactive timers intact,
+updates the standby before the switchover, changes only `archive_command` after
+both target runtimes are attested, and leaves PITR upload enablement to the
+separate migration above. Do not combine the two transactions or reuse a new
+rollout id when resuming an interrupted image transition.
+
 The helper has no `--ssh-host`, `--project-dir`, `--compose-file`, remote env
 path, or remote helper override.
 The reviewed physical-node inventory maps `mvn-api` to `/opt/air-api` and

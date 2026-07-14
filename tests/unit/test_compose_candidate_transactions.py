@@ -1,3 +1,4 @@
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -8,6 +9,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRANSACTION = REPO_ROOT / "scripts/compose_candidate_transaction.sh"
 BACKEND_RUNNER = REPO_ROOT / "scripts/deploy_backend_candidate_transaction.sh"
+LOCK_HELPER = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
+LOCK_HELPER_SHA256 = hashlib.sha256(LOCK_HELPER.read_bytes()).hexdigest()
 PREVIOUS_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "1" * 40
 
 
@@ -95,10 +98,6 @@ def _backend_runner(
         (project / ".active-api-slot").write_text("green\n", encoding="utf-8")
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    _executable(
-        fake_bin / "flock",
-        "#!/usr/bin/env bash\nprintf 'flock:%s\\n' \"$*\" >> \"$ORDER_LOG\"\nexit 0\n",
-    )
     order_log = tmp_path / "order.log"
     _executable(
         fake_bin / "docker",
@@ -178,6 +177,8 @@ exec bash "$REAL_TRANSACTION" "$@"
             "REAL_TRANSACTION": str(TRANSACTION),
             "API_PREVIOUS_BACKEND_IMAGE": "" if discover_previous else PREVIOUS_IMAGE,
             "EXPECTED_PREVIOUS_IMAGE": PREVIOUS_IMAGE,
+            "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
+            "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
         },
         text=True,
         capture_output=True,
@@ -201,7 +202,6 @@ def test_backend_failure_cleans_candidate_and_force_reconciles_canonical(
     assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
     assert not (project / "compose.yml.candidate").exists()
     assert order_log.read_text(encoding="utf-8").splitlines() == [
-        "flock:-n 9",
         "child:compose.yml.candidate:lock=true",
         "reconcile:compose.yml",
     ]
@@ -215,7 +215,6 @@ def test_backend_promotes_only_after_candidate_smoke_succeeds(tmp_path, strategy
     assert "/app/google-oauth" in (project / "compose.yml").read_text(encoding="utf-8")
     assert not (project / "compose.yml.candidate").exists()
     assert order_log.read_text(encoding="utf-8").splitlines() == [
-        "flock:-n 9",
         "child:compose.yml.candidate:lock=true",
         f"smoke:{project / 'compose.yml.candidate'}",
     ]
@@ -236,7 +235,6 @@ def test_backend_smoke_failure_cleans_candidate_and_reconciles_canonical(
     assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
     assert not (project / "compose.yml.candidate").exists()
     assert order_log.read_text(encoding="utf-8").splitlines() == [
-        "flock:-n 9",
         "child:compose.yml.candidate:lock=true",
         f"smoke:{project / 'compose.yml.candidate'}",
         "reconcile:compose.yml",

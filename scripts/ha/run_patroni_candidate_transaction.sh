@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPERATION="${PATRONI_CANDIDATE_OPERATION:-}"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 CANONICAL_FILE="${PATRONI_CANONICAL_COMPOSE_FILE:-${PROJECT_DIR}/docker-compose.patroni.yml}"
@@ -16,6 +17,10 @@ DB_CONTRACT_HELPER="${PATRONI_DB_CONTRACT_HELPER:-/tmp/patroni_compose_db_contra
 ROLE_AGENT_UNIT="${PATRONI_ROLE_AGENT_UNIT:-mvn-patroni-role-agent.service}"
 RECONCILE_SCRIPT="${API_RECONCILE_SCRIPT:-/tmp/reconcile_backend_compose_runtime.sh}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
+DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
+DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
+DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
+PATRONI_CUTOVER_MARKER="${PATRONI_CUTOVER_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_BACKEND_IMAGE="${API_PREVIOUS_BACKEND_IMAGE:-}"
 ROLE_AGENT_BACKUP=""
@@ -27,6 +32,45 @@ CANDIDATE_CHECKSUM=""
 PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
 CURRENT_ROLE_OVERRIDE="${API_CURRENT_PATRONI_ROLE:-}"
 EXPECTED_ROLE="${API_EXPECTED_PATRONI_ROLE:-}"
+
+[[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "safe deployment lock helper digest is missing" >&2; exit 1;
+}
+python3 - "${DEPLOY_LOCK_HELPER}" "${DEPLOY_LOCK_HELPER_SHA256}" <<'PY'
+import hashlib, os, stat, sys
+path, expected = sys.argv[1:]
+before = os.lstat(path)
+if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
+        or before.st_uid != os.geteuid() or before.st_nlink != 1
+        or before.st_mode & 0o022):
+    raise SystemExit("safe deployment lock helper metadata is unsafe")
+fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(fd); data = b""
+    while True:
+        chunk = os.read(fd, 131072)
+        if not chunk: break
+        data += chunk
+finally: os.close(fd)
+if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        or hashlib.sha256(data).hexdigest() != expected):
+    raise SystemExit("safe deployment lock helper source is unreviewed")
+PY
+if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
+  exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@"
+fi
+[[ "${DEPLOY_LOCK_FD}" == "9" ]] || {
+  echo "candidate transaction requires inherited deployment lock fd 9" >&2
+  exit 1
+}
+python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
+
+require_no_patroni_cutover() {
+  if [[ -e "${PATRONI_CUTOVER_MARKER}" || -L "${PATRONI_CUTOVER_MARKER}" ]]; then
+    echo "Patroni database rollout is in progress: ${PATRONI_CUTOVER_MARKER}" >&2
+    return 1
+  fi
+}
 
 transaction() {
   CANONICAL_COMPOSE_FILE="${CANONICAL_FILE}" \
@@ -298,9 +342,11 @@ CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
   echo "compose transaction helper is missing: ${TRANSACTION_SCRIPT}" >&2
   exit 1
 }
+require_no_patroni_cutover
 if [[ "${OPERATION}" == "migrate" ]]; then
   trap cleanup_migration_candidate EXIT
-  API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
+  API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+    API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
   trap - EXIT
   transaction cleanup
   exit 0
@@ -309,11 +355,6 @@ fi
 trap cleanup_candidate_only EXIT
 [[ -f "${DB_CONTRACT_HELPER}" && ! -L "${DB_CONTRACT_HELPER}" ]] || {
   echo "Patroni db contract helper is missing or unsafe: ${DB_CONTRACT_HELPER}" >&2
-  exit 1
-}
-exec 9>"${DEPLOY_LOCK_FILE}"
-flock -n 9 || {
-  echo "another deployment holds ${DEPLOY_LOCK_FILE}" >&2
   exit 1
 }
 require_unchanged_db_contract
@@ -335,8 +376,9 @@ systemctl restart "${ROLE_AGENT_UNIT}"
 systemctl is-active --quiet "${ROLE_AGENT_UNIT}"
 
 API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
-  API_DEPLOY_LOCK_ALREADY_HELD=true \
+  API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
 bash "${DEPLOY_SCRIPT}"
+require_no_patroni_cutover
 require_unchanged_db_contract
 transaction promote
 trap - EXIT

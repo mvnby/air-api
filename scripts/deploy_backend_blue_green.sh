@@ -12,7 +12,9 @@ RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
 BOOTSTRAP_ONLY="${API_BLUE_GREEN_BOOTSTRAP_ONLY:-false}"
 FORCE_ACTIVATION="${API_FORCE_ACTIVATION:-false}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
-DEPLOY_LOCK_ALREADY_HELD="${API_DEPLOY_LOCK_ALREADY_HELD:-false}"
+DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
+DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/ha/safe_deploy_lock.py}"
+DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
 ENV_FILE="${PROJECT_DIR}/.env"
@@ -54,6 +56,11 @@ TMP_DIR=""
 log() {
   printf '[blue-green][%s] %s\n' "$1" "$2"
 }
+
+if [[ "${API_DEPLOY_LOCK_ALREADY_HELD:-false}" == "true" && -z "${DEPLOY_LOCK_FD}" ]]; then
+  log error "legacy deploy-lock boolean cannot replace an inherited descriptor"
+  exit 1
+fi
 
 summary() {
   printf '%s\n' "$1" >> "${SUMMARY_FILE}"
@@ -488,7 +495,7 @@ wait_service_running() {
 # shellcheck disable=SC1090,SC1091
 source "${API_BLUE_GREEN_SAFETY_HELPER:-${SCRIPT_DIR}/deploy_backend_blue_green_safety.sh}"
 
-required_commands=(docker curl python3 flock)
+required_commands=(docker curl python3)
 if [[ "${PROXY_MODE}" == "host_nginx" ]]; then
   required_commands+=(nginx systemctl)
 fi
@@ -531,13 +538,36 @@ elif [[ "${PROXY_MODE}" != "container_nginx" ]]; then
 fi
 
 cd "${PROJECT_DIR}"
-if [[ "${DEPLOY_LOCK_ALREADY_HELD}" != "true" ]]; then
-  exec 9>"${DEPLOY_LOCK_FILE}"
-  flock -n 9 || {
-    log error "another deployment holds ${DEPLOY_LOCK_FILE}"
-    exit 1
-  }
+[[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  log error "safe deployment lock helper digest is missing"; exit 1;
+}
+python3 - "${DEPLOY_LOCK_HELPER}" "${DEPLOY_LOCK_HELPER_SHA256}" <<'PY'
+import hashlib, os, stat, sys
+path, expected = sys.argv[1:]
+before = os.lstat(path)
+if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
+        or before.st_uid != os.geteuid() or before.st_nlink != 1
+        or before.st_mode & 0o022):
+    raise SystemExit("safe deployment lock helper metadata is unsafe")
+fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(fd); data = b""
+    while True:
+        chunk = os.read(fd, 131072)
+        if not chunk: break
+        data += chunk
+finally: os.close(fd)
+if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        or hashlib.sha256(data).hexdigest() != expected):
+    raise SystemExit("safe deployment lock helper source is unreviewed")
+PY
+if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
+  exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@"
 fi
+[[ "${DEPLOY_LOCK_FD}" == "9" && "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  log error "blue-green deploy requires the exact inherited deployment lock fd"; exit 1;
+}
+python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
 
 [[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
   log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"

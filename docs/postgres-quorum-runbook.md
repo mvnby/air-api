@@ -336,6 +336,56 @@ rollback to the former physical topology, restore PostgreSQL first under the
 cutover rollback procedure, then delete `API_DB_HA_MODE`; do not switch the
 variable while Patroni is still managing either database node.
 
+## Exact Patroni Image Rolling Transaction
+
+Use `.github/workflows/rollout-patroni-image.yml` only for the reviewed
+two-node transition from the exact current Patroni digest to one exact
+published target digest. The supported starting DCS generation is deliberately
+narrow: `archive_mode=on`, `archive_timeout=300`, and the compiled legacy local
+copy `archive_command`. This controller does not authorize an `off -> on` PITR
+migration or any other DCS edit.
+
+The approved workflow requires the tested `deploy_sha`, both immutable image
+digests, a new rollout transaction id, the exact transaction id already stored
+in `/run/mvn-postgres-pitr-maintenance`, `apply=true`, and `resume=false`. The
+existing PITR marker is retained throughout; its exact id is journal-bound,
+and all PITR timers and services remain inactive. A retry must reuse every
+original input with `resume=true`. Never create a new transaction while either
+host has the old transaction marker or journal.
+
+The controller performs this fixed sequence:
+
+1. Prove source-bound Compose, helper, etcd, role-agent, SSH, image, DCS,
+   archive, quorum, lineage, and runtime-ownership contracts on both hosts.
+2. Pull and attest the exact target image on both hosts without rebuilding it.
+3. Recreate the current standby only, prove it remained a standby, and record
+   the completed generation.
+4. Perform one exact Patroni switchover, rediscover the new timeline, then
+   recreate the former primary as the standby. Image rollback is forbidden
+   after this boundary.
+5. Only after both target runtimes and API/bot/scheduler ownership are proved,
+   change the single DCS path `postgresql.parameters.archive_command`.
+6. Force a WAL switch, prove the exact segment and archiver counters, re-prove
+   quorum/topology/runtime ownership, then finalize the final standby first and
+   the final primary last.
+
+Root-only canonical journals live under
+`/var/lib/mvn-patroni-rollout/transactions/`; the separate per-project marker
+is `.patroni-cutover-in-progress`. Normal API deployments and migrations share
+the same safely opened `.deploy.lock` and must refuse to start while this
+marker exists. Resume reconciles interrupted node updates, switchover records,
+DCS compensation, abort, and partial finalization from the journals before
+requiring a fully healthy topology.
+
+Before the switchover boundary, failure restores the old standby image and
+legacy DCS generation before removing either marker. After the boundary, the
+only permitted direction is roll-forward. If the new archive helper proof
+fails, the controller restores the exact journaled legacy DCS snapshot and
+keeps both hosts fenced for a same-transaction retry. Do not remove markers or
+edit journals manually. Enabling remote PITR upload, changing timers, or
+removing the PITR maintenance marker is a separate later transaction after
+this image rollout is fully finalized.
+
 ## Production Monitoring
 
 After `API_DB_HA_MODE=patroni`, the existing scheduled workflows become

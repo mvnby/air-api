@@ -1,0 +1,220 @@
+name: Roll Out Patroni Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_sha:
+        description: Exact tested commit from main
+        required: true
+        type: string
+      current_image:
+        description: Exact immutable Patroni digest running on both nodes
+        required: true
+        type: string
+      target_image:
+        description: Exact immutable published Patroni digest to roll out
+        required: true
+        type: string
+      transaction_id:
+        description: Stable 32-character lowercase hexadecimal transaction ID
+        required: true
+        type: string
+      maintenance_transaction_id:
+        description: Exact 32-character transaction ID in the existing PITR maintenance fence
+        required: true
+        type: string
+      apply:
+        description: Explicit production mutation confirmation
+        required: true
+        default: false
+        type: boolean
+      resume:
+        description: Resume the exact existing fenced transaction
+        required: true
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      deploy_sha:
+        required: true
+        type: string
+      current_image:
+        required: true
+        type: string
+      target_image:
+        required: true
+        type: string
+      transaction_id:
+        required: true
+        type: string
+      maintenance_transaction_id:
+        required: true
+        type: string
+      apply:
+        required: true
+        type: boolean
+      resume:
+        required: true
+        type: boolean
+    secrets:
+      SSH_KEY:
+        required: true
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  attestations: read
+  contents: read
+  packages: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  rollout:
+    environment: production-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Require explicit exact production inputs
+        env:
+          APPLY: ${{ inputs.apply }}
+          CURRENT_IMAGE: ${{ inputs.current_image }}
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          TARGET_IMAGE: ${{ inputs.target_image }}
+          TRANSACTION_ID: ${{ inputs.transaction_id }}
+          MAINTENANCE_TRANSACTION_ID: ${{ inputs.maintenance_transaction_id }}
+          RESUME: ${{ inputs.resume }}
+        run: |
+          set -euo pipefail
+          test "${APPLY}" = "true" || {
+            echo "::error::Patroni production rollout requires apply=true"
+            exit 1
+          }
+          [[ "${DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "${TRANSACTION_ID}" =~ ^[0-9a-f]{32}$ ]] || exit 1
+          [[ "${MAINTENANCE_TRANSACTION_ID}" =~ ^[0-9a-f]{32}$ ]] || exit 1
+          image_re='^ghcr\.io/mvnby/air-api/patroni@sha256:[0-9a-f]{64}$'
+          [[ "${CURRENT_IMAGE}" =~ ${image_re} ]] || exit 1
+          [[ "${TARGET_IMAGE}" =~ ${image_re} ]] || exit 1
+          test "${CURRENT_IMAGE}" != "${TARGET_IMAGE}" || exit 1
+          [[ "${RESUME}" == "true" || "${RESUME}" == "false" ]] || exit 1
+
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.deploy_sha }}
+
+      - name: Require exact tested main SHA and successful CI
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+          RESUME: ${{ inputs.resume }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${DEPLOY_SHA}"
+          git fetch --no-tags origin main
+          if [ "${RESUME}" = "true" ]; then
+            git merge-base --is-ancestor "${DEPLOY_SHA}" origin/main || {
+              echo "::error::resumed deploy_sha is not in current main history"
+              exit 1
+            }
+          else
+            test "$(git rev-parse origin/main)" = "${DEPLOY_SHA}" || {
+              echo "::error::new rollout deploy_sha is not the current main commit"
+              exit 1
+            }
+          fi
+          count="$({
+            gh run list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --workflow ci.yml \
+              --branch main \
+              --commit "${DEPLOY_SHA}" \
+              --limit 20 \
+              --json conclusion,event,headBranch,headSha \
+              --jq '[.[] | select(.conclusion == "success" and .event == "push" and .headBranch == "main" and .headSha == env.DEPLOY_SHA)] | length'
+          })"
+          test "${count}" -ge 1 || {
+            echo "::error::No successful CI run found for ${DEPLOY_SHA}"
+            exit 1
+          }
+
+      - name: Verify target provenance and SBOM attestations
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_IMAGE: ${{ inputs.target_image }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${TARGET_IMAGE}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --predicate-type 'https://slsa.dev/provenance/v1' \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/publish-patroni-image.yml" \
+            --source-digest "${DEPLOY_SHA}" \
+            --source-ref refs/heads/main \
+            --format json > "${RUNNER_TEMP}/patroni-provenance.json"
+          gh attestation verify "oci://${TARGET_IMAGE}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --predicate-type 'https://spdx.dev/Document' \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/publish-patroni-image.yml" \
+            --source-digest "${DEPLOY_SHA}" \
+            --source-ref refs/heads/main \
+            --format json > "${RUNNER_TEMP}/patroni-sbom.json"
+          jq -e '[.. | objects | .packages? // empty | select(type == "array" and length > 0)] | length > 0' \
+            "${RUNNER_TEMP}/patroni-sbom.json" >/dev/null
+
+      - name: Install owner-only SSH identity
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${SSH_KEY}"
+          umask 077
+          printf '%s\n' "${SSH_KEY}" > "${RUNNER_TEMP}/patroni-rollout-key"
+          chmod 600 "${RUNNER_TEMP}/patroni-rollout-key"
+
+      - name: Roll out exact Patroni digest standby first
+        env:
+          CURRENT_IMAGE: ${{ inputs.current_image }}
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USERNAME: ${{ github.actor }}
+          RESUME: ${{ inputs.resume }}
+          TARGET_IMAGE: ${{ inputs.target_image }}
+          TRANSACTION_ID: ${{ inputs.transaction_id }}
+          MAINTENANCE_TRANSACTION_ID: ${{ inputs.maintenance_transaction_id }}
+        run: |
+          set -euo pipefail
+          test -n "${GHCR_TOKEN}"
+          python3 scripts/ha/rollout_patroni_image.py \
+            --deploy-sha "${DEPLOY_SHA}" \
+            --transaction-id "${TRANSACTION_ID}" \
+            --maintenance-transaction-id "${MAINTENANCE_TRANSACTION_ID}" \
+            --current-image "${CURRENT_IMAGE}" \
+            --target-image "${TARGET_IMAGE}" \
+            --identity-file "${RUNNER_TEMP}/patroni-rollout-key" \
+            --apply true \
+            --resume "${RESUME}"
+
+      - name: Record immutable rollout result
+        env:
+          DEPLOY_SHA: ${{ inputs.deploy_sha }}
+          TARGET_IMAGE: ${{ inputs.target_image }}
+          TRANSACTION_ID: ${{ inputs.transaction_id }}
+          MAINTENANCE_TRANSACTION_ID: ${{ inputs.maintenance_transaction_id }}
+        run: |
+          {
+            echo '## Patroni production rollout'
+            echo "- deploy_sha: ${DEPLOY_SHA}"
+            echo "- target_image: ${TARGET_IMAGE}"
+            echo "- transaction_id: ${TRANSACTION_ID}"
+            echo "- maintenance_transaction_id: ${MAINTENANCE_TRANSACTION_ID}"
+            echo '- result: passed'
+          } >> "${GITHUB_STEP_SUMMARY}"

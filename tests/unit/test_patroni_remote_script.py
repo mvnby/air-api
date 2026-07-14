@@ -185,12 +185,17 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
     assert "run_patroni_candidate_transaction.sh" in text
     assert "scripts/ha/patroni_compose_db_contract.py" in text
     assert "PATRONI_DB_CONTRACT_HELPER=" in text
-    assert "mktemp -d /tmp/mvn-patroni-db-contract.XXXXXXXX" in text
+    assert "mktemp -d /tmp/mvn-patroni-release.XXXXXXXX" in text
+    assert "verify_patroni_remote_bundle.py" in text
+    assert "BUNDLE_MANIFEST_B64" in text
+    assert "python3 -I -c" in text
+    assert "${REMOTE}:/tmp/" not in text
+    assert "bash /tmp/run_patroni_candidate_transaction.sh" not in text
     assert "patroni-compose-db-contract-${GITHUB_RUN_ID" not in text
     assert "compose_candidate_transaction.sh" in text
     assert "reconcile_backend_compose_runtime.sh" in text
     assert (
-        "API_BLUE_GREEN_SAFETY_HELPER=/tmp/deploy_backend_blue_green_safety.sh" in text
+        "API_BLUE_GREEN_SAFETY_HELPER=$(quote" in text
     )
     assert "scripts/ha/patroni_role_agent.py" in text
     assert "scripts/ha/patroni_local_identity.py" in text
@@ -201,7 +206,8 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
     assert 'install -m 0644 "${ROLE_IDENTITY_SOURCE}"' in transaction_runner
     assert "systemctl restart" in transaction_runner
     assert "systemctl is-active --quiet" in transaction_runner
-    assert "API_DEPLOY_LOCK_ALREADY_HELD=true" in transaction_runner
+    assert 'API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}"' in transaction_runner
+    assert "API_DEPLOY_LOCK_ALREADY_HELD=true" not in transaction_runner
     assert 'transaction cleanup' in transaction_runner
     assert 'API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")"' in transaction_runner
     assert "API_PROXY_MODE=" in text

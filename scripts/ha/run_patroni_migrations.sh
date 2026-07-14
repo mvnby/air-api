@@ -10,11 +10,46 @@ PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 MAINTENANCE_MARKER="${API_MAINTENANCE_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
 RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
+DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
+DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
+DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/../prepare_google_oauth_token_dir.sh}"
 
 log() {
   printf '[patroni-migrate][%s] %s\n' "$1" "$2"
 }
+
+[[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  log error "safe deployment lock helper digest is missing"; exit 1;
+}
+python3 - "${DEPLOY_LOCK_HELPER}" "${DEPLOY_LOCK_HELPER_SHA256}" <<'PY'
+import hashlib, os, stat, sys
+path, expected = sys.argv[1:]
+before = os.lstat(path)
+if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
+        or before.st_uid != os.geteuid() or before.st_nlink != 1
+        or before.st_mode & 0o022):
+    raise SystemExit("safe deployment lock helper metadata is unsafe")
+fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(fd); data = b""
+    while True:
+        chunk = os.read(fd, 131072)
+        if not chunk: break
+        data += chunk
+finally: os.close(fd)
+if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        or hashlib.sha256(data).hexdigest() != expected):
+    raise SystemExit("safe deployment lock helper source is unreviewed")
+PY
+if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
+  exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@"
+fi
+[[ "${DEPLOY_LOCK_FD}" == "9" ]] || {
+  log error "migration requires inherited deployment lock fd 9"
+  exit 1
+}
+python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
 
 local_role() {
   curl -fsS --max-time 5 "${PATRONI_URL}" | python3 -c '
@@ -44,7 +79,7 @@ require_primary() {
   }
 }
 
-for command in docker curl python3 flock; do
+for command in docker curl python3; do
   command -v "${command}" >/dev/null 2>&1 || {
     log error "required command is missing: ${command}"
     exit 1
@@ -64,9 +99,8 @@ done
 }
 
 cd "${PROJECT_DIR}"
-exec 9>"${DEPLOY_LOCK_FILE}"
-flock -n 9 || {
-  log error "another deployment holds ${DEPLOY_LOCK_FILE}"
+[[ ! -e "${MAINTENANCE_MARKER}" && ! -L "${MAINTENANCE_MARKER}" ]] || {
+  log error "Patroni maintenance marker exists: ${MAINTENANCE_MARKER}"
   exit 1
 }
 
@@ -88,6 +122,10 @@ log pull "pulling migration image ${BACKEND_IMAGE}"
 require_primary
 
 log migrate "running Alembic on the confirmed Patroni primary"
+[[ ! -e "${MAINTENANCE_MARKER}" && ! -L "${MAINTENANCE_MARKER}" ]] || {
+  log error "Patroni maintenance marker appeared before migrations"
+  exit 1
+}
 "${COMPOSE[@]}" run -T --rm --no-deps "${MIGRATION_SERVICE}" alembic upgrade head
 if [[ "${RUN_DEFAULTS}" == "true" ]]; then
   "${COMPOSE[@]}" run -T --rm --no-deps "${MIGRATION_SERVICE}" \
