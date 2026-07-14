@@ -8,10 +8,16 @@ host-side helpers by their attested absolute paths.
 from __future__ import annotations
 
 try:
+    from scripts.ha.pitr_role_agent_process_attestation import (
+        REMOTE_ROLE_AGENT_PROCESS_ATTESTATION,
+    )
     from scripts.ha.pitr_role_agent_remote_executor import (
         REMOTE_ROLE_AGENT_EXECUTOR_BODY,
     )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
+    from pitr_role_agent_process_attestation import (  # type: ignore[no-redef]
+        REMOTE_ROLE_AGENT_PROCESS_ATTESTATION,
+    )
     from pitr_role_agent_remote_executor import (  # type: ignore[no-redef]
         REMOTE_ROLE_AGENT_EXECUTOR_BODY,
     )
@@ -406,7 +412,11 @@ LOCKED_MAINTENANCE_WRAPPER = LOCKED_OPERATION_WRAPPER
 
 
 REMOTE_ROLE_AGENT_EXECUTOR = (
-    REMOTE_ASSET_ATTESTATION + "\n" + REMOTE_ROLE_AGENT_EXECUTOR_BODY
+    REMOTE_ASSET_ATTESTATION
+    + "\n"
+    + REMOTE_ROLE_AGENT_PROCESS_ATTESTATION
+    + "\n"
+    + REMOTE_ROLE_AGENT_EXECUTOR_BODY
 ).strip()
 
 
