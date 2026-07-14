@@ -1,3 +1,4 @@
+import base64
 import copy
 import json
 import os
@@ -11,7 +12,7 @@ import pytest
 from scripts.ha.patroni_rollout_remote import build_payload, run_remote_action
 from scripts.ha.patroni_rollout_remote_executor import REMOTE_EXECUTOR
 from scripts.ha.patroni_rollout_local import REVIEWED_ASSETS
-from scripts.ha.patroni_rollout_schema import RolloutInputs
+from scripts.ha.patroni_rollout_schema import NODE_CONTRACTS, RolloutInputs
 from scripts.ha.pitr_pinned_ssh import PATRONI_NODES, PinnedSshContext
 
 
@@ -207,6 +208,107 @@ def test_pitr_fence_is_bound_to_exact_maintenance_transaction(tmp_path):
     namespace["pitr_fence"]("a" * 32)
     with pytest.raises(RuntimeError, match="does not match"):
         namespace["pitr_fence"]("b" * 32)
+
+
+def _rollout_compose_case(node, monkeypatch):
+    namespace = _remote_namespace()
+    contract = NODE_CONTRACTS[node.alias]
+    image = CURRENT
+    contract_digest = "4" * 64
+    config = {
+        "name": contract["compose_project"],
+        "services": {
+            "db": {
+                "image": image,
+                "volumes": [
+                    {
+                        "type": "volume",
+                        "source": "postgres_data",
+                        "target": "/var/lib/postgresql/data",
+                    }
+                ],
+            }
+        },
+        "volumes": {
+            "postgres_data": {
+                "external": True,
+                "name": contract["data_volume"],
+            }
+        },
+    }
+
+    def fake_run(args, **_kwargs):
+        if args[:3] == ["/usr/bin/python3", "-I", "-c"]:
+            return contract_digest
+        return json.dumps(config)
+
+    namespace["run"] = fake_run
+    monkeypatch.setattr(namespace["os"], "chdir", lambda _path: None)
+    payload = {
+        "contract_helper_b64": base64.b64encode(b"pass").decode("ascii"),
+    }
+    arguments = (
+        str(contract["project_dir"]),
+        str(contract["compose_file"]),
+        str(contract["compose_project"]),
+        str(contract["data_volume"]),
+        image,
+        contract_digest,
+        payload,
+    )
+    return namespace, config, arguments, contract_digest
+
+
+def _mutate_rollout_pgdata_identity(config, mutation):
+    mount = config["services"]["db"]["volumes"][0]
+    if mutation == "duplicate-pgdata":
+        config["services"]["db"]["volumes"].append(copy.deepcopy(mount))
+    elif mutation == "bind-pgdata":
+        mount["type"] = "bind"
+    elif mutation == "top-name":
+        config["volumes"]["postgres_data"]["name"] = "wrong-postgres-data"
+    elif mutation == "external-false":
+        config["volumes"]["postgres_data"]["external"] = False
+    elif mutation == "wrong-source":
+        mount["source"] = config["volumes"]["postgres_data"]["name"]
+    else:
+        raise AssertionError(f"unknown mutation: {mutation}")
+
+
+@pytest.mark.parametrize("node", PATRONI_NODES, ids=lambda node: node.alias)
+def test_rollout_compose_proof_accepts_exact_logical_pgdata_identity(
+    node, monkeypatch
+):
+    namespace, _config, arguments, contract_digest = _rollout_compose_case(
+        node, monkeypatch
+    )
+
+    assert namespace["validate_compose"](
+        *arguments,
+    ) == contract_digest
+
+
+@pytest.mark.parametrize("node", PATRONI_NODES, ids=lambda node: node.alias)
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("duplicate-pgdata", "reviewed external PGDATA volume drifted"),
+        ("bind-pgdata", "reviewed external PGDATA volume drifted"),
+        ("top-name", "PGDATA volume must remain exact and external"),
+        ("external-false", "PGDATA volume must remain exact and external"),
+        ("wrong-source", "reviewed external PGDATA volume drifted"),
+    ),
+)
+def test_rollout_compose_proof_rejects_pgdata_identity_drift(
+    node, mutation, message, monkeypatch
+):
+    namespace, config, arguments, _digest = _rollout_compose_case(
+        node, monkeypatch
+    )
+    _mutate_rollout_pgdata_identity(config, mutation)
+
+    with pytest.raises(RuntimeError, match=message):
+        namespace["validate_compose"](*arguments)
 
 
 def test_completed_marker_cleanup_accepts_missing_but_rejects_wrong_owner(tmp_path):

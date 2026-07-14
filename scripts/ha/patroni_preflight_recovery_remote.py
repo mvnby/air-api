@@ -225,7 +225,7 @@ def prove_compose(project, compose, compose_project, volume, payload):
               if item.get("target") == "/var/lib/postgresql/data"]
     top = config.get("volumes", {}).get("postgres_data", {})
     if (config.get("name") != compose_project or db.get("image") != payload["current_image"]
-            or len(mounts) != 1 or mounts[0].get("source") != volume
+            or len(mounts) != 1 or mounts[0].get("source") != "postgres_data"
             or mounts[0].get("type") != "volume" or top.get("name") != volume
             or top.get("external") is not True):
         die("incident recovery resolved Compose identity drifted")
