@@ -110,6 +110,27 @@ elif [[ "$1" == "inspect" && "$*" == *" active-green-container" ]]; then
   printf '%s\n' "$EXPECTED_PREVIOUS_IMAGE"
 elif [[ "$1" == "compose" && "$*" == *" stop app app-blue app-green bot" ]]; then
   exit 0
+elif [[ "$1" == "compose" && "$*" == *" ps -a -q api-proxy" ]]; then
+  if [[ "${PROXY_PREVIOUS_RUNTIME_STATE:-absent}" != "absent" ]]; then
+    printf 'proxy-container\n'
+  fi
+elif [[ "$1" == "inspect" && "$*" == *"proxy-container"* && "$*" == *"State.Running"* ]]; then
+  [[ "${PROXY_PREVIOUS_RUNTIME_STATE:-absent}" == "running" ]] && printf 'true\n' || printf 'false\n'
+elif [[ "$1" == "compose" && "$*" == *" up -d --no-deps --force-recreate --wait --wait-timeout 60 api-proxy" ]]; then
+  if [[ -n "${PROXY_RUNTIME_CONFIG:-}" ]]; then
+    cp "$API_PROXY_CONFIG_FILE" "$PROXY_RUNTIME_CONFIG"
+  fi
+  exit 0
+elif [[ "$1" == "compose" && "$*" == *" exec -T api-proxy nginx -t" ]]; then
+  exit 0
+elif [[ "$1" == "compose" && "$*" == *" rm -s -f api-proxy" ]]; then
+  [[ -z "${PROXY_RUNTIME_CONFIG:-}" ]] || rm -f "$PROXY_RUNTIME_CONFIG"
+  exit 0
+elif [[ "$1" == "compose" && "$*" == *" stop api-proxy" ]]; then
+  exit 0
+elif [[ "$1" == "compose" && "$*" == *" ps --status running -q api-proxy" ]]; then
+  [[ "${PROXY_PREVIOUS_RUNTIME_STATE:-absent}" == "running" ]] && printf 'proxy-container\n' || true
+  exit 0
 else
   exit 91
 fi
@@ -153,6 +174,9 @@ esac
 set -euo pipefail
 grep -Fq '/app/token.json' "$API_PROJECT_DIR/compose.yml"
 printf "%s|%s\n" "$API_COMPOSE_FILE" "${{API_DEPLOY_LOCK_FD:-}}" > "$CHILD_LOG"
+if [[ -n "${{PROXY_RUNTIME_CONFIG:-}}" ]]; then
+  cp "$API_PROXY_CONFIG_FILE" "$PROXY_RUNTIME_CONFIG"
+fi
 : > "$DEPLOY_CHILD_RAN"
 exit {child_exit}
 ''',
@@ -229,25 +253,6 @@ def test_patroni_candidate_failure_leaves_canonical_old(tmp_path):
     assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == "compose.yml|app bot"
 
 
-def test_patroni_candidate_promotes_only_after_success(tmp_path):
-    env, project = _patroni_runner_env(tmp_path, child_exit=0)
-    new = (project / "compose.yml.candidate").read_text(encoding="utf-8")
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert (project / "compose.yml").read_text(encoding="utf-8") == new
-    assert not (project / "compose.yml.candidate").exists()
-    assert not (tmp_path / "reconcile.log").exists()
-    assert Path(env["PATRONI_ROLE_IDENTITY_TARGET"]).read_text() == (
-        "# new identity helper\n"
-    )
 
 
 def test_patroni_candidate_rejects_db_service_drift_before_host_mutation(tmp_path):

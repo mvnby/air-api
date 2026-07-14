@@ -11,6 +11,60 @@ rollback_buffer_started=false
 rollback_buffer_routed=false
 ROLLBACK_BUFFER_COMPOSE=()
 
+require_pitr_maintenance_clear_or_attested_scrub() {
+  local transaction_id="${API_PITR_MAINTENANCE_TRANSACTION_ID:-}"
+  local pinned_root="/usr/local/libexec/mvn-pitr"
+
+  if [[ ! -e "${PITR_MAINTENANCE_MARKER}" && ! -L "${PITR_MAINTENANCE_MARKER}" ]]; then
+    if [[ -n "${transaction_id}" ]]; then
+      log error "PITR scrub attestation was supplied without active maintenance"
+      return 1
+    fi
+    return 0
+  fi
+  if [[ -z "${transaction_id}" ]]; then
+    log error "PITR release maintenance is active: ${PITR_MAINTENANCE_MARKER}"
+    return 1
+  fi
+  [[ "${transaction_id}" =~ ^[0-9a-f]{32}$ ]] || {
+    log error "PITR scrub transaction id is invalid"
+    return 1
+  }
+  [[ "$0" == "${pinned_root}/deploy_backend_blue_green.sh" \
+    && "${DEPLOY_LOCK_FD}" == "9" \
+    && "${DEPLOY_LOCK_HELPER}" == "${pinned_root}/safe_deploy_lock.py" \
+    && "${SAFETY_HELPER}" == "${pinned_root}/deploy_backend_blue_green_safety.sh" \
+    && "${CAPACITY_HELPER}" == "${pinned_root}/require_deploy_capacity.sh" \
+    && "${PITR_MARKER_VALIDATOR}" == "${pinned_root}/verify_pitr_maintenance_marker.py" ]] || {
+    log error "PITR scrub helper attestation is not pinned"
+    return 1
+  }
+  [[ -f "${PITR_MARKER_VALIDATOR}" && ! -L "${PITR_MARKER_VALIDATOR}" ]] || {
+    log error "PITR maintenance marker validator is missing or unsafe"
+    return 1
+  }
+  python3 "${PITR_MARKER_VALIDATOR}" marker "${transaction_id}" || {
+    log error "PITR maintenance marker attestation failed"
+    return 1
+  }
+  log pitr "attested internal PITR runtime scrub for transaction ${transaction_id}"
+}
+
+wait_service_running() {
+  local service="$1"
+  local running
+
+  for _ in $(seq 1 15); do
+    running="$("${COMPOSE[@]}" ps --status running --services 2>/dev/null || true)"
+    if grep -Fxq "${service}" <<<"${running}"; then
+      return 0
+    fi
+    sleep 1
+  done
+  log error "compose service is not running: ${service}"
+  return 1
+}
+
 inspect_service_runtime_image() {
   local service="$1"
   local container_ids

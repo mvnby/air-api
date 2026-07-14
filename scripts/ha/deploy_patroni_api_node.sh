@@ -17,6 +17,8 @@ DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 MAINTENANCE_MARKER="${API_MAINTENANCE_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
+PITR_MAINTENANCE_MARKER="${API_PITR_MAINTENANCE_MARKER:-/run/mvn-postgres-pitr-maintenance}"
+CAPACITY_HELPER="${API_DEPLOY_CAPACITY_HELPER:-${SCRIPT_DIR}/require_deploy_capacity.sh}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
 ENV_FILE="${PROJECT_DIR}/.env"
@@ -150,12 +152,18 @@ rollback_standby() {
   exit "${exit_code}"
 }
 
-for command in docker curl python3; do
+for command in docker curl python3 awk; do
   command -v "${command}" >/dev/null 2>&1 || {
     log error "required command is missing: ${command}"
     exit 1
   }
 done
+[[ -f "${CAPACITY_HELPER}" && ! -L "${CAPACITY_HELPER}" ]] || {
+  log error "deploy capacity helper is missing or unsafe: ${CAPACITY_HELPER}"
+  exit 1
+}
+# shellcheck disable=SC1090
+source "${CAPACITY_HELPER}"
 [[ "${EXPECTED_ROLE}" == "primary" || "${EXPECTED_ROLE}" == "standby" ]] || {
   log error "API_EXPECTED_PATRONI_ROLE must be primary or standby"
   exit 1
@@ -208,7 +216,12 @@ fi
   log error "deploy requires the exact inherited deployment lock fd"; exit 1;
 }
 python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
+[[ ! -e "${PITR_MAINTENANCE_MARKER}" && ! -L "${PITR_MAINTENANCE_MARKER}" ]] || {
+  log error "PITR release maintenance is active: ${PITR_MAINTENANCE_MARKER}"
+  exit 1
+}
 require_expected_role
+require_deploy_capacity
 [[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
   log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
   exit 1
@@ -225,6 +238,7 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
     API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
     API_DEPLOY_LOCK_HELPER_SHA256="${DEPLOY_LOCK_HELPER_SHA256}" \
+    API_DEPLOY_CAPACITY_HELPER="${CAPACITY_HELPER}" \
     API_RUN_MIGRATIONS=false \
     API_RUN_DEFAULTS=false \
     bash "${BLUE_GREEN_SCRIPT}"
@@ -252,6 +266,7 @@ trap rollback_standby ERR
 reconcile_standby_proxy
 log standby "updating fenced service ${active_service}"
 "${COMPOSE[@]}" pull "${active_service}" bot
+require_deploy_capacity
 write_backend_image "${BACKEND_IMAGE}"
 env_updated=true
 "${COMPOSE[@]}" stop bot >/dev/null 2>&1 || true

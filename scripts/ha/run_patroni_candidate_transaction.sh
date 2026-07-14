@@ -6,6 +6,7 @@ OPERATION="${PATRONI_CANDIDATE_OPERATION:-}"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 CANONICAL_FILE="${PATRONI_CANONICAL_COMPOSE_FILE:-${PROJECT_DIR}/docker-compose.patroni.yml}"
 CANDIDATE_FILE="${PATRONI_CANDIDATE_COMPOSE_FILE:-}"
+CANDIDATE_SOURCE="${PATRONI_CANDIDATE_COMPOSE_SOURCE:-}"
 TRANSACTION_SCRIPT="${COMPOSE_CANDIDATE_TRANSACTION_SCRIPT:-/tmp/compose_candidate_transaction.sh}"
 MIGRATION_SCRIPT="${PATRONI_MIGRATION_SCRIPT:-/tmp/run_patroni_migrations.sh}"
 DEPLOY_SCRIPT="${PATRONI_DEPLOY_SCRIPT:-/tmp/deploy_patroni_api_node.sh}"
@@ -21,6 +22,7 @@ DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 PATRONI_CUTOVER_MARKER="${PATRONI_CUTOVER_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
+PITR_MAINTENANCE_MARKER="${API_PITR_MAINTENANCE_MARKER:-/run/mvn-postgres-pitr-maintenance}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_BACKEND_IMAGE="${API_PREVIOUS_BACKEND_IMAGE:-}"
 ROLE_AGENT_BACKUP=""
@@ -29,9 +31,22 @@ ROLE_IDENTITY_BACKUP=""
 ROLE_IDENTITY_PREEXISTED=false
 ROLE_AGENT_CHANGED=false
 CANDIDATE_CHECKSUM=""
+CANDIDATE_OWNED=false
 PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
 CURRENT_ROLE_OVERRIDE="${API_CURRENT_PATRONI_ROLE:-}"
 EXPECTED_ROLE="${API_EXPECTED_PATRONI_ROLE:-}"
+PROXY_MODE="${API_PROXY_MODE:-host_nginx}"
+PROXY_CONFIG_SOURCE="${PATRONI_PROXY_CONFIG_SOURCE:-}"
+PROXY_CONFIG_TARGET="${API_PROXY_CONFIG_FILE:-${PROJECT_DIR}/api-proxy/nginx.conf}"
+PROXY_UPSTREAM_SOURCE="${PATRONI_PROXY_UPSTREAM_SOURCE:-}"
+PROXY_UPSTREAM_TARGET="${API_NGINX_UPSTREAM_FILE:-${PROJECT_DIR}/api-proxy/upstream.conf}"
+PROXY_SERVICE="${API_PROXY_SERVICE:-api-proxy}"
+PROXY_CONFIG_BACKUP=""
+PROXY_CONFIG_PREEXISTED=false
+PROXY_UPSTREAM_CREATED=false
+PROXY_FILES_CHANGED=false
+PROXY_DIR_CREATED=false
+PROXY_RUNTIME_STATE=not-applicable
 
 [[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
   echo "safe deployment lock helper digest is missing" >&2; exit 1;
@@ -72,17 +87,60 @@ require_no_patroni_cutover() {
   fi
 }
 
+require_no_pitr_maintenance() {
+  if [[ -e "${PITR_MAINTENANCE_MARKER}" || -L "${PITR_MAINTENANCE_MARKER}" ]]; then
+    echo "PITR release maintenance is active: ${PITR_MAINTENANCE_MARKER}" >&2
+    return 1
+  fi
+}
+
 transaction() {
   CANONICAL_COMPOSE_FILE="${CANONICAL_FILE}" \
     CANDIDATE_COMPOSE_FILE="${CANDIDATE_FILE}" \
     bash "${TRANSACTION_SCRIPT}" "$1"
 }
 
+stage_candidate_compose() {
+  local temporary=""
+  [[ "$(dirname "${CANONICAL_FILE}")" == "$(dirname "${CANDIDATE_FILE}")" ]] || {
+    echo "candidate and canonical compose must share a directory" >&2
+    return 1
+  }
+  if [[ -z "${CANDIDATE_SOURCE}" ]]; then
+    [[ -f "${CANDIDATE_FILE}" && ! -L "${CANDIDATE_FILE}" ]] || {
+      echo "candidate compose is missing or unsafe: ${CANDIDATE_FILE}" >&2
+      return 1
+    }
+    CANDIDATE_OWNED=true
+    trap cleanup_candidate_only EXIT
+    return 0
+  fi
+  [[ -f "${CANDIDATE_SOURCE}" && ! -L "${CANDIDATE_SOURCE}" ]] || {
+    echo "candidate compose source is missing or unsafe: ${CANDIDATE_SOURCE}" >&2
+    return 1
+  }
+  [[ ! -e "${CANDIDATE_FILE}" && ! -L "${CANDIDATE_FILE}" ]] || {
+    echo "candidate compose target already exists: ${CANDIDATE_FILE}" >&2
+    return 1
+  }
+  CANDIDATE_OWNED=true
+  trap cleanup_candidate_only EXIT
+  temporary="$(mktemp "${CANDIDATE_FILE}.tmp.XXXXXX")"
+  if ! cp -p -- "${CANDIDATE_SOURCE}" "${temporary}"; then
+    rm -f -- "${temporary}"
+    return 1
+  fi
+  if ! mv -- "${temporary}" "${CANDIDATE_FILE}"; then
+    rm -f -- "${temporary}"
+    return 1
+  fi
+}
+
 cleanup_migration_candidate() {
   local status=$?
   trap - EXIT
   set +e
-  transaction cleanup
+  [[ "${CANDIDATE_OWNED}" == "true" ]] && transaction cleanup
   exit "${status}"
 }
 
@@ -90,7 +148,7 @@ cleanup_candidate_only() {
   local status=$?
   trap - EXIT
   set +e
-  transaction cleanup
+  [[ "${CANDIDATE_OWNED}" == "true" ]] && transaction cleanup
   exit "${status}"
 }
 
@@ -189,6 +247,173 @@ restore_role_agent() {
   [[ "${failed}" == "false" ]]
 }
 
+atomic_install_file() {
+  local source="$1"
+  local target="$2"
+  local temporary=""
+  temporary="$(mktemp "${target}.tmp.XXXXXX")"
+  if ! install -m 0644 -- "${source}" "${temporary}"; then
+    rm -f -- "${temporary}"
+    return 1
+  fi
+  mv -f -- "${temporary}" "${target}"
+}
+
+atomic_restore_file() {
+  local source="$1"
+  local target="$2"
+  local temporary=""
+  temporary="$(mktemp "${target}.tmp.XXXXXX")"
+  if ! cp -p -- "${source}" "${temporary}"; then
+    rm -f -- "${temporary}"
+    return 1
+  fi
+  mv -f -- "${temporary}" "${target}"
+}
+
+require_safe_proxy_target() {
+  python3 - "$1" <<'PY'
+import os, stat, sys
+metadata = os.lstat(sys.argv[1])
+if (not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)
+        or metadata.st_uid != os.geteuid() or metadata.st_nlink != 1
+        or metadata.st_mode & 0o022):
+    raise SystemExit("container proxy target metadata is unsafe: " + sys.argv[1])
+PY
+}
+
+capture_proxy_runtime_state() {
+  local container_ids=""
+  local running=""
+  [[ "${PROXY_MODE}" == "container_nginx" ]] || return 0
+  container_ids="$(docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
+    ps -a -q "${PROXY_SERVICE}")"
+  if [[ -z "${container_ids}" ]]; then
+    PROXY_RUNTIME_STATE=absent
+    return 0
+  fi
+  [[ "${container_ids}" != *$'\n'* ]] || {
+    echo "container proxy runtime is ambiguous" >&2
+    return 1
+  }
+  running="$(docker inspect --format '{{.State.Running}}' "${container_ids}")"
+  case "${running}" in
+    true) PROXY_RUNTIME_STATE=running ;;
+    false) PROXY_RUNTIME_STATE=stopped ;;
+    *) echo "container proxy runtime state is invalid" >&2; return 1 ;;
+  esac
+}
+
+stage_proxy_files() {
+  local proxy_dir=""
+  [[ "${PROXY_MODE}" == "container_nginx" ]] || return 0
+  [[ -f "${PROXY_CONFIG_SOURCE}" && ! -L "${PROXY_CONFIG_SOURCE}" \
+    && -f "${PROXY_UPSTREAM_SOURCE}" && ! -L "${PROXY_UPSTREAM_SOURCE}" ]] || {
+    echo "container proxy source bundle is incomplete" >&2
+    return 1
+  }
+  proxy_dir="$(dirname "${PROXY_CONFIG_TARGET}")"
+  [[ "${proxy_dir}" == "$(dirname "${PROXY_UPSTREAM_TARGET}")" ]] || {
+    echo "container proxy targets must share one directory" >&2
+    return 1
+  }
+  if [[ -e "${proxy_dir}" || -L "${proxy_dir}" ]]; then
+    [[ -d "${proxy_dir}" && ! -L "${proxy_dir}" ]] || {
+      echo "container proxy directory is unsafe: ${proxy_dir}" >&2
+      return 1
+    }
+  else
+    mkdir -m 0755 -- "${proxy_dir}"
+    PROXY_DIR_CREATED=true
+  fi
+  if [[ -e "${PROXY_CONFIG_TARGET}" || -L "${PROXY_CONFIG_TARGET}" ]]; then
+    [[ -f "${PROXY_CONFIG_TARGET}" && ! -L "${PROXY_CONFIG_TARGET}" ]] || {
+      echo "container proxy config target is unsafe" >&2
+      return 1
+    }
+    require_safe_proxy_target "${PROXY_CONFIG_TARGET}"
+    PROXY_CONFIG_BACKUP="$(mktemp "${PROJECT_DIR}/.patroni-proxy-config.backup.XXXXXX")"
+    if ! cp -p -- "${PROXY_CONFIG_TARGET}" "${PROXY_CONFIG_BACKUP}"; then
+      rm -f -- "${PROXY_CONFIG_BACKUP}"
+      PROXY_CONFIG_BACKUP=""
+      return 1
+    fi
+    PROXY_CONFIG_PREEXISTED=true
+  fi
+  if [[ -e "${PROXY_UPSTREAM_TARGET}" || -L "${PROXY_UPSTREAM_TARGET}" ]]; then
+    [[ -f "${PROXY_UPSTREAM_TARGET}" && ! -L "${PROXY_UPSTREAM_TARGET}" ]] || {
+      echo "container proxy upstream target is unsafe" >&2
+      return 1
+    }
+    require_safe_proxy_target "${PROXY_UPSTREAM_TARGET}"
+  fi
+  PROXY_FILES_CHANGED=true
+  atomic_install_file "${PROXY_CONFIG_SOURCE}" "${PROXY_CONFIG_TARGET}"
+  if [[ ! -e "${PROXY_UPSTREAM_TARGET}" ]]; then
+    atomic_install_file "${PROXY_UPSTREAM_SOURCE}" "${PROXY_UPSTREAM_TARGET}"
+    PROXY_UPSTREAM_CREATED=true
+  fi
+}
+
+restore_proxy_files() {
+  [[ "${PROXY_FILES_CHANGED}" == "true" || "${PROXY_DIR_CREATED}" == "true" ]] || return 0
+  local failed=false
+  if [[ "${PROXY_FILES_CHANGED}" == "true" ]]; then
+    if [[ "${PROXY_CONFIG_PREEXISTED}" == "true" ]]; then
+      atomic_restore_file "${PROXY_CONFIG_BACKUP}" "${PROXY_CONFIG_TARGET}" || failed=true
+    else
+      rm -f -- "${PROXY_CONFIG_TARGET}" || failed=true
+    fi
+    if [[ "${PROXY_UPSTREAM_CREATED}" == "true" ]]; then
+      rm -f -- "${PROXY_UPSTREAM_TARGET}" || failed=true
+    fi
+  fi
+  [[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}" || failed=true
+  if [[ "${PROXY_DIR_CREATED}" == "true" ]]; then
+    rmdir -- "$(dirname "${PROXY_CONFIG_TARGET}")" || failed=true
+  fi
+  [[ "${failed}" == "false" ]]
+}
+
+restore_proxy_runtime() {
+  [[ "${PROXY_MODE}" == "container_nginx" \
+    && "${PROXY_FILES_CHANGED}" == "true" ]] || return 0
+  case "${PROXY_RUNTIME_STATE}" in
+    absent)
+      docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
+        rm -s -f "${PROXY_SERVICE}" >/dev/null \
+        && [[ -z "$(docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
+          ps -a -q "${PROXY_SERVICE}")" ]]
+      ;;
+    stopped)
+      docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
+        stop "${PROXY_SERVICE}" >/dev/null \
+        && [[ -z "$(docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
+          ps --status running -q "${PROXY_SERVICE}")" ]]
+      ;;
+    running)
+      docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
+        up -d --no-deps --force-recreate --wait --wait-timeout 60 "${PROXY_SERVICE}" \
+        && docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
+          exec -T "${PROXY_SERVICE}" nginx -t
+      ;;
+    *) echo "container proxy pre-deploy runtime state is unavailable" >&2; return 1 ;;
+  esac
+}
+
+restore_proxy_state() {
+  local failed=false
+  if [[ "${PROXY_RUNTIME_STATE}" == "absent" \
+    || "${PROXY_RUNTIME_STATE}" == "stopped" ]]; then
+    restore_proxy_runtime || failed=true
+    restore_proxy_files || failed=true
+  else
+    restore_proxy_files || failed=true
+    restore_proxy_runtime || failed=true
+  fi
+  [[ "${failed}" == "false" ]]
+}
+
 current_patroni_role() {
   if [[ -n "${CURRENT_ROLE_OVERRIDE}" ]]; then
     [[ "${CURRENT_ROLE_OVERRIDE}" == "primary" || "${CURRENT_ROLE_OVERRIDE}" == "standby" ]] \
@@ -258,9 +483,14 @@ reconcile_failed_deploy() {
     echo "Patroni candidate compose promotion committed; preserving the consistent new runtime" >&2
     [[ -z "${ROLE_AGENT_BACKUP}" ]] || rm -f -- "${ROLE_AGENT_BACKUP}"
     [[ -z "${ROLE_IDENTITY_BACKUP}" ]] || rm -f -- "${ROLE_IDENTITY_BACKUP}"
+    [[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}"
     exit "${status}"
   fi
   transaction cleanup || restoration_failed=true
+  if ! restore_proxy_state; then
+    echo "failed to restore the previous container proxy files and runtime state" >&2
+    restoration_failed=true
+  fi
   if ! restore_role_agent; then
     echo "failed to restore the previous Patroni role agent" >&2
     role_agent_restore_failed=true
@@ -333,16 +563,15 @@ fi
   echo "PATRONI_CANDIDATE_COMPOSE_FILE must name this run's unique candidate" >&2
   exit 1
 }
-[[ -f "${CANDIDATE_FILE}" ]] || {
-  echo "candidate compose is missing: ${CANDIDATE_FILE}" >&2
-  exit 1
-}
-CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
 [[ -f "${TRANSACTION_SCRIPT}" ]] || {
   echo "compose transaction helper is missing: ${TRANSACTION_SCRIPT}" >&2
   exit 1
 }
+require_no_pitr_maintenance
 require_no_patroni_cutover
+stage_candidate_compose
+CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
+trap cleanup_candidate_only EXIT
 if [[ "${OPERATION}" == "migrate" ]]; then
   trap cleanup_migration_candidate EXIT
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
@@ -352,7 +581,6 @@ if [[ "${OPERATION}" == "migrate" ]]; then
   exit 0
 fi
 
-trap cleanup_candidate_only EXIT
 [[ -f "${DB_CONTRACT_HELPER}" && ! -L "${DB_CONTRACT_HELPER}" ]] || {
   echo "Patroni db contract helper is missing or unsafe: ${DB_CONTRACT_HELPER}" >&2
   exit 1
@@ -374,6 +602,8 @@ install -m 0755 "${ROLE_AGENT_SOURCE}" "${ROLE_AGENT_TARGET}"
 rm -f -- "${ROLE_AGENT_SOURCE}" "${ROLE_IDENTITY_SOURCE}"
 systemctl restart "${ROLE_AGENT_UNIT}"
 systemctl is-active --quiet "${ROLE_AGENT_UNIT}"
+capture_proxy_runtime_state
+stage_proxy_files
 
 API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
@@ -386,3 +616,5 @@ trap - EXIT
   || echo "warning: stale Patroni role agent backup remains at ${ROLE_AGENT_BACKUP}" >&2
 [[ -z "${ROLE_IDENTITY_BACKUP}" ]] || rm -f -- "${ROLE_IDENTITY_BACKUP}" \
   || echo "warning: stale Patroni identity backup remains at ${ROLE_IDENTITY_BACKUP}" >&2
+[[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}" \
+  || echo "warning: stale Patroni proxy config backup remains at ${PROXY_CONFIG_BACKUP}" >&2

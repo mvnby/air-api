@@ -99,6 +99,7 @@ def _run_probe(
     host_key_source: Path = API_HOST_KEY,
     node_host: str = "example.invalid",
     node_user: str = "deploy",
+    maintenance_marker: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir(parents=True, exist_ok=True)
@@ -150,6 +151,9 @@ def _run_probe(
             "SSH_ARGS_LOG": str(tmp_path / "ssh-args.log"),
             "SSH_FILE_MODES_CAPTURE": str(tmp_path / "ssh-file-modes.capture"),
             "SSH_KNOWN_HOSTS_CAPTURE": str(tmp_path / "known-hosts.capture"),
+            "API_PITR_MAINTENANCE_MARKER": str(
+                maintenance_marker or tmp_path / "absent-maintenance-marker"
+            ),
         },
         text=True,
         capture_output=True,
@@ -177,14 +181,22 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
     assert "docker-compose.patroni.yml" in text
     assert "run_patroni_migrations.sh" in text
     assert "deploy_patroni_api_node.sh" in text
+    assert "scripts/ha/require_deploy_capacity.sh" in text
     assert "deploy_backend_blue_green.sh" in text
     assert "deploy_backend_blue_green_safety.sh" in text
     assert "prepare_google_oauth_token_dir.sh" in text
     assert 'candidate_id="$(printf' in text
     assert 'REMOTE_COMPOSE_FILE="docker-compose.patroni.candidate.${candidate_id}.yml"' in text
+    assert 'PATRONI_CANDIDATE_COMPOSE_SOURCE=$(quote' in text
+    assert '"${REMOTE}:${PROJECT_DIR}/${REMOTE_COMPOSE_FILE}"' not in text
     assert "run_patroni_candidate_transaction.sh" in text
     assert "scripts/ha/patroni_compose_db_contract.py" in text
     assert "PATRONI_DB_CONTRACT_HELPER=" in text
+    assert "PATRONI_PROXY_CONFIG_SOURCE=" in text
+    assert "PATRONI_PROXY_UPSTREAM_SOURCE=" in text
+    assert "API_DEPLOY_CAPACITY_HELPER=" in text
+    assert "API_DEPLOY_CAPACITY_PROFILE=" in text
+    assert 'DEPLOY_CAPACITY_PROFILE=reserve' in text
     assert "mktemp -d /tmp/mvn-patroni-release.XXXXXXXX" in text
     assert "verify_patroni_remote_bundle.py" in text
     assert "BUNDLE_MANIFEST_B64" in text
@@ -212,6 +224,7 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
     assert 'API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")"' in transaction_runner
     assert "API_PROXY_MODE=" in text
     assert "upstream.conf" in text
+    assert 'scp "${SSH_OPTS[@]}" deploy/ha/proxy/nginx.conf' not in text
     assert "up -d db" not in text
     assert "docker compose" not in text
 
@@ -266,6 +279,17 @@ def test_remote_probe_rejects_unknown_running_role(tmp_path):
 
     assert result.returncode != 0
     assert "role=standby" not in result.stdout
+
+
+def test_remote_probe_refuses_active_pitr_maintenance_before_role_lookup(tmp_path):
+    marker = tmp_path / "maintenance"
+    marker.write_text("owned\n", encoding="utf-8")
+
+    result = _run_probe(tmp_path, "primary", maintenance_marker=marker)
+
+    assert result.returncode != 0
+    assert "PITR release maintenance is active" in result.stderr
+    assert "role=primary" not in result.stdout
 
 
 def test_tracked_patroni_host_keys_have_reviewed_ed25519_fingerprints():

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
 set -Eeuo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
 COMPOSE_FILE="${API_COMPOSE_FILE:-docker-compose.prod.yml}"
@@ -15,6 +14,10 @@ DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/ha/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
+CAPACITY_HELPER="${API_DEPLOY_CAPACITY_HELPER:-${SCRIPT_DIR}/ha/require_deploy_capacity.sh}"
+SAFETY_HELPER="${API_BLUE_GREEN_SAFETY_HELPER:-${SCRIPT_DIR}/deploy_backend_blue_green_safety.sh}"
+PITR_MAINTENANCE_MARKER="/run/mvn-postgres-pitr-maintenance"
+PITR_MARKER_VALIDATOR="${API_PITR_MAINTENANCE_MARKER_VALIDATOR:-${SCRIPT_DIR}/ha/verify_pitr_maintenance_marker.py}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
 ENV_FILE="${PROJECT_DIR}/.env"
@@ -56,7 +59,6 @@ TMP_DIR=""
 log() {
   printf '[blue-green][%s] %s\n' "$1" "$2"
 }
-
 if [[ "${API_DEPLOY_LOCK_ALREADY_HELD:-false}" == "true" && -z "${DEPLOY_LOCK_FD}" ]]; then
   log error "legacy deploy-lock boolean cannot replace an inherited descriptor"
   exit 1
@@ -65,7 +67,6 @@ fi
 summary() {
   printf '%s\n' "$1" >> "${SUMMARY_FILE}"
 }
-
 is_immutable_image() {
   [[ "$1" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]]
 }
@@ -477,25 +478,22 @@ PY
   log smoke "candidate API contract checks passed"
 }
 
-wait_service_running() {
-  local service="$1"
-  local running
-
-  for _ in $(seq 1 15); do
-    running="$("${COMPOSE[@]}" ps --status running --services 2>/dev/null || true)"
-    if grep -Fxq "${service}" <<<"${running}"; then
-      return 0
-    fi
-    sleep 1
-  done
-  log error "compose service is not running: ${service}"
-  return 1
-}
-
+if [[ -e "${PITR_MAINTENANCE_MARKER}" || -L "${PITR_MAINTENANCE_MARKER}" ]]; then
+  python3 /usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py pre-source \
+    "${API_PITR_MAINTENANCE_TRANSACTION_ID:-}" "$0" "${DEPLOY_LOCK_HELPER}" "${SAFETY_HELPER}" "${CAPACITY_HELPER}" || {
+    log error "PITR maintenance requires the pinned attested internal scrub runtime"; exit 1;
+  }
+fi
 # shellcheck disable=SC1090,SC1091
-source "${API_BLUE_GREEN_SAFETY_HELPER:-${SCRIPT_DIR}/deploy_backend_blue_green_safety.sh}"
+source "${SAFETY_HELPER}"
+[[ -f "${CAPACITY_HELPER}" && ! -L "${CAPACITY_HELPER}" ]] || {
+  log error "deploy capacity helper is missing or unsafe: ${CAPACITY_HELPER}"
+  exit 1
+}
+# shellcheck disable=SC1090
+source "${CAPACITY_HELPER}"
 
-required_commands=(docker curl python3)
+required_commands=(docker curl python3 awk)
 if [[ "${PROXY_MODE}" == "host_nginx" ]]; then
   required_commands+=(nginx systemctl)
 fi
@@ -568,6 +566,8 @@ fi
   log error "blue-green deploy requires the exact inherited deployment lock fd"; exit 1;
 }
 python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
+require_pitr_maintenance_clear_or_attested_scrub
+require_deploy_capacity
 
 [[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
   log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
@@ -648,15 +648,18 @@ fi
 
 log pull "pulling candidate services ${candidate_service} and bot"
 "${COMPOSE[@]}" pull "${candidate_service}" bot
+require_deploy_capacity
 
 if [[ "${RUN_MIGRATIONS}" == "true" ]]; then
   "${COMPOSE[@]}" run -T --rm --no-deps "${candidate_service}" alembic upgrade head
 fi
 if [[ "${RUN_DEFAULTS}" == "true" ]]; then
+  require_deploy_capacity
   "${COMPOSE[@]}" run -T --rm --no-deps "${candidate_service}" python3 scripts/ensure_global_config_defaults.py
 fi
 
 log start "starting ${candidate_service} on 127.0.0.1:${candidate_port}"
+require_deploy_capacity
 candidate_started=true
 "${COMPOSE[@]}" up -d --no-deps --force-recreate "${candidate_service}"
 smoke_candidate "http://127.0.0.1:${candidate_port}"

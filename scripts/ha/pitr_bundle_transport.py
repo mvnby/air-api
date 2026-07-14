@@ -53,6 +53,8 @@ BASE_REMOTE_ASSET_MODES = {
     f"{LIBEXEC_DIR}/run_postgres_pitr_install_locked.py": 0o755,
     f"{LIBEXEC_DIR}/deploy_backend_blue_green.sh": 0o755,
     f"{LIBEXEC_DIR}/deploy_backend_blue_green_safety.sh": 0o755,
+    f"{LIBEXEC_DIR}/require_deploy_capacity.sh": 0o755,
+    f"{LIBEXEC_DIR}/verify_pitr_maintenance_marker.py": 0o755,
     f"{LIBEXEC_DIR}/safe_deploy_lock.py": 0o755,
     f"{LIBEXEC_DIR}/prepare_google_oauth_token_dir.sh": 0o755,
     "/etc/systemd/system/mvn-postgres-wal-upload.service": 0o644,

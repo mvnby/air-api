@@ -89,9 +89,10 @@ def test_candidate_and_migration_verify_inherited_lock_before_marker_check():
         encoding="utf-8"
     )
     lock_index = candidate.index('"${DEPLOY_LOCK_HELPER}" verify')
-    marker_index = candidate.index("require_no_patroni_cutover", lock_index)
+    pitr_marker_index = candidate.index("require_no_pitr_maintenance", lock_index)
+    marker_index = candidate.index("require_no_patroni_cutover", pitr_marker_index)
     migrate_index = candidate.index('if [[ "${OPERATION}" == "migrate" ]]', marker_index)
-    assert lock_index < marker_index < migrate_index
+    assert lock_index < pitr_marker_index < marker_index < migrate_index
     assert 'API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}"' in candidate
     assert 'DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"' in migration
     assert '"${DEPLOY_LOCK_HELPER}" verify' in migration

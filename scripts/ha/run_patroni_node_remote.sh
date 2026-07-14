@@ -11,6 +11,7 @@ PROJECT_DIR="${API_NODE_PROJECT_DIR:-}"
 COMPOSE_SOURCE="${API_NODE_COMPOSE_SOURCE:-}"
 PROXY_MODE="${API_NODE_PROXY_MODE:-host_nginx}"
 EXPECTED_ROLE="${API_EXPECTED_PATRONI_ROLE:-}"
+PITR_MAINTENANCE_MARKER="${API_PITR_MAINTENANCE_MARKER:-/run/mvn-postgres-pitr-maintenance}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-}"
 SSH_PRIVATE_KEY="${SSH_PRIVATE_KEY:-}"
 SSH_HOST_KEY_SOURCE="${API_NODE_SSH_HOST_KEY_SOURCE:-}"
@@ -23,11 +24,13 @@ ROLE_IDENTITY_TARGET="/usr/local/sbin/patroni_local_identity.py"
 ROLE_AGENT_UNIT="mvn-patroni-role-agent.service"
 CANDIDATE_RUNNER_SOURCE="scripts/ha/run_patroni_candidate_transaction.sh"
 DEPLOY_LOCK_HELPER_SOURCE="scripts/ha/safe_deploy_lock.py"
+DEPLOY_CAPACITY_HELPER_SOURCE="scripts/ha/require_deploy_capacity.sh"
 DEPLOY_LOCK_HELPER_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${DEPLOY_LOCK_HELPER_SOURCE}")"
 DB_CONTRACT_HELPER_SOURCE="scripts/ha/patroni_compose_db_contract.py"
 TRANSACTION_SOURCE="scripts/compose_candidate_transaction.sh"
 BUNDLE_VERIFIER_SOURCE="scripts/ha/verify_patroni_remote_bundle.py"
 REMOTE_BUNDLE_DIR=""
+DEPLOY_CAPACITY_PROFILE=primary
 
 log() {
   printf '[patroni-remote][%s] %s\n' "$1" "$2"
@@ -84,6 +87,9 @@ if [[ "${OPERATION}" != "probe" ]]; then
     exit 1
   }
 fi
+if [[ "${PROJECT_DIR}" == "/opt/mvn-reserve" ]]; then
+  DEPLOY_CAPACITY_PROFILE=reserve
+fi
 if [[ "${OPERATION}" == "deploy" ]]; then
   [[ "${EXPECTED_ROLE}" == "primary" || "${EXPECTED_ROLE}" == "standby" ]] || {
     log error "API_EXPECTED_PATRONI_ROLE must be primary or standby"
@@ -101,6 +107,7 @@ if [[ "${OPERATION}" == "deploy" ]]; then
 fi
 if [[ "${OPERATION}" != "probe" ]]; then
   [[ -f "${CANDIDATE_RUNNER_SOURCE}" && -f "${TRANSACTION_SOURCE}" \
+    && -f "${DEPLOY_CAPACITY_HELPER_SOURCE}" \
     && -f "${DEPLOY_LOCK_HELPER_SOURCE}" && -f "${BUNDLE_VERIFIER_SOURCE}" ]] || {
     log error "compose candidate transaction scripts are missing"
     exit 1
@@ -171,7 +178,7 @@ REMOTE="${NODE_USER}@${NODE_HOST}"
 
 if [[ "${OPERATION}" == "probe" ]]; then
   role="$(ssh "${SSH_OPTS[@]}" "${REMOTE}" \
-    "curl -fsS --max-time 5 http://127.0.0.1:8008/patroni | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p.get(\"state\")==\"running\"; r=str(p.get(\"role\") or \"\").lower(); m={\"leader\":\"primary\",\"master\":\"primary\",\"primary\":\"primary\",\"replica\":\"standby\",\"standby\":\"standby\"}; n=m.get(r); n or sys.exit(1); print(n)'")"
+    "if test -e $(quote "${PITR_MAINTENANCE_MARKER}") || test -L $(quote "${PITR_MAINTENANCE_MARKER}"); then echo 'PITR release maintenance is active; refusing deployment probe' >&2; exit 75; fi; curl -fsS --max-time 5 http://127.0.0.1:8008/patroni | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p.get(\"state\")==\"running\"; r=str(p.get(\"role\") or \"\").lower(); m={\"leader\":\"primary\",\"master\":\"primary\",\"primary\":\"primary\",\"replica\":\"standby\",\"standby\":\"standby\"}; n=m.get(r); n or sys.exit(1); print(n)'")"
   [[ "${role}" == "primary" || "${role}" == "standby" ]] || {
     log error "invalid Patroni role from ${NODE_HOST}: ${role}"
     exit 1
@@ -183,7 +190,8 @@ if [[ "${OPERATION}" == "probe" ]]; then
   exit 0
 fi
 
-ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p $(quote "${PROJECT_DIR}")"
+ssh "${SSH_OPTS[@]}" "${REMOTE}" \
+  "test -d $(quote "${PROJECT_DIR}"); if test -e $(quote "${PITR_MAINTENANCE_MARKER}") || test -L $(quote "${PITR_MAINTENANCE_MARKER}"); then echo 'PITR release maintenance is active; refusing remote release staging' >&2; exit 75; fi"
 CANONICAL_REMOTE_COMPOSE_FILE="docker-compose.patroni.yml"
 candidate_id="$(printf '%s' "${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-job}-${OPERATION}-$$" | tr -c 'A-Za-z0-9_.-' '-')"
 REMOTE_COMPOSE_FILE="docker-compose.patroni.candidate.${candidate_id}.yml"
@@ -196,6 +204,7 @@ REMOTE_BUNDLE_DIR="$(
   exit 1
 }
 BUNDLE_SOURCES=(
+  "${COMPOSE_SOURCE}"
   scripts/ha/run_patroni_migrations.sh
   scripts/ha/deploy_patroni_api_node.sh
   scripts/deploy_backend_blue_green.sh
@@ -204,6 +213,7 @@ BUNDLE_SOURCES=(
   scripts/reconcile_backend_compose_runtime.sh
   "${CANDIDATE_RUNNER_SOURCE}"
   "${DEPLOY_LOCK_HELPER_SOURCE}"
+  "${DEPLOY_CAPACITY_HELPER_SOURCE}"
   "${TRANSACTION_SOURCE}"
 )
 if [[ "${OPERATION}" == "deploy" ]]; then
@@ -212,25 +222,20 @@ if [[ "${OPERATION}" == "deploy" ]]; then
     "${ROLE_AGENT_SOURCE}"
     "${ROLE_IDENTITY_SOURCE}"
   )
+  if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
+    BUNDLE_SOURCES+=(
+      deploy/ha/proxy/nginx.conf
+      deploy/ha/proxy/upstream.conf
+    )
+  fi
 fi
 BUNDLE_MANIFEST_B64="$(python3 "${BUNDLE_VERIFIER_SOURCE}" manifest "${BUNDLE_SOURCES[@]}")"
 BUNDLE_VERIFIER_CODE="$(<"${BUNDLE_VERIFIER_SOURCE}")"
 ROLE_AGENT_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_role_agent.py"
 ROLE_IDENTITY_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_local_identity.py"
 DB_CONTRACT_HELPER_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_compose_db_contract.py"
-scp "${SSH_OPTS[@]}" "${COMPOSE_SOURCE}" \
-  "${REMOTE}:${PROJECT_DIR}/${REMOTE_COMPOSE_FILE}"
+REMOTE_COMPOSE_SOURCE="${REMOTE_BUNDLE_DIR}/$(basename "${COMPOSE_SOURCE}")"
 scp "${SSH_OPTS[@]}" "${BUNDLE_SOURCES[@]}" "${REMOTE}:${REMOTE_BUNDLE_DIR}/"
-
-if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
-  ssh "${SSH_OPTS[@]}" "${REMOTE}" "mkdir -p $(quote "${PROJECT_DIR}/api-proxy")"
-  scp "${SSH_OPTS[@]}" deploy/ha/proxy/nginx.conf \
-    "${REMOTE}:${PROJECT_DIR}/api-proxy/nginx.conf"
-  if ! ssh "${SSH_OPTS[@]}" "${REMOTE}" "test -f $(quote "${PROJECT_DIR}/api-proxy/upstream.conf")"; then
-    scp "${SSH_OPTS[@]}" deploy/ha/proxy/upstream.conf \
-      "${REMOTE}:${PROJECT_DIR}/api-proxy/upstream.conf"
-  fi
-fi
 
 proxy_env="API_PROXY_MODE=$(quote "${PROXY_MODE}")"
 if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
@@ -264,8 +269,11 @@ printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   PATRONI_CANDIDATE_OPERATION=$(quote "${OPERATION}") \
   PATRONI_CANONICAL_COMPOSE_FILE=$(quote "${PROJECT_DIR}/${CANONICAL_REMOTE_COMPOSE_FILE}") \
   PATRONI_CANDIDATE_COMPOSE_FILE=$(quote "${PROJECT_DIR}/${REMOTE_COMPOSE_FILE}") \
+  PATRONI_CANDIDATE_COMPOSE_SOURCE=$(quote "${REMOTE_COMPOSE_SOURCE}") \
   PATRONI_MIGRATION_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/run_patroni_migrations.sh") \
   PATRONI_DEPLOY_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/deploy_patroni_api_node.sh") \
+  PATRONI_PROXY_CONFIG_SOURCE=$(quote "${REMOTE_BUNDLE_DIR}/nginx.conf") \
+  PATRONI_PROXY_UPSTREAM_SOURCE=$(quote "${REMOTE_BUNDLE_DIR}/upstream.conf") \
   COMPOSE_CANDIDATE_TRANSACTION_SCRIPT=$(quote "${REMOTE_BUNDLE_DIR}/compose_candidate_transaction.sh") \
   PATRONI_ROLE_AGENT_SOURCE=$(quote "${ROLE_AGENT_REMOTE}") \
   PATRONI_ROLE_AGENT_TARGET=$(quote "${ROLE_AGENT_TARGET}") \
@@ -274,6 +282,8 @@ printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   PATRONI_DB_CONTRACT_HELPER=$(quote "${DB_CONTRACT_HELPER_REMOTE}") \
   PATRONI_ROLE_AGENT_UNIT=$(quote "${ROLE_AGENT_UNIT}") \
   API_DEPLOY_LOCK_HELPER=$(quote "${REMOTE_BUNDLE_DIR}/safe_deploy_lock.py") \
+  API_DEPLOY_CAPACITY_HELPER=$(quote "${REMOTE_BUNDLE_DIR}/require_deploy_capacity.sh") \
+  API_DEPLOY_CAPACITY_PROFILE=$(quote "${DEPLOY_CAPACITY_PROFILE}") \
   API_DEPLOY_LOCK_HELPER_SHA256=$(quote "${DEPLOY_LOCK_HELPER_SHA256}") \
   ${proxy_env} \
   bash $(quote "${REMOTE_BUNDLE_DIR}/run_patroni_candidate_transaction.sh")

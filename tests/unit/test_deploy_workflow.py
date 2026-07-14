@@ -158,6 +158,7 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "scripts/ha/run_verified_remote_bundle.py" in primary_deploy["run"]
     assert "deploy_backend_blue_green.sh" in primary_deploy["run"]
     assert "deploy_backend_blue_green_safety.sh" in primary_deploy["run"]
+    assert "scripts/ha/require_deploy_capacity.sh" in primary_deploy["run"]
     assert "compose_candidate_transaction.sh" in primary_deploy["run"]
     assert "reconcile_backend_compose_runtime.sh" in primary_deploy["run"]
     assert "deploy_backend_candidate_transaction.sh" in primary_deploy["run"]
@@ -176,6 +177,12 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     )
     assert safety_helper_env in primary_deploy["run"]
     assert safety_helper_env in rollback["run"]
+    capacity_helper_env = (
+        "API_DEPLOY_CAPACITY_HELPER=__MVN_BUNDLE__/require_deploy_capacity.sh"
+    )
+    assert capacity_helper_env in primary_deploy["run"]
+    assert capacity_helper_env in rollback["run"]
+    assert "scripts/ha/require_deploy_capacity.sh" in rollback["run"]
     assert "scripts/deploy.sh" in standby_deploy["run"]
     assert '.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in standby_deploy["run"]
     assert "scripts/deploy_backend_candidate_transaction.sh" in standby_deploy["run"]

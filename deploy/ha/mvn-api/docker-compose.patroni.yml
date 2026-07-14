@@ -19,6 +19,7 @@ x-api-app: &api-app
     - ./client_secret.json:/app/client_secret.json:ro
     - ./credentials.json:/app/credentials.json:ro
     - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
+  mem_limit: ${MVN_PATRONI_APP_MEMORY:-1024m}
 
 services:
   db:
@@ -101,6 +102,7 @@ services:
       - ./media:/app/media
       - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
     command: python -m bot_app.main
+    mem_limit: ${MVN_PATRONI_BOT_MEMORY:-512m}
 
 volumes:
   postgres_data:

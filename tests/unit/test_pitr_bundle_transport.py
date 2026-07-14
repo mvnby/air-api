@@ -116,6 +116,11 @@ def test_real_bundle_is_deterministic_complete_and_bounded():
     )[0]
     remote = {"__name__": "pitr_bundle_policy_test"}
     exec(compile(source, "<pitr-bundle-policy>", "exec"), remote)
+    assert remote["PREVIOUS_RELEASE_ADDITIONS"] == {
+        "/usr/local/libexec/mvn-pitr/require_deploy_capacity.sh",
+        "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
+        "/usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py",
+    }
     for node in PATRONI_NODES:
         first = pitr_remote_execution.build_host_release_bundle(node)
         second = pitr_remote_execution.build_host_release_bundle(node)
@@ -651,6 +656,8 @@ def test_installer_and_blue_green_siblings_are_attested():
         "/usr/local/libexec/mvn-pitr/run_postgres_pitr_install_locked.py",
         "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh",
         "/usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh",
+        "/usr/local/libexec/mvn-pitr/require_deploy_capacity.sh",
+        "/usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py",
         "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
         "/usr/local/libexec/mvn-pitr/prepare_google_oauth_token_dir.sh",
     }

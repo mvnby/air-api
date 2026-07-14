@@ -9,7 +9,9 @@ MIGRATION_SERVICE="${API_MIGRATION_SERVICE:-app-blue}"
 PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 MAINTENANCE_MARKER="${API_MAINTENANCE_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
+PITR_MAINTENANCE_MARKER="${API_PITR_MAINTENANCE_MARKER:-/run/mvn-postgres-pitr-maintenance}"
 RUN_DEFAULTS="${API_RUN_DEFAULTS:-true}"
+CAPACITY_HELPER="${API_DEPLOY_CAPACITY_HELPER:-${SCRIPT_DIR}/require_deploy_capacity.sh}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
@@ -79,18 +81,28 @@ require_primary() {
   }
 }
 
-for command in docker curl python3; do
+for command in docker curl python3 awk; do
   command -v "${command}" >/dev/null 2>&1 || {
     log error "required command is missing: ${command}"
     exit 1
   }
 done
+[[ -f "${CAPACITY_HELPER}" && ! -L "${CAPACITY_HELPER}" ]] || {
+  log error "deploy capacity helper is missing or unsafe: ${CAPACITY_HELPER}"
+  exit 1
+}
+# shellcheck disable=SC1090
+source "${CAPACITY_HELPER}"
 [[ "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]] || {
   log error "BACKEND_IMAGE must be immutable"
   exit 1
 }
 [[ ! -e "${MAINTENANCE_MARKER}" ]] || {
   log error "Patroni maintenance marker exists: ${MAINTENANCE_MARKER}"
+  exit 1
+}
+[[ ! -e "${PITR_MAINTENANCE_MARKER}" && ! -L "${PITR_MAINTENANCE_MARKER}" ]] || {
+  log error "PITR release maintenance is active: ${PITR_MAINTENANCE_MARKER}"
   exit 1
 }
 [[ -f "${PROJECT_DIR}/${COMPOSE_FILE}" ]] || {
@@ -105,6 +117,7 @@ cd "${PROJECT_DIR}"
 }
 
 require_primary
+require_deploy_capacity
 [[ -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]] || {
   log error "Google OAuth token preparation script is missing: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}"
   exit 1
@@ -120,6 +133,7 @@ fi
 log pull "pulling migration image ${BACKEND_IMAGE}"
 "${COMPOSE[@]}" pull "${MIGRATION_SERVICE}"
 require_primary
+require_deploy_capacity
 
 log migrate "running Alembic on the confirmed Patroni primary"
 [[ ! -e "${MAINTENANCE_MARKER}" && ! -L "${MAINTENANCE_MARKER}" ]] || {
@@ -128,6 +142,8 @@ log migrate "running Alembic on the confirmed Patroni primary"
 }
 "${COMPOSE[@]}" run -T --rm --no-deps "${MIGRATION_SERVICE}" alembic upgrade head
 if [[ "${RUN_DEFAULTS}" == "true" ]]; then
+  require_primary
+  require_deploy_capacity
   "${COMPOSE[@]}" run -T --rm --no-deps "${MIGRATION_SERVICE}" \
     python3 scripts/ensure_global_config_defaults.py
 fi
