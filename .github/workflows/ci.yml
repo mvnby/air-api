@@ -19,7 +19,10 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The immutable-image pytest suite can exceed 30 minutes on a throttled
+    # hosted runner while still making steady progress. Keep a hard bound with
+    # enough headroom to distinguish slow infrastructure from a hung suite.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 

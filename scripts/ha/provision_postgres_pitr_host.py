@@ -398,8 +398,26 @@ def _require_role_agent_inactive(runner: Runner) -> None:
         )
 
 
+def _is_benign_reset_not_loaded(
+    args: Sequence[str], result: subprocess.CompletedProcess[str]
+) -> bool:
+    if (
+        list(args[:2]) != ["systemctl", "reset-failed"]
+        or len(args) != 3
+        or args[2] not in SYSTEMD_UNITS
+        or result.returncode != 1
+        or result.stdout.strip()
+    ):
+        return False
+    unit = args[2]
+    return result.stderr.strip() == (
+        f"Failed to reset failed state of unit {unit}: Unit {unit} not loaded."
+    )
+
+
 def _quiesce_units(runner: Runner) -> None:
     command_failures: list[str] = []
+    pending_not_loaded_resets: list[str] = []
 
     def attempt(args: Sequence[str]) -> None:
         try:
@@ -408,7 +426,14 @@ def _quiesce_units(runner: Runner) -> None:
             command_failures.append(f"{' '.join(args[1:])}: {type(exc).__name__}")
             return
         if result.returncode != 0:
-            command_failures.append(f"{' '.join(args[1:])}: rc={result.returncode}")
+            if _is_benign_reset_not_loaded(args, result):
+                # This is accepted only after the independent exact active,
+                # enablement, and failed-state proofs below all succeed.
+                pending_not_loaded_resets.append(args[2])
+            else:
+                command_failures.append(
+                    f"{' '.join(args[1:])}: rc={result.returncode}"
+                )
 
     for _ in range(2):
         for unit in TIMER_UNITS:
@@ -420,6 +445,16 @@ def _quiesce_units(runner: Runner) -> None:
         attempt(["systemctl", "daemon-reload"])
 
     unsafe_states: list[str] = []
+    for unit in SYSTEMD_UNITS:
+        try:
+            result = runner(
+                ["systemctl", "show", "--property=LoadState", "--value", unit]
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            unsafe_states.append(f"{unit}=load-state-unknown:{type(exc).__name__}")
+        else:
+            if result.returncode != 0 or result.stdout.strip() != "loaded":
+                unsafe_states.append(f"{unit}=not-loaded-or-unknown")
     for unit in TIMER_UNITS:
         try:
             result = runner(["systemctl", "is-enabled", unit])
@@ -436,6 +471,14 @@ def _quiesce_units(runner: Runner) -> None:
         else:
             if result.returncode not in {0, 3} or result.stdout.strip() != "inactive":
                 unsafe_states.append(f"{unit}=active-or-unknown")
+    for unit in SYSTEMD_UNITS:
+        try:
+            result = runner(["systemctl", "is-failed", unit])
+        except (OSError, subprocess.SubprocessError) as exc:
+            unsafe_states.append(f"{unit}=failed-state-unknown:{type(exc).__name__}")
+        else:
+            if result.returncode != 1 or result.stdout.strip() != "inactive":
+                unsafe_states.append(f"{unit}=failed-or-unknown")
     if unsafe_states:
         raise RuntimeError(
             "PITR units did not converge to a safe state: " + "; ".join(unsafe_states)
@@ -445,6 +488,10 @@ def _quiesce_units(runner: Runner) -> None:
             "PITR unit convergence reached safe postconditions after command failures: "
             + "; ".join(command_failures)
         )
+    # Reaching this point is the authorization to classify the exact
+    # reset-failed/not-loaded responses as benign.  Keep the collection live
+    # until every safe postcondition has been proved.
+    del pending_not_loaded_resets
 
 
 def _receipt_payload(

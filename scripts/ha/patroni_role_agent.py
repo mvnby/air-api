@@ -52,6 +52,7 @@ REVIEWED_PRIMARY_SYSTEMD_UNITS = (
     "mvn-postgres-basebackup.timer",
 )
 APP_SERVICE_NAMES = ("app", "app-blue", "app-green")
+CONTAINER_PROXY_SERVICE = "api-proxy"
 
 
 @dataclass(frozen=True)
@@ -168,6 +169,19 @@ def _start_service(config: AgentConfig, service: str, *, recreate: bool) -> None
         args.append("--force-recreate")
     args.append(service)
     _run_compose(config, *args)
+
+
+def _refresh_container_proxy_dns(
+    config: AgentConfig,
+    *,
+    running_services: set[str],
+) -> bool:
+    """Refresh nginx's startup-time Docker DNS after an app container changes."""
+
+    if CONTAINER_PROXY_SERVICE not in running_services:
+        return False
+    _run_compose(config, "restart", CONTAINER_PROXY_SERVICE)
+    return True
 
 
 def _stop_service_verified(config: AgentConfig, service: str) -> None:
@@ -518,6 +532,11 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                 actions.append(
                     "recreate_app" if recreate_app else "start_app"
                 )
+                if _refresh_container_proxy_dns(
+                    config,
+                    running_services=running,
+                ):
+                    actions.append("refresh_container_proxy_dns")
             final_running = _running_services(config)
             if (
                 service not in final_running
@@ -532,6 +551,11 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                 _require_fresh_primary_or_fence(config, "app_activation")
                 _start_service(config, service, recreate=app_env_changed)
                 actions.append("recreate_app" if app_env_changed else "start_app")
+                if _refresh_container_proxy_dns(
+                    config,
+                    running_services=running,
+                ):
+                    actions.append("refresh_container_proxy_dns")
             bot_needs_start = bot_env_changed or not bot_running
             if app_needs_start or bot_needs_start:
                 _wait_ready(config)

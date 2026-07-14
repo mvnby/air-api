@@ -14,6 +14,7 @@ class SystemdRunner:
         self,
         *,
         active_state: str = "inactive",
+        load_state: str = "loaded",
         identity_uid: int | None = None,
         identity_gid: int | None = None,
         fail_first_action: bool = False,
@@ -21,6 +22,7 @@ class SystemdRunner:
         role_agent_state: str = "inactive",
     ):
         self.active_state = active_state
+        self.load_state = load_state
         self.identity_uid = os.geteuid() if identity_uid is None else identity_uid
         self.identity_gid = os.getegid() if identity_gid is None else identity_gid
         self.fail_first_action = fail_first_action
@@ -63,10 +65,57 @@ class SystemdRunner:
             )
             code = 3 if state == "inactive" else 0
             return subprocess.CompletedProcess(values, code, state + "\n", "")
+        if values[1:2] == ["is-failed"]:
+            return subprocess.CompletedProcess(values, 1, "inactive\n", "")
+        if values[1:4] == ["show", "--property=LoadState", "--value"]:
+            return subprocess.CompletedProcess(values, 0, self.load_state + "\n", "")
         if self.fail_first_action and not self.failed_action:
             self.failed_action = True
             return subprocess.CompletedProcess(values, 1, "", "simulated partial failure")
         return subprocess.CompletedProcess(values, 0, "", "")
+
+
+class ResetFailedRunner(SystemdRunner):
+    def __init__(
+        self,
+        *,
+        reset_returncode: int = 1,
+        reset_stdout: str = "",
+        reset_stderr: str | None = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.reset_returncode = reset_returncode
+        self.reset_stdout = reset_stdout
+        self.reset_stderr = reset_stderr
+
+    def __call__(self, args):
+        values = list(args)
+        if values[1:2] == ["reset-failed"]:
+            self.calls.append(values)
+            unit = values[-1]
+            stderr = self.reset_stderr
+            if stderr is None:
+                stderr = (
+                    f"Failed to reset failed state of unit {unit}: "
+                    f"Unit {unit} not loaded.\n"
+                )
+            return subprocess.CompletedProcess(
+                values,
+                self.reset_returncode,
+                self.reset_stdout,
+                stderr,
+            )
+        return super().__call__(values)
+
+
+class FailedPostconditionRunner(ResetFailedRunner):
+    def __call__(self, args):
+        values = list(args)
+        if values[1:2] == ["is-failed"]:
+            self.calls.append(values)
+            return subprocess.CompletedProcess(values, 0, "failed\n", "")
+        return super().__call__(values)
 
 
 def _fixture_paths(tmp_path: Path, transaction_id: str):
@@ -329,6 +378,65 @@ def test_provision_attempts_full_quiescence_after_partial_systemd_failure(tmp_pa
         assert runner.calls.count(["systemctl", "stop", service]) == 2
     for unit in provision.SYSTEMD_UNITS:
         assert ["systemctl", "is-active", unit] in runner.calls
+
+
+def test_provision_accepts_exact_reset_failed_not_loaded_after_safe_proofs(tmp_path):
+    runner = ResetFailedRunner()
+
+    *_, receipt = _provision(tmp_path, runner=runner)
+
+    assert receipt.is_file()
+    for unit in provision.SYSTEMD_UNITS:
+        assert runner.calls.count(["systemctl", "reset-failed", unit]) == 2
+        assert ["systemctl", "is-active", unit] in runner.calls
+        assert ["systemctl", "is-failed", unit] in runner.calls
+    for timer in provision.TIMER_UNITS:
+        assert ["systemctl", "is-enabled", timer] in runner.calls
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "stderr"),
+    [
+        (2, "", "Unit failed to reset\n"),
+        (1, "unexpected\n", ""),
+        (1, "", "Permission denied\n"),
+    ],
+)
+def test_provision_rejects_noncanonical_reset_failed_error(
+    tmp_path, returncode, stdout, stderr
+):
+    runner = ResetFailedRunner(
+        reset_returncode=returncode,
+        reset_stdout=stdout,
+        reset_stderr=stderr,
+    )
+
+    with pytest.raises(RuntimeError, match="safe postconditions after command failures"):
+        _provision(tmp_path, runner=runner)
+
+
+def test_not_loaded_reset_is_not_benign_without_safe_runtime_postconditions(tmp_path):
+    runner = ResetFailedRunner(active_state="active")
+
+    with pytest.raises(RuntimeError, match="did not converge"):
+        _provision(tmp_path, runner=runner)
+
+
+def test_not_loaded_reset_is_not_benign_when_failed_state_is_not_clear(tmp_path):
+    runner = FailedPostconditionRunner()
+
+    with pytest.raises(RuntimeError, match="did not converge"):
+        _provision(tmp_path, runner=runner)
+
+
+@pytest.mark.parametrize("load_state", ["not-found", "error"])
+def test_not_loaded_reset_is_not_benign_without_loaded_unit_assets(
+    tmp_path, load_state
+):
+    runner = ResetFailedRunner(load_state=load_state)
+
+    with pytest.raises(RuntimeError, match="did not converge"):
+        _provision(tmp_path, runner=runner)
 
 
 def test_postgres_identity_mismatch_precedes_every_host_state_mutation(tmp_path):
