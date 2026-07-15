@@ -135,7 +135,8 @@ def test_restore_drill_waits_for_stable_sql_and_checks_business_data():
     assert "--env-file" in script
     assert "PGPASSWORD" not in script
     assert "statvfs" in script
-    assert 'POSTGRES_DATA_TMPFS_BYTES="10737418240"' in script
+    assert 'RESOURCE_SIZING_HELPER="/usr/local/sbin/mvn-logical-restore-resource-sizer"' in script
+    assert 'log "resource_envelope sql_bytes=${sql_bytes}' in script
     assert "MediaIoBaseDownload" in script
     assert "download_backup_file" not in script
     assert 'RUNTIME_CHECK_HELPER="/usr/local/sbin/mvn-postgres-pitr-runtime-check"' in script

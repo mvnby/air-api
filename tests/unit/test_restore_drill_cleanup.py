@@ -74,15 +74,16 @@ def test_logical_drill_uses_root_state_and_isolated_generated_credentials():
     assert '${POSTGRES_IMAGE:-' not in text
     assert '${APP_SERVICE:-' not in text
     assert '${DB_SERVICE:-' not in text
-    assert 'POSTGRES_DATA_TMPFS_BYTES="10737418240"' in text
-    assert 'POSTGRES_MEMORY_BYTES="12884901888"' in text
-    assert 'POSTGRES_REQUIRED_HOST_MEMORY_BYTES="13958643712"' in text
+    assert 'RESOURCE_SIZING_HELPER="/usr/local/sbin/mvn-logical-restore-resource-sizer"' in text
+    assert '--live-database-bytes "${live_database_bytes}"' in text
+    assert '--host-total-bytes "${docker_memory_bytes}"' in text
     assert '--memory "${POSTGRES_MEMORY_BYTES}"' in text
     assert '--memory-swap "${POSTGRES_MEMORY_BYTES}"' in text
     assert 'host.get("Memory") != int(memory)' in text
     assert 'host.get("MemorySwap") != int(memory)' in text
     assert 'docker info --format \'{{.MemTotal}}\'' in text
     assert 'host_available_bytes >= POSTGRES_REQUIRED_HOST_MEMORY_BYTES' in text
+    assert text.count("check_available_memory") >= 3
     assert '--tmpfs "/var/lib/postgresql/data:rw,nosuid,nodev,size=${POSTGRES_DATA_TMPFS_BYTES}' in text
     assert 'type=volume' not in text
     assert 'data tmpfs quota is invalid' in text
