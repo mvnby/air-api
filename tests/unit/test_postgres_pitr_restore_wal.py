@@ -197,7 +197,11 @@ def test_prepare_verifies_lineage_downloads_exact_chain_and_writes_target(
     ).exists()
     assert (data_dir / "recovery.signal").is_file()
     safe_conf = (target_dir / "control/postgresql.conf").read_text()
-    assert "restore_command = 'cp /pitr-restore/wal/%f %p'" in safe_conf
+    assert (
+        "restore_command = '/usr/bin/install -m 0600 "
+        "/pitr-restore/wal/%f %p'"
+    ) in safe_conf
+    assert "restore_command = 'cp " not in safe_conf
     assert "recovery_target_action = 'pause'" in safe_conf
     assert "recovery_target_inclusive = off" in safe_conf
     assert "recovery_target_time = '2026-07-02T02:30:00+00:00'" in safe_conf
