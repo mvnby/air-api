@@ -3,8 +3,13 @@
 
 from __future__ import annotations
 
+import argparse
+import os
 import re
+import stat
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Sequence
 
 
@@ -26,6 +31,15 @@ MAX_TIMELINE_HISTORY_BYTES = 64 * 1024
 MAX_TIMELINE_HISTORY_FILES = 1024
 MAX_TIMELINE_HISTORY_ENTRIES = 1024
 MAX_SELECTED_WAL_SEGMENTS = 131072
+MAX_LOCAL_ARCHIVE_ENTRIES = 8192
+LOCAL_HISTORY_UID = 70
+LOCAL_HISTORY_GID = 70
+LOCAL_ARCHIVE_MODE = 0o700
+LOCAL_HISTORY_MODE = 0o600
+ALLOWED_LOCAL_ARCHIVE_DIRS = {
+    Path("/opt/air-api/postgres-wal-archive"),
+    Path("/opt/mvn-reserve/postgres-wal-archive"),
+}
 
 
 @dataclass(frozen=True)
@@ -232,6 +246,113 @@ def _history_lineage(
     return lineage, target_entries, tuple(selected_histories)
 
 
+def _read_local_history(
+    path: Path,
+    *,
+    expected_uid: int,
+    expected_gid: int,
+) -> bytes:
+    before = path.lstat()
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or stat.S_ISLNK(before.st_mode)
+        or before.st_uid != expected_uid
+        or before.st_gid != expected_gid
+        or stat.S_IMODE(before.st_mode) != LOCAL_HISTORY_MODE
+        or before.st_nlink != 1
+        or before.st_size <= 0
+        or before.st_size > MAX_TIMELINE_HISTORY_BYTES
+    ):
+        raise SystemExit(f"PostgreSQL timeline history metadata is unsafe: {path.name}")
+    descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise SystemExit(
+                f"PostgreSQL timeline history changed while opening: {path.name}"
+            )
+        payload = os.read(descriptor, MAX_TIMELINE_HISTORY_BYTES + 1)
+        finished = os.fstat(descriptor)
+        identity = (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_uid",
+            "st_gid",
+            "st_nlink",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if (
+            len(payload) != opened.st_size
+            or os.read(descriptor, 1)
+            or tuple(getattr(finished, field) for field in identity)
+            != tuple(getattr(opened, field) for field in identity)
+        ):
+            raise SystemExit(
+                f"PostgreSQL timeline history changed while reading: {path.name}"
+            )
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+def validate_local_history_chain(
+    archive_dir: Path,
+    *,
+    required_end_wal: str,
+    expected_uid: int = LOCAL_HISTORY_UID,
+    expected_gid: int = LOCAL_HISTORY_GID,
+) -> tuple[str, ...]:
+    """Validate staged local history before any immutable remote upload."""
+
+    if not WAL_SEGMENT_RE.fullmatch(required_end_wal):
+        raise SystemExit("Required end WAL is invalid for local history validation")
+    target_timeline = int(required_end_wal[:8], 16)
+    if target_timeline <= 0:
+        raise SystemExit("Required end WAL timeline is invalid")
+    if not archive_dir.is_absolute() or archive_dir.resolve() != archive_dir:
+        raise SystemExit("Local PostgreSQL WAL archive path is unsafe")
+    metadata = archive_dir.lstat()
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or metadata.st_uid != expected_uid
+        or metadata.st_gid != expected_gid
+        or stat.S_IMODE(metadata.st_mode) != LOCAL_ARCHIVE_MODE
+        or metadata.st_nlink < 2
+    ):
+        raise SystemExit("Local PostgreSQL WAL archive metadata is unsafe")
+
+    histories: list[WalObject] = []
+    payloads: dict[str, bytes] = {}
+    for count, entry in enumerate(os.scandir(archive_dir), start=1):
+        if count > MAX_LOCAL_ARCHIVE_ENTRIES:
+            raise SystemExit("Local PostgreSQL WAL archive has too many entries")
+        if WAL_HISTORY_RE.fullmatch(entry.name) is None:
+            continue
+        path = archive_dir / entry.name
+        payload = _read_local_history(
+            path,
+            expected_uid=expected_uid,
+            expected_gid=expected_gid,
+        )
+        timeline = int(entry.name[:8], 16)
+        parse_timeline_history(payload, timeline=timeline)
+        histories.append(WalObject(str(path), entry.name, len(payload)))
+        payloads[entry.name] = payload
+
+    histories.sort(key=lambda item: item.filename)
+    _lineage, _entries, selected = _history_lineage(
+        histories,
+        start_timeline=1,
+        end_timeline=target_timeline,
+        history_loader=lambda item: payloads[item.filename],
+    )
+    return tuple(item.filename for item in selected)
+
+
 def select_wal_objects(
     objects: Sequence[WalObject],
     *,
@@ -320,3 +441,33 @@ def select_wal_objects(
         history_files=histories,
         backup_history_files=tuple(sorted(backup_histories, key=lambda item: item.filename)),
     )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "command",
+        choices=("validate-local-history",),
+    )
+    parser.add_argument("--archive-dir", required=True)
+    parser.add_argument("--required-end-wal", required=True)
+    args = parser.parse_args(argv)
+    archive_dir = Path(args.archive_dir)
+    if archive_dir not in ALLOWED_LOCAL_ARCHIVE_DIRS:
+        print("PostgreSQL WAL lineage: unreviewed local archive path", file=sys.stderr)
+        return 1
+    try:
+        selected = validate_local_history_chain(
+            archive_dir,
+            required_end_wal=args.required_end_wal,
+        )
+    except (OSError, RuntimeError, SystemExit) as exc:
+        print(f"PostgreSQL WAL lineage: {exc}", file=sys.stderr)
+        return 1
+    for name in selected:
+        print(name)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

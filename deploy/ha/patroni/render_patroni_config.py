@@ -116,6 +116,15 @@ def render_config() -> dict[str, Any]:
         )
         postgres_parameters["archive_command"] = required("PATRONI_ARCHIVE_COMMAND")
 
+    reviewed_pg_hba = [
+        "local all all trust",
+        "host all all 127.0.0.1/32 scram-sha-256",
+        "host all all 172.16.0.0/12 scram-sha-256",
+        f"host replication {replication_user} 172.16.0.0/12 scram-sha-256",
+        f"host replication {replication_user} 10.77.0.0/24 scram-sha-256",
+        "host all all 10.77.0.0/24 scram-sha-256",
+    ]
+
     watchdog_mode = os.getenv("PATRONI_WATCHDOG_MODE", "off").strip().lower()
     if watchdog_mode not in {"off", "automatic", "required"}:
         raise ValueError("PATRONI_WATCHDOG_MODE must be off, automatic, or required")
@@ -149,14 +158,7 @@ def render_config() -> dict[str, Any]:
                 },
             },
             "initdb": [{"encoding": "UTF8"}, "data-checksums"],
-            "pg_hba": [
-                "local all all trust",
-                "host all all 127.0.0.1/32 scram-sha-256",
-                "host all all 172.16.0.0/12 scram-sha-256",
-                f"host replication {replication_user} 172.16.0.0/12 scram-sha-256",
-                f"host replication {replication_user} 10.77.0.0/24 scram-sha-256",
-                "host all all 10.77.0.0/24 scram-sha-256",
-            ],
+            "pg_hba": list(reviewed_pg_hba),
         },
         "postgresql": {
             "listen": "0.0.0.0:5432",
@@ -175,6 +177,11 @@ def render_config() -> dict[str, Any]:
                 },
             },
             "parameters": {"password_encryption": "scram-sha-256"},
+            # ``bootstrap.pg_hba`` only seeds a newly initialized database
+            # cluster.  Keep the same reviewed rules in local Patroni config
+            # so existing clusters converge too, including replication from
+            # Docker's 172.16.0.0/12 bridge used by the isolated backup helper.
+            "pg_hba": list(reviewed_pg_hba),
         },
         "watchdog": {
             "mode": watchdog_mode,

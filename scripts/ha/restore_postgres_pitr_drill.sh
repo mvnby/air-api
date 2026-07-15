@@ -20,6 +20,7 @@ KEEP_DRILL_CONTAINER="${KEEP_DRILL_CONTAINER:-false}"
 KEEP_DRILL_FILES="${KEEP_DRILL_FILES:-false}"
 RUNTIME_CHECK_HELPER="${RUNTIME_CHECK_HELPER:-/usr/local/sbin/mvn-postgres-pitr-runtime-check}"
 TOOL_RUNNER="/usr/local/sbin/mvn-postgres-pitr-tool-runner"
+WAL_LINEAGE_HELPER="/usr/local/sbin/mvn-postgres-pitr-wal-lineage"
 PITR_OPERATION_ID="${PITR_OPERATION_ID:-}"
 
 umask 077
@@ -202,6 +203,10 @@ if [[ -z "${POSTGRES_USER}" || -z "${POSTGRES_DB}" ]]; then
 fi
 
 [[ -x "${TOOL_RUNNER}" ]] || { echo "PITR tool runner is unavailable" >&2; exit 1; }
+[[ -x "${WAL_LINEAGE_HELPER}" ]] || {
+  echo "PITR WAL lineage helper is unavailable" >&2
+  exit 1
+}
 live_state="$(
   "${COMPOSE[@]}" exec -T "${DB_SERVICE}" psql -v ON_ERROR_STOP=1 \
     -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -AtF '|' \
@@ -227,9 +232,13 @@ if [[ "${wal_segment_bytes}" != "16777216" ]]; then
   echo "Live PostgreSQL WAL segment size does not match the reviewed archive contract" >&2
   exit 1
 fi
-
 target_name=""
 target_lsn=""
+archive_dir="${PROJECT_DIR}/postgres-wal-archive"
+[[ -d "${archive_dir}" && ! -L "${archive_dir}" ]] || {
+  echo "Reviewed local WAL archive directory is unavailable" >&2
+  exit 1
+}
 if [[ "${target_mode}" == "time" ]]; then
   if [[ ! "${required_end_wal}" =~ ^[0-9A-F]{24}$ ]] ||
     ! is_unsigned_int "${last_archived_epoch}" || (( last_archived_epoch < target_epoch )); then
@@ -249,11 +258,6 @@ else
     echo "PostgreSQL returned an invalid restore-point proof" >&2
     exit 1
   fi
-  archive_dir="${PROJECT_DIR}/postgres-wal-archive"
-  [[ -d "${archive_dir}" && ! -L "${archive_dir}" ]] || {
-    echo "Reviewed local WAL archive directory is unavailable" >&2
-    exit 1
-  }
   archive_ready=false
   for _ in $(seq 1 "${ARCHIVE_TIMEOUT_SECONDS}"); do
     if [[ -f "${archive_dir}/${required_end_wal}" && ! -L "${archive_dir}/${required_end_wal}" ]] &&
@@ -267,8 +271,51 @@ else
     echo "Restore-point WAL was not archived before timeout" >&2
     exit 1
   }
-  "${TOOL_RUNNER}" --phase wal-upload --data-dir "${archive_dir}"
+
 fi
+
+# PostgreSQL only archives a timeline history file when that timeline is
+# created.  A cluster adopted after earlier promotions can therefore have the
+# original history chain in PGDATA but not in the new remote archive.  Reuse
+# the image-pinned, create-only archive helper to stage every ancestor before
+# the strict remote lineage check.  This is required for both target modes.
+history_output="$(
+  "${COMPOSE[@]}" exec -T --user \
+    "${POSTGRES_CONTAINER_UID}:${POSTGRES_CONTAINER_GID}" \
+    "${DB_SERVICE}" sh -ceu '
+      data_dir="${PGDATA:-/var/lib/postgresql/data}"
+      for source in "${data_dir}"/pg_wal/*.history; do
+        [ -e "${source}" ] || continue
+        name="${source##*/}"
+        /usr/local/bin/mvn-patroni-archive-wal \
+          "${source}" "${name}"
+        printf "%s\n" "${name}"
+      done
+    '
+)" || {
+  echo "Could not stage the complete PostgreSQL timeline history chain" >&2
+  exit 1
+}
+staged_history_count="$(printf '%s\n' "${history_output}" | sed '/^$/d' | wc -l | tr -d ' ')"
+if ! is_unsigned_int "${staged_history_count}"; then
+  echo "PostgreSQL timeline history staging returned an invalid result" >&2
+  exit 1
+fi
+validated_history_output="$(
+  "${WAL_LINEAGE_HELPER}" validate-local-history \
+    --archive-dir "${archive_dir}" \
+    --required-end-wal "${required_end_wal}"
+)" || {
+  echo "Local PostgreSQL timeline history failed strict lineage validation" >&2
+  exit 1
+}
+validated_history_count="$(printf '%s\n' "${validated_history_output}" | sed '/^$/d' | wc -l | tr -d ' ')"
+if ! is_unsigned_int "${validated_history_count}"; then
+  echo "PostgreSQL timeline history validation returned an invalid result" >&2
+  exit 1
+fi
+log "staged_timeline_history_files=${staged_history_count} validated_lineage_history_files=${validated_history_count} required_end_timeline=${required_end_wal:0:8}"
+"${TOOL_RUNNER}" --phase wal-upload --data-dir "${archive_dir}"
 log "target_mode=${target_mode} target_time=${TARGET_TIME:-<none>} target_name=${target_name:-<none>} target_lsn=${target_lsn:-<none>} expected_system_identifier=${live_system_identifier} required_end_wal=${required_end_wal}"
 
 run_dir="${DRILL_DIR}/${PITR_OPERATION_ID}"

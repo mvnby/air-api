@@ -50,9 +50,10 @@ def write_recovery_settings(
     if wal_mode == "local":
         # The drill mounts its verified WAL source read-only and deliberately
         # keeps archive members at 0400.  Plain ``cp`` carries that mode to
-        # PostgreSQL's RECOVERYHISTORY staging file, which PostgreSQL must
-        # subsequently reopen for writing.  Install the destination with the
-        # normal server-owned 0600 mode while leaving the archive immutable.
+        # PostgreSQL's RECOVERYHISTORY/RECOVERYXLOG staging file, but the
+        # durable-rename path opens that file O_RDWR before fsync.  Install the
+        # destination with the normal server-owned 0600 mode while leaving the
+        # archive immutable.
         restore_command = (
             "/usr/bin/install -m 0600 "
             f"{shlex.quote(restore_mount_path.rstrip('/') + '/wal/%f')} %p"
