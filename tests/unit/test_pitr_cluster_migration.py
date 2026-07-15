@@ -186,7 +186,9 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
         ("release", "inspect", "mvn-api", TXID),
         ("release", "apply", "zakup", TXID),
         ("release", "apply", "mvn-api", TXID),
+        ("role-agent", "quiesce-standby", "zakup", TXID),
         ("secret", "preflight", "zakup", TXID, ENV_TEXT),
+        ("role-agent", "resume-standby", "zakup", TXID),
         ("secret", "preflight", "mvn-api", TXID, ENV_TEXT),
         ("role-agent", "quiesce-standby", "zakup", TXID),
         ("maintenance", "provision-node", "zakup", TXID),
@@ -194,11 +196,17 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
         ("role-agent", "quiesce-fenced", "mvn-api", TXID),
         ("fenced-provision", "mvn-api", TXID),
         ("role-agent", "resume-primary", "mvn-api", TXID),
+        ("role-agent", "quiesce-standby", "zakup", TXID),
         ("secret", "configure-node", "zakup", TXID, ENV_TEXT),
+        ("role-agent", "resume-standby", "zakup", TXID),
         ("secret", "configure-node", "mvn-api", TXID, ENV_TEXT),
+        ("role-agent", "quiesce-standby", "zakup", TXID),
         ("maintenance", "scrub-node", "zakup", TXID),
+        ("role-agent", "resume-standby", "zakup", TXID),
         ("maintenance", "scrub-node", "mvn-api", TXID),
+        ("role-agent", "quiesce-standby", "zakup", TXID),
         ("maintenance", "enable-archive-env", "zakup", TXID),
+        ("role-agent", "resume-standby", "zakup", TXID),
         ("maintenance", "enable-archive-env", "mvn-api", TXID),
         ("maintenance", "basebackup", "mvn-api", TXID),
         ("maintenance", "restore-drill", "mvn-api", TXID),
@@ -208,7 +216,7 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
         ("role-agent", "resume-primary", "mvn-api", TXID),
         ("maintenance", "verify", "mvn-api", TXID),
     ]
-    assert len(operations.events) == 1 + 3 * 25
+    assert len(operations.events) == 1 + 3 * 33
     assert operations.events[0] == ("topology",)
     for index in range(1, len(operations.events), 3):
         assert operations.events[index] == ("topology",)
@@ -261,11 +269,13 @@ def test_first_bundle_digest_rejection_never_authorizes_rollback(tmp_path):
     ]
 
 
-def test_preflight_failure_rolls_back_assets_before_any_host_provision(tmp_path):
+def test_primary_preflight_failure_after_standby_window_requires_same_tx_resume(
+    tmp_path,
+):
     operations = FakeOperations()
     operations.secret_failure = ("preflight", "mvn-api")
 
-    with pytest.raises(RuntimeError, match="release bundles were rolled back"):
+    with pytest.raises(RuntimeError, match=f"resume with the same transaction ID {TXID}"):
         migrate_cluster(
             context=_context(tmp_path),
             env_text=ENV_TEXT,
@@ -282,8 +292,6 @@ def test_preflight_failure_rolls_back_assets_before_any_host_provision(tmp_path)
         "inspect",
         "apply",
         "apply",
-        "rollback",
-        "rollback",
     ]
 
 
@@ -402,6 +410,8 @@ def test_quiesce_is_standby_first_and_ambiguous_failure_recovers_both_agents(
     assert role_events == [
         ("role-agent", "quiesce-standby", "zakup", TXID),
         ("role-agent", "resume-standby", "zakup", TXID),
+        ("role-agent", "quiesce-standby", "zakup", TXID),
+        ("role-agent", "resume-standby", "zakup", TXID),
         ("role-agent", "quiesce-fenced", "mvn-api", TXID),
         ("role-agent", "quiesce-fenced", "mvn-api", TXID),
         ("role-agent", "quiesce-fenced", "zakup", TXID),
@@ -467,7 +477,7 @@ def test_recovery_keeps_both_nodes_fenced_when_fresh_topology_is_unavailable(
     operations = FakeOperations()
     operations.maintenance_failure = ("provision-node", "zakup")
     # The compatibility barrier adds two proved read-only operations.
-    operations.discover_failures.add(18)
+    operations.discover_failures.add(22)
 
     with pytest.raises(RuntimeError, match="neither node was resumed"):
         migrate_cluster(
@@ -482,9 +492,9 @@ def test_recovery_keeps_both_nodes_fenced_when_fresh_topology_is_unavailable(
     assert not any(event[1].startswith("resume-") for event in role_events[-2:])
 
 
-def test_topology_failure_before_first_provision_still_rolls_back_assets(tmp_path):
+def test_topology_failure_before_first_agent_quiesce_still_rolls_back_assets(tmp_path):
     operations = FakeOperations()
-    operations.topologies = [_topology()] * 13 + [_topology(timeline=10)]
+    operations.topologies = [_topology()] * 9 + [_topology(timeline=10)]
 
     with pytest.raises(RuntimeError, match="release bundles were rolled back"):
         migrate_cluster(
