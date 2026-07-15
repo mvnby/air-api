@@ -20,6 +20,7 @@ try:
     )
     from scripts.ha.pitr_remote_execution import (
         prepare_host_release_bundles,
+        run_remote_fenced_provision_phase,
         run_remote_maintenance_phase,
         run_remote_release_action,
         run_remote_role_agent_phase,
@@ -37,6 +38,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
     )
     from pitr_remote_execution import (  # type: ignore[no-redef]
         prepare_host_release_bundles,
+        run_remote_fenced_provision_phase,
         run_remote_maintenance_phase,
         run_remote_release_action,
         run_remote_role_agent_phase,
@@ -50,6 +52,7 @@ ReleaseAction = Callable[..., str]
 ReleaseBundleBuilder = Callable[[Sequence[PatroniNode]], dict[str, str]]
 SecretPhase = Callable[..., None]
 MaintenancePhase = Callable[..., None]
+FencedProvisionPhase = Callable[..., None]
 RoleAgentPhase = Callable[..., None]
 
 TRANSACTION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -72,6 +75,7 @@ class MigrationDependencies:
     release: ReleaseAction = run_remote_release_action
     secret: SecretPhase = run_remote_secret_phase
     maintenance: MaintenancePhase = run_remote_maintenance_phase
+    fenced_provision: FencedProvisionPhase = run_remote_fenced_provision_phase
     role_agent: RoleAgentPhase = run_remote_role_agent_phase
 
 
@@ -215,6 +219,15 @@ class _MigrationOrchestrator:
             runner=self.runner,
         )
 
+    def _fenced_provision(self, node: PatroniNode) -> None:
+        self.dependencies.fenced_provision(
+            node=node,
+            context=self.context,
+            bootstrap_helper=self.bootstrap_helper,
+            transaction_id=self.transaction_id,
+            runner=self.runner,
+        )
+
     def _role_agent(self, phase: str, node: PatroniNode) -> None:
         self.dependencies.role_agent(
             node=node,
@@ -223,6 +236,29 @@ class _MigrationOrchestrator:
             transaction_id=self.transaction_id,
             runner=self.runner,
         )
+
+    def _run_with_standby_agent_quiesced(
+        self,
+        *,
+        node: PatroniNode,
+        stage: str,
+        action: Callable[[], None],
+    ) -> None:
+        baseline = self.baseline
+        if baseline is None or node.alias != baseline.standby.alias:
+            raise RuntimeError("standby role-agent window requires the baseline standby")
+        self.role_agent_window_open = True
+        self._mutate(
+            stage=f"role-agent quiesce {node.alias} before {stage}",
+            action=lambda: self._role_agent("quiesce-standby", node),
+            enter_roll_forward=True,
+        )
+        self._mutate(stage=f"{stage} {node.alias}", action=action)
+        self._mutate(
+            stage=f"role-agent resume {node.alias} after {stage}",
+            action=lambda: self._role_agent("resume-standby", node),
+        )
+        self.role_agent_window_open = False
 
     def _rollback_owned_bundles(self, original_error: BaseException) -> None:
         failures: list[str] = []
@@ -336,10 +372,18 @@ class _MigrationOrchestrator:
                     action=lambda node=node: self._release("apply", node),
                 )
             for node in ordered_nodes:
-                self._mutate(
-                    stage=f"preflight {node.alias}",
-                    action=lambda node=node: self._secret("preflight", node),
-                )
+                preflight = lambda node=node: self._secret("preflight", node)
+                if node.alias == baseline.standby.alias:
+                    self._run_with_standby_agent_quiesced(
+                        node=node,
+                        stage="preflight",
+                        action=preflight,
+                    )
+                else:
+                    self._mutate(
+                        stage=f"preflight {node.alias}",
+                        action=preflight,
+                    )
             for node in ordered_nodes:
                 # Provision each node inside its own minimal role-agent window.
                 # The standby is already traffic-fenced. The current primary
@@ -350,54 +394,78 @@ class _MigrationOrchestrator:
                     if node.alias == baseline.standby.alias
                     else "quiesce-fenced"
                 )
-                self.role_agent_window_open = True
-                self._mutate(
-                    stage=f"role-agent quiesce {node.alias}",
-                    action=lambda node=node, phase=quiesce_phase: self._role_agent(
-                        phase, node
-                    ),
-                    enter_roll_forward=True,
-                )
-                # Provisioning mutates root-owned host state. A lost remote
-                # response cannot prove that it made no durable progress, so
-                # it remains inside the roll-forward boundary entered before
-                # the first role-agent quiesce attempt.
-                self._mutate(
-                    stage=f"provision-node {node.alias}",
-                    action=lambda node=node: self._maintenance(
-                        "provision-node", node
-                    ),
-                    enter_roll_forward=True,
-                )
-                self._mutate(
-                    stage=f"role-agent resume {node.alias}",
-                    action=lambda node=node: self._role_agent(
-                        (
-                            "resume-standby"
-                            if node.alias == baseline.standby.alias
-                            else "resume-primary"
+                if node.alias == baseline.primary.alias:
+                    self.role_agent_window_open = True
+                    self._mutate(
+                        stage=f"role-agent quiesce {node.alias}",
+                        action=lambda node=node, phase=quiesce_phase: self._role_agent(
+                            phase, node
                         ),
-                        node,
-                    ),
-                )
-                self.role_agent_window_open = False
+                        enter_roll_forward=True,
+                    )
+                    # Provisioning mutates root-owned host state. A lost remote
+                    # response cannot prove that it made no durable progress.
+                    self._mutate(
+                        stage=f"provision-node {node.alias}",
+                        action=lambda node=node: self._fenced_provision(node),
+                        enter_roll_forward=True,
+                    )
+                    self._mutate(
+                        stage=f"role-agent resume {node.alias}",
+                        action=lambda node=node: self._role_agent(
+                            "resume-primary", node
+                        ),
+                    )
+                    self.role_agent_window_open = False
+                else:
+                    self._run_with_standby_agent_quiesced(
+                        node=node,
+                        stage="provision-node",
+                        action=lambda node=node: self._maintenance(
+                            "provision-node", node
+                        ),
+                    )
             for node in ordered_nodes:
-                self._mutate(
-                    stage=f"configure-node {node.alias}",
-                    action=lambda node=node: self._secret("configure-node", node),
-                )
+                configure = lambda node=node: self._secret("configure-node", node)
+                if node.alias == baseline.standby.alias:
+                    self._run_with_standby_agent_quiesced(
+                        node=node,
+                        stage="configure-node",
+                        action=configure,
+                    )
+                else:
+                    self._mutate(
+                        stage=f"configure-node {node.alias}",
+                        action=configure,
+                    )
             for node in ordered_nodes:
-                self._mutate(
-                    stage=f"scrub-node {node.alias}",
-                    action=lambda node=node: self._maintenance("scrub-node", node),
-                )
+                scrub = lambda node=node: self._maintenance("scrub-node", node)
+                if node.alias == baseline.standby.alias:
+                    self._run_with_standby_agent_quiesced(
+                        node=node,
+                        stage="scrub-node",
+                        action=scrub,
+                    )
+                else:
+                    self._mutate(
+                        stage=f"scrub-node {node.alias}",
+                        action=scrub,
+                    )
             for node in ordered_nodes:
-                self._mutate(
-                    stage=f"enable-archive-env {node.alias}",
-                    action=lambda node=node: self._maintenance(
-                        "enable-archive-env", node
-                    ),
+                enable_archive = lambda node=node: self._maintenance(
+                    "enable-archive-env", node
                 )
+                if node.alias == baseline.standby.alias:
+                    self._run_with_standby_agent_quiesced(
+                        node=node,
+                        stage="enable-archive-env",
+                        action=enable_archive,
+                    )
+                else:
+                    self._mutate(
+                        stage=f"enable-archive-env {node.alias}",
+                        action=enable_archive,
+                    )
             self._mutate(
                 stage=f"basebackup {baseline.primary.alias}",
                 action=lambda: self._maintenance("basebackup", baseline.primary),

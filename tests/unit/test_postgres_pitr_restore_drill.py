@@ -38,6 +38,27 @@ def test_operational_drill_binds_restore_to_live_lineage_and_archived_wal():
     assert '--required-end-wal "${required_end_wal}"' in source
 
 
+def test_operational_drill_backfills_original_timeline_history_before_upload():
+    source = _source()
+
+    assert '"${COMPOSE[@]}" exec -T --user \\' in source
+    assert '"${POSTGRES_CONTAINER_UID}:${POSTGRES_CONTAINER_GID}" \\' in source
+    assert "/usr/local/bin/mvn-patroni-archive-wal" in source
+    assert 'for source in "${data_dir}"/pg_wal/*.history' in source
+    assert 'MAX_TIMELINE_HISTORY_FILES="1024"' in source
+    assert 'if [ "${count}" -gt "${maximum}" ]' in source
+    assert '"${WAL_LINEAGE_HELPER}" validate-local-history' in source
+    assert '--required-end-wal "${required_end_wal}"' in source
+    assert "expected_history_count" not in source
+    assert "pg_control_checkpoint() AS c" not in source
+    assert source.index("mvn-patroni-archive-wal") < source.index(
+        '"${TOOL_RUNNER}" --phase wal-upload'
+    )
+    assert source.index('"${WAL_LINEAGE_HELPER}" validate-local-history') < source.index(
+        '"${TOOL_RUNNER}" --phase wal-upload'
+    )
+
+
 def test_disposable_postgres_has_no_network_or_database_password():
     source = _source()
 

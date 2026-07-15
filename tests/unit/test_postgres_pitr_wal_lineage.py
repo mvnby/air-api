@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 
 import pytest
@@ -34,6 +35,99 @@ def _history(timeline: int, payload: bytes) -> lineage.WalObject:
     return lineage.WalObject(
         f"history-{timeline}", f"{timeline:08X}.history", len(payload)
     )
+
+
+def _local_history(archive_dir, timeline: int, payload: bytes):
+    path = archive_dir / f"{timeline:08X}.history"
+    path.write_bytes(payload)
+    path.chmod(0o600)
+    return path
+
+
+def test_local_validation_accepts_sparse_ancestor_chain_before_upload(tmp_path):
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir(mode=0o700)
+    history_3 = b"1\t0/300\tpromoted to timeline 3\n"
+    history_5 = history_3 + b"3\t0/580\tpromoted to timeline 5\n"
+    _local_history(archive_dir, 3, history_3)
+    _local_history(archive_dir, 5, history_5)
+
+    selected = lineage.validate_local_history_chain(
+        archive_dir,
+        required_end_wal="000000050000000000000006",
+        expected_uid=os.geteuid(),
+        expected_gid=os.getegid(),
+    )
+
+    assert selected == ("00000003.history", "00000005.history")
+
+
+def test_local_validation_uses_required_end_wal_timeline(tmp_path):
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir(mode=0o700)
+    _local_history(archive_dir, 3, b"1\t0/300\tpromoted to timeline 3\n")
+
+    with pytest.raises(SystemExit, match="00000004.history"):
+        lineage.validate_local_history_chain(
+            archive_dir,
+            required_end_wal="000000040000000000000006",
+            expected_uid=os.geteuid(),
+            expected_gid=os.getegid(),
+        )
+
+
+def test_local_validation_rejects_corrupt_unselected_history_before_upload(tmp_path):
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir(mode=0o700)
+    _local_history(archive_dir, 3, b"1\t0/300\tpromoted to timeline 3\n")
+    _local_history(archive_dir, 7, b"not a PostgreSQL history file\n")
+
+    with pytest.raises(SystemExit, match="history line is invalid"):
+        lineage.validate_local_history_chain(
+            archive_dir,
+            required_end_wal="000000030000000000000006",
+            expected_uid=os.geteuid(),
+            expected_gid=os.getegid(),
+        )
+
+
+def test_local_validation_rejects_linked_history_before_upload(tmp_path):
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir(mode=0o700)
+    original = _local_history(
+        archive_dir,
+        3,
+        b"1\t0/300\tpromoted to timeline 3\n",
+    )
+    linked = archive_dir / "00000005.history"
+    os.link(original, linked)
+
+    with pytest.raises(SystemExit, match="metadata is unsafe"):
+        lineage.validate_local_history_chain(
+            archive_dir,
+            required_end_wal="000000030000000000000006",
+            expected_uid=os.geteuid(),
+            expected_gid=os.getegid(),
+        )
+
+
+def test_local_validation_matches_remote_history_count_limit(tmp_path):
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir(mode=0o700)
+    for timeline in range(2, lineage.MAX_TIMELINE_HISTORY_FILES + 3):
+        _local_history(
+            archive_dir,
+            timeline,
+            b"1\t0/100\tvalid sparse branch\n",
+        )
+
+    with pytest.raises(SystemExit, match="Too many PostgreSQL timeline history files"):
+        lineage.validate_local_history_chain(
+            archive_dir,
+            required_end_wal="000000030000000000000006",
+            expected_uid=os.geteuid(),
+            expected_gid=os.getegid(),
+        )
 
 
 def _failover_objects() -> tuple[list[lineage.WalObject], dict[str, bytes]]:

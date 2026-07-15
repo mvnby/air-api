@@ -49,6 +49,16 @@ def test_renderer_builds_synchronous_tls_patroni_config(patroni_env):
     assert dcs["synchronous_mode_strict"] is False
     assert dcs["failsafe_mode"] is True
     assert dcs["postgresql"]["use_pg_rewind"] is True
+    expected_pg_hba = [
+        "local all all trust",
+        "host all all 127.0.0.1/32 scram-sha-256",
+        "host all all 172.16.0.0/12 scram-sha-256",
+        "host replication mvn_replicator 172.16.0.0/12 scram-sha-256",
+        "host replication mvn_replicator 10.77.0.0/24 scram-sha-256",
+        "host all all 10.77.0.0/24 scram-sha-256",
+    ]
+    assert config["bootstrap"]["pg_hba"] == expected_pg_hba
+    assert config["postgresql"]["pg_hba"] == expected_pg_hba
     assert config["postgresql"]["authentication"]["superuser"]["password"] == (
         patroni_env["POSTGRES_PASSWORD"]
     )
