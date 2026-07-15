@@ -117,6 +117,7 @@ def test_real_bundle_is_deterministic_complete_and_bounded():
     remote = {"__name__": "pitr_bundle_policy_test"}
     exec(compile(source, "<pitr-bundle-policy>", "exec"), remote)
     assert remote["PREVIOUS_RELEASE_ADDITIONS"] == {
+        "/usr/local/sbin/mvn-logical-restore-resource-sizer",
         "/usr/local/libexec/mvn-pitr/require_deploy_capacity.sh",
         "/usr/local/libexec/mvn-pitr/safe_deploy_lock.py",
         "/usr/local/libexec/mvn-pitr/verify_pitr_maintenance_marker.py",

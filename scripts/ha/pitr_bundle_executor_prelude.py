@@ -64,6 +64,7 @@ BASE_MODES = {
     "/etc/systemd/system/mvn-postgres-basebackup.timer": 0o644,
 }
 PREVIOUS_RELEASE_ADDITIONS = {
+    "/usr/local/sbin/mvn-logical-restore-resource-sizer",
     LIBEXEC_DIR + "/require_deploy_capacity.sh",
     LIBEXEC_DIR + "/safe_deploy_lock.py",
     LIBEXEC_DIR + "/verify_pitr_maintenance_marker.py",
