@@ -111,6 +111,25 @@ def test_local_validation_rejects_linked_history_before_upload(tmp_path):
         )
 
 
+def test_local_validation_matches_remote_history_count_limit(tmp_path):
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir(mode=0o700)
+    for timeline in range(2, lineage.MAX_TIMELINE_HISTORY_FILES + 3):
+        _local_history(
+            archive_dir,
+            timeline,
+            b"1\t0/100\tvalid sparse branch\n",
+        )
+
+    with pytest.raises(SystemExit, match="Too many PostgreSQL timeline history files"):
+        lineage.validate_local_history_chain(
+            archive_dir,
+            required_end_wal="000000030000000000000006",
+            expected_uid=os.geteuid(),
+            expected_gid=os.getegid(),
+        )
+
+
 def _failover_objects() -> tuple[list[lineage.WalObject], dict[str, bytes]]:
     history_3 = b"1\t0/300\tpromoted to timeline 3\n"
     history_5 = history_3 + b"3\t0/580\tpromoted to timeline 5\n"

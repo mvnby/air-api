@@ -327,11 +327,15 @@ def validate_local_history_chain(
 
     histories: list[WalObject] = []
     payloads: dict[str, bytes] = {}
+    history_count = 0
     for count, entry in enumerate(os.scandir(archive_dir), start=1):
         if count > MAX_LOCAL_ARCHIVE_ENTRIES:
             raise SystemExit("Local PostgreSQL WAL archive has too many entries")
         if WAL_HISTORY_RE.fullmatch(entry.name) is None:
             continue
+        history_count += 1
+        if history_count > MAX_TIMELINE_HISTORY_FILES:
+            raise SystemExit("Too many PostgreSQL timeline history files")
         path = archive_dir / entry.name
         payload = _read_local_history(
             path,

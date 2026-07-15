@@ -45,6 +45,8 @@ def test_operational_drill_backfills_original_timeline_history_before_upload():
     assert '"${POSTGRES_CONTAINER_UID}:${POSTGRES_CONTAINER_GID}" \\' in source
     assert "/usr/local/bin/mvn-patroni-archive-wal" in source
     assert 'for source in "${data_dir}"/pg_wal/*.history' in source
+    assert 'MAX_TIMELINE_HISTORY_FILES="1024"' in source
+    assert 'if [ "${count}" -gt "${maximum}" ]' in source
     assert '"${WAL_LINEAGE_HELPER}" validate-local-history' in source
     assert '--required-end-wal "${required_end_wal}"' in source
     assert "expected_history_count" not in source

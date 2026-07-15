@@ -8,6 +8,7 @@ DB_SERVICE="${DB_SERVICE:-db}"
 POSTGRES_IMAGE="postgres:15.18-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f"
 POSTGRES_CONTAINER_UID="70"
 POSTGRES_CONTAINER_GID="70"
+MAX_TIMELINE_HISTORY_FILES="1024"
 DRILL_DIR="/var/lib/mvn-postgres-pitr/restore-drills"
 RESTORE_MOUNT_PATH="${RESTORE_MOUNT_PATH:-/pitr-restore}"
 TARGET_TIME="${TARGET_TIME:-${PITR_RESTORE_TARGET_TIME:-}}"
@@ -283,15 +284,22 @@ history_output="$(
   "${COMPOSE[@]}" exec -T --user \
     "${POSTGRES_CONTAINER_UID}:${POSTGRES_CONTAINER_GID}" \
     "${DB_SERVICE}" sh -ceu '
+      maximum="$1"
       data_dir="${PGDATA:-/var/lib/postgresql/data}"
+      count=0
       for source in "${data_dir}"/pg_wal/*.history; do
         [ -e "${source}" ] || continue
+        count=$((count + 1))
+        if [ "${count}" -gt "${maximum}" ]; then
+          echo "Too many PostgreSQL timeline history files" >&2
+          exit 1
+        fi
         name="${source##*/}"
         /usr/local/bin/mvn-patroni-archive-wal \
           "${source}" "${name}"
         printf "%s\n" "${name}"
       done
-    '
+    ' -- "${MAX_TIMELINE_HISTORY_FILES}"
 )" || {
   echo "Could not stage the complete PostgreSQL timeline history chain" >&2
   exit 1
