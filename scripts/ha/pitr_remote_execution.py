@@ -146,6 +146,11 @@ PITR_HOST_ASSETS = (
         0o755,
     ),
     PitrHostAsset(
+        REPO_ROOT / "scripts/ha/calculate_logical_restore_resources.py",
+        "/usr/local/sbin/mvn-logical-restore-resource-sizer",
+        0o755,
+    ),
+    PitrHostAsset(
         REPO_ROOT / "scripts/ha/restore_drill_latest_db.sh",
         "/usr/local/sbin/mvn-restore-drill-latest-db",
         0o755,

@@ -147,6 +147,7 @@ install -o root -g root -m 0755 scripts/ha/bootstrap_postgres_pitr.sh /usr/local
 install -o root -g root -m 0755 scripts/ha/verify_postgres_pitr_runtime.py /usr/local/sbin/mvn-postgres-pitr-runtime-check
 install -o root -g root -m 0755 scripts/ha/run_postgres_pitr_scheduled.py /usr/local/sbin/mvn-postgres-pitr-scheduled-runner
 install -o root -g root -m 0755 scripts/ha/run_postgres_pitr_manual.py /usr/local/sbin/mvn-postgres-pitr-manual-runner
+install -o root -g root -m 0755 scripts/ha/calculate_logical_restore_resources.py /usr/local/sbin/mvn-logical-restore-resource-sizer
 install -o root -g root -m 0755 scripts/ha/restore_drill_latest_db.sh /usr/local/sbin/mvn-restore-drill-latest-db
 install -o root -g root -m 0755 scripts/ha/cleanup_restore_drill_runtime.sh /usr/local/sbin/mvn-restore-drill-latest-db-cleanup
 install -o root -g root -m 0755 scripts/ha/run_postgres_pitr_tool.py /usr/local/sbin/mvn-postgres-pitr-tool-runner

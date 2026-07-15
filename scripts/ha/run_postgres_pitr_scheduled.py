@@ -77,6 +77,7 @@ BASE_RELEASE_MODES = {
     "/usr/local/sbin/mvn-postgres-pitr-runtime-check": 0o755,
     "/usr/local/sbin/mvn-postgres-pitr-scheduled-runner": 0o755,
     "/usr/local/sbin/mvn-postgres-pitr-manual-runner": 0o755,
+    "/usr/local/sbin/mvn-logical-restore-resource-sizer": 0o755,
     "/usr/local/sbin/mvn-restore-drill-latest-db": 0o755,
     "/usr/local/sbin/mvn-restore-drill-latest-db-cleanup": 0o755,
     "/usr/local/sbin/mvn-postgres-pitr-tool-runner": 0o755,

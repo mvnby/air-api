@@ -13,11 +13,9 @@ POSTGRES_IMAGE="postgres:15.18-alpine@sha256:3d0f7584ed7d04e27fa050d6683a7474660
 EXPECTED_DRILL_ROOT="/var/lib/mvn-postgres-pitr/logical-restore-drills"
 EXPECTED_CLEANUP_SCRIPT="/usr/local/sbin/mvn-restore-drill-latest-db-cleanup"
 RUNTIME_CHECK_HELPER="/usr/local/sbin/mvn-postgres-pitr-runtime-check"
+RESOURCE_SIZING_HELPER="/usr/local/sbin/mvn-logical-restore-resource-sizer"
 MIN_PUBLIC_TABLES="64"
 MAX_RESTORED_SQL_BYTES="8589934592"
-POSTGRES_DATA_TMPFS_BYTES="10737418240"
-POSTGRES_MEMORY_BYTES="12884901888"
-POSTGRES_REQUIRED_HOST_MEMORY_BYTES="13958643712"
 RESTORE_TIMEOUT_SECONDS="900"
 POSTGRES_CONTAINER_UID="70"
 POSTGRES_CONTAINER_GID="70"
@@ -57,6 +55,8 @@ esac
   fail "installed restore-drill cleanup helper is unavailable or unsafe"
 [[ -x "${RUNTIME_CHECK_HELPER}" && ! -L "${RUNTIME_CHECK_HELPER}" ]] ||
   fail "installed PITR runtime attestation helper is unavailable or unsafe"
+[[ -x "${RESOURCE_SIZING_HELPER}" && ! -L "${RESOURCE_SIZING_HELPER}" ]] ||
+  fail "installed logical restore resource-sizing helper is unavailable or unsafe"
 [[ -d "${PROJECT_DIR}" && ! -L "${PROJECT_DIR}" ]] ||
   fail "reviewed project directory is unavailable or unsafe"
 [[ -f "${PROJECT_DIR}/${COMPOSE_FILE}" && ! -L "${PROJECT_DIR}/${COMPOSE_FILE}" ]] ||
@@ -74,11 +74,15 @@ BACKEND_IMAGE="$(
 export BACKEND_IMAGE
 COMPOSE=(docker compose -f "${COMPOSE_FILE}")
 
-in_recovery="$(
+database_state="$(
   "${COMPOSE[@]}" exec -T "${DB_SERVICE}" sh -lc \
-    'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -Atqc "SELECT pg_is_in_recovery()"'
-)" || fail "could not prove live PostgreSQL role"
+    'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -AtF "|" -qc "SELECT pg_is_in_recovery(), pg_database_size(current_database())"'
+)" || fail "could not prove live PostgreSQL role and size"
+[[ "${database_state}" != *$'\n'* ]] || fail "live PostgreSQL state is ambiguous"
+IFS='|' read -r in_recovery live_database_bytes unexpected_database_state <<<"${database_state}"
 [[ "${in_recovery}" == "f" ]] || fail "logical restore drill must run on the writable primary"
+[[ "${live_database_bytes}" =~ ^[1-9][0-9]*$ && -z "${unexpected_database_state}" ]] ||
+  fail "live PostgreSQL size attestation is invalid"
 
 run_id="${PITR_OPERATION_ID}"
 drill_dir="${DRILL_ROOT}/${run_id}"
@@ -333,25 +337,47 @@ sed '/^SET transaction_timeout = .*;$/d' "${sql_path}" >"${normalized_sql}"
   fail "normalized logical database backup is empty or unsafe"
 mv -f -- "${normalized_sql}" "${sql_path}"
 
-# The data tmpfs is charged to the container cgroup.  Refuse to start unless
-# the fixed cgroup budget, Docker host capacity, and currently available host
-# memory can all satisfy the reviewed restore envelope.
-(( POSTGRES_DATA_TMPFS_BYTES >= MAX_RESTORED_SQL_BYTES + 2147483648 )) ||
-  fail "logical restore data tmpfs is smaller than the accepted artifact envelope"
-(( POSTGRES_MEMORY_BYTES >= POSTGRES_DATA_TMPFS_BYTES + 2147483648 )) ||
-  fail "logical restore cgroup memory is smaller than the data tmpfs envelope"
-(( POSTGRES_REQUIRED_HOST_MEMORY_BYTES >= POSTGRES_MEMORY_BYTES + 1073741824 )) ||
-  fail "logical restore host memory reserve is inconsistent"
-host_available_kib="$(awk '$1 == "MemAvailable:" {print $2}' /proc/meminfo)"
+sql_bytes="$(stat -Lc '%s' "${sql_path}" 2>/dev/null || true)"
 docker_memory_bytes="$(docker info --format '{{.MemTotal}}')" ||
   fail "could not inspect Docker host memory capacity"
-[[ "${host_available_kib}" =~ ^[1-9][0-9]*$ && "${docker_memory_bytes}" =~ ^[1-9][0-9]*$ ]] ||
+[[ "${sql_bytes}" =~ ^[1-9][0-9]*$ && "${docker_memory_bytes}" =~ ^[1-9][0-9]*$ ]] ||
   fail "logical restore host memory capacity is invalid"
-host_available_bytes=$((host_available_kib * 1024))
-(( host_available_bytes >= POSTGRES_REQUIRED_HOST_MEMORY_BYTES )) ||
-  fail "logical restore host has insufficient currently available memory"
-(( docker_memory_bytes >= POSTGRES_REQUIRED_HOST_MEMORY_BYTES )) ||
-  fail "Docker host memory is below the reviewed logical restore envelope"
+resource_envelope="$(
+  /usr/bin/python3 -I "${RESOURCE_SIZING_HELPER}" \
+    --sql-bytes "${sql_bytes}" \
+    --live-database-bytes "${live_database_bytes}" \
+    --host-total-bytes "${docker_memory_bytes}"
+)" || fail "logical restore does not fit the reviewed primary-host resource envelope"
+[[ "${resource_envelope}" != *$'\n'* ]] ||
+  fail "logical restore resource-sizing output is ambiguous"
+IFS=$'\t' read -r POSTGRES_DATA_TMPFS_BYTES POSTGRES_MEMORY_BYTES \
+  POSTGRES_HOST_RESERVE_BYTES POSTGRES_REQUIRED_HOST_MEMORY_BYTES \
+  POSTGRES_PRIMARY_MEMORY_LIMIT_BYTES unexpected_resource_field <<<"${resource_envelope}"
+for resource_value in \
+  "${POSTGRES_DATA_TMPFS_BYTES}" \
+  "${POSTGRES_MEMORY_BYTES}" \
+  "${POSTGRES_HOST_RESERVE_BYTES}" \
+  "${POSTGRES_REQUIRED_HOST_MEMORY_BYTES}" \
+  "${POSTGRES_PRIMARY_MEMORY_LIMIT_BYTES}"; do
+  [[ "${resource_value}" =~ ^[1-9][0-9]*$ ]] ||
+    fail "logical restore resource-sizing output is invalid"
+done
+[[ -z "${unexpected_resource_field}" ]] ||
+  fail "logical restore resource-sizing output is ambiguous"
+
+check_available_memory() {
+  local host_available_kib=""
+  local host_available_bytes=0
+  host_available_kib="$(awk '$1 == "MemAvailable:" {print $2}' /proc/meminfo)"
+  [[ "${host_available_kib}" =~ ^[1-9][0-9]*$ ]] ||
+    fail "logical restore host available memory is invalid"
+  host_available_bytes=$((host_available_kib * 1024))
+  (( host_available_bytes >= POSTGRES_REQUIRED_HOST_MEMORY_BYTES )) ||
+    fail "logical restore host has insufficient currently available memory"
+}
+
+check_available_memory
+log "resource_envelope sql_bytes=${sql_bytes} live_database_bytes=${live_database_bytes} data_tmpfs_bytes=${POSTGRES_DATA_TMPFS_BYTES} container_memory_bytes=${POSTGRES_MEMORY_BYTES} host_reserve_bytes=${POSTGRES_HOST_RESERVE_BYTES}"
 
 /usr/bin/python3 -I - "${credentials_file}" "${POSTGRES_USER}" "${POSTGRES_DB}" <<'PY'
 import os
@@ -391,6 +417,9 @@ existing_container="$(docker ps -aq --filter "name=^/${container}$")" ||
   fail "could not inventory the logical restore container name"
 [[ -z "${existing_container}" ]] ||
   fail "logical restore runtime name is already in use"
+# Downloading and normalization can change page-cache pressure.  Re-check the
+# exact available-memory gate immediately before Docker creates the cgroup.
+check_available_memory
 docker run --pull never -d \
   --name "${container}" \
   --label com.mvn.purpose=api-restore-drill \
