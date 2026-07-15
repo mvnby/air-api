@@ -43,6 +43,7 @@ def test_ha_readiness_workflow_wires_core_and_soft_blocker_inputs():
     assert "scripts/ha/check_api_ha_readiness.sh" in audit_step["run"]
     assert "PRIMARY_SSH" in audit_step["run"]
     assert "STANDBY_SSH" in audit_step["run"]
+    assert "PITR_WORKFLOW_IDENTITY_FILE" in audit_step["run"]
     assert "api-ha-readiness.log" in audit_step["run"]
     assert "strict:" in summary_step["run"]
     assert artifact_step["if"] == "always()"
@@ -58,6 +59,17 @@ def test_ha_readiness_resolves_patroni_primary_and_uses_role_aware_monitor():
     assert "python3 scripts/ha/check_patroni_production.py" in script
     assert 'API_DB_HA_MODE="${API_DB_HA_MODE:-physical}"' in script
     assert 'CONFIGURED_PRIMARY_ORIGIN="${PRIMARY_ORIGIN}"' in script
+
+
+def test_ha_readiness_routes_required_pitr_through_guarded_workflow():
+    script = (REPO_ROOT / "scripts/ha/check_api_ha_readiness.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'if is_true "${pitr_required}"; then' in script
+    assert "PITR_WORKFLOW_IDENTITY_FILE" in script
+    assert "run_postgres_pitr_workflow.py --phase verify" in script
+    assert "PITR_REQUIRED=false /usr/local/sbin/mvn-postgres-pitr-status" in script
 
 
 def test_ha_invariant_workflow_skips_public_cloudflare_challenge_from_runner():

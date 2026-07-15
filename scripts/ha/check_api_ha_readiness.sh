@@ -147,8 +147,18 @@ run_postgres_pitr() {
     soft_blocker "POSTGRES_PITR_REQUIRED is not true; PITR is monitored in soft mode only"
   fi
 
+  if is_true "${pitr_required}"; then
+    if [[ -z "${PITR_WORKFLOW_IDENTITY_FILE:-}" || ! -f "${PITR_WORKFLOW_IDENTITY_FILE}" || -L "${PITR_WORKFLOW_IDENTITY_FILE}" ]]; then
+      log fail "strict PITR proof requires a regular SSH identity file"
+      return 1
+    fi
+    python3 -I scripts/ha/run_postgres_pitr_workflow.py --phase verify \
+      < "${PITR_WORKFLOW_IDENTITY_FILE}"
+    return
+  fi
+
   local remote_cmd
-  remote_cmd="PROJECT_DIR=$(quote_remote "${PRIMARY_PROJECT_DIR}") COMPOSE_FILE=$(quote_remote "${PRIMARY_COMPOSE_FILE}") PITR_REQUIRED=$(quote_remote "${pitr_required}") /usr/local/sbin/mvn-postgres-pitr-status"
+  remote_cmd="PROJECT_DIR=$(quote_remote "${PRIMARY_PROJECT_DIR}") COMPOSE_FILE=$(quote_remote "${PRIMARY_COMPOSE_FILE}") PITR_REQUIRED=false /usr/local/sbin/mvn-postgres-pitr-status"
   # shellcheck disable=SC2029,SC2086
   ssh ${SSH_OPTS:-} "${PRIMARY_SSH}" "${remote_cmd}"
 }
