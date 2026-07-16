@@ -36,6 +36,8 @@ async def test_manager_tariffs_and_rules_crud(async_client):
     assert create_tariff_resp.status_code == 201
     tariff = create_tariff_resp.json()
     assert tariff["selector_label"].startswith("Монтаж")
+    assert tariff["short_name"] == "Монтаж настенного до 3.5 кВт"
+    assert tariff["full_description"].startswith("Монтаж сплит-системы")
 
     tariff_id = tariff["id"]
 
@@ -98,6 +100,18 @@ async def test_manager_tariffs_and_rules_crud(async_client):
         headers=headers,
     )
     assert delete_rule_resp.status_code == 200
+
+    update_tariff_resp = await async_client.put(
+        f"/api/manager/tariffs/{tariff_id}",
+        headers=headers,
+        json={"short_name": "Монтаж кратко", "full_description": None},
+    )
+    assert update_tariff_resp.status_code == 200
+    updated_tariff = update_tariff_resp.json()
+    assert updated_tariff["short_name"] == "Монтаж кратко"
+    assert updated_tariff["full_description"] is None
+    assert updated_tariff["selector_label"] == "Монтаж кратко"
+    assert updated_tariff["estimate_template"] == "Монтаж кратко"
 
     delete_tariff_resp = await async_client.delete(
         f"/api/manager/tariffs/{tariff_id}",
@@ -192,8 +206,8 @@ async def test_manager_tariffs_accept_repair_direction(async_client):
         headers=headers,
         json={
             "service_kind": "repair",
-            "selector_label": "Ремонт кондиционера",
-            "estimate_template": "Ремонт кондиционера",
+            "short_name": "Ремонт кондиционера",
+            "full_description": None,
             "category": "repair",
             "power_range": "бытовой",
             "base_price": 150,
@@ -206,6 +220,10 @@ async def test_manager_tariffs_accept_repair_direction(async_client):
     created = create_resp.json()
     assert created["service_kind"] == "repair"
     assert created["included_route_meters"] == 0
+    assert created["short_name"] == "Ремонт кондиционера"
+    assert created["full_description"] is None
+    assert created["selector_label"] == "Ремонт кондиционера"
+    assert created["estimate_template"] == "Ремонт кондиционера"
 
     list_resp = await async_client.get(
         "/api/manager/tariffs?service_kind=repair",
@@ -223,6 +241,8 @@ async def test_manager_tariffs_accept_repair_direction(async_client):
     quick_items = quick_resp.json()["items"]
     assert len(quick_items) == 1
     assert quick_items[0]["service_kind"] == "repair"
+    assert quick_items[0]["short_name"] == "Ремонт кондиционера"
+    assert quick_items[0]["full_description"] is None
     assert quick_items[0]["title"] == "Ремонт кондиционера"
 
 

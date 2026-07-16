@@ -10,6 +10,8 @@ export type ManagerEstimateLineResponse = {
     rule_type?: (ManagerTariffRuleType | null);
     service_id?: (number | null);
     name: string;
+    short_name?: (string | null);
+    full_description?: (string | null);
     qty: number;
     unit: string;
     unit_price: number;

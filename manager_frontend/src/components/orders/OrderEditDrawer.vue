@@ -7,6 +7,7 @@ import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
+import ServiceDescriptionModeSwitch from './ServiceDescriptionModeSwitch.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
@@ -47,6 +48,11 @@ import {
   type RepairMeta,
 } from './repair-meta';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
+import {
+  useServiceDescriptionMode,
+  type ServiceDescriptionLine,
+  type ServiceDescriptionMode,
+} from './service-description-mode';
 
 import { getApiErrorMessage } from '../../utils/api-errors';
 
@@ -106,7 +112,7 @@ type ProductLine = {
   product_logistics_components?: ProductLogisticsTemplateComponent[];
   logistics_components?: OrderLogisticsComponent[] | null;
 };
-type ServiceLine = { service_id?: number | null; title: string; quantity: number; price: number; cost: number };
+type ServiceLine = ServiceDescriptionLine;
 type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
 
 const WORKFLOW_OPTIONS: Array<{ value: OrderWorkflowType; label: string; hint: string; icon: string }> = [
@@ -130,13 +136,6 @@ const normalizeWorkflowType = (value: unknown): OrderWorkflowType => {
   if (raw === 'service_work' || raw === 'maintenance' || raw === 'repair') return raw;
   return 'sales_installation';
 };
-const serviceKindForWorkflow = (value: OrderWorkflowType) => {
-  if (value === 'repair') return 'repair';
-  if (value === 'maintenance') return 'maintenance';
-  if (value === 'service_work') return 'installation';
-  return null;
-};
-
 type OrderDrawerDraft = {
   productLines: ProductLine[];
   serviceLines: ServiceLine[];
@@ -266,6 +265,12 @@ let customerBranchesRequestId = 0;
 const estimateOptions = ref<ManagerServiceEstimateResponse[]>([]);
 const estimateOptionsLoading = ref(false);
 const estimateImportMode = ref<'detailed' | 'collapsed'>('detailed');
+const {
+  preferredMode: serviceDescriptionMode,
+  rememberMode: setDefaultServiceDescriptionMode,
+  applyTariffTemplate: applyTariffTemplateToLine,
+  replaceLineDescription,
+} = useServiceDescriptionMode();
 const selectedEstimateId = ref<number | null>(null);
 const estimateSearchQuery = ref('');
 const importingEstimate = ref(false);
@@ -1321,6 +1326,11 @@ const restoreDraft = () => {
         quantity: Number(line.quantity || 1),
         price: Number(line.price || 0),
         cost: Number(line.cost || 0),
+        tariff_id: Number(line.tariff_id || 0) || null,
+        template_short_name: line.template_short_name || null,
+        template_full_description: line.template_full_description || null,
+        template_applied_text: line.template_applied_text || null,
+        description_mode: line.description_mode === 'full' ? 'full' : 'short',
       }));
     }
   } catch (error) {
@@ -1850,7 +1860,7 @@ const toggleEstimateImport = async () => {
 const debouncedLoadServiceTariffOptions = useDebounceFn(async (index: number, q: string, requestId: number) => {
   try {
     serviceTariffLookupLoading.value = true;
-    const response = await api.listManagerQuickTariffs(q, serviceKindForWorkflow(workflowType.value) as any, 10);
+    const response = await api.listManagerQuickTariffs(q, null, 10);
     if (requestId !== serviceTariffSearchRequestId || activeServiceSuggestionIndex.value !== index) return;
     serviceTariffOptions.value = response.items || [];
   } catch (error) {
@@ -1904,13 +1914,19 @@ const onServiceTitleBlur = (index: number) => {
 const selectServiceTariffForLine = (index: number, option: ManagerQuickTariffResponse) => {
   const row = serviceLines.value[index];
   if (!row) return;
-  row.service_id = null;
-  row.title = option.title;
-  row.quantity = Math.max(1, Number(row.quantity || 1));
-  row.price = Math.round(Number(option.price || 0));
-  row.cost = 0;
+  applyTariffTemplateToLine(row, option);
   activeServiceSuggestionIndex.value = null;
   serviceTariffOptions.value = [];
+};
+
+const setServiceLineDescriptionMode = (index: number, mode: ServiceDescriptionMode) => {
+  const row = serviceLines.value[index];
+  if (!row) return;
+  replaceLineDescription(
+    row,
+    mode,
+    () => window.confirm('Название уже изменено вручную. Заменить его текстом из шаблона?'),
+  );
 };
 
 const hasDiagnosticServiceLine = () => serviceLines.value.some((line) => /диагност/i.test(line.title || ''));
@@ -1920,14 +1936,16 @@ const addDefaultRepairDiagnostic = async () => {
   try {
     const response = await api.listManagerQuickTariffs('диагностика', 'repair' as any, 5);
     const option = (response.items || [])[0];
+    const diagnosticLine: ServiceLine = {
+      service_id: null,
+      title: 'Диагностика кондиционера на объекте',
+      quantity: 1,
+      price: 0,
+      cost: 0,
+    };
+    if (option) applyTariffTemplateToLine(diagnosticLine, option);
     serviceLines.value = [
-      {
-        service_id: null,
-        title: option?.title || 'Диагностика кондиционера на объекте',
-        quantity: 1,
-        price: Math.round(Number(option?.price || 0)),
-        cost: 0,
-      },
+      diagnosticLine,
       ...serviceLines.value,
     ];
     setToast('Добавили базовую диагностику для ремонта');
@@ -2048,7 +2066,11 @@ const applyEstimateToServices = async () => {
   }
   importingEstimate.value = true;
   try {
-    const response = await api.getManagerServiceEstimateOrderLines(estimateId, estimateImportMode.value);
+    const response = await api.getManagerServiceEstimateOrderLines(
+      estimateId,
+      estimateImportMode.value,
+      serviceDescriptionMode.value,
+    );
     if (!response.services.length) {
       setToast('В выбранной смете нет строк', 'error');
       return;
@@ -3544,8 +3566,15 @@ watch(
                 ×
               </button>
               <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
-                <label class="relative col-span-6 space-y-1 md:col-span-5">
-                  <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Название</span>
+                <div class="relative col-span-6 space-y-1 md:col-span-5">
+                  <span class="flex min-h-6 items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
+                    <span>Название</span>
+                    <ServiceDescriptionModeSwitch
+                      v-if="line.template_full_description"
+                      :model-value="line.description_mode || 'short'"
+                      @update:model-value="setServiceLineDescriptionMode(index, $event)"
+                    />
+                  </span>
                   <textarea
                     v-model="line.title"
                     class="field-input min-h-[64px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
@@ -3568,7 +3597,13 @@ watch(
                       @mousedown.prevent
                       @click="selectServiceTariffForLine(index, item)"
                     >
-                      <p class="line-clamp-2 font-medium text-gray-900">{{ item.title }}</p>
+                      <p class="line-clamp-2 font-medium text-gray-900">{{ item.short_name || item.title }}</p>
+                      <p
+                        v-if="item.full_description && item.full_description !== item.short_name"
+                        class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500"
+                      >
+                        {{ item.full_description }}
+                      </p>
                       <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500">
                         <span>{{ formatMoney(item.price) }}</span>
                         <span v-if="item.service_kind">· {{ formatServiceKind(item.service_kind) }}</span>
@@ -3577,7 +3612,7 @@ watch(
                       </p>
                     </button>
                   </div>
-                </label>
+                </div>
                 <label class="col-span-4 space-y-1 md:col-span-2">
                   <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
                   <input v-model.number="line.price" type="number" min="0" class="field-input" placeholder="0" />
@@ -3611,8 +3646,8 @@ watch(
             </button>
           </div>
           <div v-if="showEstimateImport" class="mt-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
-            <div class="grid gap-2 md:grid-cols-2">
-              <label class="space-y-1 md:col-span-2">
+            <div class="grid gap-2 md:grid-cols-3">
+              <label class="space-y-1 md:col-span-3">
                 <span class="px-1 text-xs font-medium text-gray-500">Смета</span>
                 <select
                   v-model="selectedEstimateId"
@@ -3634,12 +3669,19 @@ watch(
                 />
               </label>
               <label class="space-y-1">
-                <span class="px-1 text-xs font-medium text-gray-500">Режим</span>
+                <span class="px-1 text-xs font-medium text-gray-500">Структура</span>
                 <select v-model="estimateImportMode" class="field-input">
-                  <option value="detailed">Подробно (по строкам)</option>
-                  <option value="collapsed">Схлопнуто (одной строкой)</option>
+                  <option value="detailed">По строкам</option>
+                  <option value="collapsed">Одной строкой</option>
                 </select>
               </label>
+              <div class="space-y-1">
+                <span class="block px-1 text-xs font-medium text-gray-500">Текст позиции</span>
+                <ServiceDescriptionModeSwitch
+                  :model-value="serviceDescriptionMode"
+                  @update:model-value="setDefaultServiceDescriptionMode"
+                />
+              </div>
             </div>
             <div class="flex flex-col gap-2 sm:flex-row">
               <button
@@ -3661,7 +3703,7 @@ watch(
               </button>
             </div>
             <p class="text-xs text-gray-500">
-              Показываем 10 последних смет как типовые шаблоны. «Подробно» добавляет отдельные строки, «Схлопнуто» — одну строку с общим итогом.
+              Показываем 10 последних смет. Структура определяет количество строк, а формат текста — краткую или подробную формулировку.
             </p>
           </div>
         </section>

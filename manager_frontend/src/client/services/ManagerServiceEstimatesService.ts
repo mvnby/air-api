@@ -6,6 +6,7 @@ import type { ManagerActionMessageResponse } from '../models/ManagerActionMessag
 import type { ManagerInstallEstimateCalculatePayload } from '../models/ManagerInstallEstimateCalculatePayload';
 import type { ManagerInstallEstimateResponse } from '../models/ManagerInstallEstimateResponse';
 import type { ManagerInstallEstimateSavePayload } from '../models/ManagerInstallEstimateSavePayload';
+import type { ManagerServiceDescriptionMode } from '../models/ManagerServiceDescriptionMode';
 import type { ManagerServiceEstimateListResponse } from '../models/ManagerServiceEstimateListResponse';
 import type { ManagerServiceEstimateOrderLinesMode } from '../models/ManagerServiceEstimateOrderLinesMode';
 import type { ManagerServiceEstimateOrderLinesResponse } from '../models/ManagerServiceEstimateOrderLinesResponse';
@@ -82,12 +83,14 @@ export class ManagerServiceEstimatesService {
      * Get Manager Service Estimate Order Lines
      * @param estimateId
      * @param mode
+     * @param descriptionMode
      * @returns ManagerServiceEstimateOrderLinesResponse Successful Response
      * @throws ApiError
      */
     public static getManagerServiceEstimateOrderLines(
         estimateId: number,
         mode: ManagerServiceEstimateOrderLinesMode = 'detailed',
+        descriptionMode: ManagerServiceDescriptionMode = 'short',
     ): CancelablePromise<ManagerServiceEstimateOrderLinesResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -97,6 +100,7 @@ export class ManagerServiceEstimatesService {
             },
             query: {
                 'mode': mode,
+                'description_mode': descriptionMode,
             },
             errors: {
                 422: `Validation Error`,

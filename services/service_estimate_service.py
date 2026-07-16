@@ -15,6 +15,7 @@ from schemas import (
     ManagerInstallEstimateResponse,
     ManagerInstallEstimateSavePayload,
     ManagerOrderServiceLinePayload,
+    ManagerServiceDescriptionMode,
     ManagerServiceEstimateOrderLinesMode,
     ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateListResponse,
@@ -134,6 +135,8 @@ class ServiceEstimateService:
         return ManagerTariffBriefResponse(
             id=int(tariff.id),
             service_kind=service_kind,
+            short_name=tariff.effective_short_name,
+            full_description=(tariff.full_description or "").strip() or None,
             selector_label=tariff.selector_label,
             estimate_template=tariff.estimate_template,
             category=tariff.category,
@@ -165,7 +168,9 @@ class ServiceEstimateService:
             rule_id=None,
             rule_type=None,
             service_id=None,
-            name=tariff.selector_label or "Базовая услуга",
+            name=tariff.effective_short_name or "Базовая услуга",
+            short_name=tariff.effective_short_name or "Базовая услуга",
+            full_description=tariff.effective_full_description or None,
             qty=qty,
             unit="компл.",
             unit_price=ServiceEstimateService._round_money(unit_price),
@@ -233,6 +238,8 @@ class ServiceEstimateService:
             rule_type=ManagerTariffRuleType(rule.rule_type),
             service_id=rule.service_id,
             name=name,
+            short_name=name,
+            full_description=name,
             qty=ServiceEstimateService._round_money(qty),
             unit=rule.unit,
             unit_price=ServiceEstimateService._round_money(unit_price),
@@ -319,6 +326,8 @@ class ServiceEstimateService:
                     rule_type=rule_type,
                     service_id=item.service_id,
                     name=item.name,
+                    short_name=(item.short_name or item.name or "").strip() or item.name,
+                    full_description=(item.full_description or "").strip() or None,
                     qty=float(item.qty),
                     unit=item.unit,
                     unit_price=float(item.unit_price),
@@ -360,7 +369,7 @@ class ServiceEstimateService:
                 )
 
         calculation = await ServiceEstimateService.calculate_install_estimate(session, payload)
-        default_title = f"Смета: {calculation.tariff.selector_label}"
+        default_title = f"Смета: {calculation.tariff.short_name}"
         estimate = ServiceEstimate(
             customer_id=payload.customer_id,
             tariff_id=calculation.tariff.id,
@@ -381,6 +390,8 @@ class ServiceEstimateService:
                 source_id=line.source_id,
                 service_id=line.service_id,
                 name=line.name,
+                short_name=line.short_name or line.name,
+                full_description=line.full_description,
                 qty=line.qty,
                 unit=line.unit,
                 unit_price=line.unit_price,
@@ -426,13 +437,36 @@ class ServiceEstimateService:
         )
 
     @staticmethod
-    def _build_collapsed_title_from_new_model(estimate: ServiceEstimate) -> str:
-        if not estimate.tariff:
-            return estimate.title
-        head = (estimate.tariff.estimate_template or "").strip() or estimate.title
+    def _item_description(
+        item: ServiceEstimateItem,
+        description_mode: ManagerServiceDescriptionMode,
+    ) -> str:
+        short_name = (item.short_name or item.name or "").strip()
+        if description_mode == ManagerServiceDescriptionMode.full:
+            return (item.full_description or "").strip() or short_name
+        return short_name
+
+    @staticmethod
+    def _build_collapsed_title_from_new_model(
+        estimate: ServiceEstimate,
+        description_mode: ManagerServiceDescriptionMode,
+    ) -> str:
+        sorted_items = sorted(list(estimate.items or []), key=lambda item: item.sort_order)
+        base_item = next((item for item in sorted_items if item.source_type == "base"), None)
+        if base_item:
+            head = ServiceEstimateService._item_description(base_item, description_mode)
+        elif estimate.tariff:
+            head = (
+                estimate.tariff.effective_full_description
+                if description_mode == ManagerServiceDescriptionMode.full
+                else estimate.tariff.effective_short_name
+            )
+        else:
+            head = estimate.title
+        head = (head or "").strip() or estimate.title
         rule_parts = [
             (item.name or "").strip()
-            for item in sorted(list(estimate.items or []), key=lambda i: i.sort_order)
+            for item in sorted_items
             if item.source_type == "rule" and (item.name or "").strip()
         ]
         if not rule_parts:
@@ -461,12 +495,15 @@ class ServiceEstimateService:
         return f"{head}, " + ", ".join(parts)
 
     @staticmethod
-    def _map_item_to_detailed_service_line(item: ServiceEstimateItem) -> ManagerOrderServiceLinePayload:
+    def _map_item_to_detailed_service_line(
+        item: ServiceEstimateItem,
+        description_mode: ManagerServiceDescriptionMode,
+    ) -> ManagerOrderServiceLinePayload:
         qty_label = ServiceEstimateService._format_number(item.qty)
         unit_label = (item.unit or "").strip()
-        title = item.name
+        title = ServiceEstimateService._item_description(item, description_mode)
         if unit_label and (item.qty != 1 or unit_label not in {"шт", "компл."}):
-            title = f"{item.name} ({qty_label} {unit_label})"
+            title = f"{title} ({qty_label} {unit_label})"
 
         return ManagerOrderServiceLinePayload(
             link_id=None,
@@ -482,6 +519,7 @@ class ServiceEstimateService:
         session: AsyncSession,
         estimate_id: int,
         mode: ManagerServiceEstimateOrderLinesMode = ManagerServiceEstimateOrderLinesMode.detailed,
+        description_mode: ManagerServiceDescriptionMode = ManagerServiceDescriptionMode.short,
     ) -> ManagerServiceEstimateOrderLinesResponse:
         estimate = await ServiceEstimateDAO.get_by_id(session, estimate_id)
         if estimate is None:
@@ -493,7 +531,10 @@ class ServiceEstimateService:
         sorted_items = sorted(list(estimate.items or []), key=lambda item: item.sort_order)
         if mode == ManagerServiceEstimateOrderLinesMode.collapsed:
             if estimate.tariff_id:
-                collapsed_title = ServiceEstimateService._build_collapsed_title_from_new_model(estimate)
+                collapsed_title = ServiceEstimateService._build_collapsed_title_from_new_model(
+                    estimate,
+                    description_mode,
+                )
             else:
                 collapsed_title = ServiceEstimateService._build_legacy_collapsed_title(estimate)
 
@@ -510,14 +551,19 @@ class ServiceEstimateService:
             return ManagerServiceEstimateOrderLinesResponse(
                 estimate_id=int(estimate.id),
                 mode=mode,
+                description_mode=description_mode,
                 title=collapsed_title,
                 services=services,
             )
 
-        services = [ServiceEstimateService._map_item_to_detailed_service_line(item) for item in sorted_items]
+        services = [
+            ServiceEstimateService._map_item_to_detailed_service_line(item, description_mode)
+            for item in sorted_items
+        ]
         return ManagerServiceEstimateOrderLinesResponse(
             estimate_id=int(estimate.id),
             mode=mode,
+            description_mode=description_mode,
             title=estimate.title,
             services=services,
         )

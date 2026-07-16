@@ -7,6 +7,8 @@ import type { ManagerTariffServiceKind } from './ManagerTariffServiceKind';
 export type ManagerTariffResponse = {
     id: number;
     service_kind: ManagerTariffServiceKind;
+    short_name?: (string | null);
+    full_description?: (string | null);
     selector_label: string;
     estimate_template: string;
     category: string;

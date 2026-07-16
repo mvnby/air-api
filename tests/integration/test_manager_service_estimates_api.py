@@ -23,6 +23,8 @@ async def test_manager_service_estimates_calculate_and_snapshot_flow(async_clien
         service_kind="installation",
         selector_label="Монтаж настенного до 3.5 кВт",
         estimate_template="Монтаж сплит-системы настенного типа, включая расходные материалы",
+        short_name="Монтаж настенного до 3.5 кВт",
+        full_description="Монтаж сплит-системы настенного типа, включая расходные материалы",
         category="Wall",
         power_range="12",
         base_price=500,
@@ -126,15 +128,27 @@ async def test_manager_service_estimates_calculate_and_snapshot_flow(async_clien
     assert order_lines_detailed_resp.status_code == 200
     detailed_data = order_lines_detailed_resp.json()
     assert detailed_data["mode"] == "detailed"
+    assert detailed_data["description_mode"] == "short"
     assert len(detailed_data["services"]) == 4
+    assert detailed_data["services"][0]["title"] == "Монтаж настенного до 3.5 кВт"
+
+    order_lines_full_resp = await async_client.get(
+        f"/api/manager/service-estimates/{created['id']}/order-lines?mode=detailed&description_mode=full",
+        headers=headers,
+    )
+    assert order_lines_full_resp.status_code == 200
+    full_data = order_lines_full_resp.json()
+    assert full_data["description_mode"] == "full"
+    assert full_data["services"][0]["title"].startswith("Монтаж сплит-системы")
 
     order_lines_collapsed_resp = await async_client.get(
-        f"/api/manager/service-estimates/{created['id']}/order-lines?mode=collapsed",
+        f"/api/manager/service-estimates/{created['id']}/order-lines?mode=collapsed&description_mode=full",
         headers=headers,
     )
     assert order_lines_collapsed_resp.status_code == 200
     collapsed_data = order_lines_collapsed_resp.json()
     assert collapsed_data["mode"] == "collapsed"
+    assert collapsed_data["description_mode"] == "full"
     assert len(collapsed_data["services"]) == 1
     assert collapsed_data["services"][0]["price"] == 800
 

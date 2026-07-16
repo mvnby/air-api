@@ -5,6 +5,7 @@ from schemas import (
     ManagerEstimateRuleInputPayload,
     ManagerInstallEstimateCalculatePayload,
     ManagerInstallEstimateSavePayload,
+    ManagerServiceDescriptionMode,
     ManagerServiceEstimateOrderLinesMode,
 )
 from services.service_estimate_service import ServiceEstimateService
@@ -103,6 +104,8 @@ async def test_create_and_get_install_estimate_snapshot(db):
         service_kind="installation",
         selector_label="Монтаж настенного 07-09",
         estimate_template="Стандартный монтаж кондиционера, включая расходные материалы",
+        short_name="Монтаж настенного 07-09",
+        full_description="Стандартный монтаж кондиционера, включая расходные материалы",
         category="Wall",
         power_range="07-09",
         base_price=450,
@@ -158,17 +161,36 @@ async def test_create_and_get_install_estimate_snapshot(db):
         db,
         created.id,
         mode=ManagerServiceEstimateOrderLinesMode.detailed,
+        description_mode=ManagerServiceDescriptionMode.short,
     )
     assert detailed.estimate_id == created.id
     assert detailed.mode == "detailed"
     assert len(detailed.services) >= 1
+    assert detailed.services[0].title == "Монтаж настенного 07-09 (2 компл.)"
+
+    # A saved estimate owns its wording snapshot; later tariff edits must not
+    # rewrite documents created from the estimate.
+    tariff.full_description = "Новое подробное описание"
+    db.add(tariff)
+    await db.commit()
+
+    detailed_full = await ServiceEstimateService.get_estimate_order_lines(
+        db,
+        created.id,
+        mode=ManagerServiceEstimateOrderLinesMode.detailed,
+        description_mode=ManagerServiceDescriptionMode.full,
+    )
+    assert "Стандартный монтаж кондиционера" in detailed_full.services[0].title
+    assert "Новое подробное описание" not in detailed_full.services[0].title
 
     collapsed = await ServiceEstimateService.get_estimate_order_lines(
         db,
         created.id,
         mode=ManagerServiceEstimateOrderLinesMode.collapsed,
+        description_mode=ManagerServiceDescriptionMode.full,
     )
     assert collapsed.mode == "collapsed"
+    assert collapsed.description_mode == "full"
     assert len(collapsed.services) == 1
     assert collapsed.services[0].price == round(created.total)
     assert "включая расходные материалы" in collapsed.services[0].title.lower()

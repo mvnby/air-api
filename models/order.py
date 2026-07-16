@@ -59,8 +59,12 @@ class ServiceTariff(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     service_kind: str = Field(default="installation", index=True)
+    # Legacy columns remain during the expand/contract rollout so the previous
+    # application image can keep serving traffic while migrations run.
     selector_label: str = Field(index=True)
     estimate_template: str = Field(default="Монтаж кондиционера, включая расходные материалы")
+    short_name: Optional[str] = Field(default=None, index=True)
+    full_description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     category: str = Field(default="", index=True)
     power_range: str = Field(default="", index=True)
 
@@ -84,6 +88,18 @@ class ServiceTariff(SQLModel, table=True):
             "lazy": "selectin",
         },
     )
+
+    @property
+    def effective_short_name(self) -> str:
+        return (self.short_name or self.selector_label or "").strip()
+
+    @property
+    def effective_full_description(self) -> str:
+        return (
+            self.full_description
+            or self.estimate_template
+            or self.effective_short_name
+        ).strip()
 
 
 class ServiceTariffRule(SQLModel, table=True):
@@ -202,6 +218,8 @@ class ServiceEstimateItem(SQLModel, table=True):
         index=True,
     )
     name: str
+    short_name: Optional[str] = Field(default=None)
+    full_description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
 
     qty: float = Field(default=1.0)
     unit: str = Field(default="шт")
