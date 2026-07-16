@@ -841,13 +841,12 @@ class OrderService:
                 if stage.start_time and start_date <= stage.start_time <= end_date:
                     st_val = stage.status.value if hasattr(stage.status, "value") else str(stage.status)
                     color = "#0ea5e9" # Sky-500 default
+                    title = stage.name
                     if st_val == "completed":
                         color = "#10b981" # Emerald-500
                     elif st_val == "canceled":
                         color = "#94a3b8" # Slate-400
                         title = f"Отменен: {stage.name}"
-                    else:
-                        title = stage.name
 
                     title += f" - {order.customer.name if order.customer else 'Клиент'}"
                         

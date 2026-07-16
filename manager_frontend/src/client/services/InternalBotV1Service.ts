@@ -7,6 +7,8 @@ import type { BotCatalogProductLookupResponse } from '../models/BotCatalogProduc
 import type { BotCatalogSearchRequest } from '../models/BotCatalogSearchRequest';
 import type { BotCatalogSearchResponse } from '../models/BotCatalogSearchResponse';
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
+import type { BotTaskListRequest } from '../models/BotTaskListRequest';
+import type { BotTaskListResponse } from '../models/BotTaskListResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -81,6 +83,25 @@ export class InternalBotV1Service {
             query: {
                 'telegram_id': telegramId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Internal Bot My Tasks
+     * @param requestBody
+     * @returns BotTaskListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listInternalBotMyTasksV1(
+        requestBody: BotTaskListRequest,
+    ): CancelablePromise<BotTaskListResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/tasks/my',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

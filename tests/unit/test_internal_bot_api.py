@@ -5,6 +5,7 @@ from core.database import get_session
 from main import app
 from services.bot_access_service import BotAccessContext, BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
+from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
 
 
 async def _request(
@@ -74,15 +75,18 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     staff_context = schema["paths"]["/api/internal/bot/v1/staff/context/{telegram_id}"]["get"]
     catalog_search = schema["paths"]["/api/internal/bot/v1/catalog/search"]["post"]
     catalog_product = schema["paths"]["/api/internal/bot/v1/catalog/products/{product_id}"]["get"]
+    task_list = schema["paths"]["/api/internal/bot/v1/tasks/my"]["post"]
 
     assert health["operationId"] == "get_internal_bot_api_health_v1"
     assert staff_context["operationId"] == "get_internal_bot_staff_context_v1"
     assert catalog_search["operationId"] == "search_internal_bot_catalog_v1"
     assert catalog_product["operationId"] == "get_internal_bot_catalog_product_v1"
+    assert task_list["operationId"] == "list_internal_bot_my_tasks_v1"
     assert health["security"] == [{"BotServiceBearer": []}]
     assert staff_context["security"] == [{"BotServiceBearer": []}]
     assert catalog_search["security"] == [{"BotServiceBearer": []}]
     assert catalog_product["security"] == [{"BotServiceBearer": []}]
+    assert task_list["security"] == [{"BotServiceBearer": []}]
     assert schema["components"]["securitySchemes"]["BotServiceBearer"] == {
         "type": "http",
         "description": "Dedicated bearer token used only by the MVN Telegram bot service.",
@@ -279,3 +283,96 @@ async def test_internal_bot_catalog_denies_non_staff_identity(monkeypatch):
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Staff catalog access is required"}
+
+
+async def test_internal_bot_task_list_returns_stable_projection(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_list(_session, *, telegram_id, limit):
+        assert (telegram_id, limit) == (123456, 10)
+        return [
+            {
+                "kind": "stage",
+                "id": 7,
+                "order_id": 42,
+                "title": "Монтаж",
+                "status": "planned",
+                "start_time": "2026-07-20T12:00:00",
+                "address": "Победы 15",
+                "customer_name": "Иван",
+                "customer_phone": "+375291234567",
+                "comment": "Позвонить заранее",
+                "private_field": "must not leak",
+            }
+        ]
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotTaskReadService, "list_for_staff", fake_list)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/tasks/my",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "limit": 10},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "kind": "stage",
+                "id": 7,
+                "order_id": 42,
+                "title": "Монтаж",
+                "status": "planned",
+                "start_time": "2026-07-20T12:00:00",
+                "address": "Победы 15",
+                "customer_name": "Иван",
+                "customer_phone": "+375291234567",
+                "comment": "Позвонить заранее",
+            }
+        ]
+    }
+
+
+async def test_internal_bot_task_list_denies_non_staff_identity(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_list(_session, **_kwargs):
+        raise BotTaskAccessDeniedError("Staff task access is required")
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotTaskReadService, "list_for_staff", fake_list)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/tasks/my",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Staff task access is required"}
+
+
+async def test_internal_bot_task_list_validates_body(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    response = await _request(
+        "/api/internal/bot/v1/tasks/my",
+        token="expected-token",
+        method="POST",
+        json={"telegram_id": 0, "limit": 21},
+    )
+
+    assert response.status_code == 422

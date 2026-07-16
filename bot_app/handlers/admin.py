@@ -14,8 +14,9 @@ from services.customer_requisites_recognition_service import CustomerRequisitesR
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
-from services.bot_task_service import BotTaskService
 from ..access_runtime import get_bot_access_context
+from ..api_runtime import get_bot_api_gateway
+from ..task_presenter import task_to_dict
 from .repair_context import repair_context_keyboard as _repair_context_keyboard
 from ..config import bot
 from ..states import ShopState
@@ -698,12 +699,16 @@ async def choose_order_for_pending_file(callback: CallbackQuery, state: FSMConte
         await callback.answer("Файл не найден. Отправьте его еще раз.", show_alert=True)
         return
 
-    async with async_session_maker() as session:
-        if context.is_manager:
+    if context.is_manager:
+        async with async_session_maker() as session:
             orders = await BotOrderAttachmentService.list_recent_orders(session, limit=5)
-        else:
-            tasks = await BotTaskService.list_my_tasks(session, callback.from_user.id, limit=5)
-            orders = _order_choices_from_tasks(tasks)
+    else:
+        response = await get_bot_api_gateway().list_my_tasks(
+            telegram_id=callback.from_user.id,
+            limit=5,
+        )
+        tasks = [task_to_dict(task) for task in response.items]
+        orders = _order_choices_from_tasks(tasks)
 
     if orders:
         await callback.message.edit_text(

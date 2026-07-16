@@ -266,6 +266,52 @@
         }
       }
     },
+    "/api/internal/bot/v1/tasks/my": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "List Internal Bot My Tasks",
+        "operationId": "list_internal_bot_my_tasks_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotTaskListRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotTaskListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
     "/api/products/search": {
       "get": {
         "tags": [
@@ -18659,6 +18705,124 @@
           "telegram_id"
         ],
         "title": "BotStaffContextResponse"
+      },
+      "BotTaskListRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id"
+        ],
+        "title": "BotTaskListRequest"
+      },
+      "BotTaskListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotTaskResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "BotTaskListResponse"
+      },
+      "BotTaskResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stage",
+              "order"
+            ],
+            "title": "Kind"
+          },
+          "id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Time"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name",
+            "default": "\u041a\u043b\u0438\u0435\u043d\u0442"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "order_id",
+          "title",
+          "status",
+          "start_time"
+        ],
+        "title": "BotTaskResponse",
+        "description": "Stable read-only task projection rendered by the Telegram runtime."
       },
       "BulkGalleryAddRequest": {
         "properties": {

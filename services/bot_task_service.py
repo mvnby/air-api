@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timedelta
-from html import escape
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,31 +47,52 @@ class BotTaskService:
         if not staff or not staff.legacy_installer_id:
             return []
 
-        now = datetime.now() - timedelta(days=1)
-        until = datetime.now() + timedelta(days=30)
-        installer_id = int(staff.legacy_installer_id)
+        return await cls.list_installer_tasks(
+            session,
+            int(staff.legacy_installer_id),
+            limit=limit,
+        )
+
+    @classmethod
+    async def list_installer_tasks(
+        cls,
+        session: AsyncSession,
+        installer_id: int,
+        *,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 10), 20))
+
+        reference_time = datetime.now()
+        now = reference_time - timedelta(days=1)
+        until = reference_time + timedelta(days=30)
+        active_stage_filters = (
+            OrderWorkStage.installer_id == installer_id,
+            Order.status.in_(list(cls.ACTIVE_ORDER_STATUSES)),
+            OrderWorkStage.start_time.is_not(None),
+            OrderWorkStage.start_time >= now,
+            OrderWorkStage.start_time <= until,
+            OrderWorkStage.status != OrderStageStatus.COMPLETED,
+            OrderWorkStage.status != OrderStageStatus.CANCELED,
+        )
 
         stage_result = await session.execute(
             select(OrderWorkStage)
             .join(Order, Order.id == OrderWorkStage.order_id)
-            .where(OrderWorkStage.installer_id == installer_id)
-            .where(Order.status.in_(list(cls.ACTIVE_ORDER_STATUSES)))
-            .where(OrderWorkStage.start_time.is_not(None))
-            .where(
-                (OrderWorkStage.start_time >= now) & (OrderWorkStage.start_time <= until)
-            )
-            .where(OrderWorkStage.status != OrderStageStatus.COMPLETED)
-            .where(OrderWorkStage.status != OrderStageStatus.CANCELED)
+            .where(*active_stage_filters)
             .options(
                 selectinload(OrderWorkStage.order).selectinload(Order.customer),
-                selectinload(OrderWorkStage.installer),
             )
             .order_by(OrderWorkStage.start_time.asc().nullslast(), OrderWorkStage.id.asc())
-            .limit(limit)
+            .limit(safe_limit)
         )
         tasks = [cls._map_stage(stage) for stage in stage_result.scalars().all()]
-        if tasks:
-            return tasks
+
+        active_stage_order_ids = (
+            select(OrderWorkStage.order_id)
+            .join(Order, Order.id == OrderWorkStage.order_id)
+            .where(*active_stage_filters)
+        )
 
         order_result = await session.execute(
             select(Order)
@@ -83,11 +103,20 @@ class BotTaskService:
             .where(
                 (Order.installation_date >= now) & (Order.installation_date <= until)
             )
-            .options(selectinload(Order.customer), selectinload(Order.installers))
+            .where(Order.id.notin_(active_stage_order_ids))
+            .options(selectinload(Order.customer))
             .order_by(Order.installation_date.asc().nullslast(), Order.id.asc())
-            .limit(limit)
+            .limit(safe_limit)
         )
-        return [cls._map_order(order) for order in order_result.scalars().all()]
+        tasks.extend(cls._map_order(order) for order in order_result.scalars().all())
+        tasks.sort(
+            key=lambda task: (
+                task["start_time"],
+                0 if task["kind"] == "stage" else 1,
+                task["id"],
+            )
+        )
+        return tasks[:safe_limit]
 
     @staticmethod
     def _customer_phone(order: Order) -> str | None:
@@ -129,50 +158,6 @@ class BotTaskService:
             "customer_phone": cls._customer_phone(order),
             "comment": order.comment,
         }
-
-    @staticmethod
-    def format_tasks(tasks: list[dict[str, Any]]) -> str:
-        if not tasks:
-            return "У вас нет ближайших задач."
-        lines = ["<b>Мои ближайшие задачи</b>"]
-        for task in tasks:
-            dt = task.get("start_time")
-            date_text = dt.strftime("%d.%m.%Y %H:%M") if dt else "время не назначено"
-            lines.extend(
-                [
-                    "",
-                    f"<b>#{task['order_id']} - {escape(str(task['title']))}</b>",
-                    f"Дата: {escape(date_text)}",
-                    f"Клиент: {escape(str(task.get('customer_name') or 'Клиент'))}",
-                    f"Телефон: {escape(str(task.get('customer_phone') or 'не указан'))}",
-                    f"Адрес: {escape(str(task.get('address') or 'не указан'))}",
-                ]
-            )
-            if task.get("comment"):
-                lines.append(f"Комментарий: {escape(str(task['comment']))}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def format_tasks_rich_html(tasks: list[dict[str, Any]]) -> str:
-        if not tasks:
-            return "<h3>Мои ближайшие задачи</h3><p>У вас нет ближайших задач.</p>"
-
-        blocks = ["<h3>Мои ближайшие задачи</h3>"]
-        for task in tasks:
-            dt = task.get("start_time")
-            date_text = dt.strftime("%d.%m.%Y %H:%M") if dt else "время не назначено"
-            blocks.append(
-                "<p>"
-                f"<b>#{task['order_id']} - {escape(str(task['title']))}</b><br/>"
-                f"<b>Дата:</b> {escape(date_text)}<br/>"
-                f"<b>Клиент:</b> {escape(str(task.get('customer_name') or 'Клиент'))}<br/>"
-                f"<b>Телефон:</b> {escape(str(task.get('customer_phone') or 'не указан'))}<br/>"
-                f"<b>Адрес:</b> {escape(str(task.get('address') or 'не указан'))}"
-                "</p>"
-            )
-            if task.get("comment"):
-                blocks.append(f"<blockquote>{escape(str(task['comment']))}</blockquote>")
-        return "".join(blocks)
 
     @staticmethod
     def build_stage_report(

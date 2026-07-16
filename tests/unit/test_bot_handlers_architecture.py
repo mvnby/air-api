@@ -46,3 +46,16 @@ def test_bot_catalog_presenter_does_not_import_backend_services():
     source = Path("bot_app/catalog_presenter.py").read_text(encoding="utf-8")
     for forbidden in ("from core.database", "from models", "from crud", "from services"):
         assert forbidden not in source, f"catalog presenter imports backend layer: {forbidden}"
+
+
+def test_bot_task_read_paths_use_api_instead_of_task_service_reads():
+    for filename in ("work.py", "admin.py"):
+        source = Path(f"bot_app/handlers/{filename}").read_text(encoding="utf-8")
+        assert "BotTaskService.list_my_tasks" not in source
+        assert "get_bot_api_gateway().list_my_tasks" in source
+
+
+def test_bot_task_presenter_does_not_import_backend_runtime_layers():
+    source = Path("bot_app/task_presenter.py").read_text(encoding="utf-8")
+    for forbidden in ("from core.database", "from models", "from crud", "from services"):
+        assert forbidden not in source, f"task presenter imports backend layer: {forbidden}"

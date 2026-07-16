@@ -9,6 +9,7 @@ from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_service import BotService
 from services.bot_task_service import BotTaskService
 from ..access_runtime import get_bot_access_context
+from ..api_runtime import get_bot_api_gateway
 from ..keyboards import (
     get_staff_main_menu,
     quick_order_confirm_keyboard,
@@ -16,6 +17,7 @@ from ..keyboards import (
     task_actions_keyboard,
 )
 from ..states import ShopState
+from ..task_presenter import format_tasks, format_tasks_rich_html, task_to_dict
 
 router = Router()
 
@@ -196,13 +198,14 @@ async def my_tasks(message: types.Message):
     context = await _require_staff(message)
     if not context:
         return
-    async with async_session_maker() as session:
-        tasks = await BotTaskService.list_my_tasks(session, message.from_user.id if message.from_user else None)
+    user_id = message.from_user.id if message.from_user else 0
+    response = await get_bot_api_gateway().list_my_tasks(telegram_id=user_id, limit=10)
+    tasks = [task_to_dict(task) for task in response.items]
     keyboard = task_actions_keyboard(tasks)
-    fallback_text = BotTaskService.format_tasks(tasks)
+    fallback_text = format_tasks(tasks)
     delivered = await BotService.send_rich_message(
         message.chat.id,
-        BotTaskService.format_tasks_rich_html(tasks),
+        format_tasks_rich_html(tasks),
         reply_markup=keyboard,
     )
     if not delivered:
