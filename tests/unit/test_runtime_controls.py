@@ -23,6 +23,16 @@ def _set_required_env(monkeypatch):
     monkeypatch.setenv("ADMIN_PASSWORD", "admin")
 
 
+def _production_private_storage_values() -> dict[str, str]:
+    return {
+        "SERVICE_ATTACHMENT_STORAGE_PROVIDER": "r2",
+        "SERVICE_ATTACHMENT_S3_BUCKET": "test-private-service-attachments",
+        "SERVICE_ATTACHMENT_S3_ENDPOINT_URL": "https://account.r2.invalid",
+        "SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID": "test-access-key",
+        "SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY": "test-secret-key",
+    }
+
+
 def test_standby_role_disables_scheduler_by_default():
     decision = resolve_single_active_control(
         app_role="standby",
@@ -108,6 +118,7 @@ def test_bot_access_backend_is_explicit_and_normalized(monkeypatch, value, expec
         ADMIN_USERNAME="admin",
         ADMIN_PASSWORD="admin",
         BOT_ACCESS_BACKEND=value,
+        BOT_API_TOKEN="service-token" if expected == "api" else "",
         _env_file=None,
     )
 
@@ -127,6 +138,69 @@ def test_bot_access_backend_rejects_implicit_fallback(monkeypatch):
             BOT_ACCESS_BACKEND="auto",
             _env_file=None,
         )
+
+
+def test_bot_api_backend_requires_service_token(monkeypatch):
+    _set_required_env(monkeypatch)
+    config = importlib.import_module("core.config")
+
+    with pytest.raises(ValueError, match="BOT_API_TOKEN is required"):
+        config.Settings(
+            BOT_TOKEN="123:test",
+            SECRET_KEY="test-secret",
+            ADMIN_USERNAME="admin",
+            ADMIN_PASSWORD="admin",
+            BOT_ACCESS_BACKEND="api",
+            BOT_API_TOKEN="",
+            _env_file=None,
+        )
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://api.mvn.by/api/internal/bot/v1",
+        "https://app/api/internal/bot/v1",
+        "https://app-blue/api/internal/bot/v1",
+    ],
+)
+def test_production_bot_api_backend_requires_stable_https_origin(monkeypatch, base_url):
+    _set_required_env(monkeypatch)
+    config = importlib.import_module("core.config")
+
+    with pytest.raises(ValueError, match="production Bot API access"):
+        config.Settings(
+            BOT_TOKEN="123:test",
+            SECRET_KEY="test-secret",
+            ADMIN_USERNAME="admin",
+            ADMIN_PASSWORD="admin",
+            ENVIRONMENT="production",
+            BOT_ACCESS_BACKEND="api",
+            BOT_API_TOKEN="service-token",
+            BOT_API_BASE_URL=base_url,
+            _env_file=None,
+            **_production_private_storage_values(),
+        )
+
+
+def test_production_bot_api_backend_accepts_stable_https_origin(monkeypatch):
+    _set_required_env(monkeypatch)
+    config = importlib.import_module("core.config")
+
+    settings = config.Settings(
+        BOT_TOKEN="123:test",
+        SECRET_KEY="test-secret",
+        ADMIN_USERNAME="admin",
+        ADMIN_PASSWORD="admin",
+        ENVIRONMENT="production",
+        BOT_ACCESS_BACKEND="api",
+        BOT_API_TOKEN="service-token",
+        BOT_API_BASE_URL="https://api.mvn.by/api/internal/bot/v1",
+        _env_file=None,
+        **_production_private_storage_values(),
+    )
+
+    assert settings.BOT_API_BASE_URL == "https://api.mvn.by/api/internal/bot/v1"
 
 
 @pytest.mark.asyncio

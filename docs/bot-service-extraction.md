@@ -31,6 +31,12 @@ the rollout. Set `BOT_ACCESS_BACKEND=api` only after deploying the same strong
 `BOT_API_TOKEN` to the API and bot runtimes. API mode performs a startup health
 check and never silently falls back to the database after an HTTP failure.
 
+Production must use `https://api.mvn.by/api/internal/bot/v1`. Blue/green service
+names (`app-blue` and `app-green`) change on every deployment and the inactive
+slot is removed, so they are not valid service-discovery addresses for the bot.
+Settings reject API mode without a token, without HTTPS in production, or with
+a slot-local hostname.
+
 The temporary database provider is removed after API mode has been verified in
 production. Catalog, orders, repair and FSM database paths remain separate
 migration slices; this switch covers staff authorization only.
