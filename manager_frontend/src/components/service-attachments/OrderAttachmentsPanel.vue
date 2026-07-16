@@ -63,7 +63,11 @@ const audioUrls = reactive<Record<string, string>>({});
 let listRequestId = 0;
 
 const uploading = computed(() => uploadingCount.value > 0);
-const visibleCount = computed(() => loaded.value ? total.value : (props.initialCount ?? total.value));
+const visibleCount = computed<number | null>(() => {
+  if (loaded.value) return total.value;
+  const initial = Number(props.initialCount || 0);
+  return initial > 0 ? initial : null;
+});
 const imageItems = computed(() => items.value.filter(isImageAttachment));
 const fileItems = computed(() => items.value.filter((item) => !isImageAttachment(item)));
 const editingItem = computed(() => items.value.find((item) => item.id === editingId.value) || null);
@@ -386,11 +390,11 @@ defineExpose({ refresh, expand });
       <span class="min-w-0 flex-1">
         <span class="block text-sm font-semibold text-slate-900 dark:text-slate-100">Фото и файлы</span>
         <span class="block truncate text-xs text-slate-500 dark:text-slate-400">
-          {{ loaded ? (total ? `${total} файлов` : 'Файлов пока нет') : (visibleCount ? `${visibleCount} файлов` : 'Загрузятся при открытии') }}
+          {{ loaded ? (total ? `${total} файлов` : 'Файлов пока нет') : (visibleCount ? `${visibleCount} файлов` : 'Откройте, чтобы загрузить') }}
         </span>
       </span>
       <span class="inline-flex min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-        {{ visibleCount }}
+        {{ visibleCount ?? '—' }}
       </span>
       <span class="material-icons-round text-[21px] text-slate-500" aria-hidden="true">{{ expanded ? 'expand_less' : 'expand_more' }}</span>
     </button>

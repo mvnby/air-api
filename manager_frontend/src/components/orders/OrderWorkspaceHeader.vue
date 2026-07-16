@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue';
-import { Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, X } from 'lucide-vue-next';
+import { Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, Undo2, X } from 'lucide-vue-next';
 import { formatMoney } from './order-utils';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
 
@@ -24,6 +24,7 @@ const emit = defineEmits<{
   next: [];
   payments: [];
   hold: [];
+  discard: [];
   save: [];
   close: [];
 }>();
@@ -118,7 +119,7 @@ const onWorkflowChange = async (event: Event) => {
         </select>
         <ChevronDown :size="14" class="pointer-events-none absolute right-2 text-slate-400" />
       </label>
-      <span class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ formatMoney(total) }}</span>
+      <span class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Сумма {{ formatMoney(total) }}</span>
       <span class="text-xs text-slate-500 dark:text-slate-400">оплачено {{ formatMoney(paid) }}</span>
       <span class="text-xs font-semibold" :class="balance > 0 ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'">
         {{ balance > 0 ? 'долг ' + formatMoney(balance) : 'долга нет' }}
@@ -128,16 +129,20 @@ const onWorkflowChange = async (event: Event) => {
     <div class="mt-2.5 flex items-center gap-2">
       <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" @click="emit('next')">{{ viewModel.nextAction.label }}</button>
       <button v-if="balance > 0" type="button" class="btn-mini-outline hidden h-9 text-xs sm:inline-flex" @click="emit('payments')">Внести оплату</button>
-      <button
-        type="button"
-        class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition"
-        :class="dirty ? 'bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-100' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
-        :disabled="saving"
-        @click="emit('save')"
-      >
-        <Save :size="15" />
-        <span class="hidden sm:inline">{{ saving ? 'Сохраняем' : dirty ? 'Сохранить' : 'Сохранено' }}</span>
-      </button>
+      <span v-if="!dirty" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        <Check :size="15" />
+        <span class="hidden sm:inline">Сохранено</span>
+      </span>
+      <div v-else class="flex shrink-0 items-center gap-1.5">
+        <span class="hidden text-xs font-semibold text-amber-700 dark:text-amber-200 lg:inline">Есть изменения</span>
+        <button type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')">
+          <Undo2 :size="15" />
+        </button>
+        <button type="button" class="btn-mini h-9 gap-1.5 px-3 text-xs" :disabled="saving" @click="emit('save')">
+          <Save :size="15" />
+          <span class="hidden sm:inline">{{ saving ? 'Сохраняем' : 'Сохранить' }}</span>
+        </button>
+      </div>
     </div>
   </header>
 </template>

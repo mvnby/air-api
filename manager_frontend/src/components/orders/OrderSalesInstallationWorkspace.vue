@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { CreditCard, FileText, PackageCheck, Wrench } from 'lucide-vue-next';
+import { ArrowRight, CreditCard, FileText, PackageCheck, Wrench } from 'lucide-vue-next';
 import type { OrderWorkspaceLane, OrderWorkspaceTarget } from './order-workspace';
 
-defineProps<{ lanes: OrderWorkspaceLane[] }>();
+defineProps<{
+  lanes: OrderWorkspaceLane[];
+  activeTarget?: OrderWorkspaceTarget | null;
+}>();
 const emit = defineEmits<{ open: [target: OrderWorkspaceTarget] }>();
 
 const icons = {
@@ -26,7 +29,7 @@ const toneClasses = {
   <section class="mt-3">
     <div class="mb-2">
       <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Ход заказа</h3>
-      <p class="text-xs text-slate-500 dark:text-slate-400">Независимые направления продажи и монтажа</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400">Статусы по направлениям</p>
     </div>
     <div class="grid gap-2 sm:grid-cols-2">
       <button
@@ -34,14 +37,19 @@ const toneClasses = {
         :key="lane.id"
         type="button"
         class="flex min-h-[88px] items-start gap-3 rounded-xl border p-3 text-left transition hover:-translate-y-px hover:shadow-sm"
-        :class="toneClasses[lane.tone]"
+        :class="[toneClasses[lane.tone], activeTarget === lane.target ? 'ring-2 ring-teal-500/60 ring-offset-1 dark:ring-offset-slate-950' : '']"
+        :aria-expanded="activeTarget === lane.target"
         @click="emit('open', lane.target)"
       >
         <component :is="icons[lane.id]" :size="18" class="mt-0.5 shrink-0" aria-hidden="true" />
-        <span class="min-w-0">
+        <span class="flex min-w-0 flex-1 flex-col self-stretch">
           <span class="block text-[11px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ lane.label }}</span>
           <span class="mt-0.5 block text-sm font-semibold">{{ lane.status }}</span>
           <span class="mt-1 block text-xs opacity-75">{{ lane.detail }}</span>
+          <span class="mt-auto inline-flex items-center gap-1 pt-2 text-xs font-semibold">
+            {{ lane.actionLabel }}
+            <ArrowRight :size="13" aria-hidden="true" />
+          </span>
         </span>
       </button>
     </div>

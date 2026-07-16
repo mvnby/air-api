@@ -8,9 +8,12 @@ import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { fromLocalDateTimeInput } from '../../utils/datetime';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   order: ManagerOrderDetailResponse;
-}>();
+  section?: 'all' | 'documents' | 'payments';
+}>(), {
+  section: 'all',
+});
 
 const emit = defineEmits<{
   refresh: [];
@@ -281,7 +284,7 @@ watch(() => props.order.id, () => {
   </section>
 
   <!-- ZONE 3: Finance -->
-  <section class="rounded-2xl bg-slate-50 border border-slate-200 p-5 shadow-sm">
+  <section v-if="section === 'all' || section === 'payments'" class="rounded-2xl bg-slate-50 border border-slate-200 p-5 shadow-sm">
           <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk'] mb-4">Финансы</h3>
           <div class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
               <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Остаток к оплате</p>
@@ -366,12 +369,13 @@ watch(() => props.order.id, () => {
   </section>
 
   <OrderDocumentsPanel
+    v-if="section === 'all' || section === 'documents'"
     :order="order"
     @refresh="emit('refresh')"
     @toast="setToast($event.message, $event.type || 'success')"
   />
 
-  <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  <section v-if="section === 'all' || section === 'payments'" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <button
       class="flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold shadow-lg transition-transform active:scale-95"
       :class="(order.balance_due || 0) > 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-teal-500 text-white hover:bg-teal-600'"

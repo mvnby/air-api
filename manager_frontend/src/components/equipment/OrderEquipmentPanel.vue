@@ -153,6 +153,15 @@ const toggle = () => {
   if (expanded.value) void loadLinks();
 };
 
+const expand = () => {
+  expanded.value = true;
+  return loadLinks();
+};
+
+const collapse = () => {
+  expanded.value = false;
+};
+
 const createFromOrder = async () => {
   if (action.value) return;
   action.value = 'from-order';
@@ -314,6 +323,8 @@ watch(() => [props.customerId, props.customerBranchId], () => {
 });
 
 onMounted(() => void loadLinks());
+
+defineExpose({ expand, collapse });
 </script>
 
 <template>
