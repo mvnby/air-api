@@ -482,8 +482,9 @@ class _MigrationOrchestrator:
             for node in ordered_nodes:
                 # Finalization removes the maintenance marker. The sole active
                 # role agent now owns timer activation/fencing. Re-running its
-                # pinned convergence proof is idempotent and bounded; there is
-                # no second controller timer owner racing systemd.
+                # pinned convergence proof is idempotent and bounded. The
+                # following strict verify uses bounded shared-lock arbitration
+                # if the first recurring WAL upload starts at the same instant.
                 self._mutate(
                     stage=f"role-agent final convergence {node.alias}",
                     action=lambda node=node: self._role_agent(
