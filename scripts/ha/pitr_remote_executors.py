@@ -128,10 +128,20 @@ def wrapper_main():
         ):
             return wrapper_fail("shared PITR lock metadata is unsafe", 78)
         os.fchmod(lock_fd, 0o600)
-        try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return wrapper_fail("another PITR operation is active", 75)
+        verify_lock_deadline = (
+            time.monotonic() + 30.0 if phase == "verify" else None
+        )
+        while True:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if verify_lock_deadline is None:
+                    return wrapper_fail("another PITR operation is active", 75)
+                remaining = verify_lock_deadline - time.monotonic()
+                if remaining <= 0:
+                    return wrapper_fail("another PITR operation is active", 75)
+                time.sleep(min(0.5, remaining))
         try:
             deploy_fd = open_deploy_lock(project_dir)
         except BlockingIOError:
@@ -498,10 +508,20 @@ def main():
         ):
             return fail("lock file metadata is unsafe")
         os.fchmod(lock_fd, 0o600)
-        try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return fail("another PITR prerequisite apply is active", 75)
+        verify_lock_deadline = (
+            time.monotonic() + 30.0 if phase == "verify" else None
+        )
+        while True:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if verify_lock_deadline is None:
+                    return fail("another PITR prerequisite apply is active", 75)
+                remaining = verify_lock_deadline - time.monotonic()
+                if remaining <= 0:
+                    return fail("another PITR prerequisite apply is active", 75)
+                time.sleep(min(0.5, remaining))
         try:
             attest_assets(asset_manifest, project_dir, compose_file)
             guard = load_operation_guard()

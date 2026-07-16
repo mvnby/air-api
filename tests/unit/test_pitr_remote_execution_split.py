@@ -288,6 +288,23 @@ def test_transactional_host_provision_is_an_attested_maintenance_phase(tmp_path)
     )
 
 
+def test_final_verify_waits_boundedly_for_recurring_pitr_lock():
+    outer = pitr_remote_executors.REMOTE_MAINTENANCE_EXECUTOR
+    inner = pitr_remote_executors.LOCKED_OPERATION_WRAPPER
+
+    for source in (outer, inner):
+        assert 'time.monotonic() + 30.0 if phase == "verify" else None' in source
+        assert "while True:" in source
+        assert "remaining = verify_lock_deadline - time.monotonic()" in source
+        assert "time.sleep(min(0.5, remaining))" in source
+    assert outer.count(
+        'return fail("another PITR prerequisite apply is active", 75)'
+    ) >= 2
+    assert inner.count(
+        'return wrapper_fail("another PITR operation is active", 75)'
+    ) >= 2
+
+
 def test_primary_fenced_provision_uses_explicit_attested_mode(tmp_path):
     captured = []
 
