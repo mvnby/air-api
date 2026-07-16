@@ -136,13 +136,6 @@ const normalizeWorkflowType = (value: unknown): OrderWorkflowType => {
   if (raw === 'service_work' || raw === 'maintenance' || raw === 'repair') return raw;
   return 'sales_installation';
 };
-const serviceKindForWorkflow = (value: OrderWorkflowType) => {
-  if (value === 'repair') return 'repair';
-  if (value === 'maintenance') return 'maintenance';
-  if (value === 'service_work') return 'installation';
-  return null;
-};
-
 type OrderDrawerDraft = {
   productLines: ProductLine[];
   serviceLines: ServiceLine[];
@@ -1867,7 +1860,7 @@ const toggleEstimateImport = async () => {
 const debouncedLoadServiceTariffOptions = useDebounceFn(async (index: number, q: string, requestId: number) => {
   try {
     serviceTariffLookupLoading.value = true;
-    const response = await api.listManagerQuickTariffs(q, serviceKindForWorkflow(workflowType.value) as any, 10);
+    const response = await api.listManagerQuickTariffs(q, null, 10);
     if (requestId !== serviceTariffSearchRequestId || activeServiceSuggestionIndex.value !== index) return;
     serviceTariffOptions.value = response.items || [];
   } catch (error) {
