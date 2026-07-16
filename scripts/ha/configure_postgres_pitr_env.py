@@ -344,6 +344,33 @@ def validate_sanitized_environment(payload: bytes) -> None:
         raise RuntimeError("committed project env still exposes PITR credentials")
 
 
+def derive_config_transaction_id(
+    *,
+    root_transaction_id: str,
+    node_alias: str,
+    stage: str,
+    new_env: bytes,
+    new_secrets: bytes,
+) -> str:
+    if not re.fullmatch(r"[0-9a-f]{32}", root_transaction_id):
+        raise RuntimeError("root PITR transaction ID is invalid")
+    if node_alias not in {"mvn-api", "zakup"}:
+        raise RuntimeError("PITR transaction node alias is invalid")
+    if stage not in {"configure-node", "enable-archive"}:
+        raise RuntimeError("PITR configuration transaction stage is invalid")
+    material = "\0".join(
+        (
+            "mvn-pitr-config-v2",
+            root_transaction_id,
+            node_alias,
+            stage,
+            hashlib.sha256(new_env).hexdigest(),
+            hashlib.sha256(new_secrets).hexdigest(),
+        )
+    )
+    return hashlib.sha256(material.encode("ascii")).hexdigest()[:32]
+
+
 def load_transaction_module() -> ModuleType:
     candidates = (
         Path(__file__).resolve().with_name("pitr_config_transaction.py"),
@@ -369,6 +396,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--secrets-file", default="")
     parser.add_argument("--transaction-root", default="")
     parser.add_argument("--transaction-id", default="")
+    parser.add_argument("--root-transaction-id", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--transaction-node", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--transaction-stage", default="", help=argparse.SUPPRESS)
     parser.add_argument("--input-env-file", default="")
     parser.add_argument("--cluster", default="")
     parser.add_argument("--bucket", default="")
@@ -473,13 +503,35 @@ def run(argv: Sequence[str] | None = None) -> int:
     validate_config(config, merged_values, expected_destination_fingerprint=fingerprint)
     new_env = update_env_text(env_payload.decode("utf-8"), config).encode("utf-8")
     new_secrets = render_secrets(config).encode("utf-8")
+    derived_transaction_fields = (
+        args.root_transaction_id,
+        args.transaction_node,
+        args.transaction_stage,
+    )
+    if any(derived_transaction_fields) and (
+        not all(derived_transaction_fields) or args.transaction_id
+    ):
+        raise RuntimeError(
+            "payload-bound PITR transaction identity requires exactly "
+            "root ID, node, and stage"
+        )
     if not args.dry_run:
+        if all(derived_transaction_fields):
+            transaction_id = derive_config_transaction_id(
+                root_transaction_id=args.root_transaction_id,
+                node_alias=args.transaction_node,
+                stage=args.transaction_stage,
+                new_env=new_env,
+                new_secrets=new_secrets,
+            )
+        else:
+            transaction_id = args.transaction_id or uuid.uuid4().hex
         secrets_path.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
         transaction.commit_split_transaction(
             env_path=env_path,
             secrets_path=secrets_path,
             transaction_root=transaction_root,
-            transaction_id=args.transaction_id or uuid.uuid4().hex,
+            transaction_id=transaction_id,
             old_env=env_payload,
             old_secrets=secrets_payload if secrets_exists else None,
             new_env=new_env,
