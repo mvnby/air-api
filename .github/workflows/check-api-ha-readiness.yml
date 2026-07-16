@@ -76,6 +76,7 @@ jobs:
           export PRIMARY_COMPOSE_FILE="${API_COMPOSE_FILE}"
           export STANDBY_PROJECT_DIR="${API_STANDBY_PROJECT_DIR}"
           export STANDBY_COMPOSE_FILE="${API_STANDBY_COMPOSE_FILE}"
+          export PITR_WORKFLOW_IDENTITY_FILE="${HOME}/.ssh/ha_readiness_key"
           bash scripts/ha/check_api_ha_readiness.sh | tee api-ha-readiness.log
 
       - name: Write Summary

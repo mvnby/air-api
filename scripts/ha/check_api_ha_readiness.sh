@@ -142,7 +142,17 @@ run_media_cdn_db() {
 run_postgres_pitr() {
   local pitr_required="${POSTGRES_PITR_REQUIRED:-false}"
   if is_true "${HA_READINESS_STRICT}"; then
-    pitr_required=true
+    local identity_file="${PITR_WORKFLOW_IDENTITY_FILE:-}"
+    if [[ -z "${identity_file}" || ! -f "${identity_file}" || -L "${identity_file}" || ! -O "${identity_file}" ]]; then
+      log fail "strict PITR proof requires an owner-controlled workflow identity file"
+      return 1
+    fi
+    if [[ "$(stat -c '%a' "${identity_file}")" != "600" ]]; then
+      log fail "strict PITR workflow identity file must have mode 600"
+      return 1
+    fi
+    python3 -I scripts/ha/run_postgres_pitr_workflow.py --phase verify <"${identity_file}"
+    return
   elif ! is_true "${pitr_required}"; then
     soft_blocker "POSTGRES_PITR_REQUIRED is not true; PITR is monitored in soft mode only"
   fi
