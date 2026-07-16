@@ -366,6 +366,72 @@ async def test_catalog_filters_by_wifi_and_heating(async_client: AsyncClient, db
 
 
 @pytest.mark.asyncio
+async def test_catalog_filters_black_color_variants(async_client: AsyncClient, db):
+    products = [
+        Product(
+            title="Black Cyrillic",
+            slug="black-cyrillic",
+            price=1000,
+            area=25,
+            is_published=True,
+            specs=normalize_specs({"Цвет корпуса": "Черный"}),
+        ),
+        Product(
+            title="Black English",
+            slug="black-english",
+            price=1100,
+            area=25,
+            is_published=True,
+            specs=normalize_specs({"Цвет корпуса": "Black mirror"}),
+        ),
+        Product(
+            title="Black Combined",
+            slug="black-combined",
+            price=1200,
+            area=25,
+            is_published=True,
+            specs=normalize_specs({"Цвет корпуса": "зеркальный, чёрный"}),
+        ),
+        Product(
+            title="Graphite",
+            slug="graphite",
+            price=1300,
+            area=25,
+            is_published=True,
+            specs=normalize_specs({"Цвет корпуса": "Графит"}),
+        ),
+        Product(
+            title="White",
+            slug="white",
+            price=900,
+            area=25,
+            is_published=True,
+            specs=normalize_specs({"Цвет корпуса": "Белый"}),
+        ),
+    ]
+    db.add_all(products)
+    await db.commit()
+
+    response = await async_client.get("/api/v1/catalog?color=black")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert {item["slug"] for item in payload["items"]} == {
+        "black-cyrillic",
+        "black-english",
+        "black-combined",
+    }
+    assert payload["meta"]["total"] == 3
+
+
+@pytest.mark.asyncio
+async def test_catalog_rejects_unknown_color(async_client: AsyncClient):
+    response = await async_client.get("/api/v1/catalog?color=purple")
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_catalog_filters_by_brand_entity_slug(async_client: AsyncClient, db):
     mdv = Brand(title="MDV", slug="mdv", is_published=True, sort_order=10)
     haier = Brand(title="Haier", slug="haier", is_published=True, sort_order=40)

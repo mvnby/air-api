@@ -12,7 +12,8 @@ export interface HomepageQuickPick {
     title: string;
     note: string;
     href: string;
-    icon: string;
+    icon?: string;
+    colorSwatch?: "black";
     analyticsItem: string;
 }
 
@@ -71,6 +72,13 @@ export const HOMEPAGE_QUICK_PICKS: HomepageQuickPick[] = [
         analyticsItem: "silent",
     },
     {
+        title: "Черные",
+        note: "Темный корпус для интерьера",
+        href: "/catalog/black/",
+        colorSwatch: "black",
+        analyticsItem: "black",
+    },
+    {
         title: "Для обогрева",
         note: "Модели для мороза",
         href: "/catalog/heating/",
@@ -90,13 +98,6 @@ export const HOMEPAGE_QUICK_PICKS: HomepageQuickPick[] = [
         href: "/catalog/multi-split/",
         icon: "account_tree",
         analyticsItem: "multi_split",
-    },
-    {
-        title: "До 35 м²",
-        note: "Гостиная или небольшой офис",
-        href: "/catalog/do-35m2/",
-        icon: "meeting_room",
-        analyticsItem: "area_35",
     },
 ];
 

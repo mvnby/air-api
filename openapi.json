@@ -1037,6 +1037,25 @@
             }
           },
           {
+            "name": "color",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "black",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Canonical indoor unit color family",
+              "title": "Color"
+            },
+            "description": "Canonical indoor unit color family"
+          },
+          {
             "name": "indoor_types",
             "in": "query",
             "required": false,
@@ -1306,6 +1325,25 @@
               ],
               "title": "Has Fresh Air"
             }
+          },
+          {
+            "name": "color",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "black",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Canonical indoor unit color family",
+              "title": "Color"
+            },
+            "description": "Canonical indoor unit color family"
           },
           {
             "name": "indoor_types",

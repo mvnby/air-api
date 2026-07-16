@@ -34,6 +34,7 @@ const sort: CatalogSort = allowedSorts.includes(sortRaw as CatalogSort)
 const tagSlugsRaw = searchParams.getAll("tag_slugs");
 const isInverterRaw = searchParams.get("is_inverter");
 const hasWifiRaw = searchParams.get("has_wifi");
+const colorRaw = searchParams.get("color");
 const heatingMinRaw = searchParams.get("heating_min");
 const areaMinRaw = searchParams.get("area_min");
 let areaMaxRaw = searchParams.get("area_max");
@@ -61,6 +62,7 @@ const parsedHasWifi =
         : hasWifiRaw === "false"
           ? false
           : undefined;
+const parsedColor = colorRaw === "black" ? "black" : undefined;
 
 const parsedAreaMin = areaMinRaw ? parseInt(areaMinRaw, 10) : undefined;
 const parsedAreaMax = areaMaxRaw ? parseInt(areaMaxRaw, 10) : undefined;
@@ -85,6 +87,7 @@ if (hasQueryParams) {
             tag_slugs: userTagSlugs,
             is_inverter: parsedIsInverter,
             has_wifi: parsedHasWifi,
+            color: parsedColor,
             heating_min: parsedHeatingMin,
             area_min: parsedAreaMin,
             area_max: parsedAreaMax,
@@ -128,6 +131,7 @@ const catalogParams = {
     tag_slugs,
     is_inverter: parsedIsInverter,
     has_wifi: parsedHasWifi,
+    color: parsedColor,
     heating_min: parsedHeatingMin,
     area_min: parsedAreaMin,
     area_max: parsedAreaMax,
@@ -180,6 +184,7 @@ const initialFilters = {
     area_max: parsedAreaMax ?? null,
     is_inverter: parsedIsInverter ?? null,
     has_wifi: parsedHasWifi ?? null,
+    color: parsedColor ?? null,
     heating_min: parsedHeatingMin ?? null,
     indoor_types:
         hasIndustrialCategory && parsedIndoorTypes.length > 0
@@ -247,6 +252,7 @@ const initialFilters = {
                             : sp.get("has_wifi") === "false"
                               ? false
                               : undefined,
+                    color: sp.get("color") === "black" ? "black" : undefined,
                     heating_min: toNumber(sp.get("heating_min")),
                     area_min: toNumber(sp.get("area_min")),
                     area_max: toNumber(sp.get("area_max")),
@@ -271,6 +277,7 @@ const initialFilters = {
                             typeof category.filters.has_wifi === "boolean"
                                 ? category.filters.has_wifi
                                 : undefined,
+                        color: category.filters.color === "black" ? "black" : undefined,
                         heating_min: category.filters.heating_min,
                         area_min: category.filters.area_min,
                         area_max: category.filters.area_max,
@@ -281,6 +288,7 @@ const initialFilters = {
                         normalizedInput.sort === normalizedCategory.sort &&
                         normalizedInput.is_inverter === normalizedCategory.is_inverter &&
                         normalizedInput.has_wifi === normalizedCategory.has_wifi &&
+                        normalizedInput.color === normalizedCategory.color &&
                         normalizedInput.heating_min === normalizedCategory.heating_min &&
                         normalizedInput.area_min === normalizedCategory.area_min &&
                         normalizedInput.area_max === normalizedCategory.area_max &&
