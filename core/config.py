@@ -26,6 +26,9 @@ def _redact_settings_validation_error(error: ValidationError) -> ValidationError
 class Settings(BaseSettings):
     # Bot Settings
     BOT_TOKEN: str = ""
+    BOT_API_TOKEN: str = ""
+    BOT_API_BASE_URL: str = "http://app:8000/api/internal/bot/v1"
+    BOT_API_TIMEOUT_SECONDS: float = 5.0
     ADMIN_IDS: str = ""
     ADMIN_ID: int = 0
     SECRET_KEY: str
