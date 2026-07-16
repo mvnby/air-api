@@ -234,6 +234,21 @@ class Settings(BaseSettings):
             raise ValueError("BOT_ACCESS_BACKEND must be database or api")
         return normalized
 
+    @model_validator(mode="after")
+    def _validate_bot_api_runtime(self):
+        if self.BOT_ACCESS_BACKEND != "api":
+            return self
+        if not self.BOT_API_TOKEN.strip():
+            raise ValueError("BOT_API_TOKEN is required when BOT_ACCESS_BACKEND=api")
+
+        parsed = urlsplit(self.BOT_API_BASE_URL.strip())
+        if self.ENVIRONMENT == "production":
+            if parsed.scheme != "https":
+                raise ValueError("production Bot API access requires an HTTPS base URL")
+            if parsed.hostname in {"app", "app-blue", "app-green"}:
+                raise ValueError("production Bot API access requires a stable host across blue-green slots")
+        return self
+
     # Durable communications runtime. The process is deliberately inert unless
     # this immutable deployment gate is explicitly enabled. A second, database-
     # backed off/canary/all control is evaluated by the runtime after it proves
