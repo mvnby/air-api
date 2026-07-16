@@ -1,10 +1,10 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from api_contracts.bot import BotApiHealthResponse, BotStaffContextResponse
-from bot_app import access_runtime
+from bot_app import access_runtime, api_runtime
 from bot_app.access import BotAccessContext, BotAccessUnavailableError
 from bot_app.access_api import ApiBotAccessProvider
 from bot_app.api_gateway import BotApiUnavailableError
@@ -103,3 +103,23 @@ def test_access_runtime_never_implicitly_falls_back_to_database(monkeypatch):
 
     with pytest.raises(RuntimeError, match="Unsupported bot access backend"):
         access_runtime.get_bot_access_provider()
+
+
+async def test_api_runtime_shares_and_closes_one_gateway(monkeypatch):
+    gateway = SimpleNamespace(aclose=AsyncMock())
+    factory = Mock(return_value=gateway)
+    monkeypatch.setattr(api_runtime, "_gateway", None)
+    monkeypatch.setattr(api_runtime.settings, "BOT_API_BASE_URL", "https://api.example.test/bot")
+    monkeypatch.setattr(api_runtime.settings, "BOT_API_TOKEN", "test-token")
+    monkeypatch.setattr(api_runtime.settings, "BOT_API_TIMEOUT_SECONDS", 2.0)
+    monkeypatch.setattr(api_runtime, "BotApiGateway", factory)
+
+    first = api_runtime.get_bot_api_gateway()
+    second = api_runtime.get_bot_api_gateway()
+    await api_runtime.close_bot_api_gateway()
+
+    assert first is gateway
+    assert second is gateway
+    factory.assert_called_once()
+    gateway.aclose.assert_awaited_once_with()
+    assert api_runtime._gateway is None

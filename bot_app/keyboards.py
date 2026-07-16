@@ -3,7 +3,7 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton
 )
 from .access import BotAccessContext
-from services.bot_product_selection_service import BotProductSelectionService
+from .catalog_presenter import product_url
 
 
 def get_staff_main_menu(context: BotAccessContext) -> ReplyKeyboardMarkup:
@@ -68,7 +68,7 @@ wifi_selection_kb = InlineKeyboardMarkup(
 
 def get_product_keyboard(product_id, is_admin=False, in_favorites=False, product=None, staff_mode=True):
     product = product or {}
-    url = BotProductSelectionService.product_url(product) if product.get("slug") else None
+    url = product_url(product) if product.get("slug") else None
     if staff_mode:
         buttons = []
         if url:

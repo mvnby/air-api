@@ -11,6 +11,9 @@ from core.database import async_session_maker
 from services.bot_product_selection_service import BotProductSelectionService
 from services.product_service import ProductService
 from ..access_runtime import get_bot_access_context
+from ..api_gateway import BotApiError
+from ..api_runtime import get_bot_api_gateway
+from ..catalog_presenter import format_client_product
 from ..keyboards import (
     area_selection_kb,
     get_staff_main_menu,
@@ -39,14 +42,21 @@ async def _is_manager_user(user_id: int | None) -> bool:
     return context.is_staff and context.is_manager
 
 
-async def _answer_with_staff_menu(message: types.Message, user_id: int | None) -> None:
-    context = await _get_access_context(user_id)
+async def _answer_with_staff_menu(
+    message: types.Message,
+    user_id: int | None,
+    *,
+    context=None,
+) -> None:
+    context = context or await _get_access_context(user_id)
     if context.is_staff:
         await message.answer("Можно продолжить работу из меню.", reply_markup=get_staff_main_menu(context))
 
 
 def _is_inline_search_query(text: str) -> bool:
     if not text:
+        return False
+    if len(text.strip()) > 100:
         return False
     # 1..3 tokens, each token contains only latin letters/digits.
     return bool(re.fullmatch(r"[A-Za-z0-9]+(?:\s+[A-Za-z0-9]+){0,2}", text.strip()))
@@ -74,7 +84,11 @@ def _choose_search_products(products: list[dict]) -> tuple[list[dict], str | Non
     return [], None
 
 
-async def _render_search_results(message: types.Message, query: str, products: list[dict]) -> None:
+async def _render_search_results(
+    message: types.Message,
+    query: str,
+    products: list[dict],
+) -> None:
     selected_products, warning_text = _choose_search_products(products)
     if not selected_products:
         await message.answer(
@@ -91,10 +105,30 @@ async def _render_search_results(message: types.Message, query: str, products: l
         f"🔎 Нашел {len(selected_products)} вариантов по запросу «{html.escape(query)}».",
         parse_mode="HTML",
     )
-    context = await _get_access_context(message.from_user.id if message.from_user else None)
-    is_admin = context.is_staff and context.is_manager
     for product in selected_products:
-        await send_product_card(message, product, is_admin)
+        await send_product_card(message, product, False)
+
+
+async def _search_products_via_api(
+    *,
+    telegram_id: int,
+    query: str,
+    limit: int = 5,
+) -> list[dict]:
+    response = await get_bot_api_gateway().search_catalog(
+        telegram_id=telegram_id,
+        query=query,
+        limit=limit,
+    )
+    return [item.model_dump(mode="json") for item in response.items]
+
+
+async def _get_product_via_api(*, telegram_id: int, product_id: int) -> dict | None:
+    response = await get_bot_api_gateway().get_catalog_product(
+        telegram_id=telegram_id,
+        product_id=product_id,
+    )
+    return response.product.model_dump(mode="json") if response.product else None
 
 
 # ==================== УМНЫЙ ПОДБОР ====================
@@ -204,7 +238,7 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
             await send_product_card(callback, product, is_admin)
             
     await state.clear()
-    await _answer_with_staff_menu(callback.message, callback.from_user.id)
+    await _answer_with_staff_menu(callback.message, callback.from_user.id, context=context)
     await callback.answer()
 
 # ==================== ПОИСК ====================
@@ -216,74 +250,75 @@ async def search_start(message: types.Message, state: FSMContext):
         await message.answer("Этот бот теперь только для сотрудников MVN.")
         return
     await state.set_state(ShopState.waiting_for_search)
-    logger.info("BOT_SEARCH_START user_id=%s", message.from_user.id if message.from_user else None)
+    logger.info("BOT_SEARCH_START")
     await message.answer("Введите бренд и мощность, например: Midea 12")
 
 
 @router.callback_query(F.data.startswith("search_details_"))
 async def search_details(callback: CallbackQuery):
-    if not await _is_staff_user(callback.from_user.id):
+    context = await _get_access_context(callback.from_user.id)
+    if not context.is_staff:
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     product_id = int(callback.data.split("_")[-1])
-    context = await _get_access_context(callback.from_user.id)
-    async with async_session_maker() as session:
-        product = await ProductService.get_by_id(session, product_id)
-        is_admin = context.is_staff and context.is_manager
+    product = await _get_product_via_api(
+        telegram_id=callback.from_user.id,
+        product_id=product_id,
+    )
 
     if not product:
         await callback.answer("Товар не найден", show_alert=True)
         return
 
-    await send_product_card(callback, product, is_admin)
+    await send_product_card(callback, product, False)
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("product_client_text_"))
 async def product_client_text(callback: CallbackQuery):
-    if not await _is_staff_user(callback.from_user.id):
+    context = await _get_access_context(callback.from_user.id)
+    if not context.is_staff:
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     product_id = int((callback.data or "").split("_")[-1])
-    async with async_session_maker() as session:
-        product = await ProductService.get_by_id(session, product_id)
+    product = await _get_product_via_api(
+        telegram_id=callback.from_user.id,
+        product_id=product_id,
+    )
 
     if not product:
         await callback.answer("Товар не найден", show_alert=True)
         return
 
-    await callback.message.answer(BotProductSelectionService.format_client_product(product))
+    await callback.message.answer(format_client_product(product))
     await callback.answer("Можно переслать клиенту")
 
 
 @router.message(ShopState.waiting_for_search)
 async def search_process(message: types.Message, state: FSMContext):
-    if not await _is_staff_user(message.from_user.id if message.from_user else None):
+    user_id = message.from_user.id if message.from_user else None
+    context = await _get_access_context(user_id)
+    if not context.is_staff:
         await message.answer("Этот бот теперь только для сотрудников MVN.")
         await state.clear()
         return
     query = (message.text or "").strip()
-    user_id = message.from_user.id if message.from_user else None
     if not query:
-        logger.info("BOT_SEARCH_EMPTY_QUERY user_id=%s", user_id)
+        logger.info("BOT_SEARCH_EMPTY_QUERY")
         await message.answer("Введите бренд и мощность, например: Midea 12")
         return
 
-    async with async_session_maker() as session:
-        products = await ProductService.search_products(session, query=query, limit=5)
-        sample = [f"{item.get('id')}:{(item.get('title') or '')[:40]}" for item in products[:3]]
-        logger.info(
-            "BOT_SEARCH_RESULT user_id=%s query=%r found=%s sample=%s",
-            user_id,
-            query,
-            len(products),
-            sample,
-        )
+    try:
+        products = await _search_products_via_api(telegram_id=user_id, query=query, limit=5)
+    except BotApiError:
+        await state.clear()
+        raise
+    logger.info("BOT_SEARCH_RESULT query_length=%s found=%s", len(query), len(products))
 
     await _render_search_results(message, query, products)
 
     await state.clear()
-    await _answer_with_staff_menu(message, user_id)
+    await _answer_with_staff_menu(message, user_id, context=context)
 
 
 @router.message(StateFilter(None), F.text)
@@ -292,17 +327,10 @@ async def auto_search_process(message: types.Message):
     user_id = message.from_user.id if message.from_user else None
     if not _is_inline_search_query(query):
         raise SkipHandler()
-    if not await _is_staff_user(user_id):
+    context = await _get_access_context(user_id)
+    if not context.is_staff:
         return
 
-    async with async_session_maker() as session:
-        products = await ProductService.search_products(session, query=query, limit=5)
-        sample = [f"{item.get('id')}:{(item.get('title') or '')[:40]}" for item in products[:3]]
-        logger.info(
-            "BOT_AUTO_SEARCH_RESULT user_id=%s query=%r found=%s sample=%s",
-            user_id,
-            query,
-            len(products),
-            sample,
-        )
+    products = await _search_products_via_api(telegram_id=user_id, query=query, limit=5)
+    logger.info("BOT_AUTO_SEARCH_RESULT query_length=%s found=%s", len(query), len(products))
     await _render_search_results(message, query, products)

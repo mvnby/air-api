@@ -162,6 +162,110 @@
         }
       }
     },
+    "/api/internal/bot/v1/catalog/search": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Search Internal Bot Catalog",
+        "operationId": "search_internal_bot_catalog_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCatalogSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCatalogSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/catalog/products/{product_id}": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Internal Bot Catalog Product",
+        "operationId": "get_internal_bot_catalog_product_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Telegram Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCatalogProductLookupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/products/search": {
       "get": {
         "tags": [
@@ -18368,6 +18472,136 @@
         },
         "type": "object",
         "title": "BotApiHealthResponse"
+      },
+      "BotCatalogProductLookupResponse": {
+        "properties": {
+          "product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotCatalogProductResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "BotCatalogProductLookupResponse"
+      },
+      "BotCatalogProductResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "area": {
+            "type": "integer",
+            "title": "Area",
+            "default": 0
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "vitebsk_qty": {
+            "type": "integer",
+            "title": "Vitebsk Qty",
+            "default": 0
+          },
+          "minsk_qty": {
+            "type": "integer",
+            "title": "Minsk Qty",
+            "default": 0
+          },
+          "availability_status": {
+            "type": "string",
+            "title": "Availability Status",
+            "default": "out_of_stock"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "price"
+        ],
+        "title": "BotCatalogProductResponse",
+        "description": "Small, stable product projection used by Telegram catalog cards."
+      },
+      "BotCatalogSearchRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "query"
+        ],
+        "title": "BotCatalogSearchRequest"
+      },
+      "BotCatalogSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotCatalogProductResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "BotCatalogSearchResponse"
       },
       "BotStaffContextResponse": {
         "properties": {

@@ -444,3 +444,42 @@ async def test_bot_access_error_is_visible_to_callback(monkeypatch):
         "Сервис авторизации временно недоступен. Попробуйте позже.",
         show_alert=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_bot_backend_api_error_is_visible_to_message(monkeypatch):
+    _set_required_env(monkeypatch)
+    bot_main = importlib.import_module("bot_app.main")
+    from bot_app.api_gateway import BotApiUnavailableError
+
+    message = SimpleNamespace(answer=AsyncMock())
+    event = SimpleNamespace(
+        exception=BotApiUnavailableError("offline"),
+        update=SimpleNamespace(callback_query=None, message=message),
+    )
+
+    assert await bot_main.error_handler(event) is True
+
+    message.answer.assert_awaited_once_with(
+        "Рабочий сервис временно недоступен. Попробуйте позже."
+    )
+
+
+@pytest.mark.asyncio
+async def test_bot_backend_authorization_error_is_not_reported_as_outage(monkeypatch):
+    _set_required_env(monkeypatch)
+    bot_main = importlib.import_module("bot_app.main")
+    from bot_app.api_gateway import BotApiAuthorizationError
+
+    callback = SimpleNamespace(answer=AsyncMock())
+    event = SimpleNamespace(
+        exception=BotApiAuthorizationError("denied"),
+        update=SimpleNamespace(callback_query=callback, message=None),
+    )
+
+    assert await bot_main.error_handler(event) is True
+
+    callback.answer.assert_awaited_once_with(
+        "Недостаточно прав для этого действия.",
+        show_alert=True,
+    )

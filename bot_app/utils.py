@@ -1,10 +1,8 @@
 import logging
 import os
 from html import escape
-from pathlib import Path
 from aiogram import types
-from aiogram.types import FSInputFile
-from services.bot_product_selection_service import BotProductSelectionService
+from .catalog_presenter import availability_text, product_url
 from .keyboards import get_product_keyboard
 
 
@@ -29,7 +27,7 @@ def _availability_badge(product: dict) -> str:
 def _availability_details(product: dict) -> str:
     if not any(key in product for key in ("availability_status", "vitebsk_qty", "minsk_qty")):
         return ""
-    return f"📦 {BotProductSelectionService.availability_text(product)}\n"
+    return f"📦 {availability_text(product)}\n"
 
 
 def format_caption(product):
@@ -47,7 +45,7 @@ def format_caption(product):
         f"🏠 Площадь: {escape(str(product.get('area', '-')))} м²\n"
         f"{specs_str}"
         f"📝 {escape(str(product.get('description', ''))[:200])}\n"
-        f"🔗 {escape(BotProductSelectionService.product_url(product))}"
+        f"🔗 {escape(product_url(product))}"
     )
 
 async def send_product_card(message_or_callback, product, is_admin, *, staff_mode=True):
@@ -65,15 +63,10 @@ async def send_product_card(message_or_callback, product, is_admin, *, staff_mod
             photo = image_url
         else:
             normalized_path = image_url if image_url.startswith("/") else f"/{image_url}"
-            local_path = Path(normalized_path.lstrip("/"))
-            if local_path.exists() and local_path.is_file():
-                photo = FSInputFile(str(local_path))
-            else:
-                logging.warning("Bot image local file not found: %s", local_path)
-                public_api_base = os.getenv("PUBLIC_API_BASE", "https://mvn.by/api/v1").rstrip("/")
-                api_prefix = "/api/"
-                origin = public_api_base.split(api_prefix, 1)[0] if api_prefix in public_api_base else public_api_base
-                photo = f"{origin}{normalized_path}"
+            public_api_base = os.getenv("PUBLIC_API_BASE", "https://mvn.by/api/v1").rstrip("/")
+            api_prefix = "/api/"
+            origin = public_api_base.split(api_prefix, 1)[0] if api_prefix in public_api_base else public_api_base
+            photo = f"{origin}{normalized_path}"
 
     if photo:
         try:

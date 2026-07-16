@@ -5,6 +5,13 @@ import pytest
 from aiogram.dispatcher.event.bases import SkipHandler
 
 from bot_app.handlers import catalog as catalog_handler
+from api_contracts.bot import (
+    BotCatalogProductLookupResponse,
+    BotCatalogProductResponse,
+    BotCatalogSearchResponse,
+)
+from bot_app.access import BotAccessContext
+from bot_app.api_gateway import BotApiUnavailableError
 from bot_app.handlers.catalog import _choose_search_products, _is_inline_search_query
 from bot_app.utils import _availability_badge
 
@@ -21,6 +28,7 @@ def test_inline_search_rejects_non_matching_messages():
     assert not _is_inline_search_query("is chigo 12 good?")
     assert not _is_inline_search_query("midea 12 inverter black")  # 4 tokens
     assert not _is_inline_search_query("lg-9")  # punctuation
+    assert not _is_inline_search_query("m" * 101)
 
 
 def test_choose_search_products_prefers_in_stock():
@@ -61,3 +69,164 @@ async def test_auto_search_skips_non_search_text(monkeypatch):
         await catalog_handler.auto_search_process(message)
 
     staff_check.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_auto_search_uses_internal_api_gateway(monkeypatch):
+    gateway = SimpleNamespace(
+        search_catalog=AsyncMock(
+            return_value=BotCatalogSearchResponse(
+                items=[
+                    BotCatalogProductResponse(
+                        id=42,
+                        title="Midea 12",
+                        slug="midea-12",
+                        price=3200,
+                        area=35,
+                    )
+                ]
+            )
+        )
+    )
+    render = AsyncMock()
+    monkeypatch.setattr(
+        catalog_handler,
+        "_get_access_context",
+        AsyncMock(return_value=BotAccessContext(telegram_id=5, is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(catalog_handler, "get_bot_api_gateway", lambda: gateway)
+    monkeypatch.setattr(catalog_handler, "_render_search_results", render)
+    message = SimpleNamespace(text="Midea 12", from_user=SimpleNamespace(id=5))
+
+    await catalog_handler.auto_search_process(message)
+
+    gateway.search_catalog.assert_awaited_once_with(
+        telegram_id=5,
+        query="Midea 12",
+        limit=5,
+    )
+    products = render.await_args.args[2]
+    assert products == [
+        {
+            "id": 42,
+            "title": "Midea 12",
+            "slug": "midea-12",
+            "description": "",
+            "price": 3200,
+            "area": 35,
+            "main_image": None,
+            "categories": [],
+            "vitebsk_qty": 0,
+            "minsk_qty": 0,
+            "availability_status": "out_of_stock",
+        }
+    ]
+    assert render.await_args.kwargs == {}
+
+
+@pytest.mark.asyncio
+async def test_explicit_search_clears_fsm_when_catalog_api_is_unavailable(monkeypatch):
+    gateway = SimpleNamespace(
+        search_catalog=AsyncMock(side_effect=BotApiUnavailableError("offline"))
+    )
+    monkeypatch.setattr(
+        catalog_handler,
+        "_get_access_context",
+        AsyncMock(return_value=BotAccessContext(telegram_id=5, is_staff=True)),
+    )
+    monkeypatch.setattr(catalog_handler, "get_bot_api_gateway", lambda: gateway)
+    state = SimpleNamespace(clear=AsyncMock())
+    message = SimpleNamespace(text="Midea 12", from_user=SimpleNamespace(id=5))
+
+    with pytest.raises(BotApiUnavailableError, match="offline"):
+        await catalog_handler.search_process(message, state)
+
+    state.clear.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_search_details_renders_product_from_internal_api(monkeypatch):
+    product = BotCatalogProductResponse(
+        id=42,
+        title="Midea 12",
+        slug="midea-12",
+        description="Тихий инвертор",
+        price=3200,
+        area=35,
+        categories=["Настенные"],
+        minsk_qty=2,
+        availability_status="available_2_3_days",
+    )
+    gateway = SimpleNamespace(
+        get_catalog_product=AsyncMock(
+            return_value=BotCatalogProductLookupResponse(product=product)
+        )
+    )
+    send_card = AsyncMock()
+    monkeypatch.setattr(
+        catalog_handler,
+        "_get_access_context",
+        AsyncMock(return_value=BotAccessContext(telegram_id=5, is_staff=True, is_manager=True)),
+    )
+    monkeypatch.setattr(catalog_handler, "get_bot_api_gateway", lambda: gateway)
+    monkeypatch.setattr(catalog_handler, "send_product_card", send_card)
+    callback = SimpleNamespace(
+        data="search_details_42",
+        from_user=SimpleNamespace(id=5),
+        answer=AsyncMock(),
+    )
+
+    await catalog_handler.search_details(callback)
+
+    gateway.get_catalog_product.assert_awaited_once_with(telegram_id=5, product_id=42)
+    rendered = send_card.await_args.args[1]
+    assert rendered["description"] == "Тихий инвертор"
+    assert rendered["categories"] == ["Настенные"]
+    assert rendered["minsk_qty"] == 2
+    assert send_card.await_args.args[2] is False
+    callback.answer.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_product_client_text_uses_internal_api_detail(monkeypatch):
+    product = BotCatalogProductResponse(
+        id=42,
+        title="Midea 12",
+        slug="midea-12",
+        price=3200,
+        minsk_qty=2,
+        availability_status="available_2_3_days",
+    )
+    gateway = SimpleNamespace(
+        get_catalog_product=AsyncMock(
+            return_value=BotCatalogProductLookupResponse(product=product)
+        )
+    )
+    monkeypatch.setattr(
+        catalog_handler,
+        "_get_access_context",
+        AsyncMock(return_value=BotAccessContext(telegram_id=5, is_staff=True)),
+    )
+    monkeypatch.setattr(catalog_handler, "get_bot_api_gateway", lambda: gateway)
+    monkeypatch.setattr(
+        "bot_app.catalog_presenter.settings",
+        SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
+    )
+    message = SimpleNamespace(answer=AsyncMock())
+    callback = SimpleNamespace(
+        data="product_client_text_42",
+        from_user=SimpleNamespace(id=5),
+        message=message,
+        answer=AsyncMock(),
+    )
+
+    await catalog_handler.product_client_text(callback)
+
+    gateway.get_catalog_product.assert_awaited_once_with(telegram_id=5, product_id=42)
+    message.answer.assert_awaited_once_with(
+        "Midea 12\n"
+        "Цена: 3200 руб.\n"
+        "в наличии в Минске, срок поставки 2-4 дня\n"
+        "https://example.test/product/midea-12/"
+    )
+    callback.answer.assert_awaited_once_with("Можно переслать клиенту")
