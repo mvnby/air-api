@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
 import DateTimeField from '../ui/DateTimeField.vue';
@@ -10,6 +10,9 @@ import OrderDrawerSection from './OrderDrawerSection.vue';
 import ServiceDescriptionModeSwitch from './ServiceDescriptionModeSwitch.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
+import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
+import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
+import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
@@ -33,6 +36,12 @@ import type {
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
 import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
+import {
+  buildOrderWorkspaceViewModel,
+  normalizeOrderWorkflowType,
+  type OrderWorkflowType,
+  type OrderWorkspaceTarget,
+} from './order-workspace';
 import {
   CUSTOMER_APPROVAL_STATUS_OPTIONS,
   EQUIPMENT_EVENT_OPTIONS,
@@ -113,14 +122,6 @@ type ProductLine = {
   logistics_components?: OrderLogisticsComponent[] | null;
 };
 type ServiceLine = ServiceDescriptionLine;
-type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
-
-const WORKFLOW_OPTIONS: Array<{ value: OrderWorkflowType; label: string; hint: string; icon: string }> = [
-  { value: 'sales_installation', label: 'Продажа + монтаж', hint: 'товары, КП, монтаж', icon: 'shopping_cart' },
-  { value: 'service_work', label: 'Работы', hint: 'монтаж, демонтаж, трассы', icon: 'construction' },
-  { value: 'maintenance', label: 'Обслуживание', hint: 'ТО и сервисные договоры', icon: 'ac_unit' },
-  { value: 'repair', label: 'Ремонт', hint: 'диагностика и дефектный акт', icon: 'build_circle' },
-];
 
 const serviceKindLabels: Record<string, string> = {
   installation: 'монтаж',
@@ -131,11 +132,6 @@ const serviceKindLabels: Record<string, string> = {
 };
 
 const formatServiceKind = (kind?: string | null) => serviceKindLabels[String(kind || '')] || kind || '';
-const normalizeWorkflowType = (value: unknown): OrderWorkflowType => {
-  const raw = String(value || '').trim();
-  if (raw === 'service_work' || raw === 'maintenance' || raw === 'repair') return raw;
-  return 'sales_installation';
-};
 type OrderDrawerDraft = {
   productLines: ProductLine[];
   serviceLines: ServiceLine[];
@@ -256,6 +252,7 @@ const supplyRequests = ref<any[]>([]);
 const supplyActionLoadingLineId = ref<number | null>(null);
 const serviceLines = ref<ServiceLine[]>([]);
 const savedLinesSnapshot = ref('');
+const savedFormSnapshot = ref('');
 const pendingDraftClearOrderId = ref<number | null>(null);
 const activeServiceSuggestionIndex = ref<number | null>(null);
 const serviceTariffOptions = ref<ManagerQuickTariffResponse[]>([]);
@@ -322,7 +319,7 @@ const initializedOrderId = ref<number | null>(null);
 
 const localFormError = ref('');
 const showCustomerModal = ref(false);
-const isEditingOrderTitle = ref(false);
+const savingCustomerInline = ref(false);
 const showManagerLabelInput = ref(false);
 const showBranchFields = ref(false);
 
@@ -593,11 +590,6 @@ const displayOrderTitle = computed(() => (
   || customer.value?.name
   || 'Без названия'
 ));
-const clientDisplayName = computed(() => (
-  customer.value?.full_legal_name
-  || customer.value?.name
-  || 'Клиент не выбран'
-));
 const selectedCustomerBranch = computed(() => (
   customerBranches.value.find((branch) => branch.id === customerBranchId.value)
   || props.order?.customer_branch
@@ -611,20 +603,6 @@ const compactObjectAddress = computed(() => (
   || selectedCustomerBranch.value?.delivery_address
   || ''
 ));
-const clientSummaryContacts = computed(() => {
-  const rows: Array<{ key: string; icon?: string; label: string; value: string; href?: string; copyLabel: string }> = [];
-  const phone = customer.value?.phone?.trim();
-  const email = customer.value?.email?.trim();
-  const inn = customer.value?.inn?.trim();
-  const address = compactObjectAddress.value.trim();
-
-  if (phone) rows.push({ key: 'phone', icon: 'phone', label: 'Телефон', value: phone, href: `tel:${phone.replace(/\s+/g, '')}`, copyLabel: 'Телефон' });
-  if (email) rows.push({ key: 'email', icon: 'email', label: 'Email', value: email, href: `mailto:${email}`, copyLabel: 'Email' });
-  if (inn) rows.push({ key: 'inn', label: 'УНП', value: inn, copyLabel: 'УНП' });
-  if (address) rows.push({ key: 'address', icon: 'location_on', label: 'Адрес', value: address, href: `https://yandex.by/maps/?text=${encodeURIComponent(address)}`, copyLabel: 'Адрес' });
-
-  return rows;
-});
 const customerDetailsSummary = computed(() => {
   const parts = [];
   if (compactObjectAddress.value) parts.push(compactObjectAddress.value);
@@ -664,6 +642,22 @@ const activeProposalLineLabel = computed(() => {
 const paymentsSectionSummary = computed(() => (
   `оплачено ${formatMoney(totalPaymentsPreview.value)} · остаток ${formatMoney(balanceDuePreview.value)} · итого ${formatMoney(totalPreview.value)} · маржа ${formatMoney(marginPreview.value)}`
 ));
+const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
+  status: status.value,
+  negotiationStatus: negotiationStatus.value,
+  executionStatus: executionStatus.value,
+  statusChangedAt: props.order?.status_changed_at,
+  negotiationStatusChangedAt: props.order?.negotiation_status_changed_at,
+  executionStatusChangedAt: props.order?.execution_status_changed_at,
+  installationDate: installationDate.value,
+  productCount: productLines.value.length,
+  serviceCount: serviceLines.value.length,
+  linkedEquipmentCount: props.order?.linked_equipment_count || 0,
+  documents: orderDocuments.value,
+  total: totalPreview.value,
+  paid: totalPaymentsPreview.value,
+  balance: balanceDuePreview.value,
+}));
 const candidateBankReceipts = computed(() => bankReceipts.value.filter((receipt) => receipt.status === 'requires_review'));
 const hasDebtForBankReceipts = computed(() => balanceDuePreview.value > 0 && Boolean(props.order?.customer?.inn));
 const draftKey = computed(() => (
@@ -912,7 +906,6 @@ const planningDetailsSummary = computed(() => {
   if (newBranchAddress.value.trim()) parts.push('готовится новый филиал');
   return parts.join(' · ') || 'дополнительные поля не заполнены';
 });
-const selectedWorkflowOption = computed(() => WORKFLOW_OPTIONS.find((item) => item.value === workflowType.value) || WORKFLOW_OPTIONS[0]!);
 const isRepairWorkflow = computed(() => workflowType.value === 'repair');
 const showProductLinesSection = computed(() => workflowType.value === 'sales_installation');
 const planningTitle = computed(() => {
@@ -1279,8 +1272,41 @@ const currentLinesSnapshot = () => JSON.stringify({
   })),
 });
 
-const hasUnsavedLineChanges = computed(() => (
-  Boolean(props.order?.id) && Boolean(savedLinesSnapshot.value) && currentLinesSnapshot() !== savedLinesSnapshot.value
+const currentFormSnapshot = () => JSON.stringify({
+  status: status.value,
+  title: orderTitle.value.trim(),
+  workflowType: workflowType.value,
+  repairMeta: buildRepairMetaPayload(),
+  managerLabels: [...managerLabels.value],
+  nextFollowupDate: nextFollowupDate.value,
+  assessmentDate: assessmentDate.value,
+  installationDate: installationDate.value,
+  comment: comment.value,
+  installerId: installerId.value,
+  customerDeliveryAddress: customerDeliveryAddress.value.trim(),
+  customerBranchId: customerBranchId.value,
+  measurementRequired: measurementRequired.value,
+  measurerId: measurerId.value,
+  measurementResult: measurementResult.value,
+  additionalConditions: additionalConditions.value,
+  proposalStatus: proposalStatus.value,
+  negotiationStatus: negotiationStatus.value,
+  executionStatus: executionStatus.value,
+  executionWithoutPayment: executionWithoutPayment.value,
+  executionWithoutPaymentReason: executionWithoutPaymentReason.value,
+  autoExecutionOnPayment: autoExecutionOnPayment.value,
+  autoCloseOnPayment: autoCloseOnPayment.value,
+  enableCurrency: enableCurrency.value,
+  targetCurrency: targetCurrency.value,
+  targetCurrencyAmount: targetCurrencyAmount.value,
+});
+
+const hasUnsavedChanges = computed(() => (
+  Boolean(props.order?.id)
+  && (
+    (Boolean(savedLinesSnapshot.value) && currentLinesSnapshot() !== savedLinesSnapshot.value)
+    || (Boolean(savedFormSnapshot.value) && currentFormSnapshot() !== savedFormSnapshot.value)
+  )
 ));
 
 const persistDraft = () => {
@@ -1422,7 +1448,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   }
   status.value = order.status;
   orderTitle.value = order.title ?? '';
-  workflowType.value = normalizeWorkflowType((order as any).workflow_type);
+  workflowType.value = normalizeOrderWorkflowType((order as any).workflow_type);
   repairMeta.value = normalizeRepairMeta(((order as any).repair_meta || {}) as Partial<RepairMeta>, {
     defaultRepairStatus: workflowType.value === 'repair',
   });
@@ -1518,6 +1544,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   serviceTariffOptions.value = [];
   activeServiceSuggestionIndex.value = null;
   serviceTariffLookupLoading.value = false;
+  savedFormSnapshot.value = currentFormSnapshot();
   restoreDraft();
   syncProductLookupFromLines();
   await loadOrderSupplyRequests(order.id);
@@ -1528,6 +1555,20 @@ watch(
   async (value) => {
     if (value) {
       await initForm(props.order);
+    }
+  },
+);
+
+watch(
+  () => props.order,
+  async (order, previousOrder) => {
+    if (
+      props.modelValue
+      && order
+      && order !== previousOrder
+      && pendingDraftClearOrderId.value === order.id
+    ) {
+      await initForm(order);
     }
   },
 );
@@ -1931,10 +1972,13 @@ const setServiceLineDescriptionMode = (index: number, mode: ServiceDescriptionMo
 
 const hasDiagnosticServiceLine = () => serviceLines.value.some((line) => /диагност/i.test(line.title || ''));
 
-const addDefaultRepairDiagnostic = async () => {
+let workflowChangeRequestId = 0;
+
+const addDefaultRepairDiagnostic = async (requestId: number) => {
   if (hasDiagnosticServiceLine()) return;
   try {
     const response = await api.listManagerQuickTariffs('диагностика', 'repair' as any, 5);
+    if (requestId !== workflowChangeRequestId || workflowType.value !== 'repair') return;
     const option = (response.items || [])[0];
     const diagnosticLine: ServiceLine = {
       service_id: null,
@@ -1950,6 +1994,7 @@ const addDefaultRepairDiagnostic = async () => {
     ];
     setToast('Добавили базовую диагностику для ремонта');
   } catch (error) {
+    if (requestId !== workflowChangeRequestId || workflowType.value !== 'repair') return;
     serviceLines.value = [
       {
         service_id: null,
@@ -1966,6 +2011,16 @@ const addDefaultRepairDiagnostic = async () => {
 
 const setWorkflowType = async (next: OrderWorkflowType) => {
   if (workflowType.value === next) return;
+  const hasScenarioData = productLines.value.length > 0
+    || serviceLines.value.length > 0
+    || Boolean(comment.value.trim())
+    || Boolean(installationDate.value)
+    || Boolean(measurementResult.value.trim());
+  if (hasScenarioData) {
+    const confirmed = window.confirm('В заказе уже есть данные. Сменить сценарий? Скрытые разделы сохранятся и останутся доступны после возврата к сценарию.');
+    if (!confirmed) return;
+  }
+  const requestId = ++workflowChangeRequestId;
   workflowType.value = next;
   serviceTariffOptions.value = [];
   activeServiceSuggestionIndex.value = null;
@@ -1973,7 +2028,7 @@ const setWorkflowType = async (next: OrderWorkflowType) => {
     repairMeta.value = normalizeRepairMeta(repairMeta.value, { defaultRepairStatus: true });
     void loadRepairComplaintPresets();
     void loadRepairEquipment();
-    await addDefaultRepairDiagnostic();
+    await addDefaultRepairDiagnostic(requestId);
   } else {
     resetRepairEquipment();
   }
@@ -2283,9 +2338,9 @@ const handleSave = () => {
 const closeDrawer = (options?: { force?: boolean } | Event) => {
   const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
   const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
-  if (!force && hasUnsavedLineChanges.value) {
+  if (!force && hasUnsavedChanges.value) {
     persistDraft();
-    const discard = window.confirm('Есть несохраненные строки заказа. Закрыть карточку и сбросить изменения?');
+    const discard = window.confirm('Есть несохранённые изменения. Закрыть карточку без сохранения?');
     if (!discard) return;
   }
   pendingDraftClearOrderId.value = null;
@@ -2333,6 +2388,46 @@ const openCustomerProfile = () => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
+const saveCustomerInline = async (payload: { name: string; phone: string; email: string }) => {
+  const customerId = customer.value?.id;
+  if (!customerId || savingCustomerInline.value) return;
+  savingCustomerInline.value = true;
+  try {
+    await api.patchManagerCustomer(customerId, {
+      name: payload.name,
+      full_legal_name: customer.value?.type === 'company' ? payload.name : undefined,
+      phone: payload.phone || null,
+      email: payload.email || null,
+    });
+    setToast('Контакты клиента обновлены', 'success');
+    if (props.order?.id) emit('reload', props.order.id);
+  } catch (error) {
+    setToast('Не удалось обновить клиента: ' + getApiErrorMessage(error), 'error');
+  } finally {
+    savingCustomerInline.value = false;
+  }
+};
+
+const openWorkspaceTarget = async (target: OrderWorkspaceTarget) => {
+  if (target === 'object') expandedDrawerSections.value.clientDetails = true;
+  if (target === 'planning') expandedDrawerSections.value.planningDetails = true;
+  if (target === 'proposal') expandedDrawerSections.value.proposals = true;
+  if (target === 'documents') expandedDrawerSections.value.documents = true;
+  if (target === 'payments') expandedDrawerSections.value.payments = true;
+  await nextTick();
+  const elementId = status.value === 'execution' && (target === 'documents' || target === 'payments')
+    ? 'order-workspace-execution'
+    : 'order-workspace-' + target;
+  document.getElementById(elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+const discardUnsavedChanges = async () => {
+  if (!props.order) return;
+  clearDraft();
+  await initForm(props.order);
+  setToast('Изменения отменены', 'success');
+};
+
 watch(
   () => productLines.value,
   () => {
@@ -2366,241 +2461,98 @@ watch(
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
-    <aside class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white p-4 text-gray-900 shadow-2xl sm:p-6 md:border-l md:border-gray-200">
-      <header class="mb-4 border-b border-gray-100 pb-4">
-        <div class="mb-3 flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="mb-1 flex flex-wrap items-center gap-2">
-              <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">Заказ №{{ order?.id }}</span>
-              <span
-                v-if="isWebsiteOrder"
-                class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700"
-              >
-                <span class="material-icons-round text-[14px]">language</span>
-                Сайт
-              </span>
-            </div>
+    <aside class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white p-4 text-gray-900 shadow-2xl dark:bg-slate-950 dark:text-slate-100 sm:p-6 md:border-l md:border-gray-200 dark:md:border-slate-700">
+      <OrderWorkspaceHeader
+        class="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6"
+        :order-id="order?.id"
+        :title="displayOrderTitle"
+        :workflow="workflowType"
+        :view-model="orderWorkspace"
+        :total="totalPreview"
+        :paid="totalPaymentsPreview"
+        :balance="balanceDuePreview"
+        :is-website-order="isWebsiteOrder"
+        :is-on-hold="order?.is_on_hold"
+        :dirty="hasUnsavedChanges"
+        :saving="saving"
+        @update:title="orderTitle = $event"
+        @change-workflow="setWorkflowType"
+        @next="openWorkspaceTarget(orderWorkspace.nextAction.target)"
+        @payments="openWorkspaceTarget('payments')"
+        @hold="toggleHold"
+        @save="handleSave"
+        @close="closeDrawer"
+      />
 
-            <div v-if="isEditingOrderTitle" class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
-              <label class="min-w-0 flex-1">
-                <span class="sr-only">Рабочее название заказа</span>
-                <input
-                  v-model="orderTitle"
-                  class="field-input text-base font-semibold sm:text-lg"
-                  placeholder="Например: Монтаж магазина в Дубровно"
-                  maxlength="160"
-                  @keydown.enter.prevent="isEditingOrderTitle = false"
-                  @keydown.esc.prevent="isEditingOrderTitle = false"
-                />
-                <span v-if="getFieldError('title')" class="text-xs text-red-300">{{ getFieldError('title') }}</span>
-              </label>
-              <button type="button" class="btn-mini-outline whitespace-nowrap" @click="isEditingOrderTitle = false">Готово</button>
-            </div>
-            <div v-else class="mt-1 flex min-w-0 items-start gap-2">
-              <h2 class="min-w-0 break-words text-lg font-semibold text-gray-900 sm:text-xl font-['Space_Grotesk']">{{ displayOrderTitle }}</h2>
-              <button
-                type="button"
-                class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-teal-700"
-                title="Редактировать название"
-                @click="isEditingOrderTitle = true"
-              >
-                <span class="material-icons-round text-[16px]">edit</span>
-              </button>
-            </div>
 
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <span
-                v-for="label in managerLabels"
-                :key="label"
-                class="inline-flex max-w-full items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800"
-              >
-                <span class="truncate">{{ label }}</span>
-                <button
-                  type="button"
-                  class="flex h-4 w-4 items-center justify-center rounded-full text-teal-500 hover:bg-teal-100 hover:text-teal-800"
-                  :aria-label="`Удалить метку ${label}`"
-                  @click="removeManagerLabel(label)"
-                >
-                  <span class="material-icons-round text-[14px]">close</span>
-                </button>
-              </span>
-              <button
-                v-if="!showManagerLabelInput"
-                type="button"
-                class="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-teal-300 hover:text-teal-700"
-                @click="showManagerLabelInput = true"
-              >
-                <span class="material-icons-round text-[14px]">add</span>
-                метка
-              </button>
-              <div v-else class="flex min-w-[220px] max-w-full flex-1 gap-2 sm:flex-none">
-                <input
-                  v-model="managerLabelDraft"
-                  class="field-input h-8 text-xs"
-                  placeholder="срочно, ждём оплату"
-                  @keydown.enter.prevent="addManagerLabel"
-                  @keydown.esc.prevent="showManagerLabelInput = false"
-                />
-                <button type="button" class="btn-mini h-8 whitespace-nowrap text-xs" @click="addManagerLabel">Добавить</button>
-              </div>
-              <span v-if="getFieldError('manager_labels')" class="text-xs text-red-300">{{ getFieldError('manager_labels') }}</span>
-            </div>
-          </div>
-
-          <div class="flex shrink-0 items-center gap-1.5">
-            <button
-              v-if="order"
-              type="button"
-              class="inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold transition-colors"
-              :class="order.is_on_hold ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
-              @click="toggleHold"
-            >
-              <span class="material-icons-round text-[16px]">{{ order.is_on_hold ? 'play_arrow' : 'pause' }}</span>
-              {{ order.is_on_hold ? 'Вернуть' : 'Отложить' }}
-            </button>
-            <button class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" type="button" @click="closeDrawer" title="Закрыть">
-              <span class="material-icons-round">close</span>
-            </button>
-          </div>
+      <div v-if="managerLabels.length || showManagerLabelInput" class="mt-3 flex flex-wrap items-center gap-1.5">
+        <span
+          v-for="label in managerLabels"
+          :key="label"
+          class="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-medium text-teal-800 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-200"
+        >
+          {{ label }}
+          <button type="button" class="rounded-full p-0.5 hover:bg-teal-100 dark:hover:bg-teal-800" :aria-label="'Удалить метку ' + label" @click="removeManagerLabel(label)">
+            <span class="material-icons-round block text-[13px]">close</span>
+          </button>
+        </span>
+        <button v-if="!showManagerLabelInput" type="button" class="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 py-1 text-xs font-medium text-slate-500 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:text-slate-400" @click="showManagerLabelInput = true">
+          <span class="material-icons-round text-[13px]">add</span> метка
+        </button>
+        <div v-if="showManagerLabelInput" class="flex min-w-[190px] gap-1.5">
+          <input v-model="managerLabelDraft" class="field-input h-8 text-xs" placeholder="Новая метка" @keydown.enter.prevent="addManagerLabel" @keydown.esc.prevent="showManagerLabelInput = false" />
+          <button type="button" class="btn-mini h-8 px-2 text-xs" @click="addManagerLabel">Добавить</button>
         </div>
+      </div>
+      <button v-else type="button" class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300" @click="showManagerLabelInput = true">
+        <span class="material-icons-round text-[14px]">add</span> метка
+      </button>
 
-        <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-2">
-          <div class="mb-2 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            <span class="material-icons-round text-[15px]">{{ selectedWorkflowOption.icon }}</span>
-            Сценарий заказа
-          </div>
-          <div class="grid gap-2 sm:grid-cols-2">
-            <button
-              v-for="option in WORKFLOW_OPTIONS"
-              :key="option.value"
-              type="button"
-              class="rounded-xl border px-3 py-2 text-left transition"
-              :class="workflowType === option.value
-                ? 'border-teal-500 bg-white text-teal-900 shadow-sm ring-1 ring-teal-100'
-                : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white'"
-              @click="setWorkflowType(option.value)"
-            >
-              <span class="flex items-center gap-2 text-sm font-semibold">
-                <span class="material-icons-round text-[18px]">{{ option.icon }}</span>
-                {{ option.label }}
-              </span>
-              <span class="mt-0.5 block text-xs opacity-75">{{ option.hint }}</span>
-            </button>
-          </div>
+      <OrderCustomerObjectSummary
+        :customer="customer"
+        :branch="selectedCustomerBranch"
+        :address="compactObjectAddress"
+        :has-comment="Boolean(comment.trim())"
+        :saving-customer="savingCustomerInline"
+        @copy="copyText"
+        @save-customer="saveCustomerInline"
+        @update:address="customerDeliveryAddress = $event"
+        @open-customer="openCustomerProfile"
+        @change-customer="showChangeCustomerModal = true"
+        @toggle-branch="showBranchFields = !showBranchFields"
+      />
+
+      <div v-if="showBranchFields && customer?.id" class="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900 sm:grid-cols-2">
+        <label class="field-label sm:col-span-2">
+          Филиал клиента
+          <select :value="customerBranchId ?? ''" class="field-input mt-1" :disabled="customerBranchesLoading" @change="onCustomerBranchChange">
+            <option value="">Без филиала</option>
+            <option v-for="branch in customerBranches" :key="'compact-branch-' + branch.id" :value="branch.id">
+              {{ branch.name || 'Филиал #' + branch.id }} — {{ branch.delivery_address }}
+            </option>
+          </select>
+        </label>
+        <input v-model="newBranchName" class="field-input" placeholder="Название нового филиала" />
+        <input v-model="newBranchAddress" class="field-input" placeholder="Адрес нового филиала" />
+        <div class="sm:col-span-2 flex justify-end">
+          <button type="button" class="btn-mini-outline text-xs" :disabled="creatingCustomerBranch" @click="createCustomerBranch">
+            {{ creatingCustomerBranch ? 'Создаём...' : 'Создать и выбрать' }}
+          </button>
         </div>
+      </div>
 
-        <div class="grid gap-3 lg:grid-cols-[1fr_auto]">
-          <div class="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Клиент</p>
-                  <button @click="showCustomerModal = true" class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-teal-700 transition hover:bg-white" :disabled="!customer?.id">
-                    <span class="material-icons-round text-[15px]">open_in_new</span>
-                    Открыть клиента
-                  </button>
-                </div>
-                <p class="mt-1 break-words text-sm font-semibold text-slate-900">{{ clientDisplayName }}</p>
-              </div>
-              <div class="flex shrink-0 flex-wrap gap-2">
-                <button @click="showChangeCustomerModal = true" class="btn-mini-outline whitespace-nowrap text-xs">
-                  <span class="material-icons-round text-[15px]">swap_horiz</span>
-                  Сменить клиента
-                </button>
-                <button v-if="customer?.id" @click="showBranchFields = !showBranchFields" class="btn-mini-outline whitespace-nowrap text-xs" :class="showBranchFields ? 'border-teal-200 bg-teal-50 text-teal-700' : ''">
-                  <span class="material-icons-round text-[15px]">account_tree</span>
-                  Филиал
-                </button>
-              </div>
-            </div>
-
-            <div v-if="clientSummaryContacts.length" class="mt-3 flex flex-wrap gap-2">
-              <div
-                v-for="item in clientSummaryContacts"
-                :key="item.key"
-                class="group inline-flex min-w-0 max-w-full items-center rounded-full border border-white bg-white px-2.5 py-1 text-xs text-slate-700 shadow-sm"
-              >
-                <span v-if="item.icon" class="material-icons-round mr-1 text-[14px] text-slate-400">{{ item.icon }}</span>
-                <span v-else class="mr-1 text-[10px] font-semibold uppercase text-slate-400">{{ item.label }}</span>
-                <a
-                  v-if="item.href"
-                  :href="item.href"
-                  target="_blank"
-                  class="min-w-0 truncate font-medium hover:text-teal-700"
-                >
-                  {{ item.value }}
-                </a>
-                <span v-else class="min-w-0 truncate font-medium">{{ item.value }}</span>
-                <button
-                  type="button"
-                  class="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
-                  :title="`Скопировать ${item.label.toLowerCase()}`"
-                  @click="copyText(item.value, item.copyLabel)"
-                >
-                  <span class="material-icons-round text-[13px]">content_copy</span>
-                </button>
-              </div>
-            </div>
-
-            <div v-if="showBranchFields && customer?.id" class="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2">
-              <label class="field-label md:col-span-2">
-                Филиал клиента
-                <select
-                  :value="customerBranchId ?? ''"
-                  class="field-input"
-                  :disabled="customerBranchesLoading"
-                  @change="onCustomerBranchChange"
-                >
-                  <option value="">Без филиала</option>
-                  <option
-                    v-for="branch in customerBranches"
-                    :key="`order-branch-${branch.id}`"
-                    :value="branch.id"
-                  >
-                    {{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}
-                  </option>
-                </select>
-                <span v-if="customerBranchesLoading" class="text-xs text-gray-500">Загрузка филиалов...</span>
-                <span v-else-if="!customerBranches.length" class="text-xs text-gray-500">У клиента нет филиалов</span>
-              </label>
-
-              <input
-                v-model="newBranchName"
-                class="field-input"
-                placeholder="Новый филиал (название)"
-              />
-              <input
-                v-model="newBranchAddress"
-                class="field-input"
-                placeholder="Новый филиал (адрес)"
-              />
-              <div class="md:col-span-2">
-                <button
-                  type="button"
-                  class="btn-mini-outline text-xs"
-                  :disabled="creatingCustomerBranch"
-                  @click="createCustomerBranch"
-                >
-                  {{ creatingCustomerBranch ? 'Создаем филиал...' : 'Создать филиал и выбрать' }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-start gap-2 lg:justify-end">
-            <button v-if="status === 'negotiation' && !measurementRequired" type="button" class="btn-mini-outline whitespace-nowrap text-xs" @click="measurementRequired = true">
-              <span class="material-icons-round text-[15px]">add_location_alt</span>
-              Выезд на замер
-            </button>
-          </div>
-        </div>
-      </header>
+      <OrderSalesInstallationWorkspace
+        v-if="workflowType === 'sales_installation'"
+        :lanes="orderWorkspace.lanes"
+        @open="openWorkspaceTarget"
+      />
 
       <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
         {{ displayFormError }}
       </p>
 
       <OrderDrawerSection
+        id="order-workspace-object"
         v-model:expanded="expandedDrawerSections.clientDetails"
         title="Объект"
         :summary="customerDetailsSummary"
@@ -2651,6 +2603,7 @@ watch(
 
       <OrderEquipmentPanel
         v-if="order"
+        id="order-workspace-equipment"
         :key="`order-equipment-${order.id}`"
         class="mt-4"
         :order-id="order.id"
@@ -2783,7 +2736,7 @@ watch(
 
 
       <!-- Планирование (Measurement & Logistics) -->
-      <section v-if="status === 'negotiation'" class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-3">
+      <section v-if="status === 'negotiation'" id="order-workspace-planning" class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
             <h3 class="text-sm font-semibold text-blue-900">{{ planningTitle }}</h3>
@@ -3333,6 +3286,7 @@ watch(
 
       <!-- Смета -->
       <OrderDrawerSection
+        id="order-workspace-proposal"
         v-model:expanded="expandedDrawerSections.proposals"
         :title="isRepairWorkflow ? 'Смета ремонта' : 'Предложения'"
         :summary="activeProposalLineLabel"
@@ -3715,6 +3669,7 @@ watch(
       <!-- Экшн-зона (Proposal & Docs) -->
       <OrderDrawerSection
         v-if="status !== 'execution'"
+        id="order-workspace-documents"
         v-model:expanded="expandedDrawerSections.documents"
         title="Документы"
         :summary="documentSectionSummary"
@@ -3755,7 +3710,7 @@ watch(
       </OrderDrawerSection>
 
 
-      <section v-if="status === 'execution'" class="mt-4 rounded-2xl border border-teal-100 bg-teal-50/50 p-3">
+      <section v-if="status === 'execution'" id="order-workspace-planning" class="mt-4 rounded-2xl border border-teal-100 bg-teal-50/50 p-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 class="text-sm font-semibold text-teal-900">Работы</h3>
@@ -3795,6 +3750,7 @@ watch(
 
       <DealExecutionTab
         v-if="status === 'execution' && order"
+        id="order-workspace-execution"
         :order="order"
         @refresh="emit('reload', order.id) /* triggering parent reload without closing drawer */"
         @close="closeDrawer"
@@ -3804,6 +3760,7 @@ watch(
       <!-- Оплаты и Валюта (Объединенный блок) -->
       <OrderDrawerSection
         v-if="order && status !== 'execution'"
+        id="order-workspace-payments"
         v-model:expanded="expandedDrawerSections.payments"
         title="Оплаты"
         :summary="paymentsSectionSummary"
@@ -3953,7 +3910,18 @@ watch(
       </section>
       </OrderDrawerSection>
 
-      <footer class="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        v-if="hasUnsavedChanges"
+        class="sticky bottom-2 z-30 mt-5 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/95 px-3 py-2 shadow-lg backdrop-blur dark:border-amber-500/30 dark:bg-amber-950/90"
+      >
+        <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">Есть несохранённые изменения</p>
+        <div class="flex gap-2">
+          <button type="button" class="btn-mini-outline h-9 text-xs" :disabled="saving" @click="discardUnsavedChanges">Отменить</button>
+          <button type="button" class="btn-mini h-9 text-xs" :disabled="saving" @click="handleSave">{{ saving ? 'Сохраняем...' : 'Сохранить' }}</button>
+        </div>
+      </div>
+
+      <footer class="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <button class="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
             <span class="material-icons-round text-[18px]">delete</span>
