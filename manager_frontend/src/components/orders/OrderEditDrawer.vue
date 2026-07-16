@@ -2447,9 +2447,21 @@ watch(
             </div>
           </div>
 
-          <button class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" type="button" @click="closeDrawer" title="Закрыть">
-            <span class="material-icons-round">close</span>
-          </button>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <button
+              v-if="order"
+              type="button"
+              class="inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold transition-colors"
+              :class="order.is_on_hold ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+              @click="toggleHold"
+            >
+              <span class="material-icons-round text-[16px]">{{ order.is_on_hold ? 'play_arrow' : 'pause' }}</span>
+              {{ order.is_on_hold ? 'Вернуть' : 'Отложить' }}
+            </button>
+            <button class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" type="button" @click="closeDrawer" title="Закрыть">
+              <span class="material-icons-round">close</span>
+            </button>
+          </div>
         </div>
 
         <div class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-2">
@@ -2579,9 +2591,6 @@ watch(
             <button v-if="status === 'negotiation' && !measurementRequired" type="button" class="btn-mini-outline whitespace-nowrap text-xs" @click="measurementRequired = true">
               <span class="material-icons-round text-[15px]">add_location_alt</span>
               Выезд на замер
-            </button>
-            <button v-if="order" type="button" @click="toggleHold" class="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors" :class="order.is_on_hold ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'">
-              {{ order.is_on_hold ? 'Вернуть в работу' : 'Отложить' }}
             </button>
           </div>
         </div>
@@ -3330,16 +3339,9 @@ watch(
         tone="default"
         :has-error="Boolean(getFieldError('products') || getFieldError('services'))"
       >
-      <div class="rounded-2xl border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
+        <div class="min-w-0">
         <div class="mb-4 border-b border-gray-200 pb-3">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h3 class="text-lg font-bold text-gray-900 sm:text-xl font-['Space_Grotesk']">{{ isRepairWorkflow ? 'Смета ремонта' : 'Предложения' }}</h3>
-              <p class="mt-1 text-xs text-gray-500">{{ activeProposalLineLabel }}</p>
-            </div>
-          </div>
-
-          <div v-if="orderProposals.length" class="mt-3 flex gap-2 overflow-x-auto pb-1">
+          <div v-if="orderProposals.length" class="flex gap-2 overflow-x-auto pb-1">
             <button
               v-for="proposal in orderProposals"
               :key="proposal.id"

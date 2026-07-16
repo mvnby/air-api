@@ -27,6 +27,9 @@ from models import (
     RepairComplaintPreset,
     Service,
     ServiceTariff,
+    Supplier,
+    SupplyRequest,
+    SupplyRequestLine,
 )
 from models.order import OrderWorkStage
 
@@ -1097,6 +1100,79 @@ async def test_manager_order_patch_lines_preserves_installers(async_client, db):
 
     await db.refresh(order, attribute_names=["installers"])
     assert len(order.installers) == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_order_patch_product_price_preserves_supply_request_link(async_client, db):
+    customer = Customer(name="Supply linked", phone="+375296666669", type=CustomerType.individual)
+    product = Product(title="Supply linked product", slug="supply-linked-product", price=2490, area=35)
+    supplier = Supplier(name="Supply linked supplier", code="supply-linked-order-update")
+    db.add(customer)
+    db.add(product)
+    db.add(supplier)
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+    await db.refresh(supplier)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    order_line = OrderProductLink(
+        order_id=order.id,
+        product_id=product.id,
+        quantity=1,
+        price=1990,
+        cost=1110,
+    )
+    db.add(order_line)
+    await db.commit()
+    await db.refresh(order_line)
+
+    supply_request = SupplyRequest(supplier_id=supplier.id)
+    db.add(supply_request)
+    await db.commit()
+    await db.refresh(supply_request)
+
+    supply_line = SupplyRequestLine(
+        request_id=supply_request.id,
+        order_product_link_id=order_line.id,
+        source_type="order",
+        product_id=product.id,
+        title_snapshot=product.title,
+        qty=1,
+    )
+    db.add(supply_line)
+    await db.commit()
+    await db.refresh(supply_line)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "products": [
+                {
+                    "link_id": order_line.id,
+                    "product_id": product.id,
+                    "quantity": 1,
+                    "price": 2090,
+                    "cost": 1110,
+                }
+            ]
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["product_lines"][0]["id"] == order_line.id
+    assert response.json()["product_lines"][0]["price"] == 2090
+
+    await db.refresh(order_line)
+    await db.refresh(supply_line)
+    assert order_line.price == 2090
+    assert supply_line.order_product_link_id == order_line.id
 
 
 @pytest.mark.asyncio
