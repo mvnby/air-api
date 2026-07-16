@@ -32,3 +32,17 @@ def test_bot_http_gateway_does_not_import_backend_runtime_layers():
     )
     for forbidden in forbidden_imports:
         assert forbidden not in source, f"HTTP gateway imports backend layer: {forbidden}"
+
+
+def test_bot_catalog_search_path_uses_api_instead_of_product_service_reads():
+    source = Path("bot_app/handlers/catalog.py").read_text(encoding="utf-8")
+    assert "ProductService.search_products" not in source
+    assert "ProductService.get_by_id" not in source
+    assert "get_bot_api_gateway().search_catalog" in source
+    assert "get_bot_api_gateway().get_catalog_product" in source
+
+
+def test_bot_catalog_presenter_does_not_import_backend_services():
+    source = Path("bot_app/catalog_presenter.py").read_text(encoding="utf-8")
+    for forbidden in ("from core.database", "from models", "from crud", "from services"):
+        assert forbidden not in source, f"catalog presenter imports backend layer: {forbidden}"

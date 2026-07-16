@@ -19,6 +19,7 @@ from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_task_service import BotTaskService
 from services.product_read_service import ProductReadService
 from services.product_service import ProductService
+from bot_app.catalog_presenter import format_client_product
 from bot_app.keyboards import get_product_keyboard, get_staff_main_menu, selection_result_keyboard
 from bot_app.handlers import work as work_handlers
 from bot_app.utils import format_caption
@@ -346,7 +347,7 @@ async def test_task_status_update_notifies_admins(monkeypatch):
 
 def test_product_caption_contains_public_product_link(monkeypatch):
     monkeypatch.setattr(
-        "services.bot_product_selection_service.settings",
+        "bot_app.catalog_presenter.settings",
         SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
     )
 
@@ -366,7 +367,7 @@ def test_product_caption_contains_public_product_link(monkeypatch):
 
 def test_product_caption_escapes_html_fields(monkeypatch):
     monkeypatch.setattr(
-        "services.bot_product_selection_service.settings",
+        "bot_app.catalog_presenter.settings",
         SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
     )
 
@@ -392,7 +393,7 @@ def test_product_caption_escapes_html_fields(monkeypatch):
 
 def test_staff_product_keyboard_has_client_text_action(monkeypatch):
     monkeypatch.setattr(
-        "services.bot_product_selection_service.settings",
+        "bot_app.catalog_presenter.settings",
         SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
     )
 
@@ -411,7 +412,7 @@ def test_staff_product_keyboard_has_client_text_action(monkeypatch):
 
 def test_admin_product_keyboard_uses_delete_prompt(monkeypatch):
     monkeypatch.setattr(
-        "services.bot_product_selection_service.settings",
+        "bot_app.catalog_presenter.settings",
         SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
     )
 
@@ -429,11 +430,11 @@ def test_admin_product_keyboard_uses_delete_prompt(monkeypatch):
 
 def test_product_client_text_is_forwardable(monkeypatch):
     monkeypatch.setattr(
-        "services.bot_product_selection_service.settings",
+        "bot_app.catalog_presenter.settings",
         SimpleNamespace(PUBLIC_SITE_URL="https://example.test"),
     )
 
-    text = BotProductSelectionService.format_client_product(
+    text = format_client_product(
         {
             "title": "Midea 12",
             "slug": "midea-12",

@@ -31,6 +31,10 @@ export type { Body_upload_manager_order_attachment } from './models/Body_upload_
 export type { Body_upload_manager_order_document } from './models/Body_upload_manager_order_document';
 export type { Body_upload_media_assets } from './models/Body_upload_media_assets';
 export type { BotApiHealthResponse } from './models/BotApiHealthResponse';
+export type { BotCatalogProductLookupResponse } from './models/BotCatalogProductLookupResponse';
+export type { BotCatalogProductResponse } from './models/BotCatalogProductResponse';
+export type { BotCatalogSearchRequest } from './models/BotCatalogSearchRequest';
+export type { BotCatalogSearchResponse } from './models/BotCatalogSearchResponse';
 export type { BotStaffContextResponse } from './models/BotStaffContextResponse';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';

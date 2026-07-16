@@ -4,12 +4,19 @@ from core.config import settings
 from core.database import get_session
 from main import app
 from services.bot_access_service import BotAccessContext, BotAccessService
+from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
 
 
-async def _request(path: str, *, token: str | None = None):
+async def _request(
+    path: str,
+    *,
+    token: str | None = None,
+    method: str = "GET",
+    json: dict | None = None,
+):
     headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        return await client.get(path, headers=headers)
+        return await client.request(method, path, headers=headers, json=json)
 
 
 async def test_internal_bot_api_fails_closed_when_token_is_not_configured(monkeypatch):
@@ -65,11 +72,17 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
 
     health = schema["paths"]["/api/internal/bot/v1/health"]["get"]
     staff_context = schema["paths"]["/api/internal/bot/v1/staff/context/{telegram_id}"]["get"]
+    catalog_search = schema["paths"]["/api/internal/bot/v1/catalog/search"]["post"]
+    catalog_product = schema["paths"]["/api/internal/bot/v1/catalog/products/{product_id}"]["get"]
 
     assert health["operationId"] == "get_internal_bot_api_health_v1"
     assert staff_context["operationId"] == "get_internal_bot_staff_context_v1"
+    assert catalog_search["operationId"] == "search_internal_bot_catalog_v1"
+    assert catalog_product["operationId"] == "get_internal_bot_catalog_product_v1"
     assert health["security"] == [{"BotServiceBearer": []}]
     assert staff_context["security"] == [{"BotServiceBearer": []}]
+    assert catalog_search["security"] == [{"BotServiceBearer": []}]
+    assert catalog_product["security"] == [{"BotServiceBearer": []}]
     assert schema["components"]["securitySchemes"]["BotServiceBearer"] == {
         "type": "http",
         "description": "Dedicated bearer token used only by the MVN Telegram bot service.",
@@ -115,3 +128,154 @@ async def test_internal_bot_staff_context_maps_backend_permissions(monkeypatch):
         "is_manager": False,
         "is_executor": True,
     }
+
+
+async def test_internal_bot_catalog_search_returns_stable_product_projection(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_search(_session, *, telegram_id, query, limit):
+        assert (telegram_id, query, limit) == (123456, "Midea 12", 5)
+        return [
+            {
+                "id": 42,
+                "title": "Midea 12",
+                "slug": "midea-12",
+                "price": 3200,
+                "area": 35,
+                "main_image": "/media/midea.webp",
+                "vitebsk_qty": 1,
+                "availability_status": "in_stock_now",
+                "specs": {"private_backend_detail": "not part of bot contract"},
+            }
+        ]
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotCatalogService, "search_for_staff", fake_search)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/catalog/search",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "query": "Midea 12", "limit": 5},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "id": 42,
+                "title": "Midea 12",
+                "slug": "midea-12",
+                "description": "",
+                "price": 3200,
+                "area": 35,
+                "main_image": "/media/midea.webp",
+                "categories": [],
+                "vitebsk_qty": 1,
+                "minsk_qty": 0,
+                "availability_status": "in_stock_now",
+            }
+        ]
+    }
+
+
+async def test_internal_bot_catalog_product_can_report_missing_item(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_get(_session, *, telegram_id, product_id):
+        assert (telegram_id, product_id) == (123456, 404)
+        return None
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotCatalogService, "get_product_for_staff", fake_get)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/catalog/products/404?telegram_id=123456",
+            token="expected-token",
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"product": None}
+
+
+async def test_internal_bot_catalog_product_returns_card_detail(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_get(_session, *, telegram_id, product_id):
+        assert (telegram_id, product_id) == (123456, 42)
+        return {
+            "id": 42,
+            "title": "Midea 12",
+            "slug": "midea-12",
+            "description": "Тихий инвертор",
+            "price": 3200,
+            "area": 35,
+            "main_image": "/media/midea.webp",
+            "categories": ["Настенные"],
+            "vitebsk_qty": 0,
+            "minsk_qty": 2,
+            "availability_status": "available_2_3_days",
+        }
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotCatalogService, "get_product_for_staff", fake_get)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/catalog/products/42?telegram_id=123456",
+            token="expected-token",
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json()["product"] == {
+        "id": 42,
+        "title": "Midea 12",
+        "slug": "midea-12",
+        "description": "Тихий инвертор",
+        "price": 3200,
+        "area": 35,
+        "main_image": "/media/midea.webp",
+        "categories": ["Настенные"],
+        "vitebsk_qty": 0,
+        "minsk_qty": 2,
+        "availability_status": "available_2_3_days",
+    }
+
+
+async def test_internal_bot_catalog_denies_non_staff_identity(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_search(_session, **_kwargs):
+        raise BotCatalogAccessDeniedError("Staff catalog access is required")
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotCatalogService, "search_for_staff", fake_search)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/catalog/search",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "query": "Midea"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Staff catalog access is required"}

@@ -19,3 +19,33 @@ class BotStaffContextResponse(BaseModel):
     legacy_installer_id: int | None = None
     is_manager: bool = False
     is_executor: bool = False
+
+
+class BotCatalogProductResponse(BaseModel):
+    """Small, stable product projection used by Telegram catalog cards."""
+
+    id: int = Field(ge=1)
+    title: str
+    slug: str = ""
+    description: str = ""
+    price: int
+    area: int = 0
+    main_image: str | None = None
+    categories: list[str] = Field(default_factory=list)
+    vitebsk_qty: int = 0
+    minsk_qty: int = 0
+    availability_status: str = "out_of_stock"
+
+
+class BotCatalogSearchRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    query: str = Field(min_length=1, max_length=100)
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+class BotCatalogSearchResponse(BaseModel):
+    items: list[BotCatalogProductResponse] = Field(default_factory=list)
+
+
+class BotCatalogProductLookupResponse(BaseModel):
+    product: BotCatalogProductResponse | None = None

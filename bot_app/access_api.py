@@ -28,8 +28,9 @@ def _context_from_response(response: BotStaffContextResponse) -> BotAccessContex
 
 
 class ApiBotAccessProvider:
-    def __init__(self, gateway: BotApiGateway) -> None:
+    def __init__(self, gateway: BotApiGateway, *, owns_gateway: bool = True) -> None:
         self._gateway = gateway
+        self._owns_gateway = owns_gateway
 
     async def health(self) -> None:
         try:
@@ -48,4 +49,5 @@ class ApiBotAccessProvider:
         return _context_from_response(response)
 
     async def aclose(self) -> None:
-        await self._gateway.aclose()
+        if self._owns_gateway:
+            await self._gateway.aclose()

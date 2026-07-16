@@ -3,6 +3,8 @@ from aiogram import types
 from aiogram.types import BotCommand
 from .access import BotAccessUnavailableError
 from .access_runtime import close_bot_access_provider, verify_bot_access_startup
+from .api_gateway import BotApiAuthorizationError, BotApiError
+from .api_runtime import close_bot_api_gateway
 from .config import bot, dp
 from .handlers import admin, base, catalog, repair_context, work
 from core.config import settings
@@ -36,6 +38,22 @@ async def error_handler(event: types.ErrorEvent):
             await callback.answer("Сервис авторизации временно недоступен. Попробуйте позже.", show_alert=True)
         elif event.update.message is not None:
             await event.update.message.answer("Сервис авторизации временно недоступен. Попробуйте позже.")
+        return True
+    if isinstance(event.exception, BotApiAuthorizationError):
+        logger.warning("Bot staff action denied: %s", event.exception)
+        callback = event.update.callback_query
+        if callback is not None:
+            await callback.answer("Недостаточно прав для этого действия.", show_alert=True)
+        elif event.update.message is not None:
+            await event.update.message.answer("Недостаточно прав для этого действия.")
+        return True
+    if isinstance(event.exception, BotApiError):
+        logger.error("Bot backend API unavailable: %s", event.exception)
+        callback = event.update.callback_query
+        if callback is not None:
+            await callback.answer("Рабочий сервис временно недоступен. Попробуйте позже.", show_alert=True)
+        elif event.update.message is not None:
+            await event.update.message.answer("Рабочий сервис временно недоступен. Попробуйте позже.")
         return True
     logger.error(
         "Bot error: %s for event %s",
@@ -94,6 +112,7 @@ async def main(*, wait_when_disabled: bool = True):
         await dp.start_polling(bot)
     finally:
         await close_bot_access_provider()
+        await close_bot_api_gateway()
         await runtime_lock.release()
 
 if __name__ == "__main__":

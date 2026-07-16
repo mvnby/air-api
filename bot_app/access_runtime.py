@@ -4,7 +4,7 @@ from core.config import settings
 
 from .access import BotAccessContext, BotAccessProvider
 from .access_api import ApiBotAccessProvider
-from .api_gateway import BotApiGateway, BotApiGatewayConfig
+from .api_runtime import get_bot_api_gateway
 
 
 _provider: BotAccessProvider | None = None
@@ -13,13 +13,8 @@ _provider: BotAccessProvider | None = None
 def _build_provider() -> BotAccessProvider:
     if settings.BOT_ACCESS_BACKEND == "api":
         return ApiBotAccessProvider(
-            BotApiGateway(
-                BotApiGatewayConfig(
-                    base_url=settings.BOT_API_BASE_URL,
-                    token=settings.BOT_API_TOKEN,
-                    timeout_seconds=settings.BOT_API_TIMEOUT_SECONDS,
-                )
-            )
+            get_bot_api_gateway(),
+            owns_gateway=False,
         )
 
     if settings.BOT_ACCESS_BACKEND == "database":

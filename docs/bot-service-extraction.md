@@ -41,6 +41,23 @@ The temporary database provider is removed after API mode has been verified in
 production. Catalog, orders, repair and FSM database paths remain separate
 migration slices; this switch covers staff authorization only.
 
+### Catalog search slice
+
+The staff search flow, inline product search, product details and the
+forwardable client text use `/api/internal/bot/v1/catalog/*`. The API repeats
+staff authorization for the Telegram identity and returns a deliberately small
+product-card projection instead of exposing a generic manager or public catalog
+contract.
+
+Search cards are read-only. Price changes and product deletion stay in the
+Manager application and are not exposed by the autonomous bot API. Relative
+media paths are resolved through the public API origin; the bot does not depend
+on the monolith's local media filesystem.
+
+The legacy step-by-step selection and the current multi-room selection remain
+separate migration slices. They must be replaced by one backend-orchestrated
+selection use case rather than many remote product queries.
+
 ## Scope guardrails
 
 - Freeze new bot product features while a scenario is being migrated.
