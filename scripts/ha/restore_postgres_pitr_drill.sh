@@ -496,22 +496,6 @@ docker run --pull never -d \
   -c "ssl_passphrase_command=" \
   -c "ssl=off" >/dev/null
 
-ready=false
-for _ in $(seq 1 "${START_TIMEOUT_SECONDS}"); do
-  if docker exec --user postgres "${container}" \
-    pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; then
-    ready=true
-    break
-  fi
-  sleep 1
-done
-
-if [[ "${ready}" != "true" ]]; then
-  docker logs --tail=160 "${container}" || true
-  echo "Disposable PostgreSQL did not become ready" >&2
-  exit 1
-fi
-
 if [[ "${target_mode}" == "time" ]]; then
   configured_target_sql="extract(epoch FROM current_setting('recovery_target_time')::timestamptz)::bigint::text"
   target_progress_sql="true"
@@ -519,16 +503,37 @@ else
   configured_target_sql="current_setting('recovery_target_name')"
   target_progress_sql="pg_last_wal_replay_lsn() >= '${target_lsn}'::pg_lsn"
 fi
-state="$(
-  docker exec --user postgres "${container}" \
-    psql -v ON_ERROR_STOP=1 -AtF '|' \
-    -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-    -c "SELECT pg_is_in_recovery(), CASE WHEN pg_is_in_recovery() THEN pg_is_wal_replay_paused() ELSE false END, coalesce(pg_last_wal_replay_lsn()::text, ''), coalesce(extract(epoch FROM pg_last_xact_replay_timestamp())::bigint::text, ''), s.system_identifier::text, current_setting('config_file'), current_setting('hba_file'), current_setting('ident_file'), current_setting('data_directory'), ${configured_target_sql}, ${target_progress_sql} FROM pg_control_system() AS s"
-)" || {
+
+# PostgreSQL starts accepting read-only connections as soon as it reaches a
+# consistent recovery state.  That is deliberately earlier than the requested
+# restore point, so pg_isready alone cannot prove that the drill is complete.
+# Poll the recovery state until replay has reached and paused at the exact
+# target, or fail closed when the bounded startup window expires.
+state=""
+target_reached=false
+for _ in $(seq 1 "${START_TIMEOUT_SECONDS}"); do
+  if state="$(
+    docker exec --user postgres "${container}" \
+      psql -v ON_ERROR_STOP=1 -AtF '|' \
+      -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+      -c "SELECT pg_is_in_recovery(), CASE WHEN pg_is_in_recovery() THEN pg_is_wal_replay_paused() ELSE false END, coalesce(pg_last_wal_replay_lsn()::text, ''), coalesce(extract(epoch FROM pg_last_xact_replay_timestamp())::bigint::text, ''), s.system_identifier::text, current_setting('config_file'), current_setting('hba_file'), current_setting('ident_file'), current_setting('data_directory'), ${configured_target_sql}, ${target_progress_sql} FROM pg_control_system() AS s" \
+      2>/dev/null
+  )"; then
+    IFS='|' read -r current_in_recovery current_replay_paused _ _ _ _ _ _ _ _ current_target_progress current_unexpected <<< "${state}"
+    if [[ -z "${current_unexpected}" && "${current_in_recovery}" == "t" &&
+      "${current_replay_paused}" == "t" && "${current_target_progress}" == "t" ]]; then
+      target_reached=true
+      break
+    fi
+  fi
+  sleep 1
+done
+
+if [[ "${target_reached}" != "true" ]]; then
   docker logs --tail=160 "${container}" || true
-  echo "Could not prove restored PostgreSQL recovery state" >&2
+  echo "Disposable PostgreSQL did not reach and pause at the configured recovery target" >&2
   exit 1
-}
+fi
 IFS='|' read -r restored_in_recovery restored_replay_paused restored_replay_lsn replay_timestamp_epoch restored_system_identifier restored_config_file restored_hba_file restored_ident_file restored_data_directory configured_target target_progress unexpected_restored <<< "${state}"
 
 log "restored_in_recovery=${restored_in_recovery}"
