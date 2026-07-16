@@ -9,14 +9,13 @@ from aiogram.filters import StateFilter
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from core.database import async_session_maker
-from services.bot_access_service import BotAccessService
 from services.product_service import ProductService
-from services.staff_user_service import StaffUserService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.bot_task_service import BotTaskService
+from ..access_runtime import get_bot_access_context
 from .repair_context import repair_context_keyboard as _repair_context_keyboard
 from ..config import bot
 from ..states import ShopState
@@ -25,13 +24,12 @@ router = Router()
 
 
 async def _is_admin_user(user_id: int | None) -> bool:
-    async with async_session_maker() as session:
-        return await StaffUserService.is_active_owner_admin_telegram_user(session, user_id)
+    context = await _get_bot_access_context(user_id)
+    return context.is_staff and context.is_manager
 
 
 async def _get_bot_access_context(user_id: int | None):
-    async with async_session_maker() as session:
-        return await BotAccessService.get_context(session, user_id)
+    return await get_bot_access_context(user_id)
 
 
 async def _is_staff_user(user_id: int | None) -> bool:

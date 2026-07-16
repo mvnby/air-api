@@ -4,11 +4,11 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 
 from core.database import async_session_maker
-from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_service import BotService
 from services.bot_task_service import BotTaskService
+from ..access_runtime import get_bot_access_context
 from ..keyboards import (
     get_staff_main_menu,
     quick_order_confirm_keyboard,
@@ -21,8 +21,7 @@ router = Router()
 
 
 async def _access_context(user_id: int | None):
-    async with async_session_maker() as session:
-        return await BotAccessService.get_context(session, user_id)
+    return await get_bot_access_context(user_id)
 
 
 async def _require_staff(message: types.Message):

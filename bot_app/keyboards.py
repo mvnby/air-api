@@ -2,7 +2,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton, 
     InlineKeyboardMarkup, InlineKeyboardButton
 )
-from services.bot_access_service import BotAccessContext
+from .access import BotAccessContext
 from services.bot_product_selection_service import BotProductSelectionService
 
 

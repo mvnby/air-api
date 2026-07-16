@@ -23,6 +23,18 @@ authorizes the Telegram user for each use case.
 6. Move the autonomous bot into a separate repository only after the boundary
    checks below pass.
 
+### Staff access cutover
+
+Telegram handlers resolve staff identity and roles through one bot-owned
+provider. `BOT_ACCESS_BACKEND=database` is the explicit rollback mode during
+the rollout. Set `BOT_ACCESS_BACKEND=api` only after deploying the same strong
+`BOT_API_TOKEN` to the API and bot runtimes. API mode performs a startup health
+check and never silently falls back to the database after an HTTP failure.
+
+The temporary database provider is removed after API mode has been verified in
+production. Catalog, orders, repair and FSM database paths remain separate
+migration slices; this switch covers staff authorization only.
+
 ## Scope guardrails
 
 - Freeze new bot product features while a scenario is being migrated.

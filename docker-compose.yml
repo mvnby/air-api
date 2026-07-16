@@ -45,6 +45,7 @@ services:
     restart: always
     depends_on:
       - db
+      - app
     env_file:
       - .env
     environment:

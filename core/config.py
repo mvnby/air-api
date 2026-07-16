@@ -26,6 +26,7 @@ def _redact_settings_validation_error(error: ValidationError) -> ValidationError
 class Settings(BaseSettings):
     # Bot Settings
     BOT_TOKEN: str = ""
+    BOT_ACCESS_BACKEND: str = "database"
     BOT_API_TOKEN: str = ""
     BOT_API_BASE_URL: str = "http://app:8000/api/internal/bot/v1"
     BOT_API_TIMEOUT_SECONDS: float = 5.0
@@ -224,6 +225,14 @@ class Settings(BaseSettings):
     READINESS_REQUIRE_WRITABLE_DB: bool = True
     RUNTIME_DB_LOCKS_ENABLED: bool = True
     RUNTIME_LOCK_RETRY_SECONDS: int = 15
+
+    @field_validator("BOT_ACCESS_BACKEND", mode="before")
+    @classmethod
+    def _validate_bot_access_backend(cls, value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in {"database", "api"}:
+            raise ValueError("BOT_ACCESS_BACKEND must be database or api")
+        return normalized
 
     # Durable communications runtime. The process is deliberately inert unless
     # this immutable deployment gate is explicitly enabled. A second, database-
