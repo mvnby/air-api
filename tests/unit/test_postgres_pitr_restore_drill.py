@@ -120,3 +120,15 @@ def test_drill_proves_target_pause_replay_lsn_and_exact_system_identifier():
     assert "configured_target != target_epoch" in source
     assert 'target_progress}" != "t' in source
     assert 'log "target_reached=true' in source
+
+
+def test_drill_waits_for_the_exact_recovery_target_not_just_readiness():
+    source = _source()
+
+    assert 'pg_isready -U "${POSTGRES_USER}"' not in source
+    assert 'target_reached=false' in source
+    assert 'for _ in $(seq 1 "${START_TIMEOUT_SECONDS}")' in source
+    assert 'current_replay_paused}" == "t"' in source
+    assert 'current_target_progress}" == "t"' in source
+    assert 'target_reached=true' in source
+    assert "did not reach and pause at the configured recovery target" in source
