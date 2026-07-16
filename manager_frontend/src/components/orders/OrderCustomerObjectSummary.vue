@@ -84,7 +84,7 @@ const saveObject = () => {
             <a v-if="validEmail" :href="'mailto:' + email" class="inline-flex min-w-0 items-center gap-1 hover:text-teal-700 dark:hover:text-teal-300">
               <Mail :size="13" /> <span class="truncate">{{ email }}</span>
             </a>
-            <button v-else type="button" class="font-medium text-slate-500 hover:text-teal-700 dark:hover:text-teal-300" @click="startCustomerEdit">Email не указан</button>
+            <button v-else type="button" class="font-medium text-slate-500 hover:text-teal-700 dark:hover:text-teal-300" @click="startCustomerEdit">Email не указан · добавить</button>
           </div>
         </div>
         <div class="flex shrink-0 gap-1">

@@ -33,6 +33,7 @@ import type {
   ManagerEquipmentDetailResponse,
   ManagerEquipmentItemResponse,
   ManagerEquipmentHistoryFromRepairOrderPayload,
+  OutgoingEmailResponse,
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
 import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
@@ -294,6 +295,12 @@ const payments = ref<PaymentResponse[]>([]);
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
+const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
+const executionWorkspaceSection = ref<'documents' | 'payments' | null>(null);
+const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
+const orderEmails = ref<OutgoingEmailResponse[]>([]);
+const orderEmailsLoaded = ref(false);
+let orderEmailsRequestId = 0;
 
 const executorOptions = computed(() => {
   const selectedIds = new Set<number>();
@@ -312,6 +319,7 @@ const createDefaultDrawerSections = () => ({
   proposals: false,
   documents: false,
   payments: false,
+  execution: false,
 });
 type DrawerSectionsState = ReturnType<typeof createDefaultDrawerSections>;
 const expandedDrawerSections = ref(createDefaultDrawerSections());
@@ -642,6 +650,33 @@ const activeProposalLineLabel = computed(() => {
 const paymentsSectionSummary = computed(() => (
   `оплачено ${formatMoney(totalPaymentsPreview.value)} · остаток ${formatMoney(balanceDuePreview.value)} · итого ${formatMoney(totalPreview.value)} · маржа ${formatMoney(marginPreview.value)}`
 ));
+const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sent' | 'failed'>(() => {
+  if (!orderEmailsLoaded.value) return 'unknown';
+  const latestDocumentEmail = [...orderEmails.value]
+    .filter((email) => Boolean(email.attachments?.length))
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
+  if (!latestDocumentEmail) return 'none';
+  if (latestDocumentEmail.status === 'sent') return 'sent';
+  if (latestDocumentEmail.status === 'pending') return 'pending';
+  if (latestDocumentEmail.status === 'failed') return 'failed';
+  return 'none';
+});
+const normalizeDocumentNumber = (value: string) => value.toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
+const missingReferencedInvoice = computed(() => {
+  const invoiceNumbers = new Set(
+    orderDocuments.value
+      .filter((document) => document.doc_type === 'invoice')
+      .map((document) => normalizeDocumentNumber(document.number || ''))
+      .filter(Boolean),
+  );
+  for (const payment of payments.value) {
+    const purpose = payment.bank_receipt?.payment_purpose || payment.comment || '';
+    const match = purpose.match(/сч[её]т(?:у|а|ом|е)?\s*(?:№\s*)?([A-ZА-ЯЁ0-9][A-ZА-ЯЁ0-9/-]{2,})/iu);
+    const referencedNumber = match?.[1]?.trim();
+    if (referencedNumber && !invoiceNumbers.has(normalizeDocumentNumber(referencedNumber))) return referencedNumber;
+  }
+  return null;
+});
 const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   status: status.value,
   negotiationStatus: negotiationStatus.value,
@@ -654,6 +689,8 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   serviceCount: serviceLines.value.length,
   linkedEquipmentCount: props.order?.linked_equipment_count || 0,
   documents: orderDocuments.value,
+  documentEmailStatus: documentEmailStatus.value,
+  missingReferencedInvoice: missingReferencedInvoice.value,
   total: totalPreview.value,
   paid: totalPaymentsPreview.value,
   balance: balanceDuePreview.value,
@@ -702,6 +739,21 @@ const loadOrderSupplyRequests = async (orderId: number) => {
   } catch (error) {
     console.warn('Failed to load supply requests for order', error);
     supplyRequests.value = [];
+  }
+};
+
+const loadOrderEmails = async (orderId: number) => {
+  const requestId = ++orderEmailsRequestId;
+  try {
+    const response = await ManagerMailService.listManagerOrderOutgoingEmails(orderId, 20);
+    if (requestId !== orderEmailsRequestId || props.order?.id !== orderId) return;
+    orderEmails.value = response.items || [];
+    orderEmailsLoaded.value = true;
+  } catch (error) {
+    if (requestId !== orderEmailsRequestId) return;
+    console.warn('Failed to load order email summary', error);
+    orderEmails.value = [];
+    orderEmailsLoaded.value = false;
   }
 };
 
@@ -998,10 +1050,14 @@ const beforeDocumentGenerate = async (type: string) => {
 
 const handleDocumentPanelToast = (payload: { message: string; type?: 'success' | 'error' }) => {
   setToast(payload.message, payload.type || 'success');
+  if (props.order?.id) window.setTimeout(() => void loadOrderEmails(props.order!.id), 500);
 };
 
 const refreshOrderFromDocumentsPanel = () => {
-  if (props.order?.id) emit('reload', props.order.id);
+  if (props.order?.id) {
+    emit('reload', props.order.id);
+    void loadOrderEmails(props.order.id);
+  }
 };
 
 const newPaymentAmount = ref<number | null>(null);
@@ -1445,6 +1501,10 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     initializedOrderId.value = order.id;
     expandedDrawerSections.value = restoreDrawerSections();
     linkedEquipmentOptions.value = [];
+    executionWorkspaceSection.value = null;
+    activeWorkspaceTarget.value = null;
+    orderEmails.value = [];
+    orderEmailsLoaded.value = false;
   }
   status.value = order.status;
   orderTitle.value = order.title ?? '';
@@ -1547,7 +1607,10 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   savedFormSnapshot.value = currentFormSnapshot();
   restoreDraft();
   syncProductLookupFromLines();
-  await loadOrderSupplyRequests(order.id);
+  await Promise.all([
+    loadOrderSupplyRequests(order.id),
+    loadOrderEmails(order.id),
+  ]);
 };
 
 watch(
@@ -2408,15 +2471,44 @@ const saveCustomerInline = async (payload: { name: string; phone: string; email:
   }
 };
 
-const openWorkspaceTarget = async (target: OrderWorkspaceTarget) => {
+const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = false) => {
+  const shouldClose = allowToggle && activeWorkspaceTarget.value === target;
+  if (activeWorkspaceTarget.value === 'equipment') equipmentPanelRef.value?.collapse();
+  if (workflowType.value === 'sales_installation' && target !== 'object') {
+    expandedDrawerSections.value.proposals = false;
+    expandedDrawerSections.value.documents = false;
+    expandedDrawerSections.value.payments = false;
+    expandedDrawerSections.value.execution = false;
+    executionWorkspaceSection.value = null;
+  }
+  if (shouldClose) {
+    activeWorkspaceTarget.value = null;
+    return;
+  }
+  if (target !== 'object') activeWorkspaceTarget.value = target;
   if (target === 'object') expandedDrawerSections.value.clientDetails = true;
-  if (target === 'planning') expandedDrawerSections.value.planningDetails = true;
+  if (target === 'planning') {
+    if (workflowType.value === 'sales_installation') expandedDrawerSections.value.proposals = true;
+    if (status.value === 'execution') expandedDrawerSections.value.execution = true;
+    else expandedDrawerSections.value.planningDetails = true;
+  }
   if (target === 'proposal') expandedDrawerSections.value.proposals = true;
-  if (target === 'documents') expandedDrawerSections.value.documents = true;
-  if (target === 'payments') expandedDrawerSections.value.payments = true;
+  if (target === 'documents') {
+    if (status.value === 'execution') executionWorkspaceSection.value = 'documents';
+    else expandedDrawerSections.value.documents = true;
+  }
+  if (target === 'payments') {
+    if (status.value === 'execution') executionWorkspaceSection.value = 'payments';
+    else expandedDrawerSections.value.payments = true;
+  }
   await nextTick();
+  if (target === 'equipment') {
+    expandedDrawerSections.value.proposals = true;
+    await equipmentPanelRef.value?.expand();
+    await nextTick();
+  }
   const elementId = status.value === 'execution' && (target === 'documents' || target === 'payments')
-    ? 'order-workspace-execution'
+    ? 'order-workspace-execution-details'
     : 'order-workspace-' + target;
   document.getElementById(elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
@@ -2480,6 +2572,7 @@ watch(
         @next="openWorkspaceTarget(orderWorkspace.nextAction.target)"
         @payments="openWorkspaceTarget('payments')"
         @hold="toggleHold"
+        @discard="discardUnsavedChanges"
         @save="handleSave"
         @close="closeDrawer"
       />
@@ -2497,7 +2590,7 @@ watch(
           </button>
         </span>
         <button v-if="!showManagerLabelInput" type="button" class="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 py-1 text-xs font-medium text-slate-500 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:text-slate-400" @click="showManagerLabelInput = true">
-          <span class="material-icons-round text-[13px]">add</span> метка
+          <span class="material-icons-round text-[13px]">add</span> Добавить метку
         </button>
         <div v-if="showManagerLabelInput" class="flex min-w-[190px] gap-1.5">
           <input v-model="managerLabelDraft" class="field-input h-8 text-xs" placeholder="Новая метка" @keydown.enter.prevent="addManagerLabel" @keydown.esc.prevent="showManagerLabelInput = false" />
@@ -2505,7 +2598,7 @@ watch(
         </div>
       </div>
       <button v-else type="button" class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300" @click="showManagerLabelInput = true">
-        <span class="material-icons-round text-[14px]">add</span> метка
+        <span class="material-icons-round text-[14px]">add</span> Добавить метку
       </button>
 
       <OrderCustomerObjectSummary
@@ -2544,7 +2637,8 @@ watch(
       <OrderSalesInstallationWorkspace
         v-if="workflowType === 'sales_installation'"
         :lanes="orderWorkspace.lanes"
-        @open="openWorkspaceTarget"
+        :active-target="activeWorkspaceTarget"
+        @open="openWorkspaceTarget($event, true)"
       />
 
       <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -2603,6 +2697,7 @@ watch(
 
       <OrderEquipmentPanel
         v-if="order"
+        ref="equipmentPanelRef"
         id="order-workspace-equipment"
         :key="`order-equipment-${order.id}`"
         class="mt-4"
@@ -3710,14 +3805,21 @@ watch(
       </OrderDrawerSection>
 
 
-      <section v-if="status === 'execution'" id="order-workspace-planning" class="mt-4 rounded-2xl border border-teal-100 bg-teal-50/50 p-3">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 class="text-sm font-semibold text-teal-900">Работы</h3>
-            <p class="mt-0.5 text-xs text-teal-700/75">Текущий этап: {{ executionStatusLabel }}</p>
-          </div>
-        </div>
-        <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <OrderDrawerSection
+        v-if="status === 'execution'"
+        id="order-workspace-planning"
+        v-model:expanded="expandedDrawerSections.execution"
+        :title="workflowType === 'sales_installation' ? 'Монтаж' : 'Работы'"
+        :summary="executionStatusLabel"
+        tone="default"
+      >
+        <label v-if="workflowType === 'sales_installation'" class="field-label">
+          Общий этап заказа
+          <select v-model="executionStatus" class="field-input mt-1">
+            <option v-for="option in EXECUTION_STATUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+        <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <button
             v-for="option in EXECUTION_STATUS_OPTIONS"
             :key="option.value"
@@ -3733,28 +3835,29 @@ watch(
           </button>
         </div>
         <div class="mt-3 grid gap-2 sm:grid-cols-2">
-          <label class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-teal-900 ring-1 ring-teal-100">
-            <input v-model="executionWithoutPayment" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            Перенос без оплаты
+          <label class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <input v-model="executionWithoutPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            <span><strong class="block">Разрешить переходы при наличии долга</strong><span class="mt-0.5 block text-slate-500 dark:text-slate-400">Менеджер сможет продолжать работу без полной оплаты.</span></span>
           </label>
-          <label class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-teal-900 ring-1 ring-teal-100">
-            <input v-model="autoCloseOnPayment" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            Закрыть после оплаты
+          <label class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <input v-model="autoCloseOnPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+            <span><strong class="block">Автоматически завершить после полной оплаты</strong><span class="mt-0.5 block text-slate-500 dark:text-slate-400">Сработает, когда долг станет нулевым.</span></span>
           </label>
         </div>
         <label v-if="executionWithoutPayment" class="field-label mt-3">
-          Причина переноса без оплаты
+          Причина работы при наличии долга
           <textarea v-model="executionWithoutPaymentReason" class="field-input min-h-[60px]" placeholder="Например: постоянный клиент, оплата по факту..." />
         </label>
-      </section>
+      </OrderDrawerSection>
 
       <DealExecutionTab
-        v-if="status === 'execution' && order"
-        id="order-workspace-execution"
+        v-if="status === 'execution' && order && executionWorkspaceSection"
+        id="order-workspace-execution-details"
         :order="order"
+        :section="executionWorkspaceSection"
         @refresh="emit('reload', order.id) /* triggering parent reload without closing drawer */"
         @close="closeDrawer"
-        class="mt-8"
+        class="mt-4"
       />
 
       <!-- Оплаты и Валюта (Объединенный блок) -->
@@ -3910,30 +4013,11 @@ watch(
       </section>
       </OrderDrawerSection>
 
-      <div
-        v-if="hasUnsavedChanges"
-        class="sticky bottom-2 z-30 mt-5 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/95 px-3 py-2 shadow-lg backdrop-blur dark:border-amber-500/30 dark:bg-amber-950/90"
-      >
-        <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">Есть несохранённые изменения</p>
-        <div class="flex gap-2">
-          <button type="button" class="btn-mini-outline h-9 text-xs" :disabled="saving" @click="discardUnsavedChanges">Отменить</button>
-          <button type="button" class="btn-mini h-9 text-xs" :disabled="saving" @click="handleSave">{{ saving ? 'Сохраняем...' : 'Сохранить' }}</button>
-        </div>
-      </div>
-
-      <footer class="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <button class="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
-            <span class="material-icons-round text-[18px]">delete</span>
-            {{ isDeleting ? 'Удаление...' : 'Удалить заказ' }}
-          </button>
-        </div>
-        <div class="flex flex-row gap-2">
-          <button class="btn-mini-outline flex-1 sm:flex-none" :disabled="saving || isDeleting" @click="closeDrawer">Закрыть</button>
-          <button class="btn-mini flex-1 sm:flex-none" :disabled="saving || isDeleting" @click="handleSave">
-            {{ saving ? 'Сохраняем...' : 'Сохранить' }}
-          </button>
-        </div>
+      <footer class="mt-6 border-t border-gray-100 pt-4 dark:border-slate-800">
+        <button class="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
+          <span class="material-icons-round text-[16px]">delete</span>
+          {{ isDeleting ? 'Удаление...' : 'Удалить заказ' }}
+        </button>
       </footer>
     </aside>
 

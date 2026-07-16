@@ -29,6 +29,7 @@ export type OrderWorkspaceLane = {
   label: string;
   status: string;
   detail: string;
+  actionLabel: string;
   tone: OrderWorkspaceTone;
   target: OrderWorkspaceTarget;
 };
@@ -58,22 +59,40 @@ export type OrderWorkspaceInput = {
   serviceCount: number;
   linkedEquipmentCount: number;
   documents: ManagerOrderDocumentItem[];
+  documentEmailStatus?: 'unknown' | 'none' | 'pending' | 'sent' | 'failed';
+  missingReferencedInvoice?: string | null;
   total: number;
   paid: number;
   balance: number;
 };
 
-const documentLabel = (documents: ManagerOrderDocumentItem[]) => {
-  if (!documents.length) return 'Не созданы';
+const plural = (count: number, one: string, few: string, many: string) => {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+};
+
+const documentTypesLabel = (documents: ManagerOrderDocumentItem[]) => {
   const labels = documents.slice(0, 3).map((item) => {
-    if (item.doc_type === 'contract') return 'договор';
-    if (item.doc_type === 'invoice') return 'счёт';
-    if (item.doc_type === 'act') return 'акт';
+    if (item.doc_type === 'contract') return 'Договор';
+    if (item.doc_type === 'invoice') return 'Счёт';
+    if (item.doc_type === 'act') return 'Акт';
     if (item.doc_type === 'tn2') return 'ТН-2';
     return item.number || item.doc_type || 'документ';
   });
-  return `${documents.length} док. · ${labels.join(', ')}`;
+  return labels.join(', ');
 };
+
+const documentDeliveryLabel = (status: OrderWorkspaceInput['documentEmailStatus']) => ({
+  sent: 'отправлены',
+  pending: 'отправляются',
+  failed: 'ошибка отправки',
+  unknown: 'история отправки недоступна',
+  none: 'нужно проверить и отправить',
+}[status || 'none']);
 
 export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderWorkspaceViewModel => {
   const inExecution = input.status === 'execution';
@@ -84,37 +103,48 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   const changedAt = inExecution
     ? (input.executionStatusChangedAt || input.statusChangedAt)
     : (input.negotiationStatusChangedAt || input.statusChangedAt);
-  const stageLabel = isClosed
-    ? 'Заказ завершён'
-    : inExecution
-      ? (EXECUTION_STATUS_LABELS[substatus] || 'Работы')
-      : (NEGOTIATION_STATUS_LABELS[substatus] || 'Переговоры');
+  const isDocumentStage = inExecution && (substatus === 'work_done' || substatus === 'awaiting_documents');
+  let stageLabel = NEGOTIATION_STATUS_LABELS[substatus] || 'Переговоры';
+  if (inExecution) stageLabel = EXECUTION_STATUS_LABELS[substatus] || 'Работы';
+  if (inExecution && substatus === 'awaiting_payment') stageLabel = 'Ожидание оплаты';
+  if (isDocumentStage) stageLabel = 'Оформление документов';
+  if (isClosed) stageLabel = 'Заказ завершён';
 
   const blockers: string[] = [];
   if (!input.productCount && !input.serviceCount) blockers.push('Смета не заполнена');
   if (input.balance > 0) blockers.push(`Остаток ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`);
   if (inExecution && substatus === 'work_done' && !input.documents.length) blockers.push('Нет закрывающих документов');
+  if (input.missingReferencedInvoice) blockers.push(`Не найден счёт ${input.missingReferencedInvoice} из назначения платежа`);
 
   let nextAction: OrderWorkspaceViewModel['nextAction'];
   if (isClosed) nextAction = { label: 'Проверить историю', target: 'documents', tone: 'slate' };
   else if (!input.productCount && !input.serviceCount) nextAction = { label: 'Заполнить смету', target: 'proposal', tone: 'sky' };
   else if (!inExecution && substatus === 'awaiting_visit') nextAction = { label: 'Назначить выезд', target: 'planning', tone: 'sky' };
-  else if (!inExecution && substatus === 'awaiting_payment') nextAction = { label: 'Открыть оплаты', target: 'payments', tone: 'emerald' };
+  else if (!inExecution && substatus === 'awaiting_payment') nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald' };
   else if (!inExecution && substatus === 'proposal_sent') nextAction = { label: 'Проверить предложение', target: 'proposal', tone: 'amber' };
   else if (!inExecution) nextAction = { label: 'Подготовить предложение', target: 'proposal', tone: 'sky' };
   else if (substatus === 'order_equipment' || substatus === 'awaiting_equipment') nextAction = { label: 'Проверить товар', target: 'proposal', tone: 'amber' };
   else if (substatus === 'needs_schedule' || substatus === 'scheduled') nextAction = { label: 'Открыть планирование', target: 'planning', tone: 'teal' };
-  else if (substatus === 'work_done' || substatus === 'awaiting_documents') nextAction = { label: 'Закрыть документы', target: 'documents', tone: 'teal' };
-  else nextAction = { label: 'Открыть оплаты', target: 'payments', tone: 'emerald' };
+  else if (substatus === 'work_done' || substatus === 'awaiting_documents') {
+    if (input.missingReferencedInvoice) nextAction = { label: `Проверить счёт ${input.missingReferencedInvoice}`, target: 'documents', tone: 'amber' };
+    else if (!input.documents.length) nextAction = { label: 'Создать комплект документов', target: 'documents', tone: 'teal' };
+    else if (input.documentEmailStatus === 'unknown') nextAction = { label: 'Проверить комплект документов', target: 'documents', tone: 'amber' };
+    else if (input.documentEmailStatus === 'failed') nextAction = { label: 'Повторить отправку документов', target: 'documents', tone: 'rose' };
+    else if (input.documentEmailStatus === 'pending') nextAction = { label: 'Проверить отправку документов', target: 'documents', tone: 'amber' };
+    else if (input.documentEmailStatus !== 'sent') nextAction = { label: 'Отправить документы', target: 'documents', tone: 'teal' };
+    else if (input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald' };
+    else nextAction = { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald' };
+  } else if (input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald' };
+  else nextAction = { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald' };
 
   const productStatus = !input.productCount
     ? 'Товар не выбран'
-    : (substatus === 'order_equipment' ? 'Нужно заказать' : substatus === 'awaiting_equipment' ? 'Ждём оборудование' : `${input.productCount} поз.`);
+    : (substatus === 'order_equipment' ? 'Нужно заказать' : substatus === 'awaiting_equipment' ? 'Ждём оборудование' : `${input.productCount} ${plural(input.productCount, 'товар', 'товара', 'товаров')}`);
   const workStatus = substatus === 'work_done' || substatus === 'awaiting_documents' || substatus === 'awaiting_payment'
-    ? 'Работы выполнены'
+    ? 'Выполнен'
     : input.installationDate
-      ? 'Работы назначены'
-      : 'Работы не назначены';
+      ? 'Назначен'
+      : 'Не назначен';
   const paymentStatus = input.balance <= 0 && input.total > 0
     ? 'Оплачено полностью'
     : `Оплачено ${Math.round(input.paid).toLocaleString('ru-RU')} из ${Math.round(input.total).toLocaleString('ru-RU')} BYN`;
@@ -131,23 +161,32 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
         label: 'Товар',
         status: productStatus,
         detail: input.linkedEquipmentCount ? `Оборудование на объекте: ${input.linkedEquipmentCount}` : 'Оборудование объекта ещё не создано',
+        actionLabel: !input.productCount ? 'Добавить товар' : input.linkedEquipmentCount ? 'Открыть товар и оборудование' : 'Создать оборудование',
         tone: !input.productCount ? 'rose' : (substatus === 'order_equipment' || substatus === 'awaiting_equipment') ? 'amber' : 'teal',
-        target: 'proposal',
+        target: 'equipment',
       },
       {
         id: 'work',
-        label: 'Работы',
+        label: 'Монтаж',
         status: workStatus,
-        detail: input.serviceCount ? `${input.serviceCount} услуг в смете` : 'Услуги не добавлены',
-        tone: workStatus === 'Работы выполнены' ? 'emerald' : input.installationDate ? 'teal' : 'amber',
+        detail: input.serviceCount ? `${input.serviceCount} ${plural(input.serviceCount, 'услуга', 'услуги', 'услуг')} в смете` : 'Услуги не добавлены',
+        actionLabel: workStatus === 'Выполнен' ? 'Открыть результат' : 'Открыть планирование',
+        tone: workStatus === 'Выполнен' ? 'emerald' : input.installationDate ? 'teal' : 'amber',
         target: 'planning',
       },
       {
         id: 'documents',
         label: 'Документы',
-        status: documentLabel(input.documents),
-        detail: input.documents.length ? 'Откройте комплект для проверки и отправки' : 'Создайте документы из актуальной сметы',
-        tone: input.documents.length ? 'teal' : 'amber',
+        status: input.documents.length ? `${input.documents.length} ${plural(input.documents.length, 'документ', 'документа', 'документов')}` : 'Не созданы',
+        detail: input.missingReferencedInvoice
+          ? `Счёт ${input.missingReferencedInvoice} из платежа не найден`
+          : input.documents.length
+            ? `${documentTypesLabel(input.documents)} · ${documentDeliveryLabel(input.documentEmailStatus)}`
+            : 'Создайте документы из актуальной сметы',
+        actionLabel: input.missingReferencedInvoice
+          ? 'Проверить счёт'
+          : input.documents.length ? 'Открыть комплект' : 'Создать документы',
+        tone: input.missingReferencedInvoice || input.documentEmailStatus === 'failed' ? 'rose' : input.documentEmailStatus === 'unknown' || !input.documents.length ? 'amber' : 'teal',
         target: 'documents',
       },
       {
@@ -155,6 +194,7 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
         label: 'Оплата',
         status: paymentStatus,
         detail: input.balance > 0 ? `Долг ${Math.round(input.balance).toLocaleString('ru-RU')} BYN` : 'Долга нет',
+        actionLabel: input.balance > 0 ? 'Внести оплату' : 'Открыть оплаты',
         tone: input.balance > 0 ? 'rose' : 'emerald',
         target: 'payments',
       },

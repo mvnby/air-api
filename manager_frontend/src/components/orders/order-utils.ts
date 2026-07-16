@@ -21,7 +21,7 @@ export const EXECUTION_STATUS_OPTIONS = [
     { value: 'needs_schedule', label: 'Назначить работы', icon: 'event_available', tone: 'teal' },
     { value: 'scheduled', label: 'Работы назначены', icon: 'event', tone: 'cyan' },
     { value: 'work_done', label: 'Работы выполнены', icon: 'task_alt', tone: 'green' },
-    { value: 'awaiting_documents', label: 'Закрыть документы', icon: 'fact_check', tone: 'indigo' },
+    { value: 'awaiting_documents', label: 'Оформление документов', icon: 'fact_check', tone: 'indigo' },
     { value: 'awaiting_payment', label: 'Ждет оплату', icon: 'payments', tone: 'emerald' },
 ] as const;
 
