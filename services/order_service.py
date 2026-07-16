@@ -15,6 +15,7 @@ from models.common import ClosingResult
 from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
+from services.order_product_line_service import OrderProductLineService
 
 logger = logging.getLogger(__name__)
 
@@ -2867,12 +2868,7 @@ class OrderService:
                     if missing_product_ids:
                         raise ValueError(f"Product not found: {missing_product_ids[0]}")
                 product_cost_defaults = await OrderService._build_product_line_cost_defaults(session, list(payload.products))
-                await session.execute(
-                    delete(OrderProductLink).where(
-                        OrderProductLink.order_id == order_id,
-                        OrderProductLink.proposal_id == target_proposal_id,
-                    )
-                )
+                product_line_values = []
                 for product_line in payload.products:
                     logistics_components = OrderService._serialize_order_logistics_components(
                         product_line.logistics_components
@@ -2882,20 +2878,26 @@ class OrderService:
                         product_line.product_id,
                         logistics_components,
                     )
-                    new_product_link = OrderProductLink(
-                        order_id=order_id,
-                        proposal_id=target_proposal_id,
-                        product_id=product_line.product_id,
-                        quantity=product_line.quantity,
-                        price=product_line.price,
-                        cost=(
-                            product_line.cost
-                            if product_line.cost is not None
-                            else product_cost_defaults.get(int(product_line.product_id), 0)
-                        ),
-                        logistics_components=logistics_components,
+                    product_line_values.append(
+                        {
+                            "link_id": product_line.link_id,
+                            "product_id": product_line.product_id,
+                            "quantity": product_line.quantity,
+                            "price": product_line.price,
+                            "cost": (
+                                product_line.cost
+                                if product_line.cost is not None
+                                else product_cost_defaults.get(int(product_line.product_id), 0)
+                            ),
+                            "logistics_components": logistics_components,
+                        }
                     )
-                    session.add(new_product_link)
+                await OrderProductLineService.reconcile(
+                    session,
+                    order_id=order_id,
+                    proposal_id=target_proposal_id,
+                    lines=product_line_values,
+                )
 
             if "services" in fields_set and payload.services is not None:
                 for service_line in payload.services:

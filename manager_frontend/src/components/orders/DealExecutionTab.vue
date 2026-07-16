@@ -74,28 +74,6 @@ const deleteStage = async (stageId: number, stageName: string) => {
     }
 };
 
-const updateEquipmentStatus = async (newStatus: string) => {
-    try {
-        await ManagerOrdersService.patchManagerOrder(props.order.id, {
-            equipment_status: newStatus
-        });
-        emit('refresh');
-    } catch (e: any) {
-        setToast(`Ошибка: ${getApiErrorMessage(e)}`, 'error');
-    }
-};
-
-const toggleKit = async (val: boolean) => {
-    try {
-        await ManagerOrdersService.patchManagerOrder(props.order.id, {
-            standard_install_kit_issued: val
-        });
-        emit('refresh');
-    } catch (e: any) {
-        setToast(`Ошибка: ${getApiErrorMessage(e)}`, 'error');
-    }
-};
-
 const closeDeal = async () => {
     try {
         await ManagerOrdersService.patchManagerOrder(props.order.id, {
@@ -300,34 +278,6 @@ watch(() => props.order.id, () => {
             <button class="btn-mini" :disabled="!newStageName" @click="addStage">Сохранить</button>
         </div>
     </div>
-  </section>
-
-  <!-- ZONE 2: Picking List -->
-  <section class="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 border-b border-slate-100 pb-3">
-          <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk']">Склад и комплектация</h3>
-          
-          <div class="flex flex-wrap items-center gap-2 border border-slate-300 bg-slate-50 rounded-lg p-1 mt-3 md:mt-0 w-full md:w-auto">
-              <button class="px-3 py-1 flex-1 md:flex-none justify-center rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'pending' ? 'bg-red-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('pending')">🔴 Не собрано</button>
-              <button class="px-3 py-1 flex-1 md:flex-none justify-center rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'reserved' ? 'bg-amber-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('reserved')">🟡 Забронировано</button>
-              <button class="px-3 py-1 flex-1 md:flex-none justify-center rounded text-xs font-medium transition-colors" :class="order.equipment_status === 'issued' ? 'bg-teal-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'" @click="updateEquipmentStatus('issued')">🟢 Выдано бригаде</button>
-          </div>
-      </div>
-
-      <div class="bg-slate-50 rounded-xl p-4 border border-slate-200 mb-4">
-          <ul class="space-y-2 text-sm text-slate-700">
-              <li v-for="link in order.product_lines" :key="link.id" class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-slate-100">
-                  <span class="font-medium flex-1">{{ link.product_title }}</span>
-                  <span class="bg-slate-100 px-2 py-0.5 rounded font-bold text-slate-600">{{ link.quantity }} шт.</span>
-              </li>
-              <li v-if="!order.product_lines?.length" class="text-slate-400 italic py-2">Нет оборудования в смете</li>
-          </ul>
-      </div>
-
-      <label class="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
-          <input type="checkbox" :checked="order.standard_install_kit_issued" @change="toggleKit(($event.target as HTMLInputElement).checked)" class="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-600" />
-          <span class="font-medium text-slate-800 text-sm">Выдать стандартный монтажный комплект (Кронштейны, труба и т.д.)</span>
-      </label>
   </section>
 
   <!-- ZONE 3: Finance -->
