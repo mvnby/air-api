@@ -11,6 +11,7 @@ export interface CatalogQuery {
     tag_slugs?: string[];
     is_inverter?: boolean;
     has_wifi?: boolean;
+    color?: "black";
     heating_min?: number;
     area_min?: number;
     area_max?: number;
@@ -21,6 +22,7 @@ interface NormalizedFilters {
     tag_slugs: string[];
     is_inverter?: boolean;
     has_wifi?: boolean;
+    color?: "black";
     heating_min?: number;
     area_min?: number;
     area_max?: number;
@@ -61,6 +63,7 @@ function normalizeFilters(filters: CatalogQuery): NormalizedFilters {
             typeof filters.has_wifi === "boolean"
                 ? filters.has_wifi
                 : undefined,
+        color: filters.color === "black" ? "black" : undefined,
         heating_min: normalizeNumber(filters.heating_min),
         area_min: normalizeNumber(filters.area_min),
         area_max: normalizeNumber(filters.area_max),
@@ -72,6 +75,7 @@ function areFiltersEqual(left: NormalizedFilters, right: NormalizedFilters) {
         left.sort === right.sort &&
         left.is_inverter === right.is_inverter &&
         left.has_wifi === right.has_wifi &&
+        left.color === right.color &&
         left.heating_min === right.heating_min &&
         left.area_min === right.area_min &&
         left.area_max === right.area_max &&
@@ -90,6 +94,7 @@ export function buildCatalogQueryFromVirtual(
         tag_slugs: [...(config.filters.tag_slugs || [])],
         is_inverter: config.filters.is_inverter,
         has_wifi: config.filters.has_wifi,
+        color: config.filters.color,
         heating_min: config.filters.heating_min,
         area_min: config.filters.area_min,
         area_max: config.filters.area_max,
@@ -107,6 +112,7 @@ export function matchVirtualCategoryByFilters(
             tag_slugs: category.filters.tag_slugs || [],
             is_inverter: category.filters.is_inverter,
             has_wifi: category.filters.has_wifi,
+            color: category.filters.color,
             heating_min: category.filters.heating_min,
             area_min: category.filters.area_min,
             area_max: category.filters.area_max,

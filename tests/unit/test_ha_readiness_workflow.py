@@ -43,6 +43,7 @@ def test_ha_readiness_workflow_wires_core_and_soft_blocker_inputs():
     assert "scripts/ha/check_api_ha_readiness.sh" in audit_step["run"]
     assert "PRIMARY_SSH" in audit_step["run"]
     assert "STANDBY_SSH" in audit_step["run"]
+    assert "PITR_WORKFLOW_IDENTITY_FILE" in audit_step["run"]
     assert "api-ha-readiness.log" in audit_step["run"]
     assert "strict:" in summary_step["run"]
     assert artifact_step["if"] == "always()"
@@ -56,6 +57,8 @@ def test_ha_readiness_resolves_patroni_primary_and_uses_role_aware_monitor():
 
     assert "check_patroni_production.py --resolve-primary" in script
     assert "python3 scripts/ha/check_patroni_production.py" in script
+    assert "run_postgres_pitr_workflow.py --phase verify" in script
+    assert 'PITR_WORKFLOW_IDENTITY_FILE' in script
     assert 'API_DB_HA_MODE="${API_DB_HA_MODE:-physical}"' in script
     assert 'CONFIGURED_PRIMARY_ORIGIN="${PRIMARY_ORIGIN}"' in script
 

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import CatalogColorFilter from './catalog/CatalogColorFilter.vue';
 import ProductCard from './ProductCard.vue';
 import { getCatalog, getFiltersConfig, resolveImageUrl } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
@@ -91,6 +92,7 @@ const currentAreaMax = ref(props.initialFilters?.area_max ?? null);
 const currentIsInverter = ref(props.initialFilters?.is_inverter ?? null);
 const currentHasWifi = ref(props.initialFilters?.has_wifi ?? null);
 const currentHasFreshAir = ref(props.initialFilters?.has_fresh_air ?? null);
+const currentColor = ref(props.initialFilters?.color ?? null);
 const currentHeatingMin = ref(props.initialFilters?.heating_min ?? null);
 const currentIndoorTypes = ref([...(props.initialFilters?.indoor_types || [])]);
 const currentBrandSlugs = ref([...new Set(initialBrandSlugs.map((slug) => String(slug || '').trim()).filter(Boolean))]);
@@ -598,6 +600,7 @@ const hasActiveAdvancedFilters = computed(() => (
   || currentIsInverter.value !== null
   || currentHasWifi.value !== null
   || currentHasFreshAir.value !== null
+  || (currentColor.value !== null && lockedFilters.value?.color == null)
   || currentHeatingMin.value !== null
 ));
 
@@ -662,6 +665,7 @@ const getParamsFromUrl = () => {
       : sp.get('has_fresh_air') === 'false'
         ? false
         : null,
+    color: sp.get('color') === 'black' ? 'black' : null,
     indoor_types: sp.getAll('indoor_types').flatMap((value) => value.split(',')).map((v) => v.trim()).filter(Boolean),
     heating_min: sp.get('heating_min') || null,
   };
@@ -689,6 +693,7 @@ const applyLockedFilters = (params) => {
     'is_inverter',
     'has_wifi',
     'has_fresh_air',
+    'color',
     'heating_min',
     'sort',
   ];
@@ -717,6 +722,7 @@ const syncStateFromUrl = () => {
   currentIsInverter.value = params.is_inverter;
   currentHasWifi.value = params.has_wifi;
   currentHasFreshAir.value = params.has_fresh_air;
+  currentColor.value = params.color;
   currentIndoorTypes.value = [...params.indoor_types];
   currentHeatingMin.value = params.heating_min;
 
@@ -766,6 +772,7 @@ const buildApiParams = (page = 1) => {
     is_inverter: currentIsInverter.value,
     has_wifi: currentHasWifi.value,
     has_fresh_air: currentHasFreshAir.value,
+    color: currentColor.value || undefined,
     indoor_types: isIndustrialCategory.value ? [...currentIndoorTypes.value] : undefined,
     heating_min: currentHeatingMin.value || undefined,
   };
@@ -803,6 +810,7 @@ const syncUrlFromState = (page = 1, { replace = false } = {}) => {
   if (params.is_inverter !== null && params.is_inverter !== undefined) sp.set('is_inverter', String(params.is_inverter));
   if (params.has_wifi !== null && params.has_wifi !== undefined) sp.set('has_wifi', String(params.has_wifi));
   if (params.has_fresh_air !== null && params.has_fresh_air !== undefined) sp.set('has_fresh_air', String(params.has_fresh_air));
+  if (params.color) sp.set('color', params.color);
   if (params.indoor_types && params.indoor_types.length > 0) {
     params.indoor_types.forEach((value) => sp.append('indoor_types', value));
   }
@@ -1062,11 +1070,22 @@ const setHeatingMin = async (value) => {
   await fetchProducts({ page: 1, append: false });
 };
 
+const toggleColorFilter = async (value) => {
+  if (lockedFilters.value?.color === value && currentColor.value === value) {
+    if (typeof window !== 'undefined') window.location.assign('/catalog/');
+    return;
+  }
+  currentColor.value = currentColor.value === value ? null : value;
+  syncUrlFromState(1);
+  await fetchProducts({ page: 1, append: false });
+};
+
 const resetAdvancedFilters = async () => {
   sort.value = CATALOG_DEFAULT_SORT;
   currentIsInverter.value = null;
   currentHasWifi.value = null;
   currentHasFreshAir.value = null;
+  currentColor.value = lockedFilters.value?.color ?? null;
   currentIndoorTypes.value = [];
   currentHeatingMin.value = null;
   if (!isHouseholdCategory.value) {
@@ -1368,6 +1387,8 @@ onMounted(async () => {
             </button>
           </div>
         </div>
+
+        <CatalogColorFilter :value="currentColor" @toggle="toggleColorFilter" />
 
         <div class="advanced-row">
           <div class="control-label">Обогрев</div>

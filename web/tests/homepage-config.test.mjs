@@ -60,6 +60,20 @@ describe("homepage conversion routes", () => {
         }
     });
 
+    it("routes the black quick pick through the canonical color filter", () => {
+        const quickPick = homepage.HOMEPAGE_QUICK_PICKS.find(
+            (item) => item.analyticsItem === "black",
+        );
+        const category = virtualCategories.VIRTUAL_CATEGORIES.find(
+            (item) => item.slug === "black",
+        );
+
+        assert.equal(quickPick?.href, "/catalog/black/");
+        assert.equal(quickPick?.colorSwatch, "black");
+        assert.equal(category?.filters.color, "black");
+        assert.deepEqual(category?.filters.tag_slugs, ["cat-household"]);
+    });
+
     it("keeps analytics event names distinct and free of PII fields", () => {
         const events = Object.values(homepage.HOMEPAGE_ANALYTICS_EVENTS);
         assert.equal(new Set(events).size, events.length);

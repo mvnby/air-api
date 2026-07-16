@@ -1,6 +1,6 @@
 """Public product/catalog endpoints split from the main API router."""
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +64,10 @@ async def get_catalog(
     heating_min: Optional[int] = None,
     has_wifi: Optional[bool] = None,
     has_fresh_air: Optional[bool] = None,
+    color: Optional[Literal["black"]] = Query(
+        None,
+        description="Canonical indoor unit color family",
+    ),
     indoor_types: Optional[List[str]] = Query(
         None,
         description="Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
@@ -91,6 +95,7 @@ async def get_catalog(
         heating_min=heating_min,
         has_wifi=has_wifi,
         has_fresh_air=has_fresh_air,
+        color=color,
         indoor_types=indoor_types,
         tag_slugs=tag_slugs,
         brand_slugs=brand_slugs,
