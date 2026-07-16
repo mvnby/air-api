@@ -169,3 +169,108 @@ def test_configure_env_dry_run_does_not_write(tmp_path):
     assert env_file.read_text(encoding="utf-8") == "POSTGRES_USER=postgres\n"
     assert not list(tmp_path.glob(".env.bak-pitr-*"))
     assert not (tmp_path / ".mvn-postgres-pitr.secrets.env").exists()
+
+
+def test_payload_bound_transaction_survives_legitimate_project_env_drift(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("POSTGRES_USER=postgres\nDEPLOY_GENERATION=1\n", encoding="utf-8")
+    env_file.chmod(0o600)
+    input_file = tmp_path / "pitr.env"
+    _write_input_env(input_file)
+    identity = (
+        "--root-transaction-id",
+        "46fb45d80a7e58531bdddb79a6bd5fb3",
+        "--transaction-node",
+        "zakup",
+        "--transaction-stage",
+        "configure-node",
+    )
+
+    first = _run_configure(
+        tmp_path, "--input-env-file", str(input_file), "--enable-archive", *identity
+    )
+    assert first.returncode == 0, first.stderr
+    receipt_root = tmp_path / ".mvn-postgres-pitr-transactions-receipts"
+    first_receipts = sorted(receipt_root.glob("*.json"))
+    assert len(first_receipts) == 1
+
+    env_file.write_text(
+        env_file.read_text(encoding="utf-8").replace(
+            "DEPLOY_GENERATION=1", "DEPLOY_GENERATION=2"
+        ),
+        encoding="utf-8",
+    )
+    second = _run_configure(
+        tmp_path, "--input-env-file", str(input_file), "--enable-archive", *identity
+    )
+    assert second.returncode == 0, second.stderr
+    second_receipts = sorted(receipt_root.glob("*.json"))
+    assert len(second_receipts) == 2
+    assert first_receipts[0] in second_receipts
+    stable_paths = (env_file, tmp_path / ".mvn-postgres-pitr.secrets.env", *second_receipts)
+    stable_metadata = {
+        path: (path.stat().st_ino, path.stat().st_mtime_ns) for path in stable_paths
+    }
+
+    replay = _run_configure(
+        tmp_path, "--input-env-file", str(input_file), "--enable-archive", *identity
+    )
+    assert replay.returncode == 0, replay.stderr
+    assert sorted(receipt_root.glob("*.json")) == second_receipts
+    assert {
+        path: (path.stat().st_ino, path.stat().st_mtime_ns) for path in stable_paths
+    } == stable_metadata
+
+
+def test_payload_bound_transaction_fails_closed_on_completed_target_drift(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("POSTGRES_USER=postgres\n", encoding="utf-8")
+    env_file.chmod(0o600)
+    input_file = tmp_path / "pitr.env"
+    _write_input_env(input_file)
+    identity = (
+        "--root-transaction-id",
+        "46fb45d80a7e58531bdddb79a6bd5fb3",
+        "--transaction-node",
+        "mvn-api",
+        "--transaction-stage",
+        "configure-node",
+    )
+    first = _run_configure(
+        tmp_path, "--input-env-file", str(input_file), "--enable-archive", *identity
+    )
+    assert first.returncode == 0, first.stderr
+
+    env_file.write_text(
+        env_file.read_text(encoding="utf-8").replace(
+            "POSTGRES_PITR_ARCHIVE_MODE=on", "POSTGRES_PITR_ARCHIVE_MODE=off"
+        ),
+        encoding="utf-8",
+    )
+    replay = _run_configure(
+        tmp_path, "--input-env-file", str(input_file), "--enable-archive", *identity
+    )
+
+    assert replay.returncode != 0
+    assert "completed PITR transaction target files drifted" in replay.stderr
+    assert "POSTGRES_PITR_ARCHIVE_MODE=off" in env_file.read_text(encoding="utf-8")
+
+
+def test_payload_bound_transaction_rejects_partial_identity_during_dry_run(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("POSTGRES_USER=postgres\n", encoding="utf-8")
+    env_file.chmod(0o600)
+    input_file = tmp_path / "pitr.env"
+    _write_input_env(input_file)
+
+    result = _run_configure(
+        tmp_path,
+        "--input-env-file",
+        str(input_file),
+        "--root-transaction-id",
+        "46fb45d80a7e58531bdddb79a6bd5fb3",
+        "--dry-run",
+    )
+
+    assert result.returncode != 0
+    assert "requires exactly root ID, node, and stage" in result.stderr
