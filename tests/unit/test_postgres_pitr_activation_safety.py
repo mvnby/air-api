@@ -70,7 +70,9 @@ def test_bootstrap_stages_final_archive_state_and_supports_late_resume():
 
     assert "--enable-archive" in configure_body
     assert "--disable-archive" not in configure_body
-    assert "config_subtransaction_id configure-node" in configure_body
+    assert '--root-transaction-id "${PITR_TRANSACTION_ID}"' in configure_body
+    assert '--transaction-stage configure-node' in configure_body
+    assert '--transaction-node "${node_alias}"' in configure_body
     assert "--pitr-env-policy legacy-migration" in policy_body
     assert "--pitr-env-policy migration-files-clean" in policy_body
     assert "--pitr-env-policy configured" in policy_body

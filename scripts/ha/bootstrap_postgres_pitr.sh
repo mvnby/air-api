@@ -264,31 +264,6 @@ reviewed_node_alias() {
   esac
 }
 
-config_subtransaction_id() {
-  local stage="$1" node_alias
-  require_transaction_id
-  case "${stage}" in
-    configure-node|enable-archive) ;;
-    *) die "unreviewed PITR config transaction stage" ;;
-  esac
-  node_alias="$(reviewed_node_alias)"
-  /usr/bin/python3 -I - "${PITR_TRANSACTION_ID}" "${node_alias}" "${stage}" <<'PY'
-import hashlib
-import re
-import sys
-
-root_transaction_id, node_alias, stage = sys.argv[1:]
-if re.fullmatch(r"[0-9a-f]{32}", root_transaction_id) is None:
-    raise SystemExit("invalid root PITR transaction ID")
-if node_alias not in {"mvn-api", "zakup"}:
-    raise SystemExit("invalid PITR node alias")
-if stage not in {"configure-node", "enable-archive"}:
-    raise SystemExit("invalid PITR config stage")
-material = "\0".join(("mvn-pitr-config-v1", root_transaction_id, node_alias, stage))
-print(hashlib.sha256(material.encode()).hexdigest()[:32])
-PY
-}
-
 print_archive_settings() {
   compose exec -T "${DB_SERVICE}" sh -lc 'psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-air_conditioners}" -AtF "|"' <<'SQL' |
 select name, setting
@@ -343,16 +318,18 @@ provision_node() {
 }
 
 configure_node() {
-  local config_transaction_id
+  local node_alias
   require_root_for_write_phase
   require_transaction_id
   require_active_patroni_compose legacy-or-clean
   require_env_input_file
-  config_transaction_id="$(config_subtransaction_id configure-node)"
+  node_alias="$(reviewed_node_alias)"
   "${CONFIGURE_HELPER}" \
     --project-dir "${PROJECT_DIR}" \
     --input-env-file "${ENV_INPUT_FILE}" \
-    --transaction-id "${config_transaction_id}" \
+    --root-transaction-id "${PITR_TRANSACTION_ID}" \
+    --transaction-node "${node_alias}" \
+    --transaction-stage configure-node \
     --enable-archive
   require_active_patroni_compose migration-files-clean
   log "root-only PITR secrets committed and final archive env staged"
@@ -540,14 +517,16 @@ basebackup() {
 }
 
 enable_archive_env() {
-  local config_transaction_id
+  local node_alias
   require_root_for_write_phase
   require_transaction_id
   require_active_patroni_compose configured
-  config_transaction_id="$(config_subtransaction_id enable-archive)"
+  node_alias="$(reviewed_node_alias)"
   "${CONFIGURE_HELPER}" \
     --project-dir "${PROJECT_DIR}" \
-    --transaction-id "${config_transaction_id}" \
+    --root-transaction-id "${PITR_TRANSACTION_ID}" \
+    --transaction-node "${node_alias}" \
+    --transaction-stage enable-archive \
     --enable-archive
   log "PITR archive env staged on the reviewed Patroni node"
 }
