@@ -6,6 +6,8 @@ export type CatalogSort =
     | "area_asc"
     | "area_desc";
 
+export type CatalogColor = "black";
+
 export interface VirtualCategoryConfig {
     slug: string;
     seoTitle: string;
@@ -18,6 +20,7 @@ export interface VirtualCategoryConfig {
         area_max?: number;
         is_inverter?: boolean;
         has_wifi?: boolean;
+        color?: CatalogColor;
         heating_min?: number;
         sort?: CatalogSort;
     };
@@ -75,6 +78,20 @@ export const VIRTUAL_CATEGORIES: VirtualCategoryConfig[] = [
         filters: {
             tag_slugs: ["cat-household"],
             has_wifi: true,
+            sort: "recommended",
+        },
+        indexable: true,
+    },
+    {
+        slug: "black",
+        seoTitle: "Купить черный кондиционер в Витебске",
+        seoDescription:
+            "Черные кондиционеры в Витебске: настенные сплит-системы с темным корпусом, подбором и монтажом.",
+        h1: "Черные кондиционеры в Витебске",
+        intro: "Модели с черным, зеркально-черным или комбинированным темным корпусом для интерьеров, где белый блок не подходит.",
+        filters: {
+            tag_slugs: ["cat-household"],
+            color: "black",
             sort: "recommended",
         },
         indexable: true,

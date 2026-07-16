@@ -18,6 +18,15 @@ from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierO
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
 ALLOWED_INDOOR_TYPE_FILTERS = {"duct", "cassette", "floor_ceiling", "column"}
+BLACK_COLOR_PATTERNS = (
+    "%черн%",
+    "%чёрн%",
+    "%Черн%",
+    "%Чёрн%",
+    "%ЧЕРН%",
+    "%ЧЁРН%",
+    "%black%",
+)
 CATALOG_CATEGORY_SLUGS = {"cat-household", "cat-multi", "cat-industrial"}
 CATALOG_RANKING_WEIGHTS = {
     "availability": 100,
@@ -173,6 +182,7 @@ class ProductDAO:
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
         has_fresh_air: Optional[bool] = None,
+        color: Optional[str] = None,
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         brand_slugs: Optional[List[str]] = None,
@@ -268,6 +278,10 @@ class ProductDAO:
                     stmt = stmt.where(or_(fresh_air_expr == 0, fresh_air_expr.is_(None)))
                 else:
                     stmt = stmt.where(or_(fresh_air_expr == False, fresh_air_expr.is_(None)))
+
+        if color == "black":
+            color_expr = ProductDAO._json_text_expr(session, "color")
+            stmt = stmt.where(or_(*(color_expr.ilike(pattern) for pattern in BLACK_COLOR_PATTERNS)))
 
         if indoor_types:
             normalized_types = [
@@ -503,6 +517,7 @@ class ProductDAO:
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
         has_fresh_air: Optional[bool] = None,
+        color: Optional[str] = None,
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         brand_slugs: Optional[List[str]] = None,
@@ -533,6 +548,7 @@ class ProductDAO:
             heating_min=heating_min,
             has_wifi=has_wifi,
             has_fresh_air=has_fresh_air,
+            color=color,
             indoor_types=indoor_types,
             tag_slugs=tag_slugs,
             brand_slugs=brand_slugs,
@@ -577,6 +593,7 @@ class ProductDAO:
         heating_min: Optional[int] = None,
         has_wifi: Optional[bool] = None,
         has_fresh_air: Optional[bool] = None,
+        color: Optional[str] = None,
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         brand_slugs: Optional[List[str]] = None,
@@ -596,6 +613,7 @@ class ProductDAO:
             heating_min=heating_min,
             has_wifi=has_wifi,
             has_fresh_air=has_fresh_air,
+            color=color,
             indoor_types=indoor_types,
             tag_slugs=tag_slugs,
             brand_slugs=brand_slugs,

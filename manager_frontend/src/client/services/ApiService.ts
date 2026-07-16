@@ -407,6 +407,7 @@ export class ApiService {
      * @param heatingMin
      * @param hasWifi
      * @param hasFreshAir
+     * @param color Canonical indoor unit color family
      * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
      * @param tagSlugs
      * @param brandSlugs Canonical brand slugs to include
@@ -426,6 +427,7 @@ export class ApiService {
         heatingMin?: (number | null),
         hasWifi?: (boolean | null),
         hasFreshAir?: (boolean | null),
+        color?: (string | null),
         indoorTypes?: (Array<string> | null),
         tagSlugs?: (Array<string> | null),
         brandSlugs?: (Array<string> | null),
@@ -446,6 +448,7 @@ export class ApiService {
                 'heating_min': heatingMin,
                 'has_wifi': hasWifi,
                 'has_fresh_air': hasFreshAir,
+                'color': color,
                 'indoor_types': indoorTypes,
                 'tag_slugs': tagSlugs,
                 'brand_slugs': brandSlugs,
@@ -469,6 +472,7 @@ export class ApiService {
      * @param heatingMin
      * @param hasWifi
      * @param hasFreshAir
+     * @param color Canonical indoor unit color family
      * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
      * @param tagSlugs
      * @param brandSlugs Canonical brand slugs to include
@@ -488,6 +492,7 @@ export class ApiService {
         heatingMin?: (number | null),
         hasWifi?: (boolean | null),
         hasFreshAir?: (boolean | null),
+        color?: (string | null),
         indoorTypes?: (Array<string> | null),
         tagSlugs?: (Array<string> | null),
         brandSlugs?: (Array<string> | null),
@@ -508,6 +513,7 @@ export class ApiService {
                 'heating_min': heatingMin,
                 'has_wifi': hasWifi,
                 'has_fresh_air': hasFreshAir,
+                'color': color,
                 'indoor_types': indoorTypes,
                 'tag_slugs': tagSlugs,
                 'brand_slugs': brandSlugs,
