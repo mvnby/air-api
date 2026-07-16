@@ -5,8 +5,8 @@
 import type { ManagerTariffServiceKind } from './ManagerTariffServiceKind';
 export type ManagerTariffCreatePayload = {
     service_kind?: ManagerTariffServiceKind;
-    selector_label: string;
-    estimate_template?: string;
+    short_name: string;
+    full_description?: (string | null);
     category?: string;
     power_range?: string;
     base_price?: number;

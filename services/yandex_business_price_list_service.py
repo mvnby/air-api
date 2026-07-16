@@ -99,7 +99,7 @@ class YandexBusinessPriceListService:
     @staticmethod
     def _service_description(tariff: ServiceTariff) -> str:
         parts = [
-            tariff.estimate_template,
+            tariff.effective_full_description,
             tariff.comment,
         ]
         if tariff.power_range:

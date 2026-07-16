@@ -39,6 +39,8 @@ const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string
 
 const serviceKindLabel = (kind: ManagerTariffServiceKind | string) =>
   serviceKindOptions.find((item) => item.value === kind)?.label ?? String(kind || 'Услуга');
+const tariffShortName = (tariff: ManagerTariffResponse) => tariff.short_name || tariff.selector_label;
+const tariffFullDescription = (tariff: ManagerTariffResponse) => tariff.full_description || tariffShortName(tariff);
 
 const ROUTE_AWARE_SERVICE_KINDS = new Set<ManagerTariffServiceKind>(['installation', 'pre_install']);
 const shouldShowRouteColumn = computed(() => ROUTE_AWARE_SERVICE_KINDS.has(kindFilter.value));
@@ -81,7 +83,7 @@ const openEditTariff = (tariff: ManagerTariffResponse) => {
 };
 
 const confirmDeleteTariff = async (tariff: ManagerTariffResponse) => {
-  if (!window.confirm(`Удалить тариф "${tariff.selector_label}"?`)) return;
+  if (!window.confirm(`Удалить тариф "${tariffShortName(tariff)}"?`)) return;
   try {
     await api.deleteManagerTariff(tariff.id);
     setToast('Тариф удален');
@@ -207,7 +209,7 @@ onMounted(loadTariffs);
             >
               <td class="px-4 py-3">
                 <button class="text-left" @click="selectedTariffId = tariff.id">
-                  <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ tariff.selector_label }}</div>
+                  <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ tariffShortName(tariff) }}</div>
                   <div class="text-xs text-gray-500 dark:text-slate-400">
                     {{ serviceKindLabel(tariff.service_kind) }} · {{ tariff.category || '—' }} · {{ tariff.power_range || 'all' }} · sort {{ tariff.sort_order }}
                   </div>
@@ -264,8 +266,8 @@ onMounted(loadTariffs);
         <div v-else>
           <div class="flex items-start justify-between gap-3 mb-4">
             <div>
-              <h3 class="text-base font-semibold text-gray-900 dark:text-slate-100">{{ selectedTariff.selector_label }}</h3>
-              <p class="text-xs text-gray-500 dark:text-slate-400 mt-1">{{ selectedTariff.estimate_template }}</p>
+              <h3 class="text-base font-semibold text-gray-900 dark:text-slate-100">{{ tariffShortName(selectedTariff) }}</h3>
+              <p class="text-xs text-gray-500 dark:text-slate-400 mt-1">{{ tariffFullDescription(selectedTariff) }}</p>
             </div>
             <button
               @click="openAddRule(selectedTariff.id)"

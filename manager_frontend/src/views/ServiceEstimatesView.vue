@@ -73,7 +73,7 @@ const manualInputRules = computed(() =>
 
 const collapsedPreview = computed(() => {
   if (!calculation.value) return '';
-  const head = calculation.value.tariff.estimate_template;
+  const head = calculation.value.tariff.full_description || calculation.value.tariff.short_name || calculation.value.tariff.selector_label;
   const tail = (calculation.value.rule_lines || []).map((line) => line.name).filter(Boolean);
   if (!tail.length) return head;
   return `${head}; ${tail.join('; ')}`;
@@ -343,14 +343,14 @@ onMounted(async () => {
               >
                 <option :value="null">Выберите тариф</option>
                 <option v-for="tariff in tariffs" :key="tariff.id" :value="tariff.id">
-                  {{ tariff.selector_label }} · {{ tariff.base_price }} BYN
+                  {{ tariff.short_name || tariff.selector_label }} · {{ tariff.base_price }} BYN
                 </option>
               </select>
             </label>
           </div>
 
           <p v-if="selectedTariff" class="text-xs text-gray-500 dark:text-slate-400">
-            {{ selectedTariff.estimate_template }}
+            {{ selectedTariff.full_description || selectedTariff.short_name || selectedTariff.selector_label }}
           </p>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -442,7 +442,7 @@ onMounted(async () => {
         <div v-if="calculation" class="space-y-4">
           <div class="flex flex-wrap gap-2">
             <span class="inline-flex items-center rounded-full border border-gray-200 dark:border-slate-600 px-3 py-1 text-xs text-gray-600 dark:text-slate-300">
-              {{ calculation.tariff.selector_label }}
+              {{ calculation.tariff.short_name || calculation.tariff.selector_label }}
             </span>
             <span class="inline-flex items-center rounded-full border border-gray-200 dark:border-slate-600 px-3 py-1 text-xs text-gray-600 dark:text-slate-300">
               {{ calculation.tariff.category || '—' }} · {{ calculation.tariff.power_range || 'all' }}
@@ -591,7 +591,7 @@ onMounted(async () => {
                 <div v-if="item.comment" class="text-xs text-gray-500 dark:text-slate-400 mt-1">{{ item.comment }}</div>
               </td>
               <td class="px-3 py-2 hidden md:table-cell text-xs text-gray-500 dark:text-slate-400">
-                {{ item.tariff?.selector_label || 'legacy' }}
+                {{ item.tariff?.short_name || item.tariff?.selector_label || 'legacy' }}
               </td>
               <td class="px-3 py-2 text-right font-semibold text-gray-900 dark:text-slate-100">
                 {{ formatMoney(item.total) }} {{ item.currency }}
@@ -660,7 +660,7 @@ onMounted(async () => {
         <div v-if="detailLoading" class="text-sm text-gray-500 dark:text-slate-400">Загрузка...</div>
         <div v-else class="space-y-2">
           <div class="text-xs text-gray-500 dark:text-slate-400">
-            Тариф: {{ selectedEstimate.tariff?.selector_label || 'legacy' }} · статус {{ selectedEstimate.status }}
+            Тариф: {{ selectedEstimate.tariff?.short_name || selectedEstimate.tariff?.selector_label || 'legacy' }} · статус {{ selectedEstimate.status }}
           </div>
           <div class="rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
             <table class="min-w-full text-sm">

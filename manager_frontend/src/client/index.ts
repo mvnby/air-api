@@ -235,6 +235,7 @@ export type { ManagerServiceAttachmentAccessResponse } from './models/ManagerSer
 export type { ManagerServiceAttachmentItemResponse } from './models/ManagerServiceAttachmentItemResponse';
 export type { ManagerServiceAttachmentListResponse } from './models/ManagerServiceAttachmentListResponse';
 export type { ManagerServiceAttachmentUpdatePayload } from './models/ManagerServiceAttachmentUpdatePayload';
+export type { ManagerServiceDescriptionMode } from './models/ManagerServiceDescriptionMode';
 export type { ManagerServiceEstimateListResponse } from './models/ManagerServiceEstimateListResponse';
 export type { ManagerServiceEstimateOrderLinesMode } from './models/ManagerServiceEstimateOrderLinesMode';
 export type { ManagerServiceEstimateOrderLinesResponse } from './models/ManagerServiceEstimateOrderLinesResponse';

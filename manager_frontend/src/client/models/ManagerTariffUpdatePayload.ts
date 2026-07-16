@@ -5,8 +5,8 @@
 import type { ManagerTariffServiceKind } from './ManagerTariffServiceKind';
 export type ManagerTariffUpdatePayload = {
     service_kind?: (ManagerTariffServiceKind | null);
-    selector_label?: (string | null);
-    estimate_template?: (string | null);
+    short_name?: (string | null);
+    full_description?: (string | null);
     category?: (string | null);
     power_range?: (string | null);
     base_price?: (number | null);

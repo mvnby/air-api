@@ -1,5 +1,5 @@
 from typing import Annotated, List, Optional, Any, Dict, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, computed_field
 from datetime import date, datetime
 from enum import Enum
 from core.input_validation import (
@@ -3823,6 +3823,9 @@ class ManagerTariffResponse(BaseModel):
 
     id: int
     service_kind: ManagerTariffServiceKind
+    short_name: Optional[str] = None
+    full_description: Optional[str] = None
+    # Kept in the response while older Manager builds still consume them.
     selector_label: str
     estimate_template: str
     category: str
@@ -3837,8 +3840,11 @@ class ManagerTariffResponse(BaseModel):
 
 class ManagerTariffCreatePayload(BaseModel):
     service_kind: ManagerTariffServiceKind = ManagerTariffServiceKind.installation
-    selector_label: str
-    estimate_template: str = "Монтаж кондиционера, включая расходные материалы"
+    short_name: str = Field(validation_alias=AliasChoices("short_name", "selector_label"))
+    full_description: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("full_description", "estimate_template"),
+    )
     category: str = ""
     power_range: str = ""
     base_price: int = 0
@@ -3847,11 +3853,24 @@ class ManagerTariffCreatePayload(BaseModel):
     sort_order: int = 0
     comment: Optional[str] = None
 
+    @field_validator("short_name")
+    @classmethod
+    def validate_short_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("short_name must not be empty")
+        return value
+
 
 class ManagerTariffUpdatePayload(BaseModel):
     service_kind: Optional[ManagerTariffServiceKind] = None
-    selector_label: Optional[str] = None
-    estimate_template: Optional[str] = None
+    short_name: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("short_name", "selector_label"),
+    )
+    full_description: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("full_description", "estimate_template"),
+    )
     category: Optional[str] = None
     power_range: Optional[str] = None
     base_price: Optional[int] = None
@@ -3859,6 +3878,13 @@ class ManagerTariffUpdatePayload(BaseModel):
     is_active: Optional[bool] = None
     sort_order: Optional[int] = None
     comment: Optional[str] = None
+
+    @field_validator("short_name")
+    @classmethod
+    def validate_optional_short_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not value.strip():
+            raise ValueError("short_name must not be empty")
+        return value
 
 
 class ManagerTariffListResponse(BaseModel):
@@ -3868,6 +3894,9 @@ class ManagerTariffListResponse(BaseModel):
 class ManagerQuickTariffResponse(BaseModel):
     tariff_id: int
     service_kind: ManagerTariffServiceKind
+    short_name: str
+    full_description: Optional[str] = None
+    # Compatibility title for Manager builds deployed before description modes.
     title: str
     price: int
     category: str = ""
@@ -3966,6 +3995,8 @@ class ManagerEstimateRuleInputPayload(BaseModel):
 class ManagerTariffBriefResponse(BaseModel):
     id: int
     service_kind: ManagerTariffServiceKind
+    short_name: str
+    full_description: Optional[str] = None
     selector_label: str
     estimate_template: str
     category: str
@@ -4025,6 +4056,8 @@ class ManagerEstimateLineResponse(BaseModel):
     rule_type: Optional[ManagerTariffRuleType] = None
     service_id: Optional[int] = None
     name: str
+    short_name: Optional[str] = None
+    full_description: Optional[str] = None
     qty: float
     unit: str
     unit_price: float
@@ -4076,9 +4109,15 @@ class ManagerServiceEstimateOrderLinesMode(str, Enum):
     collapsed = "collapsed"
 
 
+class ManagerServiceDescriptionMode(str, Enum):
+    short = "short"
+    full = "full"
+
+
 class ManagerServiceEstimateOrderLinesResponse(BaseModel):
     estimate_id: int
     mode: ManagerServiceEstimateOrderLinesMode
+    description_mode: ManagerServiceDescriptionMode
     title: str
     services: List[ManagerOrderServiceLinePayload]
 

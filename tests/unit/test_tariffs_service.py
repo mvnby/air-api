@@ -9,6 +9,8 @@ def test_build_quick_add_title_enriches_generic_installation_tariff():
         service_kind="installation",
         selector_label="Монтаж настенного кондиционера",
         estimate_template="Монтаж кондиционера, включая расходные материалы",
+        short_name="Монтаж настенного кондиционера",
+        full_description="Монтаж кондиционера, включая расходные материалы",
         category="Wall",
         power_range="12",
         base_price=500,
@@ -70,6 +72,8 @@ async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
         service_kind="installation",
         selector_label="Монтаж настенного кондиционера",
         estimate_template="Монтаж кондиционера, включая расходные материалы",
+        short_name="Монтаж настенного кондиционера",
+        full_description="Монтаж кондиционера, включая расходные материалы",
         category="Wall",
         power_range="12",
         base_price=500,
@@ -144,6 +148,8 @@ async def test_list_quick_add_tariffs_filters_active_search_and_kind(db):
 
     assert [item.tariff_id for item in result] == [active_installation.id, active_dismantling.id, active_repair.id]
     assert result[0].price == 500
+    assert result[0].short_name == "Монтаж настенного кондиционера"
+    assert result[0].full_description == "Монтаж кондиционера, включая расходные материалы"
     assert "мощностью до 3,5 кВт" in result[0].title
 
     maintenance = await TariffsService.list_quick_add_tariffs(db, service_kind="maintenance", q="обслуж", limit=10)

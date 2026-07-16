@@ -23,14 +23,6 @@ const emit = defineEmits<{
 const loading = ref(false);
 const error = ref('');
 
-const DEFAULT_TEMPLATES: Record<ManagerTariffServiceKind, string> = {
-  installation: 'Монтаж сплит-системы, включая расходные материалы',
-  pre_install: 'Закладка межблочной трассы под кондиционер, включая материалы',
-  dismantling: 'Демонтаж кондиционера',
-  maintenance: 'Техническое обслуживание кондиционера',
-  repair: 'Ремонт кондиционера',
-};
-
 const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
   { value: 'installation', label: 'Монтаж' },
   { value: 'pre_install', label: 'Закладка коммуникаций' },
@@ -59,8 +51,8 @@ const powerPlaceholder = computed(() => {
 
 const formData = ref<ManagerTariffCreatePayload>({
   service_kind: 'installation',
-  selector_label: '',
-  estimate_template: DEFAULT_TEMPLATES.installation,
+  short_name: '',
+  full_description: null,
   category: '',
   power_range: '',
   base_price: 0,
@@ -74,8 +66,8 @@ const resetForm = () => {
   if (props.tariff) {
     formData.value = {
       service_kind: props.tariff.service_kind,
-      selector_label: props.tariff.selector_label,
-      estimate_template: props.tariff.estimate_template,
+      short_name: props.tariff.short_name || props.tariff.selector_label,
+      full_description: props.tariff.full_description || null,
       category: props.tariff.category,
       power_range: props.tariff.power_range,
       base_price: props.tariff.base_price,
@@ -88,8 +80,8 @@ const resetForm = () => {
     const serviceKind = props.initialServiceKind ?? 'installation';
     formData.value = {
       service_kind: serviceKind,
-      selector_label: '',
-      estimate_template: DEFAULT_TEMPLATES[serviceKind],
+      short_name: '',
+      full_description: null,
       category: '',
       power_range: '',
       base_price: 0,
@@ -104,10 +96,6 @@ const resetForm = () => {
 
 const handleServiceKindChange = () => {
   const serviceKind = formData.value.service_kind as ManagerTariffServiceKind;
-  const currentTemplate = String(formData.value.estimate_template || '').trim();
-  if (!currentTemplate || Object.values(DEFAULT_TEMPLATES).includes(currentTemplate)) {
-    formData.value.estimate_template = DEFAULT_TEMPLATES[serviceKind];
-  }
   if (!ROUTE_AWARE_SERVICE_KINDS.has(serviceKind)) {
     formData.value.included_route_meters = 0;
   } else if (!formData.value.included_route_meters) {
@@ -129,12 +117,8 @@ const close = () => {
 };
 
 const submit = async () => {
-  if (!String(formData.value.selector_label || '').trim()) {
+  if (!String(formData.value.short_name || '').trim()) {
     error.value = 'Короткое название обязательно';
-    return;
-  }
-  if (!String(formData.value.estimate_template || '').trim()) {
-    error.value = 'Шаблон формулировки обязателен';
     return;
   }
   loading.value = true;
@@ -146,8 +130,8 @@ const submit = async () => {
     if (props.tariff?.id) {
       const updatePayload: ManagerTariffUpdatePayload = {
         service_kind: formData.value.service_kind as ManagerTariffServiceKind,
-        selector_label: formData.value.selector_label,
-        estimate_template: formData.value.estimate_template,
+        short_name: formData.value.short_name,
+        full_description: formData.value.full_description || null,
         category: formData.value.category,
         power_range: formData.value.power_range,
         base_price: formData.value.base_price,
@@ -231,7 +215,7 @@ const submit = async () => {
             <label class="block">
               <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Короткое название *</span>
               <input
-                v-model="formData.selector_label"
+                v-model="formData.short_name"
                 type="text"
                 class="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200"
                 placeholder="Монтаж настенного до 3.5 кВт"
@@ -240,11 +224,12 @@ const submit = async () => {
             </label>
 
             <label class="block">
-              <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Шаблон формулировки *</span>
+              <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Подробное описание</span>
               <textarea
-                v-model="formData.estimate_template"
-                rows="2"
+                v-model="formData.full_description"
+                rows="5"
                 class="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 resize-none"
+                placeholder="Состав работ для подробных документов. Если оставить пустым, будет использовано короткое название."
                 :disabled="loading"
               />
             </label>
@@ -323,7 +308,7 @@ const submit = async () => {
             <button
               @click="submit"
               class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-teal-900/30"
-              :disabled="loading || !String(formData.selector_label || '').trim()"
+              :disabled="loading || !String(formData.short_name || '').trim()"
             >
               <span v-if="loading" class="material-icons-round text-sm animate-spin">refresh</span>
               <span v-else class="material-icons-round text-sm">save</span>

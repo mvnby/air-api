@@ -80,8 +80,8 @@ class TariffsService:
 
     @staticmethod
     def build_quick_add_title(tariff: ServiceTariff) -> str:
-        selector = (tariff.selector_label or "").strip()
-        template = (tariff.estimate_template or "").strip()
+        selector = tariff.effective_short_name
+        template = tariff.effective_full_description
         base = selector or template or "Услуга"
 
         title = base.rstrip(" .,")
@@ -104,6 +104,8 @@ class TariffsService:
         return ManagerQuickTariffResponse(
             tariff_id=int(tariff.id),
             service_kind=service_kind,
+            short_name=tariff.effective_short_name or "Услуга",
+            full_description=(tariff.full_description or "").strip() or None,
             title=TariffsService.build_quick_add_title(tariff),
             price=int(tariff.base_price or 0),
             category=tariff.category or "",
@@ -156,6 +158,8 @@ class TariffsService:
             starts_pattern = f"{query.lower()}%"
             stmt = stmt.where(
                 or_(
+                    ServiceTariff.short_name.ilike(pattern),
+                    ServiceTariff.full_description.ilike(pattern),
                     ServiceTariff.selector_label.ilike(pattern),
                     ServiceTariff.estimate_template.ilike(pattern),
                     ServiceTariff.category.ilike(pattern),
@@ -164,7 +168,9 @@ class TariffsService:
                 )
             )
             relevance_order = case(
+                (func.lower(ServiceTariff.short_name).like(starts_pattern), 0),
                 (func.lower(ServiceTariff.selector_label).like(starts_pattern), 0),
+                (func.lower(ServiceTariff.full_description).like(starts_pattern), 1),
                 (func.lower(ServiceTariff.estimate_template).like(starts_pattern), 1),
                 else_=2,
             )
@@ -209,10 +215,14 @@ class TariffsService:
             if TariffsService.supports_route_meters(payload.service_kind)
             else 0.0
         )
+        short_name = payload.short_name.strip()
+        full_description = (payload.full_description or "").strip() or None
         tariff = ServiceTariff(
             service_kind=payload.service_kind.value,
-            selector_label=payload.selector_label.strip(),
-            estimate_template=payload.estimate_template.strip(),
+            short_name=short_name,
+            full_description=full_description,
+            selector_label=short_name,
+            estimate_template=full_description or short_name,
             category=(payload.category or "").strip(),
             power_range=(payload.power_range or "").strip(),
             base_price=int(payload.base_price or 0),
@@ -241,10 +251,23 @@ class TariffsService:
             if key == "service_kind" and value is not None:
                 setattr(tariff, key, value.value if hasattr(value, "value") else str(value))
                 continue
-            if key in {"selector_label", "estimate_template", "category", "power_range", "comment"}:
-                setattr(tariff, key, (value or "").strip() or (None if key == "comment" else ""))
+            if key == "short_name":
+                tariff.short_name = (value or "").strip()
+                continue
+            if key in {"full_description", "comment"}:
+                setattr(tariff, key, (value or "").strip() or None)
+                continue
+            if key in {"category", "power_range"}:
+                setattr(tariff, key, (value or "").strip())
                 continue
             setattr(tariff, key, value)
+        if "short_name" in update_data and not tariff.short_name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="short_name must not be empty",
+            )
+        tariff.selector_label = tariff.effective_short_name
+        tariff.estimate_template = (tariff.full_description or "").strip() or tariff.effective_short_name
         if not TariffsService.supports_route_meters(next_service_kind_value):
             tariff.included_route_meters = 0.0
 

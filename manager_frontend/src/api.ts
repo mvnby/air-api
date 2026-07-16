@@ -45,6 +45,7 @@ import {
     type ManagerInstallEstimateSavePayload,
     type ManagerServiceEstimateListResponse,
     type ManagerServiceEstimateOrderLinesMode,
+    type ManagerServiceDescriptionMode,
     type ManagerServiceEstimateOrderLinesResponse,
     type ManagerServiceEstimateResponse,
     type ManagerInstallEstimateResponse,
@@ -146,6 +147,7 @@ export type {
     ManagerInstallEstimateSavePayload,
     ManagerServiceEstimateListResponse,
     ManagerServiceEstimateOrderLinesMode,
+    ManagerServiceDescriptionMode,
     ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateResponse,
     ManagerInstallEstimateResponse,
@@ -550,8 +552,9 @@ export const api = {
     async getManagerServiceEstimateOrderLines(
         estimateId: number,
         mode: ManagerServiceEstimateOrderLinesMode = 'detailed',
+        descriptionMode: ManagerServiceDescriptionMode = 'short',
     ): Promise<ManagerServiceEstimateOrderLinesResponse> {
-        return await ManagerServiceEstimatesService.getManagerServiceEstimateOrderLines(estimateId, mode);
+        return await ManagerServiceEstimatesService.getManagerServiceEstimateOrderLines(estimateId, mode, descriptionMode);
     },
 
     async deleteManagerServiceEstimate(estimateId: number) {

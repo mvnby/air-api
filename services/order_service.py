@@ -2466,7 +2466,10 @@ class OrderService:
             .where(
                 ServiceTariff.service_kind == "repair",
                 ServiceTariff.is_active == True,  # noqa: E712
-                ServiceTariff.selector_label.ilike("%диагност%"),
+                or_(
+                    ServiceTariff.short_name.ilike("%диагност%"),
+                    ServiceTariff.selector_label.ilike("%диагност%"),
+                ),
             )
             .order_by(ServiceTariff.sort_order, ServiceTariff.id)
             .limit(1)
@@ -2480,7 +2483,7 @@ class OrderService:
                 order_id=int(order.id),
                 proposal_id=target_proposal_id,
                 service_id=None,
-                title=OrderService._clean_order_title(tariff.estimate_template or tariff.selector_label) or tariff.selector_label,
+                title=OrderService._clean_order_title(tariff.effective_short_name) or tariff.effective_short_name,
                 quantity=1,
                 price=int(tariff.base_price or 0),
                 cost=0,

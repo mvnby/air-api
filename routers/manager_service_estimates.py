@@ -16,6 +16,7 @@ from schemas import (
     ManagerInstallEstimateCalculatePayload,
     ManagerInstallEstimateResponse,
     ManagerInstallEstimateSavePayload,
+    ManagerServiceDescriptionMode,
     ManagerServiceEstimateOrderLinesMode,
     ManagerServiceEstimateOrderLinesResponse,
     ManagerServiceEstimateListResponse,
@@ -80,12 +81,14 @@ async def list_manager_service_estimates(
 async def get_manager_service_estimate_order_lines(
     estimate_id: int,
     mode: ManagerServiceEstimateOrderLinesMode = Query(ManagerServiceEstimateOrderLinesMode.detailed),
+    description_mode: ManagerServiceDescriptionMode = Query(ManagerServiceDescriptionMode.short),
     session: AsyncSession = Depends(get_session),
 ):
     return await ServiceEstimateService.get_estimate_order_lines(
         session=session,
         estimate_id=estimate_id,
         mode=mode,
+        description_mode=description_mode,
     )
 
 
