@@ -30,6 +30,8 @@ export type { Body_upload_manager_customer_contract } from './models/Body_upload
 export type { Body_upload_manager_order_attachment } from './models/Body_upload_manager_order_attachment';
 export type { Body_upload_manager_order_document } from './models/Body_upload_manager_order_document';
 export type { Body_upload_media_assets } from './models/Body_upload_media_assets';
+export type { BotApiHealthResponse } from './models/BotApiHealthResponse';
+export type { BotStaffContextResponse } from './models/BotStaffContextResponse';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';
 export type { BulkProductIdsRequest } from './models/BulkProductIdsRequest';
@@ -416,6 +418,7 @@ export type { WebRebuildStatusResponse } from './models/WebRebuildStatusResponse
 export type { WebRebuildTriggerResponse } from './models/WebRebuildTriggerResponse';
 
 export { ApiService } from './services/ApiService';
+export { InternalBotV1Service } from './services/InternalBotV1Service';
 export { LoginService } from './services/LoginService';
 export { ManagerService } from './services/ManagerService';
 export { ManagerBackupsService } from './services/ManagerBackupsService';

@@ -367,7 +367,11 @@ async def test_terminal_db_timeout_is_recovered_as_ambiguous_attempt(
         provider=provider,
         worker_id="terminal-timeout-worker",
         lease_seconds=60,
-        db_operation_timeout_seconds=0.01,
+        # The timeout must be comfortably above normal SQLite setup/claim
+        # latency so this test deterministically reaches the mocked, blocked
+        # terminal write. Ten milliseconds made the assertion depend on suite
+        # load and could time out before the provider call.
+        db_operation_timeout_seconds=0.5,
     )
 
     with pytest.raises(TimeoutError):

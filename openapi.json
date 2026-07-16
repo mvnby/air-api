@@ -88,6 +88,80 @@
         }
       }
     },
+    "/api/internal/bot/v1/health": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Internal Bot Api Health",
+        "operationId": "get_internal_bot_api_health_v1",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotApiHealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/staff/context/{telegram_id}": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Internal Bot Staff Context",
+        "operationId": "get_internal_bot_staff_context_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "telegram_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Telegram Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStaffContextResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/products/search": {
       "get": {
         "tags": [
@@ -18276,6 +18350,81 @@
           "files"
         ],
         "title": "Body_upload_media_assets"
+      },
+      "BotApiHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "default": "ok"
+          },
+          "api_version": {
+            "type": "string",
+            "const": "v1",
+            "title": "Api Version",
+            "default": "v1"
+          }
+        },
+        "type": "object",
+        "title": "BotApiHealthResponse"
+      },
+      "BotStaffContextResponse": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "is_staff": {
+            "type": "boolean",
+            "title": "Is Staff",
+            "default": false
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name",
+            "default": ""
+          },
+          "primary_role": {
+            "type": "string",
+            "title": "Primary Role",
+            "default": ""
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "legacy_installer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Installer Id"
+          },
+          "is_manager": {
+            "type": "boolean",
+            "title": "Is Manager",
+            "default": false
+          },
+          "is_executor": {
+            "type": "boolean",
+            "title": "Is Executor",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id"
+        ],
+        "title": "BotStaffContextResponse"
       },
       "BulkGalleryAddRequest": {
         "properties": {
@@ -45083,6 +45232,11 @@
       }
     },
     "securitySchemes": {
+      "BotServiceBearer": {
+        "type": "http",
+        "description": "Dedicated bearer token used only by the MVN Telegram bot service.",
+        "scheme": "bearer"
+      },
       "OAuth2PasswordBearer": {
         "type": "oauth2",
         "flows": {
