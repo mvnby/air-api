@@ -8,10 +8,9 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from core.database import async_session_maker
-from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.product_service import ProductService
-from services.staff_user_service import StaffUserService
+from ..access_runtime import get_bot_access_context
 from ..keyboards import (
     area_selection_kb,
     get_staff_main_menu,
@@ -27,8 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _get_access_context(user_id: int | None):
-    async with async_session_maker() as session:
-        return await BotAccessService.get_context(session, user_id)
+    return await get_bot_access_context(user_id)
 
 
 async def _is_staff_user(user_id: int | None) -> bool:
@@ -93,11 +91,8 @@ async def _render_search_results(message: types.Message, query: str, products: l
         f"🔎 Нашел {len(selected_products)} вариантов по запросу «{html.escape(query)}».",
         parse_mode="HTML",
     )
-    async with async_session_maker() as session:
-        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(
-            session,
-            message.from_user.id if message.from_user else None,
-        )
+    context = await _get_access_context(message.from_user.id if message.from_user else None)
+    is_admin = context.is_staff and context.is_manager
     for product in selected_products:
         await send_product_card(message, product, is_admin)
 
@@ -187,6 +182,7 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
     )
     
     # Получаем товары с фильтрацией по тегам
+    context = await _get_access_context(callback.from_user.id)
     async with async_session_maker() as session:
         products = await ProductService.get_curated(
             session, 
@@ -195,7 +191,7 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
             tag_slugs=tag_slugs if tag_slugs else None,
             limit=5  # Максимум 5 результатов
         )
-        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(session, callback.from_user.id)
+        is_admin = context.is_staff and context.is_manager
     
     if not products:
         await callback.message.answer(
@@ -230,9 +226,10 @@ async def search_details(callback: CallbackQuery):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     product_id = int(callback.data.split("_")[-1])
+    context = await _get_access_context(callback.from_user.id)
     async with async_session_maker() as session:
         product = await ProductService.get_by_id(session, product_id)
-        is_admin = await StaffUserService.is_active_owner_admin_telegram_user(session, callback.from_user.id)
+        is_admin = context.is_staff and context.is_manager
 
     if not product:
         await callback.answer("Товар не найден", show_alert=True)

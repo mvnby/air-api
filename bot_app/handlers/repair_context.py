@@ -5,9 +5,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from core.database import async_session_maker
-from services.bot_access_service import BotAccessService
 from services.bot_defect_act_service import BotDefectActService
 
+from ..access_runtime import get_bot_access_context
 from ..states import ShopState
 
 router = Router()
@@ -21,8 +21,7 @@ REPAIR_PRESET_FAULT_TYPES = {
 
 
 async def _access_context(user_id: int | None):
-    async with async_session_maker() as session:
-        return await BotAccessService.get_context(session, user_id)
+    return await get_bot_access_context(user_id)
 
 
 def _parse_order_id(value: object) -> int | None:

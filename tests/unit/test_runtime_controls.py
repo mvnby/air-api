@@ -97,6 +97,38 @@ def test_empty_runtime_switch_env_values_are_unset(monkeypatch):
     assert settings.db_bootstrap_control_decision.enabled is True
 
 
+@pytest.mark.parametrize(("value", "expected"), [("database", "database"), (" API ", "api")])
+def test_bot_access_backend_is_explicit_and_normalized(monkeypatch, value, expected):
+    _set_required_env(monkeypatch)
+    config = importlib.import_module("core.config")
+
+    settings = config.Settings(
+        BOT_TOKEN="123:test",
+        SECRET_KEY="test-secret",
+        ADMIN_USERNAME="admin",
+        ADMIN_PASSWORD="admin",
+        BOT_ACCESS_BACKEND=value,
+        _env_file=None,
+    )
+
+    assert settings.BOT_ACCESS_BACKEND == expected
+
+
+def test_bot_access_backend_rejects_implicit_fallback(monkeypatch):
+    _set_required_env(monkeypatch)
+    config = importlib.import_module("core.config")
+
+    with pytest.raises(ValueError, match="BOT_ACCESS_BACKEND"):
+        config.Settings(
+            BOT_TOKEN="123:test",
+            SECRET_KEY="test-secret",
+            ADMIN_USERNAME="admin",
+            ADMIN_PASSWORD="admin",
+            BOT_ACCESS_BACKEND="auto",
+            _env_file=None,
+        )
+
+
 @pytest.mark.asyncio
 async def test_database_bootstrap_skips_for_standby(monkeypatch):
     _set_required_env(monkeypatch)
@@ -234,6 +266,7 @@ async def test_bot_main_disabled_does_not_poll(monkeypatch):
     delete_webhook = AsyncMock()
     start_polling = AsyncMock()
     verify_storage = AsyncMock()
+    verify_access = AsyncMock()
     monkeypatch.setattr(
         bot_main,
         "verify_private_attachment_storage_startup",
@@ -241,10 +274,12 @@ async def test_bot_main_disabled_does_not_poll(monkeypatch):
     )
     monkeypatch.setattr(bot_main.bot, "delete_webhook", delete_webhook)
     monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
+    monkeypatch.setattr(bot_main, "verify_bot_access_startup", verify_access)
 
     await bot_main.main(wait_when_disabled=False)
 
     verify_storage.assert_awaited_once_with(bot_main.settings)
+    verify_access.assert_not_awaited()
     delete_webhook.assert_not_awaited()
     start_polling.assert_not_awaited()
 
@@ -263,9 +298,13 @@ async def test_bot_main_preserves_pending_updates_by_default(monkeypatch):
     setup_commands = AsyncMock()
     delete_webhook = AsyncMock()
     start_polling = AsyncMock()
+    verify_access = AsyncMock()
+    close_access = AsyncMock()
     monkeypatch.setattr(bot_main, "_setup_bot_commands", setup_commands)
     monkeypatch.setattr(bot_main.bot, "delete_webhook", delete_webhook)
     monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
+    monkeypatch.setattr(bot_main, "verify_bot_access_startup", verify_access)
+    monkeypatch.setattr(bot_main, "close_bot_access_provider", close_access)
     monkeypatch.setattr(
         bot_main.RuntimeLockService,
         "try_acquire",
@@ -274,6 +313,60 @@ async def test_bot_main_preserves_pending_updates_by_default(monkeypatch):
 
     await bot_main.main(wait_when_disabled=False)
 
+    verify_access.assert_awaited_once_with()
     setup_commands.assert_awaited_once()
     delete_webhook.assert_awaited_once_with(drop_pending_updates=False)
     start_polling.assert_awaited_once_with(bot_main.bot)
+    close_access.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_bot_main_does_not_poll_when_access_preflight_fails(monkeypatch):
+    _set_required_env(monkeypatch)
+    config = importlib.import_module("core.config")
+    monkeypatch.setattr(config.settings, "BOT_TOKEN", "123:test", raising=False)
+    bot_main = importlib.import_module("bot_app.main")
+
+    monkeypatch.setattr(bot_main.settings, "APP_ROLE", "primary", raising=False)
+    monkeypatch.setattr(bot_main.settings, "BOT_ENABLED", True, raising=False)
+    monkeypatch.setattr(bot_main.dp, "include_router", Mock())
+    runtime_lock = SimpleNamespace(acquired=True, reason="test lock", release=AsyncMock())
+    monkeypatch.setattr(
+        bot_main.RuntimeLockService,
+        "try_acquire",
+        AsyncMock(return_value=runtime_lock),
+    )
+    monkeypatch.setattr(
+        bot_main,
+        "verify_bot_access_startup",
+        AsyncMock(side_effect=bot_main.BotAccessUnavailableError("offline")),
+    )
+    close_access = AsyncMock()
+    start_polling = AsyncMock()
+    monkeypatch.setattr(bot_main, "close_bot_access_provider", close_access)
+    monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
+
+    with pytest.raises(bot_main.BotAccessUnavailableError, match="offline"):
+        await bot_main.main(wait_when_disabled=False)
+
+    start_polling.assert_not_awaited()
+    close_access.assert_awaited_once_with()
+    runtime_lock.release.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_bot_access_error_is_visible_to_callback(monkeypatch):
+    _set_required_env(monkeypatch)
+    bot_main = importlib.import_module("bot_app.main")
+    callback = SimpleNamespace(answer=AsyncMock())
+    event = SimpleNamespace(
+        exception=bot_main.BotAccessUnavailableError("offline"),
+        update=SimpleNamespace(callback_query=callback, message=None),
+    )
+
+    assert await bot_main.error_handler(event) is True
+
+    callback.answer.assert_awaited_once_with(
+        "Сервис авторизации временно недоступен. Попробуйте позже.",
+        show_alert=True,
+    )

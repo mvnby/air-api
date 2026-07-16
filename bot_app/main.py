@@ -1,6 +1,8 @@
 import asyncio
 from aiogram import types
 from aiogram.types import BotCommand
+from .access import BotAccessUnavailableError
+from .access_runtime import close_bot_access_provider, verify_bot_access_startup
 from .config import bot, dp
 from .handlers import admin, base, catalog, repair_context, work
 from core.config import settings
@@ -27,7 +29,20 @@ STAFF_BOT_COMMANDS = [
 # Global Error Handler for Bot
 @dp.error()
 async def error_handler(event: types.ErrorEvent):
-    logger.exception(f"Bot error: {event.exception} for event {event.update}")
+    if isinstance(event.exception, BotAccessUnavailableError):
+        logger.error("Bot staff access unavailable: %s", event.exception)
+        callback = event.update.callback_query
+        if callback is not None:
+            await callback.answer("Сервис авторизации временно недоступен. Попробуйте позже.", show_alert=True)
+        elif event.update.message is not None:
+            await event.update.message.answer("Сервис авторизации временно недоступен. Попробуйте позже.")
+        return True
+    logger.error(
+        "Bot error: %s for event %s",
+        event.exception,
+        event.update,
+        exc_info=(type(event.exception), event.exception, event.exception.__traceback__),
+    )
     return True
 
 async def _idle_when_disabled() -> None:
@@ -73,10 +88,12 @@ async def main(*, wait_when_disabled: bool = True):
     dp.include_router(admin.router)
     
     try:
+        await verify_bot_access_startup()
         await _setup_bot_commands()
         await bot.delete_webhook(drop_pending_updates=settings.BOT_DROP_PENDING_UPDATES)
         await dp.start_polling(bot)
     finally:
+        await close_bot_access_provider()
         await runtime_lock.release()
 
 if __name__ == "__main__":

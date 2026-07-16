@@ -176,23 +176,12 @@ async def test_delete_item_skips_service_for_non_admin(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_is_admin_user_uses_staff_service(monkeypatch):
-    session = object()
-
-    class _StaticSessionContext:
-        async def __aenter__(self):
-            return session
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    admin_check = AsyncMock(return_value=True)
-    monkeypatch.setattr(admin_handler.StaffUserService, "is_active_owner_admin_telegram_user", admin_check)
-    monkeypatch.setattr(admin_handler, "async_session_maker", lambda: _StaticSessionContext())
+async def test_is_admin_user_uses_shared_access_context(monkeypatch):
+    access_check = AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=True))
+    monkeypatch.setattr(admin_handler, "_get_bot_access_context", access_check)
 
     assert await admin_handler._is_admin_user(7)
-    admin_check.assert_awaited_once()
-    assert admin_check.await_args.args == (session, 7)
+    access_check.assert_awaited_once_with(7)
 
 
 @pytest.mark.asyncio
