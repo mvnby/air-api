@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from api_contracts.bot import BotQuickOrderDraft
 from models import Order
@@ -24,6 +25,38 @@ class BotQuickOrderCreateResult:
 
 
 class BotQuickOrderApiService:
+    @staticmethod
+    async def _create_locked(
+        session: AsyncSession,
+        *,
+        telegram_id: int,
+        source_fingerprint: str,
+        draft: BotQuickOrderDraft,
+    ) -> BotQuickOrderCreateResult:
+        await BotQuickOrderApiService._require_manager(session, telegram_id)
+        order_data = await BotQuickOrderService.create_order_from_draft(
+            session,
+            draft.model_dump(mode="json", exclude={"service_label"}),
+            source_fingerprint=source_fingerprint,
+        )
+        order_id = int(order_data.get("id") or 0)
+        if not order_id:
+            raise ValueError("Не удалось определить созданный заказ")
+
+        customer = order_data.get("customer") if isinstance(order_data.get("customer"), dict) else {}
+        customer_id = int(customer.get("id") or order_data.get("customer_id") or 0)
+        if not customer_id:
+            order = await session.get(Order, order_id)
+            customer_id = int(order.customer_id or 0) if order else 0
+        if not customer_id:
+            raise ValueError("Не удалось определить клиента заказа")
+
+        return BotQuickOrderCreateResult(
+            order_id=order_id,
+            customer_id=customer_id,
+            created=bool(order_data.get("_bot_order_created", True)),
+        )
+
     @staticmethod
     async def _require_manager(session: AsyncSession, telegram_id: int) -> None:
         context = await BotAccessService.get_context(session, telegram_id)
@@ -80,30 +113,37 @@ class BotQuickOrderApiService:
         idempotency_key: str,
         draft: BotQuickOrderDraft,
     ) -> BotQuickOrderCreateResult:
-        await cls._require_manager(session, telegram_id)
         source_fingerprint = cls._request_fingerprint(
             telegram_id=telegram_id,
             idempotency_key=idempotency_key,
         )
-        order_data = await BotQuickOrderService.create_order_from_draft(
-            session,
-            draft.model_dump(mode="json", exclude={"service_label"}),
-            source_fingerprint=source_fingerprint,
-        )
-        order_id = int(order_data.get("id") or 0)
-        if not order_id:
-            raise ValueError("Не удалось определить созданный заказ")
+        bind = session.bind
+        if not isinstance(bind, AsyncEngine) or bind.dialect.name != "postgresql":
+            return await cls._create_locked(
+                session,
+                telegram_id=telegram_id,
+                source_fingerprint=source_fingerprint,
+                draft=draft,
+            )
 
-        customer = order_data.get("customer") if isinstance(order_data.get("customer"), dict) else {}
-        customer_id = int(customer.get("id") or order_data.get("customer_id") or 0)
-        if not customer_id:
-            order = await session.get(Order, order_id)
-            customer_id = int(order.customer_id or 0) if order else 0
-        if not customer_id:
-            raise ValueError("Не удалось определить клиента заказа")
-
-        return BotQuickOrderCreateResult(
-            order_id=order_id,
-            customer_id=customer_id,
-            created=bool(order_data.get("_bot_order_created", True)),
-        )
+        lock_key = f"bot-quick-order:{source_fingerprint}"
+        async with bind.connect() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_lock(hashtext(:lock_key)::bigint)"),
+                {"lock_key": lock_key},
+            )
+            await connection.commit()
+            try:
+                async with AsyncSession(bind=connection, expire_on_commit=False) as locked_session:
+                    return await cls._create_locked(
+                        locked_session,
+                        telegram_id=telegram_id,
+                        source_fingerprint=source_fingerprint,
+                        draft=draft,
+                    )
+            finally:
+                await connection.execute(
+                    text("SELECT pg_advisory_unlock(hashtext(:lock_key)::bigint)"),
+                    {"lock_key": lock_key},
+                )
+                await connection.commit()
