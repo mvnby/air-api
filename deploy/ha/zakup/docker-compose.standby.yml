@@ -62,7 +62,7 @@ services:
       - ./secrets/client_secret.json:/app/client_secret.json:ro
       - ./secrets/credentials.json:/app/credentials.json:ro
       - ./secrets/g-vision-ocr.json:/app/g-vision-ocr.json:ro
-    mem_limit: ${MVN_RESERVE_APP_MEMORY:-520m}
+    mem_limit: ${MVN_RESERVE_APP_MEMORY:-1024m}
     networks:
       - reserve
 
