@@ -66,3 +66,24 @@ def test_bot_task_presenter_does_not_import_backend_runtime_layers():
     source = Path("bot_app/task_presenter.py").read_text(encoding="utf-8")
     for forbidden in ("from core.database", "from models", "from crud", "from services"):
         assert forbidden not in source, f"task presenter imports backend layer: {forbidden}"
+
+
+def test_bot_quick_order_paths_use_api_instead_of_backend_service():
+    source = Path("bot_app/handlers/work.py").read_text(encoding="utf-8")
+    assert "BotQuickOrderService" not in source
+    assert "get_bot_api_gateway().parse_quick_order" in source
+    assert "get_bot_api_gateway().create_quick_order" in source
+
+
+def test_bot_customer_requisites_paths_use_api_instead_of_backend_service():
+    source = Path("bot_app/handlers/admin.py").read_text(encoding="utf-8")
+    assert "CustomerRequisitesRecognitionService" not in source
+    assert "get_bot_api_gateway().recognize_customer_requisites_file" in source
+    assert "get_bot_api_gateway().recognize_customer_requisites_text" in source
+    assert "get_bot_api_gateway().apply_customer_requisites_action" in source
+
+
+def test_bot_quick_order_presenter_does_not_import_backend_runtime_layers():
+    source = Path("bot_app/quick_order_presenter.py").read_text(encoding="utf-8")
+    for forbidden in ("from core.database", "from models", "from crud", "from services"):
+        assert forbidden not in source, f"quick-order presenter imports backend layer: {forbidden}"

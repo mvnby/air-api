@@ -23,6 +23,7 @@ export type { Body_complete_media_worker_job } from './models/Body_complete_medi
 export type { Body_create_repair_diagnostic_lead } from './models/Body_create_repair_diagnostic_lead';
 export type { Body_import_manager_bank_statement } from './models/Body_import_manager_bank_statement';
 export type { Body_login_access_token } from './models/Body_login_access_token';
+export type { Body_recognize_internal_bot_customer_requisites_file_v1 } from './models/Body_recognize_internal_bot_customer_requisites_file_v1';
 export type { Body_recognize_manager_customer_requisites } from './models/Body_recognize_manager_customer_requisites';
 export type { Body_register_manager_external_contract } from './models/Body_register_manager_external_contract';
 export type { Body_upload_local_images } from './models/Body_upload_local_images';
@@ -35,6 +36,17 @@ export type { BotCatalogProductLookupResponse } from './models/BotCatalogProduct
 export type { BotCatalogProductResponse } from './models/BotCatalogProductResponse';
 export type { BotCatalogSearchRequest } from './models/BotCatalogSearchRequest';
 export type { BotCatalogSearchResponse } from './models/BotCatalogSearchResponse';
+export type { BotCustomerBriefResponse } from './models/BotCustomerBriefResponse';
+export type { BotCustomerRequisitesActionRequest } from './models/BotCustomerRequisitesActionRequest';
+export type { BotCustomerRequisitesActionResponse } from './models/BotCustomerRequisitesActionResponse';
+export type { BotCustomerRequisitesRecognitionResponse } from './models/BotCustomerRequisitesRecognitionResponse';
+export type { BotCustomerRequisitesTextRequest } from './models/BotCustomerRequisitesTextRequest';
+export type { BotQuickOrderAddressCheck } from './models/BotQuickOrderAddressCheck';
+export type { BotQuickOrderCreateRequest } from './models/BotQuickOrderCreateRequest';
+export type { BotQuickOrderCreateResponse } from './models/BotQuickOrderCreateResponse';
+export type { BotQuickOrderDraft } from './models/BotQuickOrderDraft';
+export type { BotQuickOrderParseRequest } from './models/BotQuickOrderParseRequest';
+export type { BotQuickOrderParseResponse } from './models/BotQuickOrderParseResponse';
 export type { BotStaffContextResponse } from './models/BotStaffContextResponse';
 export type { BotTaskListRequest } from './models/BotTaskListRequest';
 export type { BotTaskListResponse } from './models/BotTaskListResponse';

@@ -5,16 +5,20 @@ from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 
 from core.database import async_session_maker
 from services.bot_product_selection_service import BotProductSelectionService
-from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_service import BotService
 from ..access_runtime import get_bot_access_context
-from ..api_gateway import BotApiAuthorizationError, BotApiConflictError
+from ..api_gateway import BotApiAuthorizationError, BotApiConflictError, BotApiError
 from ..api_runtime import get_bot_api_gateway
 from ..keyboards import (
     get_staff_main_menu,
     quick_order_confirm_keyboard,
     selection_result_keyboard,
     task_actions_keyboard,
+)
+from ..quick_order_presenter import (
+    format_quick_order_preview,
+    format_quick_order_preview_rich_html,
+    quick_order_to_dict,
 )
 from ..states import ShopState
 from ..task_presenter import build_stage_report, format_tasks, format_tasks_rich_html, task_to_dict
@@ -66,13 +70,21 @@ async def quick_order_parse(message: types.Message, state: FSMContext):
     if not text:
         await message.answer("Нужен текст заявки.")
         return
-    draft = await BotQuickOrderService.parse_text(text)
-    await state.update_data(quick_order_draft=draft)
+    response = await get_bot_api_gateway().parse_quick_order(
+        telegram_id=message.from_user.id if message.from_user else 0,
+        text=text,
+    )
+    draft = quick_order_to_dict(response.draft)
+    chat_id = message.chat.id if message.chat else 0
+    await state.update_data(
+        quick_order_draft=draft,
+        quick_order_idempotency_key=f"telegram:{chat_id}:{message.message_id}",
+    )
     keyboard = quick_order_confirm_keyboard()
-    fallback_text = BotQuickOrderService.format_draft_preview(draft)
+    fallback_text = format_quick_order_preview(draft)
     delivered = await BotService.send_rich_message(
         message.chat.id,
-        BotQuickOrderService.format_draft_preview_rich_html(draft),
+        format_quick_order_preview_rich_html(draft),
         reply_markup=keyboard,
     )
     if not delivered:
@@ -90,21 +102,29 @@ async def quick_order_create(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Заказ уже создается", show_alert=False)
         return
     draft = data.get("quick_order_draft")
-    if not isinstance(draft, dict):
+    idempotency_key = str(data.get("quick_order_idempotency_key") or "").strip()
+    if not isinstance(draft, dict) or not idempotency_key:
         await callback.answer("Черновик не найден", show_alert=True)
         return
     await state.update_data(quick_order_creating=True)
     try:
-        async with async_session_maker() as session:
-            order = await BotQuickOrderService.create_order_from_draft(session, draft)
-    except Exception as exc:
+        result = await get_bot_api_gateway().create_quick_order(
+            telegram_id=callback.from_user.id,
+            idempotency_key=idempotency_key,
+            draft=draft,
+        )
+    except BotApiError:
+        await state.update_data(quick_order_creating=False)
+        raise
+    except ValueError as exc:
         await state.update_data(quick_order_creating=False)
         await callback.answer(str(exc), show_alert=True)
         return
 
     await state.clear()
+    created_label = "создан" if result.created else "уже был создан"
     await callback.message.edit_text(
-        f"✅ Заказ #{order['id']} создан.\n"
+        f"✅ Заказ #{result.order_id} {created_label}.\n"
         "Он уже доступен в менеджере и календаре, если дата была указана."
     )
     await _answer_with_staff_menu(callback.message, context)

@@ -428,6 +428,248 @@
         }
       }
     },
+    "/api/internal/bot/v1/quick-orders/parse": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Parse Internal Bot Quick Order",
+        "operationId": "parse_internal_bot_quick_order_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotQuickOrderParseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderParseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/quick-orders": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Create Internal Bot Quick Order",
+        "operationId": "create_internal_bot_quick_order_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotQuickOrderCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/customers/requisites/recognize-text": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Recognize Internal Bot Customer Requisites Text",
+        "operationId": "recognize_internal_bot_customer_requisites_text_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCustomerRequisitesTextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCustomerRequisitesRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/customers/requisites/recognize-file": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Recognize Internal Bot Customer Requisites File",
+        "operationId": "recognize_internal_bot_customer_requisites_file_v1",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_recognize_internal_bot_customer_requisites_file_v1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCustomerRequisitesRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/customers/requisites/{recognition_id}/action": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Apply Internal Bot Customer Requisites Action",
+        "operationId": "apply_internal_bot_customer_requisites_action_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recognition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Recognition Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCustomerRequisitesActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCustomerRequisitesActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/products/search": {
       "get": {
         "tags": [
@@ -18412,6 +18654,48 @@
         ],
         "title": "Body_login_access_token"
       },
+      "Body_recognize_internal_bot_customer_requisites_file_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Message Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "file"
+        ],
+        "title": "Body_recognize_internal_bot_customer_requisites_file_v1"
+      },
       "Body_recognize_manager_customer_requisites": {
         "properties": {
           "file": {
@@ -18800,6 +19084,463 @@
         },
         "type": "object",
         "title": "BotCatalogSearchResponse"
+      },
+      "BotCustomerBriefResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "BotCustomerBriefResponse"
+      },
+      "BotCustomerRequisitesActionRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update",
+              "cancel"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "action"
+        ],
+        "title": "BotCustomerRequisitesActionRequest"
+      },
+      "BotCustomerRequisitesActionResponse": {
+        "properties": {
+          "recognition": {
+            "$ref": "#/components/schemas/BotCustomerRequisitesRecognitionResponse"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotCustomerBriefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recognition",
+          "changed"
+        ],
+        "title": "BotCustomerRequisitesActionResponse"
+      },
+      "BotCustomerRequisitesRecognitionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "recognized",
+              "confirmed",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "extracted": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Extracted"
+          },
+          "validation_flags": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Validation Flags"
+          },
+          "duplicate_customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotCustomerBriefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmed_customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Customer Id"
+          },
+          "confirmed_action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "create",
+                  "update"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Action"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "source",
+          "created_at"
+        ],
+        "title": "BotCustomerRequisitesRecognitionResponse"
+      },
+      "BotCustomerRequisitesTextRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 20,
+            "title": "Text"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "text"
+        ],
+        "title": "BotCustomerRequisitesTextRequest"
+      },
+      "BotQuickOrderAddressCheck": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "unchecked",
+              "not_found",
+              "needs_review",
+              "confirmed"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "BotQuickOrderAddressCheck"
+      },
+      "BotQuickOrderCreateRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/BotQuickOrderDraft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "idempotency_key",
+          "draft"
+        ],
+        "title": "BotQuickOrderCreateRequest"
+      },
+      "BotQuickOrderCreateResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "customer_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Customer Id"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "customer_id",
+          "created"
+        ],
+        "title": "BotQuickOrderCreateResponse"
+      },
+      "BotQuickOrderDraft": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "turnkey",
+                  "install_only",
+                  "pre_install",
+                  "maintenance",
+                  "repair",
+                  "dismantling"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "service_label": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Service Label"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "request_text": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Request Text"
+          },
+          "parser": {
+            "type": "string",
+            "enum": [
+              "fallback",
+              "ai"
+            ],
+            "title": "Parser",
+            "default": "fallback"
+          },
+          "address_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotQuickOrderAddressCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_label",
+          "request_text"
+        ],
+        "title": "BotQuickOrderDraft"
+      },
+      "BotQuickOrderParseRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "text"
+        ],
+        "title": "BotQuickOrderParseRequest"
+      },
+      "BotQuickOrderParseResponse": {
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/BotQuickOrderDraft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft"
+        ],
+        "title": "BotQuickOrderParseResponse"
       },
       "BotStaffContextResponse": {
         "properties": {

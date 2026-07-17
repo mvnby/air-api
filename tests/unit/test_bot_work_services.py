@@ -1580,12 +1580,11 @@ async def test_quick_order_create_ignores_duplicate_callback(monkeypatch):
         answer=AsyncMock(),
     )
 
-    async def fake_create_order(*args, **kwargs):
-        raise AssertionError("duplicate callback should not create order")
-
     monkeypatch.setattr(work_handlers, "_access_context", fake_access_context)
-    monkeypatch.setattr(work_handlers.BotQuickOrderService, "create_order_from_draft", fake_create_order)
+    gateway = SimpleNamespace(create_quick_order=AsyncMock())
+    monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
 
     await work_handlers.quick_order_create(callback, _State())
 
     callback.answer.assert_awaited_once_with("Заказ уже создается", show_alert=False)
+    gateway.create_quick_order.assert_not_called()

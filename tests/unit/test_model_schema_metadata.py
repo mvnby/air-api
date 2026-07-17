@@ -113,6 +113,35 @@ def test_model_indexes_match_current_database_shape():
         for index in bank_receipt.indexes
     )
 
+    lead = SQLModel.metadata.tables["lead"]
+    assert any(
+        index.name == "uq_lead_bot_source_fingerprint"
+        and index.unique
+        and [column.name for column in index.columns] == ["source_fingerprint"]
+        and str(index.dialect_options["postgresql"]["where"])
+        == "source = 'bot' AND source_fingerprint IS NOT NULL"
+        for index in lead.indexes
+    )
+
+    recognition = SQLModel.metadata.tables["customer_requisites_recognition"]
+    assert any(
+        index.name == "uq_customer_requisites_telegram_message"
+        and index.unique
+        and [column.name for column in index.columns]
+        == ["source", "telegram_user_id", "telegram_chat_id", "telegram_message_id"]
+        for index in recognition.indexes
+    )
+
+    work_stage = SQLModel.metadata.tables["order_work_stage"]
+    assert any(
+        index.name == "uq_unassigned_order_work_stage_schedule"
+        and index.unique
+        and [column.name for column in index.columns] == ["order_id", "name", "start_time"]
+        and str(index.dialect_options["postgresql"]["where"])
+        == "installer_id IS NULL AND start_time IS NOT NULL"
+        for index in work_stage.indexes
+    )
+
 
 def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_indexes():
     outbox = SQLModel.metadata.tables["integration_outbox_event"]

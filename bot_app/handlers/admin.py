@@ -8,9 +8,9 @@ from aiogram import Router, types, F
 from aiogram.filters import StateFilter
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
+from api_contracts.bot import BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES
 from core.database import async_session_maker
 from services.product_service import ProductService
-from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
@@ -444,7 +444,7 @@ def _warranty_nameplate_preview_text(data: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def _file_too_large_message(max_bytes: int = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES) -> str:
+def _file_too_large_message(max_bytes: int = BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES) -> str:
     max_mb = max_bytes / (1024 * 1024)
     return f"Файл слишком большой. Максимум {max_mb:g} МБ."
 
@@ -458,7 +458,7 @@ def _normalize_file_size(value: object) -> int | None:
 
 
 async def _download_telegram_file(file_id: str, *, expected_size: int | None = None) -> bytes:
-    max_bytes = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES
+    max_bytes = BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES
     if expected_size is not None and expected_size > max_bytes:
         raise ValueError(_file_too_large_message(max_bytes))
 
@@ -493,17 +493,16 @@ async def _run_requisites_recognition(
 ):
     try:
         content = await _download_telegram_file(file_id, expected_size=_normalize_file_size(file_size))
-        async with async_session_maker() as session:
-            data = await CustomerRequisitesRecognitionService.recognize_bytes(
-                session,
+        data = (
+            await get_bot_api_gateway().recognize_customer_requisites_file(
+                telegram_id=int(telegram_user_id or 0),
                 content=content,
                 filename=filename,
                 mime_type=mime_type,
-                source="telegram",
-                telegram_user_id=telegram_user_id,
                 telegram_chat_id=telegram_chat_id,
                 telegram_message_id=telegram_message_id,
             )
+        ).model_dump(mode="json")
     except Exception as exc:
         await progress_message.edit_text(f"❌ Не удалось распознать реквизиты: {escape(str(exc))}")
         return
@@ -520,15 +519,14 @@ async def _run_requisites_text_recognition(
     telegram_message_id: int | None,
 ):
     try:
-        async with async_session_maker() as session:
-            data = await CustomerRequisitesRecognitionService.recognize_text(
-                session,
+        data = (
+            await get_bot_api_gateway().recognize_customer_requisites_text(
+                telegram_id=int(telegram_user_id or 0),
                 text=text,
-                source="telegram_text",
-                telegram_user_id=telegram_user_id,
                 telegram_chat_id=telegram_chat_id,
                 telegram_message_id=telegram_message_id,
             )
+        ).model_dump(mode="json")
     except Exception as exc:
         await progress_message.edit_text(f"❌ Не удалось распознать реквизиты: {escape(str(exc))}")
         return
@@ -581,7 +579,7 @@ async def _ask_requisites_file_action(
         )
         return
     normalized_size = _normalize_file_size(file_size)
-    if normalized_size is not None and normalized_size > CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES:
+    if normalized_size is not None and normalized_size > BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES:
         await message.answer(_file_too_large_message())
         return
     can_extract_requisites = await _is_admin_user(user_id)
@@ -1384,26 +1382,28 @@ async def confirm_requisites_recognition(callback: CallbackQuery):
     action = "create" if data.startswith("ocr_create_") else "update" if data.startswith("ocr_update_") else "cancel"
     recognition_id = int(data.rsplit("_", 1)[-1])
     try:
-        async with async_session_maker() as session:
-            if action == "cancel":
-                await CustomerRequisitesRecognitionService.cancel(session, recognition_id=recognition_id)
-                await callback.message.edit_text("Распознавание отменено.")
-                await callback.answer()
-                return
-            result = await CustomerRequisitesRecognitionService.confirm(
-                session,
-                recognition_id=recognition_id,
-                action=action,
-            )
+        result = await get_bot_api_gateway().apply_customer_requisites_action(
+            telegram_id=callback.from_user.id,
+            recognition_id=recognition_id,
+            action=action,
+        )
     except Exception as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    customer = result["customer"]
-    customer_id = int(customer["id"])
+    if action == "cancel":
+        await callback.message.edit_text("Распознавание отменено.")
+        await callback.answer()
+        return
+
+    customer = result.customer
+    if customer is None:
+        await callback.answer("Клиент не найден", show_alert=True)
+        return
+    customer_id = customer.id
     await callback.message.edit_text(
         f"✅ Клиент {'создан' if action == 'create' else 'обновлен'}: "
-        f"<a href=\"{escape(_manager_customer_url(customer_id))}\">{escape(str(customer.get('name') or customer_id))}</a>",
+        f"<a href=\"{escape(_manager_customer_url(customer_id))}\">{escape(customer.name or str(customer_id))}</a>",
         parse_mode="HTML",
         disable_web_page_preview=True,
     )

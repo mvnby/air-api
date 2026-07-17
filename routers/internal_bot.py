@@ -1,6 +1,6 @@
 """Private, versioned use-case API consumed by the Telegram bot service."""
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_contracts.bot import (
@@ -9,6 +9,15 @@ from api_contracts.bot import (
     BotCatalogProductResponse,
     BotCatalogSearchRequest,
     BotCatalogSearchResponse,
+    BotCustomerRequisitesActionRequest,
+    BotCustomerRequisitesActionResponse,
+    BotCustomerRequisitesRecognitionResponse,
+    BotCustomerRequisitesTextRequest,
+    BotQuickOrderCreateRequest,
+    BotQuickOrderCreateResponse,
+    BotQuickOrderDraft,
+    BotQuickOrderParseRequest,
+    BotQuickOrderParseResponse,
     BotStaffContextResponse,
     BotTaskListRequest,
     BotTaskListResponse,
@@ -23,12 +32,23 @@ from core.database import get_session
 from models import OrderStageStatus
 from services.bot_access_service import BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
+from services.bot_customer_requisites_api_service import (
+    BotCustomerRequisitesAccessDeniedError,
+    BotCustomerRequisitesApiService,
+    BotCustomerRequisitesConflictError,
+    BotCustomerRequisitesNotFoundError,
+)
+from services.bot_quick_order_api_service import (
+    BotQuickOrderAccessDeniedError,
+    BotQuickOrderApiService,
+)
 from services.bot_task_mutation_service import (
     BotTaskMutationAccessDeniedError,
     BotTaskMutationConflictError,
     BotTaskMutationService,
 )
 from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
+from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 
 
 router = APIRouter(
@@ -186,5 +206,145 @@ async def save_internal_bot_task_report(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return BotTaskReportSaveResponse(
         stage_id=result.stage_id,
+        changed=result.changed,
+    )
+
+
+@router.post(
+    "/quick-orders/parse",
+    response_model=BotQuickOrderParseResponse,
+    operation_id="parse_internal_bot_quick_order_v1",
+)
+async def parse_internal_bot_quick_order(
+    payload: BotQuickOrderParseRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BotQuickOrderParseResponse:
+    try:
+        draft = await BotQuickOrderApiService.parse_for_manager(
+            session,
+            telegram_id=payload.telegram_id,
+            text=payload.text,
+        )
+    except BotQuickOrderAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    return BotQuickOrderParseResponse(draft=BotQuickOrderDraft.model_validate(draft))
+
+
+@router.post(
+    "/quick-orders",
+    response_model=BotQuickOrderCreateResponse,
+    operation_id="create_internal_bot_quick_order_v1",
+)
+async def create_internal_bot_quick_order(
+    payload: BotQuickOrderCreateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BotQuickOrderCreateResponse:
+    try:
+        result = await BotQuickOrderApiService.create_for_manager(
+            session,
+            telegram_id=payload.telegram_id,
+            idempotency_key=payload.idempotency_key,
+            draft=payload.draft,
+        )
+    except BotQuickOrderAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return BotQuickOrderCreateResponse(
+        order_id=result.order_id,
+        customer_id=result.customer_id,
+        created=result.created,
+    )
+
+
+@router.post(
+    "/customers/requisites/recognize-text",
+    response_model=BotCustomerRequisitesRecognitionResponse,
+    operation_id="recognize_internal_bot_customer_requisites_text_v1",
+)
+async def recognize_internal_bot_customer_requisites_text(
+    payload: BotCustomerRequisitesTextRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BotCustomerRequisitesRecognitionResponse:
+    try:
+        recognition = await BotCustomerRequisitesApiService.recognize_text_for_manager(
+            session,
+            telegram_id=payload.telegram_id,
+            text_value=payload.text,
+            telegram_chat_id=payload.telegram_chat_id,
+            telegram_message_id=payload.telegram_message_id,
+        )
+    except BotCustomerRequisitesAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return BotCustomerRequisitesRecognitionResponse.model_validate(recognition)
+
+
+@router.post(
+    "/customers/requisites/recognize-file",
+    response_model=BotCustomerRequisitesRecognitionResponse,
+    operation_id="recognize_internal_bot_customer_requisites_file_v1",
+)
+async def recognize_internal_bot_customer_requisites_file(
+    telegram_id: int = Form(ge=1),
+    telegram_chat_id: int | None = Form(default=None),
+    telegram_message_id: int | None = Form(default=None),
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+) -> BotCustomerRequisitesRecognitionResponse:
+    max_bytes = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES
+    content = await file.read(max_bytes + 1)
+    await file.close()
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Файл слишком большой. Максимальный размер: 10 МБ",
+        )
+    try:
+        recognition = await BotCustomerRequisitesApiService.recognize_file_for_manager(
+            session,
+            telegram_id=telegram_id,
+            content=content,
+            filename=file.filename or "telegram-requisites",
+            mime_type=file.content_type or "application/octet-stream",
+            telegram_chat_id=telegram_chat_id,
+            telegram_message_id=telegram_message_id,
+        )
+    except BotCustomerRequisitesAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return BotCustomerRequisitesRecognitionResponse.model_validate(recognition)
+
+
+@router.post(
+    "/customers/requisites/{recognition_id}/action",
+    response_model=BotCustomerRequisitesActionResponse,
+    operation_id="apply_internal_bot_customer_requisites_action_v1",
+)
+async def apply_internal_bot_customer_requisites_action(
+    payload: BotCustomerRequisitesActionRequest,
+    recognition_id: int = Path(ge=1),
+    session: AsyncSession = Depends(get_session),
+) -> BotCustomerRequisitesActionResponse:
+    try:
+        result = await BotCustomerRequisitesApiService.apply_action_for_manager(
+            session,
+            telegram_id=payload.telegram_id,
+            recognition_id=recognition_id,
+            action=payload.action,
+        )
+    except BotCustomerRequisitesAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except BotCustomerRequisitesNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BotCustomerRequisitesConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return BotCustomerRequisitesActionResponse(
+        recognition=BotCustomerRequisitesRecognitionResponse.model_validate(result.recognition),
+        customer=result.customer,
         changed=result.changed,
     )

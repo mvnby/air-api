@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import BigInteger, Column, JSON, String, Text
+from sqlalchemy import BigInteger, Column, Index, JSON, String, Text, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from .common import ClosingResult, DocumentRoleType, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentCurrency, PaymentType
@@ -355,6 +355,18 @@ class DocumentTemplate(SQLModel, table=True):
 
 class OrderWorkStage(SQLModel, table=True):
     __tablename__ = "order_work_stage"
+    __table_args__ = (
+        Index(
+            "uq_unassigned_order_work_stage_schedule",
+            "order_id",
+            "name",
+            "start_time",
+            unique=True,
+            postgresql_where=text("installer_id IS NULL AND start_time IS NOT NULL"),
+            sqlite_where=text("installer_id IS NULL AND start_time IS NOT NULL"),
+        ),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
 

@@ -380,6 +380,7 @@ class LeadService:
                 "lead": LeadService._map_lead(lead),
                 "customer_id": int(converted_order.customer_id or 0),
                 "order_id": int(converted_order.id),
+                "order_created": False,
             }
 
         name = LeadService._clean_optional(payload.name) or LeadService._clean_optional(lead.name)
@@ -493,6 +494,7 @@ class LeadService:
             "lead": LeadService._map_lead(lead),
             "customer_id": int(customer.id),
             "order_id": int(order.id),
+            "order_created": True,
         }
 
     @staticmethod
