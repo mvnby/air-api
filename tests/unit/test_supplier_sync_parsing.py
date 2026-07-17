@@ -29,15 +29,22 @@ def test_parse_qty_and_currency_normalization():
     assert _normalize_currency("byn") == "BYN"
     assert _parse_qty("в наличии") == 10
     assert _parse_qty("есть") == 10
+    assert _parse_qty("склад") == 10
+    assert _parse_qty("СКЛАД") == 10
     assert _parse_qty("в наличии 4 шт") == 4
+    assert _parse_qty("заказ") == 0
     assert _parse_qty("ожидается поставка") == 0
     assert _parse_qty("нет в наличии") == 0
+    assert _parse_qty("нет на складе") == 0
 
 
 def test_availability_classification():
     assert classify_availability("в наличии") == "in_stock"
+    assert classify_availability("склад") == "in_stock"
+    assert classify_availability("заказ") == "incoming"
     assert classify_availability("приход июнь-июль") == "incoming"
     assert classify_availability("нет в наличии") == "out_of_stock"
+    assert classify_availability("нет на складе") == "out_of_stock"
 
 
 def test_extract_range_start_row():
