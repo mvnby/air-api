@@ -275,6 +275,57 @@ async def test_bot_api_gateway_posts_normalized_task_report():
     assert response.changed is False
 
 
+async def test_bot_api_gateway_posts_runtime_lease_contract():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/runtime-leases/acquire")
+        assert request.content == b'{"name":"mvn:telegram_bot","owner_id":"node:1","ttl_seconds":45}'
+        return httpx.Response(
+            200,
+            json={
+                "name": "mvn:telegram_bot",
+                "owner_id": "node:1",
+                "acquired": True,
+                "expires_at": "2026-07-17T18:00:00",
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        response = await gateway.acquire_runtime_lease(
+            name="mvn:telegram_bot", owner_id="node:1", ttl_seconds=45
+        )
+    assert response.acquired is True
+
+
+async def test_bot_api_gateway_sends_order_attachment_as_multipart():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/orders/42/attachments")
+        assert b'filename="photo.jpg"' in request.content
+        assert b"image-bytes" in request.content
+        assert b'form-data; name="file_id"' in request.content
+        return httpx.Response(200, json={"order_id": 42, "already_attached": False})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        response = await gateway.attach_order_file(
+            telegram_id=123,
+            order_id=42,
+            content=b"image-bytes",
+            file_id="telegram-file",
+            filename="photo.jpg",
+            mime_type="image/jpeg",
+            telegram_chat_id=100,
+            telegram_message_id=55,
+        )
+    assert response.order_id == 42
+
+
 async def test_bot_api_gateway_maps_task_conflict():
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _request: httpx.Response(409, json={"detail": "terminal"}))

@@ -1,4 +1,5 @@
 import importlib
+import asyncio
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -308,9 +309,9 @@ def test_bot_config_allows_empty_token_when_disabled(monkeypatch):
     config = importlib.import_module("core.config")
     bot_config = importlib.import_module("bot_app.config")
 
-    monkeypatch.setattr(config.settings, "BOT_TOKEN", "", raising=False)
-    monkeypatch.setattr(config.settings, "APP_ROLE", "standby", raising=False)
-    monkeypatch.setattr(config.settings, "BOT_ENABLED", None, raising=False)
+    monkeypatch.setattr(bot_config.settings, "BOT_TOKEN", "", raising=False)
+    monkeypatch.setattr(bot_config.settings, "APP_ROLE", "standby", raising=False)
+    monkeypatch.setattr(bot_config.settings, "BOT_ENABLED", None, raising=False)
 
     assert bot_config._resolve_bot_token() == "0:disabled-bot-token"
 
@@ -320,9 +321,9 @@ def test_bot_config_requires_token_when_enabled(monkeypatch):
     config = importlib.import_module("core.config")
     bot_config = importlib.import_module("bot_app.config")
 
-    monkeypatch.setattr(config.settings, "BOT_TOKEN", "", raising=False)
-    monkeypatch.setattr(config.settings, "APP_ROLE", "primary", raising=False)
-    monkeypatch.setattr(config.settings, "BOT_ENABLED", True, raising=False)
+    monkeypatch.setattr(bot_config.settings, "BOT_TOKEN", "", raising=False)
+    monkeypatch.setattr(bot_config.settings, "APP_ROLE", "primary", raising=False)
+    monkeypatch.setattr(bot_config.settings, "BOT_ENABLED", True, raising=False)
 
     with pytest.raises(RuntimeError, match="BOT_TOKEN is required"):
         bot_config._resolve_bot_token()
@@ -339,20 +340,13 @@ async def test_bot_main_disabled_does_not_poll(monkeypatch):
     monkeypatch.setattr(bot_main.settings, "BOT_ENABLED", None, raising=False)
     delete_webhook = AsyncMock()
     start_polling = AsyncMock()
-    verify_storage = AsyncMock()
     verify_access = AsyncMock()
-    monkeypatch.setattr(
-        bot_main,
-        "verify_private_attachment_storage_startup",
-        verify_storage,
-    )
     monkeypatch.setattr(bot_main.bot, "delete_webhook", delete_webhook)
     monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
     monkeypatch.setattr(bot_main, "verify_bot_access_startup", verify_access)
 
     await bot_main.main(wait_when_disabled=False)
 
-    verify_storage.assert_awaited_once_with(bot_main.settings)
     verify_access.assert_not_awaited()
     delete_webhook.assert_not_awaited()
     start_polling.assert_not_awaited()
@@ -374,16 +368,18 @@ async def test_bot_main_preserves_pending_updates_by_default(monkeypatch):
     start_polling = AsyncMock()
     verify_access = AsyncMock()
     close_access = AsyncMock()
+    lease = SimpleNamespace(
+        lost_event=asyncio.Event(),
+        try_acquire=AsyncMock(return_value=True),
+        release=AsyncMock(),
+    )
     monkeypatch.setattr(bot_main, "_setup_bot_commands", setup_commands)
     monkeypatch.setattr(bot_main.bot, "delete_webhook", delete_webhook)
     monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
     monkeypatch.setattr(bot_main, "verify_bot_access_startup", verify_access)
     monkeypatch.setattr(bot_main, "close_bot_access_provider", close_access)
-    monkeypatch.setattr(
-        bot_main.RuntimeLockService,
-        "try_acquire",
-        AsyncMock(return_value=FakeRuntimeLock()),
-    )
+    monkeypatch.setattr(bot_main, "close_bot_api_gateway", AsyncMock())
+    monkeypatch.setattr(bot_main, "BotRuntimeLease", Mock(return_value=lease))
 
     await bot_main.main(wait_when_disabled=False)
 
@@ -392,6 +388,8 @@ async def test_bot_main_preserves_pending_updates_by_default(monkeypatch):
     delete_webhook.assert_awaited_once_with(drop_pending_updates=False)
     start_polling.assert_awaited_once_with(bot_main.bot)
     close_access.assert_awaited_once_with()
+    lease.try_acquire.assert_awaited_once_with()
+    lease.release.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
@@ -404,12 +402,12 @@ async def test_bot_main_does_not_poll_when_access_preflight_fails(monkeypatch):
     monkeypatch.setattr(bot_main.settings, "APP_ROLE", "primary", raising=False)
     monkeypatch.setattr(bot_main.settings, "BOT_ENABLED", True, raising=False)
     monkeypatch.setattr(bot_main.dp, "include_router", Mock())
-    runtime_lock = SimpleNamespace(acquired=True, reason="test lock", release=AsyncMock())
-    monkeypatch.setattr(
-        bot_main.RuntimeLockService,
-        "try_acquire",
-        AsyncMock(return_value=runtime_lock),
+    lease = SimpleNamespace(
+        lost_event=asyncio.Event(),
+        try_acquire=AsyncMock(return_value=True),
+        release=AsyncMock(),
     )
+    monkeypatch.setattr(bot_main, "BotRuntimeLease", Mock(return_value=lease))
     monkeypatch.setattr(
         bot_main,
         "verify_bot_access_startup",
@@ -418,6 +416,7 @@ async def test_bot_main_does_not_poll_when_access_preflight_fails(monkeypatch):
     close_access = AsyncMock()
     start_polling = AsyncMock()
     monkeypatch.setattr(bot_main, "close_bot_access_provider", close_access)
+    monkeypatch.setattr(bot_main, "close_bot_api_gateway", AsyncMock())
     monkeypatch.setattr(bot_main.dp, "start_polling", start_polling)
 
     with pytest.raises(bot_main.BotAccessUnavailableError, match="offline"):
@@ -425,7 +424,8 @@ async def test_bot_main_does_not_poll_when_access_preflight_fails(monkeypatch):
 
     start_polling.assert_not_awaited()
     close_access.assert_awaited_once_with()
-    runtime_lock.release.assert_awaited_once_with()
+    lease.try_acquire.assert_not_awaited()
+    lease.release.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio

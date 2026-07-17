@@ -34,12 +34,9 @@ services:
     build: .
     restart: always
     depends_on:
-      - db
       - app
     env_file:
       - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db/${POSTGRES_DB:-air_conditioners}
     command: python -m bot_app.main
 
 volumes:

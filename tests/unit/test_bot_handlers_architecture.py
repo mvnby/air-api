@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 
@@ -8,6 +9,33 @@ def test_bot_handlers_do_not_use_direct_db_queries():
         assert "from sqlmodel import select" not in source, f"{path} imports select directly"
         assert "session.execute(" not in source, f"{path} executes SQL directly"
         assert "from crud." not in source, f"{path} imports CRUD directly"
+
+
+def test_entire_bot_package_has_no_monolith_runtime_imports():
+    forbidden_roots = {"core", "models", "services", "crud", "schemas"}
+    for path in Path("bot_app").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                root = node.module.split(".", 1)[0]
+                assert root not in forbidden_roots, f"{path} imports backend package {node.module}"
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root = alias.name.split(".", 1)[0]
+                    assert root not in forbidden_roots, f"{path} imports backend package {alias.name}"
+
+
+def test_bot_compose_services_have_no_database_dependency_or_credentials():
+    for compose_path in (
+        "docker-compose.yml",
+        "docker-compose.api.yml",
+        "docker-compose.prod.yml",
+        "deploy/ha/mvn-api/docker-compose.patroni.yml",
+    ):
+        source = Path(compose_path).read_text(encoding="utf-8")
+        bot_section = source.split("\n  bot:\n", 1)[1].split("\n  ", 1)[0]
+        assert "DATABASE_URL" not in bot_section, compose_path
+        assert "- db" not in bot_section, compose_path
 
 
 def test_bot_handlers_resolve_staff_access_only_through_bot_provider():
@@ -49,7 +77,7 @@ def test_bot_catalog_presenter_does_not_import_backend_services():
 
 
 def test_bot_task_read_paths_use_api_instead_of_task_service_reads():
-    for filename in ("work.py", "admin.py"):
+    for filename in ("work.py", "attachments.py"):
         source = Path(f"bot_app/handlers/{filename}").read_text(encoding="utf-8")
         assert "BotTaskService.list_my_tasks" not in source
         assert "get_bot_api_gateway().list_my_tasks" in source
@@ -76,7 +104,10 @@ def test_bot_quick_order_paths_use_api_instead_of_backend_service():
 
 
 def test_bot_customer_requisites_paths_use_api_instead_of_backend_service():
-    source = Path("bot_app/handlers/admin.py").read_text(encoding="utf-8")
+    source = "\n".join(
+        Path(path).read_text(encoding="utf-8")
+        for path in ("bot_app/handlers/admin_common.py", "bot_app/handlers/requisites.py")
+    )
     assert "CustomerRequisitesRecognitionService" not in source
     assert "get_bot_api_gateway().recognize_customer_requisites_file" in source
     assert "get_bot_api_gateway().recognize_customer_requisites_text" in source

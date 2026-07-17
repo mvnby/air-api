@@ -18,3 +18,14 @@ class BotFsmState(SQLModel, table=True):
     state: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
     data: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, default=dict))
     updated_at: datetime = Field(default_factory=datetime.now, index=True, sa_column_kwargs={"onupdate": datetime.now})
+
+
+class BotRuntimeLease(SQLModel, table=True):
+    """Short-lived ownership lease for an independently deployed bot process."""
+
+    __tablename__ = "bot_runtime_lease"
+
+    name: str = Field(primary_key=True)
+    owner_id: str = Field(index=True, max_length=160)
+    expires_at: datetime = Field(index=True)
+    updated_at: datetime = Field(default_factory=datetime.now, index=True)

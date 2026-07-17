@@ -4,10 +4,8 @@ from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
-from core.database import async_session_maker
-from services.bot_defect_act_service import BotDefectActService
-
 from ..access_runtime import get_bot_access_context
+from ..api_runtime import get_bot_api_gateway
 from ..states import ShopState
 
 router = Router()
@@ -115,12 +113,12 @@ async def prepare_repair_diagnostic_preset(callback: CallbackQuery, state: FSMCo
         return
 
     try:
-        async with async_session_maker() as session:
-            draft = await BotDefectActService.build_diagnostic_preset_draft(
-                session,
-                order_id=order_id,
-                fault_type=fault_type,
-            )
+        response = await get_bot_api_gateway().build_repair_preset_draft(
+            telegram_id=callback.from_user.id,
+            order_id=order_id,
+            fault_type=fault_type,
+        )
+        draft = response.draft
     except Exception as exc:
         await callback.answer(f"Не удалось подготовить дефектный акт: {exc}", show_alert=True)
         return
@@ -166,12 +164,12 @@ async def handle_repair_context_comment(message: types.Message, state: FSMContex
 
     progress = await message.answer("Готовлю краткий дефектный акт из комментария…")
     try:
-        async with async_session_maker() as session:
-            draft = await BotDefectActService.build_diagnostic_comment_draft(
-                session,
-                order_id=order_id,
-                comment=text,
-            )
+        response = await get_bot_api_gateway().build_repair_comment_draft(
+            telegram_id=message.from_user.id,
+            order_id=order_id,
+            comment=text,
+        )
+        draft = response.draft
     except Exception as exc:
         await progress.edit_text(f"❌ Не удалось обработать комментарий: {escape(str(exc))}")
         return
@@ -205,17 +203,15 @@ async def confirm_repair_context_comment(callback: CallbackQuery, state: FSMCont
         await callback.answer("Черновик комментария не найден.", show_alert=True)
         return
 
-    async with async_session_maker() as session:
-        result = await BotDefectActService.apply_diagnostic_comment(
-            session,
-            order_id,
-            repair_meta_draft=draft.get("repair_meta") or {},
-            raw_comment=str(draft.get("comment") or ""),
-            telegram_user_id=callback.from_user.id,
-            telegram_chat_id=draft.get("telegram_chat_id"),
-            telegram_message_id=draft.get("telegram_message_id"),
-            can_attach_any=context.is_manager,
-        )
+    response = await get_bot_api_gateway().apply_repair_context(
+        telegram_id=callback.from_user.id,
+        order_id=order_id,
+        repair_meta_draft=draft.get("repair_meta") or {},
+        raw_comment=str(draft.get("comment") or ""),
+        telegram_chat_id=draft.get("telegram_chat_id"),
+        telegram_message_id=draft.get("telegram_message_id"),
+    )
+    result = response.result
 
     if not result:
         await callback.answer("Заказ не найден или недоступен.", show_alert=True)

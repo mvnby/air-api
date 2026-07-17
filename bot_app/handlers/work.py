@@ -3,9 +3,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 
-from core.database import async_session_maker
-from services.bot_product_selection_service import BotProductSelectionService
-from services.bot_service import BotService
 from ..access_runtime import get_bot_access_context
 from ..api_gateway import BotApiAuthorizationError, BotApiConflictError, BotApiError
 from ..api_runtime import get_bot_api_gateway
@@ -20,8 +17,10 @@ from ..quick_order_presenter import (
     format_quick_order_preview_rich_html,
     quick_order_to_dict,
 )
+from ..selection_presenter import format_client_selection, format_selection, format_selection_rich_html
 from ..states import ShopState
 from ..task_presenter import build_stage_report, format_tasks, format_tasks_rich_html, task_to_dict
+from ..telegram_service import BotTelegramService
 
 router = Router()
 
@@ -82,7 +81,7 @@ async def quick_order_parse(message: types.Message, state: FSMContext):
     )
     keyboard = quick_order_confirm_keyboard()
     fallback_text = format_quick_order_preview(draft)
-    delivered = await BotService.send_rich_message(
+    delivered = await BotTelegramService.send_rich_message(
         message.chat.id,
         format_quick_order_preview_rich_html(draft),
         reply_markup=keyboard,
@@ -171,15 +170,18 @@ async def selection_process(message: types.Message, state: FSMContext):
         await state.clear()
         return
     query = (message.text or "").strip()
-    async with async_session_maker() as session:
-        selection = await BotProductSelectionService.build_selection(session, query)
-    await state.update_data(selection_client_text=BotProductSelectionService.format_client_selection(selection))
+    response = await get_bot_api_gateway().build_product_selection(
+        telegram_id=message.from_user.id,
+        query=query,
+    )
+    selection = response.selection
+    await state.update_data(selection_client_text=format_client_selection(selection))
     await state.set_state(None)
     keyboard = selection_result_keyboard() if selection.get("areas") else None
-    fallback_text = BotProductSelectionService.format_selection(selection)
-    await BotService.send_rich_message(
+    fallback_text = format_selection(selection)
+    await BotTelegramService.send_rich_message(
         message.chat.id,
-        BotProductSelectionService.format_selection_rich_html(selection),
+        format_selection_rich_html(selection),
         fallback_text=fallback_text,
         reply_markup=keyboard,
     )
@@ -223,7 +225,7 @@ async def my_tasks(message: types.Message):
     tasks = [task_to_dict(task) for task in response.items]
     keyboard = task_actions_keyboard(tasks)
     fallback_text = format_tasks(tasks)
-    delivered = await BotService.send_rich_message(
+    delivered = await BotTelegramService.send_rich_message(
         message.chat.id,
         format_tasks_rich_html(tasks),
         reply_markup=keyboard,

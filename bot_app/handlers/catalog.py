@@ -7,9 +7,6 @@ from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-from core.database import async_session_maker
-from services.bot_product_selection_service import BotProductSelectionService
-from services.product_service import ProductService
 from ..access_runtime import get_bot_access_context
 from ..api_gateway import BotApiError
 from ..api_runtime import get_bot_api_gateway
@@ -150,7 +147,7 @@ async def process_area(callback: CallbackQuery, state: FSMContext):
     area_val = callback.data.split("_")[-1]
     await state.update_data(area=int(area_val))
     await state.set_state(ShopState.select_type)
-    
+
     await callback.message.edit_text(
         f"Выбрана площадь: до {area_val} м².\n\n"
         "Теперь выберите тип оборудования:\n"
@@ -165,7 +162,7 @@ async def process_type(callback: CallbackQuery, state: FSMContext):
     is_inverter = callback.data == "select_type_inverter"
     await state.update_data(is_inverter=is_inverter)
     await state.set_state(ShopState.select_winter)
-    
+
     type_text = "Премиум (Инвертор)" if is_inverter else "Оптимальный (Стандарт)"
     await callback.message.edit_text(
         f"Выбран тип: {type_text}.\n\n"
@@ -182,7 +179,7 @@ async def process_winter(callback: CallbackQuery, state: FSMContext):
     winter_tag = None if winter_val == "none" else winter_val
     await state.update_data(winter_tag=winter_tag)
     await state.set_state(ShopState.select_wifi)
-    
+
     winter_text = "Не важно" if winter_val == "none" else f"До {winter_val.replace('winter', '')}°C"
     await callback.message.edit_text(
         f"Обогрев зимой: {winter_text}.\n\n"
@@ -195,38 +192,38 @@ async def process_winter(callback: CallbackQuery, state: FSMContext):
 async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMContext):
     wifi_val = callback.data.replace("select_wifi_", "")
     wifi_tag = None if wifi_val == "none" else wifi_val
-    
+
     # Получаем все данные
     data = await state.get_data()
     area = data.get("area")
     is_inverter = data.get("is_inverter")
     winter_tag = data.get("winter_tag")
-    
+
     # Собираем теги для фильтрации
     tag_slugs = []
     if winter_tag:
         tag_slugs.append(winter_tag)
     if wifi_tag:
         tag_slugs.append(wifi_tag)
-    
+
     wifi_text = "Не важно" if wifi_val == "none" else ("Встроенный" if "builtin" in wifi_val else "Опция")
     await callback.message.edit_text(
         f"Wi-Fi: {wifi_text}.\n\n"
         f"🔍 Ищем лучшие модели для площади {area} м²..."
     )
-    
+
     # Получаем товары с фильтрацией по тегам
     context = await _get_access_context(callback.from_user.id)
-    async with async_session_maker() as session:
-        products = await ProductService.get_curated(
-            session, 
-            area=area, 
-            is_inverter=is_inverter,
-            tag_slugs=tag_slugs if tag_slugs else None,
-            limit=5  # Максимум 5 результатов
-        )
-        is_admin = context.is_staff and context.is_manager
-    
+    response = await get_bot_api_gateway().get_curated_products(
+        telegram_id=callback.from_user.id,
+        area=area,
+        is_inverter=is_inverter,
+        tag_slugs=tag_slugs,
+        limit=5,
+    )
+    products = [product.model_dump(mode="json") for product in response.items]
+    is_admin = context.is_staff and context.is_manager
+
     if not products:
         await callback.message.answer(
             "К сожалению, по вашим параметрам сейчас ничего не найдено. 😔\n"
@@ -236,7 +233,7 @@ async def process_wifi_and_show_results(callback: CallbackQuery, state: FSMConte
         await callback.message.answer(f"🚀 Вот лучшие предложения для вас ({len(products)} шт.):")
         for product in products:
             await send_product_card(callback, product, is_admin)
-            
+
     await state.clear()
     await _answer_with_staff_menu(callback.message, callback.from_user.id, context=context)
     await callback.answer()

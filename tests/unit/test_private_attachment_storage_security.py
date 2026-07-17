@@ -234,11 +234,16 @@ async def test_startup_probe_fails_closed_when_delete_does_not_remove_object():
 )
 def test_production_compose_pins_environment_and_private_storage_provider(compose_path):
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
-    service_environments = [
+    api_environments = [
         compose["services"][service_name]["environment"]
-        for service_name in ("app", "app-blue", "app-green", "bot")
+        for service_name in ("app", "app-blue", "app-green")
     ]
 
-    for environment in service_environments:
+    for environment in api_environments:
         assert environment["ENVIRONMENT"] == "production"
         assert environment["SERVICE_ATTACHMENT_STORAGE_PROVIDER"] == "r2"
+
+    bot_environment = compose["services"]["bot"]["environment"]
+    assert bot_environment["ENVIRONMENT"] == "production"
+    assert "SERVICE_ATTACHMENT_STORAGE_PROVIDER" not in bot_environment
+    assert "DATABASE_URL" not in bot_environment
