@@ -15,6 +15,8 @@ import type { ManagerBrandSeriesListResponse } from '../models/ManagerBrandSerie
 import type { ManagerBrandSeriesResponse } from '../models/ManagerBrandSeriesResponse';
 import type { ManagerBrandSeriesUpdatePayload } from '../models/ManagerBrandSeriesUpdatePayload';
 import type { ManagerBrandUpdatePayload } from '../models/ManagerBrandUpdatePayload';
+import type { ManagerSeriesGalleryApplyPayload } from '../models/ManagerSeriesGalleryApplyPayload';
+import type { ManagerSeriesGalleryApplyResponse } from '../models/ManagerSeriesGalleryApplyResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -276,6 +278,33 @@ export class ManagerBrandsService {
                 'brand_id': brandId,
                 'series_id': seriesId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Manager Series Gallery To Products
+     * @param brandId
+     * @param seriesId
+     * @param requestBody
+     * @returns ManagerSeriesGalleryApplyResponse Successful Response
+     * @throws ApiError
+     */
+    public static applyManagerSeriesGalleryToProducts(
+        brandId: number,
+        seriesId: number,
+        requestBody: ManagerSeriesGalleryApplyPayload,
+    ): CancelablePromise<ManagerSeriesGalleryApplyResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/brands/{brand_id}/series/{series_id}/gallery/apply-to-products',
+            path: {
+                'brand_id': brandId,
+                'series_id': seriesId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

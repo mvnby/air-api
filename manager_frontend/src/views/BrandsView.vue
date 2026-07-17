@@ -73,6 +73,7 @@ const brandFeatures = ref<ManagerBrandFeature[]>([]);
 const seriesLoading = ref(false);
 const brandFeaturesLoading = ref(false);
 const seriesSaving = ref(false);
+const seriesGalleryApplying = ref(false);
 const featureSaving = ref(false);
 const editingBrandFeatureId = ref<number | null>(null);
 const seriesError = ref('');
@@ -664,6 +665,32 @@ const addGalleryImage = (url = pendingGalleryImage.value) => {
 
 const removeGalleryImage = (index: number) => {
     seriesForm.value.galleryImages.splice(index, 1);
+};
+
+const applySeriesGalleryToProducts = async () => {
+    if (!selectedBrandId.value || !editingSeries.value?.id || seriesGalleryApplying.value) return;
+    const galleryUrls = normalizeUrlList(seriesForm.value.galleryImages);
+    if (!galleryUrls.length) {
+        seriesError.value = 'Добавьте хотя бы одно изображение в галерею.';
+        return;
+    }
+
+    seriesGalleryApplying.value = true;
+    seriesError.value = '';
+    try {
+        const result = await api.applyManagerSeriesGalleryToProducts(
+            selectedBrandId.value,
+            editingSeries.value.id,
+            galleryUrls,
+        );
+        seriesForm.value.galleryImages = galleryUrls;
+        await fetchSeries();
+        setToast(`Добавлено товарам: ${result.added_links}, уже было: ${result.skipped_existing}`);
+    } catch (err) {
+        seriesError.value = getApiErrorMessage(err);
+    } finally {
+        seriesGalleryApplying.value = false;
+    }
 };
 
 const isBrandFeatureSelected = (featureId: number) => seriesForm.value.brandFeatureIds.includes(featureId);
@@ -1507,9 +1534,21 @@ onMounted(() => {
                             />
                         </div>
                         <div class="space-y-3">
-                            <div>
-                                <h3 class="text-sm font-medium text-gray-600 dark:text-slate-300">Галерея</h3>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">Изображения серии для лендингов, карточек и промо-блоков.</p>
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h3 class="text-sm font-medium text-gray-600 dark:text-slate-300">Галерея</h3>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">Изображения серии для лендингов, карточек и промо-блоков.</p>
+                                </div>
+                                <button
+                                    v-if="editingSeries?.id"
+                                    type="button"
+                                    class="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:cursor-wait disabled:opacity-50 dark:border-teal-900/60 dark:text-teal-200 dark:hover:bg-teal-950/30"
+                                    :disabled="seriesGalleryApplying || !seriesForm.galleryImages.length"
+                                    @click="applySeriesGalleryToProducts"
+                                >
+                                    <span class="material-icons-round text-[16px]">library_add</span>
+                                    {{ seriesGalleryApplying ? 'Добавление...' : 'Добавить товарам серии' }}
+                                </button>
                             </div>
                             <div v-if="seriesForm.galleryImages.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                                 <div
@@ -1549,6 +1588,7 @@ onMounted(() => {
                                     kind="brand"
                                     :tags="['series', 'gallery']"
                                     accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                                    multiple
                                     placeholder="/media/library/original/series-gallery.webp"
                                     @picked="addGalleryImage"
                                 />

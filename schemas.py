@@ -2577,6 +2577,10 @@ class ManagerBrandSeriesUpdatePayload(BaseModel):
     sort_order: Optional[int] = None
 
 
+class ManagerSeriesGalleryApplyPayload(BaseModel):
+    source_urls: List[str]
+
+
 class ManagerBrandFeatureResponse(ProductSeriesBrandFeatureResponse):
     brand_id: int
     created_at: datetime
@@ -2748,6 +2752,11 @@ class ManagerMediaBulkAddResponse(ManagerActionMessageResponse):
     products_count: int
     added_links: int
     skipped_existing: int
+
+
+class ManagerSeriesGalleryApplyResponse(ManagerMediaBulkAddResponse):
+    series_id: int
+    images_applied: int
 
 
 class ManagerMediaBulkDeleteResponse(ManagerActionMessageResponse):

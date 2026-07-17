@@ -27,6 +27,7 @@ import {
   type BackgroundRemovalProvider,
 } from '../utils/media-processing';
 import { uploadSequentially } from '../utils/sequential-upload';
+import { optimizeImageForUpload } from '../utils/image-upload-optimization';
 import ImageCropSelector, { type ImageCropSourceSize, type ImageCropValue } from '../components/ImageCropSelector.vue';
 
 type MediaKind = { value: string; label: string };
@@ -292,11 +293,14 @@ const uploadFiles = async (files: FileList | File[]) => {
     const tagsJson = JSON.stringify(parseTags(uploadTags.value));
     await uploadSequentially(
       imageFiles,
-      (file) => api.uploadMediaAssets({
-        files: [file],
-        kind: uploadKind.value,
-        tags_json: tagsJson,
-      }),
+      async (file) => {
+        const preparedFile = await optimizeImageForUpload(file);
+        return api.uploadMediaAssets({
+          files: [preparedFile],
+          kind: uploadKind.value,
+          tags_json: tagsJson,
+        });
+      },
       (response, progress) => {
         appendUploadedAssets(response.items, response.uploaded);
         uploadCompleted.value = progress.completed;

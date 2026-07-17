@@ -12,6 +12,8 @@ import {
 } from 'lucide-vue-next';
 import { api, type ManagerMediaAssetResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { optimizeImageForUpload } from '../utils/image-upload-optimization';
+import { uploadSequentially } from '../utils/sequential-upload';
 
 const props = withDefaults(defineProps<{
     modelValue?: string;
@@ -20,12 +22,14 @@ const props = withDefaults(defineProps<{
     tags?: string[];
     accept?: string;
     placeholder?: string;
+    multiple?: boolean;
 }>(), {
     modelValue: '',
     kind: 'misc',
     tags: () => [],
     accept: 'image/*,.svg',
     placeholder: '/media/library/original/logo.svg',
+    multiple: false,
 });
 
 const emit = defineEmits<{
@@ -41,6 +45,8 @@ type ClipboardImageItem = {
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
+const uploadCompleted = ref(0);
+const uploadTotal = ref(0);
 const error = ref('');
 const pickerOpen = ref(false);
 const assets = ref<ManagerMediaAssetResponse[]>([]);
@@ -92,34 +98,45 @@ const rememberUploadedAsset = (asset: ManagerMediaAssetResponse) => {
 };
 
 const uploadFile = async (file: File) => {
-    uploading.value = true;
-    error.value = '';
-    try {
-        const response = await api.uploadMediaAssets({
-            files: [file],
-            kind: props.kind,
-            tags_json: JSON.stringify(props.tags || []),
-        });
-        const uploaded = response.items?.[0];
-        if (!uploaded?.url) {
-            throw new Error('Загрузка завершилась без URL файла');
-        }
-        pickedUrl(uploaded.url);
-        emit('uploaded', uploaded.url);
-        rememberUploadedAsset(uploaded);
-    } catch (err) {
-        error.value = mediaErrorMessage(err, 'Не удалось загрузить файл');
-    } finally {
-        uploading.value = false;
-        if (fileInput.value) fileInput.value.value = '';
+    const preparedFile = await optimizeImageForUpload(file);
+    const response = await api.uploadMediaAssets({
+        files: [preparedFile],
+        kind: props.kind,
+        tags_json: JSON.stringify(props.tags || []),
+    });
+    const uploaded = response.items?.[0];
+    if (!uploaded?.url) {
+        throw new Error('Загрузка завершилась без URL файла');
     }
+    pickedUrl(uploaded.url);
+    emit('uploaded', uploaded.url);
+    rememberUploadedAsset(uploaded);
 };
 
 const onFileChange = async (event: Event) => {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    await uploadFile(file);
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    uploading.value = true;
+    uploadCompleted.value = 0;
+    uploadTotal.value = props.multiple ? files.length : 1;
+    error.value = '';
+    try {
+        await uploadSequentially(
+            props.multiple ? files : files.slice(0, 1),
+            uploadFile,
+            (_result, progress) => {
+                uploadCompleted.value = progress.completed;
+            },
+        );
+    } catch (err) {
+        error.value = mediaErrorMessage(err, 'Не удалось загрузить файл');
+    } finally {
+        uploading.value = false;
+        uploadCompleted.value = 0;
+        uploadTotal.value = 0;
+        input.value = '';
+    }
 };
 
 const clearValue = () => {
@@ -208,7 +225,13 @@ const pasteFromClipboard = async () => {
             const imageType = item.types.find((type) => type.startsWith('image/'));
             if (!imageType) continue;
             const blob = await item.getType(imageType);
-            await uploadFile(new File([blob], `clipboard-${Date.now()}.${extensionFromMime(imageType)}`, { type: imageType }));
+            uploading.value = true;
+            error.value = '';
+            try {
+                await uploadFile(new File([blob], `clipboard-${Date.now()}.${extensionFromMime(imageType)}`, { type: imageType }));
+            } finally {
+                uploading.value = false;
+            }
             return;
         }
         error.value = 'В буфере нет изображения';
@@ -271,6 +294,7 @@ const pasteFromClipboard = async () => {
             type="file"
             class="hidden"
             :accept="accept"
+            :multiple="multiple"
             @change="onFileChange"
         />
 
@@ -306,7 +330,7 @@ const pasteFromClipboard = async () => {
                     </button>
                 </span>
                 <span v-if="uploading" class="mt-1 block text-xs font-medium text-teal-700 dark:text-teal-300">
-                    Загрузка...
+                    {{ uploadTotal > 1 ? `Подготовка и загрузка: ${uploadCompleted}/${uploadTotal}` : 'Подготовка и загрузка...' }}
                 </span>
                 <span v-if="error" class="mt-1 block text-xs font-medium text-red-600 dark:text-red-300">
                     {{ error }}

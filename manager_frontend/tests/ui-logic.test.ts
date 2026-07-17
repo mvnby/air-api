@@ -14,6 +14,12 @@ import {
   syncStickyHeaderAfterLayout,
 } from '../src/composables/useSmartStickyHeader';
 import { uploadSequentially } from '../src/utils/sequential-upload';
+import {
+  CLIENT_IMAGE_MIN_OPTIMIZE_BYTES,
+  needsImageOptimization,
+  optimizedImageFileName,
+  shouldOptimizeImageUpload,
+} from '../src/utils/image-upload-optimization';
 import { compactLegalName } from '../src/components/orders/order-utils';
 
 const assert = (condition: unknown, message: string) => {
@@ -98,6 +104,19 @@ const uploadResults = await uploadSequentially(
 assert(uploadOrder.join(',') === '1,2,3', 'media files must upload sequentially in selection order');
 assert(uploadResults.join(',') === '10,20,30', 'sequential upload must return every response');
 assert(uploadProgress.join(',') === '1/3,2/3,3/3', 'sequential upload must report completed file count');
+assert(
+  shouldOptimizeImageUpload({ type: 'image/png', size: CLIENT_IMAGE_MIN_OPTIMIZE_BYTES }),
+  'raster images must be eligible for browser preparation',
+);
+assert(
+  !shouldOptimizeImageUpload({ type: 'image/svg+xml', size: CLIENT_IMAGE_MIN_OPTIMIZE_BYTES * 4 }),
+  'vector images must not be rasterized by client optimization',
+);
+assert(optimizedImageFileName('outside.unit.PNG') === 'outside.unit.webp', 'optimized files must use WebP names');
+assert(
+  needsImageOptimization(5000, 1200, CLIENT_IMAGE_MIN_OPTIMIZE_BYTES / 2),
+  'oversized pixel dimensions must be optimized even when the encoded file is small',
+);
 
 assert(
   compactLegalName('Общество с ограниченной ответственностью "НПП Юни"') === 'ООО "НПП Юни"',
