@@ -28,6 +28,20 @@ def svg_bytes() -> bytes:
     </svg>"""
 
 
+def test_large_library_image_is_downscaled_before_webp_encoding():
+    image = MediaLibraryService._open_image(image_bytes(size=(3000, 2000)))
+    try:
+        assert image.size == (2400, 1600)
+        assert image.mode == "RGB"
+    finally:
+        image.close()
+
+    encoded = MediaLibraryService._source_to_webp(image_bytes(size=(3000, 2000)))
+    with Image.open(BytesIO(encoded)) as stored:
+        assert stored.size == (2400, 1600)
+        assert stored.format == "WEBP"
+
+
 def write_media_file(path, content: bytes | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content if content is not None else image_bytes(size=(64, 48)))

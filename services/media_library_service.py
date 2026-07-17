@@ -46,6 +46,7 @@ from services.product_image_processing_provider import (
 MEDIA_LIBRARY_BASE_DIR = Path("media/library")
 MEDIA_LIBRARY_PUBLIC_PREFIX = "/media/library"
 MAX_LIBRARY_IMAGE_PIXELS = 50_000_000
+MAX_LIBRARY_IMAGE_DIMENSION = 2400
 MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
 REMOTE_IMAGE_TIMEOUT_SECONDS = 12.0
 SVG_MIME_TYPE = "image/svg+xml"
@@ -336,12 +337,18 @@ class MediaLibraryService:
 
         def crop() -> bytes:
             image = MediaLibraryService._open_image(source_content)
-            left = max(0, min(x, image.width - 1))
-            top = max(0, min(y, image.height - 1))
-            right = max(left + 1, min(left + width, image.width))
-            bottom = max(top + 1, min(top + height, image.height))
-            cropped = image.crop((left, top, right, bottom))
-            return MediaLibraryService._export_webp(cropped)
+            try:
+                left = max(0, min(x, image.width - 1))
+                top = max(0, min(y, image.height - 1))
+                right = max(left + 1, min(left + width, image.width))
+                bottom = max(top + 1, min(top + height, image.height))
+                cropped = image.crop((left, top, right, bottom))
+                try:
+                    return MediaLibraryService._export_webp(cropped)
+                finally:
+                    cropped.close()
+            finally:
+                image.close()
 
         content = await asyncio.to_thread(crop)
         stored = await MediaLibraryService._store_processed_webp(content, variant_type="crop")
@@ -478,9 +485,7 @@ class MediaLibraryService:
         if MediaLibraryService._looks_like_svg(content):
             return await MediaLibraryService._store_svg(content, variant_type=variant_type)
 
-        webp_content = await asyncio.to_thread(
-            lambda: MediaLibraryService._export_webp(MediaLibraryService._open_image(content))
-        )
+        webp_content = await asyncio.to_thread(MediaLibraryService._source_to_webp, content)
         return await MediaLibraryService._store_processed_webp(webp_content, variant_type=variant_type)
 
     @staticmethod
@@ -666,25 +671,41 @@ class MediaLibraryService:
                 if image.width * image.height > MAX_LIBRARY_IMAGE_PIXELS:
                     raise ValueError("Source image is too large for safe processing")
                 transposed = ImageOps.exif_transpose(image)
+                transposed.thumbnail(
+                    (MAX_LIBRARY_IMAGE_DIMENSION, MAX_LIBRARY_IMAGE_DIMENSION),
+                    Image.Resampling.LANCZOS,
+                    reducing_gap=3.0,
+                )
                 mode = "RGBA" if MediaLibraryService._has_alpha(transposed) else "RGB"
-                converted = transposed.convert(mode)
+                converted = transposed.convert(mode) if transposed.mode != mode else transposed.copy()
                 converted.load()
-                return converted.copy()
+                return converted
         except UnidentifiedImageError as exc:
             raise ValueError("Source image cannot be opened") from exc
+
+    @staticmethod
+    def _source_to_webp(content: bytes) -> bytes:
+        image = MediaLibraryService._open_image(content)
+        try:
+            return MediaLibraryService._export_webp(image)
+        finally:
+            image.close()
 
     @staticmethod
     def _export_webp(image: Image.Image) -> bytes:
         if not features.check("webp"):
             raise RuntimeError("Pillow WebP support is required for media library")
         output = BytesIO()
-        image.save(output, format="WEBP", quality=88, method=6, exact=image.mode == "RGBA")
+        image.save(output, format="WEBP", quality=88, method=4, exact=image.mode == "RGBA")
         return output.getvalue()
 
     @staticmethod
     def _image_size(content: bytes) -> tuple[int, int]:
         image = MediaLibraryService._open_image(content)
-        return image.width, image.height
+        try:
+            return image.width, image.height
+        finally:
+            image.close()
 
     @staticmethod
     def _looks_like_svg(content: bytes) -> bool:
