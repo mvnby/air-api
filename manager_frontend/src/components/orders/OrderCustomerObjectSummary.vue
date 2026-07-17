@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue';
 import { Building2, Copy, Mail, MapPin, Pencil, Phone, Route, UserRound } from 'lucide-vue-next';
 import type { OrderCustomerBrief } from '../../client';
+import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
+import { buildYandexMapUrl } from '../../utils/address';
 
 const props = defineProps<{
   customer?: OrderCustomerBrief | null;
@@ -33,7 +35,7 @@ const email = computed(() => String(props.customer?.email || '').trim());
 const phoneDigits = computed(() => phone.value.replace(/\D/g, ''));
 const validPhone = computed(() => phoneDigits.value.length >= 7);
 const validEmail = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value));
-const mapUrl = computed(() => props.address ? 'https://yandex.by/maps/?text=' + encodeURIComponent(props.address) : '');
+const mapUrl = computed(() => buildYandexMapUrl(props.address));
 
 watch(() => props.address, (value) => {
   if (!editingObject.value) objectAddress.value = value;
@@ -129,7 +131,7 @@ const saveObject = () => {
     </div>
 
     <div v-if="editingObject" class="border-t border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/50">
-      <label class="field-label">Адрес объекта<input v-model="objectAddress" class="field-input mt-1" autocomplete="street-address" /></label>
+      <AddressSuggestInput v-model="objectAddress" label="Адрес объекта" />
       <div class="mt-2 flex justify-between gap-2">
         <button type="button" class="btn-mini-outline text-xs" @click="emit('toggle-branch')">Выбрать филиал</button>
         <div class="flex gap-2">

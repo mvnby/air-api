@@ -56,9 +56,16 @@ async def get_fx_rate(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/address-suggest", response_model=AddressSuggestResponse, operation_id=SUGGEST_ADDRESS)
-async def suggest_address(q: str = Query(..., min_length=2)):
+async def suggest_address(
+    q: str = Query(..., min_length=2),
+    lat: float | None = Query(default=None, ge=-90, le=90),
+    lon: float | None = Query(default=None, ge=-180, le=180),
+):
     try:
-        return AddressSuggestResponse(items=await AddressSuggestService.suggest(q))
+        ull = f"{lon},{lat}" if lat is not None and lon is not None else None
+        return AddressSuggestResponse(
+            items=await AddressSuggestService.suggest(q, ull=ull)
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except httpx.HTTPError as exc:

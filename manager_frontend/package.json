@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "test:ui-logic": "node scripts/run-ui-logic-tests.mjs",
     "preview": "vite preview",
     "gen:api": "openapi --input ../openapi.json --output ./src/client --client fetch --useUnionTypes"
   },

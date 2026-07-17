@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
+import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 import {
   Building2,
   CheckCircle2,
@@ -585,8 +586,8 @@ onMounted(loadData);
               <label class="space-y-1 text-sm font-medium text-slate-600 md:col-span-2">Google Spreadsheet URL/ID<input v-model="supplierForm.spreadsheet_id_or_url" class="field-input" placeholder="https://docs.google.com/spreadsheets/..." /></label>
               <label class="space-y-1 text-sm font-medium text-slate-600">Юридическое название<input v-model="supplierForm.legal_name" class="field-input" placeholder="ООО / УП..." /></label>
               <label class="space-y-1 text-sm font-medium text-slate-600">УНП / рег. номер<input v-model="supplierForm.tax_id" class="field-input" /></label>
-              <label class="space-y-1 text-sm font-medium text-slate-600">Юр. адрес<textarea v-model="supplierForm.legal_address" class="field-input min-h-[76px]" /></label>
-              <label class="space-y-1 text-sm font-medium text-slate-600">Почтовый адрес / документы<textarea v-model="supplierForm.postal_address" class="field-input min-h-[76px]" /></label>
+              <AddressSuggestInput v-model="supplierForm.legal_address" label="Юр. адрес" />
+              <AddressSuggestInput v-model="supplierForm.postal_address" label="Почтовый адрес / документы" />
               <label class="space-y-1 text-sm font-medium text-slate-600">
                 Оплата по умолчанию
                 <select v-model="supplierForm.default_payment_method" class="field-input">
@@ -681,7 +682,7 @@ onMounted(loadData);
               <h3 class="mb-3 font-semibold text-slate-900">{{ editingWarehouseId ? 'Редактировать склад' : 'Новый склад' }}</h3>
               <div class="space-y-2">
                 <input v-model="warehouseForm.name" required class="field-input bg-white" placeholder="Название склада" />
-                <textarea v-model="warehouseForm.address" required class="field-input min-h-[80px] bg-white" placeholder="Адрес склада / точки отгрузки" />
+                <AddressSuggestInput v-model="warehouseForm.address" required placeholder="Адрес склада / точки отгрузки" input-class="bg-white" />
                 <select v-model="warehouseForm.contact_id" class="field-input bg-white">
                   <option :value="null">Контакт из справочника не выбран</option>
                   <option v-for="contact in contacts" :key="contact.id" :value="contact.id">{{ contact.name }}</option>
