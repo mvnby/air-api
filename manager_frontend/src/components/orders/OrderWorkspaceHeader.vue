@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
-import { Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, Undo2, X } from 'lucide-vue-next';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { ArrowRight, Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, Undo2, X } from 'lucide-vue-next';
 import { formatMoney } from './order-utils';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
+import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStickyHeader';
 
 const props = defineProps<{
   orderId?: number;
   title: string;
+  customerName?: string;
   workflow: OrderWorkflowType;
   viewModel: OrderWorkspaceViewModel;
   total: number;
@@ -34,8 +36,83 @@ const editingTitle = ref(false);
 const menuOpen = ref(false);
 const titleDraft = ref('');
 const headerRef = ref<HTMLElement | null>(null);
+const contentRef = ref<HTMLElement | null>(null);
 const focusLocksCompactMode = ref(false);
 const effectiveCompact = computed(() => Boolean(props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value));
+const showCustomerName = computed(() => {
+  const customerName = String(props.customerName || '').trim();
+  return Boolean(customerName && customerName !== String(props.title || '').trim());
+});
+let resizeAnimation: Animation | null = null;
+let contentAnimation: Animation | null = null;
+let resizeGeneration = 0;
+
+const clearResizeAnimation = () => {
+  resizeGeneration += 1;
+  resizeAnimation?.cancel();
+  resizeAnimation = null;
+  contentAnimation?.cancel();
+  contentAnimation = null;
+  headerRef.value?.style.removeProperty('overflow');
+};
+
+watch(effectiveCompact, async (isCompact) => {
+  const header = headerRef.value;
+  if (!header) return;
+  const generation = ++resizeGeneration;
+  const fromHeight = header.getBoundingClientRect().height;
+  resizeAnimation?.cancel();
+  resizeAnimation = null;
+  contentAnimation?.cancel();
+  contentAnimation = null;
+  header.style.removeProperty('overflow');
+
+  await nextTick();
+  if (generation !== resizeGeneration || headerRef.value !== header) return;
+  const toHeight = header.getBoundingClientRect().height;
+  if (
+    Math.abs(toHeight - fromHeight) < 1
+    || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    || typeof header.animate !== 'function'
+  ) return;
+
+  header.style.overflow = 'hidden';
+  const animation = header.animate(
+    [{ height: `${fromHeight}px` }, { height: `${toHeight}px` }],
+    {
+      duration: STICKY_HEADER_RESIZE_DURATION_MS,
+      easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    },
+  );
+  resizeAnimation = animation;
+  const content = contentRef.value;
+  if (content && typeof content.animate === 'function') {
+    contentAnimation = content.animate(
+      [
+        {
+          opacity: 0.68,
+          transform: `translateY(${isCompact ? '10px' : '-10px'})`,
+        },
+        { opacity: 1, transform: 'translateY(0)' },
+      ],
+      {
+        duration: Math.round(STICKY_HEADER_RESIZE_DURATION_MS * 0.82),
+        easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+    );
+    const activeContentAnimation = contentAnimation;
+    activeContentAnimation.addEventListener('finish', () => {
+      if (contentAnimation === activeContentAnimation) contentAnimation = null;
+    }, { once: true });
+  }
+  animation.addEventListener('finish', () => {
+    if (resizeAnimation !== animation) return;
+    resizeAnimation = null;
+    header.style.removeProperty('overflow');
+  }, { once: true });
+}, { flush: 'pre' });
+
+onBeforeUnmount(clearResizeAnimation);
 
 const refreshFocusLock = () => {
   window.requestAnimationFrame(() => {
@@ -71,11 +148,12 @@ const onWorkflowChange = async (event: Event) => {
 <template>
   <header
     ref="headerRef"
-    class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 shadow-sm backdrop-blur transition-[padding] duration-200 motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-950/95 sm:px-5"
+    class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 sm:px-5"
     :class="effectiveCompact ? 'py-2' : 'py-3'"
     @focusin="refreshFocusLock"
     @focusout="refreshFocusLock"
   >
+    <div ref="contentRef">
     <div class="flex gap-2 sm:gap-3" :class="effectiveCompact ? 'h-9 items-center' : 'items-start'">
       <div class="min-w-0 flex-1">
         <div v-if="effectiveCompact" class="flex min-w-0 items-center gap-2">
@@ -83,7 +161,6 @@ const onWorkflowChange = async (event: Event) => {
           <button type="button" class="min-w-0 flex-1 truncate text-left text-sm font-semibold text-slate-950 dark:text-white" title="Изменить название" @click="startTitleEdit">
             {{ title || 'Без названия' }}
           </button>
-          <span class="hidden max-w-32 shrink-0 truncate rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 md:inline">{{ viewModel.stageLabel }}</span>
         </div>
         <template v-else>
         <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -109,24 +186,16 @@ const onWorkflowChange = async (event: Event) => {
           </button>
         </div>
         <button v-else type="button" class="mt-1 flex max-w-full items-start gap-1.5 text-left" title="Изменить название" @click="startTitleEdit">
-          <span class="truncate text-base font-semibold text-slate-950 dark:text-white sm:text-lg">{{ title || 'Без названия' }}</span>
+          <span class="break-words text-base font-semibold leading-5 text-slate-950 dark:text-white sm:text-lg sm:leading-6">{{ title || 'Без названия' }}</span>
           <Pencil :size="14" class="mt-1 shrink-0 text-slate-400" aria-hidden="true" />
         </button>
+        <p v-if="showCustomerName" class="mt-1 break-words text-xs leading-4 text-slate-500 dark:text-slate-400">
+          {{ customerName }}
+        </p>
         </template>
       </div>
 
       <div class="flex shrink-0 items-center gap-1">
-        <button
-          v-if="effectiveCompact"
-          type="button"
-          class="btn-mini h-9 min-w-9 justify-center px-2 text-xs sm:px-3"
-          :title="viewModel.nextAction.label"
-          :aria-label="viewModel.nextAction.label"
-          @click="emit('next')"
-        >
-          <Check :size="15" />
-          <span class="hidden max-w-28 truncate lg:inline">{{ viewModel.nextAction.label }}</span>
-        </button>
         <button
           v-if="effectiveCompact && dirty"
           type="button"
@@ -138,9 +207,6 @@ const onWorkflowChange = async (event: Event) => {
         >
           <Save :size="15" />
         </button>
-        <span v-else-if="effectiveCompact" class="flex h-9 w-7 items-center justify-center text-emerald-600 dark:text-emerald-300" title="Сохранено" aria-label="Сохранено">
-          <Check :size="16" />
-        </span>
         <div class="relative">
           <button
             type="button"
@@ -163,6 +229,25 @@ const onWorkflowChange = async (event: Event) => {
           <X :size="20" />
         </button>
       </div>
+    </div>
+
+    <div v-if="effectiveCompact" class="mt-2 flex h-8 min-w-0 items-center gap-2">
+      <span
+        class="inline-flex min-w-0 max-w-[42%] items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+        :title="viewModel.stageLabel"
+      >
+        <Clock3 :size="14" class="shrink-0" aria-hidden="true" />
+        <span class="truncate">{{ viewModel.stageLabel }}</span>
+      </span>
+      <button
+        type="button"
+        class="btn-mini h-8 min-w-0 flex-1 justify-center gap-1.5 px-2.5 text-xs"
+        :title="viewModel.nextAction.label"
+        @click="emit('next')"
+      >
+        <span class="truncate">{{ viewModel.nextAction.label }}</span>
+        <ArrowRight :size="14" class="shrink-0" aria-hidden="true" />
+      </button>
     </div>
 
     <div v-if="!effectiveCompact" class="mt-2.5 flex flex-wrap items-center gap-2">
@@ -201,6 +286,7 @@ const onWorkflowChange = async (event: Event) => {
           <span class="hidden sm:inline">{{ saving ? 'Сохраняем' : 'Сохранить' }}</span>
         </button>
       </div>
+    </div>
     </div>
   </header>
 </template>

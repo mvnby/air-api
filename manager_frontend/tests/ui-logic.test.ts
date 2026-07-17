@@ -6,6 +6,7 @@ import {
 import {
   STICKY_HEADER_COLLAPSE_TRAVEL_PX,
   STICKY_HEADER_EXPAND_TRAVEL_PX,
+  STICKY_HEADER_RESIZE_DURATION_MS,
   getStickyHeaderLayoutCompensation,
   getStickyHeaderLogicalScrollTop,
   initialStickyHeaderState,
@@ -18,6 +19,10 @@ const assert = (condition: unknown, message: string) => {
 };
 
 assert(ADDRESS_SUGGEST_DEBOUNCE_MS === 800, 'address debounce must remain 800 ms');
+assert(
+  STICKY_HEADER_RESIZE_DURATION_MS >= 300 && STICKY_HEADER_RESIZE_DURATION_MS <= 450,
+  'sticky header resize must stay quick but perceptible',
+);
 assert(!hasEnoughAddressCharacters('  а б  '), 'spaces must not count as significant address characters');
 assert(hasEnoughAddressCharacters('Мин'), 'three significant characters must enable suggestions');
 assert(buildYandexMapUrl('') === '', 'empty address must not create a map link');

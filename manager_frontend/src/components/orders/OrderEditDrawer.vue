@@ -589,6 +589,11 @@ const recordRepairHistoryFromOrder = async () => {
 };
 
 const customer = computed(() => props.order?.customer ?? null);
+const customerDisplayName = computed(() => (
+  customer.value?.full_legal_name
+  || customer.value?.name
+  || ''
+));
 const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
 const isB2cCustomer = computed(() => {
   if (!customer.value) return true; // defaults to B2C if unknown
@@ -2528,6 +2533,7 @@ watch(
       <OrderWorkspaceHeader
         :order-id="order?.id"
         :title="displayOrderTitle"
+        :customer-name="customerDisplayName"
         :workflow="workflowType"
         :view-model="orderWorkspace"
         :total="totalPreview"
