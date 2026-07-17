@@ -191,3 +191,37 @@ async def test_bot_api_gateway_decodes_catalog_product_detail():
     assert response.product.description == "Тихий инвертор"
     assert response.product.categories == ["Настенные"]
     assert response.product.minsk_qty == 2
+
+
+async def test_bot_api_gateway_posts_task_list_without_staff_id_in_url():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/internal/bot/v1/tasks/my"
+        assert request.method == "POST"
+        assert request.url.query == b""
+        assert request.content == b'{"telegram_id":123,"limit":10}'
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "kind": "stage",
+                        "id": 7,
+                        "order_id": 42,
+                        "title": "Монтаж",
+                        "status": "planned",
+                        "start_time": "2026-07-20T12:00:00",
+                        "customer_name": "Иван",
+                    }
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        response = await gateway.list_my_tasks(telegram_id=123)
+
+    assert response.items[0].id == 7
+    assert response.items[0].start_time.isoformat() == "2026-07-20T12:00:00"

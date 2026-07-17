@@ -1,5 +1,6 @@
 """Versioned response contracts for the internal Telegram bot API."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -49,3 +50,27 @@ class BotCatalogSearchResponse(BaseModel):
 
 class BotCatalogProductLookupResponse(BaseModel):
     product: BotCatalogProductResponse | None = None
+
+
+class BotTaskListRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    limit: int = Field(default=10, ge=1, le=20)
+
+
+class BotTaskResponse(BaseModel):
+    """Stable read-only task projection rendered by the Telegram runtime."""
+
+    kind: Literal["stage", "order"]
+    id: int = Field(ge=1)
+    order_id: int = Field(ge=1)
+    title: str
+    status: str
+    start_time: datetime
+    address: str | None = None
+    customer_name: str = "Клиент"
+    customer_phone: str | None = None
+    comment: str | None = None
+
+
+class BotTaskListResponse(BaseModel):
+    items: list[BotTaskResponse] = Field(default_factory=list)

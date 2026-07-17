@@ -58,6 +58,19 @@ The legacy step-by-step selection and the current multi-room selection remain
 separate migration slices. They must be replaced by one backend-orchestrated
 selection use case rather than many remote product queries.
 
+### Read-only task slice
+
+The staff task list uses `POST /api/internal/bot/v1/tasks/my`. Telegram identity
+and pagination stay in the JSON body so staff identifiers do not enter access
+log URLs. The API authorizes the identity once, then queries by the verified
+legacy installer mapping.
+
+Scheduled work stages and legacy installer assignments are merged, ordered by
+start time and deduplicated by order. A work stage is the source of truth when
+both representations exist; unrelated legacy assignments are still returned.
+Task status changes and reports remain a separate write slice and continue to
+use the existing local path until idempotent API commands are introduced.
+
 ## Scope guardrails
 
 - Freeze new bot product features while a scenario is being migrated.

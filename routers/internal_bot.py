@@ -10,11 +10,15 @@ from api_contracts.bot import (
     BotCatalogSearchRequest,
     BotCatalogSearchResponse,
     BotStaffContextResponse,
+    BotTaskListRequest,
+    BotTaskListResponse,
+    BotTaskResponse,
 )
 from core.bot_api_security import require_bot_api_token
 from core.database import get_session
 from services.bot_access_service import BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
+from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
 
 
 router = APIRouter(
@@ -98,4 +102,26 @@ async def get_internal_bot_catalog_product(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return BotCatalogProductLookupResponse(
         product=BotCatalogProductResponse.model_validate(product) if product else None
+    )
+
+
+@router.post(
+    "/tasks/my",
+    response_model=BotTaskListResponse,
+    operation_id="list_internal_bot_my_tasks_v1",
+)
+async def list_internal_bot_my_tasks(
+    payload: BotTaskListRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BotTaskListResponse:
+    try:
+        tasks = await BotTaskReadService.list_for_staff(
+            session,
+            telegram_id=payload.telegram_id,
+            limit=payload.limit,
+        )
+    except BotTaskAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    return BotTaskListResponse(
+        items=[BotTaskResponse.model_validate(task) for task in tasks]
     )

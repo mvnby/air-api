@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from api_contracts.bot import BotTaskListResponse, BotTaskResponse
+
 os.environ["BOT_TOKEN"] = "123:test"
 
 from core.config import settings
@@ -564,31 +566,42 @@ async def test_requisites_file_attach_callback_shows_executor_tasks(monkeypatch)
 
     list_recent_mock = AsyncMock()
 
-    async def fake_list_tasks(session, telegram_id, *, limit):
-        assert telegram_id == 5
-        assert limit == 5
-        return [
-            {
-                "id": 7,
-                "order_id": 42,
-                "title": "Монтаж",
-                "customer_name": "Иван",
-                "address": "Победы 15",
-            }
-        ]
+    gateway = SimpleNamespace(
+        list_my_tasks=AsyncMock(
+            return_value=BotTaskListResponse(
+                items=[
+                    BotTaskResponse(
+                        kind="stage",
+                        id=7,
+                        order_id=42,
+                        title="Монтаж",
+                        status="planned",
+                        start_time="2026-07-20T12:00:00",
+                        customer_name="Иван",
+                        address="Победы 15",
+                    )
+                ]
+            )
+        )
+    )
 
     monkeypatch.setattr(
         admin_handler,
         "_get_bot_access_context",
         AsyncMock(return_value=SimpleNamespace(is_staff=True, is_manager=False)),
     )
-    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    monkeypatch.setattr(
+        admin_handler,
+        "async_session_maker",
+        lambda: (_ for _ in ()).throw(AssertionError("executor task read must not open a DB session")),
+    )
     monkeypatch.setattr(admin_handler.BotOrderAttachmentService, "list_recent_orders", list_recent_mock)
-    monkeypatch.setattr(admin_handler.BotTaskService, "list_my_tasks", fake_list_tasks)
+    monkeypatch.setattr(admin_handler, "get_bot_api_gateway", lambda: gateway)
 
     await admin_handler.choose_order_for_pending_file(callback, state)
 
     list_recent_mock.assert_not_called()
+    gateway.list_my_tasks.assert_awaited_once_with(telegram_id=5, limit=5)
     args, kwargs = callback.message.edit_text.await_args
     assert "#42" in args[0]
     assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "req_file_attach_order_42"

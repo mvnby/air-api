@@ -165,6 +165,65 @@ def test_service_display_order_title_hides_legacy_site_title():
     assert OrderService._display_order_title(order) == "Монтаж магазина"
 
 
+@pytest.mark.asyncio
+async def test_calendar_completed_stages_keep_their_own_titles(sqlite_order_session):
+    customer = Customer(name="Иван", phone="+375291234567")
+    sqlite_order_session.add(customer)
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(customer)
+
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        title="Монтаж",
+        delivery_address="Победы 15",
+    )
+    sqlite_order_session.add(order)
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(order)
+
+    event_time = datetime(2026, 7, 20, 12, 0)
+    stages = [
+        OrderWorkStage(
+            order_id=order.id,
+            name="Завершенный первый",
+            start_time=event_time,
+            status=OrderStageStatus.COMPLETED,
+        ),
+        OrderWorkStage(
+            order_id=order.id,
+            name="Запланированный",
+            start_time=event_time + timedelta(hours=1),
+            status=OrderStageStatus.PLANNED,
+        ),
+        OrderWorkStage(
+            order_id=order.id,
+            name="Завершенный последний",
+            start_time=event_time + timedelta(hours=2),
+            status=OrderStageStatus.COMPLETED,
+        ),
+    ]
+    sqlite_order_session.add_all(stages)
+    await sqlite_order_session.commit()
+    for stage in stages:
+        await sqlite_order_session.refresh(stage)
+    await sqlite_order_session.refresh(order, ["work_stages"])
+
+    events = await OrderService.get_calendar_events(
+        sqlite_order_session,
+        event_time - timedelta(hours=1),
+        event_time + timedelta(hours=3),
+    )
+    by_id = {event.id: event for event in events}
+
+    first = by_id[f"{order.id}-stage-{stages[0].id}"]
+    last = by_id[f"{order.id}-stage-{stages[2].id}"]
+    assert first.title == "Завершенный первый - Иван"
+    assert first.color == "#10b981"
+    assert last.title == "Завершенный последний - Иван"
+    assert last.color == "#10b981"
+
+
 def test_service_json_text_search_variants_include_escaped_cyrillic():
     assert OrderService._json_text_search_variants("адрес") == [
         "адрес",

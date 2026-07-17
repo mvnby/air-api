@@ -10,6 +10,7 @@ from api_contracts.bot import (
     BotCatalogProductLookupResponse,
     BotCatalogSearchResponse,
     BotStaffContextResponse,
+    BotTaskListResponse,
 )
 
 
@@ -139,6 +140,25 @@ class BotApiGateway:
             return BotCatalogProductLookupResponse.model_validate(payload)
         except ValueError as exc:
             raise BotApiResponseError("MVN API returned an invalid catalog product contract") from exc
+
+    async def list_my_tasks(
+        self,
+        *,
+        telegram_id: int,
+        limit: int = 10,
+    ) -> BotTaskListResponse:
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        if limit < 1 or limit > 20:
+            raise ValueError("Task list limit must be between 1 and 20")
+        payload = await self._post(
+            "tasks/my",
+            json={"telegram_id": telegram_id, "limit": limit},
+        )
+        try:
+            return BotTaskListResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned an invalid task list contract") from exc
 
     async def _get(self, path: str, *, params: dict[str, object] | None = None) -> dict:
         return await self._request("GET", path, params=params)

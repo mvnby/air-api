@@ -17,12 +17,15 @@ from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_task_service import BotTaskService
+from services.bot_task_read_service import BotTaskReadService
 from services.product_read_service import ProductReadService
 from services.product_service import ProductService
 from bot_app.catalog_presenter import format_client_product
 from bot_app.keyboards import get_product_keyboard, get_staff_main_menu, selection_result_keyboard
+from bot_app.task_presenter import format_tasks, format_tasks_rich_html
 from bot_app.handlers import work as work_handlers
 from bot_app.utils import format_caption
+from api_contracts.bot import BotTaskListResponse, BotTaskResponse
 
 
 @pytest.fixture
@@ -172,8 +175,8 @@ def test_tasks_rich_html_formats_and_escapes_cards():
         }
     ]
 
-    rich = BotTaskService.format_tasks_rich_html(tasks)
-    fallback = BotTaskService.format_tasks(tasks)
+    rich = format_tasks_rich_html(tasks)
+    fallback = format_tasks(tasks)
 
     assert "<h3>Мои ближайшие задачи</h3>" in rich
     assert "#42 - Монтаж &lt;важно&gt;" in rich
@@ -184,7 +187,7 @@ def test_tasks_rich_html_formats_and_escapes_cards():
 
 
 @pytest.mark.asyncio
-async def test_task_list_skips_stale_unscheduled_and_closed_work(sqlite_staff_session):
+async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_session):
     installer = Installer(name="Иван Монтажник")
     sqlite_staff_session.add(installer)
     await sqlite_staff_session.commit()
@@ -209,6 +212,7 @@ async def test_task_list_skips_stale_unscheduled_and_closed_work(sqlite_staff_se
         status=OrderStatus.EXECUTION,
         title="Активный заказ",
         delivery_address="Победы 15",
+        installation_date=datetime.now() + timedelta(days=1),
     )
     closed_order = Order(
         customer_id=customer.id,
@@ -222,6 +226,7 @@ async def test_task_list_skips_stale_unscheduled_and_closed_work(sqlite_staff_se
         status=OrderStatus.EXECUTION,
         title="Старый монтаж без даты",
         delivery_address="Победы 17",
+        installation_date=datetime.now() + timedelta(days=3),
     )
     sqlite_staff_session.add(active_order)
     sqlite_staff_session.add(closed_order)
@@ -255,6 +260,13 @@ async def test_task_list_skips_stale_unscheduled_and_closed_work(sqlite_staff_se
                 status=OrderStageStatus.PLANNED,
             ),
             OrderWorkStage(
+                order_id=active_order.id,
+                name="Пусконаладка",
+                installer_id=installer.id,
+                start_time=datetime.now() + timedelta(days=2, hours=1),
+                status=OrderStageStatus.PLANNED,
+            ),
+            OrderWorkStage(
                 order_id=closed_order.id,
                 name="Этап закрытого заказа",
                 installer_id=installer.id,
@@ -262,13 +274,99 @@ async def test_task_list_skips_stale_unscheduled_and_closed_work(sqlite_staff_se
                 status=OrderStageStatus.PLANNED,
             ),
             OrderInstaller(order_id=legacy_order.id, installer_id=installer.id),
+            OrderInstaller(order_id=active_order.id, installer_id=installer.id),
         ]
     )
     await sqlite_staff_session.commit()
 
     tasks = await BotTaskService.list_my_tasks(sqlite_staff_session, 12345)
 
-    assert [task["title"] for task in tasks] == ["Ближайший монтаж"]
+    assert [task["title"] for task in tasks] == [
+        "Ближайший монтаж",
+        "Пусконаладка",
+        "Старый монтаж без даты",
+    ]
+    assert [task["kind"] for task in tasks] == ["stage", "stage", "order"]
+    assert not any(
+        task["kind"] == "order" and task["order_id"] == active_order.id
+        for task in tasks
+    )
+
+    limited = await BotTaskService.list_my_tasks(sqlite_staff_session, 12345, limit=2)
+    assert [task["title"] for task in limited] == ["Ближайший монтаж", "Пусконаладка"]
+
+
+@pytest.mark.asyncio
+async def test_my_tasks_handler_uses_gateway_without_opening_database(monkeypatch):
+    task = BotTaskResponse(
+        kind="stage",
+        id=7,
+        order_id=42,
+        title="Монтаж",
+        status="planned",
+        start_time=datetime(2026, 7, 20, 12, 0),
+        customer_name="Иван",
+        customer_phone="+375291234567",
+        address="Победы 15",
+    )
+    gateway = SimpleNamespace(
+        list_my_tasks=AsyncMock(return_value=BotTaskListResponse(items=[task]))
+    )
+    context = SimpleNamespace(is_staff=True, is_manager=False, is_executor=True)
+    message = SimpleNamespace(
+        from_user=SimpleNamespace(id=777),
+        chat=SimpleNamespace(id=555),
+        answer=AsyncMock(),
+    )
+    send_rich = AsyncMock(return_value=True)
+
+    monkeypatch.setattr(work_handlers, "_require_staff", AsyncMock(return_value=context))
+    monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
+    monkeypatch.setattr(work_handlers.BotService, "send_rich_message", send_rich)
+    monkeypatch.setattr(
+        work_handlers,
+        "async_session_maker",
+        lambda: (_ for _ in ()).throw(AssertionError("task read must not open a DB session")),
+    )
+
+    await work_handlers.my_tasks(message)
+
+    gateway.list_my_tasks.assert_awaited_once_with(telegram_id=777, limit=10)
+    send_rich.assert_awaited_once()
+    assert "#42 - Монтаж" in send_rich.await_args.args[1]
+    keyboard = send_rich.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].callback_data == "task_accept_7"
+    message.answer.assert_awaited_once_with(
+        "Можно продолжить работу из меню.",
+        reply_markup=get_staff_main_menu(context),
+    )
+
+
+@pytest.mark.asyncio
+async def test_task_read_service_reuses_authorized_installer_mapping(monkeypatch):
+    session = object()
+    context = SimpleNamespace(is_staff=True, legacy_installer_id=17)
+    get_context = AsyncMock(return_value=context)
+    list_installer_tasks = AsyncMock(return_value=[])
+
+    monkeypatch.setattr(
+        "services.bot_task_read_service.BotAccessService.get_context",
+        get_context,
+    )
+    monkeypatch.setattr(
+        "services.bot_task_read_service.BotTaskService.list_installer_tasks",
+        list_installer_tasks,
+    )
+
+    tasks = await BotTaskReadService.list_for_staff(
+        session,
+        telegram_id=777,
+        limit=10,
+    )
+
+    assert tasks == []
+    get_context.assert_awaited_once_with(session, 777)
+    list_installer_tasks.assert_awaited_once_with(session, 17, limit=10)
 
 
 def test_task_report_builder_keeps_text_report_plain():
