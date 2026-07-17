@@ -27,7 +27,7 @@ PITR_ENV_POLICIES = (*PUBLIC_PITR_ENV_POLICIES, *MIGRATION_PITR_ENV_POLICIES)
 SECRETS_FILE = Path("/etc/mvn-postgres-pitr.secrets.env")
 EXPECTED_COMPOSE_DIGESTS = {
     "/opt/air-api/docker-compose.patroni.yml": (
-        "f624fe0aad2ce364d1067b34765a54a501281bdca270d43e84045e0d076c4b6a"
+        "2d30b640b36eb3081ee439215d923388d2e542d40ce9c55d0502b4b11682282e"
     ),
     "/opt/mvn-reserve/docker-compose.patroni.yml": (
         "af02921ab9b4490017002aa08699d758486d858f16a741b72eef33feca27fff4"
