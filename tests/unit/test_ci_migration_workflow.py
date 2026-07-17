@@ -28,4 +28,4 @@ def test_ci_runs_storefront_theme_and_behavior_checks():
 def test_ci_timeout_covers_the_full_immutable_image_suite():
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
 
-    assert workflow["jobs"]["test"]["timeout-minutes"] == 45
+    assert workflow["jobs"]["test"]["timeout-minutes"] == 60
