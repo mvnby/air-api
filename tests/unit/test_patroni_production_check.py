@@ -267,7 +267,7 @@ def test_runtime_check_requires_role_aware_scheduler_state(monkeypatch):
             "SCHEDULER_ENABLED": str(primary).lower() if filename == ".ha-app-role.env" else "false",
         }
         if filename == ".ha-bot-role.env":
-            common["BOT_ENABLED"] = str(primary).lower()
+            common["BOT_ENABLED"] = "false"
         if not primary and filename == ".ha-app-role.env":
             common.update(
                 {
@@ -290,7 +290,7 @@ def test_runtime_check_requires_role_aware_scheduler_state(monkeypatch):
     monkeypatch.setattr(
         patroni_check,
         "_running_services",
-        lambda _runner, node: {"app-blue", "bot"} if node == api else {"app-blue"},
+        lambda _runner, node: {"app-blue"},
     )
     monkeypatch.setattr(
         patroni_check,

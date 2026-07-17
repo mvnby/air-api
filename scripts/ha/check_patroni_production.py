@@ -3,7 +3,7 @@
 
 The checker is role-aware: the API VPS and reserve VPS are node identities,
 not permanent PostgreSQL roles. It verifies DCS topology, PostgreSQL streaming
-and synchronous durability, API fencing, singleton bot/PITR ownership, and the
+and synchronous durability, API fencing, external bot fencing/PITR ownership, and the
 three-member etcd quorum without reading database or infrastructure secrets.
 """
 
@@ -540,7 +540,7 @@ def _check_runtime(
         expected_bot_values = {
             "APP_ROLE": expected_role,
             "API_READY_ENABLED": "false",
-            "BOT_ENABLED": str(expected_primary).lower(),
+            "BOT_ENABLED": "false",
             "DB_BOOTSTRAP_ENABLED": "false",
             "SCHEDULER_ENABLED": "false",
         }
@@ -570,10 +570,9 @@ def _check_runtime(
         if not app_services:
             report.fail(f"{node.label}: no API app service is running")
         bot_running = "bot" in services
-        if bot_running != (node == primary):
+        if bot_running:
             report.fail(
-                f"{node.label}: bot_running={str(bot_running).lower()} expected="
-                f"{str(node == primary).lower()}"
+                f"{node.label}: legacy bot is running; polling belongs to the external service"
             )
 
         status, payload = _ready_response(runner, node, config.ready_url)
@@ -622,7 +621,7 @@ def _check_runtime(
 
     if len(report.failures) == initial_failure_count:
         report.pass_check(
-            f"runtime ownership follows primary={primary.label}: one bot, one ready API, PITR timers fenced"
+            f"runtime ownership follows primary={primary.label}: legacy bot fenced, one ready API, PITR timers fenced"
         )
 
 

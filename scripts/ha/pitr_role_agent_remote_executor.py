@@ -416,7 +416,9 @@ def prove_safe_state(role_agent, config, *, required, expected_role=None):
             )
         state = (role + "\n").encode("ascii")
     expected_app = role_agent.role_env(role, bot_process=False).encode("ascii")
-    expected_bot = role_agent.role_env(role, bot_process=True).encode("ascii")
+    expected_bot = role_agent.role_env(
+        role, bot_process=True, bot_enabled=False
+    ).encode("ascii")
     read_project_state(config.state_file, state)
     read_project_state(config.app_role_env, expected_app)
     read_project_state(config.bot_role_env, expected_bot)
@@ -426,8 +428,8 @@ def prove_safe_state(role_agent, config, *, required, expected_role=None):
         if apps or "bot" in running:
             raise RuntimeError("fenced runtime still owns app or bot")
     else:
-        if len(apps) != 1 or (("bot" in running) != (role == "primary")):
-            raise RuntimeError("role-agent app/bot ownership did not converge")
+        if len(apps) != 1 or "bot" in running:
+            raise RuntimeError("role-agent API ownership or legacy bot fencing did not converge")
         status, payload = readiness_state()
         expected_status = 200 if role == "primary" else 503
         expected_traffic = "enabled" if role == "primary" else "disabled"
