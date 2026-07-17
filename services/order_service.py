@@ -2092,7 +2092,10 @@ class OrderService:
         # B2B = explicit company OR customer has non-empty INN.
         # B2C = everything else (including legacy orders without linked customer).
         has_inn = and_(Customer.inn.is_not(None), func.length(func.trim(Customer.inn)) > 0)
-        is_b2b = or_(Customer.type == CustomerType.company, has_inn)
+        is_b2b = or_(
+            cast(Customer.type, String) == CustomerType.company.value,
+            has_inn,
+        )
         base_filters = [Order.status != OrderStatus.NEW_LEAD]
         if segment == "b2b":
             base_filters.append(is_b2b)

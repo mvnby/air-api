@@ -3,6 +3,7 @@ import { nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue';
 export const STICKY_HEADER_TOP_ZONE_PX = 80;
 export const STICKY_HEADER_COLLAPSE_TRAVEL_PX = 72;
 export const STICKY_HEADER_EXPAND_TRAVEL_PX = 32;
+export const STICKY_HEADER_RESIZE_DURATION_MS = 360;
 const MIN_SCROLL_DELTA_PX = 2;
 
 export type StickyHeaderMotionState = {
@@ -77,6 +78,7 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
   let motionState = initialStickyHeaderState();
   let frameId: number | null = null;
   let layoutFrameId: number | null = null;
+  let layoutTimerId: number | null = null;
   let layoutSyncGeneration = 0;
   let layoutSyncPending = false;
   let scrollCompensation = 0;
@@ -88,23 +90,27 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
 
     void nextTick(() => {
       if (generation !== layoutSyncGeneration || !currentContainer) return;
-      layoutFrameId = window.requestAnimationFrame(() => {
-        layoutFrameId = null;
-        if (generation !== layoutSyncGeneration || !currentContainer) return;
-        const rawScrollTop = currentContainer.scrollTop;
-        scrollCompensation = getStickyHeaderLayoutCompensation(
-          logicalScrollTop,
-          rawScrollTop,
-          targetCompact,
-        );
-        motionState = syncStickyHeaderAfterLayout(
-          motionState,
-          targetCompact
-            ? getStickyHeaderLogicalScrollTop(rawScrollTop, scrollCompensation)
-            : rawScrollTop,
-        );
-        layoutSyncPending = false;
-      });
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      layoutTimerId = window.setTimeout(() => {
+        layoutTimerId = null;
+        layoutFrameId = window.requestAnimationFrame(() => {
+          layoutFrameId = null;
+          if (generation !== layoutSyncGeneration || !currentContainer) return;
+          const rawScrollTop = currentContainer.scrollTop;
+          scrollCompensation = getStickyHeaderLayoutCompensation(
+            logicalScrollTop,
+            rawScrollTop,
+            targetCompact,
+          );
+          motionState = syncStickyHeaderAfterLayout(
+            motionState,
+            targetCompact
+              ? getStickyHeaderLogicalScrollTop(rawScrollTop, scrollCompensation)
+              : rawScrollTop,
+          );
+          layoutSyncPending = false;
+        });
+      }, reducedMotion ? 0 : STICKY_HEADER_RESIZE_DURATION_MS);
     });
   };
 
@@ -141,6 +147,10 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
     if (layoutFrameId !== null) {
       window.cancelAnimationFrame(layoutFrameId);
       layoutFrameId = null;
+    }
+    if (layoutTimerId !== null) {
+      window.clearTimeout(layoutTimerId);
+      layoutTimerId = null;
     }
   };
 

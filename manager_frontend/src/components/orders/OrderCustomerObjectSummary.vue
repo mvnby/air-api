@@ -71,13 +71,13 @@ const saveObject = () => {
 <template>
   <section class="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
     <div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
-      <div class="flex min-w-0 items-center gap-3 px-3 py-2.5">
-        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+      <div class="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 px-3 py-2.5 sm:grid-cols-[2rem_minmax(0,1fr)_auto]">
+        <span class="row-span-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
           <Building2 v-if="customer?.type === 'company'" :size="17" />
           <UserRound v-else :size="17" />
         </span>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ displayName }}</p>
+          <p class="break-words text-sm font-semibold leading-5 text-slate-900 dark:text-white">{{ displayName }}</p>
           <div class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
             <a v-if="validPhone" :href="'tel:' + phoneDigits" class="inline-flex items-center gap-1 hover:text-teal-700 dark:hover:text-teal-300">
               <Phone :size="13" /> {{ phone }}
@@ -89,7 +89,7 @@ const saveObject = () => {
             <button v-else type="button" class="font-medium text-slate-500 hover:text-teal-700 dark:hover:text-teal-300" @click="startCustomerEdit">Email не указан · добавить</button>
           </div>
         </div>
-        <div class="flex shrink-0 gap-1">
+        <div class="col-start-2 row-start-2 mt-1 flex shrink-0 gap-1 sm:col-start-3 sm:row-start-1 sm:mt-0">
           <button v-if="validPhone" type="button" class="icon-action" aria-label="Скопировать телефон" @click="emit('copy', phone, 'Телефон')"><Copy :size="15" /></button>
           <button type="button" class="icon-action" aria-label="Редактировать клиента" @click="startCustomerEdit"><Pencil :size="15" /></button>
           <button type="button" class="icon-action hidden sm:flex" aria-label="Открыть полную карточку клиента" @click="emit('open-customer')"><Route :size="15" /></button>
