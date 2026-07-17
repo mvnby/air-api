@@ -140,6 +140,12 @@ def test_role_env_rejects_compose_colon_syntax_and_unknown_keys():
     with pytest.raises(RuntimeError, match="exact canonical generation"):
         namespace["exact_role_env"]("/role.env", "standby", False)
 
+    _primary_bot, primary_bot_values = namespace["canonical_role_env"](
+        "primary", True
+    )
+    assert primary_bot_values["APP_ROLE"] == "primary"
+    assert primary_bot_values["BOT_ENABLED"] == "false"
+
 
 def test_live_container_role_env_rejects_duplicate_or_overridden_values():
     namespace = _remote_namespace()

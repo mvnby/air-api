@@ -19,7 +19,7 @@ Usage:
 
 Runs on the standby host. It fences the old primary when OLD_PRIMARY_SSH is set,
 promotes local PostgreSQL, swaps the local compose file to the prepared primary
-compose, starts app+bot, disables media pull, and verifies local /api/ready.
+compose, starts the API app, disables media pull, and verifies local /api/ready.
 
 By default the helper refuses to promote when OLD_PRIMARY_SSH is empty. If the
 old primary is unreachable and cannot be fenced over SSH, explicitly set
@@ -133,7 +133,7 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 echo "Starting promoted primary services..."
-"${COMPOSE[@]}" up -d db app bot
+"${COMPOSE[@]}" up -d db app
 
 echo "Verifying local readiness..."
 for _ in $(seq 1 30); do

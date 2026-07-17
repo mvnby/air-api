@@ -52,14 +52,12 @@ print("MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED", settings.MAIL_IMAP_LEAD_AUTO_IMPORT_
 PY
 
 echo
-echo "bot_runtime:"
-"${COMPOSE[@]}" exec -T bot python - <<'PY'
-from core.config import settings
-
-print("APP_ROLE", settings.APP_ROLE)
-print("BOT", settings.bot_control_decision)
-print("SCHEDULER", settings.scheduler_control_decision)
-PY
+echo "legacy_bot_runtime:"
+if "${COMPOSE[@]}" ps --status running --services | grep -Fxq bot; then
+  echo "unexpected_running=true"
+else
+  echo "stopped=true external_service_owner=mvn-telegram-bot"
+fi
 
 echo
 echo "postgres_primary_and_replication:"

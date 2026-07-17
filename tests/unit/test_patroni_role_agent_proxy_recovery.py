@@ -87,9 +87,8 @@ def test_primary_refreshes_container_proxy_dns_before_stable_readiness(
     monkeypatch.setattr(patroni_role_agent, "_wait_ready", ready)
 
     assert reconcile(config, "primary") is True
-    assert runtime.calls.index(("restart", "api-proxy")) < runtime.calls.index(
-        ("up", "-d", "--no-deps", "--force-recreate", "bot")
-    )
+    assert ("restart", "api-proxy") in runtime.calls
+    assert not any(call[0] == "up" and call[-1] == "bot" for call in runtime.calls)
     assert config.state_file.read_text(encoding="utf-8") == "primary\n"
 
 

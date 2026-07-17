@@ -67,6 +67,7 @@ services:
       - reserve
 
   bot:
+    profiles: [legacy-bot]
     image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: unless-stopped
     depends_on:

@@ -117,7 +117,7 @@ def test_pre_stop_rollback_requires_confirmed_candidate_stop(tmp_path):
     assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(
         encoding="utf-8"
     )
-    assert f"bot_image {OLD_IMAGE}" in commands
+    assert "bot_image " not in commands
     summary = Path(env["API_BLUE_GREEN_SUMMARY_FILE"]).read_text(encoding="utf-8")
     assert "status=rollback_failed" in summary
     assert "old_route_confirmed=true" in summary
@@ -385,7 +385,7 @@ def test_preserved_routed_buffer_syncs_image_and_same_image_retry_deploys(
         encoding="utf-8"
     )
     first_commands = command_log.read_text(encoding="utf-8")
-    assert f"bot_image {OLD_IMAGE}" in first_commands
+    assert "bot_image " not in first_commands
     assert (project / ".active-api-slot").read_text(encoding="utf-8").strip() == "green"
     first_summary = Path(env["API_BLUE_GREEN_SUMMARY_FILE"]).read_text(
         encoding="utf-8"

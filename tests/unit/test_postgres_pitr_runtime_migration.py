@@ -230,7 +230,7 @@ def test_legacy_migration_requires_exact_reviewed_secrets_across_all_state(
     _enable_legacy_project_state(project)
     containers = {
         "blue": _container("app-blue", running=True, secrets=dict(PITR_VALUES)),
-        "bot": _container("bot", running=False, secrets=dict(PITR_VALUES)),
+        "legacy-app": _container("app", running=False, secrets=dict(PITR_VALUES)),
         "clean-green": _container("app-green", running=False),
     }
     calls = _fake_docker(
@@ -443,7 +443,7 @@ def test_files_clean_allows_only_exact_pre_scrub_container_secrets(
         monkeypatch,
         containers={
             "blue": _container("app-blue", running=True, secrets=dirty),
-            "old-bot": _container("bot", running=False, secrets=dirty),
+            "old-app": _container("app", running=False, secrets=dirty),
         },
     )
 
@@ -470,8 +470,8 @@ def test_normal_policy_rejects_secrets_in_stopped_container(tmp_path, monkeypatc
         monkeypatch,
         containers={
             "blue": _container("app-blue", running=True),
-            "stopped-bot": _container(
-                "bot",
+            "stopped-app": _container(
+                "app",
                 running=False,
                 secrets={key: PITR_VALUES[key] for key in runtime.SECRET_PITR_KEYS},
             ),

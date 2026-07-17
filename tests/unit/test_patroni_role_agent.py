@@ -90,6 +90,9 @@ def test_role_env_opens_api_and_singleton_processes_only_on_primary():
     primary_bot = role_env("primary", bot_process=True)
     standby_app = role_env("standby", bot_process=False)
     standby_bot = role_env("standby", bot_process=True)
+    externalized_bot = role_env(
+        "primary", bot_process=True, bot_enabled=False
+    )
 
     assert "API_READY_ENABLED=true" in primary_app
     assert "SCHEDULER_ENABLED=true" in primary_app
@@ -97,6 +100,8 @@ def test_role_env_opens_api_and_singleton_processes_only_on_primary():
     assert "API_READY_ENABLED=false" in primary_bot
     assert "SCHEDULER_ENABLED=false" in primary_bot
     assert "BOT_ENABLED=true" in primary_bot
+    assert "APP_ROLE=primary" in externalized_bot
+    assert "BOT_ENABLED=false" in externalized_bot
     assert "API_READY_ENABLED=false" in standby_app
     assert "SCHEDULER_ENABLED=false" in standby_app
     assert "BOT_ENABLED=false" in standby_bot
@@ -406,11 +411,9 @@ def test_app_appearing_at_lock_handoff_is_force_recreated_after_fast_fence(
     assert config.state_file.read_text() == "standby\n"
 
 
-def test_reconcile_primary_checks_fresh_role_before_bot_activation(
-    tmp_path, monkeypatch
-):
+def test_reconcile_primary_fences_legacy_bot_without_restarting_it(tmp_path, monkeypatch):
     config = _config(tmp_path, app_service_override="app")
-    runtime = _ComposeRuntime("app")
+    runtime = _ComposeRuntime("app", "bot")
     events: list[str | tuple[str, ...]] = []
 
     def compose(_config, *args, **kwargs):
@@ -424,11 +427,10 @@ def test_reconcile_primary_checks_fresh_role_before_bot_activation(
     _mock_primary_proof(monkeypatch, events)
 
     assert reconcile(config, "primary") is True
-    assert events.index("bot_activation") < events.index(
-        ("up", "-d", "--no-deps", "--force-recreate", "bot")
-    )
-    assert events.index("wait_ready") < events.index("bot_activation")
-    assert runtime.services == {"app", "bot"}
+    assert ("rm", "--stop", "--force", "bot") in events
+    assert not any(call[0] == "up" and call[-1] == "bot" for call in runtime.calls)
+    assert runtime.services == {"app"}
+    assert "BOT_ENABLED=false" in config.bot_role_env.read_text()
 
 
 def test_systemd_only_repair_is_guarded_and_reported_as_reconcile(
@@ -437,9 +439,11 @@ def test_systemd_only_repair_is_guarded_and_reported_as_reconcile(
     config = _config(tmp_path, app_service_override="app")
     config = AgentConfig(**{**config.__dict__, "primary_systemd_units": ("wal.timer",)})
     config.app_role_env.write_text(role_env("primary", bot_process=False))
-    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.bot_role_env.write_text(
+        role_env("primary", bot_process=True, bot_enabled=False)
+    )
     config.state_file.write_text("primary\n")
-    runtime = _ComposeRuntime("app", "bot")
+    runtime = _ComposeRuntime("app")
     active = False
     guards: list[str] = []
 
@@ -468,7 +472,7 @@ def test_systemd_only_repair_is_guarded_and_reported_as_reconcile(
     assert not any(call[0] == "up" for call in runtime.calls)
 
 
-def test_valid_maintenance_marker_keeps_pitr_fenced_but_reconciles_primary_app_and_bot(
+def test_valid_maintenance_marker_keeps_pitr_fenced_and_legacy_bot_stopped(
     tmp_path, monkeypatch
 ):
     config = _config(tmp_path, app_service_override="app")
@@ -503,7 +507,7 @@ def test_valid_maintenance_marker_keeps_pitr_fenced_but_reconciles_primary_app_a
     monkeypatch.setattr(patroni_role_agent, "_wait_ready", lambda _config: None)
 
     assert reconcile(config, "primary") is True
-    assert runtime.services == {"app", "bot"}
+    assert runtime.services == {"app"}
     assert systemd_active is False
     assert systemd_roles and set(systemd_roles) == {"standby"}
     assert config.state_file.read_text() == "primary\n"
@@ -608,9 +612,7 @@ def test_network_error_is_treated_as_standby(tmp_path, monkeypatch):
 
 PRIMARY_ACTIVATION_BOUNDARIES = [
     "primary_app_env",
-    "primary_bot_env",
     "app_activation",
-    "bot_activation",
     "systemd_activation:wal.timer",
     "systemd_activation:base.timer",
     "primary_postcondition",
@@ -630,7 +632,9 @@ def test_primary_flip_at_each_activation_boundary_immediately_fences_runtime(
         }
     )
     config.app_role_env.write_text(role_env("standby", bot_process=False))
-    config.bot_role_env.write_text(role_env("standby", bot_process=True))
+    config.bot_role_env.write_text(
+        role_env("primary", bot_process=True, bot_enabled=False)
+    )
     config.state_file.write_text("standby\n")
     runtime = _ComposeRuntime()
     systemd_active = False
@@ -678,9 +682,11 @@ def test_primary_flip_at_each_activation_boundary_immediately_fences_runtime(
 def test_network_loss_at_activation_boundary_also_fences(tmp_path, monkeypatch):
     config = _config(tmp_path, app_service_override="app")
     config.app_role_env.write_text(role_env("primary", bot_process=False))
-    config.bot_role_env.write_text(role_env("primary", bot_process=True))
+    config.bot_role_env.write_text(
+        role_env("primary", bot_process=True, bot_enabled=False)
+    )
     config.state_file.write_text("primary\n")
-    runtime = _ComposeRuntime("app")
+    runtime = _ComposeRuntime()
     monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
     monkeypatch.setattr(patroni_role_agent, "_wait_ready", lambda _config: None)
     monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
@@ -690,7 +696,7 @@ def test_network_loss_at_activation_boundary_also_fences(tmp_path, monkeypatch):
         lambda _config: (_ for _ in ()).throw(urllib.error.URLError("lost DCS")),
     )
 
-    with pytest.raises(RuntimeError, match="bot_activation"):
+    with pytest.raises(RuntimeError, match="app_activation"):
         reconcile(config, "primary")
 
     assert runtime.services == set()

@@ -250,7 +250,7 @@ def test_patroni_candidate_failure_leaves_canonical_old(tmp_path):
     assert (project / "compose.yml").read_text(encoding="utf-8") == old
     assert not (project / "compose.yml.candidate").exists()
     assert (tmp_path / "child.log").read_text(encoding="utf-8").strip() == "compose.yml.candidate|9"
-    assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == "compose.yml|app bot"
+    assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == "compose.yml|app"
 
 
 
@@ -382,7 +382,7 @@ def test_patroni_candidate_rechecks_db_contract_immediately_before_promotion(tmp
     assert not (project / "compose.yml.candidate").exists()
     assert (tmp_path / "child.log").exists()
     assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == (
-        "compose.yml|app bot"
+        "compose.yml|app"
     )
 
 
@@ -434,7 +434,7 @@ def test_patroni_discovers_previous_runtime_image_from_active_slot_before_reconc
     reconcile_index = commands.index("reconcile:compose.yml")
     assert ps_index < inspect_index < reconcile_index
     assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == (
-        "compose.yml|app bot"
+        "compose.yml|app"
     )
 
 

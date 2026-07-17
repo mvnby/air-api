@@ -74,7 +74,7 @@ jobs:
           API_COMPOSE_FILE: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}
           API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
           API_STANDBY_COMPOSE_FILE: ${{ vars.API_STANDBY_COMPOSE_FILE || 'docker-compose.reserve.yml' }}
-          API_COMPOSE_SERVICE_CHECKS: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot db' }}
+          API_COMPOSE_SERVICE_CHECKS: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app db' }}
           API_LOCAL_HEALTH_URL: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:18080/api/health' }}
         run: |
           set -euo pipefail
@@ -130,7 +130,7 @@ jobs:
             echo "- base_url: https://api.mvn.by"
             echo "- api_project_dir: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}"
             echo "- api_compose_file: ${{ vars.API_COMPOSE_FILE || 'docker-compose.prod.yml' }}"
-            echo "- api_compose_service_checks: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot db' }}"
+            echo "- api_compose_service_checks: ${{ vars.API_COMPOSE_SERVICE_CHECKS || vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app db' }}"
             echo "- api_local_health_url: ${{ vars.API_LOCAL_HEALTH_URL || 'http://127.0.0.1:18080/api/health' }}"
             echo "- backup_max_age_hours: ${{ github.event_name == 'workflow_dispatch' && inputs.backup_max_age_hours || '36' }}"
             echo "- check_backups: ${{ github.event_name != 'workflow_dispatch' || inputs.check_backups }}"

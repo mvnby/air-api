@@ -101,7 +101,7 @@ def canonical_role_env(role, bot_process):
     values = {}
     values["APP_ROLE"] = role
     values["API_READY_ENABLED"] = "false" if bot_process else str(primary).lower()
-    values["BOT_ENABLED"] = str(primary and bot_process).lower()
+    values["BOT_ENABLED"] = "false"
     values["DB_BOOTSTRAP_ENABLED"] = "false"
     values["SCHEDULER_ENABLED"] = str(primary and not bot_process).lower()
     if not primary:
@@ -145,11 +145,9 @@ def runtime_ownership_once(project, compose, expected_role):
         "--status", "running", "--services"]).splitlines())
     if len(services.intersection({"app", "app-blue", "app-green"})) != 1:
         die("exactly one API service must be running")
-    if ("bot" in services) != primary: die("bot singleton ownership is incorrect")
+    if "bot" in services: die("legacy bot must be fenced on every Patroni role")
     app_service = next(iter(services.intersection({"app", "app-blue", "app-green"})))
     attest_container_role_environment(project, compose, app_service, expected_app)
-    if primary:
-        attest_container_role_environment(project, compose, "bot", expected_bot)
     response = run(["curl", "-sS", "--max-time", "5", "-w", "\n%{http_code}",
         "http://127.0.0.1:18080/api/ready"])
     lines = response.rstrip().splitlines()

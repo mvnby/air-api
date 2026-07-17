@@ -75,6 +75,7 @@ services:
       - reserve
 
   bot:
+    profiles: [legacy-bot]
     image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: unless-stopped
     depends_on:
@@ -87,7 +88,7 @@ services:
       BOT_DROP_PENDING_UPDATES: ${BOT_DROP_PENDING_UPDATES:-false}
       ENVIRONMENT: production
       APP_ROLE: primary
-      BOT_ENABLED: "true"
+      BOT_ENABLED: ${LEGACY_BOT_ENABLED:-false}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
       PUBLIC_API_BASE: ${PUBLIC_API_BASE:-https://mvn.by/api/v1}
       MANAGER_BASE_URL: ${MANAGER_BASE_URL:-}
