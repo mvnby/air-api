@@ -56,17 +56,23 @@ export class ManagerSettingsService {
     /**
      * Suggest Address
      * @param q
+     * @param lat
+     * @param lon
      * @returns AddressSuggestResponse Successful Response
      * @throws ApiError
      */
     public static suggestAddress(
         q: string,
+        lat?: (number | null),
+        lon?: (number | null),
     ): CancelablePromise<AddressSuggestResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/settings/address-suggest',
             query: {
                 'q': q,
+                'lat': lat,
+                'lon': lon,
             },
             errors: {
                 422: `Validation Error`,

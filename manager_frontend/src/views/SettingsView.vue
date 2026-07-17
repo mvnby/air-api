@@ -14,6 +14,7 @@ import type {
 } from '../client';
 import { ManagerDocsService, ManagerRepairComplaintsService, ManagerSettingsService } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
+import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 
 const settings = ref<ManagerSettingResponse[]>([]);
 const loading = ref(false);
@@ -1674,7 +1675,7 @@ onMounted(() => {
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Юридический адрес</span>
-                        <input v-model="companyRequisites.company_legal_address" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <AddressSuggestInput v-model="companyRequisites.company_legal_address" input-class="bg-gray-50 dark:bg-slate-900" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">IBAN</span>

@@ -5,6 +5,7 @@ import type { LeadsInboxItemResponse } from '../../api';
 import type { ManagerCustomerBranchItemResponse, ManagerOrderUpdatePayload } from '../../client';
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../../composables/useB2BLookup';
+import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 
 const props = defineProps<{
   lead: LeadsInboxItemResponse;
@@ -513,10 +514,13 @@ const submitQualify = async () => {
               Email
               <input v-model="customerEmail" type="email" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
             </label>
-            <label class="block text-xs font-semibold text-slate-500 md:col-span-2">
-              Адрес объекта / доставки
-              <input v-model="customerDeliveryAddress" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900" placeholder="Адрес можно добавить позже">
-            </label>
+            <AddressSuggestInput
+              v-model="customerDeliveryAddress"
+              class="md:col-span-2"
+              label="Адрес объекта / доставки"
+              placeholder="Адрес можно добавить позже"
+              input-class="bg-white text-sm dark:bg-slate-900"
+            />
           </div>
 
           <button
@@ -549,10 +553,12 @@ const submitQualify = async () => {
               Полное юридическое название
               <input v-model="companyFullLegalName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
             </label>
-            <label class="block text-xs font-semibold text-slate-500 md:col-span-2">
-              Юридический адрес
-              <input v-model="companyLegalAddress" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
-            </label>
+            <AddressSuggestInput
+              v-model="companyLegalAddress"
+              class="md:col-span-2"
+              label="Юридический адрес"
+              input-class="bg-white text-sm dark:bg-slate-900"
+            />
             <label class="block text-xs font-semibold text-slate-500 md:col-span-2">
               IBAN
               <span class="relative mt-1 block">
@@ -605,10 +611,12 @@ const submitQualify = async () => {
                 Новый филиал
                 <input v-model="newBranchName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900" placeholder="Склад / Объект">
               </label>
-              <label class="block text-xs font-semibold text-slate-500">
-                Адрес филиала
-                <input v-model="newBranchAddress" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900" placeholder="Минск, Ленина 1">
-              </label>
+              <AddressSuggestInput
+                v-model="newBranchAddress"
+                label="Адрес филиала"
+                placeholder="Минск, Ленина 1"
+                input-class="bg-white text-sm dark:bg-slate-900"
+              />
               <div class="md:col-span-2">
                 <button
                   type="button"

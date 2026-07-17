@@ -13,6 +13,7 @@ import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
 import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
 import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
+import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
@@ -65,6 +66,7 @@ import {
 } from './service-description-mode';
 
 import { getApiErrorMessage } from '../../utils/api-errors';
+import { useSmartStickyHeader } from '../../composables/useSmartStickyHeader';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -81,6 +83,9 @@ const emit = defineEmits<{
   deleted: [orderId: number];
   reload: [orderId: number];
 }>();
+
+const drawerScrollContainer = ref<HTMLElement | null>(null);
+const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(drawerScrollContainer);
 
 type ProductOption = {
   id: number;
@@ -159,9 +164,6 @@ const isPaid = ref(false);
 const installerId = ref<number | null>(null);
 
 const customerDeliveryAddress = ref('');
-const addressSuggestions = ref<any[]>([]);
-const addressSuggestActive = ref(false);
-const addressLookupLoading = ref(false);
 const customerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
 const customerBranchId = ref<number | null>(null);
 const customerBranchesLoading = ref(false);
@@ -1636,40 +1638,9 @@ watch(
   },
 );
 
-const fetchAddressSuggestions = async (query: string) => {
-  if (!query || query.length < 3) {
-    addressSuggestions.value = [];
-    return;
-  }
-  addressLookupLoading.value = true;
-  try {
-    const res = await ManagerSettingsService.suggestAddress(query);
-    addressSuggestions.value = res.items || [];
-  } catch (err) {
-    console.warn('Failed to fetch address suggestions', err);
-  } finally {
-    addressLookupLoading.value = false;
-  }
-};
-
-const debouncedFetchAddressSuggestions = useDebounceFn(fetchAddressSuggestions, 400);
-
-const onAddressInput = () => {
-  addressSuggestActive.value = true;
-  debouncedFetchAddressSuggestions(customerDeliveryAddress.value);
-};
-
-const selectAddressSuggestion = (item: any) => {
-  customerDeliveryAddress.value = item.value || item.title || '';
-  addressSuggestActive.value = false;
-  addressSuggestions.value = [];
-};
-
-const hideAddressSuggestions = () => {
-  setTimeout(() => {
-    addressSuggestActive.value = false;
-  }, 200);
-};
+watch(() => props.modelValue, (open) => {
+  if (open) nextTick(resetWorkspaceHeader);
+});
 
 watch(
   () => props.order,
@@ -2553,7 +2524,7 @@ watch(
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
-    <aside class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white p-4 text-gray-900 shadow-2xl dark:bg-slate-950 dark:text-slate-100 sm:p-6 md:border-l md:border-gray-200 dark:md:border-slate-700">
+    <aside ref="drawerScrollContainer" class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white p-4 text-gray-900 shadow-2xl dark:bg-slate-950 dark:text-slate-100 sm:p-6 md:border-l md:border-gray-200 dark:md:border-slate-700">
       <OrderWorkspaceHeader
         class="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6"
         :order-id="order?.id"
@@ -2567,6 +2538,7 @@ watch(
         :is-on-hold="order?.is_on_hold"
         :dirty="hasUnsavedChanges"
         :saving="saving"
+        :compact="compactWorkspaceHeader"
         @update:title="orderTitle = $event"
         @change-workflow="setWorkflowType"
         @next="openWorkspaceTarget(orderWorkspace.nextAction.target)"
@@ -2626,7 +2598,7 @@ watch(
           </select>
         </label>
         <input v-model="newBranchName" class="field-input" placeholder="Название нового филиала" />
-        <input v-model="newBranchAddress" class="field-input" placeholder="Адрес нового филиала" />
+        <AddressSuggestInput v-model="newBranchAddress" placeholder="Адрес нового филиала" />
         <div class="sm:col-span-2 flex justify-end">
           <button type="button" class="btn-mini-outline text-xs" :disabled="creatingCustomerBranch" @click="createCustomerBranch">
             {{ creatingCustomerBranch ? 'Создаём...' : 'Создать и выбрать' }}
@@ -2654,34 +2626,13 @@ watch(
         :has-error="Boolean(getFieldError('customer_delivery_address') || getFieldError('comment'))"
       >
         <div class="grid gap-3 md:grid-cols-2">
-          <label class="field-label md:col-span-2 relative">
-            Адрес объекта / доставки
-            <input
-              v-model="customerDeliveryAddress"
-              @input="onAddressInput"
-              @blur="hideAddressSuggestions"
-              @focus="addressSuggestActive = true"
-              class="field-input"
-              placeholder="Введите адрес..."
-              autocomplete="off"
-            />
-            <div v-if="addressLookupLoading" class="absolute right-3 top-9">
-              <span class="material-icons-round animate-spin text-gray-400 text-[18px]">refresh</span>
-            </div>
-            <span v-if="getFieldError('customer_delivery_address')" class="text-xs text-red-300">{{ getFieldError('customer_delivery_address') }}</span>
-
-            <ul v-if="addressSuggestActive && addressSuggestions.length > 0" class="absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl bg-white flex flex-col p-1 shadow-2xl border border-gray-100 ring-1 ring-black/5">
-              <li
-                v-for="(item, i) in addressSuggestions"
-                :key="i"
-                class="flex cursor-pointer flex-col px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors border-b border-gray-50 last:border-0"
-                @mousedown.prevent="selectAddressSuggestion(item)"
-              >
-                <div class="font-medium text-gray-900">{{ item.title || item.value }}</div>
-                <div v-if="item.subtitle" class="text-xs text-gray-500 mt-0.5 truncate">{{ item.subtitle }}</div>
-              </li>
-            </ul>
-          </label>
+          <AddressSuggestInput
+            v-model="customerDeliveryAddress"
+            class="md:col-span-2"
+            label="Адрес объекта / доставки"
+            placeholder="Введите адрес..."
+            :error="getFieldError('customer_delivery_address')"
+          />
 
           <label class="field-label md:col-span-2">
             Комментарий

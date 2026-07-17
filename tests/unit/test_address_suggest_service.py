@@ -7,7 +7,13 @@ from services.address_suggest_service import AddressSuggestService
 async def test_suggest_prefers_vitebsk_region_then_falls_back(monkeypatch):
     calls: list[str] = []
 
-    async def fake_fetch_raw(query: str, *, bbox: str | None = None, ull: str | None = None, strict_bounds: bool = True):
+    async def fake_fetch_raw(
+        query: str,
+        *,
+        bbox: str | None = None,
+        ull: str | None = None,
+        strict_bounds: bool = True,
+    ):
         assert query == "Ленина 1"
         assert strict_bounds is True
         assert ull is None
@@ -46,6 +52,31 @@ async def test_suggest_prefers_vitebsk_region_then_falls_back(monkeypatch):
         "Витебск, улица Ленина, д. 1",
         "Минск, улица Ленина, д. 1",
     ]
+
+
+@pytest.mark.asyncio
+async def test_suggest_uses_coordinate_priority_without_vitebsk_scope(monkeypatch):
+    calls: list[tuple[str | None, str | None]] = []
+
+    async def fake_fetch_raw(query: str, *, bbox: str | None = None, ull: str | None = None, strict_bounds: bool = True):
+        assert query == "Кирова 1"
+        assert strict_bounds is True
+        calls.append((bbox, ull))
+        return {
+            "results": [
+                {
+                    "title": {"text": "улица Кирова, 1"},
+                    "subtitle": {"text": "Гомель"},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(AddressSuggestService, "fetch_raw", fake_fetch_raw)
+
+    items = await AddressSuggestService.suggest("Кирова 1", ull="30.9754,52.4345")
+
+    assert calls == [(AddressSuggestService.BELARUS_BBOX, "30.9754,52.4345")]
+    assert items[0]["value"] == "Гомель, улица Кирова, д. 1"
 
 
 def test_normalize_results_deduplicates_and_skips_invalid_entries():

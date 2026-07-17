@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, Undo2, X } from 'lucide-vue-next';
 import { formatMoney } from './order-utils';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
@@ -16,6 +16,7 @@ const props = defineProps<{
   isOnHold?: boolean;
   dirty?: boolean;
   saving?: boolean;
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -32,6 +33,23 @@ const emit = defineEmits<{
 const editingTitle = ref(false);
 const menuOpen = ref(false);
 const titleDraft = ref('');
+const headerRef = ref<HTMLElement | null>(null);
+const focusLocksCompactMode = ref(false);
+const effectiveCompact = computed(() => Boolean(props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value));
+
+const refreshFocusLock = () => {
+  window.requestAnimationFrame(() => {
+    const activeElement = document.activeElement;
+    focusLocksCompactMode.value = Boolean(
+      activeElement
+      && headerRef.value?.contains(activeElement)
+      && (
+        activeElement.matches('input, select, textarea')
+        || activeElement.hasAttribute('data-sticky-header-lock')
+      )
+    );
+  });
+};
 const startTitleEdit = () => {
   titleDraft.value = props.title;
   editingTitle.value = true;
@@ -51,9 +69,23 @@ const onWorkflowChange = async (event: Event) => {
 </script>
 
 <template>
-  <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 py-3 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 sm:px-5">
-    <div class="flex items-start gap-3">
+  <header
+    ref="headerRef"
+    class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 shadow-sm backdrop-blur transition-[padding] duration-200 motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-950/95 sm:px-5"
+    :class="effectiveCompact ? 'py-2' : 'py-3'"
+    @focusin="refreshFocusLock"
+    @focusout="refreshFocusLock"
+  >
+    <div class="flex gap-2 sm:gap-3" :class="effectiveCompact ? 'h-9 items-center' : 'items-start'">
       <div class="min-w-0 flex-1">
+        <div v-if="effectiveCompact" class="flex min-w-0 items-center gap-2">
+          <span class="shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300">№{{ orderId }}</span>
+          <button type="button" class="min-w-0 flex-1 truncate text-left text-sm font-semibold text-slate-950 dark:text-white" title="Изменить название" @click="startTitleEdit">
+            {{ title || 'Без названия' }}
+          </button>
+          <span class="hidden max-w-32 shrink-0 truncate rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 md:inline">{{ viewModel.stageLabel }}</span>
+        </div>
+        <template v-else>
         <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           <span class="font-semibold text-slate-700 dark:text-slate-200">Заказ №{{ orderId }}</span>
           <span v-if="isWebsiteOrder" class="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">Сайт</span>
@@ -80,9 +112,35 @@ const onWorkflowChange = async (event: Event) => {
           <span class="truncate text-base font-semibold text-slate-950 dark:text-white sm:text-lg">{{ title || 'Без названия' }}</span>
           <Pencil :size="14" class="mt-1 shrink-0 text-slate-400" aria-hidden="true" />
         </button>
+        </template>
       </div>
 
       <div class="flex shrink-0 items-center gap-1">
+        <button
+          v-if="effectiveCompact"
+          type="button"
+          class="btn-mini h-9 min-w-9 justify-center px-2 text-xs sm:px-3"
+          :title="viewModel.nextAction.label"
+          :aria-label="viewModel.nextAction.label"
+          @click="emit('next')"
+        >
+          <Check :size="15" />
+          <span class="hidden max-w-28 truncate lg:inline">{{ viewModel.nextAction.label }}</span>
+        </button>
+        <button
+          v-if="effectiveCompact && dirty"
+          type="button"
+          class="btn-mini h-9 w-9 justify-center p-0"
+          :disabled="saving"
+          :title="saving ? 'Сохраняем' : 'Не сохранено — сохранить'"
+          :aria-label="saving ? 'Сохраняем изменения' : 'Сохранить изменения'"
+          @click="emit('save')"
+        >
+          <Save :size="15" />
+        </button>
+        <span v-else-if="effectiveCompact" class="flex h-9 w-7 items-center justify-center text-emerald-600 dark:text-emerald-300" title="Сохранено" aria-label="Сохранено">
+          <Check :size="16" />
+        </span>
         <div class="relative">
           <button
             type="button"
@@ -107,7 +165,7 @@ const onWorkflowChange = async (event: Event) => {
       </div>
     </div>
 
-    <div class="mt-2.5 flex flex-wrap items-center gap-2">
+    <div v-if="!effectiveCompact" class="mt-2.5 flex flex-wrap items-center gap-2">
       <label class="relative inline-flex min-w-0 items-center">
         <span class="sr-only">Сценарий заказа</span>
         <select
@@ -126,7 +184,7 @@ const onWorkflowChange = async (event: Event) => {
       </span>
     </div>
 
-    <div class="mt-2.5 flex items-center gap-2">
+    <div v-if="!effectiveCompact" class="mt-2.5 flex items-center gap-2">
       <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" @click="emit('next')">{{ viewModel.nextAction.label }}</button>
       <button v-if="balance > 0" type="button" class="btn-mini-outline hidden h-9 text-xs sm:inline-flex" @click="emit('payments')">Внести оплату</button>
       <span v-if="!dirty" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">

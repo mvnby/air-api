@@ -54,12 +54,30 @@ class AddressSuggestService:
             return {}
 
     @classmethod
-    async def suggest(cls, query: str) -> list[dict[str, str | None]]:
+    async def suggest(
+        cls,
+        query: str,
+        *,
+        ull: str | None = None,
+    ) -> list[dict[str, str | None]]:
         items: list[dict[str, str | None]] = []
         seen_values: set[str] = set()
 
-        for bbox in (cls.VITEBSK_REGION_BBOX, cls.BELARUS_BBOX):
-            payload = await cls.fetch_raw(query, bbox=bbox, strict_bounds=True)
+        scopes = (
+            [(cls.BELARUS_BBOX, ull)]
+            if ull
+            else [
+                (cls.VITEBSK_REGION_BBOX, None),
+                (cls.BELARUS_BBOX, None),
+            ]
+        )
+        for bbox, scope_ull in scopes:
+            payload = await cls.fetch_raw(
+                query,
+                bbox=bbox,
+                ull=scope_ull,
+                strict_bounds=True,
+            )
             scoped_items = cls.normalize_results(payload)
             for item in scoped_items:
                 value = item.get("value")

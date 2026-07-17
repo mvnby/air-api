@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useDebounceFn } from '@vueuse/core';
 import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, Plus, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
+import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 import EquipmentAttachmentsPanel from '../components/equipment/EquipmentAttachmentsPanel.vue';
 import EquipmentWarrantyPanel from '../components/equipment/EquipmentWarrantyPanel.vue';
 import { equipmentWarrantySummary } from '../components/equipment/equipmentWarrantySummary';
@@ -12,9 +12,7 @@ import {
   ManagerContractsService,
   ManagerDocsService,
   ManagerEquipmentService,
-  ManagerSettingsService,
   ManagerService,
-  type AddressSuggestionItem,
   type DocumentTemplateItem,
   type EquipmentServiceEventType,
   type ManagerCatalogCustomerItemResponse,
@@ -198,12 +196,6 @@ const emailError = ref('');
 const innError = ref('');
 const ibanError = ref('');
 const phoneInputRef = ref<HTMLInputElement | null>(null);
-type CustomerAddressField = 'legal_address' | 'actual_address';
-const customerAddressSuggestions = ref<AddressSuggestionItem[]>([]);
-const activeCustomerAddressField = ref<CustomerAddressField | null>(null);
-const customerAddressLookupLoading = ref(false);
-let customerAddressRequestId = 0;
-
 const form = ref<CustomerForm>({
   name: '',
   phone: '',
@@ -582,46 +574,6 @@ const fieldClass = (key: keyof CustomerForm) => ({
     (key === 'inn' && Boolean(innError.value)) ||
     (key === 'iban' && Boolean(ibanError.value)),
 });
-
-const fetchCustomerAddressSuggestions = async (field: CustomerAddressField, query: string) => {
-  const requestId = ++customerAddressRequestId;
-  if (!query || query.length < 3) {
-    customerAddressSuggestions.value = [];
-    return;
-  }
-  customerAddressLookupLoading.value = true;
-  try {
-    const res = await ManagerSettingsService.suggestAddress(query);
-    if (requestId === customerAddressRequestId && activeCustomerAddressField.value === field) {
-      customerAddressSuggestions.value = res.items || [];
-    }
-  } catch (err) {
-    console.warn('Failed to fetch address suggestions', err);
-  } finally {
-    if (requestId === customerAddressRequestId) {
-      customerAddressLookupLoading.value = false;
-    }
-  }
-};
-
-const debouncedFetchCustomerAddressSuggestions = useDebounceFn(fetchCustomerAddressSuggestions, 400);
-
-const onCustomerAddressInput = (field: CustomerAddressField) => {
-  activeCustomerAddressField.value = field;
-  debouncedFetchCustomerAddressSuggestions(field, form.value[field]);
-};
-
-const selectCustomerAddressSuggestion = (field: CustomerAddressField, item: AddressSuggestionItem) => {
-  form.value[field] = item.value || item.title || '';
-  activeCustomerAddressField.value = null;
-  customerAddressSuggestions.value = [];
-};
-
-const hideCustomerAddressSuggestions = () => {
-  window.setTimeout(() => {
-    activeCustomerAddressField.value = null;
-  }, 200);
-};
 
 const clearFieldErrors = () => {
   serverErrors.value = {};
@@ -1569,33 +1521,13 @@ onMounted(() => {
                   <option value="company">Юр. лицо</option>
                 </select>
                 <input v-model="form.name" type="text" :placeholder="isCompany ? 'Компания' : 'Имя клиента'" :class="fieldClass('name')" />
-                <div v-if="!isCompany" class="relative">
-                  <input
-                    v-model="form.actual_address"
-                    type="text"
-                    placeholder="Адрес объекта / доставки"
-                    autocomplete="off"
-                    :class="fieldClass('actual_address')"
-                    @input="onCustomerAddressInput('actual_address')"
-                    @focus="activeCustomerAddressField = 'actual_address'"
-                    @blur="hideCustomerAddressSuggestions"
-                  />
-                  <div v-if="customerAddressLookupLoading && activeCustomerAddressField === 'actual_address'" class="absolute right-3 top-2">
-                    <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
-                  </div>
-                  <div v-if="activeCustomerAddressField === 'actual_address' && customerAddressSuggestions.length > 0" class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                    <button
-                      v-for="(item, index) in customerAddressSuggestions"
-                      :key="index"
-                      type="button"
-                      class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
-                      @mousedown.prevent="selectCustomerAddressSuggestion('actual_address', item)"
-                    >
-                      <span class="block font-medium text-slate-900">{{ item.title || item.value }}</span>
-                      <span v-if="item.subtitle" class="block truncate text-xs text-slate-500">{{ item.subtitle }}</span>
-                    </button>
-                  </div>
-                </div>
+                <AddressSuggestInput
+                  v-if="!isCompany"
+                  v-model="form.actual_address"
+                  placeholder="Адрес объекта / доставки"
+                  :input-class="fieldClass('actual_address')"
+                  :error="serverErrors.actual_address"
+                />
                 <input ref="phoneInputRef" v-model="form.phone" type="tel" placeholder="+375 (XX) XXX-XX-XX или +7 XXX XXX-XX-XX" :class="fieldClass('phone')" />
                 <span v-if="phoneError" class="field-error">{{ phoneError }}</span>
                 <input v-model="form.email" type="email" placeholder="Email" :class="fieldClass('email')" />
@@ -1634,60 +1566,18 @@ onMounted(() => {
               <div class="space-y-3 text-sm">
                 <div v-if="isCompany" class="space-y-3">
                   <input v-model="form.full_legal_name" type="text" placeholder="Полное наименование" :class="fieldClass('full_legal_name')" />
-                  <div class="relative">
-                    <input
-                      v-model="form.legal_address"
-                      type="text"
-                      placeholder="Юр. адрес"
-                      autocomplete="off"
-                      :class="fieldClass('legal_address')"
-                      @input="onCustomerAddressInput('legal_address')"
-                      @focus="activeCustomerAddressField = 'legal_address'"
-                      @blur="hideCustomerAddressSuggestions"
-                    />
-                    <div v-if="customerAddressLookupLoading && activeCustomerAddressField === 'legal_address'" class="absolute right-3 top-2">
-                      <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
-                    </div>
-                    <div v-if="activeCustomerAddressField === 'legal_address' && customerAddressSuggestions.length > 0" class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                      <button
-                        v-for="(item, index) in customerAddressSuggestions"
-                        :key="index"
-                        type="button"
-                        class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
-                        @mousedown.prevent="selectCustomerAddressSuggestion('legal_address', item)"
-                      >
-                        <span class="block font-medium text-slate-900">{{ item.title || item.value }}</span>
-                        <span v-if="item.subtitle" class="block truncate text-xs text-slate-500">{{ item.subtitle }}</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div class="relative">
-                    <input
-                      v-model="form.actual_address"
-                      type="text"
-                      placeholder="Факт. адрес"
-                      autocomplete="off"
-                      :class="fieldClass('actual_address')"
-                      @input="onCustomerAddressInput('actual_address')"
-                      @focus="activeCustomerAddressField = 'actual_address'"
-                      @blur="hideCustomerAddressSuggestions"
-                    />
-                    <div v-if="customerAddressLookupLoading && activeCustomerAddressField === 'actual_address'" class="absolute right-3 top-2">
-                      <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
-                    </div>
-                    <div v-if="activeCustomerAddressField === 'actual_address' && customerAddressSuggestions.length > 0" class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                      <button
-                        v-for="(item, index) in customerAddressSuggestions"
-                        :key="index"
-                        type="button"
-                        class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
-                        @mousedown.prevent="selectCustomerAddressSuggestion('actual_address', item)"
-                      >
-                        <span class="block font-medium text-slate-900">{{ item.title || item.value }}</span>
-                        <span v-if="item.subtitle" class="block truncate text-xs text-slate-500">{{ item.subtitle }}</span>
-                      </button>
-                    </div>
-                  </div>
+                  <AddressSuggestInput
+                    v-model="form.legal_address"
+                    placeholder="Юр. адрес"
+                    :input-class="fieldClass('legal_address')"
+                    :error="serverErrors.legal_address"
+                  />
+                  <AddressSuggestInput
+                    v-model="form.actual_address"
+                    placeholder="Факт. адрес"
+                    :input-class="fieldClass('actual_address')"
+                    :error="serverErrors.actual_address"
+                  />
                   <input v-model="form.bank_name" type="text" placeholder="Название банка" :class="fieldClass('bank_name')" />
                   <input v-model="form.bic" type="text" placeholder="BIC" :class="fieldClass('bic')" />
                   <div class="relative">
