@@ -30,7 +30,7 @@ EXPECTED_COMPOSE_DIGESTS = {
         "a441113b33d7cff45d535071edc5e3afa98e7c3ac22c86a422599eb65e7ed1ce"
     ),
     "/opt/mvn-reserve/docker-compose.patroni.yml": (
-        "e68f422dd85bafa8a75dff9f0d62a904ebcdc578626921ead7b7aa66ae497fa3"
+        "d91c8bdf151b3ba86b286237ed20c1c7a8710885c3346d03b914de8877cdcf01"
     ),
 }
 EXPECTED_PITR_CLUSTERS = {
