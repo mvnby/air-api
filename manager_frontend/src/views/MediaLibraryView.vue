@@ -26,6 +26,7 @@ import {
   backgroundRemovalProviderOptions,
   type BackgroundRemovalProvider,
 } from '../utils/media-processing';
+import { uploadSequentially } from '../utils/sequential-upload';
 import ImageCropSelector, { type ImageCropSourceSize, type ImageCropValue } from '../components/ImageCropSelector.vue';
 
 type MediaKind = { value: string; label: string };
@@ -49,6 +50,8 @@ const kindOptions: MediaKind[] = [
 const assets = ref<ManagerMediaAssetResponse[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
+const uploadCompleted = ref(0);
+const uploadTotal = ref(0);
 const saving = ref(false);
 const deleting = ref(false);
 const processing = ref<'crop' | 'background' | ''>('');
@@ -114,6 +117,10 @@ const showBackgroundExperimentWarning = computed(() => (
   || backgroundProvider.value === 'ben'
   || (showRembgModelSelect.value && selectedBackgroundModelOption.value?.recommended === false)
 ));
+const uploadProgressLabel = computed(() => {
+  if (!uploading.value || !uploadTotal.value) return '';
+  return `${Math.min(uploadCompleted.value + 1, uploadTotal.value)}/${uploadTotal.value}`;
+});
 const activeSelectedProcessingJob = computed(() => {
   if (!selectedAsset.value) return null;
   return processingJobs.value.find((job) => (
@@ -279,18 +286,32 @@ const uploadFiles = async (files: FileList | File[]) => {
     return;
   }
   uploading.value = true;
+  uploadCompleted.value = 0;
+  uploadTotal.value = imageFiles.length;
   try {
-    const response = await api.uploadMediaAssets({
-      files: imageFiles,
-      kind: uploadKind.value,
-      tags_json: JSON.stringify(parseTags(uploadTags.value)),
-    });
-    appendUploadedAssets(response.items, response.uploaded);
-    setToast(`Загружено: ${response.uploaded}`);
+    const tagsJson = JSON.stringify(parseTags(uploadTags.value));
+    await uploadSequentially(
+      imageFiles,
+      (file) => api.uploadMediaAssets({
+        files: [file],
+        kind: uploadKind.value,
+        tags_json: tagsJson,
+      }),
+      (response, progress) => {
+        appendUploadedAssets(response.items, response.uploaded);
+        uploadCompleted.value = progress.completed;
+      },
+    );
+    setToast(`Загружено: ${uploadCompleted.value}`);
   } catch (err) {
-    setToast(mediaErrorMessage(err, 'Не удалось загрузить файлы'), 'error');
+    const prefix = uploadCompleted.value
+      ? `Загружено ${uploadCompleted.value} из ${uploadTotal.value}. `
+      : '';
+    setToast(`${prefix}${mediaErrorMessage(err, 'Не удалось загрузить файлы')}`, 'error');
   } finally {
     uploading.value = false;
+    uploadCompleted.value = 0;
+    uploadTotal.value = 0;
     dragActive.value = false;
     if (uploadInput.value) uploadInput.value.value = '';
   }
@@ -642,7 +663,7 @@ onUnmounted(() => {
           @click="uploadInput?.click()"
         >
           <UploadCloud class="h-4 w-4" />
-          {{ uploading ? 'Загрузка...' : 'Выбрать' }}
+          {{ uploading ? `Загрузка ${uploadProgressLabel}` : 'Выбрать' }}
         </button>
       </div>
       <div class="mt-2 lg:mt-3">
