@@ -13,6 +13,7 @@ import {
   reduceStickyHeaderScroll,
   syncStickyHeaderAfterLayout,
 } from '../src/composables/useSmartStickyHeader';
+import { uploadSequentially } from '../src/utils/sequential-upload';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -82,5 +83,19 @@ assert(
   getStickyHeaderLayoutCompensation(header.lastScrollTop, 120, header.compact) === 0,
   'expanded mode must clear layout compensation',
 );
+
+const uploadOrder: number[] = [];
+const uploadProgress: string[] = [];
+const uploadResults = await uploadSequentially(
+  [1, 2, 3],
+  async (item) => {
+    uploadOrder.push(item);
+    return item * 10;
+  },
+  (_result, progress) => uploadProgress.push(`${progress.completed}/${progress.total}`),
+);
+assert(uploadOrder.join(',') === '1,2,3', 'media files must upload sequentially in selection order');
+assert(uploadResults.join(',') === '10,20,30', 'sequential upload must return every response');
+assert(uploadProgress.join(',') === '1/3,2/3,3/3', 'sequential upload must report completed file count');
 
 console.log('Address and sticky header UI logic tests passed');

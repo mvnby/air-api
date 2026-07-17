@@ -40,6 +40,7 @@ from services.product_image_processing_provider import (
 
 
 router = APIRouter(prefix="/api/manager/media/assets", tags=["manager media"])
+MAX_UPLOAD_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 @router.get(
@@ -84,14 +85,23 @@ async def upload_media_assets(
         tags = json.loads(tags_json or "[]")
         if not isinstance(tags, list):
             raise ValueError("tags_json must be a JSON array")
-        file_payloads = [(item.filename, await item.read()) for item in files]
-        return await MediaLibraryService.upload_assets(
-            session=session,
-            files=file_payloads,
-            kind=kind,
-            tags=[str(item) for item in tags],
-            created_by=username,
-        )
+        if len(files) != 1:
+            raise ValueError("Upload exactly one image per request")
+
+        upload = files[0]
+        try:
+            content = await upload.read(MAX_UPLOAD_IMAGE_BYTES + 1)
+            if len(content) > MAX_UPLOAD_IMAGE_BYTES:
+                raise ValueError("Uploaded image is too large (maximum 20 MB)")
+            return await MediaLibraryService.upload_assets(
+                session=session,
+                files=[(upload.filename, content)],
+                kind=kind,
+                tags=[str(item) for item in tags],
+                created_by=username,
+            )
+        finally:
+            await upload.close()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
