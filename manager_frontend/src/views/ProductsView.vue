@@ -205,6 +205,8 @@ const heatingMin = ref<number | undefined>();
 const hasWifi = ref<boolean | undefined>();
 const hasFreshAir = ref<boolean | undefined>();
 const selectedBrandSlug = ref<string | null>(null);
+const selectedSeriesId = ref<number | null>(null);
+const selectedSeriesTitle = ref('');
 const brands = ref<ManagerBrand[]>([]);
 const loadingBrands = ref(false);
 const filtersOpen = ref(false);
@@ -218,8 +220,10 @@ const FAVORITE_TAG_GROUP_TITLE = 'Метки менеджера';
 const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
 type CatalogCategorySlug = 'cat-household' | 'cat-multi' | 'cat-industrial';
 type CategoryFilterValue = CatalogCategorySlug | 'missing';
-const categoryFilter = ref<CategoryFilterValue>('cat-household');
-const CATEGORY_FILTER_TABS: Array<{ value: CategoryFilterValue; title: string }> = [
+type CatalogCategoryFilterValue = CategoryFilterValue | 'all';
+const categoryFilter = ref<CatalogCategoryFilterValue>('cat-household');
+const CATEGORY_FILTER_TABS: Array<{ value: CatalogCategoryFilterValue; title: string }> = [
+    { value: 'all', title: 'Все категории' },
     { value: 'cat-household', title: 'Бытовые' },
     { value: 'cat-multi', title: 'Мульти-сплит' },
     { value: 'cat-industrial', title: 'Полупром' },
@@ -227,12 +231,12 @@ const CATEGORY_FILTER_TABS: Array<{ value: CategoryFilterValue; title: string }>
 ];
 const isMissingCategoryFilter = computed(() => categoryFilter.value === 'missing');
 const categorySlug = computed<CatalogCategorySlug | undefined>(() => (
-    isMissingCategoryFilter.value ? undefined : categoryFilter.value as CatalogCategorySlug
+    isMissingCategoryFilter.value || categoryFilter.value === 'all' ? undefined : categoryFilter.value as CatalogCategorySlug
 ));
 const categoryStatus = computed<'missing' | undefined>(() => (
     isMissingCategoryFilter.value ? 'missing' : undefined
 ));
-const usesSmartSearch = computed(() => hasSearchQuery.value && !isMissingCategoryFilter.value);
+const usesSmartSearch = computed(() => hasSearchQuery.value && !isMissingCategoryFilter.value && selectedSeriesId.value === null);
 const favoriteTagId = ref<number | null>(null);
 const favoriteUpdatingIds = ref<Set<number>>(new Set());
 const availableBrands = computed(() => (
@@ -248,6 +252,7 @@ const hasAdvancedFilters = computed(() => (
     || hasWifi.value !== undefined
     || hasFreshAir.value !== undefined
     || selectedBrandSlug.value !== null
+    || selectedSeriesId.value !== null
     || sortMode.value !== 'recommended'
 ));
 
@@ -265,6 +270,14 @@ const onCategoryChange = () => {
     loadProducts();
 };
 
+const removeSeriesQueryParams = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete('seriesId');
+    params.delete('seriesTitle');
+    params.delete('brand');
+    window.history.replaceState({}, '', `${window.location.pathname}${params.size ? `?${params.toString()}` : ''}`);
+};
+
 const resetFilters = () => {
     searchQuery.value = '';
     areaMin.value = undefined;
@@ -274,8 +287,11 @@ const resetFilters = () => {
     hasWifi.value = undefined;
     hasFreshAir.value = undefined;
     selectedBrandSlug.value = null;
+    selectedSeriesId.value = null;
+    selectedSeriesTitle.value = '';
     sortMode.value = 'recommended';
     categoryFilter.value = 'cat-household';
+    removeSeriesQueryParams();
     selectedProductIds.value.clear();
     page.value = 1;
     loadProducts();
@@ -289,7 +305,15 @@ const getManagerProductFilters = () => ({
     areaMin: areaMin.value,
     areaMax: areaMax.value,
     categoryStatus: categoryStatus.value,
+    seriesId: selectedSeriesId.value ?? undefined,
 });
+
+const clearSeriesFilter = () => {
+    selectedSeriesId.value = null;
+    selectedSeriesTitle.value = '';
+    removeSeriesQueryParams();
+    applyFilters();
+};
 
 const toggleBrand = (slug: string | null) => {
     selectedBrandSlug.value = selectedBrandSlug.value === slug ? null : slug;
@@ -1351,6 +1375,14 @@ const selectImage = async (url: string) => {
 // Intersection Observer for infinite scroll
 onMounted(() => {
     const params = new URLSearchParams(window.location.search);
+    const seriesIdRaw = Number(params.get('seriesId'));
+    if (Number.isInteger(seriesIdRaw) && seriesIdRaw > 0) {
+        selectedSeriesId.value = seriesIdRaw;
+        selectedSeriesTitle.value = params.get('seriesTitle') || `#${seriesIdRaw}`;
+        selectedBrandSlug.value = params.get('brand');
+        categoryFilter.value = 'all';
+        filtersOpen.value = true;
+    }
     const editProductIdRaw = params.get('editProductId');
     const parsedEditProductId = editProductIdRaw ? Number(editProductIdRaw) : NaN;
     pendingEditProductId.value = Number.isFinite(parsedEditProductId) && parsedEditProductId > 0 ? parsedEditProductId : null;
@@ -1615,6 +1647,19 @@ watchDebounced(
                     Сбросить фильтры
                 </button>
             </div>
+        </div>
+
+        <div v-if="selectedSeriesId" class="flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm dark:border-teal-900/60 dark:bg-teal-950/30">
+            <span class="font-medium text-teal-900 dark:text-teal-100">Серия: {{ selectedSeriesTitle }}</span>
+            <button
+                type="button"
+                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-teal-700 transition-colors hover:bg-teal-100 dark:text-teal-300 dark:hover:bg-teal-900/50"
+                title="Показать товары всех серий"
+                aria-label="Сбросить фильтр серии"
+                @click="clearSeriesFilter"
+            >
+                <X class="h-4 w-4" />
+            </button>
         </div>
 
         <Transition name="fade">

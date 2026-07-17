@@ -251,16 +251,41 @@ export type OrderRenderItem =
     | { type: 'order'; order: ManagerOrderListItemResponse }
     | { type: 'group'; group: CustomerOrderGroup };
 
+const LEGAL_ENTITY_PREFIXES: Array<[RegExp, string]> = [
+    [/^производственное республиканское унитарное предприятие(?=\s|$)/iu, 'ПРУП'],
+    [/^республиканское унитарное предприятие(?=\s|$)/iu, 'РУП'],
+    [/^коммунальное унитарное предприятие(?=\s|$)/iu, 'КУП'],
+    [/^частное торговое унитарное предприятие(?=\s|$)/iu, 'ЧТУП'],
+    [/^частное унитарное предприятие(?=\s|$)/iu, 'ЧУП'],
+    [/^унитарное предприятие(?=\s|$)/iu, 'УП'],
+    [/^общество с ограниченной ответственностью(?=\s|$)/iu, 'ООО'],
+    [/^общество с дополнительной ответственностью(?=\s|$)/iu, 'ОДО'],
+    [/^открытое акционерное общество(?=\s|$)/iu, 'ОАО'],
+    [/^закрытое акционерное общество(?=\s|$)/iu, 'ЗАО'],
+    [/^индивидуальный предприниматель(?=\s|$)/iu, 'ИП'],
+    [/^учреждение образования(?=\s|$)/iu, 'УО'],
+];
+
+export function compactLegalName(value: string): string {
+    const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+
+    for (const [pattern, abbreviation] of LEGAL_ENTITY_PREFIXES) {
+        if (pattern.test(normalized)) return normalized.replace(pattern, abbreviation);
+    }
+    return normalized;
+}
+
 export function getOrderCustomerName(order: ManagerOrderListItemResponse, segment: Segment): string {
     const customer = order.customer;
     if (!customer) return `Заказ #${order.id}`;
 
     if ((segment === 'all' ? getOrderSegment(order) : segment) === 'b2b') {
-        return customer.full_legal_name
+        return compactLegalName(customer.full_legal_name
             || customer.name
             || customer.phone
             || customer.email
-            || `Клиент #${customer.id}`;
+            || `Клиент #${customer.id}`);
     }
 
     return customer.name

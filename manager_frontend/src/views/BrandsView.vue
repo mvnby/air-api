@@ -320,9 +320,6 @@ const fetchBrands = async () => {
         if (selectedBrandId.value && !brands.value.some((item) => item.id === selectedBrandId.value)) {
             selectedBrandId.value = null;
         }
-        if (!selectedBrandId.value && brands.value.length > 0) {
-            selectedBrandId.value = brands.value[0]?.id || null;
-        }
     } catch (err) {
         error.value = getApiErrorMessage(err);
     } finally {
@@ -375,6 +372,30 @@ const selectBrand = (brand: ManagerBrand) => {
         return;
     }
     selectedBrandId.value = brand.id;
+};
+
+const openSeriesProducts = (series: ManagerBrandSeries) => {
+    const params = new URLSearchParams({
+        seriesId: String(series.id),
+        seriesTitle: String(series.title || ''),
+        returnTo: '/manager/brands',
+    });
+    if (selectedBrand.value?.slug) params.set('brand', selectedBrand.value.slug);
+    window.location.href = `/manager/products?${params.toString()}`;
+};
+
+const formatProductCount = (count: number | undefined) => {
+    const value = Math.max(0, Number(count) || 0);
+    const mod100 = value % 100;
+    const mod10 = value % 10;
+    const noun = mod100 >= 11 && mod100 <= 14
+        ? 'товаров'
+        : mod10 === 1
+            ? 'товар'
+            : mod10 >= 2 && mod10 <= 4
+                ? 'товара'
+                : 'товаров';
+    return `${value} ${noun}`;
 };
 
 const openCreate = () => {
@@ -1222,7 +1243,15 @@ onMounted(() => {
                                                             >
                                                                 {{ series.is_published ? 'Публичная' : 'Скрыта' }}
                                                             </span>
-                                                            <span class="text-xs text-gray-500 dark:text-slate-400">{{ series.products_count }} товаров</span>
+                                                            <button
+                                                                type="button"
+                                                                class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-teal-700 transition-colors hover:bg-teal-50 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-teal-300 dark:hover:bg-teal-950/40 dark:hover:text-teal-100"
+                                                                :title="`Показать товары серии ${series.title}`"
+                                                                @click.stop="openSeriesProducts(series)"
+                                                            >
+                                                                {{ formatProductCount(series.products_count) }}
+                                                                <span class="material-icons-round text-[14px]">arrow_outward</span>
+                                                            </button>
                                                         </div>
                                                         <p class="text-xs font-mono text-gray-500 dark:text-slate-400">{{ series.slug }}</p>
                                                         <p v-if="series.tagline" class="mt-0.5 text-sm font-semibold text-gray-700 dark:text-slate-200">

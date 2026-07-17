@@ -3752,6 +3752,25 @@
             "description": "Brand slugs to include"
           },
           {
+            "name": "series_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact product series ID",
+              "title": "Series Id"
+            },
+            "description": "Exact product series ID"
+          },
+          {
             "name": "category_slug",
             "in": "query",
             "required": false,

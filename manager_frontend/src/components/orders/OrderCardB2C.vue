@@ -118,38 +118,42 @@ const paymentSummary = computed(() => {
     @dragstart="onDragStart"
     @dragend="onDragEnd"
   >
-    <header class="flex items-start gap-2">
-      <div class="min-w-0 flex-1">
-        <div class="flex min-w-0 items-center gap-2">
+    <header class="space-y-1.5">
+      <div class="flex min-w-0 items-center justify-between gap-2">
+        <span class="-ml-1 shrink-0 rounded-r-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-900/40 dark:text-slate-400">№{{ order.id }}</span>
+        <span class="-mr-1 max-w-[70%] truncate rounded-l-full px-2 py-0.5 text-[10px] font-semibold" :class="boardBadgeClass">{{ boardLabel }}</span>
+      </div>
+      <div class="flex min-w-0 items-start gap-1">
+        <div class="min-w-0 flex-1">
           <OrderTitleEditor
-            class="min-w-0 flex-1"
+            class="min-w-0"
             :order-id="order.id"
             :title="order.title"
             :fallback-title="customerName"
-            text-class="text-sm"
+            text-class="text-[15px] leading-5"
+            multiline
             @rename="(payload) => emit('renameOrder', payload)"
           />
-          <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="boardBadgeClass">{{ boardLabel }}</span>
+          <p v-if="objectLine" class="mt-1 line-clamp-2 text-xs leading-4 text-gray-500 dark:text-slate-400">{{ objectLine }}</p>
         </div>
-        <p v-if="objectLine" class="mt-1 truncate text-xs text-gray-500 dark:text-slate-400">{{ objectLine }}</p>
-      </div>
-      <div class="relative flex shrink-0 items-center gap-1">
-        <OrderCardActionsMenu
-          :order="order"
-          allow-close-debt
-          @cancel-order="(payload) => emit('cancelOrder', payload)"
-          @quick-status="(payload) => emit('quickStatus', payload)"
-          @close-debt="(payload) => emit('closeDebt', payload)"
-        />
-        <button
-          type="button"
-          class="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-white"
-          :aria-label="expanded ? 'Свернуть заказ' : 'Раскрыть заказ'"
-          @click.stop="emit('toggleExpanded', order.id)"
-        >
-          <ChevronUp v-if="expanded" class="h-4 w-4" />
-          <ChevronDown v-else class="h-4 w-4" />
-        </button>
+        <div class="relative flex shrink-0 items-center gap-0.5">
+          <OrderCardActionsMenu
+            :order="order"
+            allow-close-debt
+            @cancel-order="(payload) => emit('cancelOrder', payload)"
+            @quick-status="(payload) => emit('quickStatus', payload)"
+            @close-debt="(payload) => emit('closeDebt', payload)"
+          />
+          <button
+            type="button"
+            class="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-white"
+            :aria-label="expanded ? 'Свернуть заказ' : 'Раскрыть заказ'"
+            @click.stop="emit('toggleExpanded', order.id)"
+          >
+            <ChevronUp v-if="expanded" class="h-4 w-4" />
+            <ChevronDown v-else class="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </header>
 

@@ -80,8 +80,8 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
       @keydown.space.prevent="onGroupClick"
     >
       <div class="min-w-0 flex-1">
-        <div class="flex min-w-0 flex-wrap items-center gap-2">
-          <div class="min-w-0 flex-1" @click.stop>
+        <div class="min-w-0 pr-1">
+          <div class="min-w-0" @click.stop>
             <div v-if="editing" class="flex min-w-0 items-center gap-1">
               <input
                 v-model="aliasDraft"
@@ -101,18 +101,18 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
             </div>
             <p
               v-else
-              class="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-white"
+              class="min-w-0 line-clamp-2 text-[13px] font-semibold leading-4 text-slate-900 dark:text-white"
               title="Двойной клик — переименовать группу локально"
               @dblclick.stop="startEditing"
             >
               {{ group.customerName }}
             </p>
           </div>
-          <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {{ formatOrderCount(group.orders.length) }}
-          </span>
         </div>
         <div class="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+          <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            {{ formatOrderCount(group.orders.length) }}
+          </span>
           <span>Сумма: <strong class="text-slate-800 dark:text-slate-200">{{ formatMoney(group.totalAmount) }}</strong></span>
           <span>Маржа: <strong class="text-teal-700 dark:text-teal-300">{{ formatMoney(group.margin) }}</strong></span>
           <span>

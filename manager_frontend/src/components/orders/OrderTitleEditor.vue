@@ -8,6 +8,7 @@ const props = defineProps<{
   fallbackTitle: string;
   textClass?: string;
   inputClass?: string;
+  multiline?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -66,9 +67,9 @@ const cancelEditing = () => {
     </div>
     <p
       v-else
-      class="truncate font-semibold text-gray-900 dark:text-white"
-      :class="textClass"
-      title="Двойной клик — переименовать заказ"
+      class="font-semibold text-gray-900 dark:text-white"
+      :class="[multiline ? 'line-clamp-2' : 'truncate', textClass]"
+      :title="`${displayTitle}. Двойной клик — переименовать заказ`"
       @dblclick.stop="startEditing"
     >
       {{ displayTitle }}
