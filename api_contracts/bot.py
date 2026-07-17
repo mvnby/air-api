@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+BOT_UPLOAD_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
 
 class BotApiHealthResponse(BaseModel):
@@ -213,3 +214,147 @@ class BotCustomerRequisitesActionResponse(BaseModel):
     recognition: BotCustomerRequisitesRecognitionResponse
     customer: BotCustomerBriefResponse | None = None
     changed: bool
+
+
+class BotOrderBriefResponse(BaseModel):
+    id: int = Field(ge=1)
+    title: str | None = None
+    status: str
+    workflow_type: str | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    address: str | None = None
+    installation_date: datetime | None = None
+    updated_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class BotOrderListRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+class BotOrderListResponse(BaseModel):
+    items: list[BotOrderBriefResponse] = Field(default_factory=list)
+    scope: str | None = None
+
+
+class BotOrderAttachmentResponse(BaseModel):
+    order_id: int = Field(ge=1)
+    already_attached: bool = False
+
+
+class BotNameplateRecognitionResponse(BaseModel):
+    order_id: int = Field(ge=1)
+    unit_type: Literal["indoor_unit", "outdoor_unit"] | None = None
+    raw_text: str
+    extracted: dict[str, Any] = Field(default_factory=dict)
+    validation_flags: dict[str, Any] = Field(default_factory=dict)
+    merge_preview: dict[str, Any] = Field(default_factory=dict)
+
+
+class BotNameplateApplyResponse(BaseModel):
+    result: dict[str, Any]
+
+
+class BotProductSelectionRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    query: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("query")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Selection query must not be empty")
+        return normalized
+
+
+class BotProductSelectionResponse(BaseModel):
+    selection: dict[str, Any]
+
+
+class BotCuratedProductsRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    area: int = Field(ge=8, le=200)
+    is_inverter: bool
+    tag_slugs: list[str] = Field(default_factory=list, max_length=10)
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+class BotCuratedProductsResponse(BaseModel):
+    items: list[BotCatalogProductResponse] = Field(default_factory=list)
+
+
+class BotProductPriceUpdateRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    price: int = Field(ge=0, le=10_000_000)
+
+
+class BotProductMutationRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+
+
+class BotProductMutationResponse(BaseModel):
+    product_id: int = Field(ge=1)
+    changed: bool
+
+
+class BotRepairDraftRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    order_id: int = Field(ge=1)
+    comment: str | None = Field(default=None, max_length=4000)
+    fault_type: str | None = Field(default=None, max_length=120)
+
+
+class BotRepairDraftResponse(BaseModel):
+    draft: dict[str, Any]
+
+
+class BotRepairApplyRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    order_id: int = Field(ge=1)
+    repair_meta_draft: dict[str, Any]
+    raw_comment: str = Field(max_length=4000)
+    telegram_chat_id: int | None = None
+    telegram_message_id: int | None = None
+
+
+class BotRepairApplyResponse(BaseModel):
+    result: dict[str, Any]
+
+
+class BotFsmStateGetRequest(BaseModel):
+    storage_key: str = Field(min_length=1, max_length=1000)
+
+
+class BotFsmStateResponse(BaseModel):
+    state: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class BotFsmStateUpdateRequest(BaseModel):
+    storage_key: str = Field(min_length=1, max_length=1000)
+    bot_id: int
+    chat_id: int
+    user_id: int
+    thread_id: int | None = None
+    business_connection_id: str | None = Field(default=None, max_length=500)
+    destiny: str = Field(default="default", min_length=1, max_length=120)
+    write_state: bool = False
+    state: str | None = Field(default=None, max_length=500)
+    write_data: bool = False
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class BotRuntimeLeaseRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9._:-]+$")
+    owner_id: str = Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9._:-]+$")
+    ttl_seconds: int = Field(default=45, ge=15, le=300)
+
+
+class BotRuntimeLeaseResponse(BaseModel):
+    name: str
+    owner_id: str
+    acquired: bool
+    expires_at: datetime | None = None

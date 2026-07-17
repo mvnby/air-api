@@ -12,7 +12,7 @@ from api_contracts.bot import (
     BotQuickOrderDraft,
     BotQuickOrderParseResponse,
 )
-from bot_app.handlers import admin as admin_handlers
+from bot_app.handlers import requisites as admin_handlers
 from bot_app.handlers import work as work_handlers
 
 
@@ -36,12 +36,7 @@ async def test_quick_order_parse_uses_api_and_stores_message_idempotency_key(mon
         "_require_staff",
         AsyncMock(return_value=SimpleNamespace(is_manager=True, is_staff=True)),
     )
-    monkeypatch.setattr(work_handlers.BotService, "send_rich_message", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        work_handlers,
-        "async_session_maker",
-        lambda: (_ for _ in ()).throw(AssertionError("quick order parse must not open DB")),
-    )
+    monkeypatch.setattr(work_handlers.BotTelegramService, "send_rich_message", AsyncMock(return_value=True))
     message = SimpleNamespace(
         text=" ТО Иван ",
         from_user=SimpleNamespace(id=123),
@@ -133,11 +128,6 @@ async def test_customer_requisites_confirmation_uses_api_without_db(monkeypatch)
     )
     monkeypatch.setattr(admin_handlers, "get_bot_api_gateway", lambda: gateway)
     monkeypatch.setattr(admin_handlers, "_is_admin_user", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        admin_handlers,
-        "async_session_maker",
-        lambda: (_ for _ in ()).throw(AssertionError("customer action must not open DB")),
-    )
     callback = SimpleNamespace(
         data="ocr_create_12",
         from_user=SimpleNamespace(id=123),

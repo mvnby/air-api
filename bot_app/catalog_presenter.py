@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from core.config import settings
+from .settings import settings
 
 
 def product_url(product: dict[str, Any]) -> str:

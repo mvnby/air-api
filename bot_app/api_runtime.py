@@ -1,6 +1,6 @@
 """Process-wide MVN API gateway shared by autonomous bot use cases."""
 
-from core.config import settings
+from .settings import settings
 
 from .api_gateway import BotApiGateway, BotApiGatewayConfig
 

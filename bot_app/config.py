@@ -1,7 +1,7 @@
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import SimpleEventIsolation
-from core.config import settings
-from .fsm_storage import SqlAlchemyFsmStorage
+from .fsm_storage import ApiFsmStorage
+from .settings import settings
 
 
 def _resolve_bot_token() -> str:
@@ -14,4 +14,4 @@ def _resolve_bot_token() -> str:
 
 
 bot = Bot(token=_resolve_bot_token())
-dp = Dispatcher(storage=SqlAlchemyFsmStorage(), events_isolation=SimpleEventIsolation())
+dp = Dispatcher(storage=ApiFsmStorage(), events_isolation=SimpleEventIsolation())

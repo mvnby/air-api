@@ -327,13 +327,7 @@ async def test_my_tasks_handler_uses_gateway_without_opening_database(monkeypatc
 
     monkeypatch.setattr(work_handlers, "_require_staff", AsyncMock(return_value=context))
     monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
-    monkeypatch.setattr(work_handlers.BotService, "send_rich_message", send_rich)
-    monkeypatch.setattr(
-        work_handlers,
-        "async_session_maker",
-        lambda: (_ for _ in ()).throw(AssertionError("task read must not open a DB session")),
-    )
-
+    monkeypatch.setattr(work_handlers.BotTelegramService, "send_rich_message", send_rich)
     await work_handlers.my_tasks(message)
 
     gateway.list_my_tasks.assert_awaited_once_with(telegram_id=777, limit=10)
@@ -424,11 +418,6 @@ async def test_task_status_handler_uses_gateway_without_opening_database(monkeyp
 
     monkeypatch.setattr(work_handlers, "_access_context", AsyncMock(return_value=context))
     monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
-    monkeypatch.setattr(
-        work_handlers,
-        "async_session_maker",
-        lambda: (_ for _ in ()).throw(AssertionError("task mutation must not open a DB session")),
-    )
 
     await work_handlers.update_task_status(callback)
 
@@ -467,11 +456,6 @@ async def test_task_report_handler_uses_gateway_without_opening_database(monkeyp
 
     monkeypatch.setattr(work_handlers, "_access_context", AsyncMock(return_value=context))
     monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
-    monkeypatch.setattr(
-        work_handlers,
-        "async_session_maker",
-        lambda: (_ for _ in ()).throw(AssertionError("task report must not open a DB session")),
-    )
 
     await work_handlers.task_report_finish(message, state)
 
@@ -948,9 +932,11 @@ async def test_selection_process_passes_html_fallback_to_rich_sender(monkeypatch
     async def fake_require_staff(message):
         return context
 
-    async def fake_build_selection(session, query):
-        calls["build"] = {"session": session, "query": query}
-        return selection
+    gateway = SimpleNamespace(
+        build_product_selection=AsyncMock(
+            return_value=SimpleNamespace(selection=selection)
+        )
+    )
 
     async def fake_send_rich_message(user_id, rich_html, **kwargs):
         calls["rich"] = {
@@ -962,16 +948,15 @@ async def test_selection_process_passes_html_fallback_to_rich_sender(monkeypatch
         return False
 
     monkeypatch.setattr(work_handlers, "_require_staff", fake_require_staff)
-    monkeypatch.setattr(work_handlers, "async_session_maker", lambda: FakeSessionContext())
-    monkeypatch.setattr(work_handlers.BotProductSelectionService, "build_selection", fake_build_selection)
-    monkeypatch.setattr(work_handlers.BotService, "send_rich_message", fake_send_rich_message)
+    monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
+    monkeypatch.setattr(work_handlers.BotTelegramService, "send_rich_message", fake_send_rich_message)
 
     message = FakeMessage()
     state = FakeState()
 
     await work_handlers.selection_process(message, state)
 
-    assert calls["build"]["query"] == "7"
+    gateway.build_product_selection.assert_awaited_once_with(telegram_id=777, query="7")
     assert calls["rich"]["user_id"] == 555
     assert "<h3>Подбор кондиционеров для клиента</h3>" in calls["rich"]["rich_html"]
     assert "<b>Подбор кондиционеров для клиента</b>" in calls["rich"]["fallback_text"]

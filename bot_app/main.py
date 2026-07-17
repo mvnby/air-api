@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from aiogram import types
 from aiogram.types import BotCommand
 from .access import BotAccessUnavailableError
@@ -7,16 +8,15 @@ from .api_gateway import BotApiAuthorizationError, BotApiError
 from .api_runtime import close_bot_api_gateway
 from .config import bot, dp
 from .handlers import admin, base, catalog, repair_context, work
-from core.config import settings
-from core.database import async_session_maker
-from core.logger import setup_logging
-from services.private_attachment_storage_service import (
-    verify_private_attachment_storage_startup,
-)
-from services.runtime_lock_service import RuntimeLockService
+from .runtime_lease import BotRuntimeLease
+from .settings import settings
 
 # Setup logging with session-specific bot.log (cleared on restart)
-logger = setup_logging(session_log_file="logs/bot.log", clear_session_log=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 STAFF_BOT_COMMANDS = [
     BotCommand(command="start", description="Открыть рабочее меню"),
@@ -73,8 +73,6 @@ async def _setup_bot_commands() -> None:
 
 
 async def main(*, wait_when_disabled: bool = True):
-    await verify_private_attachment_storage_startup(settings)
-
     decision = settings.bot_control_decision
     if not decision.enabled:
         logger.warning("Telegram bot polling disabled: %s.", decision.reason)
@@ -83,37 +81,39 @@ async def main(*, wait_when_disabled: bool = True):
             await _idle_when_disabled()
         return
 
-    if wait_when_disabled:
-        runtime_lock = await RuntimeLockService.wait_until_acquired(
-            async_session_maker,
-            "mvn:telegram_bot",
-        )
-    else:
-        runtime_lock = await RuntimeLockService.try_acquire(
-            async_session_maker,
-            "mvn:telegram_bot",
-        )
-    if not runtime_lock.acquired:
-        logger.warning("Telegram bot polling disabled: %s.", runtime_lock.reason)
-        return
-
-    logger.info("Starting bot polling: %s.", decision.reason)
-    # Register routers in specific order
-    dp.include_router(base.router)
-    dp.include_router(work.router)
-    dp.include_router(catalog.router)
-    dp.include_router(repair_context.router)
-    dp.include_router(admin.router)
-    
+    runtime_lease = BotRuntimeLease()
     try:
         await verify_bot_access_startup()
+        if wait_when_disabled:
+            await runtime_lease.wait_until_acquired()
+        elif not await runtime_lease.try_acquire():
+            logger.warning("Telegram bot polling disabled: %s.", runtime_lease.reason)
+            return
+
+        logger.info("Starting bot polling: %s.", decision.reason)
+        dp.include_router(base.router)
+        dp.include_router(work.router)
+        dp.include_router(catalog.router)
+        dp.include_router(repair_context.router)
+        dp.include_router(admin.router)
         await _setup_bot_commands()
         await bot.delete_webhook(drop_pending_updates=settings.BOT_DROP_PENDING_UPDATES)
-        await dp.start_polling(bot)
+        polling_task = asyncio.create_task(dp.start_polling(bot))
+        lease_lost_task = asyncio.create_task(runtime_lease.lost_event.wait())
+        done, pending = await asyncio.wait(
+            {polling_task, lease_lost_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        if lease_lost_task in done and runtime_lease.lost_event.is_set():
+            await dp.stop_polling()
+            raise RuntimeError("Telegram runtime lease was lost; polling stopped")
+        await polling_task
     finally:
         await close_bot_access_provider()
+        await runtime_lease.release()
         await close_bot_api_gateway()
-        await runtime_lock.release()
 
 if __name__ == "__main__":
     asyncio.run(main())

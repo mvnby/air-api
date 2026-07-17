@@ -56,17 +56,11 @@ services:
     image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: always
     depends_on:
-      - db
       - app
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
       ENVIRONMENT: production
-      SERVICE_ATTACHMENT_STORAGE_PROVIDER: r2
-    volumes:
-      - ./media:/app/media
-      - ./g-vision-ocr.json:/app/g-vision-ocr.json:ro
     command: python -m bot_app.main
 
 volumes:

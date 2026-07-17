@@ -19,6 +19,11 @@ from api_contracts.bot import (
     BotTaskReportSaveResponse,
     BotTaskStatusUpdateResponse,
 )
+from pydantic import BaseModel
+
+from .api_media_gateway import BotApiMediaMixin
+from .api_operations_gateway import BotApiOperationsMixin
+from .api_runtime_gateway import BotApiRuntimeMixin
 
 
 class BotApiError(RuntimeError):
@@ -79,7 +84,11 @@ class BotApiGatewayConfig:
         object.__setattr__(self, "token", self.token.strip())
 
 
-class BotApiGateway:
+class BotApiGateway(
+    BotApiMediaMixin,
+    BotApiOperationsMixin,
+    BotApiRuntimeMixin,
+):
     """Small use-case client; bot handlers must not know API transport details."""
 
     def __init__(
@@ -95,6 +104,13 @@ class BotApiGateway:
     async def aclose(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+    @staticmethod
+    def _validate_contract(model: type[BaseModel], payload: dict, label: str):
+        try:
+            return model.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError(f"MVN API returned an invalid {label} contract") from exc
 
     async def health(self) -> BotApiHealthResponse:
         payload = await self._get("health")

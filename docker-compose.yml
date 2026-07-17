@@ -44,16 +44,9 @@ services:
     build: .
     restart: always
     depends_on:
-      - db
       - app
     env_file:
       - .env
-    environment:
-      # Ему тоже нужна база данных
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db/${POSTGRES_DB:-air_conditioners}
-    volumes:
-      - ./media:/app/media
-      - ./static:/app/static
     # ВАЖНО: Переопределяем команду запуска.
     # Вместо uvicorn (как в Dockerfile) запускаем бота
     command: python -m bot_app.main

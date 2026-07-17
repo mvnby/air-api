@@ -670,6 +670,962 @@
         }
       }
     },
+    "/api/internal/bot/v1/orders/recent": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "List Recent Orders",
+        "operationId": "list_internal_bot_recent_orders_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotOrderListRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotOrderListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/orders/{order_id}/attachments": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "Attach Order File",
+        "operationId": "attach_internal_bot_order_file_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_attach_internal_bot_order_file_v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotOrderAttachmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/repair-nameplates/orders": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "List Repair Nameplate Orders",
+        "operationId": "list_internal_bot_repair_nameplate_orders_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotOrderListRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotOrderListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/repair-nameplates/recognize": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "Recognize Repair Nameplate",
+        "operationId": "recognize_internal_bot_repair_nameplate_v1",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_recognize_internal_bot_repair_nameplate_v1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotNameplateRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/repair-nameplates/apply": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "Apply Repair Nameplate",
+        "operationId": "apply_internal_bot_repair_nameplate_v1",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_apply_internal_bot_repair_nameplate_v1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotNameplateApplyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/warranty-nameplates/orders": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "List Warranty Nameplate Orders",
+        "operationId": "list_internal_bot_warranty_nameplate_orders_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotOrderListRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotOrderListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/warranty-nameplates/recognize": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "Recognize Warranty Nameplate",
+        "operationId": "recognize_internal_bot_warranty_nameplate_v1",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_recognize_internal_bot_warranty_nameplate_v1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotNameplateRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/warranty-nameplates/apply": {
+      "post": {
+        "tags": [
+          "internal bot v1 media"
+        ],
+        "summary": "Apply Warranty Nameplate",
+        "operationId": "apply_internal_bot_warranty_nameplate_v1",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_apply_internal_bot_warranty_nameplate_v1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotNameplateApplyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/catalog/selection": {
+      "post": {
+        "tags": [
+          "internal bot v1 operations"
+        ],
+        "summary": "Build Catalog Selection",
+        "operationId": "build_internal_bot_catalog_selection_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotProductSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotProductSelectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/catalog/curated": {
+      "post": {
+        "tags": [
+          "internal bot v1 operations"
+        ],
+        "summary": "Get Curated Catalog",
+        "operationId": "get_internal_bot_curated_catalog_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCuratedProductsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCuratedProductsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/catalog/products/{product_id}/price": {
+      "post": {
+        "tags": [
+          "internal bot v1 operations"
+        ],
+        "summary": "Update Catalog Product Price",
+        "operationId": "update_internal_bot_catalog_product_price_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotProductPriceUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotProductMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/catalog/products/{product_id}/delete": {
+      "post": {
+        "tags": [
+          "internal bot v1 operations"
+        ],
+        "summary": "Delete Catalog Product",
+        "operationId": "delete_internal_bot_catalog_product_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotProductMutationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotProductMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/repair-context/comment-draft": {
+      "post": {
+        "tags": [
+          "internal bot v1 operations"
+        ],
+        "summary": "Build Repair Comment Draft",
+        "operationId": "build_internal_bot_repair_comment_draft_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotRepairDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotRepairDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/repair-context/preset-draft": {
+      "post": {
+        "tags": [
+          "internal bot v1 operations"
+        ],
+        "summary": "Build Repair Preset Draft",
+        "operationId": "build_internal_bot_repair_preset_draft_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotRepairDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotRepairDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/repair-context/apply": {
+      "post": {
+        "tags": [
+          "internal bot v1 operations"
+        ],
+        "summary": "Apply Repair Context",
+        "operationId": "apply_internal_bot_repair_context_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotRepairApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotRepairApplyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/fsm/get": {
+      "post": {
+        "tags": [
+          "internal bot v1 runtime"
+        ],
+        "summary": "Get Fsm State",
+        "operationId": "get_internal_bot_fsm_state_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotFsmStateGetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotFsmStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/fsm/update": {
+      "post": {
+        "tags": [
+          "internal bot v1 runtime"
+        ],
+        "summary": "Update Fsm State",
+        "operationId": "update_internal_bot_fsm_state_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotFsmStateUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotFsmStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/runtime-leases/acquire": {
+      "post": {
+        "tags": [
+          "internal bot v1 runtime"
+        ],
+        "summary": "Acquire Runtime Lease",
+        "operationId": "acquire_internal_bot_runtime_lease_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotRuntimeLeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotRuntimeLeaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/runtime-leases/renew": {
+      "post": {
+        "tags": [
+          "internal bot v1 runtime"
+        ],
+        "summary": "Renew Runtime Lease",
+        "operationId": "renew_internal_bot_runtime_lease_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotRuntimeLeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotRuntimeLeaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/runtime-leases/release": {
+      "post": {
+        "tags": [
+          "internal bot v1 runtime"
+        ],
+        "summary": "Release Runtime Lease",
+        "operationId": "release_internal_bot_runtime_lease_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotRuntimeLeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotRuntimeLeaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
     "/api/products/search": {
       "get": {
         "tags": [
@@ -18418,6 +19374,207 @@
         "type": "object",
         "title": "BankStatementImportResponse"
       },
+      "Body_apply_internal_bot_repair_nameplate_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "file_id": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "raw_text": {
+            "type": "string",
+            "maxLength": 50000,
+            "title": "Raw Text"
+          },
+          "extracted_json": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Extracted Json"
+          },
+          "validation_json": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Validation Json"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Message Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "order_id",
+          "file_id",
+          "raw_text",
+          "extracted_json",
+          "validation_json",
+          "file"
+        ],
+        "title": "Body_apply_internal_bot_repair_nameplate_v1"
+      },
+      "Body_apply_internal_bot_warranty_nameplate_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "unit_type": {
+            "type": "string",
+            "pattern": "^(indoor_unit|outdoor_unit)$",
+            "title": "Unit Type"
+          },
+          "file_id": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "raw_text": {
+            "type": "string",
+            "maxLength": 50000,
+            "title": "Raw Text"
+          },
+          "extracted_json": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Extracted Json"
+          },
+          "validation_json": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Validation Json"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Message Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "order_id",
+          "unit_type",
+          "file_id",
+          "raw_text",
+          "extracted_json",
+          "validation_json",
+          "file"
+        ],
+        "title": "Body_apply_internal_bot_warranty_nameplate_v1"
+      },
+      "Body_attach_internal_bot_order_file_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "file_id": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Message Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "file_id",
+          "file"
+        ],
+        "title": "Body_attach_internal_bot_order_file_v1"
+      },
       "Body_attach_manager_doc_file": {
         "properties": {
           "file": {
@@ -18695,6 +19852,64 @@
           "file"
         ],
         "title": "Body_recognize_internal_bot_customer_requisites_file_v1"
+      },
+      "Body_recognize_internal_bot_repair_nameplate_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "order_id",
+          "file"
+        ],
+        "title": "Body_recognize_internal_bot_repair_nameplate_v1"
+      },
+      "Body_recognize_internal_bot_warranty_nameplate_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "unit_type": {
+            "type": "string",
+            "pattern": "^(indoor_unit|outdoor_unit)$",
+            "title": "Unit Type"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "order_id",
+          "unit_type",
+          "file"
+        ],
+        "title": "Body_recognize_internal_bot_warranty_nameplate_v1"
       },
       "Body_recognize_manager_customer_requisites": {
         "properties": {
@@ -19085,6 +20300,60 @@
         "type": "object",
         "title": "BotCatalogSearchResponse"
       },
+      "BotCuratedProductsRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "area": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 8.0,
+            "title": "Area"
+          },
+          "is_inverter": {
+            "type": "boolean",
+            "title": "Is Inverter"
+          },
+          "tag_slugs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Tag Slugs"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "area",
+          "is_inverter"
+        ],
+        "title": "BotCuratedProductsRequest"
+      },
+      "BotCuratedProductsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotCatalogProductResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "BotCuratedProductsResponse"
+      },
       "BotCustomerBriefResponse": {
         "properties": {
           "id": {
@@ -19311,6 +20580,456 @@
           "text"
         ],
         "title": "BotCustomerRequisitesTextRequest"
+      },
+      "BotFsmStateGetRequest": {
+        "properties": {
+          "storage_key": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Storage Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storage_key"
+        ],
+        "title": "BotFsmStateGetRequest"
+      },
+      "BotFsmStateResponse": {
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "BotFsmStateResponse"
+      },
+      "BotFsmStateUpdateRequest": {
+        "properties": {
+          "storage_key": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Storage Key"
+          },
+          "bot_id": {
+            "type": "integer",
+            "title": "Bot Id"
+          },
+          "chat_id": {
+            "type": "integer",
+            "title": "Chat Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "business_connection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Connection Id"
+          },
+          "destiny": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Destiny",
+            "default": "default"
+          },
+          "write_state": {
+            "type": "boolean",
+            "title": "Write State",
+            "default": false
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "write_data": {
+            "type": "boolean",
+            "title": "Write Data",
+            "default": false
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storage_key",
+          "bot_id",
+          "chat_id",
+          "user_id"
+        ],
+        "title": "BotFsmStateUpdateRequest"
+      },
+      "BotNameplateApplyResponse": {
+        "properties": {
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result"
+        ],
+        "title": "BotNameplateApplyResponse"
+      },
+      "BotNameplateRecognitionResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "unit_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "indoor_unit",
+                  "outdoor_unit"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Type"
+          },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text"
+          },
+          "extracted": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Extracted"
+          },
+          "validation_flags": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Validation Flags"
+          },
+          "merge_preview": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Merge Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "raw_text"
+        ],
+        "title": "BotNameplateRecognitionResponse"
+      },
+      "BotOrderAttachmentResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "already_attached": {
+            "type": "boolean",
+            "title": "Already Attached",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id"
+        ],
+        "title": "BotOrderAttachmentResponse"
+      },
+      "BotOrderBriefResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "installation_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Date"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "BotOrderBriefResponse"
+      },
+      "BotOrderListRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id"
+        ],
+        "title": "BotOrderListRequest"
+      },
+      "BotOrderListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderBriefResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "type": "object",
+        "title": "BotOrderListResponse"
+      },
+      "BotProductMutationRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id"
+        ],
+        "title": "BotProductMutationRequest"
+      },
+      "BotProductMutationResponse": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Product Id"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "changed"
+        ],
+        "title": "BotProductMutationResponse"
+      },
+      "BotProductPriceUpdateRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "price": {
+            "type": "integer",
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "price"
+        ],
+        "title": "BotProductPriceUpdateRequest"
+      },
+      "BotProductSelectionRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "query"
+        ],
+        "title": "BotProductSelectionRequest"
+      },
+      "BotProductSelectionResponse": {
+        "properties": {
+          "selection": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Selection"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selection"
+        ],
+        "title": "BotProductSelectionResponse"
       },
       "BotQuickOrderAddressCheck": {
         "properties": {
@@ -19541,6 +21260,198 @@
           "draft"
         ],
         "title": "BotQuickOrderParseResponse"
+      },
+      "BotRepairApplyRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "repair_meta_draft": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Repair Meta Draft"
+          },
+          "raw_comment": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Raw Comment"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "order_id",
+          "repair_meta_draft",
+          "raw_comment"
+        ],
+        "title": "BotRepairApplyRequest"
+      },
+      "BotRepairApplyResponse": {
+        "properties": {
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result"
+        ],
+        "title": "BotRepairApplyResponse"
+      },
+      "BotRepairDraftRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "fault_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fault Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "order_id"
+        ],
+        "title": "BotRepairDraftRequest"
+      },
+      "BotRepairDraftResponse": {
+        "properties": {
+          "draft": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Draft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft"
+        ],
+        "title": "BotRepairDraftResponse"
+      },
+      "BotRuntimeLeaseRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Name"
+          },
+          "owner_id": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Owner Id"
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "maximum": 300.0,
+            "minimum": 15.0,
+            "title": "Ttl Seconds",
+            "default": 45
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "owner_id"
+        ],
+        "title": "BotRuntimeLeaseRequest"
+      },
+      "BotRuntimeLeaseResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "Owner Id"
+          },
+          "acquired": {
+            "type": "boolean",
+            "title": "Acquired"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "owner_id",
+          "acquired"
+        ],
+        "title": "BotRuntimeLeaseResponse"
       },
       "BotStaffContextResponse": {
         "properties": {

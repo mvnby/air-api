@@ -1,7 +1,5 @@
 """Select and own the staff-access provider used by Telegram handlers."""
 
-from core.config import settings
-
 from .access import BotAccessContext, BotAccessProvider
 from .access_api import ApiBotAccessProvider
 from .api_runtime import get_bot_api_gateway
@@ -11,19 +9,10 @@ _provider: BotAccessProvider | None = None
 
 
 def _build_provider() -> BotAccessProvider:
-    if settings.BOT_ACCESS_BACKEND == "api":
-        return ApiBotAccessProvider(
-            get_bot_api_gateway(),
-            owns_gateway=False,
-        )
-
-    if settings.BOT_ACCESS_BACKEND == "database":
-        # Import the temporary adapter only when explicit rollback mode is selected.
-        from .access_database import DatabaseBotAccessProvider
-
-        return DatabaseBotAccessProvider()
-
-    raise RuntimeError(f"Unsupported bot access backend: {settings.BOT_ACCESS_BACKEND}")
+    return ApiBotAccessProvider(
+        get_bot_api_gateway(),
+        owns_gateway=False,
+    )
 
 
 def get_bot_access_provider() -> BotAccessProvider:

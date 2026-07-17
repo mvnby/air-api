@@ -23,6 +23,8 @@ from services.bot_task_mutation_service import (
     BotTaskReportMutationResult,
     BotTaskStatusMutationResult,
 )
+from services.bot_catalog_operations_api_service import BotCatalogOperationsApiService
+from services.bot_runtime_api_service import BotRuntimeApiService
 from models import OrderStageStatus
 
 
@@ -101,6 +103,15 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     requisites_text = schema["paths"]["/api/internal/bot/v1/customers/requisites/recognize-text"]["post"]
     requisites_file = schema["paths"]["/api/internal/bot/v1/customers/requisites/recognize-file"]["post"]
     requisites_action = schema["paths"]["/api/internal/bot/v1/customers/requisites/{recognition_id}/action"]["post"]
+    new_paths = (
+        "/api/internal/bot/v1/orders/recent",
+        "/api/internal/bot/v1/repair-nameplates/recognize",
+        "/api/internal/bot/v1/warranty-nameplates/apply",
+        "/api/internal/bot/v1/catalog/selection",
+        "/api/internal/bot/v1/repair-context/apply",
+        "/api/internal/bot/v1/fsm/update",
+        "/api/internal/bot/v1/runtime-leases/acquire",
+    )
 
     assert health["operationId"] == "get_internal_bot_api_health_v1"
     assert staff_context["operationId"] == "get_internal_bot_staff_context_v1"
@@ -126,11 +137,67 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     assert requisites_text["security"] == [{"BotServiceBearer": []}]
     assert requisites_file["security"] == [{"BotServiceBearer": []}]
     assert requisites_action["security"] == [{"BotServiceBearer": []}]
+    for path in new_paths:
+        method = next(iter(schema["paths"][path].values()))
+        assert method["security"] == [{"BotServiceBearer": []}], path
     assert schema["components"]["securitySchemes"]["BotServiceBearer"] == {
         "type": "http",
         "description": "Dedicated bearer token used only by the MVN Telegram bot service.",
         "scheme": "bearer",
     }
+
+
+async def test_internal_bot_product_price_mutation_uses_authorized_service(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+    update = AsyncMock(return_value=True)
+    monkeypatch.setattr(BotCatalogOperationsApiService, "update_price", update)
+
+    async def fake_session():
+        yield object()
+
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/catalog/products/42/price",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123, "price": 3200},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+    assert response.status_code == 200
+    assert response.json() == {"product_id": 42, "changed": True}
+    update.assert_awaited_once()
+
+
+async def test_internal_bot_runtime_lease_endpoint_uses_api_database_service(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+    acquire = AsyncMock(
+        return_value={
+            "name": "mvn:telegram_bot",
+            "owner_id": "node:1",
+            "acquired": True,
+            "expires_at": "2026-07-17T18:00:00",
+        }
+    )
+    monkeypatch.setattr(BotRuntimeApiService, "acquire_lease", acquire)
+
+    async def fake_session():
+        yield object()
+
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/runtime-leases/acquire",
+            token="expected-token",
+            method="POST",
+            json={"name": "mvn:telegram_bot", "owner_id": "node:1", "ttl_seconds": 45},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+    assert response.status_code == 200
+    assert response.json()["acquired"] is True
+    acquire.assert_awaited_once()
 
 
 async def test_internal_bot_staff_context_maps_backend_permissions(monkeypatch):

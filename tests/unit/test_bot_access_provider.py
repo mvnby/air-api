@@ -90,19 +90,20 @@ async def test_access_runtime_checks_health_and_closes_provider(monkeypatch):
 
 def test_api_access_backend_requires_service_token(monkeypatch):
     monkeypatch.setattr(access_runtime, "_provider", None)
-    monkeypatch.setattr(access_runtime.settings, "BOT_ACCESS_BACKEND", "api")
-    monkeypatch.setattr(access_runtime.settings, "BOT_API_TOKEN", "")
+    monkeypatch.setattr(api_runtime, "_gateway", None)
+    monkeypatch.setattr(api_runtime.settings, "BOT_API_TOKEN", "")
 
     with pytest.raises(ValueError, match="Bot API token is required"):
         access_runtime.get_bot_access_provider()
 
 
-def test_access_runtime_never_implicitly_falls_back_to_database(monkeypatch):
+def test_access_runtime_is_always_api_backed(monkeypatch):
     monkeypatch.setattr(access_runtime, "_provider", None)
-    monkeypatch.setattr(access_runtime.settings, "BOT_ACCESS_BACKEND", "unexpected")
-
-    with pytest.raises(RuntimeError, match="Unsupported bot access backend"):
-        access_runtime.get_bot_access_provider()
+    gateway = SimpleNamespace()
+    monkeypatch.setattr(access_runtime, "get_bot_api_gateway", lambda: gateway)
+    provider = access_runtime.get_bot_access_provider()
+    assert isinstance(provider, ApiBotAccessProvider)
+    assert provider._gateway is gateway
 
 
 async def test_api_runtime_shares_and_closes_one_gateway(monkeypatch):
