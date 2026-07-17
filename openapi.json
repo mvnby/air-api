@@ -14605,6 +14605,72 @@
         }
       }
     },
+    "/api/manager/brands/{brand_id}/series/{series_id}/gallery/apply-to-products": {
+      "post": {
+        "tags": [
+          "manager brands"
+        ],
+        "summary": "Apply Manager Series Gallery To Products",
+        "operationId": "apply_manager_series_gallery_to_products",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "brand_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Brand Id"
+            }
+          },
+          {
+            "name": "series_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Series Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerSeriesGalleryApplyPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerSeriesGalleryApplyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/settings": {
       "get": {
         "tags": [
@@ -36938,6 +37004,60 @@
           "stage"
         ],
         "title": "ManagerRestoreJobStatusResponse"
+      },
+      "ManagerSeriesGalleryApplyPayload": {
+        "properties": {
+          "source_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Urls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_urls"
+        ],
+        "title": "ManagerSeriesGalleryApplyPayload"
+      },
+      "ManagerSeriesGalleryApplyResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "products_count": {
+            "type": "integer",
+            "title": "Products Count"
+          },
+          "added_links": {
+            "type": "integer",
+            "title": "Added Links"
+          },
+          "skipped_existing": {
+            "type": "integer",
+            "title": "Skipped Existing"
+          },
+          "series_id": {
+            "type": "integer",
+            "title": "Series Id"
+          },
+          "images_applied": {
+            "type": "integer",
+            "title": "Images Applied"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "products_count",
+          "added_links",
+          "skipped_existing",
+          "series_id",
+          "images_applied"
+        ],
+        "title": "ManagerSeriesGalleryApplyResponse"
       },
       "ManagerServiceAttachmentAccessResponse": {
         "properties": {

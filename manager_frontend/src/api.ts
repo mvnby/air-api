@@ -1251,6 +1251,16 @@ export const api = {
         };
     },
 
+    async applyManagerSeriesGalleryToProducts(
+        brandId: number,
+        seriesId: number,
+        sourceUrls: string[],
+    ) {
+        return await ManagerBrandsService.applyManagerSeriesGalleryToProducts(brandId, seriesId, {
+            source_urls: sourceUrls,
+        });
+    },
+
     async deleteManagerBrandSeries(brandId: number, seriesId: number): Promise<{ message: string }> {
         return await ManagerBrandsService.deleteManagerBrandSeries(brandId, seriesId);
     },

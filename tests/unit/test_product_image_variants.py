@@ -362,6 +362,7 @@ async def test_apply_gallery_to_series_preserves_installation_photos_and_replace
 
     result = await ManagerMediaService.apply_gallery_to_series(sqlite_session, source.id)
 
+    await sqlite_session.refresh(series)
     await sqlite_session.refresh(target)
     await sqlite_session.refresh(outside)
     target_images = (
@@ -383,6 +384,10 @@ async def test_apply_gallery_to_series_preserves_installation_photos_and_replace
     assert result["replaced_links"] == 2
     assert result["deleted_files_count"] == 0
     assert result["preserved_installation_links"] == 1
+    assert series.gallery_images == [
+        "/media/products/shared/source-main.webp",
+        "/media/products/shared/source-extra.webp",
+    ]
     assert target.main_image == source.main_image
     assert [image.url for image in target_images] == [
         "/media/products/shared/target-installation.webp",

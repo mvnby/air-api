@@ -568,6 +568,64 @@ class ManagerBrandService:
         )
 
     @staticmethod
+    async def apply_series_gallery_to_products(
+        session: AsyncSession,
+        brand_id: int,
+        series_id: int,
+        source_urls: List[str],
+    ) -> Dict[str, Any]:
+        brand = await session.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail="Бренд не найден.")
+
+        series = await ManagerBrandService._get_brand_series(session, brand_id, series_id)
+        gallery_urls = ManagerBrandService._normalize_string_list(source_urls)
+        if not gallery_urls:
+            raise HTTPException(status_code=400, detail="Галерея серии пуста.")
+
+        product_ids = list(
+            (
+                await session.execute(
+                    select(Product.id).where(Product.series_id == series.id).order_by(Product.id)
+                )
+            ).scalars().all()
+        )
+        series.gallery_images = gallery_urls
+        session.add(series)
+
+        if product_ids:
+            from services.manager_media_service import ManagerMediaService
+
+            result = await ManagerMediaService.bulk_add_gallery_images(
+                session=session,
+                product_ids=product_ids,
+                source_urls=gallery_urls,
+                is_installation=False,
+                skip_existing=True,
+                set_main=False,
+                commit=False,
+            )
+        else:
+            result = {
+                "message": "Series gallery saved; no products assigned",
+                "products_count": 0,
+                "added_links": 0,
+                "skipped_existing": 0,
+            }
+
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="brand_series_gallery_apply",
+            product_ids=product_ids,
+            brand_slugs=[brand.slug],
+        )
+        return {
+            **result,
+            "series_id": int(series.id or series_id),
+            "images_applied": len(gallery_urls),
+        }
+
+    @staticmethod
     async def delete_brand_series(
         session: AsyncSession,
         brand_id: int,

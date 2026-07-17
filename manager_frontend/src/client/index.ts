@@ -283,6 +283,8 @@ export type { ManagerRepairComplaintPresetResponse } from './models/ManagerRepai
 export type { ManagerRepairComplaintPresetUpdatePayload } from './models/ManagerRepairComplaintPresetUpdatePayload';
 export type { ManagerRestoreJobStartResponse } from './models/ManagerRestoreJobStartResponse';
 export type { ManagerRestoreJobStatusResponse } from './models/ManagerRestoreJobStatusResponse';
+export type { ManagerSeriesGalleryApplyPayload } from './models/ManagerSeriesGalleryApplyPayload';
+export type { ManagerSeriesGalleryApplyResponse } from './models/ManagerSeriesGalleryApplyResponse';
 export type { ManagerServiceAttachmentAccessResponse } from './models/ManagerServiceAttachmentAccessResponse';
 export type { ManagerServiceAttachmentItemResponse } from './models/ManagerServiceAttachmentItemResponse';
 export type { ManagerServiceAttachmentListResponse } from './models/ManagerServiceAttachmentListResponse';

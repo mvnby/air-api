@@ -26,6 +26,8 @@ import {
     backgroundRemovalProviderOptions,
     type BackgroundRemovalProvider,
 } from '../utils/media-processing';
+import { optimizeImageForUpload } from '../utils/image-upload-optimization';
+import { uploadSequentially } from '../utils/sequential-upload';
 
 // Product state
 const products = ref<Product[]>([]);
@@ -38,6 +40,8 @@ const showEditModal = ref(false);
 const modalMode = ref<'single' | 'bulk'>('single');
 const imageSearchResults = ref<any[]>([]);
 const searchLoading = ref(false);
+const uploadCompleted = ref(0);
+const uploadTotal = ref(0);
 const imageQuery = ref('');
 const cleanupLoading = ref(false);
 const cleanupStats = ref<any>(null);
@@ -525,15 +529,39 @@ const handleDrop = async (e: DragEvent) => {
 
 const uploadFiles = async (files: FileList | File[]) => {
     if (!selectedProduct.value && !isBulkMode.value) return;
+    const imageFiles = Array.from(files);
+    if (!imageFiles.length) return;
     searchLoading.value = true;
+    uploadCompleted.value = 0;
+    uploadTotal.value = imageFiles.length;
     try {
         if (isBulkMode.value) {
-            const res = await api.bulkUploadLocalImages(selectedIdsArray.value, files);
-            setToast(`Загружено ссылок: ${res.uploaded_links}`);
+            let uploadedLinks = 0;
+            await uploadSequentially(
+                imageFiles,
+                async (file) => {
+                    const preparedFile = await optimizeImageForUpload(file);
+                    const response = await api.bulkUploadLocalImages(selectedIdsArray.value, [preparedFile]);
+                    uploadedLinks += response.uploaded_links;
+                    return response;
+                },
+                (_response, progress) => { uploadCompleted.value = progress.completed; },
+            );
+            setToast(`Загружено ссылок: ${uploadedLinks}`);
             await loadCommonGallery();
         } else {
-            const res = await api.uploadLocalImages(selectedProduct.value!.id, files);
-            setToast(`Загружено изображений: ${res.uploaded}`);
+            let uploaded = 0;
+            await uploadSequentially(
+                imageFiles,
+                async (file) => {
+                    const preparedFile = await optimizeImageForUpload(file);
+                    const response = await api.uploadLocalImages(selectedProduct.value!.id, [preparedFile]);
+                    uploaded += response.uploaded;
+                    return response;
+                },
+                (_response, progress) => { uploadCompleted.value = progress.completed; },
+            );
+            setToast(`Загружено изображений: ${uploaded}`);
             refreshSelectedProduct();
         }
         await loadProducts();
@@ -542,6 +570,8 @@ const uploadFiles = async (files: FileList | File[]) => {
         console.error(e);
     } finally {
         searchLoading.value = false;
+        uploadCompleted.value = 0;
+        uploadTotal.value = 0;
         if (fileInput.value) fileInput.value.value = '';
     }
 };
@@ -2164,7 +2194,7 @@ watchDebounced(
                       
                       <div v-if="searchLoading" class="flex items-center gap-2 text-teal-600 font-medium">
                           <div class="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
-                          Загрузка...
+                          {{ uploadTotal > 1 ? `Подготовка и загрузка: ${uploadCompleted}/${uploadTotal}` : 'Подготовка и загрузка...' }}
                       </div>
                   </div>
                   <div class="w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-3 shadow-sm">

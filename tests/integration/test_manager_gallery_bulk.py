@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from sqlmodel import select
 
 from core.config import settings
-from models import Product, ProductImage, ProductImageVariant
+from models import Brand, Product, ProductImage, ProductImageVariant, ProductSeries
 
 
 def _make_product(idx: int) -> Product:
@@ -171,6 +171,53 @@ async def test_bulk_delete_common_removes_variants_only_for_deleted_links(async_
     ).scalars().all()
     assert len(remaining_variants) == 1
     assert remaining_variants[0].product_image_id == img3_id
+
+
+@pytest.mark.asyncio
+async def test_series_gallery_can_be_added_to_all_series_products(async_client: AsyncClient, db):
+    brand = Brand(title="Series gallery brand", slug="series-gallery-brand")
+    db.add(brand)
+    await db.flush()
+    series = ProductSeries(
+        brand_id=brand.id,
+        title="Shared gallery series",
+        slug="shared-gallery-series",
+    )
+    db.add(series)
+    await db.flush()
+    first = _make_product(41)
+    first.brand_id = brand.id
+    first.series_id = series.id
+    second = _make_product(42)
+    second.brand_id = brand.id
+    second.series_id = series.id
+    outside = _make_product(43)
+    db.add_all([first, second, outside])
+    await db.commit()
+
+    urls = [
+        "/media/library/original/series-gallery-1.webp",
+        "/media/library/original/series-gallery-2.webp",
+    ]
+    headers = await _auth_headers(async_client)
+    endpoint = f"/api/manager/brands/{brand.id}/series/{series.id}/gallery/apply-to-products"
+    response = await async_client.post(endpoint, json={"source_urls": urls}, headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["products_count"] == 2
+    assert response.json()["added_links"] == 4
+    await db.refresh(series)
+    assert series.gallery_images == urls
+
+    linked_rows = (
+        await db.execute(select(ProductImage).where(ProductImage.url.in_(urls)).order_by(ProductImage.id))
+    ).scalars().all()
+    assert {row.product_id for row in linked_rows} == {first.id, second.id}
+
+    repeated = await async_client.post(endpoint, json={"source_urls": urls}, headers=headers)
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["added_links"] == 0
+    assert repeated.json()["skipped_existing"] == 4
 
 
 @pytest.mark.asyncio

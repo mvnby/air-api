@@ -15,6 +15,7 @@ from routers.manager_operation_ids import (
     LIST_MANAGER_BRANDS,
     UPDATE_MANAGER_BRAND_FEATURE,
     UPDATE_MANAGER_BRAND_SERIES,
+    APPLY_MANAGER_SERIES_GALLERY_TO_PRODUCTS,
     UPDATE_MANAGER_BRAND,
 )
 from schemas import (
@@ -30,6 +31,8 @@ from schemas import (
     ManagerBrandSeriesListResponse,
     ManagerBrandSeriesResponse,
     ManagerBrandSeriesUpdatePayload,
+    ManagerSeriesGalleryApplyPayload,
+    ManagerSeriesGalleryApplyResponse,
     ManagerBrandUpdatePayload,
 )
 from services.manager_brand_service import ManagerBrandService
@@ -196,6 +199,26 @@ async def update_manager_brand_series(
         payload=payload.model_dump(exclude_unset=True),
     )
     return ManagerBrandSeriesResponse(**updated)
+
+
+@router.post(
+    "/{brand_id}/series/{series_id}/gallery/apply-to-products",
+    response_model=ManagerSeriesGalleryApplyResponse,
+    operation_id=APPLY_MANAGER_SERIES_GALLERY_TO_PRODUCTS,
+)
+async def apply_manager_series_gallery_to_products(
+    brand_id: int,
+    series_id: int,
+    payload: ManagerSeriesGalleryApplyPayload,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await ManagerBrandService.apply_series_gallery_to_products(
+        session=session,
+        brand_id=brand_id,
+        series_id=series_id,
+        source_urls=payload.source_urls,
+    )
+    return ManagerSeriesGalleryApplyResponse(**result)
 
 
 @router.delete(

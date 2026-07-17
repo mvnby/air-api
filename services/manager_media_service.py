@@ -15,6 +15,7 @@ from sqlalchemy import func
 from sqlmodel import select, update
 
 from models import Product, ProductImage, ProductImageVariant, ProductSeries
+from services.catalog_revision_service import CatalogRevisionService
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -486,6 +487,7 @@ class ManagerMediaService:
         is_installation: bool,
         skip_existing: bool,
         set_main: bool,
+        commit: bool = True,
     ) -> dict:
         if not product_ids:
             raise ValueError("product_ids is required")
@@ -538,7 +540,8 @@ class ManagerMediaService:
 
             await ManagerMediaService.sync_legacy_images(session, product_id)
 
-        await session.commit()
+        if commit:
+            await session.commit()
         return {
             "message": "Bulk image add completed",
             "products_count": len(unique_product_ids),
@@ -713,6 +716,10 @@ class ManagerMediaService:
                 "deleted_files_count": 0,
             }
 
+        if series:
+            series.gallery_images = list(dict.fromkeys([*(series.gallery_images or []), *source_urls]))
+            session.add(series)
+
         for target_product in target_products:
             target_rows = target_rows_by_product_id[target_product.id]
 
@@ -752,7 +759,11 @@ class ManagerMediaService:
             await ManagerMediaService.sync_legacy_images(session, target_product.id)
             updated_products += 1
 
-        await session.commit()
+        await CatalogRevisionService.bump_commit_and_purge(
+            session,
+            scope="product_series_gallery_apply",
+            product_ids=[source_product.id, *(product.id for product in target_products)],
+        )
 
         deleted_files_count = 0
         if delete_unreferenced:
