@@ -2524,9 +2524,8 @@ watch(
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white p-4 text-gray-900 shadow-2xl dark:bg-slate-950 dark:text-slate-100 sm:p-6 md:border-l md:border-gray-200 dark:md:border-slate-700">
+    <aside ref="drawerScrollContainer" class="h-full w-full min-w-0 max-w-3xl overflow-y-auto bg-white text-gray-900 shadow-2xl dark:bg-slate-950 dark:text-slate-100 md:border-l md:border-gray-200 dark:md:border-slate-700">
       <OrderWorkspaceHeader
-        class="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6"
         :order-id="order?.id"
         :title="displayOrderTitle"
         :workflow="workflowType"
@@ -2549,7 +2548,7 @@ watch(
         @close="closeDrawer"
       />
 
-
+      <div class="p-4 sm:p-6">
       <div v-if="managerLabels.length || showManagerLabelInput" class="mt-3 flex flex-wrap items-center gap-1.5">
         <span
           v-for="label in managerLabels"
@@ -3970,6 +3969,7 @@ watch(
           {{ isDeleting ? 'Удаление...' : 'Удалить заказ' }}
         </button>
       </footer>
+      </div>
     </aside>
 
     <div

@@ -1,4 +1,4 @@
-import { onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import { nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue';
 
 export const STICKY_HEADER_TOP_ZONE_PX = 80;
 export const STICKY_HEADER_COLLAPSE_TRAVEL_PX = 72;
@@ -17,6 +17,27 @@ export const initialStickyHeaderState = (scrollTop = 0): StickyHeaderMotionState
   downwardTravel: 0,
   upwardTravel: 0,
 });
+
+export const syncStickyHeaderAfterLayout = (
+  state: StickyHeaderMotionState,
+  scrollTop: number,
+): StickyHeaderMotionState => ({
+  ...state,
+  lastScrollTop: Math.max(0, scrollTop),
+  downwardTravel: 0,
+  upwardTravel: 0,
+});
+
+export const getStickyHeaderLogicalScrollTop = (
+  rawScrollTop: number,
+  compensation: number,
+) => Math.max(0, rawScrollTop + compensation);
+
+export const getStickyHeaderLayoutCompensation = (
+  logicalScrollTop: number,
+  rawScrollTop: number,
+  compact: boolean,
+) => compact ? logicalScrollTop - rawScrollTop : 0;
 
 export const reduceStickyHeaderScroll = (
   state: StickyHeaderMotionState,
@@ -55,30 +76,77 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
   const compact = ref(false);
   let motionState = initialStickyHeaderState();
   let frameId: number | null = null;
+  let layoutFrameId: number | null = null;
+  let layoutSyncGeneration = 0;
+  let layoutSyncPending = false;
+  let scrollCompensation = 0;
   let currentContainer: HTMLElement | null = null;
+
+  const syncAfterLayoutChange = (logicalScrollTop: number, targetCompact: boolean) => {
+    layoutSyncPending = true;
+    const generation = ++layoutSyncGeneration;
+
+    void nextTick(() => {
+      if (generation !== layoutSyncGeneration || !currentContainer) return;
+      layoutFrameId = window.requestAnimationFrame(() => {
+        layoutFrameId = null;
+        if (generation !== layoutSyncGeneration || !currentContainer) return;
+        const rawScrollTop = currentContainer.scrollTop;
+        scrollCompensation = getStickyHeaderLayoutCompensation(
+          logicalScrollTop,
+          rawScrollTop,
+          targetCompact,
+        );
+        motionState = syncStickyHeaderAfterLayout(
+          motionState,
+          targetCompact
+            ? getStickyHeaderLogicalScrollTop(rawScrollTop, scrollCompensation)
+            : rawScrollTop,
+        );
+        layoutSyncPending = false;
+      });
+    });
+  };
 
   const updateFromScroll = () => {
     frameId = null;
-    if (!currentContainer) return;
-    motionState = reduceStickyHeaderScroll(motionState, currentContainer.scrollTop);
+    if (!currentContainer || layoutSyncPending) return;
+    const wasCompact = motionState.compact;
+    const logicalScrollTop = getStickyHeaderLogicalScrollTop(
+      currentContainer.scrollTop,
+      scrollCompensation,
+    );
+    motionState = reduceStickyHeaderScroll(motionState, logicalScrollTop);
     compact.value = motionState.compact;
+    if (wasCompact !== motionState.compact) {
+      syncAfterLayoutChange(motionState.lastScrollTop, motionState.compact);
+    }
   };
 
   const onScroll = () => {
+    if (layoutSyncPending) return;
     if (frameId === null) frameId = window.requestAnimationFrame(updateFromScroll);
   };
 
   const detach = () => {
     currentContainer?.removeEventListener('scroll', onScroll);
     currentContainer = null;
+    layoutSyncPending = false;
+    scrollCompensation = 0;
+    layoutSyncGeneration += 1;
     if (frameId !== null) {
       window.cancelAnimationFrame(frameId);
       frameId = null;
+    }
+    if (layoutFrameId !== null) {
+      window.cancelAnimationFrame(layoutFrameId);
+      layoutFrameId = null;
     }
   };
 
   const reset = () => {
     const scrollTop = currentContainer?.scrollTop || 0;
+    scrollCompensation = 0;
     motionState = initialStickyHeaderState(scrollTop);
     compact.value = false;
   };
