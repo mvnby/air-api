@@ -96,19 +96,23 @@ services:
     image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
     restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
+      - app
     env_file:
-      - ${MVN_RESERVE_ENV_FILE:-.env}
       - .ha-bot-role.env
     environment:
+      BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN in .env}
+      BOT_API_TOKEN: ${BOT_API_TOKEN:?set BOT_API_TOKEN in .env}
+      BOT_API_BASE_URL: ${BOT_API_BASE_URL:?set stable HTTPS BOT_API_BASE_URL in .env}
+      BOT_API_TIMEOUT_SECONDS: ${BOT_API_TIMEOUT_SECONDS:-5}
+      BOT_DROP_PENDING_UPDATES: ${BOT_DROP_PENDING_UPDATES:-false}
       ENVIRONMENT: production
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB:-air_conditioners}
-      BACKGROUND_REMOVAL_PROVIDER: noop
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
+      PUBLIC_API_BASE: ${PUBLIC_API_BASE:-https://mvn.by/api/v1}
+      MANAGER_BASE_URL: ${MANAGER_BASE_URL:-}
+      BOT_RUNTIME_LEASE_SECONDS: ${BOT_RUNTIME_LEASE_SECONDS:-45}
+      BOT_RUNTIME_RENEW_SECONDS: ${BOT_RUNTIME_RENEW_SECONDS:-15}
+      BOT_RUNTIME_RETRY_SECONDS: ${BOT_RUNTIME_RETRY_SECONDS:-5}
     command: python -m bot_app.main
-    volumes:
-      - ./media:/app/media
-      - ./secrets/g-vision-ocr.json:/app/g-vision-ocr.json:ro
     mem_limit: ${MVN_RESERVE_BOT_MEMORY:-360m}
     networks: [reserve]
 

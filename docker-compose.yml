@@ -45,8 +45,24 @@ services:
     restart: always
     depends_on:
       - app
-    env_file:
-      - .env
+    # Keep the bot runtime on an explicit allowlist. Compose still reads .env
+    # for interpolation, but backend/database credentials never enter the
+    # container environment.
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN in .env}
+      BOT_API_TOKEN: ${BOT_API_TOKEN:?set BOT_API_TOKEN in .env}
+      BOT_API_BASE_URL: ${BOT_API_BASE_URL:-http://app:8000/api/internal/bot/v1}
+      BOT_API_TIMEOUT_SECONDS: ${BOT_API_TIMEOUT_SECONDS:-5}
+      BOT_ENABLED: ${BOT_ENABLED:-true}
+      BOT_DROP_PENDING_UPDATES: ${BOT_DROP_PENDING_UPDATES:-false}
+      APP_ROLE: ${APP_ROLE:-primary}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
+      PUBLIC_API_BASE: ${PUBLIC_API_BASE:-https://mvn.by/api/v1}
+      MANAGER_BASE_URL: ${MANAGER_BASE_URL:-}
+      BOT_RUNTIME_LEASE_SECONDS: ${BOT_RUNTIME_LEASE_SECONDS:-45}
+      BOT_RUNTIME_RENEW_SECONDS: ${BOT_RUNTIME_RENEW_SECONDS:-15}
+      BOT_RUNTIME_RETRY_SECONDS: ${BOT_RUNTIME_RETRY_SECONDS:-5}
     # ВАЖНО: Переопределяем команду запуска.
     # Вместо uvicorn (как в Dockerfile) запускаем бота
     command: python -m bot_app.main

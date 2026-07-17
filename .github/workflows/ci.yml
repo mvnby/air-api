@@ -42,6 +42,9 @@ jobs:
 
             echo "SECRET_KEY=dummy_secret_for_tests"
             echo "BOT_TOKEN=dummy_token"
+            echo "BOT_API_TOKEN=dummy_bot_api_token"
+            echo "BOT_API_BASE_URL=http://app:8000/api/internal/bot/v1"
+            echo "BOT_ENABLED=false"
             echo "ADMIN_USERNAME=admin"
             echo "ADMIN_PASSWORD=admin"
             echo "ENVIRONMENT=test"
