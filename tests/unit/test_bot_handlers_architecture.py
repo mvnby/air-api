@@ -1,6 +1,37 @@
 import ast
 from pathlib import Path
 
+import yaml
+
+
+BOT_COMPOSE_PATHS = (
+    "docker-compose.yml",
+    "docker-compose.api.yml",
+    "docker-compose.prod.yml",
+    "deploy/ha/mvn-api/docker-compose.patroni.yml",
+    "deploy/ha/mvn-api/docker-compose.primary.yml",
+    "deploy/ha/mvn-api/docker-compose.standby.yml",
+    "deploy/ha/zakup/docker-compose.patroni.yml",
+    "deploy/ha/zakup/docker-compose.primary.yml",
+    "deploy/ha/zakup/docker-compose.standby.yml",
+)
+BOT_ALLOWED_ENVIRONMENT = {
+    "APP_ROLE",
+    "BOT_API_BASE_URL",
+    "BOT_API_TIMEOUT_SECONDS",
+    "BOT_API_TOKEN",
+    "BOT_DROP_PENDING_UPDATES",
+    "BOT_ENABLED",
+    "BOT_RUNTIME_LEASE_SECONDS",
+    "BOT_RUNTIME_RENEW_SECONDS",
+    "BOT_RUNTIME_RETRY_SECONDS",
+    "BOT_TOKEN",
+    "ENVIRONMENT",
+    "MANAGER_BASE_URL",
+    "PUBLIC_API_BASE",
+    "PUBLIC_SITE_URL",
+}
+
 
 def test_bot_handlers_do_not_use_direct_db_queries():
     handlers_dir = Path("bot_app/handlers")
@@ -26,16 +57,20 @@ def test_entire_bot_package_has_no_monolith_runtime_imports():
 
 
 def test_bot_compose_services_have_no_database_dependency_or_credentials():
-    for compose_path in (
-        "docker-compose.yml",
-        "docker-compose.api.yml",
-        "docker-compose.prod.yml",
-        "deploy/ha/mvn-api/docker-compose.patroni.yml",
-    ):
-        source = Path(compose_path).read_text(encoding="utf-8")
-        bot_section = source.split("\n  bot:\n", 1)[1].split("\n  ", 1)[0]
-        assert "DATABASE_URL" not in bot_section, compose_path
-        assert "- db" not in bot_section, compose_path
+    for compose_path in BOT_COMPOSE_PATHS:
+        compose = yaml.safe_load(Path(compose_path).read_text(encoding="utf-8"))
+        bot = compose["services"]["bot"]
+        dependencies = bot.get("depends_on", [])
+        dependency_names = set(dependencies if isinstance(dependencies, list) else dependencies)
+        assert "db" not in dependency_names, compose_path
+        assert "volumes" not in bot, compose_path
+
+        env_files = bot.get("env_file", [])
+        assert env_files in ([], [".ha-bot-role.env"]), compose_path
+
+        environment = bot.get("environment", {})
+        assert {"BOT_TOKEN", "BOT_API_TOKEN", "BOT_API_BASE_URL"} <= set(environment)
+        assert set(environment) <= BOT_ALLOWED_ENVIRONMENT, compose_path
 
 
 def test_bot_handlers_resolve_staff_access_only_through_bot_provider():
