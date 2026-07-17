@@ -91,10 +91,20 @@ services:
     depends_on:
       - app
     env_file:
-      - .env
       - .ha-bot-role.env
     environment:
+      BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN in .env}
+      BOT_API_TOKEN: ${BOT_API_TOKEN:?set BOT_API_TOKEN in .env}
+      BOT_API_BASE_URL: ${BOT_API_BASE_URL:?set stable HTTPS BOT_API_BASE_URL in .env}
+      BOT_API_TIMEOUT_SECONDS: ${BOT_API_TIMEOUT_SECONDS:-5}
+      BOT_DROP_PENDING_UPDATES: ${BOT_DROP_PENDING_UPDATES:-false}
       ENVIRONMENT: production
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
+      PUBLIC_API_BASE: ${PUBLIC_API_BASE:-https://mvn.by/api/v1}
+      MANAGER_BASE_URL: ${MANAGER_BASE_URL:-}
+      BOT_RUNTIME_LEASE_SECONDS: ${BOT_RUNTIME_LEASE_SECONDS:-45}
+      BOT_RUNTIME_RENEW_SECONDS: ${BOT_RUNTIME_RENEW_SECONDS:-15}
+      BOT_RUNTIME_RETRY_SECONDS: ${BOT_RUNTIME_RETRY_SECONDS:-5}
     command: python -m bot_app.main
     mem_limit: ${MVN_PATRONI_BOT_MEMORY:-512m}
 
