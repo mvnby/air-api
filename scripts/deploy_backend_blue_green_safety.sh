@@ -293,13 +293,6 @@ rollback_restore_previous_image_state() {
       return 1
     fi
   fi
-  if [[ "${bot_update_attempted}" == "true" ]]; then
-    if ! "${COMPOSE[@]}" up -d --no-deps --force-recreate bot \
-      || ! wait_service_running bot; then
-      log error "could not restore bot to the previous image"
-      return 1
-    fi
-  fi
 }
 
 rollback_restore_candidate_from_buffer() {

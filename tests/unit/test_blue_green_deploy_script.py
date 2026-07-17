@@ -130,10 +130,10 @@ def test_first_deploy_activates_blue_without_touching_database(tmp_path):
 
     assert result.returncode == 0, result.stderr
     commands = command_log.read_text(encoding="utf-8")
-    assert "pull app-blue bot" in commands
+    assert "pull app-blue" in commands
     assert "run -T --rm --no-deps app-blue alembic upgrade head" in commands
     assert "up -d --no-deps --force-recreate app-blue" in commands
-    assert "up -d --no-deps --force-recreate bot" in commands
+    assert "up -d --no-deps --force-recreate bot" not in commands
     assert "stop -t 5 app" in commands
     assert "rm -f app" in commands
     candidate_ready_calls = [
@@ -269,7 +269,7 @@ def test_next_deploy_uses_green_and_stops_blue(tmp_path):
 
     assert result.returncode == 0, result.stderr
     commands = command_log.read_text(encoding="utf-8")
-    assert "pull app-green bot" in commands
+    assert "pull app-green" in commands
     assert "up -d --no-deps --force-recreate app-green" in commands
     assert "stop -t 5 app-blue" in commands
     assert "rm -f app-blue" in commands
@@ -338,7 +338,7 @@ def test_runtime_image_reconciles_env_and_remains_rollback_source_of_truth(tmp_p
     assert result.returncode != 0
     assert "requested image is already active" not in result.stdout
     commands = command_log.read_text(encoding="utf-8")
-    assert "pull app-green bot" in commands
+    assert "pull app-green" in commands
     assert "stop -t 5 app-green" in commands
     assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(
         encoding="utf-8"
@@ -351,7 +351,7 @@ def test_runtime_image_reconciles_env_and_remains_rollback_source_of_truth(tmp_p
     assert f"failed_candidate={NEW_IMAGE}" in summary
 
 
-def test_bot_runtime_mismatch_bypasses_already_active_shortcut(tmp_path):
+def test_external_bot_runtime_does_not_affect_api_already_active_shortcut(tmp_path):
     env, project, site, command_log = _environment(tmp_path)
     _configure_active_slot(env, project, site, "blue", "host_nginx")
     env["BACKEND_IMAGE"] = OLD_IMAGE
@@ -361,13 +361,12 @@ def test_bot_runtime_mismatch_bypasses_already_active_shortcut(tmp_path):
 
     assert result.returncode == 0, result.stderr
     commands = command_log.read_text(encoding="utf-8")
-    assert "pull app-green bot" in commands
+    assert " pull " not in commands
     summary = Path(env["API_BLUE_GREEN_SUMMARY_FILE"]).read_text(encoding="utf-8")
-    assert "status=activated" in summary
-    assert "status=already_active" not in summary
+    assert "status=already_active" in summary
 
 
-def test_matching_api_and_bot_runtime_can_use_already_active_shortcut(tmp_path):
+def test_matching_api_runtime_can_use_already_active_shortcut(tmp_path):
     env, project, site, command_log = _environment(tmp_path)
     _configure_active_slot(env, project, site, "blue", "host_nginx")
     env["BACKEND_IMAGE"] = OLD_IMAGE

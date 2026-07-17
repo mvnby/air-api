@@ -67,8 +67,9 @@ services:
       - "127.0.0.1:18002:8000"
 
   bot:
+    profiles: [legacy-bot]
     image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
-    restart: always
+    restart: unless-stopped
     depends_on:
       - app
     environment:
@@ -78,7 +79,7 @@ services:
       BOT_API_TIMEOUT_SECONDS: ${BOT_API_TIMEOUT_SECONDS:-5}
       BOT_DROP_PENDING_UPDATES: ${BOT_DROP_PENDING_UPDATES:-false}
       APP_ROLE: primary
-      BOT_ENABLED: "true"
+      BOT_ENABLED: ${LEGACY_BOT_ENABLED:-false}
       ENVIRONMENT: production
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://mvn.by}
       PUBLIC_API_BASE: ${PUBLIC_API_BASE:-https://mvn.by/api/v1}

@@ -505,7 +505,7 @@ reconcile_failed_deploy() {
     fence_runtime_for_role_drift || restoration_failed=true
     restoration_failed=true
   elif [[ "${recovery_role}" == "primary" ]]; then
-    if ! API_DEPLOY_SERVICES="app bot" \
+    if ! API_DEPLOY_SERVICES="app" \
       API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
       API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
       API_READY_URL="${API_HEALTH_URL:-http://127.0.0.1:18080/api/health}" \

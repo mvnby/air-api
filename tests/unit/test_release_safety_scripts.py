@@ -105,9 +105,9 @@ def test_deploy_changes_only_application_services_and_records_rollback(tmp_path)
 
     assert result.returncode == 0, result.stderr
     calls = docker_log.read_text(encoding="utf-8")
-    assert "compose -f docker-compose.prod.yml pull app bot" in calls
+    assert "compose -f docker-compose.prod.yml pull app" in calls
     assert "compose -f docker-compose.prod.yml run -T --rm --no-deps app alembic upgrade head" in calls
-    assert "compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app bot" in calls
+    assert "compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app" in calls
     assert " pull db" not in calls
     assert " stop " not in calls
     assert "system prune" not in calls
@@ -319,7 +319,7 @@ def test_rollback_restores_previous_immutable_image(tmp_path):
     assert result.returncode == 0, result.stderr
     assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
     assert (project / ".previous-backend-image").read_text(encoding="utf-8").strip() == NEW_IMAGE
-    assert "up -d --no-deps --force-recreate app bot" in docker_log.read_text(encoding="utf-8")
+    assert "up -d --no-deps --force-recreate app" in docker_log.read_text(encoding="utf-8")
 
 
 def test_rollback_delegates_to_blue_green_when_active_slot_exists(tmp_path):

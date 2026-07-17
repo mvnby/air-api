@@ -36,12 +36,20 @@ def integer_env(name: str, default: int, *, minimum: int = 1) -> int:
     return value
 
 
-def render_role_env(role: str, *, bot_process: bool) -> str:
+def render_role_env(
+    role: str,
+    *,
+    bot_process: bool,
+    bot_enabled: bool | None = None,
+) -> str:
     primary = role == "primary"
+    resolved_bot_enabled = (
+        primary and bot_process if bot_enabled is None else bot_enabled
+    )
     values = {
         "APP_ROLE": role,
         "API_READY_ENABLED": "false" if bot_process else str(primary).lower(),
-        "BOT_ENABLED": str(primary and bot_process).lower(),
+        "BOT_ENABLED": str(resolved_bot_enabled).lower(),
         "DB_BOOTSTRAP_ENABLED": "false",
         "SCHEDULER_ENABLED": str(primary and not bot_process).lower(),
     }

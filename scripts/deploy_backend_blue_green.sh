@@ -50,7 +50,6 @@ candidate_service=""
 candidate_port=""
 previous_image=""
 env_updated=false
-bot_update_attempted=false
 nginx_switch_attempted=false
 candidate_started=false
 old_service_stop_started=false
@@ -615,21 +614,18 @@ if [[ "${active_slot}" != "legacy" \
   && "${BACKEND_IMAGE}" == "${previous_image}" \
   && "${FORCE_ACTIVATION}" != "true" \
   && ! -f "${PROJECT_DIR}/.rollback-api-buffer.compose.yml" ]]; then
-  if service_runtime_matches_image bot "${REQUESTED_IMAGE}"; then
-    smoke_candidate "http://127.0.0.1:${active_port}"
-    wait_ready_url "origin" "https://${API_HOST}/api/ready" --resolve "${API_HOST}:443:127.0.0.1"
-    wait_ready_url "public" "${PUBLIC_READY_URL}"
-    wait_scheduler_running_url \
-      "active_scheduler" \
-      "http://127.0.0.1:${active_port}/api/ready"
-    summary "status=already_active"
-    summary "active_slot=${active_slot}"
-    summary "active_port=${active_port}"
-    summary "backend_image=${BACKEND_IMAGE}"
-    log "done" "requested image is already active"
-    exit 0
-  fi
-  log reconcile "bot runtime does not match ${REQUESTED_IMAGE}; running a full activation"
+  smoke_candidate "http://127.0.0.1:${active_port}"
+  wait_ready_url "origin" "https://${API_HOST}/api/ready" --resolve "${API_HOST}:443:127.0.0.1"
+  wait_ready_url "public" "${PUBLIC_READY_URL}"
+  wait_scheduler_running_url \
+    "active_scheduler" \
+    "http://127.0.0.1:${active_port}/api/ready"
+  summary "status=already_active"
+  summary "active_slot=${active_slot}"
+  summary "active_port=${active_port}"
+  summary "backend_image=${BACKEND_IMAGE}"
+  log "done" "requested image is already active"
+  exit 0
 fi
 
 if [[ "${active_slot}" == "blue" ]]; then
@@ -646,8 +642,8 @@ if [[ -n "${GHCR_PAT:-}" ]]; then
   printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GITHUB_ACTOR:-github-actions}" --password-stdin
 fi
 
-log pull "pulling candidate services ${candidate_service} and bot"
-"${COMPOSE[@]}" pull "${candidate_service}" bot
+log pull "pulling API candidate service ${candidate_service}"
+"${COMPOSE[@]}" pull "${candidate_service}"
 require_deploy_capacity
 
 if [[ "${RUN_MIGRATIONS}" == "true" ]]; then
@@ -666,9 +662,6 @@ smoke_candidate "http://127.0.0.1:${candidate_port}"
 
 write_backend_image "${BACKEND_IMAGE}"
 env_updated=true
-bot_update_attempted=true
-"${COMPOSE[@]}" up -d --no-deps --force-recreate bot
-wait_service_running bot
 
 nginx_switch_attempted=true
 write_upstream "${candidate_slot}"

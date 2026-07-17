@@ -36,13 +36,21 @@ Runtime controls:
 Production requires a stable HTTPS API origin. Blue-green slot hostnames are
 rejected because the bot must survive API slot switches without reconfiguration.
 
-## Deployment order
+## Deployment ownership
 
-1. Deploy the backend migration and `/api/internal/bot/v1` endpoints.
-2. Verify the bot bearer token against the API health endpoint.
-3. Deploy the API-only bot runtime without `DATABASE_URL` or storage volumes.
-4. Confirm one process owns `mvn:telegram_bot` and polling is healthy.
-5. Only then remove the old bot container/image during repository extraction.
+The active polling runtime is deployed from the private `mvnby/mvn-telegram-bot`
+repository on the Netherlands node. The monolith deploys only API services.
+Its former `bot` Compose service is retained under the explicit `legacy-bot`
+profile for a time-bounded emergency rollback and is fenced by the Patroni role
+agent on both database roles.
+
+Cutover and rollback must keep this order:
+
+1. Verify the external container and bot API contract while `BOT_ENABLED=false`.
+2. Deploy the monolith release that fences the legacy polling container.
+3. Enable polling in the external service and confirm the runtime lease.
+4. To roll back, disable external polling first, then explicitly start the
+   `legacy-bot` profile with `LEGACY_BOT_ENABLED=true`.
 
 The runtime lease is short-lived and renewed through the API. Losing the lease
 stops polling, preventing two bot instances from consuming updates concurrently.

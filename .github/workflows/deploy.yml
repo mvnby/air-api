@@ -190,14 +190,14 @@ jobs:
       API_COMPOSE_SOURCE_FILE: ${{ vars.API_COMPOSE_SOURCE_FILE || 'docker-compose.prod.yml' }}
       API_COPY_COMPOSE: ${{ vars.API_COPY_COMPOSE || 'true' }}
       API_DEPLOY_STRATEGY: ${{ vars.API_DEPLOY_STRATEGY || 'blue_green' }}
-      API_DEPLOY_SERVICES: ${{ vars.API_DEPLOY_SERVICES || 'app bot' }}
+      API_DEPLOY_SERVICES: ${{ vars.API_DEPLOY_SERVICES || 'app' }}
       API_MIGRATION_SERVICE: ${{ vars.API_MIGRATION_SERVICE || 'app' }}
       API_RUN_MIGRATIONS: ${{ vars.API_RUN_MIGRATIONS || 'true' }}
       API_RUN_DEFAULTS: ${{ vars.API_RUN_DEFAULTS || 'true' }}
       API_BASE_URL: ${{ vars.API_BASE_URL || 'http://localhost:18080' }}
       API_READY_URL: ${{ vars.API_READY_URL || 'http://localhost:18080/api/ready' }}
-      API_SMOKE_COMPOSE_SERVICE_CHECKS: ${{ vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app bot' }}
-      API_BOT_EXPECT_ENABLED: ${{ vars.API_BOT_EXPECT_ENABLED || 'true' }}
+      API_SMOKE_COMPOSE_SERVICE_CHECKS: ${{ vars.API_SMOKE_COMPOSE_SERVICE_CHECKS || 'app' }}
+      API_BOT_EXPECT_ENABLED: ${{ vars.API_BOT_EXPECT_ENABLED || 'false' }}
 
     steps:
       - name: Checkout
@@ -229,7 +229,7 @@ jobs:
         id: prep
         run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Backend (App + Bot) [Attempt 1]
+      - name: Build and push Backend API [Attempt 1]
         id: backend_push_1
         continue-on-error: true
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -238,7 +238,7 @@ jobs:
           push: true
           tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}
 
-      - name: Build and push Backend (App + Bot) [Attempt 2]
+      - name: Build and push Backend API [Attempt 2]
         id: backend_push_2
         if: steps.backend_push_1.outcome == 'failure'
         continue-on-error: true
@@ -248,7 +248,7 @@ jobs:
           push: true
           tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}
 
-      - name: Build and push Backend (App + Bot) [Attempt 3]
+      - name: Build and push Backend API [Attempt 3]
         id: backend_push_3
         if: steps.backend_push_1.outcome == 'failure' && steps.backend_push_2.outcome == 'failure'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
