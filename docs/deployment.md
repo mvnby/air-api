@@ -108,13 +108,13 @@ Optional API variables:
 | `API_COMPOSE_FILE` | `docker-compose.prod.yml` | Compose file name inside `API_PROJECT_DIR`. |
 | `API_COPY_COMPOSE` | `true` | Copy repo `docker-compose.prod.yml` to the host before deploy. Set `false` for host-local emergency compose. |
 | `API_DEPLOY_STRATEGY` | `blue_green` | `blue_green` on `mvn-api`; use `in_place` on the shared `zakup` fallback. |
-| `API_DEPLOY_SERVICES` | `app bot` | Compose services to recreate after pulling images. |
+| `API_DEPLOY_SERVICES` | `app` | Compose services to recreate after pulling images. The Telegram polling service deploys independently. |
 | `API_BASE_URL` | `http://localhost:18080` | Stable nginx-local base URL used by post-deploy smoke. |
 | `API_READY_URL` | `http://localhost:18080/api/ready` | Stable nginx-local readiness URL. |
-| `API_SMOKE_COMPOSE_SERVICE_CHECKS` | `app bot` | Services expected to be running during smoke. |
-| `API_BOT_EXPECT_ENABLED` | `true` | Whether smoke requires bot runtime controls to be enabled. |
+| `API_SMOKE_COMPOSE_SERVICE_CHECKS` | `app` | API services expected to be running during smoke. |
+| `API_BOT_EXPECT_ENABLED` | `false` | Legacy compatibility switch; production API deploys do not own Telegram polling. |
 | `API_TUNNEL_REMOTE_PORT` | `18080` | Stable nginx-local API port used by the frontend build SSH tunnel. |
-| `API_COMPOSE_SERVICE_CHECKS` | `app bot db` | Services expected by the manual API VPS health workflow. |
+| `API_COMPOSE_SERVICE_CHECKS` | `app db` | Services expected by the manual API VPS health workflow. |
 | `API_LOCAL_HEALTH_URL` | `http://127.0.0.1:18080/api/health` | Host-local health URL for the manual API VPS health workflow. |
 
 Current emergency `zakup` values:

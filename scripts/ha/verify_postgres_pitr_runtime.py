@@ -20,17 +20,17 @@ BACKEND_IMAGE_RE = re.compile(
     r"^ghcr\.io/mvnby/air-api/backend@sha256:[0-9a-f]{64}$"
 )
 APP_SERVICES = ("app", "app-blue", "app-green")
-RUNTIME_SERVICES = (*APP_SERVICES, "bot")
+RUNTIME_SERVICES = APP_SERVICES
 PUBLIC_PITR_ENV_POLICIES = ("runtime-only", "configured", "operational")
 MIGRATION_PITR_ENV_POLICIES = ("legacy-migration", "migration-files-clean")
 PITR_ENV_POLICIES = (*PUBLIC_PITR_ENV_POLICIES, *MIGRATION_PITR_ENV_POLICIES)
 SECRETS_FILE = Path("/etc/mvn-postgres-pitr.secrets.env")
 EXPECTED_COMPOSE_DIGESTS = {
     "/opt/air-api/docker-compose.patroni.yml": (
-        "a441113b33d7cff45d535071edc5e3afa98e7c3ac22c86a422599eb65e7ed1ce"
+        "cd5f27cf87896e700994d2e5a960593390408844c56ab38ff59763ae74e85901"
     ),
     "/opt/mvn-reserve/docker-compose.patroni.yml": (
-        "e68f422dd85bafa8a75dff9f0d62a904ebcdc578626921ead7b7aa66ae497fa3"
+        "d33c8cfb2715293f303ffd95a7e04c20c0b25591594cbb75582136e6f4463cc9"
     ),
 }
 EXPECTED_PITR_CLUSTERS = {
@@ -224,7 +224,7 @@ def _validate_project_env(
             label="legacy project env",
         )
     elif secret_values:
-        raise RuntimeError("project env exposes private PITR settings to API/bot")
+        raise RuntimeError("project env exposes private PITR settings to API")
     if policy == "runtime-only":
         return ProjectEnvState(secret_values={}, runtime_values={})
     missing = sorted(key for key in PROJECT_PITR_KEYS if not values.get(key))
@@ -335,7 +335,7 @@ def _mount_references_wal_archive(mount: object) -> bool:
             for name in ("source", "target", "Source", "Destination", "Name")
         )
     else:
-        raise RuntimeError("API/bot mount definition is invalid")
+        raise RuntimeError("API mount definition is invalid")
     return any(
         value == FORBIDDEN_WAL_ARCHIVE_TARGET
         or FORBIDDEN_WAL_ARCHIVE_MARKER in value
@@ -420,26 +420,26 @@ def _configured_backend_image(
     for name in RUNTIME_SERVICES:
         service = services.get(name)
         if not isinstance(service, dict):
-            raise RuntimeError("canonical Compose config is missing an API/bot service")
+            raise RuntimeError("canonical Compose config is missing an API service")
         environment = service.get("environment") or {}
         if not isinstance(environment, dict):
-            raise RuntimeError("resolved API/bot environment is invalid")
+            raise RuntimeError("resolved API environment is invalid")
         for environment_name in environment:
             if (
                 str(environment_name).startswith("POSTGRES_PITR_")
                 and environment_name not in KNOWN_PITR_KEYS
             ):
-                raise RuntimeError("resolved API/bot environment has an unexpected PITR key")
+                raise RuntimeError("resolved API environment has an unexpected PITR key")
         _validate_runtime_secret_exposure(
             {str(key): str(value) for key, value in environment.items()},
             policy=policy,
             expected_secrets=expected_secrets,
-            label="resolved API/bot environment",
+            label="resolved API environment",
             canonical_compose=True,
         )
         _validate_no_wal_archive_mounts(
             service.get("volumes"),
-            label="resolved API/bot service",
+            label="resolved API service",
         )
     images = {str(services[name].get("image") or "") for name in RUNTIME_SERVICES}
     if len(images) != 1:
@@ -476,7 +476,7 @@ def _inspect_runtime_containers(
     )
     container_ids = [line for line in container_output.splitlines() if line]
     if not container_ids or len(container_ids) != len(set(container_ids)):
-        raise RuntimeError("all-state API/bot container set is empty or ambiguous")
+        raise RuntimeError("all-state API container set is empty or ambiguous")
 
     seen_services: set[str] = set()
     running_services: set[str] = set()
@@ -492,40 +492,40 @@ def _inspect_runtime_containers(
             running_id = str(inspection["Image"])
             configured_ref = str(config["Image"])
         except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError("API/bot container inspection is invalid") from exc
+            raise RuntimeError("API container inspection is invalid") from exc
         if not isinstance(config, dict) or not isinstance(labels, dict):
-            raise RuntimeError("API/bot container inspection is invalid")
+            raise RuntimeError("API container inspection is invalid")
         if not isinstance(state, dict) or not isinstance(state.get("Running"), bool):
-            raise RuntimeError("API/bot container state is invalid")
+            raise RuntimeError("API container state is invalid")
         service = labels.get("com.docker.compose.service")
         if service not in RUNTIME_SERVICES or service in seen_services:
-            raise RuntimeError("all-state API/bot service identity is unexpected or ambiguous")
+            raise RuntimeError("all-state API service identity is unexpected or ambiguous")
         seen_services.add(service)
 
         if not BACKEND_IMAGE_RE.fullmatch(configured_ref):
-            raise RuntimeError("API/bot container image is not an immutable reviewed digest")
+            raise RuntimeError("API container image is not an immutable reviewed digest")
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", running_id):
-            raise RuntimeError("API/bot container image ID is invalid")
+            raise RuntimeError("API container image ID is invalid")
         if state["Running"]:
             running_services.add(service)
         if state["Running"] or policy in MIGRATION_PITR_ENV_POLICIES:
             if configured_ref != backend_image or running_id != expected_image_id:
-                raise RuntimeError("API/bot container does not match the resolved image")
+                raise RuntimeError("API container does not match the resolved image")
 
         environment = _parse_runtime_environment(
             config.get("Env"),
-            label="API/bot container",
+            label="API container",
         )
         _validate_runtime_secret_exposure(
             environment,
             policy=policy,
             expected_secrets=expected_secrets,
-            label="API/bot container",
+            label="API container",
             canonical_compose=False,
         )
         _validate_runtime_wal_archive_mounts(
             inspection.get("Mounts"),
-            label="API/bot container",
+            label="API container",
             project_dir=project_dir,
             policy=policy,
         )

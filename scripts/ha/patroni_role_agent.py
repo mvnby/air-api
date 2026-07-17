@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Reconcile API, scheduler, and bot runtime state with the local Patroni role."""
+"""Reconcile API and scheduler runtime state with the local Patroni role.
+
+The Telegram polling runtime is an external service. The legacy Compose service
+is kept stopped on both database roles to prevent two consumers from polling the
+same Telegram token during and after extraction.
+"""
 
 from __future__ import annotations
 
@@ -366,7 +371,7 @@ def reconcile(config: AgentConfig, role: str) -> bool:
     maintenance_transaction = _maintenance_transaction_or_fence(config)
     pitr_role = "standby" if maintenance_transaction is not None else role
     desired_app = role_env(role, bot_process=False)
-    desired_bot = role_env(role, bot_process=True)
+    desired_bot = role_env(role, bot_process=True, bot_enabled=False)
     current_state = (
         config.state_file.read_text(encoding="utf-8").strip()
         if config.state_file.exists()
@@ -393,7 +398,7 @@ def reconcile(config: AgentConfig, role: str) -> bool:
     running = _running_services(config)
     app_running = service in running
     bot_running = "bot" in running
-    bot_expected = role == "primary"
+    bot_expected = False
     # On demotion, Docker singleton fencing must happen before any fallible or
     # slow systemd D-Bus inspection.  A ten-second query timeout is already too
     # long to leave old-primary workers live beside a new primary.
@@ -412,10 +417,8 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         reasons.append("bot_env")
     if not app_running:
         reasons.append("app_not_running")
-    if bot_expected and not bot_running:
-        reasons.append("bot_not_running")
-    if not bot_expected and bot_running:
-        reasons.append("bot_running_on_standby")
+    if bot_running:
+        reasons.append("legacy_bot_running")
     if not systemd_matches:
         reasons.append("systemd_units")
     if maintenance_transaction is not None:
@@ -424,6 +427,13 @@ def reconcile(config: AgentConfig, role: str) -> bool:
     actions: list[str] = []
     if fast_fenced:
         actions.append("demotion_fast_fence")
+    if bot_running:
+        # The polling process is owned by mvn-telegram-bot now. Fence the old
+        # Compose service before the deployment lock so a concurrent API
+        # release cannot prolong duplicate Telegram polling.
+        _stop_service_verified(config, "bot")
+        bot_running = False
+        actions.append("stop_legacy_bot_prelock")
     if role == "standby":
         # Demotion fencing has priority over deploys and long-running PITR jobs.
         # Persist the fenced environment first, then stop every local side-effect
@@ -434,10 +444,6 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         if bot_env_changed:
             _atomic_write(config.bot_role_env, desired_bot)
             actions.append("write_bot_env_prelock")
-        if bot_running:
-            _stop_service_verified(config, "bot")
-            bot_running = False
-            actions.append("stop_bot_prelock")
         running_apps = [name for name in APP_SERVICE_NAMES if name in running]
         if (
             fast_fenced
@@ -504,7 +510,6 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                 actions.append("write_app_env")
         if bot_env_changed:
             if role != "standby":
-                _require_fresh_primary_or_fence(config, "primary_bot_env")
                 _atomic_write(config.bot_role_env, desired_bot)
                 actions.append("write_bot_env")
 
@@ -514,14 +519,16 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         app_running = service in running
         bot_running = "bot" in running
 
+        if bot_running:
+            _stop_service_verified(config, "bot")
+            bot_running = False
+            actions.append("stop_legacy_bot")
+
         app_needs_start = fast_fenced or app_env_changed or role_changed or not app_running
         if role == "standby":
             if not systemd_matches:
                 _reconcile_primary_systemd_units(config, role)
                 actions.append("stop_primary_units")
-            if bot_running:
-                _stop_service_verified(config, "bot")
-                actions.append("stop_bot")
             for running_app in APP_SERVICE_NAMES:
                 if running_app != service and running_app in running:
                     _stop_service_verified(config, running_app)
@@ -556,14 +563,9 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                     running_services=running,
                 ):
                     actions.append("refresh_container_proxy_dns")
-            bot_needs_start = bot_env_changed or not bot_running
-            if app_needs_start or bot_needs_start:
+            if app_needs_start:
                 _wait_ready(config)
                 actions.append("wait_ready")
-            if bot_needs_start:
-                _require_fresh_primary_or_fence(config, "bot_activation")
-                _start_service(config, "bot", recreate=bot_env_changed)
-                actions.append("recreate_bot" if bot_env_changed else "start_bot")
             if not systemd_matches:
                 if maintenance_transaction is not None:
                     _reconcile_primary_systemd_units(config, "standby")
@@ -589,7 +591,7 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                 _reconcile_primary_systemd_units(config, "standby")
                 actions.append("stop_pitr_units_for_final_maintenance")
             final_running = _running_services(config)
-            if service not in final_running or "bot" not in final_running:
+            if service not in final_running or "bot" in final_running:
                 raise RuntimeError("primary runtime activation postcondition failed")
             expected_pitr_role = (
                 "standby"

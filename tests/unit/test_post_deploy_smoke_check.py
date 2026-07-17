@@ -56,9 +56,7 @@ fi
         """#!/usr/bin/env bash
 printf '%s\n' "$*" >> "$COMMAND_LOG"
 if [[ "$*" == *"ps --status running --services"* ]]; then
-  printf 'app-green\nbot\n'
-elif [[ "$*" == *"exec -T bot python3 -"* ]]; then
-  printf 'enabled=true\nreason=test\n'
+      printf 'app-green\n'
 fi
 exit 0
 """,
@@ -89,5 +87,5 @@ exit 0
     assert result.returncode == 0, result.stderr
     calls = command_log.read_text(encoding="utf-8")
     assert "--profile bluegreen ps --status running --services" in calls
-    assert "exec -T bot python3 -" in calls
-    assert "Compose services running: app-green bot" in result.stdout
+    assert "exec -T bot python3 -" not in calls
+    assert "Compose services running: app-green" in result.stdout

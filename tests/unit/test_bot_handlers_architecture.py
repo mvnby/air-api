@@ -15,6 +15,11 @@ BOT_COMPOSE_PATHS = (
     "deploy/ha/zakup/docker-compose.primary.yml",
     "deploy/ha/zakup/docker-compose.standby.yml",
 )
+PRODUCTION_BOT_COMPOSE_PATHS = tuple(
+    path
+    for path in BOT_COMPOSE_PATHS
+    if path == "docker-compose.prod.yml" or path.startswith("deploy/ha/")
+)
 BOT_ALLOWED_ENVIRONMENT = {
     "APP_ROLE",
     "BOT_API_BASE_URL",
@@ -71,6 +76,14 @@ def test_bot_compose_services_have_no_database_dependency_or_credentials():
         environment = bot.get("environment", {})
         assert {"BOT_TOKEN", "BOT_API_TOKEN", "BOT_API_BASE_URL"} <= set(environment)
         assert set(environment) <= BOT_ALLOWED_ENVIRONMENT, compose_path
+
+
+def test_monolith_production_bot_is_explicit_legacy_fallback_only():
+    for compose_path in PRODUCTION_BOT_COMPOSE_PATHS:
+        compose = yaml.safe_load(Path(compose_path).read_text(encoding="utf-8"))
+        bot = compose["services"]["bot"]
+        assert bot.get("profiles") == ["legacy-bot"], compose_path
+        assert bot.get("restart") != "always", compose_path
 
 
 def test_bot_handlers_resolve_staff_access_only_through_bot_provider():

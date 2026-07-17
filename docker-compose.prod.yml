@@ -53,8 +53,9 @@ services:
       - "127.0.0.1:18002:8000"
 
   bot:
+    profiles: [legacy-bot]
     image: ${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}
-    restart: always
+    restart: unless-stopped
     depends_on:
       - app
     environment:
@@ -62,7 +63,7 @@ services:
       BOT_API_TOKEN: ${BOT_API_TOKEN:?set BOT_API_TOKEN in .env}
       BOT_API_BASE_URL: ${BOT_API_BASE_URL:?set stable HTTPS BOT_API_BASE_URL in .env}
       BOT_API_TIMEOUT_SECONDS: ${BOT_API_TIMEOUT_SECONDS:-5}
-      BOT_ENABLED: ${BOT_ENABLED:-true}
+      BOT_ENABLED: ${LEGACY_BOT_ENABLED:-false}
       BOT_DROP_PENDING_UPDATES: ${BOT_DROP_PENDING_UPDATES:-false}
       APP_ROLE: ${APP_ROLE:-primary}
       ENVIRONMENT: production

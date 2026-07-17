@@ -20,8 +20,12 @@ authorizes the Telegram user for each use case.
 4. Move attachment, OCR, repair and warranty scenarios.
 5. Move FSM/runtime ownership, remove database access and publish a dedicated
    bot image.
-6. Move the autonomous bot into a separate repository only after the boundary
-   checks below pass.
+6. Move the autonomous bot into the private `mvnby/mvn-telegram-bot` repository
+   and deploy it independently on the Netherlands node.
+
+Steps 1-6 are complete. The monolith retains the internal API and a disabled
+`legacy-bot` rollback profile; it no longer deploys or activates Telegram
+polling as part of API/Patroni role changes.
 
 ### Staff access cutover
 

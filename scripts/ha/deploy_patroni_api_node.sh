@@ -265,7 +265,7 @@ fi
 trap rollback_standby ERR
 reconcile_standby_proxy
 log standby "updating fenced service ${active_service}"
-"${COMPOSE[@]}" pull "${active_service}" bot
+"${COMPOSE[@]}" pull "${active_service}"
 require_deploy_capacity
 write_backend_image "${BACKEND_IMAGE}"
 env_updated=true
