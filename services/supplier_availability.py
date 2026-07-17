@@ -20,9 +20,14 @@ INCOMING_PATTERNS = (
 OUT_PATTERNS = (
     "нет в наличии",
     "нет налич",
+    "нет на складе",
     "out of stock",
     "отсутств",
 )
+EXACT_AVAILABILITY_STATUSES = {
+    "склад": "in_stock",
+    "заказ": "incoming",
+}
 
 
 def classify_availability(raw: str | None) -> str:
@@ -30,6 +35,9 @@ def classify_availability(raw: str | None) -> str:
     if not text:
         return "unknown"
 
+    exact_status = EXACT_AVAILABILITY_STATUSES.get(text)
+    if exact_status:
+        return exact_status
     if any(p in text for p in OUT_PATTERNS):
         return "out_of_stock"
     if any(p in text for p in INCOMING_PATTERNS):
