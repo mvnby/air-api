@@ -11,6 +11,8 @@ from api_contracts.bot import (
     BotCatalogSearchResponse,
     BotStaffContextResponse,
     BotTaskListResponse,
+    BotTaskReportSaveResponse,
+    BotTaskStatusUpdateResponse,
 )
 
 
@@ -32,6 +34,10 @@ class BotApiUnavailableError(BotApiError):
 
 class BotApiResponseError(BotApiError):
     """The API returned an unexpected response."""
+
+
+class BotApiConflictError(BotApiError):
+    """The staff action conflicts with the current backend state."""
 
 
 @dataclass(frozen=True)
@@ -160,6 +166,53 @@ class BotApiGateway:
         except ValueError as exc:
             raise BotApiResponseError("MVN API returned an invalid task list contract") from exc
 
+    async def update_task_status(
+        self,
+        *,
+        telegram_id: int,
+        stage_id: int,
+        status: str,
+    ) -> BotTaskStatusUpdateResponse:
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        if stage_id <= 0:
+            raise ValueError("Task stage ID must be positive")
+        if status not in {"in_progress", "completed"}:
+            raise ValueError("Task status must be in_progress or completed")
+        payload = await self._post(
+            f"tasks/stages/{stage_id}/status",
+            json={"telegram_id": telegram_id, "status": status},
+        )
+        try:
+            return BotTaskStatusUpdateResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned an invalid task status contract") from exc
+
+    async def save_task_report(
+        self,
+        *,
+        telegram_id: int,
+        stage_id: int,
+        report: str,
+    ) -> BotTaskReportSaveResponse:
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        if stage_id <= 0:
+            raise ValueError("Task stage ID must be positive")
+        normalized_report = report.strip()
+        if not normalized_report:
+            raise ValueError("Task report must not be empty")
+        if len(normalized_report) > 12_000:
+            raise ValueError("Task report must not exceed 12000 characters")
+        payload = await self._post(
+            f"tasks/stages/{stage_id}/report",
+            json={"telegram_id": telegram_id, "report": normalized_report},
+        )
+        try:
+            return BotTaskReportSaveResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned an invalid task report contract") from exc
+
     async def _get(self, path: str, *, params: dict[str, object] | None = None) -> dict:
         return await self._request("GET", path, params=params)
 
@@ -191,6 +244,8 @@ class BotApiGateway:
             raise BotApiAuthenticationError("MVN API rejected the bot credential")
         if response.status_code == 403:
             raise BotApiAuthorizationError("MVN API denied the staff action")
+        if response.status_code == 409:
+            raise BotApiConflictError("MVN API rejected a conflicting staff action")
         if response.status_code >= 500:
             raise BotApiUnavailableError(f"MVN API returned HTTP {response.status_code}")
         if response.status_code >= 400:

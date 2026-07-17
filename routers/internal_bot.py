@@ -12,12 +12,22 @@ from api_contracts.bot import (
     BotStaffContextResponse,
     BotTaskListRequest,
     BotTaskListResponse,
+    BotTaskReportSaveRequest,
+    BotTaskReportSaveResponse,
     BotTaskResponse,
+    BotTaskStatusUpdateRequest,
+    BotTaskStatusUpdateResponse,
 )
 from core.bot_api_security import require_bot_api_token
 from core.database import get_session
+from models import OrderStageStatus
 from services.bot_access_service import BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
+from services.bot_task_mutation_service import (
+    BotTaskMutationAccessDeniedError,
+    BotTaskMutationConflictError,
+    BotTaskMutationService,
+)
 from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
 
 
@@ -124,4 +134,57 @@ async def list_internal_bot_my_tasks(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return BotTaskListResponse(
         items=[BotTaskResponse.model_validate(task) for task in tasks]
+    )
+
+
+@router.post(
+    "/tasks/stages/{stage_id}/status",
+    response_model=BotTaskStatusUpdateResponse,
+    operation_id="update_internal_bot_task_status_v1",
+)
+async def update_internal_bot_task_status(
+    payload: BotTaskStatusUpdateRequest,
+    stage_id: int = Path(ge=1),
+    session: AsyncSession = Depends(get_session),
+) -> BotTaskStatusUpdateResponse:
+    try:
+        result = await BotTaskMutationService.update_stage_status(
+            session,
+            telegram_id=payload.telegram_id,
+            stage_id=stage_id,
+            status=OrderStageStatus(payload.status),
+        )
+    except BotTaskMutationAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except BotTaskMutationConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return BotTaskStatusUpdateResponse(
+        stage_id=result.stage_id,
+        status=result.status.value,
+        changed=result.changed,
+    )
+
+
+@router.post(
+    "/tasks/stages/{stage_id}/report",
+    response_model=BotTaskReportSaveResponse,
+    operation_id="save_internal_bot_task_report_v1",
+)
+async def save_internal_bot_task_report(
+    payload: BotTaskReportSaveRequest,
+    stage_id: int = Path(ge=1),
+    session: AsyncSession = Depends(get_session),
+) -> BotTaskReportSaveResponse:
+    try:
+        result = await BotTaskMutationService.save_stage_report(
+            session,
+            telegram_id=payload.telegram_id,
+            stage_id=stage_id,
+            report=payload.report,
+        )
+    except BotTaskMutationAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    return BotTaskReportSaveResponse(
+        stage_id=result.stage_id,
+        changed=result.changed,
     )

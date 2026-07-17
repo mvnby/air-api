@@ -7,8 +7,8 @@ from core.database import async_session_maker
 from services.bot_product_selection_service import BotProductSelectionService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.bot_service import BotService
-from services.bot_task_service import BotTaskService
 from ..access_runtime import get_bot_access_context
+from ..api_gateway import BotApiAuthorizationError, BotApiConflictError
 from ..api_runtime import get_bot_api_gateway
 from ..keyboards import (
     get_staff_main_menu,
@@ -17,7 +17,7 @@ from ..keyboards import (
     task_actions_keyboard,
 )
 from ..states import ShopState
-from ..task_presenter import format_tasks, format_tasks_rich_html, task_to_dict
+from ..task_presenter import build_stage_report, format_tasks, format_tasks_rich_html, task_to_dict
 
 router = Router()
 
@@ -219,15 +219,17 @@ async def update_task_status(callback: CallbackQuery):
     data = callback.data or ""
     status = "in_progress" if data.startswith("task_accept_") else "completed"
     stage_id = int(data.rsplit("_", 1)[-1])
-    async with async_session_maker() as session:
-        ok = await BotTaskService.update_stage_status(
-            session,
-            stage_id,
-            status,
+    try:
+        await get_bot_api_gateway().update_task_status(
             telegram_id=callback.from_user.id,
+            stage_id=stage_id,
+            status=status,
         )
-    if not ok:
+    except BotApiAuthorizationError:
         await callback.answer("Задача не найдена или нет доступа", show_alert=True)
+        return
+    except BotApiConflictError:
+        await callback.answer("Задача уже завершена или отменена", show_alert=True)
         return
     await callback.answer("Готово")
     await callback.message.answer("Статус задачи обновлен.", reply_markup=get_staff_main_menu(context))
@@ -248,7 +250,7 @@ async def task_report_finish(message: types.Message, state: FSMContext):
     stage_id = int(data.get("task_report_stage_id") or 0)
     photo_file_id = message.photo[-1].file_id if message.photo else None
     document = message.document
-    report = BotTaskService.build_stage_report(
+    report = build_stage_report(
         text=message.text,
         caption=message.caption,
         photo_file_id=photo_file_id,
@@ -258,16 +260,23 @@ async def task_report_finish(message: types.Message, state: FSMContext):
     if not stage_id or not report:
         await message.answer("Отчет пустой, попробуйте еще раз.")
         return
-    async with async_session_maker() as session:
-        ok = await BotTaskService.save_stage_report(
-            session,
-            stage_id,
-            report,
-            telegram_id=message.from_user.id if message.from_user else None,
+    try:
+        await get_bot_api_gateway().save_task_report(
+            telegram_id=message.from_user.id if message.from_user else 0,
+            stage_id=stage_id,
+            report=report,
         )
+    except BotApiAuthorizationError:
+        await state.clear()
+        context = await _access_context(message.from_user.id if message.from_user else None)
+        await message.answer(
+            "Задача не найдена или нет доступа.",
+            reply_markup=get_staff_main_menu(context) if context.is_staff else None,
+        )
+        return
     await state.clear()
     context = await _access_context(message.from_user.id if message.from_user else None)
     await message.answer(
-        "Отчет сохранен." if ok else "Задача не найдена или нет доступа.",
+        "Отчет сохранен.",
         reply_markup=get_staff_main_menu(context) if context.is_staff else None,
     )

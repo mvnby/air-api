@@ -6,6 +6,14 @@ from main import app
 from services.bot_access_service import BotAccessContext, BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
 from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
+from services.bot_task_mutation_service import (
+    BotTaskMutationAccessDeniedError,
+    BotTaskMutationConflictError,
+    BotTaskMutationService,
+    BotTaskReportMutationResult,
+    BotTaskStatusMutationResult,
+)
+from models import OrderStageStatus
 
 
 async def _request(
@@ -76,17 +84,23 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     catalog_search = schema["paths"]["/api/internal/bot/v1/catalog/search"]["post"]
     catalog_product = schema["paths"]["/api/internal/bot/v1/catalog/products/{product_id}"]["get"]
     task_list = schema["paths"]["/api/internal/bot/v1/tasks/my"]["post"]
+    task_status = schema["paths"]["/api/internal/bot/v1/tasks/stages/{stage_id}/status"]["post"]
+    task_report = schema["paths"]["/api/internal/bot/v1/tasks/stages/{stage_id}/report"]["post"]
 
     assert health["operationId"] == "get_internal_bot_api_health_v1"
     assert staff_context["operationId"] == "get_internal_bot_staff_context_v1"
     assert catalog_search["operationId"] == "search_internal_bot_catalog_v1"
     assert catalog_product["operationId"] == "get_internal_bot_catalog_product_v1"
     assert task_list["operationId"] == "list_internal_bot_my_tasks_v1"
+    assert task_status["operationId"] == "update_internal_bot_task_status_v1"
+    assert task_report["operationId"] == "save_internal_bot_task_report_v1"
     assert health["security"] == [{"BotServiceBearer": []}]
     assert staff_context["security"] == [{"BotServiceBearer": []}]
     assert catalog_search["security"] == [{"BotServiceBearer": []}]
     assert catalog_product["security"] == [{"BotServiceBearer": []}]
     assert task_list["security"] == [{"BotServiceBearer": []}]
+    assert task_status["security"] == [{"BotServiceBearer": []}]
+    assert task_report["security"] == [{"BotServiceBearer": []}]
     assert schema["components"]["securitySchemes"]["BotServiceBearer"] == {
         "type": "http",
         "description": "Dedicated bearer token used only by the MVN Telegram bot service.",
@@ -376,3 +390,107 @@ async def test_internal_bot_task_list_validates_body(monkeypatch):
     )
 
     assert response.status_code == 422
+
+
+async def test_internal_bot_task_status_mutation_uses_authorized_service(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_update(_session, **kwargs):
+        assert kwargs == {
+            "telegram_id": 123456,
+            "stage_id": 7,
+            "status": OrderStageStatus.COMPLETED,
+        }
+        return BotTaskStatusMutationResult(
+            stage_id=7,
+            status=OrderStageStatus.COMPLETED,
+            changed=True,
+        )
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotTaskMutationService, "update_stage_status", fake_update)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/tasks/stages/7/status",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "status": "completed"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "stage_id": 7,
+        "status": "completed",
+        "changed": True,
+    }
+
+
+async def test_internal_bot_task_status_maps_access_and_conflict(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_session():
+        yield object()
+
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        async def deny(*_args, **_kwargs):
+            raise BotTaskMutationAccessDeniedError("denied")
+
+        monkeypatch.setattr(BotTaskMutationService, "update_stage_status", deny)
+        denied = await _request(
+            "/api/internal/bot/v1/tasks/stages/7/status",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "status": "completed"},
+        )
+
+        async def conflict(*_args, **_kwargs):
+            raise BotTaskMutationConflictError("terminal")
+
+        monkeypatch.setattr(BotTaskMutationService, "update_stage_status", conflict)
+        conflicted = await _request(
+            "/api/internal/bot/v1/tasks/stages/7/status",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "status": "in_progress"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert denied.status_code == 403
+    assert conflicted.status_code == 409
+
+
+async def test_internal_bot_task_report_normalizes_and_saves(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_save(_session, **kwargs):
+        assert kwargs == {
+            "telegram_id": 123456,
+            "stage_id": 7,
+            "report": "Работа выполнена",
+        }
+        return BotTaskReportMutationResult(stage_id=7, changed=False)
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotTaskMutationService, "save_stage_report", fake_save)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/tasks/stages/7/report",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "report": "  Работа выполнена  "},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"stage_id": 7, "changed": False}

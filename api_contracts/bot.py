@@ -1,9 +1,9 @@
-"""Versioned response contracts for the internal Telegram bot API."""
+"""Versioned contracts for the internal Telegram bot API."""
 
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class BotApiHealthResponse(BaseModel):
@@ -74,3 +74,32 @@ class BotTaskResponse(BaseModel):
 
 class BotTaskListResponse(BaseModel):
     items: list[BotTaskResponse] = Field(default_factory=list)
+
+
+class BotTaskStatusUpdateRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    status: Literal["in_progress", "completed"]
+
+
+class BotTaskStatusUpdateResponse(BaseModel):
+    stage_id: int = Field(ge=1)
+    status: Literal["in_progress", "completed"]
+    changed: bool
+
+
+class BotTaskReportSaveRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    report: str = Field(min_length=1, max_length=12_000)
+
+    @field_validator("report")
+    @classmethod
+    def normalize_report(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Task report must not be empty")
+        return normalized
+
+
+class BotTaskReportSaveResponse(BaseModel):
+    stage_id: int = Field(ge=1)
+    changed: bool

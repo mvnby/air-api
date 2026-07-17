@@ -312,6 +312,122 @@
         ]
       }
     },
+    "/api/internal/bot/v1/tasks/stages/{stage_id}/status": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Update Internal Bot Task Status",
+        "operationId": "update_internal_bot_task_status_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Stage Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotTaskStatusUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotTaskStatusUpdateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/tasks/stages/{stage_id}/report": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Save Internal Bot Task Report",
+        "operationId": "save_internal_bot_task_report_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Stage Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotTaskReportSaveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotTaskReportSaveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/products/search": {
       "get": {
         "tags": [
@@ -18776,6 +18892,46 @@
         "type": "object",
         "title": "BotTaskListResponse"
       },
+      "BotTaskReportSaveRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "report": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Report"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "report"
+        ],
+        "title": "BotTaskReportSaveRequest"
+      },
+      "BotTaskReportSaveResponse": {
+        "properties": {
+          "stage_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Stage Id"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage_id",
+          "changed"
+        ],
+        "title": "BotTaskReportSaveResponse"
+      },
       "BotTaskResponse": {
         "properties": {
           "kind": {
@@ -18859,6 +19015,57 @@
         ],
         "title": "BotTaskResponse",
         "description": "Stable read-only task projection rendered by the Telegram runtime."
+      },
+      "BotTaskStatusUpdateRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in_progress",
+              "completed"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "status"
+        ],
+        "title": "BotTaskStatusUpdateRequest"
+      },
+      "BotTaskStatusUpdateResponse": {
+        "properties": {
+          "stage_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Stage Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in_progress",
+              "completed"
+            ],
+            "title": "Status"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage_id",
+          "status",
+          "changed"
+        ],
+        "title": "BotTaskStatusUpdateResponse"
       },
       "BulkGalleryAddRequest": {
         "properties": {

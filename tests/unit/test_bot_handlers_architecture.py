@@ -55,6 +55,13 @@ def test_bot_task_read_paths_use_api_instead_of_task_service_reads():
         assert "get_bot_api_gateway().list_my_tasks" in source
 
 
+def test_bot_task_mutation_paths_use_api_instead_of_backend_task_service():
+    source = Path("bot_app/handlers/work.py").read_text(encoding="utf-8")
+    assert "BotTaskService" not in source
+    assert "get_bot_api_gateway().update_task_status" in source
+    assert "get_bot_api_gateway().save_task_report" in source
+
+
 def test_bot_task_presenter_does_not_import_backend_runtime_layers():
     source = Path("bot_app/task_presenter.py").read_text(encoding="utf-8")
     for forbidden in ("from core.database", "from models", "from crud", "from services"):
