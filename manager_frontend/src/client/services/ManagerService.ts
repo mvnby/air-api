@@ -128,6 +128,7 @@ export class ManagerService {
      * @param hasWifi
      * @param hasFreshAir
      * @param brandSlugs Brand slugs to include
+     * @param seriesId Exact product series ID
      * @param categorySlug Category tag slug: cat-household/cat-multi/cat-industrial
      * @param categoryStatus Catalog category status: assigned/missing
      * @param sort
@@ -146,6 +147,7 @@ export class ManagerService {
         hasWifi?: (boolean | null),
         hasFreshAir?: (boolean | null),
         brandSlugs?: (Array<string> | null),
+        seriesId?: (number | null),
         categorySlug?: (string | null),
         categoryStatus?: ('assigned' | 'missing' | null),
         sort: string = 'recommended',
@@ -165,6 +167,7 @@ export class ManagerService {
                 'has_wifi': hasWifi,
                 'has_fresh_air': hasFreshAir,
                 'brand_slugs': brandSlugs,
+                'series_id': seriesId,
                 'category_slug': categorySlug,
                 'category_status': categoryStatus,
                 'sort': sort,

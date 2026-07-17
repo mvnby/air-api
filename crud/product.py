@@ -186,6 +186,7 @@ class ProductDAO:
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         brand_slugs: Optional[List[str]] = None,
+        series_id: Optional[int] = None,
         is_published: Optional[bool] = True,
     ):
         if is_published is not None:
@@ -328,6 +329,9 @@ class ProductDAO:
             if normalized_brand_slugs:
                 brand_subq = select(Brand.id).where(Brand.slug.in_(normalized_brand_slugs))
                 stmt = stmt.where(Product.brand_id.in_(brand_subq))
+
+        if series_id is not None:
+            stmt = stmt.where(Product.series_id == series_id)
 
         return stmt
 
@@ -700,6 +704,7 @@ class ProductDAO:
         has_wifi: Optional[bool] = None,
         has_fresh_air: Optional[bool] = None,
         brand_slugs: Optional[List[str]] = None,
+        series_id: Optional[int] = None,
         category_slug: Optional[str] = None,
         category_status: Optional[str] = None,
         sort: str = "recommended",
@@ -721,6 +726,7 @@ class ProductDAO:
             "is_inverter": is_inverter,
             "tag_slugs": [category_slug] if category_slug and normalized_category_status != "missing" else None,
             "brand_slugs": brand_slugs,
+            "series_id": series_id,
             "is_published": is_published,
         }
         stmt = ProductDAO._apply_common_filters(

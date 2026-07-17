@@ -14,6 +14,7 @@ import {
   syncStickyHeaderAfterLayout,
 } from '../src/composables/useSmartStickyHeader';
 import { uploadSequentially } from '../src/utils/sequential-upload';
+import { compactLegalName } from '../src/components/orders/order-utils';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -97,5 +98,18 @@ const uploadResults = await uploadSequentially(
 assert(uploadOrder.join(',') === '1,2,3', 'media files must upload sequentially in selection order');
 assert(uploadResults.join(',') === '10,20,30', 'sequential upload must return every response');
 assert(uploadProgress.join(',') === '1/3,2/3,3/3', 'sequential upload must report completed file count');
+
+assert(
+  compactLegalName('Общество с ограниченной ответственностью "НПП Юни"') === 'ООО "НПП Юни"',
+  'common legal forms must be compact in narrow order surfaces',
+);
+assert(
+  compactLegalName('Унитарное предприятие «Торговый дом»') === 'УП «Торговый дом»',
+  'unitary enterprise names must be compact in narrow order surfaces',
+);
+assert(
+  compactLegalName('ЗАО «Витебскагропродукт»') === 'ЗАО «Витебскагропродукт»',
+  'already compact legal names must remain unchanged',
+);
 
 console.log('Address and sticky header UI logic tests passed');

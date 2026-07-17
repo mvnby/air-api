@@ -266,6 +266,7 @@ export interface ManagerProductFilterOptions {
     hasWifi?: boolean;
     hasFreshAir?: boolean;
     brandSlugs?: string[];
+    seriesId?: number;
     areaMin?: number;
     areaMax?: number;
     categoryStatus?: 'assigned' | 'missing';
@@ -757,6 +758,7 @@ export const api = {
             filters.hasWifi ?? undefined,
             filters.hasFreshAir ?? undefined,
             filters.brandSlugs ?? undefined,
+            filters.seriesId ?? undefined,
             categorySlug ?? undefined,
             filters.categoryStatus ?? undefined,
             sort,
