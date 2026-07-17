@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 from httpx import ASGITransport, AsyncClient
 
 from core.config import settings
@@ -5,6 +7,14 @@ from core.database import get_session
 from main import app
 from services.bot_access_service import BotAccessContext, BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
+from services.bot_customer_requisites_api_service import (
+    BotCustomerRequisitesActionResult,
+    BotCustomerRequisitesApiService,
+)
+from services.bot_quick_order_api_service import (
+    BotQuickOrderApiService,
+    BotQuickOrderCreateResult,
+)
 from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
 from services.bot_task_mutation_service import (
     BotTaskMutationAccessDeniedError,
@@ -86,6 +96,11 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     task_list = schema["paths"]["/api/internal/bot/v1/tasks/my"]["post"]
     task_status = schema["paths"]["/api/internal/bot/v1/tasks/stages/{stage_id}/status"]["post"]
     task_report = schema["paths"]["/api/internal/bot/v1/tasks/stages/{stage_id}/report"]["post"]
+    quick_order_parse = schema["paths"]["/api/internal/bot/v1/quick-orders/parse"]["post"]
+    quick_order_create = schema["paths"]["/api/internal/bot/v1/quick-orders"]["post"]
+    requisites_text = schema["paths"]["/api/internal/bot/v1/customers/requisites/recognize-text"]["post"]
+    requisites_file = schema["paths"]["/api/internal/bot/v1/customers/requisites/recognize-file"]["post"]
+    requisites_action = schema["paths"]["/api/internal/bot/v1/customers/requisites/{recognition_id}/action"]["post"]
 
     assert health["operationId"] == "get_internal_bot_api_health_v1"
     assert staff_context["operationId"] == "get_internal_bot_staff_context_v1"
@@ -94,6 +109,11 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     assert task_list["operationId"] == "list_internal_bot_my_tasks_v1"
     assert task_status["operationId"] == "update_internal_bot_task_status_v1"
     assert task_report["operationId"] == "save_internal_bot_task_report_v1"
+    assert quick_order_parse["operationId"] == "parse_internal_bot_quick_order_v1"
+    assert quick_order_create["operationId"] == "create_internal_bot_quick_order_v1"
+    assert requisites_text["operationId"] == "recognize_internal_bot_customer_requisites_text_v1"
+    assert requisites_file["operationId"] == "recognize_internal_bot_customer_requisites_file_v1"
+    assert requisites_action["operationId"] == "apply_internal_bot_customer_requisites_action_v1"
     assert health["security"] == [{"BotServiceBearer": []}]
     assert staff_context["security"] == [{"BotServiceBearer": []}]
     assert catalog_search["security"] == [{"BotServiceBearer": []}]
@@ -101,6 +121,11 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     assert task_list["security"] == [{"BotServiceBearer": []}]
     assert task_status["security"] == [{"BotServiceBearer": []}]
     assert task_report["security"] == [{"BotServiceBearer": []}]
+    assert quick_order_parse["security"] == [{"BotServiceBearer": []}]
+    assert quick_order_create["security"] == [{"BotServiceBearer": []}]
+    assert requisites_text["security"] == [{"BotServiceBearer": []}]
+    assert requisites_file["security"] == [{"BotServiceBearer": []}]
+    assert requisites_action["security"] == [{"BotServiceBearer": []}]
     assert schema["components"]["securitySchemes"]["BotServiceBearer"] == {
         "type": "http",
         "description": "Dedicated bearer token used only by the MVN Telegram bot service.",
@@ -494,3 +519,150 @@ async def test_internal_bot_task_report_normalizes_and_saves(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"stage_id": 7, "changed": False}
+
+
+async def test_internal_bot_quick_order_parse_and_create_use_stable_contract(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_parse(_session, *, telegram_id, text):
+        assert (telegram_id, text) == (123456, "ТО Иван")
+        return {
+            "name": "Иван",
+            "phone": "+375291234567",
+            "address": "Победы 15",
+            "service_type": "maintenance",
+            "service_label": "Обслуживание",
+            "target_date": "2026-07-20T14:00:00",
+            "request_text": text,
+            "parser": "fallback",
+        }
+
+    async def fake_create(_session, *, telegram_id, idempotency_key, draft):
+        assert telegram_id == 123456
+        assert idempotency_key == "telegram:-100:55"
+        assert draft.service_type == "maintenance"
+        return BotQuickOrderCreateResult(order_id=42, customer_id=7, created=True)
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotQuickOrderApiService, "parse_for_manager", fake_parse)
+    monkeypatch.setattr(BotQuickOrderApiService, "create_for_manager", fake_create)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        parsed = await _request(
+            "/api/internal/bot/v1/quick-orders/parse",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "text": " ТО Иван "},
+        )
+        created = await _request(
+            "/api/internal/bot/v1/quick-orders",
+            token="expected-token",
+            method="POST",
+            json={
+                "telegram_id": 123456,
+                "idempotency_key": "telegram:-100:55",
+                "draft": parsed.json()["draft"],
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert parsed.status_code == 200
+    assert parsed.json()["draft"]["service_label"] == "Обслуживание"
+    assert created.status_code == 200
+    assert created.json() == {"order_id": 42, "customer_id": 7, "created": True}
+
+
+async def test_internal_bot_requisites_text_and_action_do_not_leak_private_fields(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+    recognition = {
+        "id": 12,
+        "status": "recognized",
+        "source": "telegram_text",
+        "raw_text": "private raw OCR text",
+        "local_file_url": "/private/file.pdf",
+        "extracted": {"name": "ООО Тест", "inn": "123456789"},
+        "validation_flags": {},
+        "duplicate_customer": None,
+        "confirmed_customer_id": None,
+        "confirmed_action": None,
+        "created_at": "2026-07-17T12:00:00",
+    }
+
+    async def fake_recognize(_session, **kwargs):
+        assert kwargs["telegram_id"] == 123456
+        assert kwargs["telegram_chat_id"] == -100
+        return recognition
+
+    async def fake_action(_session, **kwargs):
+        assert kwargs["action"] == "create"
+        confirmed = dict(recognition, status="confirmed", confirmed_customer_id=7, confirmed_action="create")
+        return BotCustomerRequisitesActionResult(
+            recognition=confirmed,
+            customer={"id": 7, "name": "ООО Тест", "inn": "123456789"},
+            changed=True,
+        )
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotCustomerRequisitesApiService, "recognize_text_for_manager", fake_recognize)
+    monkeypatch.setattr(BotCustomerRequisitesApiService, "apply_action_for_manager", fake_action)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        recognized = await _request(
+            "/api/internal/bot/v1/customers/requisites/recognize-text",
+            token="expected-token",
+            method="POST",
+            json={
+                "telegram_id": 123456,
+                "text": "ООО Тест УНП 123456789 банковские реквизиты",
+                "telegram_chat_id": -100,
+                "telegram_message_id": 55,
+            },
+        )
+        action = await _request(
+            "/api/internal/bot/v1/customers/requisites/12/action",
+            token="expected-token",
+            method="POST",
+            json={"telegram_id": 123456, "action": "create"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert recognized.status_code == 200
+    assert "raw_text" not in recognized.json()
+    assert "local_file_url" not in recognized.json()
+    assert action.status_code == 200
+    assert action.json()["customer"]["id"] == 7
+    assert action.json()["changed"] is True
+
+
+async def test_internal_bot_requisites_file_enforces_size_before_service(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+    monkeypatch.setattr(
+        "routers.internal_bot.CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES",
+        4,
+    )
+    recognize = AsyncMock()
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotCustomerRequisitesApiService, "recognize_file_for_manager", recognize)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/internal/bot/v1/customers/requisites/recognize-file",
+                headers={"Authorization": "Bearer expected-token"},
+                data={"telegram_id": "123456"},
+                files={"file": ("large.pdf", b"12345", "application/pdf")},
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 413
+    recognize.assert_not_called()

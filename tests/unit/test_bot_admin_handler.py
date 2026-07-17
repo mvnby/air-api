@@ -1,11 +1,16 @@
 import os
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from api_contracts.bot import BotTaskListResponse, BotTaskResponse
+from api_contracts.bot import (
+    BotCustomerRequisitesRecognitionResponse,
+    BotTaskListResponse,
+    BotTaskResponse,
+)
 
 os.environ["BOT_TOKEN"] = "123:test"
 
@@ -64,6 +69,18 @@ class _DummySessionContext:
 
 def _fake_async_session_maker():
     return _DummySessionContext()
+
+
+def _recognition_response(*, source: str, extracted: dict) -> BotCustomerRequisitesRecognitionResponse:
+    return BotCustomerRequisitesRecognitionResponse(
+        id=12,
+        status="recognized",
+        source=source,
+        extracted=extracted,
+        validation_flags={"field_errors": {}, "warnings": {}, "is_valid": True},
+        duplicate_customer=None,
+        created_at=datetime(2026, 7, 17, 12, 0),
+    )
 
 
 def test_admin_handler_has_no_direct_dao_import():
@@ -210,27 +227,20 @@ async def test_requisites_file_sends_preview_for_admin(monkeypatch):
     monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
     monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"image"))
 
-    async def fake_recognize(session, **kwargs):
-        assert kwargs["content"] == b"image"
-        assert kwargs["source"] == "telegram"
-        return {
-            "id": 12,
-            "status": "recognized",
-            "source": "telegram",
-            "raw_text": "raw",
-            "extracted": {
+    recognize = AsyncMock(
+        return_value=_recognition_response(
+            source="telegram",
+            extracted={
                 "name": "ООО Тест",
                 "inn": "123456789",
                 "signer_name": "Иванова Ивана Ивановича",
                 "signer_position": "директора",
                 "acting_basis": "Устава",
             },
-            "validation_flags": {"field_errors": {}, "warnings": {}, "is_valid": True},
-            "duplicate_customer": None,
-        }
-
-    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_bytes", fake_recognize)
-    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+        )
+    )
+    gateway = SimpleNamespace(recognize_customer_requisites_file=recognize)
+    monkeypatch.setattr(admin_handler, "get_bot_api_gateway", lambda: gateway)
 
     await admin_handler._handle_requisites_file(
         message,
@@ -243,6 +253,14 @@ async def test_requisites_file_sends_preview_for_admin(monkeypatch):
     args, kwargs = progress.edit_text.await_args
     assert "ООО Тест" in args[0]
     assert kwargs["parse_mode"] == "HTML"
+    recognize.assert_awaited_once_with(
+        telegram_id=5,
+        content=b"image",
+        filename="req.png",
+        mime_type="image/png",
+        telegram_chat_id=100,
+        telegram_message_id=55,
+    )
 
 
 @pytest.mark.asyncio
@@ -261,29 +279,19 @@ async def test_requisites_text_sends_preview_for_admin(monkeypatch):
 
     monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
 
-    async def fake_recognize(session, **kwargs):
-        assert "МегаЕвроКлимат" in kwargs["text"]
-        assert kwargs["source"] == "telegram_text"
-        assert kwargs["telegram_user_id"] == 5
-        assert kwargs["telegram_chat_id"] == 100
-        assert kwargs["telegram_message_id"] == 55
-        return {
-            "id": 12,
-            "status": "recognized",
-            "source": "telegram_text",
-            "raw_text": kwargs["text"],
-            "extracted": {
+    recognize = AsyncMock(
+        return_value=_recognition_response(
+            source="telegram_text",
+            extracted={
                 "name": "ЧУП «МегаЕвроКлимат»",
                 "inn": "392053942",
                 "iban": "BY83BPSB30123542950119330000",
                 "bic": "BPSBBY2X",
             },
-            "validation_flags": {"field_errors": {}, "warnings": {}, "is_valid": True},
-            "duplicate_customer": None,
-        }
-
-    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_text", fake_recognize)
-    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+        )
+    )
+    gateway = SimpleNamespace(recognize_customer_requisites_text=recognize)
+    monkeypatch.setattr(admin_handler, "get_bot_api_gateway", lambda: gateway)
 
     await admin_handler.recognize_requisites_text(message)
 
@@ -293,6 +301,11 @@ async def test_requisites_text_sends_preview_for_admin(monkeypatch):
     assert "МегаЕвроКлимат" in args[0]
     assert "392053942" in args[0]
     assert kwargs["parse_mode"] == "HTML"
+    recognize.assert_awaited_once()
+    assert "МегаЕвроКлимат" in recognize.await_args.kwargs["text"]
+    assert recognize.await_args.kwargs["telegram_id"] == 5
+    assert recognize.await_args.kwargs["telegram_chat_id"] == 100
+    assert recognize.await_args.kwargs["telegram_message_id"] == 55
 
 
 @pytest.mark.asyncio
@@ -319,7 +332,8 @@ async def test_requisites_photo_prompts_for_action_without_recognition(monkeypat
     monkeypatch.setattr(admin_handler, "_is_staff_user", AsyncMock(return_value=True))
     monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
     recognize_mock = AsyncMock()
-    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_bytes", recognize_mock)
+    gateway = SimpleNamespace(recognize_customer_requisites_file=recognize_mock)
+    monkeypatch.setattr(admin_handler, "get_bot_api_gateway", lambda: gateway)
 
     await admin_handler.recognize_requisites_photo(message, state)
 
@@ -415,7 +429,7 @@ async def test_requisites_document_rejects_large_file_before_pending(monkeypatch
         file_id="large-pdf-file",
         file_name="large.pdf",
         mime_type="application/pdf",
-        file_size=admin_handler.CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES + 1,
+        file_size=admin_handler.BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES + 1,
     )
     state = _DummyState({})
 
@@ -438,7 +452,7 @@ async def test_download_telegram_file_rejects_large_metadata_before_download(mon
         get_file=AsyncMock(
             return_value=SimpleNamespace(
                 file_path="documents/large.pdf",
-                file_size=admin_handler.CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES + 1,
+                file_size=admin_handler.BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES + 1,
             )
         ),
         download_file=download_file,
@@ -486,25 +500,14 @@ async def test_requisites_file_extract_callback_runs_recognition(monkeypatch):
     monkeypatch.setattr(admin_handler, "_is_admin_user", AsyncMock(return_value=True))
     monkeypatch.setattr(admin_handler, "_download_telegram_file", AsyncMock(return_value=b"image"))
 
-    async def fake_recognize(session, **kwargs):
-        assert kwargs["content"] == b"image"
-        assert kwargs["filename"] == "req.png"
-        assert kwargs["mime_type"] == "image/png"
-        assert kwargs["telegram_user_id"] == 5
-        assert kwargs["telegram_chat_id"] == 200
-        assert kwargs["telegram_message_id"] == 77
-        return {
-            "id": 12,
-            "status": "recognized",
-            "source": "telegram",
-            "raw_text": "raw",
-            "extracted": {"name": "ООО Тест", "inn": "123456789"},
-            "validation_flags": {"field_errors": {}, "warnings": {}, "is_valid": True},
-            "duplicate_customer": None,
-        }
-
-    monkeypatch.setattr(admin_handler.CustomerRequisitesRecognitionService, "recognize_bytes", fake_recognize)
-    monkeypatch.setattr(admin_handler, "async_session_maker", _fake_async_session_maker)
+    recognize = AsyncMock(
+        return_value=_recognition_response(
+            source="telegram",
+            extracted={"name": "ООО Тест", "inn": "123456789"},
+        )
+    )
+    gateway = SimpleNamespace(recognize_customer_requisites_file=recognize)
+    monkeypatch.setattr(admin_handler, "get_bot_api_gateway", lambda: gateway)
 
     await admin_handler.extract_pending_requisites_file(callback, state)
 
@@ -514,6 +517,14 @@ async def test_requisites_file_extract_callback_runs_recognition(monkeypatch):
     final_args, final_kwargs = callback.message.edit_text.await_args
     assert "ООО Тест" in final_args[0]
     assert final_kwargs["parse_mode"] == "HTML"
+    recognize.assert_awaited_once_with(
+        telegram_id=5,
+        content=b"image",
+        filename="req.png",
+        mime_type="image/png",
+        telegram_chat_id=200,
+        telegram_message_id=77,
+    )
 
 
 @pytest.mark.asyncio

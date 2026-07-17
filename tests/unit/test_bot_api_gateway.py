@@ -289,3 +289,126 @@ async def test_bot_api_gateway_maps_task_conflict():
                 stage_id=7,
                 status="in_progress",
             )
+
+
+async def test_bot_api_gateway_parses_and_creates_quick_order_with_stable_key():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path.endswith("/quick-orders/parse"):
+            assert request.content == '{"telegram_id":123,"text":"ТО Иван"}'.encode()
+            return httpx.Response(
+                200,
+                json={
+                    "draft": {
+                        "name": "Иван",
+                        "phone": "+375291234567",
+                        "service_type": "maintenance",
+                        "service_label": "Обслуживание",
+                        "request_text": "ТО Иван",
+                        "parser": "fallback",
+                    }
+                },
+            )
+        assert request.url.path.endswith("/quick-orders")
+        body = request.content.decode()
+        assert '"idempotency_key":"telegram:-100:55"' in body
+        assert '"service_label":"Обслуживание"' in body
+        return httpx.Response(
+            200,
+            json={"order_id": 42, "customer_id": 7, "created": True},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        parsed = await gateway.parse_quick_order(telegram_id=123, text="  ТО Иван  ")
+        created = await gateway.create_quick_order(
+            telegram_id=123,
+            idempotency_key="telegram:-100:55",
+            draft=parsed.draft,
+        )
+
+    assert len(requests) == 2
+    assert parsed.draft.service_type == "maintenance"
+    assert created.order_id == 42
+    assert created.created is True
+
+
+async def test_bot_api_gateway_sends_requisites_file_as_multipart():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/customers/requisites/recognize-file")
+        assert request.headers["content-type"].startswith("multipart/form-data; boundary=")
+        assert b'name="telegram_id"' in request.content
+        assert b"123" in request.content
+        assert b'filename="req.png"' in request.content
+        assert b"image-bytes" in request.content
+        return httpx.Response(
+            200,
+            json={
+                "id": 12,
+                "status": "recognized",
+                "source": "telegram",
+                "extracted": {"name": "ООО Тест"},
+                "validation_flags": {},
+                "duplicate_customer": None,
+                "created_at": "2026-07-17T12:00:00",
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        response = await gateway.recognize_customer_requisites_file(
+            telegram_id=123,
+            content=b"image-bytes",
+            filename="req.png",
+            mime_type="image/png",
+            telegram_chat_id=-100,
+            telegram_message_id=55,
+        )
+
+    assert response.id == 12
+    assert response.extracted["name"] == "ООО Тест"
+
+
+async def test_bot_api_gateway_applies_customer_requisites_action():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/customers/requisites/12/action")
+        assert request.content == b'{"telegram_id":123,"action":"create"}'
+        return httpx.Response(
+            200,
+            json={
+                "recognition": {
+                    "id": 12,
+                    "status": "confirmed",
+                    "source": "telegram_text",
+                    "extracted": {"name": "ООО Тест"},
+                    "validation_flags": {},
+                    "confirmed_customer_id": 7,
+                    "confirmed_action": "create",
+                    "created_at": "2026-07-17T12:00:00",
+                },
+                "customer": {"id": 7, "name": "ООО Тест"},
+                "changed": False,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        response = await gateway.apply_customer_requisites_action(
+            telegram_id=123,
+            recognition_id=12,
+            action="create",
+        )
+
+    assert response.customer.id == 7
+    assert response.changed is False

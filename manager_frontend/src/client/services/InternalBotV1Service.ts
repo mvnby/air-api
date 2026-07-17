@@ -2,10 +2,19 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_recognize_internal_bot_customer_requisites_file_v1 } from '../models/Body_recognize_internal_bot_customer_requisites_file_v1';
 import type { BotApiHealthResponse } from '../models/BotApiHealthResponse';
 import type { BotCatalogProductLookupResponse } from '../models/BotCatalogProductLookupResponse';
 import type { BotCatalogSearchRequest } from '../models/BotCatalogSearchRequest';
 import type { BotCatalogSearchResponse } from '../models/BotCatalogSearchResponse';
+import type { BotCustomerRequisitesActionRequest } from '../models/BotCustomerRequisitesActionRequest';
+import type { BotCustomerRequisitesActionResponse } from '../models/BotCustomerRequisitesActionResponse';
+import type { BotCustomerRequisitesRecognitionResponse } from '../models/BotCustomerRequisitesRecognitionResponse';
+import type { BotCustomerRequisitesTextRequest } from '../models/BotCustomerRequisitesTextRequest';
+import type { BotQuickOrderCreateRequest } from '../models/BotQuickOrderCreateRequest';
+import type { BotQuickOrderCreateResponse } from '../models/BotQuickOrderCreateResponse';
+import type { BotQuickOrderParseRequest } from '../models/BotQuickOrderParseRequest';
+import type { BotQuickOrderParseResponse } from '../models/BotQuickOrderParseResponse';
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
 import type { BotTaskListRequest } from '../models/BotTaskListRequest';
 import type { BotTaskListResponse } from '../models/BotTaskListResponse';
@@ -151,6 +160,106 @@ export class InternalBotV1Service {
             url: '/api/internal/bot/v1/tasks/stages/{stage_id}/report',
             path: {
                 'stage_id': stageId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Parse Internal Bot Quick Order
+     * @param requestBody
+     * @returns BotQuickOrderParseResponse Successful Response
+     * @throws ApiError
+     */
+    public static parseInternalBotQuickOrderV1(
+        requestBody: BotQuickOrderParseRequest,
+    ): CancelablePromise<BotQuickOrderParseResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/quick-orders/parse',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Internal Bot Quick Order
+     * @param requestBody
+     * @returns BotQuickOrderCreateResponse Successful Response
+     * @throws ApiError
+     */
+    public static createInternalBotQuickOrderV1(
+        requestBody: BotQuickOrderCreateRequest,
+    ): CancelablePromise<BotQuickOrderCreateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/quick-orders',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Recognize Internal Bot Customer Requisites Text
+     * @param requestBody
+     * @returns BotCustomerRequisitesRecognitionResponse Successful Response
+     * @throws ApiError
+     */
+    public static recognizeInternalBotCustomerRequisitesTextV1(
+        requestBody: BotCustomerRequisitesTextRequest,
+    ): CancelablePromise<BotCustomerRequisitesRecognitionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/customers/requisites/recognize-text',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Recognize Internal Bot Customer Requisites File
+     * @param formData
+     * @returns BotCustomerRequisitesRecognitionResponse Successful Response
+     * @throws ApiError
+     */
+    public static recognizeInternalBotCustomerRequisitesFileV1(
+        formData: Body_recognize_internal_bot_customer_requisites_file_v1,
+    ): CancelablePromise<BotCustomerRequisitesRecognitionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/customers/requisites/recognize-file',
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Internal Bot Customer Requisites Action
+     * @param recognitionId
+     * @param requestBody
+     * @returns BotCustomerRequisitesActionResponse Successful Response
+     * @throws ApiError
+     */
+    public static applyInternalBotCustomerRequisitesActionV1(
+        recognitionId: number,
+        requestBody: BotCustomerRequisitesActionRequest,
+    ): CancelablePromise<BotCustomerRequisitesActionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/customers/requisites/{recognition_id}/action',
+            path: {
+                'recognition_id': recognitionId,
             },
             body: requestBody,
             mediaType: 'application/json',

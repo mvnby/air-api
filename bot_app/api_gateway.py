@@ -9,6 +9,11 @@ from api_contracts.bot import (
     BotApiHealthResponse,
     BotCatalogProductLookupResponse,
     BotCatalogSearchResponse,
+    BotCustomerRequisitesActionResponse,
+    BotCustomerRequisitesRecognitionResponse,
+    BotQuickOrderCreateResponse,
+    BotQuickOrderDraft,
+    BotQuickOrderParseResponse,
     BotStaffContextResponse,
     BotTaskListResponse,
     BotTaskReportSaveResponse,
@@ -38,6 +43,14 @@ class BotApiResponseError(BotApiError):
 
 class BotApiConflictError(BotApiError):
     """The staff action conflicts with the current backend state."""
+
+
+class BotApiNotFoundError(BotApiResponseError):
+    """The requested backend resource no longer exists."""
+
+
+class BotApiValidationError(BotApiResponseError):
+    """The backend rejected user-provided data."""
 
 
 @dataclass(frozen=True)
@@ -213,11 +226,164 @@ class BotApiGateway:
         except ValueError as exc:
             raise BotApiResponseError("MVN API returned an invalid task report contract") from exc
 
+    async def parse_quick_order(
+        self,
+        *,
+        telegram_id: int,
+        text: str,
+    ) -> BotQuickOrderParseResponse:
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        normalized_text = text.strip()
+        if not normalized_text:
+            raise ValueError("Quick order text must not be empty")
+        if len(normalized_text) > 12_000:
+            raise ValueError("Quick order text must not exceed 12000 characters")
+        payload = await self._post(
+            "quick-orders/parse",
+            json={"telegram_id": telegram_id, "text": normalized_text},
+            timeout_seconds=20.0,
+        )
+        try:
+            return BotQuickOrderParseResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned an invalid quick-order draft") from exc
+
+    async def create_quick_order(
+        self,
+        *,
+        telegram_id: int,
+        idempotency_key: str,
+        draft: BotQuickOrderDraft | dict,
+    ) -> BotQuickOrderCreateResponse:
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        normalized_key = idempotency_key.strip()
+        if not normalized_key:
+            raise ValueError("Quick order idempotency key is required")
+        validated_draft = BotQuickOrderDraft.model_validate(draft)
+        payload = await self._post(
+            "quick-orders",
+            json={
+                "telegram_id": telegram_id,
+                "idempotency_key": normalized_key,
+                "draft": validated_draft.model_dump(mode="json"),
+            },
+            timeout_seconds=20.0,
+        )
+        try:
+            return BotQuickOrderCreateResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned an invalid quick-order result") from exc
+
+    async def recognize_customer_requisites_text(
+        self,
+        *,
+        telegram_id: int,
+        text: str,
+        telegram_chat_id: int | None,
+        telegram_message_id: int | None,
+    ) -> BotCustomerRequisitesRecognitionResponse:
+        normalized_text = text.strip()
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        if len(normalized_text) < 20:
+            raise ValueError("Requisites text is too short")
+        payload = await self._post(
+            "customers/requisites/recognize-text",
+            json={
+                "telegram_id": telegram_id,
+                "text": normalized_text,
+                "telegram_chat_id": telegram_chat_id,
+                "telegram_message_id": telegram_message_id,
+            },
+            timeout_seconds=60.0,
+        )
+        try:
+            return BotCustomerRequisitesRecognitionResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned invalid customer requisites") from exc
+
+    async def recognize_customer_requisites_file(
+        self,
+        *,
+        telegram_id: int,
+        content: bytes,
+        filename: str,
+        mime_type: str,
+        telegram_chat_id: int | None,
+        telegram_message_id: int | None,
+    ) -> BotCustomerRequisitesRecognitionResponse:
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        if not content:
+            raise ValueError("Requisites file must not be empty")
+        form_data = {"telegram_id": str(telegram_id)}
+        if telegram_chat_id is not None:
+            form_data["telegram_chat_id"] = str(telegram_chat_id)
+        if telegram_message_id is not None:
+            form_data["telegram_message_id"] = str(telegram_message_id)
+        payload = await self._post_multipart(
+            "customers/requisites/recognize-file",
+            data=form_data,
+            files={"file": (filename, content, mime_type)},
+            timeout_seconds=90.0,
+        )
+        try:
+            return BotCustomerRequisitesRecognitionResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned invalid customer requisites") from exc
+
+    async def apply_customer_requisites_action(
+        self,
+        *,
+        telegram_id: int,
+        recognition_id: int,
+        action: str,
+    ) -> BotCustomerRequisitesActionResponse:
+        if telegram_id <= 0:
+            raise ValueError("Telegram ID must be positive")
+        if recognition_id <= 0:
+            raise ValueError("Recognition ID must be positive")
+        if action not in {"create", "update", "cancel"}:
+            raise ValueError("Recognition action must be create, update or cancel")
+        payload = await self._post(
+            f"customers/requisites/{recognition_id}/action",
+            json={"telegram_id": telegram_id, "action": action},
+            timeout_seconds=20.0,
+        )
+        try:
+            return BotCustomerRequisitesActionResponse.model_validate(payload)
+        except ValueError as exc:
+            raise BotApiResponseError("MVN API returned an invalid customer action result") from exc
+
     async def _get(self, path: str, *, params: dict[str, object] | None = None) -> dict:
         return await self._request("GET", path, params=params)
 
-    async def _post(self, path: str, *, json: dict[str, object]) -> dict:
-        return await self._request("POST", path, json=json)
+    async def _post(
+        self,
+        path: str,
+        *,
+        json: dict[str, object],
+        timeout_seconds: float | None = None,
+    ) -> dict:
+        return await self._request("POST", path, json=json, timeout_seconds=timeout_seconds)
+
+    async def _post_multipart(
+        self,
+        path: str,
+        *,
+        data: dict[str, str],
+        files: dict[str, tuple[str, bytes, str]],
+        timeout_seconds: float,
+    ) -> dict:
+        return await self._request(
+            "POST",
+            path,
+            data=data,
+            files=files,
+            timeout_seconds=timeout_seconds,
+        )
 
     async def _request(
         self,
@@ -226,6 +392,9 @@ class BotApiGateway:
         *,
         params: dict[str, object] | None = None,
         json: dict[str, object] | None = None,
+        data: dict[str, str] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict:
         url = f"{self._config.base_url}/{path.lstrip('/')}"
         try:
@@ -235,7 +404,9 @@ class BotApiGateway:
                 headers={"Authorization": f"Bearer {self._config.token}"},
                 params=params,
                 json=json,
-                timeout=self._config.timeout_seconds,
+                data=data,
+                files=files,
+                timeout=timeout_seconds or self._config.timeout_seconds,
             )
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             raise BotApiUnavailableError("MVN API is temporarily unavailable") from exc
@@ -246,6 +417,17 @@ class BotApiGateway:
             raise BotApiAuthorizationError("MVN API denied the staff action")
         if response.status_code == 409:
             raise BotApiConflictError("MVN API rejected a conflicting staff action")
+        if response.status_code == 404:
+            raise BotApiNotFoundError("MVN API resource was not found")
+        if response.status_code in {400, 413, 422}:
+            detail = "MVN API rejected the request"
+            try:
+                response_payload = response.json()
+                if isinstance(response_payload, dict) and isinstance(response_payload.get("detail"), str):
+                    detail = response_payload["detail"]
+            except ValueError:
+                pass
+            raise BotApiValidationError(detail)
         if response.status_code >= 500:
             raise BotApiUnavailableError(f"MVN API returned HTTP {response.status_code}")
         if response.status_code >= 400:

@@ -7,6 +7,7 @@ from html import escape
 from typing import Any, Optional
 
 import httpx
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -427,6 +428,8 @@ class BotQuickOrderService:
         cls,
         session: AsyncSession,
         draft: dict[str, Any],
+        *,
+        source_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         normalized = cls.normalize_draft(draft)
         target_date = None
@@ -434,7 +437,7 @@ class BotQuickOrderService:
             target_date = datetime.fromisoformat(str(normalized["target_date"]).replace("Z", "+00:00"))
 
         request_text = normalized["request_text"] or "Быстрый заказ из Telegram"
-        source_fingerprint = cls._source_fingerprint(normalized)
+        source_fingerprint = source_fingerprint or cls._source_fingerprint(normalized)
         result = await session.execute(
             select(Lead)
             .where(Lead.source == "bot", Lead.source_fingerprint == source_fingerprint)
@@ -450,24 +453,39 @@ class BotQuickOrderService:
                 "lead": LeadService._map_lead(existing_lead),
                 "customer_id": int(converted_order.customer_id or 0),
                 "order_id": int(converted_order.id or 0),
+                "order_created": False,
             }
         else:
             if existing_lead:
                 lead_id = int(existing_lead.id or 0)
             else:
-                lead = await LeadService.create_lead(
-                    session,
-                    LeadCreatePayload(
-                        source="bot",
-                        request_text=request_text,
-                        name=normalized.get("name"),
-                        phone=normalized.get("phone"),
-                        segment_hint="b2c",
-                        source_fingerprint=source_fingerprint,
-                        next_followup_date=target_date,
-                    ),
-                )
-                lead_id = int(lead["id"])
+                try:
+                    lead = await LeadService.create_lead(
+                        session,
+                        LeadCreatePayload(
+                            source="bot",
+                            request_text=request_text,
+                            name=normalized.get("name"),
+                            phone=normalized.get("phone"),
+                            segment_hint="b2c",
+                            source_fingerprint=source_fingerprint,
+                            next_followup_date=target_date,
+                        ),
+                    )
+                    lead_id = int(lead["id"])
+                except IntegrityError:
+                    await session.rollback()
+                    concurrent_lead = (
+                        await session.execute(
+                            select(Lead).where(
+                                Lead.source == "bot",
+                                Lead.source_fingerprint == source_fingerprint,
+                            )
+                        )
+                    ).scalars().first()
+                    if not concurrent_lead:
+                        raise
+                    lead_id = int(concurrent_lead.id or 0)
             qualification = await LeadService.qualify_lead(
                 session,
                 lead_id,
@@ -505,6 +523,17 @@ class BotQuickOrderService:
         if not order:
             raise ValueError("Не удалось создать заказ")
 
+        order_created = bool(qualification.get("order_created", True))
+        if order_created:
+            try:
+                await NotificationService.notify_admins_staff_order_created(
+                    session,
+                    order_id,
+                    source_label="Telegram-бот",
+                )
+            except Exception:
+                logger.exception("BOT_QUICK_ORDER_NOTIFY_FAILED order_id=%s", order_id)
+
         if target_date and service_type != "maintenance":
             stage_payload = OrderWorkStageCreatePayload(
                 name=cls.SERVICE_LABELS.get(service_type, "Рабочая задача"),
@@ -523,16 +552,24 @@ class BotQuickOrderService:
             if existing_stage:
                 order = await OrderService.get_order_detail_for_manager(session, order_id) or order
             else:
-                updated = await OrderService.add_order_stage(session, order_id, stage_payload)
-                order = updated or order
+                try:
+                    updated = await OrderService.add_order_stage(session, order_id, stage_payload)
+                    order = updated or order
+                except IntegrityError:
+                    await session.rollback()
+                    concurrent_stage = (
+                        await session.execute(
+                            select(OrderWorkStage).where(
+                                OrderWorkStage.order_id == order_id,
+                                OrderWorkStage.name == stage_payload.name,
+                                OrderWorkStage.start_time == stage_payload.start_time,
+                                OrderWorkStage.installer_id.is_(None),
+                            )
+                        )
+                    ).scalars().first()
+                    if not concurrent_stage:
+                        raise
+                    order = await OrderService.get_order_detail_for_manager(session, order_id) or order
 
-        try:
-            await NotificationService.notify_admins_staff_order_created(
-                session,
-                order_id,
-                source_label="Telegram-бот",
-            )
-        except Exception:
-            logger.exception("BOT_QUICK_ORDER_NOTIFY_FAILED order_id=%s", order_id)
-
+        order["_bot_order_created"] = order_created
         return order

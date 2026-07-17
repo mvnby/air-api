@@ -1,9 +1,12 @@
 """Versioned contracts for the internal Telegram bot API."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+
+BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
 
 class BotApiHealthResponse(BaseModel):
@@ -102,4 +105,111 @@ class BotTaskReportSaveRequest(BaseModel):
 
 class BotTaskReportSaveResponse(BaseModel):
     stage_id: int = Field(ge=1)
+    changed: bool
+
+
+BotQuickOrderServiceType = Literal[
+    "turnkey",
+    "install_only",
+    "pre_install",
+    "maintenance",
+    "repair",
+    "dismantling",
+]
+
+
+class BotQuickOrderAddressCheck(BaseModel):
+    status: Literal["unchecked", "not_found", "needs_review", "confirmed"]
+    message: str = Field(min_length=1, max_length=500)
+    suggestion: str | None = Field(default=None, max_length=500)
+
+
+class BotQuickOrderDraft(BaseModel):
+    name: str | None = Field(default=None, max_length=300)
+    phone: str | None = Field(default=None, max_length=64)
+    address: str | None = Field(default=None, max_length=1000)
+    service_type: BotQuickOrderServiceType | None = None
+    service_label: str = Field(min_length=1, max_length=100)
+    target_date: datetime | None = None
+    request_text: str = Field(min_length=1, max_length=12_000)
+    parser: Literal["fallback", "ai"] = "fallback"
+    address_check: BotQuickOrderAddressCheck | None = None
+
+
+class BotQuickOrderParseRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    text: str = Field(min_length=1, max_length=12_000)
+
+    @field_validator("text")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Quick order text must not be empty")
+        return normalized
+
+
+class BotQuickOrderParseResponse(BaseModel):
+    draft: BotQuickOrderDraft
+
+
+class BotQuickOrderCreateRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    idempotency_key: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    draft: BotQuickOrderDraft
+
+
+class BotQuickOrderCreateResponse(BaseModel):
+    order_id: int = Field(ge=1)
+    customer_id: int = Field(ge=1)
+    created: bool
+
+
+class BotCustomerBriefResponse(BaseModel):
+    id: int = Field(ge=1)
+    name: str
+    inn: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
+class BotCustomerRequisitesRecognitionResponse(BaseModel):
+    id: int = Field(ge=1)
+    status: Literal["recognized", "confirmed", "cancelled"]
+    source: str
+    extracted: dict[str, Any] = Field(default_factory=dict)
+    validation_flags: dict[str, Any] = Field(default_factory=dict)
+    duplicate_customer: BotCustomerBriefResponse | None = None
+    confirmed_customer_id: int | None = None
+    confirmed_action: Literal["create", "update"] | None = None
+    created_at: datetime
+
+
+class BotCustomerRequisitesTextRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    text: str = Field(min_length=20, max_length=12_000)
+    telegram_chat_id: int | None = None
+    telegram_message_id: int | None = None
+
+    @field_validator("text")
+    @classmethod
+    def normalize_requisites_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 20:
+            raise ValueError("Requisites text is too short")
+        return normalized
+
+
+class BotCustomerRequisitesActionRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    action: Literal["create", "update", "cancel"]
+
+
+class BotCustomerRequisitesActionResponse(BaseModel):
+    recognition: BotCustomerRequisitesRecognitionResponse
+    customer: BotCustomerBriefResponse | None = None
     changed: bool

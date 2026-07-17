@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, JSON, String
+from sqlalchemy import Column, Index, JSON, String, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from .common import CustomerType, DocumentRoleType, LeadIntakeSource, LeadLossReason, LeadSegmentHint, LeadStatus
@@ -107,6 +107,28 @@ class CustomerBranch(SQLModel, table=True):
 
 class CustomerRequisitesRecognition(SQLModel, table=True):
     __tablename__ = "customer_requisites_recognition"
+    __table_args__ = (
+        Index(
+            "uq_customer_requisites_telegram_message",
+            "source",
+            "telegram_user_id",
+            "telegram_chat_id",
+            "telegram_message_id",
+            unique=True,
+            postgresql_where=text(
+                "source IN ('telegram', 'telegram_text') "
+                "AND telegram_user_id IS NOT NULL "
+                "AND telegram_chat_id IS NOT NULL "
+                "AND telegram_message_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "source IN ('telegram', 'telegram_text') "
+                "AND telegram_user_id IS NOT NULL "
+                "AND telegram_chat_id IS NOT NULL "
+                "AND telegram_message_id IS NOT NULL"
+            ),
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
@@ -135,6 +157,16 @@ class CustomerRequisitesRecognition(SQLModel, table=True):
 
 
 class Lead(SQLModel, table=True):
+    __table_args__ = (
+        Index(
+            "uq_lead_bot_source_fingerprint",
+            "source_fingerprint",
+            unique=True,
+            postgresql_where=text("source = 'bot' AND source_fingerprint IS NOT NULL"),
+            sqlite_where=text("source = 'bot' AND source_fingerprint IS NOT NULL"),
+        ),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
 
     status: LeadStatus = Field(default=LeadStatus.new, sa_column=Column(String, index=True))
