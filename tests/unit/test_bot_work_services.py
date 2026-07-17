@@ -22,10 +22,15 @@ from services.product_read_service import ProductReadService
 from services.product_service import ProductService
 from bot_app.catalog_presenter import format_client_product
 from bot_app.keyboards import get_product_keyboard, get_staff_main_menu, selection_result_keyboard
-from bot_app.task_presenter import format_tasks, format_tasks_rich_html
+from bot_app.task_presenter import build_stage_report, format_tasks, format_tasks_rich_html
 from bot_app.handlers import work as work_handlers
 from bot_app.utils import format_caption
-from api_contracts.bot import BotTaskListResponse, BotTaskResponse
+from api_contracts.bot import (
+    BotTaskListResponse,
+    BotTaskReportSaveResponse,
+    BotTaskResponse,
+    BotTaskStatusUpdateResponse,
+)
 
 
 @pytest.fixture
@@ -370,13 +375,13 @@ async def test_task_read_service_reuses_authorized_installer_mapping(monkeypatch
 
 
 def test_task_report_builder_keeps_text_report_plain():
-    report = BotTaskService.build_stage_report(text="Фреон дозаправлен, трасса проверена")
+    report = build_stage_report(text="Фреон дозаправлен, трасса проверена")
 
     assert report == "Фреон дозаправлен, трасса проверена"
 
 
 def test_task_report_builder_accepts_photo_with_caption():
-    report = BotTaskService.build_stage_report(
+    report = build_stage_report(
         caption="Фото после обслуживания",
         photo_file_id="AgACAgIAAxkBAAIB_photo",
     )
@@ -390,7 +395,7 @@ def test_task_report_builder_accepts_photo_with_caption():
 
 
 def test_task_report_builder_accepts_document_without_caption():
-    report = BotTaskService.build_stage_report(
+    report = build_stage_report(
         document_file_id="BQACAgIAAxkBAAIB_doc",
         document_name="акт выполненных работ.pdf",
     )
@@ -399,48 +404,87 @@ def test_task_report_builder_accepts_document_without_caption():
 
 
 @pytest.mark.asyncio
-async def test_task_status_update_notifies_admins(monkeypatch):
-    calls = {}
-    stage = SimpleNamespace(id=10, installer_id=7, status=OrderStageStatus.PLANNED)
-    staff = SimpleNamespace(legacy_installer_id=7)
+async def test_task_status_handler_uses_gateway_without_opening_database(monkeypatch):
+    gateway = SimpleNamespace(
+        update_task_status=AsyncMock(
+            return_value=BotTaskStatusUpdateResponse(
+                stage_id=10,
+                status="completed",
+                changed=True,
+            )
+        )
+    )
+    context = SimpleNamespace(is_staff=True, is_manager=False, is_executor=True)
+    callback = SimpleNamespace(
+        data="task_done_10",
+        from_user=SimpleNamespace(id=777),
+        answer=AsyncMock(),
+        message=SimpleNamespace(answer=AsyncMock()),
+    )
 
-    class FakeSession:
-        async def get(self, model, stage_id):
-            calls["get"] = {"model": model, "stage_id": stage_id}
-            return stage
-
-        def add(self, item):
-            calls["add"] = item
-
-        async def commit(self):
-            calls["commit"] = True
-
-    async def fake_staff_by_telegram_id(session, telegram_id):
-        calls["staff_lookup"] = {"session": session, "telegram_id": telegram_id}
-        return staff
-
-    async def fake_notify(session, stage_id):
-        calls["notify"] = {"session": session, "stage_id": stage_id}
-        return 1
-
-    monkeypatch.setattr(BotTaskService, "_staff_by_telegram_id", fake_staff_by_telegram_id)
+    monkeypatch.setattr(work_handlers, "_access_context", AsyncMock(return_value=context))
+    monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
     monkeypatch.setattr(
-        "services.bot_task_service.NotificationService.notify_admins_work_stage_status_changed",
-        fake_notify,
+        work_handlers,
+        "async_session_maker",
+        lambda: (_ for _ in ()).throw(AssertionError("task mutation must not open a DB session")),
     )
 
-    session = FakeSession()
-    ok = await BotTaskService.update_stage_status(
-        session,
-        10,
-        "completed",
+    await work_handlers.update_task_status(callback)
+
+    gateway.update_task_status.assert_awaited_once_with(
         telegram_id=777,
+        stage_id=10,
+        status="completed",
+    )
+    callback.answer.assert_awaited_once_with("Готово")
+    callback.message.answer.assert_awaited_once_with(
+        "Статус задачи обновлен.",
+        reply_markup=get_staff_main_menu(context),
     )
 
-    assert ok
-    assert stage.status == OrderStageStatus.COMPLETED
-    assert calls["commit"] is True
-    assert calls["notify"] == {"session": session, "stage_id": 10}
+
+@pytest.mark.asyncio
+async def test_task_report_handler_uses_gateway_without_opening_database(monkeypatch):
+    gateway = SimpleNamespace(
+        save_task_report=AsyncMock(
+            return_value=BotTaskReportSaveResponse(stage_id=10, changed=True)
+        )
+    )
+    context = SimpleNamespace(is_staff=True, is_manager=False, is_executor=True)
+    state = SimpleNamespace(
+        get_data=AsyncMock(return_value={"task_report_stage_id": 10}),
+        clear=AsyncMock(),
+    )
+    message = SimpleNamespace(
+        from_user=SimpleNamespace(id=777),
+        text="Монтаж завершен",
+        caption=None,
+        photo=None,
+        document=None,
+        answer=AsyncMock(),
+    )
+
+    monkeypatch.setattr(work_handlers, "_access_context", AsyncMock(return_value=context))
+    monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
+    monkeypatch.setattr(
+        work_handlers,
+        "async_session_maker",
+        lambda: (_ for _ in ()).throw(AssertionError("task report must not open a DB session")),
+    )
+
+    await work_handlers.task_report_finish(message, state)
+
+    gateway.save_task_report.assert_awaited_once_with(
+        telegram_id=777,
+        stage_id=10,
+        report="Монтаж завершен",
+    )
+    state.clear.assert_awaited_once()
+    message.answer.assert_awaited_once_with(
+        "Отчет сохранен.",
+        reply_markup=get_staff_main_menu(context),
+    )
 
 
 def test_product_caption_contains_public_product_link(monkeypatch):

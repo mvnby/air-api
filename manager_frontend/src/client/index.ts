@@ -38,7 +38,11 @@ export type { BotCatalogSearchResponse } from './models/BotCatalogSearchResponse
 export type { BotStaffContextResponse } from './models/BotStaffContextResponse';
 export type { BotTaskListRequest } from './models/BotTaskListRequest';
 export type { BotTaskListResponse } from './models/BotTaskListResponse';
+export type { BotTaskReportSaveRequest } from './models/BotTaskReportSaveRequest';
+export type { BotTaskReportSaveResponse } from './models/BotTaskReportSaveResponse';
 export type { BotTaskResponse } from './models/BotTaskResponse';
+export type { BotTaskStatusUpdateRequest } from './models/BotTaskStatusUpdateRequest';
+export type { BotTaskStatusUpdateResponse } from './models/BotTaskStatusUpdateResponse';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';
 export type { BulkProductIdsRequest } from './models/BulkProductIdsRequest';

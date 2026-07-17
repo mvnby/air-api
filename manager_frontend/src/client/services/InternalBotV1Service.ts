@@ -9,6 +9,10 @@ import type { BotCatalogSearchResponse } from '../models/BotCatalogSearchRespons
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
 import type { BotTaskListRequest } from '../models/BotTaskListRequest';
 import type { BotTaskListResponse } from '../models/BotTaskListResponse';
+import type { BotTaskReportSaveRequest } from '../models/BotTaskReportSaveRequest';
+import type { BotTaskReportSaveResponse } from '../models/BotTaskReportSaveResponse';
+import type { BotTaskStatusUpdateRequest } from '../models/BotTaskStatusUpdateRequest';
+import type { BotTaskStatusUpdateResponse } from '../models/BotTaskStatusUpdateResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -100,6 +104,54 @@ export class InternalBotV1Service {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/internal/bot/v1/tasks/my',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Internal Bot Task Status
+     * @param stageId
+     * @param requestBody
+     * @returns BotTaskStatusUpdateResponse Successful Response
+     * @throws ApiError
+     */
+    public static updateInternalBotTaskStatusV1(
+        stageId: number,
+        requestBody: BotTaskStatusUpdateRequest,
+    ): CancelablePromise<BotTaskStatusUpdateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/tasks/stages/{stage_id}/status',
+            path: {
+                'stage_id': stageId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Internal Bot Task Report
+     * @param stageId
+     * @param requestBody
+     * @returns BotTaskReportSaveResponse Successful Response
+     * @throws ApiError
+     */
+    public static saveInternalBotTaskReportV1(
+        stageId: number,
+        requestBody: BotTaskReportSaveRequest,
+    ): CancelablePromise<BotTaskReportSaveResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/tasks/stages/{stage_id}/report',
+            path: {
+                'stage_id': stageId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

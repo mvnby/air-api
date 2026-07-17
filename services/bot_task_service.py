@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -7,10 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import Order, OrderInstaller, OrderStageStatus, OrderStatus, OrderWorkStage, StaffUser
-from services.notification_service import NotificationService
 from services.staff_user_service import StaffUserService
-
-logger = logging.getLogger(__name__)
 
 
 class BotTaskService:
@@ -158,69 +154,3 @@ class BotTaskService:
             "customer_phone": cls._customer_phone(order),
             "comment": order.comment,
         }
-
-    @staticmethod
-    def build_stage_report(
-        *,
-        text: str | None = None,
-        caption: str | None = None,
-        photo_file_id: str | None = None,
-        document_file_id: str | None = None,
-        document_name: str | None = None,
-    ) -> str:
-        body = (text or caption or "").strip()
-        lines: list[str] = [body] if body else []
-        attachments: list[str] = []
-
-        if photo_file_id:
-            attachments.append(f"Фото: {photo_file_id}")
-
-        if document_file_id:
-            safe_name = " ".join((document_name or "файл").split())[:120] or "файл"
-            attachments.append(f"Документ: {safe_name} ({document_file_id})")
-
-        if attachments:
-            if lines:
-                lines.append("")
-            lines.append("Вложения:")
-            lines.extend(f"- {attachment}" for attachment in attachments)
-
-        return "\n".join(lines).strip()
-
-    @staticmethod
-    async def update_stage_status(
-        session: AsyncSession,
-        stage_id: int,
-        status: str,
-        *,
-        telegram_id: int | str | None,
-    ) -> bool:
-        staff = await BotTaskService._staff_by_telegram_id(session, telegram_id)
-        stage = await session.get(OrderWorkStage, stage_id)
-        if not staff or not stage or stage.installer_id != staff.legacy_installer_id:
-            return False
-        stage.status = OrderStageStatus(status)
-        session.add(stage)
-        await session.commit()
-        try:
-            await NotificationService.notify_admins_work_stage_status_changed(session, stage_id)
-        except Exception:
-            logger.exception("BOT_TASK_STATUS_NOTIFY_FAILED stage_id=%s", stage_id)
-        return True
-
-    @staticmethod
-    async def save_stage_report(
-        session: AsyncSession,
-        stage_id: int,
-        report: str,
-        *,
-        telegram_id: int | str | None,
-    ) -> bool:
-        staff = await BotTaskService._staff_by_telegram_id(session, telegram_id)
-        stage = await session.get(OrderWorkStage, stage_id)
-        if not staff or not stage or stage.installer_id != staff.legacy_installer_id:
-            return False
-        stage.installer_report = report.strip()
-        session.add(stage)
-        await session.commit()
-        return True

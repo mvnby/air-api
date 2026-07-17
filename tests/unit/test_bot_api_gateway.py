@@ -4,6 +4,7 @@ import pytest
 from bot_app.api_gateway import (
     BotApiAuthenticationError,
     BotApiAuthorizationError,
+    BotApiConflictError,
     BotApiGateway,
     BotApiGatewayConfig,
     BotApiResponseError,
@@ -225,3 +226,66 @@ async def test_bot_api_gateway_posts_task_list_without_staff_id_in_url():
 
     assert response.items[0].id == 7
     assert response.items[0].start_time.isoformat() == "2026-07-20T12:00:00"
+
+
+async def test_bot_api_gateway_posts_task_status_mutation():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/internal/bot/v1/tasks/stages/7/status"
+        assert request.method == "POST"
+        assert request.content == b'{"telegram_id":123,"status":"completed"}'
+        return httpx.Response(
+            200,
+            json={"stage_id": 7, "status": "completed", "changed": True},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        response = await gateway.update_task_status(
+            telegram_id=123,
+            stage_id=7,
+            status="completed",
+        )
+
+    assert response.stage_id == 7
+    assert response.status == "completed"
+    assert response.changed is True
+
+
+async def test_bot_api_gateway_posts_normalized_task_report():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/internal/bot/v1/tasks/stages/7/report"
+        assert request.content.decode() == '{"telegram_id":123,"report":"Готово"}'
+        return httpx.Response(200, json={"stage_id": 7, "changed": False})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        response = await gateway.save_task_report(
+            telegram_id=123,
+            stage_id=7,
+            report="  Готово  ",
+        )
+
+    assert response.stage_id == 7
+    assert response.changed is False
+
+
+async def test_bot_api_gateway_maps_task_conflict():
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(409, json={"detail": "terminal"}))
+    ) as client:
+        gateway = BotApiGateway(
+            BotApiGatewayConfig(base_url="https://api.mvn.by/api/internal/bot/v1", token="secret"),
+            client=client,
+        )
+        with pytest.raises(BotApiConflictError):
+            await gateway.update_task_status(
+                telegram_id=123,
+                stage_id=7,
+                status="in_progress",
+            )
