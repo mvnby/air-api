@@ -65,6 +65,12 @@ async def test_catalog_quality_report_supports_normalized_workspace_filters(asyn
     assert payload["meta"]["total"] == 1
     assert payload["total_products"] == 1
     assert payload["fixable_products"] == 1
+    assert set(payload["builtin_view_counts"]) == {
+        "critical-published",
+        "stock-media",
+        "household-no-series",
+        "supplier-unmapped",
+    }
     assert payload["items"][0]["product_id"] == product.id
     assert payload["items"][0]["equipment_type"] == "cat-household"
     assert payload["groups"][0]["key"] == "equipment:cat-household"

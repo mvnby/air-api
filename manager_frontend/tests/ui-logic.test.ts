@@ -36,6 +36,7 @@ import {
   parseCatalogQualityState,
   serializeCatalogQualityState,
 } from '../src/components/catalog-quality/catalog-quality-state';
+import { countLabel } from '../src/components/catalog-quality/catalog-quality-copy';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -164,6 +165,9 @@ const savedQualityView = applyCatalogQualityView(
 assert(savedQualityView.availability === 'in_stock' && savedQualityView.category === 'media', 'saved catalog view must apply its filters');
 assert(savedQualityView.view === 'table' && savedQualityView.limit === 100, 'saved catalog view must preserve personal display preferences');
 assert(savedQualityView.page === 1, 'saved catalog view must restart pagination');
+assert(countLabel(1, 'поставщик', 'поставщика', 'поставщиков') === '1 поставщик', 'catalog counts must use singular form');
+assert(countLabel(3, 'поставщик', 'поставщика', 'поставщиков') === '3 поставщика', 'catalog counts must use paucal form');
+assert(countLabel(12, 'поставщик', 'поставщика', 'поставщиков') === '12 поставщиков', 'catalog counts must use plural form');
 
 const workspaceBase = {
   status: 'negotiation',

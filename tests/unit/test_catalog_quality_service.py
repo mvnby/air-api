@@ -1,5 +1,6 @@
 from models.product import Product, ProductImage, Tag, TagGroup
 from services.catalog_quality_filters import (
+    build_builtin_view_counts,
     build_groups,
     classify_product,
     enrich_work_priority,
@@ -180,6 +181,7 @@ def test_priority_sort_and_series_groups_are_transparent():
             "series_id": 100,
             "series_title": "Elite",
             "score": 92,
+            "work_priority": "medium",
             "work_priority_score": 20,
             "critical_issue_count": 0,
             "issues": [],
@@ -190,6 +192,7 @@ def test_priority_sort_and_series_groups_are_transparent():
             "series_id": 100,
             "series_title": "Elite",
             "score": 60,
+            "work_priority": "high",
             "work_priority_score": 180,
             "critical_issue_count": 1,
             "issues": [{"category": "media", "severity": "critical"}],
@@ -208,3 +211,46 @@ def test_priority_sort_and_series_groups_are_transparent():
             "spec_problem_products": 0,
         }
     ]
+
+
+def test_priority_sort_keeps_medium_ahead_of_low_even_with_a_lower_numeric_score():
+    rows = [
+        {"product_id": 1, "title": "Deferred", "score": 30, "work_priority": "low", "work_priority_score": 500},
+        {"product_id": 2, "title": "Current", "score": 70, "work_priority": "medium", "work_priority_score": 80},
+    ]
+
+    assert [row["product_id"] for row in sort_rows(rows, "priority")] == [2, 1]
+
+
+def test_builtin_view_counts_use_the_same_filters_as_workspace_presets():
+    rows = [
+        {
+            "product_id": 1,
+            "equipment_type": "cat-household",
+            "series_id": None,
+            "is_published": True,
+            "available_qty": 4,
+            "score": 40,
+            "issues": [{"category": "media", "severity": "critical"}],
+            "suppliers": [],
+        },
+        {
+            "product_id": 2,
+            "equipment_type": "cat-household",
+            "series_id": None,
+            "is_published": False,
+            "available_qty": 0,
+            "score": 80,
+            "issues": [{"category": "supplier", "severity": "warning"}],
+            "suppliers": [],
+        },
+    ]
+    for row in rows:
+        enrich_work_priority(row)
+
+    assert build_builtin_view_counts(rows) == {
+        "critical-published": 1,
+        "stock-media": 1,
+        "household-no-series": 2,
+        "supplier-unmapped": 1,
+    }
