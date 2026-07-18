@@ -9,6 +9,7 @@ export type BotTaskResponse = {
     kind: 'stage' | 'order';
     id: number;
     order_id: number;
+    stage_id?: (number | null);
     title: string;
     status: string;
     start_time: string;
@@ -16,5 +17,6 @@ export type BotTaskResponse = {
     customer_name?: string;
     customer_phone?: (string | null);
     comment?: (string | null);
+    manager_url?: (string | null);
 };
 

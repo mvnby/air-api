@@ -149,6 +149,9 @@ async def list_internal_bot_my_tasks(
             session,
             telegram_id=payload.telegram_id,
             limit=payload.limit,
+            date_from=payload.date_from,
+            date_to=payload.date_to,
+            statuses=payload.statuses,
         )
     except BotTaskAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc

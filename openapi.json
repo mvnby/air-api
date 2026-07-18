@@ -21877,6 +21877,48 @@
             "minimum": 1.0,
             "title": "Limit",
             "default": 10
+          },
+          "date_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date From"
+          },
+          "date_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date To"
+          },
+          "statuses": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "planned",
+                "in_progress",
+                "completed",
+                "canceled",
+                "new_lead",
+                "negotiation",
+                "execution",
+                "closed"
+              ]
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Statuses"
           }
         },
         "type": "object",
@@ -21958,6 +22000,18 @@
             "minimum": 1.0,
             "title": "Order Id"
           },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -22008,6 +22062,17 @@
               }
             ],
             "title": "Comment"
+          },
+          "manager_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Url"
           }
         },
         "type": "object",
