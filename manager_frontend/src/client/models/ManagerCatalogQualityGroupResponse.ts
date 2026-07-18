@@ -11,3 +11,4 @@ export type ManagerCatalogQualityGroupResponse = {
     media_problem_products?: number;
     spec_problem_products?: number;
 };
+

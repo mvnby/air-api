@@ -10,3 +10,4 @@ export type ManagerCatalogQualityFilterOptionsResponse = {
     series?: Array<ManagerCatalogQualityFilterOptionResponse>;
     suppliers?: Array<ManagerCatalogQualityFilterOptionResponse>;
 };
+

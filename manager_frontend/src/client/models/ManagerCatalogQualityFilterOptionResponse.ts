@@ -8,3 +8,4 @@ export type ManagerCatalogQualityFilterOptionResponse = {
     count?: number;
     parent_value?: (string | null);
 };
+

@@ -11,3 +11,4 @@ export type ManagerCatalogQualitySupplierResponse = {
     wholesale_currency?: (string | null);
     updated_at?: (string | null);
 };
+
