@@ -27854,6 +27854,10 @@
             "type": "integer",
             "title": "Critical Products"
           },
+          "fixable_products": {
+            "type": "integer",
+            "title": "Fixable Products"
+          },
           "average_score": {
             "type": "integer",
             "title": "Average Score"
@@ -27913,6 +27917,7 @@
           "total_products",
           "problem_products",
           "critical_products",
+          "fixable_products",
           "average_score",
           "items",
           "summary",

@@ -13,6 +13,7 @@ export type ManagerCatalogQualityReportResponse = {
     total_products: number;
     problem_products: number;
     critical_products: number;
+    fixable_products: number;
     average_score: number;
     items: Array<ManagerCatalogQualityProductResponse>;
     summary: Array<ManagerCatalogQualitySummaryItemResponse>;

@@ -1762,6 +1762,7 @@ class ManagerCatalogQualityReportResponse(BaseModel):
     total_products: int
     problem_products: int
     critical_products: int
+    fixable_products: int
     average_score: int
     items: List[ManagerCatalogQualityProductResponse]
     summary: List[ManagerCatalogQualitySummaryItemResponse]
