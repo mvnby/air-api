@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import BankReceipt, Customer, LeadSource, Order, OrderDocument, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency
+from models import BankReceipt, Customer, LeadSource, Order, OrderDocument, OrderProposal, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptService
 from services.bank_statement_csv_service import BankStatementCsvService
@@ -1091,8 +1091,14 @@ async def test_send_order_email_attaches_documents_and_marks_offer_sent(sqlite_s
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
 
+    proposal = OrderProposal(order_id=order.id, name="Основное", status="ready_to_send", is_selected=True)
+    sqlite_session.add(proposal)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(proposal)
+
     offer = OrderDocument(
         order_id=order.id,
+        proposal_id=proposal.id,
         doc_type="offer",
         number="КП-2026-001",
         google_file_id="offer-file",
@@ -1138,6 +1144,8 @@ async def test_send_order_email_attaches_documents_and_marks_offer_sent(sqlite_s
     refreshed_order = await sqlite_session.get(Order, order.id)
     assert refreshed_order.proposal_status == "sent"
     assert refreshed_order.proposal_sent_at is not None
+    refreshed_proposal = await sqlite_session.get(OrderProposal, proposal.id)
+    assert refreshed_proposal.status == "sent"
 
     persisted_email = (await sqlite_session.execute(select(OutgoingEmail).where(OutgoingEmail.id == email_row.id))).scalar_one()
     assert persisted_email.recipient_email == "client@example.com"
@@ -1189,3 +1197,57 @@ async def test_send_order_email_without_offer_keeps_proposal_status(sqlite_sessi
     refreshed_order = await sqlite_session.get(Order, order.id)
     assert refreshed_order.proposal_status == "draft"
     assert refreshed_order.proposal_sent_at is None
+
+
+@pytest.mark.asyncio
+async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, monkeypatch):
+    monkeypatch.setattr(settings, "MAIL_SMTP_USERNAME", "a@mvn.by")
+    monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")
+    monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
+
+    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="negotiation", proposal_status="ready_to_send")
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    proposal = OrderProposal(order_id=order.id, name="Основное", status="ready_to_send", is_selected=True)
+    sqlite_session.add(proposal)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(proposal)
+    offer = OrderDocument(
+        order_id=order.id,
+        proposal_id=proposal.id,
+        doc_type="offer",
+        number="КП-2026-FAIL",
+        google_file_id="offer-file",
+        google_edit_url="https://docs.example/offer",
+    )
+    sqlite_session.add(offer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(offer)
+
+    async def fake_download(_session, doc_id: int):
+        return b"%PDF-1.4", f"document-{doc_id}.pdf"
+
+    monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
+    monkeypatch.setattr(MailSmtpService, "send_message", lambda _message: (_ for _ in ()).throw(OSError("SMTP unavailable")))
+
+    with pytest.raises(RuntimeError, match="SMTP unavailable"):
+        await MailSmtpService.send_order_email(
+            sqlite_session,
+            order_id=order.id,
+            to_email="client@example.com",
+            subject="Коммерческое предложение",
+            body_text="Здравствуйте",
+            document_ids=[offer.id],
+        )
+
+    refreshed_order = await sqlite_session.get(Order, order.id)
+    refreshed_proposal = await sqlite_session.get(OrderProposal, proposal.id)
+    assert refreshed_order.proposal_status == "ready_to_send"
+    assert refreshed_order.proposal_sent_at is None
+    assert refreshed_proposal.status == "ready_to_send"

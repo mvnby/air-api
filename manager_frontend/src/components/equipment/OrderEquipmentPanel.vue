@@ -60,6 +60,13 @@ let linksRequestId = 0;
 let customerEquipmentRequestId = 0;
 
 const count = computed(() => loaded.value ? links.value.length : Number(props.initialCount || 0));
+const countLabel = computed(() => {
+  const value = count.value;
+  const mod100 = value % 100;
+  const mod10 = value % 10;
+  const noun = mod100 >= 11 && mod100 <= 14 ? 'единиц' : mod10 === 1 ? 'единица' : mod10 >= 2 && mod10 <= 4 ? 'единицы' : 'единиц';
+  return `Оборудование: ${value} ${noun}`;
+});
 const linkedIds = computed(() => links.value.map((item) => item.equipment.id));
 
 const equipmentTitle = (item: ManagerOrderEquipmentLinkItemResponse['equipment']) => (
@@ -329,18 +336,21 @@ defineExpose({ expand, collapse });
 
 <template>
   <section class="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
-    <button type="button" class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60 sm:px-4" :aria-expanded="expanded" @click="toggle">
-      <Boxes class="h-5 w-5 shrink-0 text-teal-700 dark:text-teal-300" />
-      <span class="min-w-0 flex-1">
-        <span class="block text-sm font-semibold text-slate-900 dark:text-slate-100">Оборудование на объекте</span>
-        <span class="block truncate text-xs text-slate-500 dark:text-slate-400">
-          {{ count ? `${count} ед.` : 'Пока не привязано' }}
+    <div class="flex items-center gap-1 pr-2">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60 sm:px-4" :aria-expanded="expanded" @click="toggle">
+        <Boxes class="h-5 w-5 shrink-0 text-teal-700 dark:text-teal-300" />
+        <span class="min-w-0 flex-1">
+          <span class="block text-sm font-semibold text-slate-900 dark:text-slate-100">Оборудование на объекте</span>
+          <span class="block truncate text-xs text-slate-500 dark:text-slate-400">
+            {{ count ? countLabel : 'Оборудование не привязано' }}
+          </span>
         </span>
-      </span>
-      <span class="inline-flex min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ count }}</span>
-      <ChevronUp v-if="expanded" class="h-5 w-5 text-slate-500" />
-      <ChevronDown v-else class="h-5 w-5 text-slate-500" />
-    </button>
+        <span v-if="count" class="inline-flex min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ count }}</span>
+        <ChevronUp v-if="expanded" class="h-5 w-5 text-slate-500" />
+        <ChevronDown v-else class="h-5 w-5 text-slate-500" />
+      </button>
+      <button v-if="!count" type="button" class="btn-mini-outline h-8 shrink-0 px-2 text-xs" :disabled="Boolean(action)" @click="openLinkDialog">Привязать</button>
+    </div>
 
     <div v-if="expanded" class="border-t border-slate-200 px-3 pb-4 pt-3 dark:border-slate-700 sm:px-4">
       <div class="flex flex-wrap items-center gap-2">

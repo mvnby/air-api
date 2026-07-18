@@ -6,10 +6,12 @@ from email.utils import formataddr
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from core.config import settings
-from models import Order, OrderDocument, OutgoingEmail
+from models import Order, OrderDocument, OrderProposal, OutgoingEmail
 from services.document_service import DocumentService
+from services.order_proposal_lifecycle import PROPOSAL_STATUS_SENT, sync_selected_proposal_status
 
 
 @dataclass(frozen=True)
@@ -158,12 +160,15 @@ class MailSmtpService:
 
         attachments: List[MailAttachment] = []
         has_offer_document = False
+        offer_proposal_ids: set[int] = set()
         for doc_id in document_ids or []:
             doc = await session.get(OrderDocument, doc_id)
             if not doc or doc.order_id != order_id:
                 raise ValueError(f"Document {doc_id} not found on order")
             if doc.doc_type == "offer":
                 has_offer_document = True
+                if doc.proposal_id is not None:
+                    offer_proposal_ids.add(doc.proposal_id)
             stream, filename = await DocumentService.get_download_stream(session, doc_id)
             if not stream:
                 raise ValueError(f"Document {doc_id} cannot be downloaded")
@@ -182,8 +187,39 @@ class MailSmtpService:
             attachments=attachments,
         )
         if has_offer_document:
-            order.proposal_status = "sent"
-            order.proposal_sent_at = datetime.now()
+            sent_at = datetime.now()
+            if offer_proposal_ids:
+                proposals = list(
+                    (
+                        await session.execute(
+                            select(OrderProposal).where(
+                                OrderProposal.order_id == order_id,
+                                OrderProposal.id.in_(offer_proposal_ids),
+                            )
+                        )
+                    ).scalars().all()
+                )
+            else:
+                proposals = list(
+                    (
+                        await session.execute(
+                            select(OrderProposal).where(
+                                OrderProposal.order_id == order_id,
+                                OrderProposal.is_selected == True,
+                                OrderProposal.is_archived == False,
+                            )
+                        )
+                    ).scalars().all()
+                )
+            for proposal in proposals:
+                proposal.status = PROPOSAL_STATUS_SENT
+                sync_selected_proposal_status(order, proposal, now=sent_at)
+                session.add(proposal)
+            if not proposals:
+                order.proposal_status = PROPOSAL_STATUS_SENT
+                order.proposal_sent_at = sent_at
+                order.negotiation_status = "proposal_sent"
+                order.negotiation_status_changed_at = sent_at
             session.add(order)
             await session.commit()
             await session.refresh(email_row)

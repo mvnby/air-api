@@ -452,7 +452,6 @@ const buildBoardTransitionPayload = (order: ManagerOrderListItemResponse, column
     execution_without_payment: false,
     execution_without_payment_reason: null,
     measurement_required: column === 'awaiting_visit' ? true : undefined,
-    proposal_status: column === 'proposal_sent' ? 'sent' : column === 'awaiting_payment' ? 'approved' : undefined,
   };
 };
 
@@ -464,7 +463,6 @@ const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload)
   if (payload.execution_status !== undefined && payload.execution_status !== null) item.execution_status = payload.execution_status;
   if (payload.closing_result !== undefined) item.closing_result = payload.closing_result;
   if (payload.reject_reason !== undefined) item.reject_reason = payload.reject_reason;
-  if (payload.proposal_status !== undefined && payload.proposal_status !== null) item.proposal_status = payload.proposal_status;
   if (payload.measurement_required !== undefined && payload.measurement_required !== null) item.measurement_required = payload.measurement_required;
   if (payload.execution_without_payment !== undefined && payload.execution_without_payment !== null) item.execution_without_payment = payload.execution_without_payment;
   if (payload.execution_without_payment_reason !== undefined) item.execution_without_payment_reason = payload.execution_without_payment_reason;

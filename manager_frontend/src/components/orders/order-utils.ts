@@ -12,7 +12,7 @@ export const NEGOTIATION_STATUS_OPTIONS = [
     { value: 'awaiting_visit', label: 'Ждет выезд', icon: 'location_on', tone: 'violet' },
     { value: 'proposal_sent', label: 'Ожидаем ответ', icon: 'send', tone: 'amber' },
     { value: 'awaiting_payment', label: 'Ожидаем оплату', icon: 'payments', tone: 'emerald' },
-    { value: 'follow_up', label: 'Уточнить', icon: 'contact_phone', tone: 'slate' },
+    { value: 'follow_up', label: 'Требуется уточнение', icon: 'contact_phone', tone: 'slate' },
 ] as const;
 
 export const EXECUTION_STATUS_OPTIONS = [

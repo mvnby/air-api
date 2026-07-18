@@ -1056,7 +1056,6 @@ class DocumentService:
                 if order and order.status in ["new_lead", "measurement"]:
                     from models.common import OrderStatus
                     order.status = OrderStatus.NEGOTIATION
-                    order.proposal_status = "sent"
                     session.add(order)
 
             await session.commit()
