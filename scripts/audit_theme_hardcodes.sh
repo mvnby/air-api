@@ -2,4 +2,4 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-exec bash "$ROOT_DIR/web/scripts/audit-theme-hardcodes.sh"
+exec node "$ROOT_DIR/web/scripts/audit-theme-hardcodes.mjs"
