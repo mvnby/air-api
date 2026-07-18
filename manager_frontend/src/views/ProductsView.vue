@@ -176,6 +176,7 @@ const handleOnlinerImported = async (successCount: number) => {
 const pendingEditProductId = ref<number | null>(null);
 const pendingEditProductQuery = ref('');
 const pendingReturnTo = ref('');
+const pendingProductPanel = ref<'edit' | 'media'>('edit');
 const pendingEditHandled = ref(false);
 
 // Bulk Actions
@@ -723,7 +724,8 @@ const loadProducts = async () => {
           : null);
       if (target) {
         pendingEditHandled.value = true;
-        openEditModal(target);
+        if (pendingProductPanel.value === 'media') openSearchModal(target);
+        else openEditModal(target);
       } else if (searchQuery.value.trim()) {
         pendingEditHandled.value = true;
         setToast(`Товар #${pendingEditProductId.value} не найден`);
@@ -1418,6 +1420,7 @@ onMounted(() => {
     pendingEditProductId.value = Number.isFinite(parsedEditProductId) && parsedEditProductId > 0 ? parsedEditProductId : null;
     pendingEditProductQuery.value = params.get('editProductQuery') || '';
     pendingReturnTo.value = params.get('returnTo') || '';
+    pendingProductPanel.value = params.get('productPanel') === 'media' ? 'media' : 'edit';
     if (!searchQuery.value) {
         if (pendingEditProductQuery.value) {
             searchQuery.value = pendingEditProductQuery.value;

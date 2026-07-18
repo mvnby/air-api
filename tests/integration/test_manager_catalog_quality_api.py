@@ -64,6 +64,7 @@ async def test_catalog_quality_report_supports_normalized_workspace_filters(asyn
     payload = response.json()
     assert payload["meta"]["total"] == 1
     assert payload["total_products"] == 1
+    assert payload["fixable_products"] == 1
     assert payload["items"][0]["product_id"] == product.id
     assert payload["items"][0]["equipment_type"] == "cat-household"
     assert payload["groups"][0]["key"] == "equipment:cat-household"

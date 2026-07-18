@@ -264,6 +264,7 @@ class CatalogQualityService:
             for item in filtered
             if any(issue["severity"] == "critical" for issue in item["issues"])
         )
+        fixable_products = sum(1 for item in filtered if int(item.get("fixable_issue_count") or 0) > 0)
         severity_issue_counts = {severity_key: 0 for severity_key in ("critical", "warning", "info")}
         severity_product_counts = {severity_key: 0 for severity_key in ("critical", "warning", "info")}
         for item in filtered:
@@ -280,6 +281,7 @@ class CatalogQualityService:
             "total_products": total_filtered,
             "problem_products": problem_products,
             "critical_products": critical_products,
+            "fixable_products": fixable_products,
             "average_score": average_score,
             "items": page_items,
             "summary": summary,

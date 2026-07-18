@@ -43,6 +43,14 @@ const currentRelativeUrl = () => `${window.location.pathname}${window.location.s
 const generatedAt = computed(() => report.value?.generated_at
   ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(report.value.generated_at))
   : '');
+const selectedBrandTitle = computed(() => state.value.brandId
+  ? report.value?.filter_options.brands?.find((item) => item.value === state.value.brandId)?.label || ''
+  : '');
+const shouldSuggestSeriesGrouping = computed(() => Boolean(
+  state.value.brandId
+  && state.value.groupBy === 'none'
+  && (report.value?.filter_options.series?.filter((item) => item.parent_value === state.value.brandId).length || 0) > 1,
+));
 const productCountLabel = (value?: number | null) => {
   const count = Number(value || 0);
   const lastTwo = count % 100;
@@ -141,7 +149,7 @@ const deleteSavedView = (id: string) => {
   writeCatalogQualitySavedViews(window.localStorage, next);
 };
 
-const openProduct = (product: QualityProduct) => {
+const openProductPanel = (product: QualityProduct, panel: 'edit' | 'media') => {
   window.sessionStorage.setItem(SCROLL_STORAGE_KEY, JSON.stringify({
     url: currentRelativeUrl(),
     scrollY: window.scrollY,
@@ -149,10 +157,14 @@ const openProduct = (product: QualityProduct) => {
   const params = new URLSearchParams({
     editProductId: String(product.product_id),
     returnTo: currentRelativeUrl(),
+    productPanel: panel,
   });
   if (product.title) params.set('editProductQuery', product.title);
   window.location.href = `/manager/products?${params.toString()}`;
 };
+
+const openProduct = (product: QualityProduct) => openProductPanel(product, 'edit');
+const openProductMedia = (product: QualityProduct) => openProductPanel(product, 'media');
 
 const goToPage = (page: number) => {
   state.value = { ...state.value, page: Math.min(Math.max(1, page), totalPages.value) };
@@ -185,12 +197,12 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
 </script>
 
 <template>
-  <main class="min-h-screen bg-gray-50 pb-8 pt-12 text-gray-950 md:pt-4">
-    <div class="mx-auto max-w-[1600px] overflow-hidden border-y border-gray-200 bg-white shadow-sm md:rounded-xl md:border">
-      <header class="flex flex-col gap-3 border-b border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+  <main class="min-h-screen bg-gray-50 pb-8 pt-12 text-gray-950 dark:bg-slate-950 dark:text-slate-100 md:pt-4">
+    <div class="mx-auto max-w-[1600px] overflow-hidden border-y border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 md:rounded-xl md:border">
+      <header class="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div class="min-w-0">
-          <div class="flex items-center gap-2"><ShieldCheck class="h-6 w-6 text-teal-700" /><h1 class="text-xl font-bold">Качество каталога</h1></div>
-          <p class="mt-1 text-sm text-gray-500">Рабочая очередь карточек: контент, нормализация и готовность предложений.</p>
+          <div class="flex items-center gap-2"><ShieldCheck class="h-6 w-6 text-teal-700" /><h1 class="text-xl font-bold text-gray-950 dark:text-slate-100">Качество каталога</h1></div>
+          <p class="mt-1 hidden text-sm text-gray-500 dark:text-slate-400 sm:block">Рабочая очередь карточек: контент, нормализация и готовность предложений.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <span v-if="generatedAt" class="text-xs text-gray-400">Проверено {{ generatedAt }}</span>
@@ -214,25 +226,28 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
 
       <div v-if="error" class="border-b border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">Не удалось загрузить отчет: {{ error }}</div>
 
-      <section class="flex flex-col gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between sm:px-5">
+      <section class="sticky top-0 z-20 flex flex-col gap-2 border-b border-gray-200 bg-gray-50/95 px-4 py-2 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 lg:flex-row lg:items-center lg:justify-between sm:px-5">
         <div class="flex flex-wrap items-center gap-2 text-sm">
-          <strong>{{ productCountLabel(meta?.total) }}</strong>
+          <strong v-if="selectedBrandTitle" class="text-teal-800">{{ selectedBrandTitle }}</strong>
+          <span v-if="selectedBrandTitle" class="text-gray-400">·</span>
+          <strong class="text-gray-950 dark:text-slate-100">{{ productCountLabel(meta?.total) }}</strong>
           <span class="text-gray-400">·</span>
-          <span class="text-gray-500">страница {{ meta?.page || 1 }} из {{ totalPages }}</span>
+          <span class="text-gray-500 dark:text-slate-400">страница {{ meta?.page || 1 }} из {{ totalPages }}</span>
           <span v-if="loading" class="font-semibold text-teal-700">обновляем...</span>
+          <button v-if="shouldSuggestSeriesGrouping" class="h-8 rounded-lg bg-teal-50 px-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-100" @click="state.groupBy = 'series'">Сгруппировать по сериям</button>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <label class="flex items-center gap-2 text-xs font-semibold text-gray-500">Сортировка
-            <select v-model="state.sortBy" class="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800">
+          <label class="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-300">Сортировка
+            <select v-model="state.sortBy" class="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
               <option value="priority">По рабочему приоритету</option><option value="score_asc">Худший score</option><option value="critical">Критичные сначала</option><option value="stock">С наличием сначала</option><option value="newest">Новые сначала</option><option value="brand">По бренду</option><option value="series">По серии</option><option value="title">По названию</option>
             </select>
           </label>
-          <label class="flex items-center gap-2 text-xs font-semibold text-gray-500">Группа
-            <select v-model="state.groupBy" class="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800">
+          <label class="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-300">Группа
+            <select v-model="state.groupBy" class="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
               <option value="none">Без группировки</option><option value="brand">Бренд</option><option value="series">Серия</option><option value="supplier">Поставщик</option><option value="equipment_type">Тип оборудования</option>
             </select>
           </label>
-          <div class="inline-flex h-9 overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <div class="inline-flex h-9 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-900">
             <button class="grid w-9 place-items-center" :class="state.view === 'cards' ? 'bg-teal-600 text-white' : 'text-gray-500'" title="Карточки" @click="state.view = 'cards'"><Grid2X2 class="h-4 w-4" /></button>
             <button class="grid w-9 place-items-center" :class="state.view === 'table' ? 'bg-teal-600 text-white' : 'text-gray-500'" title="Таблица" @click="state.view = 'table'"><List class="h-4 w-4" /></button>
           </div>
@@ -242,7 +257,17 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
       <div v-if="loading && !report" class="grid gap-3 p-5 sm:grid-cols-2"><div v-for="index in 6" :key="index" class="h-36 animate-pulse rounded-lg bg-gray-100" /></div>
       <div v-else-if="report && !report.items.length" class="px-5 py-14 text-center"><ShieldCheck class="mx-auto h-10 w-10 text-emerald-600" /><h2 class="mt-3 text-lg font-bold">По этой выборке все чисто</h2><p class="mt-1 text-sm text-gray-500">Измените фильтры или включите карточки без проблем.</p></div>
       <template v-else-if="report">
-        <CatalogQualityCards v-if="state.view === 'cards'" :items="report.items" :groups="report.groups" :grouped="state.groupBy !== 'none'" @open="openProduct" @select-issue="selectIssue" />
+        <CatalogQualityCards
+          v-if="state.view === 'cards'"
+          :items="report.items"
+          :groups="report.groups"
+          :grouped="state.groupBy !== 'none'"
+          :selected-brand-title="selectedBrandTitle"
+          :hide-equipment-type="Boolean(state.equipmentType)"
+          :hide-series="Boolean(state.seriesId) || state.groupBy === 'series'"
+          @open="openProduct"
+          @open-media="openProductMedia"
+        />
         <CatalogQualityTable v-else :items="report.items" @open="openProduct" @select-issue="selectIssue" />
       </template>
 
