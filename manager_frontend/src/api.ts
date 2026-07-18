@@ -272,6 +272,31 @@ export interface ManagerProductFilterOptions {
     categoryStatus?: 'assigned' | 'missing';
 }
 
+export interface CatalogQualityReportParams {
+    page?: number;
+    limit?: number;
+    q?: string | null;
+    category?: 'media' | 'identity' | 'specs' | 'commerce' | 'supplier' | null;
+    severity?: 'critical' | 'warning' | 'info' | null;
+    issueCode?: string | null;
+    onlyProblems?: boolean;
+    equipmentType?: string | null;
+    equipmentSubtype?: string | null;
+    brandId?: number | null;
+    seriesId?: number | null;
+    seriesState?: 'assigned' | 'missing' | null;
+    supplierId?: number | null;
+    supplierState?: 'mapped' | 'in_stock' | 'unmapped' | 'multiple' | null;
+    publication?: 'published' | 'hidden' | null;
+    availability?: 'in_stock' | 'out_of_stock' | null;
+    priority?: 'high' | 'medium' | 'low' | null;
+    scoreMin?: number | null;
+    scoreMax?: number | null;
+    onlyFixable?: boolean;
+    sortBy?: 'priority' | 'score_asc' | 'critical' | 'stock' | 'newest' | 'title' | 'brand' | 'series';
+    groupBy?: 'none' | 'brand' | 'series' | 'supplier' | 'equipment_type';
+}
+
 export const api = {
     async login(username: string, password: string) {
         return await LoginService.loginAccessToken({ username, password });
@@ -289,15 +314,7 @@ export const api = {
         return await ManagerDashboardService.getDashboardStats();
     },
 
-    async getCatalogQualityReport(params: {
-        page?: number;
-        limit?: number;
-        q?: string | null;
-        category?: 'media' | 'identity' | 'specs' | 'commerce' | 'supplier' | null;
-        severity?: 'critical' | 'warning' | 'info' | null;
-        issueCode?: string | null;
-        onlyProblems?: boolean;
-    } = {}): Promise<ManagerCatalogQualityReportResponse> {
+    async getCatalogQualityReport(params: CatalogQualityReportParams = {}): Promise<ManagerCatalogQualityReportResponse> {
         return await ManagerCatalogQualityService.getManagerCatalogQualityReport(
             params.page ?? 1,
             params.limit ?? 50,
@@ -306,6 +323,21 @@ export const api = {
             params.severity ?? null,
             params.issueCode ?? null,
             params.onlyProblems ?? true,
+            params.equipmentType ?? null,
+            params.equipmentSubtype ?? null,
+            params.brandId ?? null,
+            params.seriesId ?? null,
+            params.seriesState ?? null,
+            params.supplierId ?? null,
+            params.supplierState ?? null,
+            params.publication ?? null,
+            params.availability ?? null,
+            params.priority ?? null,
+            params.scoreMin ?? null,
+            params.scoreMax ?? null,
+            params.onlyFixable ?? false,
+            params.sortBy ?? 'priority',
+            params.groupBy ?? 'none',
         );
     },
 

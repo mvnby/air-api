@@ -21,6 +21,12 @@ import {
   shouldOptimizeImageUpload,
 } from '../src/utils/image-upload-optimization';
 import { compactLegalName } from '../src/components/orders/order-utils';
+import {
+  applyCatalogQualityView,
+  createDefaultCatalogQualityState,
+  parseCatalogQualityState,
+  serializeCatalogQualityState,
+} from '../src/components/catalog-quality/catalog-quality-state';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -131,4 +137,23 @@ assert(
   'already compact legal names must remain unchanged',
 );
 
-console.log('Address and sticky header UI logic tests passed');
+const qualityState = parseCatalogQualityState(
+  '?equipmentType=cat-multi&brandId=7&seriesId=18&supplierState=in_stock&view=table&page=3&limit=100',
+);
+assert(qualityState.equipmentType === 'cat-multi', 'catalog quality equipment type must restore from URL');
+assert(qualityState.seriesId === '18', 'catalog quality series cascade must restore from URL');
+assert(qualityState.view === 'table' && qualityState.page === 3, 'catalog quality workspace state must restore from URL');
+const serializedQualityState = serializeCatalogQualityState(qualityState);
+assert(serializedQualityState.includes('equipmentType=cat-multi'), 'active catalog filters must be shareable in URL');
+assert(!serializedQualityState.includes('onlyProblems=true'), 'default catalog filters must stay out of URL');
+const invalidQualityState = parseCatalogQualityState('?view=broken&limit=13&page=-2&supplierState=broken');
+assert(invalidQualityState.view === 'cards' && invalidQualityState.limit === 50, 'invalid catalog URL values must fall back safely');
+const savedQualityView = applyCatalogQualityView(
+  { ...createDefaultCatalogQualityState(), view: 'table', limit: 100 },
+  { availability: 'in_stock', category: 'media', page: 9 },
+);
+assert(savedQualityView.availability === 'in_stock' && savedQualityView.category === 'media', 'saved catalog view must apply its filters');
+assert(savedQualityView.view === 'table' && savedQualityView.limit === 100, 'saved catalog view must preserve personal display preferences');
+assert(savedQualityView.page === 1, 'saved catalog view must restart pagination');
+
+console.log('Manager UI logic tests passed');
