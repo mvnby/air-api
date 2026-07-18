@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 BOT_UPLOAD_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+BOT_VOICE_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024
+BOT_VOICE_MAX_DURATION_SECONDS = 180
 
 
 class BotApiHealthResponse(BaseModel):
@@ -178,6 +180,11 @@ class BotQuickOrderParseRequest(BaseModel):
 
 
 class BotQuickOrderParseResponse(BaseModel):
+    draft: BotQuickOrderDraft
+
+
+class BotVoiceQuickOrderParseResponse(BaseModel):
+    transcript: str = Field(min_length=1, max_length=12_000)
     draft: BotQuickOrderDraft
 
 

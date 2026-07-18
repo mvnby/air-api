@@ -233,8 +233,11 @@ def test_remote_orchestrator_passes_token_over_stdin_not_command_line():
     text = SCRIPT.read_text(encoding="utf-8")
 
     assert "IFS= read -r GHCR_PAT" in text
+    assert "IFS= read -r BOT_VOICE_TRANSCRIPTION_API_KEY" in text
     assert "export GHCR_PAT" in text
     assert "GHCR_PAT='" not in text
+    assert "BOT_VOICE_TRANSCRIPTION_API_KEY='" not in text
+    assert "sync_bot_voice_env.py" in text
 
 
 def test_installed_role_agent_loads_its_pinned_sibling_module(tmp_path):

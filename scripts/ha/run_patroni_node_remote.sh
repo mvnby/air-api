@@ -29,6 +29,8 @@ DEPLOY_LOCK_HELPER_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha25
 DB_CONTRACT_HELPER_SOURCE="scripts/ha/patroni_compose_db_contract.py"
 TRANSACTION_SOURCE="scripts/compose_candidate_transaction.sh"
 BUNDLE_VERIFIER_SOURCE="scripts/ha/verify_patroni_remote_bundle.py"
+VOICE_ENV_SYNC_SOURCE="scripts/ha/sync_bot_voice_env.py"
+BOT_VOICE_TRANSCRIPTION_API_KEY="${BOT_VOICE_TRANSCRIPTION_API_KEY:-}"
 REMOTE_BUNDLE_DIR=""
 DEPLOY_CAPACITY_PROFILE=primary
 
@@ -86,6 +88,10 @@ if [[ "${OPERATION}" != "probe" ]]; then
     log error "BACKEND_IMAGE must be immutable"
     exit 1
   }
+  [[ -n "${BOT_VOICE_TRANSCRIPTION_API_KEY}" ]] || {
+    log error "BOT_VOICE_TRANSCRIPTION_API_KEY is required"
+    exit 1
+  }
 fi
 if [[ "${PROJECT_DIR}" == "/opt/mvn-reserve" ]]; then
   DEPLOY_CAPACITY_PROFILE=reserve
@@ -108,7 +114,8 @@ fi
 if [[ "${OPERATION}" != "probe" ]]; then
   [[ -f "${CANDIDATE_RUNNER_SOURCE}" && -f "${TRANSACTION_SOURCE}" \
     && -f "${DEPLOY_CAPACITY_HELPER_SOURCE}" \
-    && -f "${DEPLOY_LOCK_HELPER_SOURCE}" && -f "${BUNDLE_VERIFIER_SOURCE}" ]] || {
+    && -f "${DEPLOY_LOCK_HELPER_SOURCE}" && -f "${BUNDLE_VERIFIER_SOURCE}" \
+    && -f "${VOICE_ENV_SYNC_SOURCE}" && ! -L "${VOICE_ENV_SYNC_SOURCE}" ]] || {
     log error "compose candidate transaction scripts are missing"
     exit 1
   }
@@ -215,6 +222,7 @@ BUNDLE_SOURCES=(
   "${DEPLOY_LOCK_HELPER_SOURCE}"
   "${DEPLOY_CAPACITY_HELPER_SOURCE}"
   "${TRANSACTION_SOURCE}"
+  "${VOICE_ENV_SYNC_SOURCE}"
 )
 if [[ "${OPERATION}" == "deploy" ]]; then
   BUNDLE_SOURCES+=(
@@ -234,6 +242,7 @@ BUNDLE_VERIFIER_CODE="$(<"${BUNDLE_VERIFIER_SOURCE}")"
 ROLE_AGENT_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_role_agent.py"
 ROLE_IDENTITY_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_local_identity.py"
 DB_CONTRACT_HELPER_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_compose_db_contract.py"
+VOICE_ENV_SYNC_REMOTE="${REMOTE_BUNDLE_DIR}/sync_bot_voice_env.py"
 REMOTE_COMPOSE_SOURCE="${REMOTE_BUNDLE_DIR}/$(basename "${COMPOSE_SOURCE}")"
 scp "${SSH_OPTS[@]}" "${BUNDLE_SOURCES[@]}" "${REMOTE}:${REMOTE_BUNDLE_DIR}/"
 
@@ -245,15 +254,20 @@ if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
 fi
 
 log "${OPERATION}" "running ${OPERATION} on ${NODE_HOST}"
-printf '%s\n' "${GHCR_PAT:-}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
+printf '%s\n%s\n' "${GHCR_PAT:-}" "${BOT_VOICE_TRANSCRIPTION_API_KEY}" | ssh "${SSH_OPTS[@]}" "${REMOTE}" "
   set -euo pipefail
   IFS= read -r GHCR_PAT
+  IFS= read -r BOT_VOICE_TRANSCRIPTION_API_KEY
   export GHCR_PAT
   trap $(quote "rm -rf -- ${REMOTE_BUNDLE_DIR}") EXIT
   python3 -I -c $(quote "${BUNDLE_VERIFIER_CODE}") verify \
     $(quote "${REMOTE_BUNDLE_DIR}") $(quote "${BUNDLE_MANIFEST_B64}")
   chmod 0755 $(quote "${REMOTE_BUNDLE_DIR}")/*.sh \
     $(quote "${REMOTE_BUNDLE_DIR}/safe_deploy_lock.py")
+  printf '%s' \"\${BOT_VOICE_TRANSCRIPTION_API_KEY}\" | \
+    python3 -I $(quote "${VOICE_ENV_SYNC_REMOTE}") \
+      --env-file $(quote "${PROJECT_DIR}/.env")
+  unset BOT_VOICE_TRANSCRIPTION_API_KEY
   API_PROJECT_DIR=$(quote "${PROJECT_DIR}") \
   API_EXPECTED_PATRONI_ROLE=$(quote "${EXPECTED_ROLE}") \
   API_READY_URL=http://127.0.0.1:18080/api/ready \

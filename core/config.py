@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     BOT_API_TIMEOUT_SECONDS: float = 5.0
     MANAGER_BASE_URL: str = "https://api.mvn.by/manager"
     BOT_TASK_TIMEZONE: str = "Europe/Minsk"
+    BOT_VOICE_TRANSCRIPTION_ENABLED: bool = False
+    BOT_VOICE_TRANSCRIPTION_API_URL: str = (
+        "https://api.groq.com/openai/v1/audio/transcriptions"
+    )
+    BOT_VOICE_TRANSCRIPTION_API_KEY: str = ""
+    BOT_VOICE_TRANSCRIPTION_MODEL: str = "whisper-large-v3-turbo"
+    BOT_VOICE_TRANSCRIPTION_TIMEOUT_SECONDS: float = 30.0
     ADMIN_IDS: str = ""
     ADMIN_ID: int = 0
     SECRET_KEY: str
