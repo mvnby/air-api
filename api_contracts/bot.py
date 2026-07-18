@@ -392,3 +392,80 @@ class BotRuntimeLeaseResponse(BaseModel):
     owner_id: str
     acquired: bool
     expires_at: datetime | None = None
+
+
+class BotStaffNotificationPayload(BaseModel):
+    event_kind: Literal[
+        "assigned", "rescheduled", "canceled", "departure_reminder"
+    ]
+    staff_user_id: int = Field(ge=1)
+    stage_id: int = Field(ge=1)
+    order_id: int = Field(ge=1)
+    stage_name: str
+    status: str
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    timezone: Literal["Europe/Minsk"] = "Europe/Minsk"
+    address: str | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    manager_url: str
+    change_fields: list[
+        Literal["assignee", "start_time", "end_time", "address"]
+    ] = Field(default_factory=list)
+    reminder_offset_minutes: int | None = None
+
+
+class BotStaffNotificationClaimRequest(BaseModel):
+    worker_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    visibility_timeout_seconds: int = Field(default=90, ge=30, le=900)
+
+
+class BotStaffNotificationItem(BaseModel):
+    delivery_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    event_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    telegram_id: int
+    payload: BotStaffNotificationPayload
+    attempt: int = Field(ge=1)
+    max_attempts: int = Field(ge=1)
+    lease_token: str = Field(min_length=32, max_length=255)
+    lease_expires_at: datetime
+
+
+class BotStaffNotificationClaimResponse(BaseModel):
+    notification: BotStaffNotificationItem | None = None
+
+
+class BotStaffNotificationLeaseRequest(BaseModel):
+    worker_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    lease_token: str = Field(min_length=32, max_length=255)
+
+
+class BotStaffNotificationRenewRequest(BotStaffNotificationLeaseRequest):
+    visibility_timeout_seconds: int = Field(default=90, ge=30, le=900)
+
+
+class BotStaffNotificationAckRequest(BotStaffNotificationLeaseRequest):
+    telegram_message_id: int = Field(ge=1)
+    provider_latency_ms: int | None = Field(default=None, ge=0, le=300_000)
+
+
+class BotStaffNotificationNackRequest(BotStaffNotificationLeaseRequest):
+    permanent: bool = False
+    error_code: str = Field(min_length=1, max_length=100)
+    retry_after_seconds: int | None = Field(default=None, ge=1, le=3600)
+
+
+class BotStaffNotificationMutationResponse(BaseModel):
+    delivery_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    status: Literal["running", "sent", "retry", "dead"]
+    lease_expires_at: datetime | None = None
+    next_attempt_at: datetime | None = None

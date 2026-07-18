@@ -153,7 +153,9 @@ class CommunicationRecipientV1(_ContractV1):
 
 class CommunicationTemplatePlanV1(_ContractV1):
     channel: Literal["telegram"] = "telegram"
-    audience: Literal["management", "operations_canary"] = "management"
+    audience: Literal["management", "operations_canary", "staff_assignee"] = (
+        "management"
+    )
     template_key: str = Field(
         min_length=3,
         max_length=120,

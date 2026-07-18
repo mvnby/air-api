@@ -152,6 +152,9 @@ class SchedulerService:
         # Build internal equipment maintenance reminders once a day.
         tasks.append(asyncio.create_task(self._equipment_maintenance_reminder_loop()))
 
+        # Materialize idempotent staff departure reminders every five minutes.
+        tasks.append(asyncio.create_task(self._staff_task_departure_reminder_loop()))
+
         # Run bank receipt IMAP import loop
         tasks.append(asyncio.create_task(self._bank_mail_import_loop()))
 
@@ -314,6 +317,28 @@ class SchedulerService:
             except Exception:
                 logger.exception("Equipment maintenance reminder loop error")
                 await asyncio.sleep(3600)
+
+    async def _staff_task_departure_reminder_loop(self):
+        from services.staff_task_notification_event_service import (
+            StaffTaskNotificationEventService,
+        )
+
+        while True:
+            try:
+                async with async_session_maker() as session:
+                    created = (
+                        await StaffTaskNotificationEventService.enqueue_departure_reminders(
+                            session,
+                            offset_minutes=120,
+                            scan_window_minutes=10,
+                        )
+                    )
+                    await session.commit()
+                if created:
+                    logger.info("Staff departure reminders enqueued: %s", created)
+            except Exception:
+                logger.exception("Staff departure reminder loop error")
+            await asyncio.sleep(5 * 60)
 
     async def _bank_mail_import_loop(self):
         while True:

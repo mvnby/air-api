@@ -16,6 +16,15 @@ from services.communications.templates.website import (
     render_website_contact_lead_v1,
     render_website_order_v1,
 )
+from services.communications.staff_task_contracts import (
+    STAFF_TASK_EVENT_TYPE_VALUES,
+    STAFF_TASK_TEMPLATE_KEY_VALUES,
+)
+from services.communications.staff_task_templates import (
+    plan_staff_task_event,
+    render_staff_task_v1,
+    validate_staff_task_template,
+)
 
 
 PUBLIC_ORDER_CREATED_EVENT = "crm.public_order.created"
@@ -32,6 +41,7 @@ SUPPORTED_EVENT_TYPES = {
     PUBLIC_ORDER_CREATED_EVENT,
     PUBLIC_CONTACT_LEAD_CREATED_EVENT,
     TELEGRAM_CANARY_REQUESTED_EVENT,
+    *STAFF_TASK_EVENT_TYPE_VALUES,
 }
 
 ORDER_TEMPLATE_KEY = "telegram.website_order_created"
@@ -105,6 +115,17 @@ class WebsiteTemplateRegistry:
                     render_context
                 )
                 audience = "operations_canary"
+            elif template_key in STAFF_TASK_TEMPLATE_KEY_VALUES:
+                try:
+                    payload = validate_staff_task_template(
+                        template_key=template_key,
+                        render_context=render_context,
+                    )
+                except (ValidationError, ValueError) as exc:
+                    raise InvalidCommunicationEventPayload(
+                        f"Invalid render context for {template_key} v{template_version}"
+                    ) from exc
+                audience = "staff_assignee"
             else:
                 raise UnsupportedCommunicationEvent(
                     f"Unsupported communication template {template_key!r}"
@@ -157,6 +178,16 @@ class WebsiteTemplateRegistry:
                         "Invalid fixed Telegram canary metadata"
                     )
                 template_key = TELEGRAM_CANARY_TEMPLATE_KEY
+            elif event.event_type in STAFF_TASK_EVENT_TYPE_VALUES:
+                try:
+                    template_key, payload = plan_staff_task_event(
+                        event_type=event.event_type,
+                        payload=event.payload,
+                    )
+                except (ValidationError, ValueError) as exc:
+                    raise InvalidCommunicationEventPayload(
+                        f"Invalid payload for {event.event_type} schema v{event.schema_version}"
+                    ) from exc
             else:
                 raise UnsupportedCommunicationEvent(
                     f"Unsupported communication event {event.event_type!r}"
@@ -189,6 +220,12 @@ class WebsiteTemplateRegistry:
                     "Telegram canary template requires operations_canary audience"
                 )
             return render_telegram_canary_v1(plan.render_context)
+        if plan.template_key in STAFF_TASK_TEMPLATE_KEY_VALUES:
+            payload = validate_staff_task_template(
+                template_key=plan.template_key,
+                render_context=plan.render_context,
+            )
+            return render_staff_task_v1(payload)
         raise UnsupportedCommunicationEvent(
             f"Unsupported communication template {plan.template_key!r}"
         )
