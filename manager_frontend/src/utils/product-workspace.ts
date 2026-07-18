@@ -44,8 +44,8 @@ export const getProductWorkspaceNeighbors = (
   const index = productIds.indexOf(currentProductId);
   if (index < 0) return { previousId: null, nextId: null };
   return {
-    previousId: index > 0 ? productIds[index - 1] : null,
-    nextId: index < productIds.length - 1 ? productIds[index + 1] : null,
+    previousId: index > 0 ? (productIds[index - 1] ?? null) : null,
+    nextId: index < productIds.length - 1 ? (productIds[index + 1] ?? null) : null,
   };
 };
 
