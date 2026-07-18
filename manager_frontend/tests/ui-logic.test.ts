@@ -39,10 +39,17 @@ import {
   serializeCatalogQualityState,
 } from '../src/components/catalog-quality/catalog-quality-state';
 import { countLabel } from '../src/components/catalog-quality/catalog-quality-copy';
+import { navSections } from '../src/manager-navigation';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
 };
+
+assert(
+  navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')
+    === 'Кондиционеры|Бренды|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
+  'catalog navigation must follow the product data workflow',
+);
 
 assert(ADDRESS_SUGGEST_DEBOUNCE_MS === 800, 'address debounce must remain 800 ms');
 assert(

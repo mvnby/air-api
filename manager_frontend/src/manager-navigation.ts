@@ -52,13 +52,13 @@ export const navSections: NavSection[] = [
     label: 'Каталог',
     items: [
       { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix' },
-      { path: '/manager/catalog-quality', label: 'Качество каталога', icon: ShieldCheck, match: 'prefix' },
-      { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix' },
-      { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix' },
-      { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix' },
       { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix' },
-      { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix' },
+      { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix' },
+      { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix' },
+      { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix' },
+      { path: '/manager/catalog-quality', label: 'Качество каталога', icon: ShieldCheck, match: 'prefix' },
       { path: '/manager/media', label: 'Медиатека', icon: ImageIcon, match: 'exact' },
+      { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix' },
     ],
   },
   {
