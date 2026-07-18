@@ -797,6 +797,10 @@ export const api = {
         );
     },
 
+    async getManagerProduct(productId: number): Promise<Product> {
+        return await ManagerService.getManagerProduct(productId);
+    },
+
     async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = false) {
         return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined, onlyWithOrders);
     },

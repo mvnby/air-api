@@ -39,3 +39,41 @@ async def test_manager_products_list_can_show_unpublished_product(async_client, 
     items = response.json()["items"]
     match = next(item for item in items if item["id"] == product.id)
     assert match["is_published"] is False
+
+
+@pytest.mark.asyncio
+async def test_manager_product_detail_can_open_unpublished_product(async_client, db):
+    headers = await _auth_headers(async_client)
+    product = Product(
+        title="Workspace Draft Product",
+        slug="workspace-draft-product",
+        price=1250,
+        area=32,
+        is_published=False,
+    )
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+
+    response = await async_client.get(
+        f"/api/manager/products/{product.id}",
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["id"] == product.id
+    assert payload["title"] == "Workspace Draft Product"
+    assert payload["is_published"] is False
+
+
+@pytest.mark.asyncio
+async def test_manager_product_detail_returns_not_found(async_client):
+    headers = await _auth_headers(async_client)
+
+    response = await async_client.get(
+        "/api/manager/products/99999999",
+        headers=headers,
+    )
+
+    assert response.status_code == 404

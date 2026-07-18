@@ -36,6 +36,77 @@ class ProductManagerService:
         ]
 
     @staticmethod
+    def _serialize_manager_product(
+        product: Product,
+        supply_metrics: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "id": product.id,
+            "brand_id": product.brand_id,
+            "series_id": product.series_id,
+            "title": product.title,
+            "slug": product.slug,
+            "price": product.price,
+            "old_price": product.old_price,
+            "area": product.area,
+            "is_inverter": product.is_inverter,
+            "power_cooling": product.power_cooling,
+            "main_image": product.main_image,
+            "is_published": product.is_published,
+            "created_at": product.created_at.isoformat() if product.created_at else None,
+            "specs": sanitize_specs(product.specs),
+            "gallery_images": [
+                {
+                    "id": image.id,
+                    "url": image.url,
+                    "is_installation_photo": image.is_installation_photo,
+                }
+                for image in (product.gallery_images or [])
+            ],
+            "manuals": ProductManagerService._serialize_manuals(product),
+            "tags": [
+                {
+                    "id": tag.id,
+                    "title": tag.title,
+                    "slug": tag.slug,
+                    "group_title": tag.group.title if tag.group else None,
+                    "group_color": tag.group.color if tag.group else "secondary",
+                }
+                for tag in (product.tags or [])
+            ],
+            "min_cost_byn": supply_metrics.get("min_cost_byn"),
+            "recommended_price_byn": supply_metrics.get("recommended_price_byn"),
+            "margin_abs_preview": supply_metrics.get("margin_abs_preview"),
+            "margin_pct_preview": supply_metrics.get("margin_pct_preview"),
+            "vitebsk_qty": supply_metrics.get("vitebsk_qty", 0),
+            "minsk_qty": supply_metrics.get("minsk_qty", 0),
+            "availability_status": supply_metrics.get("availability_status", "out_of_stock"),
+        }
+
+    @staticmethod
+    async def get_manager_product(
+        session: AsyncSession,
+        product_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        result = await session.execute(
+            select(Product)
+            .options(
+                selectinload(Product.tags).selectinload(Tag.group),
+                selectinload(Product.gallery_images),
+                selectinload(Product.attachments),
+            )
+            .where(Product.id == product_id)
+        )
+        product = result.scalars().first()
+        if not product:
+            return None
+        supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, [product])
+        return ProductManagerService._serialize_manager_product(
+            product,
+            supply_metrics.get(product.id, {}),
+        )
+
+    @staticmethod
     async def smart_search(
         session: AsyncSession,
         q: str,
@@ -191,52 +262,13 @@ class ProductManagerService:
         )
         supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, list(items))
 
-        formatted_items = []
-        for p in items:
-            formatted_items.append(
-                {
-                    "id": p.id,
-                    "brand_id": p.brand_id,
-                    "series_id": p.series_id,
-                    "title": p.title,
-                    "slug": p.slug,
-                    "price": p.price,
-                    "old_price": p.old_price,
-                    "area": p.area,
-                    "is_inverter": p.is_inverter,
-                    "power_cooling": p.power_cooling,
-                    "main_image": p.main_image,
-                    "is_published": p.is_published,
-                    "created_at": p.created_at.isoformat() if p.created_at else None,
-                    "specs": sanitize_specs(p.specs),
-                    "gallery_images": [
-                        {
-                            "id": img.id,
-                            "url": img.url,
-                            "is_installation_photo": img.is_installation_photo,
-                        }
-                        for img in (p.gallery_images or [])
-                    ],
-                    "manuals": ProductManagerService._serialize_manuals(p),
-                    "tags": [
-                        {
-                            "id": t.id,
-                            "title": t.title,
-                            "slug": t.slug,
-                            "group_title": t.group.title if t.group else None,
-                            "group_color": t.group.color if t.group else "secondary",
-                        }
-                        for t in (p.tags or [])
-                    ],
-                    "min_cost_byn": supply_metrics.get(p.id, {}).get("min_cost_byn"),
-                    "recommended_price_byn": supply_metrics.get(p.id, {}).get("recommended_price_byn"),
-                    "margin_abs_preview": supply_metrics.get(p.id, {}).get("margin_abs_preview"),
-                    "margin_pct_preview": supply_metrics.get(p.id, {}).get("margin_pct_preview"),
-                    "vitebsk_qty": supply_metrics.get(p.id, {}).get("vitebsk_qty", 0),
-                    "minsk_qty": supply_metrics.get(p.id, {}).get("minsk_qty", 0),
-                    "availability_status": supply_metrics.get(p.id, {}).get("availability_status", "out_of_stock"),
-                }
+        formatted_items = [
+            ProductManagerService._serialize_manager_product(
+                product,
+                supply_metrics.get(product.id, {}),
             )
+            for product in items
+        ]
 
         return {
             "items": formatted_items,

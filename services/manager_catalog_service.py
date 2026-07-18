@@ -18,6 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 class ManagerCatalogService:
     @staticmethod
+    async def get_product(
+        session: AsyncSession,
+        *,
+        product_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        return await ProductService.get_manager_product(session, product_id)
+
+    @staticmethod
     async def list_products(
         session: AsyncSession,
         *,

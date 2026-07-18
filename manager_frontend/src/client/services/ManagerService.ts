@@ -26,6 +26,7 @@ import type { ManagerBulkSetRrcPriceResponse } from '../models/ManagerBulkSetRrc
 import type { ManagerBulkSpecsResponse } from '../models/ManagerBulkSpecsResponse';
 import type { ManagerCatalogCustomerItemResponse } from '../models/ManagerCatalogCustomerItemResponse';
 import type { ManagerCatalogCustomerListResponse } from '../models/ManagerCatalogCustomerListResponse';
+import type { ManagerCatalogProductItemResponse } from '../models/ManagerCatalogProductItemResponse';
 import type { ManagerCatalogProductListResponse } from '../models/ManagerCatalogProductListResponse';
 import type { ManagerCustomerBranchCreatePayload } from '../models/ManagerCustomerBranchCreatePayload';
 import type { ManagerCustomerBranchItemResponse } from '../models/ManagerCustomerBranchItemResponse';
@@ -171,6 +172,71 @@ export class ManagerService {
                 'category_slug': categorySlug,
                 'category_status': categoryStatus,
                 'sort': sort,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Product For Manager
+     * @param productId
+     * @returns ManagerCatalogProductItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerProduct(
+        productId: number,
+    ): CancelablePromise<ManagerCatalogProductItemResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Product
+     * Update individual product fields.
+     * @param productId
+     * @param requestBody
+     * @returns ManagerActionMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static updateProduct(
+        productId: number,
+        requestBody: ProductUpdate,
+    ): CancelablePromise<ManagerActionMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Product
+     * @param productId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteManagerProduct(
+        productId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/products/{product_id}',
+            path: {
+                'product_id': productId,
             },
             errors: {
                 422: `Validation Error`,
@@ -528,51 +594,6 @@ export class ManagerService {
             },
             body: requestBody,
             mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Update Product
-     * Update individual product fields.
-     * @param productId
-     * @param requestBody
-     * @returns ManagerActionMessageResponse Successful Response
-     * @throws ApiError
-     */
-    public static updateProduct(
-        productId: number,
-        requestBody: ProductUpdate,
-    ): CancelablePromise<ManagerActionMessageResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/manager/products/{product_id}',
-            path: {
-                'product_id': productId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Delete Product
-     * @param productId
-     * @returns any Successful Response
-     * @throws ApiError
-     */
-    public static deleteManagerProduct(
-        productId: number,
-    ): CancelablePromise<any> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/manager/products/{product_id}',
-            path: {
-                'product_id': productId,
-            },
             errors: {
                 422: `Validation Error`,
             },
