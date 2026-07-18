@@ -32,6 +32,8 @@ import {
 } from '../src/components/orders/proposal-lifecycle';
 import {
   applyCatalogQualityView,
+  catalogQualityStateMatchesView,
+  catalogQualityViewFiltersFromState,
   createDefaultCatalogQualityState,
   parseCatalogQualityState,
   serializeCatalogQualityState,
@@ -165,6 +167,14 @@ const savedQualityView = applyCatalogQualityView(
 assert(savedQualityView.availability === 'in_stock' && savedQualityView.category === 'media', 'saved catalog view must apply its filters');
 assert(savedQualityView.view === 'table' && savedQualityView.limit === 100, 'saved catalog view must preserve personal display preferences');
 assert(savedQualityView.page === 1, 'saved catalog view must restart pagination');
+const qualityView = {
+  id: 'custom-quality',
+  name: 'KINGHOME media',
+  filters: catalogQualityViewFiltersFromState(savedQualityView),
+};
+assert(catalogQualityStateMatchesView(savedQualityView, qualityView), 'saved catalog view must match its source filters');
+assert(!catalogQualityStateMatchesView({ ...savedQualityView, brandId: '4' }, qualityView), 'changed filters must mark applied view as changed');
+assert(!('page' in qualityView.filters) && !('view' in qualityView.filters), 'saved view must not persist pagination or display mode');
 assert(countLabel(1, 'поставщик', 'поставщика', 'поставщиков') === '1 поставщик', 'catalog counts must use singular form');
 assert(countLabel(3, 'поставщик', 'поставщика', 'поставщиков') === '3 поставщика', 'catalog counts must use paucal form');
 assert(countLabel(12, 'поставщик', 'поставщика', 'поставщиков') === '12 поставщиков', 'catalog counts must use plural form');

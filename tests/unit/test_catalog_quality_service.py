@@ -184,6 +184,10 @@ def test_priority_sort_and_series_groups_are_transparent():
             "work_priority": "medium",
             "work_priority_score": 20,
             "critical_issue_count": 0,
+            "available_qty": 2,
+            "main_image": "/media/shared.webp",
+            "main_image_width": 340,
+            "main_image_height": 104,
             "issues": [],
         },
         {
@@ -195,6 +199,10 @@ def test_priority_sort_and_series_groups_are_transparent():
             "work_priority": "high",
             "work_priority_score": 180,
             "critical_issue_count": 1,
+            "available_qty": 0,
+            "main_image": "/media/shared.webp",
+            "main_image_width": 340,
+            "main_image_height": 104,
             "issues": [{"category": "media", "severity": "critical"}],
         },
     ]
@@ -207,8 +215,12 @@ def test_priority_sort_and_series_groups_are_transparent():
             "count": 2,
             "average_score": 76,
             "critical_products": 1,
+            "in_stock_products": 1,
             "media_problem_products": 1,
             "spec_problem_products": 0,
+            "shared_main_image_products": 2,
+            "shared_main_image_width": 340,
+            "shared_main_image_height": 104,
         }
     ]
 

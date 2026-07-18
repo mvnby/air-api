@@ -1719,8 +1719,12 @@ class ManagerCatalogQualityGroupResponse(BaseModel):
     count: int
     average_score: int
     critical_products: int = 0
+    in_stock_products: int = 0
     media_problem_products: int = 0
     spec_problem_products: int = 0
+    shared_main_image_products: int = 0
+    shared_main_image_width: Optional[int] = None
+    shared_main_image_height: Optional[int] = None
 
 
 class ManagerCatalogQualityProductResponse(BaseModel):

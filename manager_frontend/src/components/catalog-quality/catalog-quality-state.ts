@@ -130,6 +130,27 @@ export const applyCatalogQualityView = (
   page: 1,
 });
 
+const catalogQualityViewComparisonKeys: Array<keyof CatalogQualityFilterState> = [
+  'q', 'equipmentType', 'equipmentSubtype', 'brandId', 'seriesId', 'seriesState',
+  'supplierId', 'supplierState', 'publication', 'availability', 'priority',
+  'scoreMin', 'scoreMax', 'category', 'severity', 'issueCode', 'onlyProblems',
+  'onlyFixable', 'sortBy', 'groupBy',
+];
+
+export const catalogQualityStateMatchesView = (
+  state: CatalogQualityFilterState,
+  view: CatalogQualitySavedView,
+) => {
+  const target = { ...createDefaultCatalogQualityState(), ...view.filters };
+  return catalogQualityViewComparisonKeys.every((key) => state[key] === target[key]);
+};
+
+export const catalogQualityViewFiltersFromState = (
+  state: CatalogQualityFilterState,
+): Partial<CatalogQualityFilterState> => Object.fromEntries(
+  catalogQualityViewComparisonKeys.map((key) => [key, state[key]]),
+) as Partial<CatalogQualityFilterState>;
+
 export const catalogQualityBuiltinViews: CatalogQualitySavedView[] = [
   {
     id: 'critical-published',
