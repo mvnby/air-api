@@ -20,6 +20,7 @@ export type ManagerCatalogQualityReportResponse = {
     categories: Array<ManagerCatalogQualityCategoryResponse>;
     groups?: Array<ManagerCatalogQualityGroupResponse>;
     filter_options: ManagerCatalogQualityFilterOptionsResponse;
+    builtin_view_counts?: Record<string, number>;
     severity_issue_counts?: Record<string, number>;
     severity_product_counts?: Record<string, number>;
     meta: Meta;

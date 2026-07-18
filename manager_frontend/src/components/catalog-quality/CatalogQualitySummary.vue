@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { AlertTriangle, Image as ImageIcon, ListChecks, PackageCheck, ShieldCheck, Truck } from 'lucide-vue-next';
 import type { ManagerCatalogQualityReportResponse } from '../../api';
+import { countLabel } from './catalog-quality-copy';
 
 const props = defineProps<{
   report: ManagerCatalogQualityReportResponse;
@@ -8,6 +10,19 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ selectIssue: [code: string] }>();
+
+const summaryGroups = computed(() => [
+  {
+    key: 'content',
+    label: 'Контент',
+    items: props.report.summary.filter((item) => ['media', 'identity', 'specs'].includes(item.category)),
+  },
+  {
+    key: 'commercial',
+    label: 'Коммерческая готовность',
+    items: props.report.summary.filter((item) => ['commerce', 'supplier'].includes(item.category)),
+  },
+].filter((group) => group.items.length));
 
 const formatNumber = (value?: number | null) => new Intl.NumberFormat('ru-RU').format(Number(value || 0));
 const categoryIcon = (category: string) => {
@@ -36,20 +51,22 @@ const severityTone = (severity: string) => {
       <div><p class="text-[11px] font-semibold uppercase text-teal-700">Исправимо здесь</p><p class="text-lg font-bold text-teal-800">{{ formatNumber(report.fixable_products) }}</p></div>
     </div>
 
-    <div v-if="report.summary.length" class="mt-3 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-3 dark:border-slate-700">
-      <span class="mr-1 text-xs font-semibold text-gray-500 dark:text-slate-400">Главные причины:</span>
-      <button
-        v-for="item in report.summary.slice(0, 6)"
-        :key="item.code"
-        class="inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold transition hover:brightness-95"
-        :class="[severityTone(item.severity), selectedIssueCode === item.code ? 'ring-2 ring-teal-500 ring-offset-1' : '']"
-        :title="`Показать ${formatNumber(item.count)} карточек с этой проблемой`"
-        @click="emit('selectIssue', item.code)"
-      >
-        <component :is="categoryIcon(item.category)" class="h-3.5 w-3.5" />
-        <span>{{ item.label }}</span>
-        <strong>{{ formatNumber(item.count) }}</strong>
-      </button>
+    <div v-if="report.summary.length" class="mt-3 grid gap-2 border-t border-gray-100 pt-3 dark:border-slate-700 lg:grid-cols-2">
+      <div v-for="group in summaryGroups" :key="group.key" class="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span class="mr-1 text-xs font-semibold text-gray-500 dark:text-slate-400">{{ group.label }}:</span>
+        <button
+          v-for="item in group.items.slice(0, 4)"
+          :key="item.code"
+          class="inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold transition hover:brightness-95"
+          :class="[severityTone(item.severity), selectedIssueCode === item.code ? 'ring-2 ring-teal-500 ring-offset-1' : '']"
+          :title="`Показать ${countLabel(item.count, 'карточку', 'карточки', 'карточек')} с этой проблемой`"
+          @click="emit('selectIssue', item.code)"
+        >
+          <component :is="categoryIcon(item.category)" class="h-3.5 w-3.5" />
+          <span>{{ item.label }}</span>
+          <strong>{{ formatNumber(item.count) }}</strong>
+        </button>
+      </div>
     </div>
     <p v-else class="mt-3 border-t border-gray-100 pt-3 text-sm font-semibold text-emerald-700">По текущей выборке проблем нет.</p>
   </section>

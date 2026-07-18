@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { ExternalLink, Image as ImageIcon, Images, Wrench } from 'lucide-vue-next';
 import type { ManagerCatalogQualityReportResponse } from '../../api';
+import { countLabel } from './catalog-quality-copy';
 
 type QualityProduct = ManagerCatalogQualityReportResponse['items'][number];
 type QualityIssue = NonNullable<QualityProduct['issues']>[number];
@@ -17,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [product: QualityProduct];
   openMedia: [product: QualityProduct];
+  openSeriesMedia: [product: QualityProduct];
 }>();
 const failedImages = ref(new Set<number>());
 
@@ -33,6 +35,8 @@ const groupedItems = computed(() => {
 });
 
 const groupSummary = (key: string) => props.groups?.find((group) => group.key === key);
+const seriesMediaProduct = (group: { key: string; items: QualityProduct[] }) =>
+  group.key.startsWith('series:') ? group.items.find((product) => product.series_id) : undefined;
 const imageSrc = (url?: string | null) => !url ? '' : url.startsWith('http') || url.startsWith('/') ? url : `/${url}`;
 const publicSiteBaseUrl = (() => {
   const configured = String(import.meta.env.WEBSITE_URL || '').trim();
@@ -82,6 +86,15 @@ const imageSizeLabel = (product: QualityProduct) => product.main_image_width && 
 const markImageFailed = (productId: number) => {
   failedImages.value = new Set(failedImages.value).add(productId);
 };
+const openGroupMedia = (group: { key: string; items: QualityProduct[] }) => {
+  const product = seriesMediaProduct(group);
+  if (product) emit('openSeriesMedia', product);
+};
+const visibleIssues = (product: QualityProduct) => (product.issues ?? []).filter((issue) => !(
+  issue.code === 'out_of_stock'
+  && product.work_priority === 'low'
+  && Number(product.available_qty || 0) === 0
+));
 </script>
 
 <template>
@@ -90,9 +103,12 @@ const markImageFailed = (productId: number) => {
       <header v-if="grouped" class="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-2 dark:border-slate-700">
         <div>
           <h2 class="font-bold text-gray-950 dark:text-slate-100">{{ group.label }}</h2>
-          <p class="text-xs text-gray-500 dark:text-slate-400">{{ formatNumber(groupSummary(group.key)?.count ?? group.items.length) }} товаров · score {{ groupSummary(group.key)?.average_score ?? '—' }} · критичных {{ groupSummary(group.key)?.critical_products || 0 }}</p>
+          <p class="text-xs text-gray-500 dark:text-slate-400">{{ countLabel(groupSummary(group.key)?.count ?? group.items.length, 'товар', 'товара', 'товаров') }} · score {{ groupSummary(group.key)?.average_score ?? '—' }} · критичных {{ groupSummary(group.key)?.critical_products || 0 }}</p>
         </div>
-        <span v-if="groupSummary(group.key)?.media_problem_products" class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800"><Images class="h-3.5 w-3.5" /> Медиа: {{ groupSummary(group.key)?.media_problem_products }}</span>
+        <div v-if="groupSummary(group.key)?.media_problem_products" class="flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200"><Images class="h-3.5 w-3.5" /> Медиа: {{ groupSummary(group.key)?.media_problem_products }}</span>
+          <button v-if="seriesMediaProduct(group)" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700" @click="openGroupMedia(group)"><Images class="h-3.5 w-3.5" />Исправить медиа серии</button>
+        </div>
       </header>
 
       <div class="grid gap-3 xl:grid-cols-2">
@@ -117,14 +133,14 @@ const markImageFailed = (productId: number) => {
             <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-gray-600 dark:text-slate-300">
               <span v-if="!hideEquipmentType">{{ product.equipment_type_label || 'Тип не определен' }}</span>
               <span>{{ product.available_qty || 0 }} шт.</span>
-              <span>{{ product.supplier_mapping_count || 0 }} поставщ.</span>
+              <span>{{ countLabel(product.supplier_mapping_count || 0, 'поставщик', 'поставщика', 'поставщиков') }}</span>
               <span :class="product.is_published ? 'text-emerald-700' : 'text-gray-500'">{{ product.is_published ? 'На сайте' : 'Скрыт' }}</span>
               <span>{{ product.image_count || 0 }} фото<span v-if="imageSizeLabel(product)"> · {{ imageSizeLabel(product) }}</span></span>
             </div>
 
             <div class="mt-2 flex flex-wrap gap-1">
-              <span v-for="issue in (product.issues ?? []).slice(0, 3)" :key="issue.code" class="rounded-md px-1.5 py-1 text-[11px] font-semibold" :class="severityTone(issue.severity)" :title="issue.detail || issue.message">{{ issue.label }}</span>
-              <span v-if="product.issue_count > 3" class="rounded-md bg-gray-100 px-1.5 py-1 text-[11px] font-semibold text-gray-500 dark:bg-slate-800 dark:text-slate-300">Ещё {{ formatNumber(product.issue_count - 3) }}</span>
+              <span v-for="issue in visibleIssues(product).slice(0, 3)" :key="issue.code" class="rounded-md px-1.5 py-1 text-[11px] font-semibold" :class="severityTone(issue.severity)" :title="issue.detail || issue.message">{{ issue.label }}</span>
+              <span v-if="visibleIssues(product).length > 3" class="rounded-md bg-gray-100 px-1.5 py-1 text-[11px] font-semibold text-gray-500 dark:bg-slate-800 dark:text-slate-300">Ещё {{ formatNumber(visibleIssues(product).length - 3) }}</span>
             </div>
 
             <div class="mt-2 flex flex-wrap gap-2 border-t border-gray-100 pt-2 dark:border-slate-700">

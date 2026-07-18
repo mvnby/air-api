@@ -7,6 +7,7 @@ import {
   RefreshCw,
   RotateCcw,
   ShieldCheck,
+  SlidersHorizontal,
 } from 'lucide-vue-next';
 import { api, type CatalogQualityReportParams, type ManagerCatalogQualityReportResponse } from '../api';
 import CatalogQualityCards from '../components/catalog-quality/CatalogQualityCards.vue';
@@ -35,6 +36,7 @@ const loading = ref(false);
 const error = ref('');
 const requestId = ref(0);
 const customViews = ref<CatalogQualitySavedView[]>(readCatalogQualitySavedViews(window.localStorage));
+const filtersAnchor = ref<HTMLElement | null>(null);
 
 const savedViews = computed(() => [...catalogQualityBuiltinViews, ...customViews.value]);
 const meta = computed(() => report.value?.meta);
@@ -46,11 +48,15 @@ const generatedAt = computed(() => report.value?.generated_at
 const selectedBrandTitle = computed(() => state.value.brandId
   ? report.value?.filter_options.brands?.find((item) => item.value === state.value.brandId)?.label || ''
   : '');
+const selectedBrandCatalogCount = computed(() => state.value.brandId
+  ? Number(report.value?.filter_options.brands?.find((item) => item.value === state.value.brandId)?.count || 0)
+  : 0);
 const shouldSuggestSeriesGrouping = computed(() => Boolean(
   state.value.brandId
   && state.value.groupBy === 'none'
   && (report.value?.filter_options.series?.filter((item) => item.parent_value === state.value.brandId).length || 0) > 1,
 ));
+const formatNumber = (value?: number | null) => new Intl.NumberFormat('ru-RU').format(Number(value || 0));
 const productCountLabel = (value?: number | null) => {
   const count = Number(value || 0);
   const lastTwo = count % 100;
@@ -165,6 +171,7 @@ const openProductPanel = (product: QualityProduct, panel: 'edit' | 'media') => {
 
 const openProduct = (product: QualityProduct) => openProductPanel(product, 'edit');
 const openProductMedia = (product: QualityProduct) => openProductPanel(product, 'media');
+const scrollToFilters = () => filtersAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
 const goToPage = (page: number) => {
   state.value = { ...state.value, page: Math.min(Math.max(1, page), totalPages.value) };
@@ -211,32 +218,41 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
         </div>
       </header>
 
-      <CatalogQualityFilters
-        :model-value="state"
-        :options="report?.filter_options"
-        :saved-views="savedViews"
-        :loading="loading"
-        @update:model-value="updateState"
-        @apply-view="applySavedView"
-        @save-view="saveCurrentView"
-        @delete-view="deleteSavedView"
-      />
+      <div ref="filtersAnchor">
+        <CatalogQualityFilters
+          :model-value="state"
+          :options="report?.filter_options"
+          :saved-views="savedViews"
+          :view-counts="report?.builtin_view_counts"
+          :loading="loading"
+          @update:model-value="updateState"
+          @apply-view="applySavedView"
+          @save-view="saveCurrentView"
+          @delete-view="deleteSavedView"
+        />
+      </div>
 
       <CatalogQualitySummary v-if="report" :report="report" :selected-issue-code="state.issueCode" @select-issue="selectIssue" />
 
       <div v-if="error" class="border-b border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">Не удалось загрузить отчет: {{ error }}</div>
 
       <section class="sticky top-0 z-20 flex flex-col gap-2 border-b border-gray-200 bg-gray-50/95 px-4 py-2 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 lg:flex-row lg:items-center lg:justify-between sm:px-5">
-        <div class="flex flex-wrap items-center gap-2 text-sm">
+        <div class="flex min-w-0 flex-wrap items-center gap-2 text-sm">
           <strong v-if="selectedBrandTitle" class="text-teal-800">{{ selectedBrandTitle }}</strong>
           <span v-if="selectedBrandTitle" class="text-gray-400">·</span>
-          <strong class="text-gray-950 dark:text-slate-100">{{ productCountLabel(meta?.total) }}</strong>
+          <strong class="text-gray-950 dark:text-slate-100">
+            <template v-if="selectedBrandTitle && selectedBrandCatalogCount > Number(meta?.total || 0)">{{ formatNumber(meta?.total) }} в очереди из {{ productCountLabel(selectedBrandCatalogCount) }}</template>
+            <template v-else>{{ productCountLabel(meta?.total) }}</template>
+          </strong>
           <span class="text-gray-400">·</span>
-          <span class="text-gray-500 dark:text-slate-400">страница {{ meta?.page || 1 }} из {{ totalPages }}</span>
+          <span class="text-gray-500 dark:text-slate-400">score {{ report?.average_score ?? '—' }}</span>
+          <span class="hidden text-gray-400 sm:inline">·</span>
+          <span class="hidden text-gray-500 dark:text-slate-400 sm:inline">страница {{ meta?.page || 1 }} из {{ totalPages }}</span>
           <span v-if="loading" class="font-semibold text-teal-700">обновляем...</span>
-          <button v-if="shouldSuggestSeriesGrouping" class="h-8 rounded-lg bg-teal-50 px-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-100" @click="state.groupBy = 'series'">Сгруппировать по сериям</button>
+          <span v-if="shouldSuggestSeriesGrouping" class="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-2 py-1 text-xs text-teal-900 dark:bg-teal-950 dark:text-teal-100">У бренда несколько серий. <button class="font-bold underline decoration-teal-400 underline-offset-2" @click="state.groupBy = 'series'">Применить группировку</button></span>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-2 overflow-x-auto pb-0.5">
+          <button class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-600 hover:border-teal-300 hover:text-teal-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" @click="scrollToFilters"><SlidersHorizontal class="h-4 w-4" />Фильтры</button>
           <label class="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-300">Сортировка
             <select v-model="state.sortBy" class="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
               <option value="priority">По рабочему приоритету</option><option value="score_asc">Худший score</option><option value="critical">Критичные сначала</option><option value="stock">С наличием сначала</option><option value="newest">Новые сначала</option><option value="brand">По бренду</option><option value="series">По серии</option><option value="title">По названию</option>
@@ -267,6 +283,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
           :hide-series="Boolean(state.seriesId) || state.groupBy === 'series'"
           @open="openProduct"
           @open-media="openProductMedia"
+          @open-series-media="openProductMedia"
         />
         <CatalogQualityTable v-else :items="report.items" @open="openProduct" @select-issue="selectIssue" />
       </template>

@@ -39,6 +39,25 @@ MULTI_COMPONENT_LABELS = {
 
 FIXABLE_CATEGORIES = {"media", "identity", "specs"}
 
+BUILTIN_VIEW_FILTERS: dict[str, dict[str, Any]] = {
+    "critical-published": {
+        "dimensions": {"publication": "published"},
+        "issues": {"severity": "critical", "only_problems": True},
+    },
+    "stock-media": {
+        "dimensions": {"availability": "in_stock"},
+        "issues": {"category": "media", "only_problems": True},
+    },
+    "household-no-series": {
+        "dimensions": {"equipment_type": "cat-household", "series_state": "missing"},
+        "issues": {"only_problems": False},
+    },
+    "supplier-unmapped": {
+        "dimensions": {"supplier_state": "unmapped"},
+        "issues": {"category": "supplier", "only_problems": True},
+    },
+}
+
 
 def _clean(value: Any) -> str:
     return str(value or "").strip().lower().replace("ё", "е")
@@ -110,16 +129,16 @@ def enrich_work_priority(row: dict[str, Any]) -> None:
 
     if published and in_stock and critical_fixable:
         priority = "high"
-        reason = "На сайте · в наличии · критичная проблема контента"
+        reason = "Критичная проблема контента"
     elif published and in_stock and fixable:
         priority = "medium"
-        reason = "На сайте · в наличии · есть исправимые замечания"
+        reason = "Есть исправимые замечания"
     else:
         priority = "low"
         if not published:
-            reason = "Товар скрыт с сайта"
+            reason = "Отложено: товар скрыт"
         elif not in_stock:
-            reason = "Нет доступного наличия"
+            reason = "Отложено до появления наличия"
         else:
             reason = "Нет срочных исправимых замечаний"
 
@@ -232,8 +251,30 @@ def sort_rows(rows: list[dict[str, Any]], sort_by: str) -> list[dict[str, Any]]:
     elif sort_by == "title":
         key = lambda row: _clean(row.get("title"))
     else:
-        key = lambda row: (-int(row.get("work_priority_score") or 0), int(row.get("score") or 0), _clean(row.get("title")))
+        priority_rank = {"high": 0, "medium": 1, "low": 2}
+        key = lambda row: (
+            priority_rank.get(row.get("work_priority"), 3),
+            -int(row.get("work_priority_score") or 0),
+            int(row.get("score") or 0),
+            _clean(row.get("title")),
+        )
     return sorted(rows, key=key)
+
+
+def build_builtin_view_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for view_id, filters in BUILTIN_VIEW_FILTERS.items():
+        scoped = filter_dimension_rows(rows, **filters["dimensions"])
+        counts[view_id] = len(
+            filter_issue_rows(
+                scoped,
+                category=filters["issues"].get("category"),
+                severity=filters["issues"].get("severity"),
+                issue_code=None,
+                only_problems=filters["issues"]["only_problems"],
+            )
+        )
+    return counts
 
 
 def row_group(row: dict[str, Any], group_by: str) -> tuple[str, str]:

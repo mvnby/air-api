@@ -16,6 +16,7 @@ from models.media import MediaAsset
 from models.product import Product, Tag
 from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from services.catalog_quality_filters import (
+    build_builtin_view_counts,
     build_filter_options,
     build_groups,
     classify_product,
@@ -226,6 +227,7 @@ class CatalogQualityService:
         ]
 
         filter_options = build_filter_options(rows)
+        builtin_view_counts = build_builtin_view_counts(rows)
         scoped_rows = filter_dimension_rows(
             rows,
             equipment_type=equipment_type,
@@ -288,6 +290,7 @@ class CatalogQualityService:
             "categories": categories,
             "groups": groups,
             "filter_options": filter_options,
+            "builtin_view_counts": builtin_view_counts,
             "severity_issue_counts": severity_issue_counts,
             "severity_product_counts": severity_product_counts,
             "meta": {

@@ -12,6 +12,7 @@ const props = defineProps<{
   modelValue: CatalogQualityFilterState;
   options?: ManagerCatalogQualityFilterOptionsResponse;
   savedViews: CatalogQualitySavedView[];
+  viewCounts?: Record<string, number>;
   loading?: boolean;
 }>();
 
@@ -133,7 +134,7 @@ const submitView = () => {
           ]"
           @click="emit('apply-view', view)"
         >
-          {{ view.name }}
+          {{ view.name }}<span v-if="viewCounts?.[view.id] !== undefined" class="ml-1 opacity-75">· {{ viewCounts[view.id] }}</span>
         </button>
         <button
           v-if="!view.builtin"
@@ -224,8 +225,7 @@ const submitView = () => {
       @click="showAdvanced = !showAdvanced"
     >
       <SlidersHorizontal class="h-4 w-4" />
-      Дополнительные фильтры
-      <span v-if="advancedActiveCount" class="rounded-full bg-teal-100 px-2 py-0.5 text-xs text-teal-800">{{ advancedActiveCount }} активных</span>
+      Дополнительные фильтры<span v-if="advancedActiveCount"> · {{ advancedActiveCount }}</span>
       <ChevronDown class="h-4 w-4 transition-transform" :class="showAdvanced ? 'rotate-180' : ''" />
     </button>
 

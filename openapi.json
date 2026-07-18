@@ -27893,6 +27893,13 @@
           "filter_options": {
             "$ref": "#/components/schemas/ManagerCatalogQualityFilterOptionsResponse"
           },
+          "builtin_view_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Builtin View Counts"
+          },
           "severity_issue_counts": {
             "additionalProperties": {
               "type": "integer"

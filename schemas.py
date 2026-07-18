@@ -1769,6 +1769,7 @@ class ManagerCatalogQualityReportResponse(BaseModel):
     categories: List[ManagerCatalogQualityCategoryResponse]
     groups: List[ManagerCatalogQualityGroupResponse] = Field(default_factory=list)
     filter_options: ManagerCatalogQualityFilterOptionsResponse
+    builtin_view_counts: Dict[str, int] = Field(default_factory=dict)
     severity_issue_counts: Dict[str, int] = Field(default_factory=dict)
     severity_product_counts: Dict[str, int] = Field(default_factory=dict)
     meta: Meta
