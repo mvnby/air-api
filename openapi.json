@@ -1626,6 +1626,52 @@
         ]
       }
     },
+    "/api/internal/bot/v1/quick-orders/parse-voice": {
+      "post": {
+        "tags": [
+          "internal bot v1 voice"
+        ],
+        "summary": "Parse Internal Bot Voice Quick Order",
+        "operationId": "parse_internal_bot_voice_quick_order_v1",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_parse_internal_bot_voice_quick_order_v1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotVoiceQuickOrderParseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
     "/api/products/search": {
       "get": {
         "tags": [
@@ -20165,6 +20211,44 @@
         ],
         "title": "Body_login_access_token"
       },
+      "Body_parse_internal_bot_voice_quick_order_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "telegram_chat_id": {
+            "type": "integer",
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Message Id"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "maximum": 180.0,
+            "minimum": 1.0,
+            "title": "Duration Seconds"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "telegram_chat_id",
+          "telegram_message_id",
+          "duration_seconds",
+          "file"
+        ],
+        "title": "Body_parse_internal_bot_voice_quick_order_v1"
+      },
       "Body_recognize_internal_bot_customer_requisites_file_v1": {
         "properties": {
           "telegram_id": {
@@ -22137,6 +22221,25 @@
           "changed"
         ],
         "title": "BotTaskStatusUpdateResponse"
+      },
+      "BotVoiceQuickOrderParseResponse": {
+        "properties": {
+          "transcript": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Transcript"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/BotQuickOrderDraft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transcript",
+          "draft"
+        ],
+        "title": "BotVoiceQuickOrderParseResponse"
       },
       "BulkGalleryAddRequest": {
         "properties": {

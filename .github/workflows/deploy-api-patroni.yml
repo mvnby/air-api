@@ -189,6 +189,7 @@ jobs:
           API_NODE_PROXY_MODE: host_nginx
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh migrate
 
@@ -218,6 +219,7 @@ jobs:
           API_NODE_PROXY_MODE: container_nginx
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh migrate
 
@@ -248,6 +250,7 @@ jobs:
           API_EXPECTED_PATRONI_ROLE: standby
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy
 
@@ -278,6 +281,7 @@ jobs:
           API_EXPECTED_PATRONI_ROLE: standby
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy
 
@@ -309,6 +313,7 @@ jobs:
           API_EXPECTED_PATRONI_ROLE: primary
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy
 
@@ -340,6 +345,7 @@ jobs:
           API_EXPECTED_PATRONI_ROLE: primary
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy
 

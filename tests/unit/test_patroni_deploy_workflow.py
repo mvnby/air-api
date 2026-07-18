@@ -68,6 +68,10 @@ def test_patroni_release_orders_migration_replica_then_primary():
     ):
         run = jobs[job_name]["steps"][-1]["run"]
         assert "scripts/ha/run_patroni_node_remote.sh" in run
+        env = jobs[job_name]["steps"][-1]["env"]
+        assert env["BOT_VOICE_TRANSCRIPTION_API_KEY"] == (
+            "${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}"
+        )
 
     text = (REPO_ROOT / ".github/workflows/deploy-api-patroni.yml").read_text(encoding="utf-8")
     assert "up -d db" not in text

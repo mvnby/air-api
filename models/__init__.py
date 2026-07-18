@@ -17,6 +17,7 @@ from .customer import Customer, CustomerBranch, CustomerContract, CustomerRequis
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
 from .brand import Brand, BrandFeature, ProductSeries, ProductSeriesFeatureLink
 from .bot_fsm import BotFsmState, BotRuntimeLease
+from .bot_voice import BotVoiceTranscriptionAudit
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .content import Article, GlobalConfig
@@ -94,6 +95,7 @@ __all__ = [
     "BrandFeature",
     "BotFsmState",
     "BotRuntimeLease",
+    "BotVoiceTranscriptionAudit",
     "CatalogImportJob",
     "CommunicationDelivery",
     "CommunicationDeliveryAttempt",

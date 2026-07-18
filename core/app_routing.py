@@ -6,6 +6,7 @@ from routers import internal_bot as internal_bot_router
 from routers import internal_bot_media as internal_bot_media_router
 from routers import internal_bot_operations as internal_bot_operations_router
 from routers import internal_bot_runtime as internal_bot_runtime_router
+from routers import internal_bot_voice as internal_bot_voice_router
 from routers import legacy_admin_redirects
 from routers import manager as manager_router
 from routers import system as system_router
@@ -16,6 +17,7 @@ APP_ROUTERS: tuple[APIRouter, ...] = (
     internal_bot_media_router.router,
     internal_bot_operations_router.router,
     internal_bot_runtime_router.router,
+    internal_bot_voice_router.router,
     api_router.router,
     manager_router.router,
     legacy_admin_redirects.router,
