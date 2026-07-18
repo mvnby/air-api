@@ -1688,6 +1688,41 @@ class ManagerCatalogQualityCategoryResponse(BaseModel):
     info: int = 0
 
 
+class ManagerCatalogQualityFilterOptionResponse(BaseModel):
+    value: str
+    label: str
+    count: int = 0
+    parent_value: Optional[str] = None
+
+
+class ManagerCatalogQualityFilterOptionsResponse(BaseModel):
+    equipment_types: List[ManagerCatalogQualityFilterOptionResponse] = Field(default_factory=list)
+    equipment_subtypes: List[ManagerCatalogQualityFilterOptionResponse] = Field(default_factory=list)
+    brands: List[ManagerCatalogQualityFilterOptionResponse] = Field(default_factory=list)
+    series: List[ManagerCatalogQualityFilterOptionResponse] = Field(default_factory=list)
+    suppliers: List[ManagerCatalogQualityFilterOptionResponse] = Field(default_factory=list)
+
+
+class ManagerCatalogQualitySupplierResponse(BaseModel):
+    supplier_id: int
+    supplier_name: str
+    qty: int = 0
+    rrc_byn: Optional[float] = None
+    wholesale_value: Optional[float] = None
+    wholesale_currency: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class ManagerCatalogQualityGroupResponse(BaseModel):
+    key: str
+    label: str
+    count: int
+    average_score: int
+    critical_products: int = 0
+    media_problem_products: int = 0
+    spec_problem_products: int = 0
+
+
 class ManagerCatalogQualityProductResponse(BaseModel):
     product_id: int
     title: str
@@ -1696,6 +1731,10 @@ class ManagerCatalogQualityProductResponse(BaseModel):
     brand_title: Optional[str] = None
     series_id: Optional[int] = None
     series_title: Optional[str] = None
+    equipment_type: Optional[str] = None
+    equipment_type_label: Optional[str] = None
+    equipment_subtype: Optional[str] = None
+    equipment_subtype_label: Optional[str] = None
     main_image: Optional[str] = None
     price: int = 0
     is_published: bool = True
@@ -1706,8 +1745,16 @@ class ManagerCatalogQualityProductResponse(BaseModel):
     main_image_height: Optional[int] = None
     media_status: str = "unknown"
     supplier_mapping_count: int = 0
+    suppliers: List[ManagerCatalogQualitySupplierResponse] = Field(default_factory=list)
     available_qty: int = 0
-    issues: List[ManagerCatalogQualityIssueResponse] = []
+    created_at: Optional[datetime] = None
+    critical_issue_count: int = 0
+    fixable_issue_count: int = 0
+    work_priority: Literal["high", "medium", "low"] = "low"
+    priority_reason: str = ""
+    group_key: Optional[str] = None
+    group_label: Optional[str] = None
+    issues: List[ManagerCatalogQualityIssueResponse] = Field(default_factory=list)
 
 
 class ManagerCatalogQualityReportResponse(BaseModel):
@@ -1719,6 +1766,10 @@ class ManagerCatalogQualityReportResponse(BaseModel):
     items: List[ManagerCatalogQualityProductResponse]
     summary: List[ManagerCatalogQualitySummaryItemResponse]
     categories: List[ManagerCatalogQualityCategoryResponse]
+    groups: List[ManagerCatalogQualityGroupResponse] = Field(default_factory=list)
+    filter_options: ManagerCatalogQualityFilterOptionsResponse
+    severity_issue_counts: Dict[str, int] = Field(default_factory=dict)
+    severity_product_counts: Dict[str, int] = Field(default_factory=dict)
     meta: Meta
 
 

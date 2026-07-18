@@ -7,16 +7,23 @@ from typing import Any
 from urllib.parse import urlparse
 
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models.media import MediaAsset
-from models.product import Product
-from models.supplier import ProductSupplierMapping, SupplierOffer
-
-
+from models.product import Product, Tag
+from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
+from services.catalog_quality_filters import (
+    build_filter_options,
+    build_groups,
+    classify_product,
+    enrich_work_priority,
+    filter_dimension_rows,
+    filter_issue_rows,
+    sort_rows,
+)
 CATEGORY_LABELS = {
     "media": "Медиа",
     "identity": "Бренд и серия",
@@ -45,8 +52,6 @@ ISSUE_LABELS = {
     "missing_supplier_mapping": "Нет связи с поставщиком",
     "out_of_stock": "Нет доступного наличия",
 }
-
-
 @dataclass(frozen=True)
 class ImageInfo:
     url: str
@@ -187,55 +192,102 @@ class CatalogQualityService:
         severity: str | None = None,
         issue_code: str | None = None,
         only_problems: bool = True,
+        equipment_type: str | None = None,
+        equipment_subtype: str | None = None,
+        brand_id: int | None = None,
+        series_id: int | None = None,
+        series_state: str | None = None,
+        supplier_id: int | None = None,
+        supplier_state: str | None = None,
+        publication: str | None = None,
+        availability: str | None = None,
+        priority: str | None = None,
+        score_min: int | None = None,
+        score_max: int | None = None,
+        only_fixable: bool = False,
+        sort_by: str = "priority",
+        group_by: str = "none",
     ) -> dict[str, Any]:
         base_dir = Path.cwd()
         products = await CatalogQualityService._load_products(session=session, q=q)
         media_by_url = await CatalogQualityService._load_media_assets(session, products)
-        offer_qty_by_product = await CatalogQualityService._load_offer_qty_by_product(session)
+        supplier_context_by_product = await CatalogQualityService._load_supplier_context(session)
         local_size_cache: dict[str, ImageInfo | None] = {}
 
         rows = [
             CatalogQualityService._inspect_product(
                 product=product,
                 media_by_url=media_by_url,
-                offer_qty_by_product=offer_qty_by_product,
+                supplier_context_by_product=supplier_context_by_product,
                 base_dir=base_dir,
                 local_size_cache=local_size_cache,
             )
             for product in products
         ]
 
-        summary = CatalogQualityService._build_summary(rows)
-        categories = CatalogQualityService._build_categories(rows)
-        filtered = CatalogQualityService._filter_rows(
+        filter_options = build_filter_options(rows)
+        scoped_rows = filter_dimension_rows(
             rows,
+            equipment_type=equipment_type,
+            equipment_subtype=equipment_subtype,
+            brand_id=brand_id,
+            series_id=series_id,
+            series_state=series_state,
+            supplier_id=supplier_id,
+            supplier_state=supplier_state,
+            publication=publication,
+            availability=availability,
+            priority=priority,
+            score_min=score_min,
+            score_max=score_max,
+            only_fixable=only_fixable,
+        )
+        filtered = filter_issue_rows(
+            scoped_rows,
             category=category,
             severity=severity,
             issue_code=issue_code,
             only_problems=only_problems,
         )
-
+        summary = CatalogQualityService._build_summary(filtered)
+        categories = CatalogQualityService._build_categories(filtered)
+        filtered = sort_rows(filtered, sort_by)
+        groups = build_groups(filtered, group_by)
         total_filtered = len(filtered)
         offset = (page - 1) * limit
         page_items = filtered[offset : offset + limit]
-        score_values = [item["score"] for item in rows]
+        score_values = [item["score"] for item in filtered]
         average_score = round(sum(score_values) / len(score_values)) if score_values else 100
-        problem_products = sum(1 for item in rows if item["issue_count"] > 0)
+        problem_products = sum(1 for item in filtered if item["issue_count"] > 0)
         critical_products = sum(
             1
-            for item in rows
+            for item in filtered
             if any(issue["severity"] == "critical" for issue in item["issues"])
         )
+        severity_issue_counts = {severity_key: 0 for severity_key in ("critical", "warning", "info")}
+        severity_product_counts = {severity_key: 0 for severity_key in ("critical", "warning", "info")}
+        for item in filtered:
+            present: set[str] = set()
+            for issue in item["issues"]:
+                severity_key = issue["severity"]
+                severity_issue_counts[severity_key] += 1
+                present.add(severity_key)
+            for severity_key in present:
+                severity_product_counts[severity_key] += 1
 
         return {
             "generated_at": datetime.now(),
-            "total_products": len(rows),
+            "total_products": total_filtered,
             "problem_products": problem_products,
             "critical_products": critical_products,
             "average_score": average_score,
             "items": page_items,
             "summary": summary,
             "categories": categories,
+            "groups": groups,
+            "filter_options": filter_options,
+            "severity_issue_counts": severity_issue_counts,
+            "severity_product_counts": severity_product_counts,
             "meta": {
                 "total": total_filtered,
                 "page": page,
@@ -252,6 +304,7 @@ class CatalogQualityService:
                 selectinload(Product.brand),
                 selectinload(Product.series),
                 selectinload(Product.gallery_images),
+                selectinload(Product.tags).selectinload(Tag.group),
                 selectinload(Product.supplier_mappings),
                 selectinload(Product.local_stocks),
             )
@@ -291,27 +344,40 @@ class CatalogQualityService:
         return media_by_url
 
     @staticmethod
-    async def _load_offer_qty_by_product(session: AsyncSession) -> dict[int, int]:
+    async def _load_supplier_context(session: AsyncSession) -> dict[int, list[dict[str, Any]]]:
         stmt = (
-            select(ProductSupplierMapping.product_id, func.coalesce(func.sum(SupplierOffer.qty), 0))
-            .join(
+            select(ProductSupplierMapping, SupplierOffer, Supplier)
+            .join(Supplier, Supplier.id == ProductSupplierMapping.supplier_id)
+            .outerjoin(
                 SupplierOffer,
                 (SupplierOffer.supplier_id == ProductSupplierMapping.supplier_id)
-                & (SupplierOffer.external_id == ProductSupplierMapping.external_id),
+                & (SupplierOffer.external_id == ProductSupplierMapping.external_id)
+                & (SupplierOffer.is_active == True),  # noqa: E712
             )
             .where(ProductSupplierMapping.is_active == True)  # noqa: E712
-            .where(SupplierOffer.is_active == True)  # noqa: E712
-            .group_by(ProductSupplierMapping.product_id)
         )
         result = await session.execute(stmt)
-        return {int(product_id): int(qty or 0) for product_id, qty in result.all()}
+        contexts: dict[int, list[dict[str, Any]]] = {}
+        for mapping, offer, supplier in result.all():
+            contexts.setdefault(int(mapping.product_id), []).append(
+                {
+                    "supplier_id": int(supplier.id),
+                    "supplier_name": supplier.name,
+                    "qty": int(offer.qty or 0) if offer else 0,
+                    "rrc_byn": float(offer.rrc_byn) if offer and offer.rrc_byn is not None else None,
+                    "wholesale_value": float(offer.wholesale_value) if offer and offer.wholesale_value is not None else None,
+                    "wholesale_currency": offer.wholesale_currency if offer else None,
+                    "updated_at": offer.updated_at if offer else None,
+                }
+            )
+        return contexts
 
     @staticmethod
     def _inspect_product(
         *,
         product: Product,
         media_by_url: dict[str, ImageInfo],
-        offer_qty_by_product: dict[int, int],
+        supplier_context_by_product: dict[int, list[dict[str, Any]]],
         base_dir: Path,
         local_size_cache: dict[str, ImageInfo | None],
     ) -> dict[str, Any]:
@@ -330,9 +396,10 @@ class CatalogQualityService:
             local_size_cache=local_size_cache,
         )
         local_qty = sum(int(stock.qty or 0) for stock in product.local_stocks or [])
-        offer_qty = offer_qty_by_product.get(product_id, 0)
+        supplier_context = supplier_context_by_product.get(product_id, [])
+        offer_qty = sum(int(item.get("qty") or 0) for item in supplier_context)
         available_qty = local_qty + offer_qty
-        active_mapping_count = sum(1 for mapping in product.supplier_mappings or [] if mapping.is_active)
+        active_mapping_count = len(supplier_context)
         issues = CatalogQualityService._collect_issues(
             product=product,
             specs=specs,
@@ -344,7 +411,8 @@ class CatalogQualityService:
         issue_dicts = [issue.as_dict() for issue in issues]
         score = CatalogQualityService._score(issues)
         media_status = CatalogQualityService._media_status(product, image_infos)
-        return {
+        equipment_type, equipment_type_label, equipment_subtype, equipment_subtype_label = classify_product(product)
+        row = {
             "product_id": product_id,
             "title": product.title,
             "slug": product.slug,
@@ -352,6 +420,10 @@ class CatalogQualityService:
             "brand_title": product.brand.title if product.brand else None,
             "series_id": product.series_id,
             "series_title": product.series.title if product.series else None,
+            "equipment_type": equipment_type,
+            "equipment_type_label": equipment_type_label,
+            "equipment_subtype": equipment_subtype,
+            "equipment_subtype_label": equipment_subtype_label,
             "main_image": product.main_image,
             "price": int(product.price or 0),
             "is_published": bool(product.is_published),
@@ -362,9 +434,14 @@ class CatalogQualityService:
             "main_image_height": main_image_info.height if main_image_info else None,
             "media_status": media_status,
             "supplier_mapping_count": active_mapping_count,
+            "suppliers": supplier_context,
             "available_qty": available_qty,
+            "created_at": product.created_at,
+            "critical_issue_count": sum(1 for issue in issue_dicts if issue["severity"] == "critical"),
             "issues": issue_dicts,
         }
+        enrich_work_priority(row)
+        return row
 
     @staticmethod
     def _resolve_product_images(
@@ -620,26 +697,3 @@ class CatalogQualityService:
             for category in row_categories:
                 categories[category]["count"] += 1
         return [item for item in categories.values() if item["count"] > 0]
-
-    @staticmethod
-    def _filter_rows(
-        rows: list[dict[str, Any]],
-        *,
-        category: str | None,
-        severity: str | None,
-        issue_code: str | None,
-        only_problems: bool,
-    ) -> list[dict[str, Any]]:
-        filtered: list[dict[str, Any]] = []
-        for row in rows:
-            issues = row["issues"]
-            if only_problems and not issues:
-                continue
-            if category and not any(issue["category"] == category for issue in issues):
-                continue
-            if severity and not any(issue["severity"] == severity for issue in issues):
-                continue
-            if issue_code and not any(issue["code"] == issue_code for issue in issues):
-                continue
-            filtered.append(row)
-        return filtered

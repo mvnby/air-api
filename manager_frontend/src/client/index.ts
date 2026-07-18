@@ -167,10 +167,14 @@ export type { ManagerCatalogProductListResponse } from './models/ManagerCatalogP
 export type { ManagerCatalogProductManualResponse } from './models/ManagerCatalogProductManualResponse';
 export type { ManagerCatalogProductTagResponse } from './models/ManagerCatalogProductTagResponse';
 export type { ManagerCatalogQualityCategoryResponse } from './models/ManagerCatalogQualityCategoryResponse';
+export type { ManagerCatalogQualityFilterOptionResponse } from './models/ManagerCatalogQualityFilterOptionResponse';
+export type { ManagerCatalogQualityFilterOptionsResponse } from './models/ManagerCatalogQualityFilterOptionsResponse';
+export type { ManagerCatalogQualityGroupResponse } from './models/ManagerCatalogQualityGroupResponse';
 export type { ManagerCatalogQualityIssueResponse } from './models/ManagerCatalogQualityIssueResponse';
 export type { ManagerCatalogQualityProductResponse } from './models/ManagerCatalogQualityProductResponse';
 export type { ManagerCatalogQualityReportResponse } from './models/ManagerCatalogQualityReportResponse';
 export type { ManagerCatalogQualitySummaryItemResponse } from './models/ManagerCatalogQualitySummaryItemResponse';
+export type { ManagerCatalogQualitySupplierResponse } from './models/ManagerCatalogQualitySupplierResponse';
 export type { ManagerCrmHealthReportResponse } from './models/ManagerCrmHealthReportResponse';
 export type { ManagerCustomerBranchCreatePayload } from './models/ManagerCustomerBranchCreatePayload';
 export type { ManagerCustomerBranchItemResponse } from './models/ManagerCustomerBranchItemResponse';

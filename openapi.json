@@ -5539,6 +5539,275 @@
               "default": true,
               "title": "Only Problems"
             }
+          },
+          {
+            "name": "equipment_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Equipment Type"
+            }
+          },
+          {
+            "name": "equipment_subtype",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Equipment Subtype"
+            }
+          },
+          {
+            "name": "brand_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Brand Id"
+            }
+          },
+          {
+            "name": "series_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Series Id"
+            }
+          },
+          {
+            "name": "series_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "assigned",
+                    "missing"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Series State"
+            }
+          },
+          {
+            "name": "supplier_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "supplier_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "mapped",
+                    "in_stock",
+                    "unmapped",
+                    "multiple"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier State"
+            }
+          },
+          {
+            "name": "publication",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "published",
+                    "hidden"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Publication"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "in_stock",
+                    "out_of_stock"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Availability"
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Priority"
+            }
+          },
+          {
+            "name": "score_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Score Min"
+            }
+          },
+          {
+            "name": "score_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Score Max"
+            }
+          },
+          {
+            "name": "only_fixable",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Only Fixable"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "priority",
+                "score_asc",
+                "critical",
+                "stock",
+                "newest",
+                "title",
+                "brand",
+                "series"
+              ],
+              "type": "string",
+              "default": "priority",
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "none",
+                "brand",
+                "series",
+                "supplier",
+                "equipment_type"
+              ],
+              "type": "string",
+              "default": "none",
+              "title": "Group By"
+            }
           }
         ],
         "responses": {
@@ -27071,6 +27340,124 @@
         ],
         "title": "ManagerCatalogQualityCategoryResponse"
       },
+      "ManagerCatalogQualityFilterOptionResponse": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "default": 0
+          },
+          "parent_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ManagerCatalogQualityFilterOptionResponse"
+      },
+      "ManagerCatalogQualityFilterOptionsResponse": {
+        "properties": {
+          "equipment_types": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityFilterOptionResponse"
+            },
+            "type": "array",
+            "title": "Equipment Types"
+          },
+          "equipment_subtypes": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityFilterOptionResponse"
+            },
+            "type": "array",
+            "title": "Equipment Subtypes"
+          },
+          "brands": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityFilterOptionResponse"
+            },
+            "type": "array",
+            "title": "Brands"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityFilterOptionResponse"
+            },
+            "type": "array",
+            "title": "Series"
+          },
+          "suppliers": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityFilterOptionResponse"
+            },
+            "type": "array",
+            "title": "Suppliers"
+          }
+        },
+        "type": "object",
+        "title": "ManagerCatalogQualityFilterOptionsResponse"
+      },
+      "ManagerCatalogQualityGroupResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "average_score": {
+            "type": "integer",
+            "title": "Average Score"
+          },
+          "critical_products": {
+            "type": "integer",
+            "title": "Critical Products",
+            "default": 0
+          },
+          "media_problem_products": {
+            "type": "integer",
+            "title": "Media Problem Products",
+            "default": 0
+          },
+          "spec_problem_products": {
+            "type": "integer",
+            "title": "Spec Problem Products",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "count",
+          "average_score"
+        ],
+        "title": "ManagerCatalogQualityGroupResponse"
+      },
       "ManagerCatalogQualityIssueResponse": {
         "properties": {
           "code": {
@@ -27185,6 +27572,50 @@
             ],
             "title": "Series Title"
           },
+          "equipment_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Type"
+          },
+          "equipment_type_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Type Label"
+          },
+          "equipment_subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Subtype"
+          },
+          "equipment_subtype_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Subtype Label"
+          },
           "main_image": {
             "anyOf": [
               {
@@ -27251,18 +27682,83 @@
             "title": "Supplier Mapping Count",
             "default": 0
           },
+          "suppliers": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualitySupplierResponse"
+            },
+            "type": "array",
+            "title": "Suppliers"
+          },
           "available_qty": {
             "type": "integer",
             "title": "Available Qty",
             "default": 0
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "critical_issue_count": {
+            "type": "integer",
+            "title": "Critical Issue Count",
+            "default": 0
+          },
+          "fixable_issue_count": {
+            "type": "integer",
+            "title": "Fixable Issue Count",
+            "default": 0
+          },
+          "work_priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Work Priority",
+            "default": "low"
+          },
+          "priority_reason": {
+            "type": "string",
+            "title": "Priority Reason",
+            "default": ""
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "group_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Label"
           },
           "issues": {
             "items": {
               "$ref": "#/components/schemas/ManagerCatalogQualityIssueResponse"
             },
             "type": "array",
-            "title": "Issues",
-            "default": []
+            "title": "Issues"
           }
         },
         "type": "object",
@@ -27318,6 +27814,30 @@
             "type": "array",
             "title": "Categories"
           },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCatalogQualityGroupResponse"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "filter_options": {
+            "$ref": "#/components/schemas/ManagerCatalogQualityFilterOptionsResponse"
+          },
+          "severity_issue_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Severity Issue Counts"
+          },
+          "severity_product_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Severity Product Counts"
+          },
           "meta": {
             "$ref": "#/components/schemas/Meta"
           }
@@ -27332,6 +27852,7 @@
           "items",
           "summary",
           "categories",
+          "filter_options",
           "meta"
         ],
         "title": "ManagerCatalogQualityReportResponse"
@@ -27373,6 +27894,74 @@
           "count"
         ],
         "title": "ManagerCatalogQualitySummaryItemResponse"
+      },
+      "ManagerCatalogQualitySupplierResponse": {
+        "properties": {
+          "supplier_id": {
+            "type": "integer",
+            "title": "Supplier Id"
+          },
+          "supplier_name": {
+            "type": "string",
+            "title": "Supplier Name"
+          },
+          "qty": {
+            "type": "integer",
+            "title": "Qty",
+            "default": 0
+          },
+          "rrc_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrc Byn"
+          },
+          "wholesale_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholesale Value"
+          },
+          "wholesale_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wholesale Currency"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "supplier_name"
+        ],
+        "title": "ManagerCatalogQualitySupplierResponse"
       },
       "ManagerCrmHealthReportResponse": {
         "properties": {
