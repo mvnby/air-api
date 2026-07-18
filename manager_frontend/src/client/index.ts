@@ -26,6 +26,7 @@ export type { Body_complete_media_worker_job } from './models/Body_complete_medi
 export type { Body_create_repair_diagnostic_lead } from './models/Body_create_repair_diagnostic_lead';
 export type { Body_import_manager_bank_statement } from './models/Body_import_manager_bank_statement';
 export type { Body_login_access_token } from './models/Body_login_access_token';
+export type { Body_parse_internal_bot_voice_quick_order_v1 } from './models/Body_parse_internal_bot_voice_quick_order_v1';
 export type { Body_recognize_internal_bot_customer_requisites_file_v1 } from './models/Body_recognize_internal_bot_customer_requisites_file_v1';
 export type { Body_recognize_internal_bot_repair_nameplate_v1 } from './models/Body_recognize_internal_bot_repair_nameplate_v1';
 export type { Body_recognize_internal_bot_warranty_nameplate_v1 } from './models/Body_recognize_internal_bot_warranty_nameplate_v1';
@@ -82,6 +83,7 @@ export type { BotTaskReportSaveResponse } from './models/BotTaskReportSaveRespon
 export type { BotTaskResponse } from './models/BotTaskResponse';
 export type { BotTaskStatusUpdateRequest } from './models/BotTaskStatusUpdateRequest';
 export type { BotTaskStatusUpdateResponse } from './models/BotTaskStatusUpdateResponse';
+export type { BotVoiceQuickOrderParseResponse } from './models/BotVoiceQuickOrderParseResponse';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';
 export type { BulkProductIdsRequest } from './models/BulkProductIdsRequest';
@@ -478,6 +480,7 @@ export { InternalBotV1Service } from './services/InternalBotV1Service';
 export { InternalBotV1MediaService } from './services/InternalBotV1MediaService';
 export { InternalBotV1OperationsService } from './services/InternalBotV1OperationsService';
 export { InternalBotV1RuntimeService } from './services/InternalBotV1RuntimeService';
+export { InternalBotV1VoiceService } from './services/InternalBotV1VoiceService';
 export { LoginService } from './services/LoginService';
 export { ManagerService } from './services/ManagerService';
 export { ManagerBackupsService } from './services/ManagerBackupsService';

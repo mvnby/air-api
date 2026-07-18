@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     antiword \
+    ffmpeg \
     postgresql-client \
     poppler-utils \
     tesseract-ocr \
