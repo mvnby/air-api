@@ -22,6 +22,15 @@ import {
 } from '../src/utils/image-upload-optimization';
 import { compactLegalName } from '../src/components/orders/order-utils';
 import {
+  buildMeasurementSummary,
+  buildOrderWorkspaceViewModel,
+} from '../src/components/orders/order-workspace';
+import {
+  isProposalRevisionLocked,
+  proposalPrimaryAction,
+  proposalStatusLabel,
+} from '../src/components/orders/proposal-lifecycle';
+import {
   applyCatalogQualityView,
   createDefaultCatalogQualityState,
   parseCatalogQualityState,
@@ -155,5 +164,58 @@ const savedQualityView = applyCatalogQualityView(
 assert(savedQualityView.availability === 'in_stock' && savedQualityView.category === 'media', 'saved catalog view must apply its filters');
 assert(savedQualityView.view === 'table' && savedQualityView.limit === 100, 'saved catalog view must preserve personal display preferences');
 assert(savedQualityView.page === 1, 'saved catalog view must restart pagination');
+
+const workspaceBase = {
+  status: 'negotiation',
+  negotiationStatus: 'awaiting_offer',
+  activeProposalId: 7,
+  activeProposalLineCount: 2,
+  activeProposalTotal: 2400,
+  productCount: 1,
+  serviceCount: 1,
+  linkedEquipmentCount: 0,
+  documents: [],
+  total: 2400,
+  paid: 0,
+  balance: 2400,
+};
+assert(
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'draft' }).nextAction.command === 'finish_proposal',
+  'valid draft proposal must lead to preparation completion',
+);
+assert(
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'ready_to_send' }).nextAction.command === 'send_proposal',
+  'ready proposal must lead to sending',
+);
+assert(
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'sent' }).nextAction.command === 'record_proposal_response',
+  'sent proposal must lead to recording the response',
+);
+assert(
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'rejected' }).nextAction.command === 'create_proposal_variant',
+  'rejected proposal must lead to a new variant',
+);
+assert(proposalPrimaryAction('approved') === null, 'accepted proposal must not expose another proposal action');
+assert(isProposalRevisionLocked('sent'), 'sent proposal revision must be locked');
+assert(isProposalRevisionLocked('approved'), 'accepted proposal revision must be locked');
+assert(!isProposalRevisionLocked('ready_to_send'), 'ready proposal must remain editable before sending');
+assert(proposalStatusLabel('accepted') === 'Принято клиентом', 'legacy accepted alias must render consistently');
+
+assert(
+  buildMeasurementSummary({ required: false }) === 'Замер не требуется',
+  'optional measurement must be described as not required',
+);
+assert(
+  buildMeasurementSummary({ required: true }) === 'Замер не назначен',
+  'required measurement without a date must be described as not scheduled',
+);
+assert(
+  buildMeasurementSummary({ required: true, date: '2026-07-20', formatDate: () => '20.07.2026' }) === 'Замер назначен: 20.07.2026',
+  'scheduled measurement must show its date',
+);
+assert(
+  buildMeasurementSummary({ required: true, result: 'Осмотр выполнен', kind: 'diagnostic' }) === 'Диагностика выполнена',
+  'completed diagnostic must use the correct wording',
+);
 
 console.log('Manager UI logic tests passed');

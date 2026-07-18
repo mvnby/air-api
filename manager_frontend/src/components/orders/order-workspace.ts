@@ -1,9 +1,17 @@
 import type { ManagerOrderDocumentItem } from '../../client';
 import { EXECUTION_STATUS_LABELS, NEGOTIATION_STATUS_LABELS, formatRelativeAge } from './order-utils';
+import { normalizeProposalStatus, type ProposalLifecycleStatus } from './proposal-lifecycle';
 
 export type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
 export type OrderWorkspaceTarget = 'object' | 'planning' | 'proposal' | 'documents' | 'payments' | 'equipment';
 export type OrderWorkspaceTone = 'slate' | 'sky' | 'amber' | 'teal' | 'emerald' | 'rose';
+export type OrderWorkspaceCommand =
+  | 'open'
+  | 'create_proposal'
+  | 'finish_proposal'
+  | 'send_proposal'
+  | 'record_proposal_response'
+  | 'create_proposal_variant';
 
 export type OrderWorkflowOption = {
   value: OrderWorkflowType;
@@ -42,6 +50,7 @@ export type OrderWorkspaceViewModel = {
     label: string;
     target: OrderWorkspaceTarget;
     tone: OrderWorkspaceTone;
+    command: OrderWorkspaceCommand;
   };
   blockers: string[];
   lanes: OrderWorkspaceLane[];
@@ -55,6 +64,11 @@ export type OrderWorkspaceInput = {
   negotiationStatusChangedAt?: string | null;
   executionStatusChangedAt?: string | null;
   installationDate?: string | null;
+  activeProposalId?: number | null;
+  activeProposalStatus?: ProposalLifecycleStatus | string | null;
+  activeProposalLineCount?: number;
+  activeProposalTotal?: number;
+  autoExecutionOnPayment?: boolean;
   productCount: number;
   serviceCount: number;
   linkedEquipmentCount: number;
@@ -64,6 +78,24 @@ export type OrderWorkspaceInput = {
   total: number;
   paid: number;
   balance: number;
+};
+
+export const buildMeasurementSummary = (input: {
+  required: boolean;
+  date?: string | null;
+  result?: string | null;
+  kind?: 'measurement' | 'diagnostic';
+  formatDate?: (value: string) => string | null;
+}) => {
+  const diagnostic = input.kind === 'diagnostic';
+  const label = diagnostic ? 'Диагностика' : 'Замер';
+  if (!input.required) return `${label} не требуется`;
+  if (String(input.result || '').trim()) return `${label} выполнен${diagnostic ? 'а' : ''}`;
+  if (input.date) {
+    const renderedDate = (input.formatDate ? input.formatDate(input.date) : input.date) || input.date;
+    return `${label} назначен${diagnostic ? 'а' : ''}: ${renderedDate}`;
+  }
+  return `${label} не назначен${diagnostic ? 'а' : ''}`;
 };
 
 const plural = (count: number, one: string, few: string, many: string) => {
@@ -116,26 +148,36 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   if (inExecution && substatus === 'work_done' && !input.documents.length) blockers.push('Нет закрывающих документов');
   if (input.missingReferencedInvoice) blockers.push(`Не найден счёт ${input.missingReferencedInvoice} из назначения платежа`);
 
+  const proposalStatus = normalizeProposalStatus(input.activeProposalStatus);
+  const hasActiveProposal = Boolean(input.activeProposalId);
+  const proposalHasValidLines = Number(input.activeProposalLineCount || 0) > 0 && Number(input.activeProposalTotal || 0) > 0;
+
   let nextAction: OrderWorkspaceViewModel['nextAction'];
-  if (isClosed) nextAction = { label: 'Проверить историю', target: 'documents', tone: 'slate' };
-  else if (!input.productCount && !input.serviceCount) nextAction = { label: 'Заполнить смету', target: 'proposal', tone: 'sky' };
-  else if (!inExecution && substatus === 'awaiting_visit') nextAction = { label: 'Назначить выезд', target: 'planning', tone: 'sky' };
-  else if (!inExecution && substatus === 'awaiting_payment') nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald' };
-  else if (!inExecution && substatus === 'proposal_sent') nextAction = { label: 'Проверить предложение', target: 'proposal', tone: 'amber' };
-  else if (!inExecution) nextAction = { label: 'Подготовить предложение', target: 'proposal', tone: 'sky' };
-  else if (substatus === 'order_equipment' || substatus === 'awaiting_equipment') nextAction = { label: 'Проверить товар', target: 'proposal', tone: 'amber' };
-  else if (substatus === 'needs_schedule' || substatus === 'scheduled') nextAction = { label: 'Открыть планирование', target: 'planning', tone: 'teal' };
+  if (isClosed) nextAction = { label: 'Проверить историю', target: 'documents', tone: 'slate', command: 'open' };
+  else if (!inExecution && !hasActiveProposal) nextAction = { label: 'Создать предложение', target: 'proposal', tone: 'sky', command: 'create_proposal' };
+  else if (!inExecution && proposalStatus === 'draft' && !proposalHasValidLines) nextAction = { label: 'Заполнить предложение', target: 'proposal', tone: 'sky', command: 'open' };
+  else if (!inExecution && proposalStatus === 'draft') nextAction = { label: 'Завершить подготовку', target: 'proposal', tone: 'sky', command: 'finish_proposal' };
+  else if (!inExecution && proposalStatus === 'ready_to_send') nextAction = { label: 'Отправить предложение', target: 'proposal', tone: 'sky', command: 'send_proposal' };
+  else if (!inExecution && proposalStatus === 'sent') nextAction = { label: 'Зафиксировать ответ', target: 'proposal', tone: 'amber', command: 'record_proposal_response' };
+  else if (!inExecution && proposalStatus === 'rejected') nextAction = { label: 'Подготовить новый вариант', target: 'proposal', tone: 'rose', command: 'create_proposal_variant' };
+  else if (!inExecution && proposalStatus === 'approved' && input.autoExecutionOnPayment && input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
+  else if (!inExecution && proposalStatus === 'approved' && !input.installationDate) nextAction = { label: 'Назначить работы', target: 'planning', tone: 'teal', command: 'open' };
+  else if (!inExecution && substatus === 'awaiting_visit') nextAction = { label: 'Назначить выезд', target: 'planning', tone: 'sky', command: 'open' };
+  else if (!inExecution && substatus === 'awaiting_payment') nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
+  else if (!inExecution) nextAction = { label: 'Открыть предложение', target: 'proposal', tone: 'sky', command: 'open' };
+  else if (substatus === 'order_equipment' || substatus === 'awaiting_equipment') nextAction = { label: 'Проверить товар', target: 'proposal', tone: 'amber', command: 'open' };
+  else if (substatus === 'needs_schedule' || substatus === 'scheduled') nextAction = { label: 'Открыть планирование', target: 'planning', tone: 'teal', command: 'open' };
   else if (substatus === 'work_done' || substatus === 'awaiting_documents') {
-    if (input.missingReferencedInvoice) nextAction = { label: `Проверить счёт ${input.missingReferencedInvoice}`, target: 'documents', tone: 'amber' };
-    else if (!input.documents.length) nextAction = { label: 'Создать комплект документов', target: 'documents', tone: 'teal' };
-    else if (input.documentEmailStatus === 'unknown') nextAction = { label: 'Проверить комплект документов', target: 'documents', tone: 'amber' };
-    else if (input.documentEmailStatus === 'failed') nextAction = { label: 'Повторить отправку документов', target: 'documents', tone: 'rose' };
-    else if (input.documentEmailStatus === 'pending') nextAction = { label: 'Проверить отправку документов', target: 'documents', tone: 'amber' };
-    else if (input.documentEmailStatus !== 'sent') nextAction = { label: 'Отправить документы', target: 'documents', tone: 'teal' };
-    else if (input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald' };
-    else nextAction = { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald' };
-  } else if (input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald' };
-  else nextAction = { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald' };
+    if (input.missingReferencedInvoice) nextAction = { label: `Проверить счёт ${input.missingReferencedInvoice}`, target: 'documents', tone: 'amber', command: 'open' };
+    else if (!input.documents.length) nextAction = { label: 'Создать комплект документов', target: 'documents', tone: 'teal', command: 'open' };
+    else if (input.documentEmailStatus === 'unknown') nextAction = { label: 'Проверить комплект документов', target: 'documents', tone: 'amber', command: 'open' };
+    else if (input.documentEmailStatus === 'failed') nextAction = { label: 'Повторить отправку документов', target: 'documents', tone: 'rose', command: 'open' };
+    else if (input.documentEmailStatus === 'pending') nextAction = { label: 'Проверить отправку документов', target: 'documents', tone: 'amber', command: 'open' };
+    else if (input.documentEmailStatus !== 'sent') nextAction = { label: 'Отправить документы', target: 'documents', tone: 'teal', command: 'open' };
+    else if (input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
+    else nextAction = { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald', command: 'open' };
+  } else if (input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
+  else nextAction = { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald', command: 'open' };
 
   const productStatus = !input.productCount
     ? 'Товар не выбран'

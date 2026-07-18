@@ -13,6 +13,7 @@ import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
 import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
 import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
+import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
@@ -39,11 +40,18 @@ import type {
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
 import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
 import {
+  buildMeasurementSummary,
   buildOrderWorkspaceViewModel,
   normalizeOrderWorkflowType,
   type OrderWorkflowType,
   type OrderWorkspaceTarget,
 } from './order-workspace';
+import {
+  isProposalRevisionLocked,
+  normalizeProposalStatus,
+  proposalStatusLabel,
+  type ProposalLifecycleStatus,
+} from './proposal-lifecycle';
 import {
   CUSTOMER_APPROVAL_STATUS_OPTIONS,
   EQUIPMENT_EVENT_OPTIONS,
@@ -222,7 +230,7 @@ const measurementRequired = ref(false);
 const measurerId = ref<number | null>(null);
 const measurementResult = ref('');
 const additionalConditions = ref('');
-const proposalStatus = ref<'draft' | 'sent' | 'approved' | 'rejected'>('draft');
+const proposalStatus = ref<ProposalLifecycleStatus>('draft');
 const negotiationStatus = ref('awaiting_offer');
 const executionStatus = ref('needs_schedule');
 const executionWithoutPayment = ref(false);
@@ -231,17 +239,12 @@ const autoExecutionOnPayment = ref(false);
 const autoCloseOnPayment = ref(false);
 const activeProposalId = ref<number | null>(null);
 const proposalActionLoading = ref(false);
-const negotiationStatusLabel = computed(() => (
-  NEGOTIATION_STATUS_OPTIONS.find((option) => option.value === negotiationStatus.value)?.label || 'Ждет предложение'
-));
 const executionStatusLabel = computed(() => (
   EXECUTION_STATUS_OPTIONS.find((option) => option.value === executionStatus.value)?.label || 'Назначить работы'
 ));
 
 const setNegotiationStatus = (value: string) => {
   negotiationStatus.value = value;
-  if (value === 'proposal_sent') proposalStatus.value = 'sent';
-  if (value === 'awaiting_payment') proposalStatus.value = 'approved';
 };
 
 const setExecutionStatus = (value: string) => {
@@ -254,6 +257,7 @@ const productLines = ref<ProductLine[]>([]);
 const supplyRequests = ref<any[]>([]);
 const supplyActionLoadingLineId = ref<number | null>(null);
 const serviceLines = ref<ServiceLine[]>([]);
+const editingServiceLineIndex = ref<number | null>(null);
 const savedLinesSnapshot = ref('');
 const savedFormSnapshot = ref('');
 const pendingDraftClearOrderId = ref<number | null>(null);
@@ -298,6 +302,8 @@ const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
+const documentsPanelRef = ref<InstanceType<typeof OrderDocumentsPanel> | null>(null);
+const proposalToolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const executionWorkspaceSection = ref<'documents' | 'payments' | null>(null);
 const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
 const orderEmails = ref<OutgoingEmailResponse[]>([]);
@@ -619,10 +625,8 @@ const compactObjectAddress = computed(() => (
   || ''
 ));
 const customerDetailsSummary = computed(() => {
-  const parts = [];
-  if (compactObjectAddress.value) parts.push(compactObjectAddress.value);
-  if (comment.value.trim()) parts.push('есть комментарий');
-  return parts.join(' · ') || 'адрес и комментарий';
+  if (customerBranchId.value) return 'Филиал и дополнительные данные';
+  return 'Адрес и комментарий';
 });
 const filteredEstimateOptions = computed(() => {
   const query = estimateSearchQuery.value.trim().toLowerCase();
@@ -648,11 +652,16 @@ const activeProposal = computed(() => (
   orderProposals.value.find((proposal) => proposal.id === activeProposalId.value)
   || selectedOrderProposal.value
 ));
+const activeProposalStatus = computed(() => normalizeProposalStatus(activeProposal.value?.status || proposalStatus.value));
+const activeProposalLocked = computed(() => isProposalRevisionLocked(activeProposalStatus.value));
 const activeProposalLineLabel = computed(() => {
   const proposal = activeProposal.value;
-  if (!proposal) return 'основной расчет';
+  if (!proposal) return 'Предложение не создано';
   const count = (proposal.product_lines?.length || 0) + (proposal.service_lines?.length || 0);
-  return `${proposal.name} · ${count} поз. · ${formatMoney(proposal.total_amount || 0)}`;
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  const noun = mod100 >= 11 && mod100 <= 14 ? 'позиций' : mod10 === 1 ? 'позиция' : mod10 >= 2 && mod10 <= 4 ? 'позиции' : 'позиций';
+  return `${proposal.name} · ${proposalStatusLabel(proposal.status)} · ${count} ${noun} · ${formatMoney(proposal.total_amount || 0)}`;
 });
 const paymentsSectionSummary = computed(() => (
   `оплачено ${formatMoney(totalPaymentsPreview.value)} · остаток ${formatMoney(balanceDuePreview.value)} · итого ${formatMoney(totalPreview.value)} · маржа ${formatMoney(marginPreview.value)}`
@@ -692,6 +701,11 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   negotiationStatusChangedAt: props.order?.negotiation_status_changed_at,
   executionStatusChangedAt: props.order?.execution_status_changed_at,
   installationDate: installationDate.value,
+  activeProposalId: selectedOrderProposal.value?.id || null,
+  activeProposalStatus: selectedOrderProposal.value?.status || proposalStatus.value,
+  activeProposalLineCount: (selectedOrderProposal.value?.product_lines?.length || 0) + (selectedOrderProposal.value?.service_lines?.length || 0),
+  activeProposalTotal: Number(selectedOrderProposal.value?.total_amount || 0),
+  autoExecutionOnPayment: autoExecutionOnPayment.value,
   productCount: productLines.value.length,
   serviceCount: serviceLines.value.length,
   linkedEquipmentCount: props.order?.linked_equipment_count || 0,
@@ -949,12 +963,14 @@ const websiteOrderSummary = computed(() => {
   return parts.join(' · ');
 });
 const planningSummary = computed(() => {
-  const parts = [];
-  const visitLabel = workflowType.value === 'repair' ? 'диагностика' : 'замер';
-  parts.push(measurementRequired.value ? `${visitLabel} нужна` : `без ${visitLabel}`);
-  if (assessmentDate.value) parts.push(`${visitLabel} ${formatDateTime(assessmentDate.value)}`);
+  const parts = [buildMeasurementSummary({
+    required: measurementRequired.value,
+    date: assessmentDate.value,
+    result: measurementResult.value,
+    kind: workflowType.value === 'repair' ? 'diagnostic' : 'measurement',
+    formatDate: formatDateTime,
+  })];
   if (installationDate.value) parts.push(`${workDateLabel.value.toLowerCase()} ${formatDateTime(installationDate.value)}`);
-  if (customerDeliveryAddress.value) parts.push(customerDeliveryAddress.value);
   return parts.join(' · ');
 });
 const planningDetailsSummary = computed(() => {
@@ -1032,8 +1048,12 @@ const buildRepairMetaPayload = () => normalizeRepairMeta({
   fault_type: repairMeta.value.fault_type || repairAiDefectType.value,
 }, { defaultRepairStatus: isRepairWorkflow.value });
 const documentSectionSummary = computed(() => {
-  const contractText = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : 'без договора');
-  return `${orderDocuments.value.length} док. · ${contractText}`;
+  const count = orderDocuments.value.length;
+  if (!count) return 'Документов нет';
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  const noun = mod100 >= 11 && mod100 <= 14 ? 'документов' : mod10 === 1 ? 'документ' : mod10 >= 2 && mod10 <= 4 ? 'документа' : 'документов';
+  return `${count} ${noun}${hasContract.value ? '' : ' · договор не создан'}`;
 });
 const documentSectionHasError = computed(() => isCompanyOrder.value && !props.order?.customer_contract_id && !hasClosingBaseDocument.value);
 const beforeDocumentGenerate = async (type: string) => {
@@ -1482,15 +1502,16 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
 const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine => ({
   service_id: line.service_id,
   title: line.service_title,
-  quantity: line.quantity,
-  price: line.price,
-  cost: line.cost,
+  quantity: Math.max(1, Number(line.quantity || 1)),
+  price: Number(line.price || 0),
+  cost: Number(line.cost || 0),
 });
 
 const loadProposalLines = (proposal: OrderProposalResponse | null | undefined, fallbackOrder?: ManagerOrderDetailResponse | null) => {
+  editingServiceLineIndex.value = null;
   if (proposal) {
     activeProposalId.value = proposal.id;
-    proposalStatus.value = (proposal.status as any) || proposalStatus.value || 'draft';
+    proposalStatus.value = normalizeProposalStatus(proposal.status);
     productLines.value = (proposal.product_lines || []).map(mapProductLineFromResponse);
     serviceLines.value = (proposal.service_lines || []).map(mapServiceLineFromResponse);
     return;
@@ -1545,7 +1566,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   measurerId.value = order.measurer_id ?? null;
   measurementResult.value = order.measurement_result ?? '';
   additionalConditions.value = order.additional_conditions ?? '';
-  proposalStatus.value = (order.proposal_status as any) || 'draft';
+  proposalStatus.value = normalizeProposalStatus(order.proposal_status);
   negotiationStatus.value = order.negotiation_status || 'awaiting_offer';
   executionStatus.value = order.execution_status || 'needs_schedule';
   executionWithoutPayment.value = Boolean(order.execution_without_payment);
@@ -1752,6 +1773,7 @@ const addProductLine = () => {
 
 const addServiceLine = () => {
   serviceLines.value.push({ title: '', quantity: 1, price: 0, cost: 0, service_id: null });
+  editingServiceLineIndex.value = serviceLines.value.length - 1;
 };
 
 const applyOrderResponse = async (
@@ -1803,6 +1825,7 @@ const validateProposalLines = () => {
 
 const saveCurrentProposalLines = async () => {
   if (!props.order?.id) return props.order || null;
+  if (activeProposalLocked.value) return props.order;
   const validationError = validateProposalLines();
   if (validationError) {
     localFormError.value = validationError;
@@ -1928,6 +1951,70 @@ const selectProposalForOrder = async (proposal?: OrderProposalResponse) => {
   } finally {
     proposalActionLoading.value = false;
   }
+};
+
+const changeActiveProposalStatus = async (nextStatus: ProposalLifecycleStatus) => {
+  const proposal = activeProposal.value;
+  if (!props.order?.id || !proposal?.id || proposalActionLoading.value) return;
+  if (nextStatus === activeProposalStatus.value) return;
+
+  if (nextStatus === 'ready_to_send') {
+    const validationError = validateProposalLines();
+    if (validationError || totalPreview.value <= 0) {
+      setToast(validationError || 'Добавьте хотя бы одну позицию с ненулевой суммой', 'error');
+      return;
+    }
+  }
+  if (nextStatus === 'sent' && !window.confirm('Отметить предложение отправленным другим способом? Для отправки по email используйте основную кнопку.')) return;
+  if (nextStatus === 'draft' && activeProposalLocked.value && !window.confirm('Вернуть предложение в черновик? После этого его можно будет редактировать.')) return;
+
+  proposalActionLoading.value = true;
+  try {
+    if (nextStatus === 'ready_to_send') await saveCurrentProposalLines();
+    const order = await ManagerOrdersService.patchManagerOrderProposal(props.order.id, proposal.id, { status: nextStatus });
+    proposalStatus.value = nextStatus;
+    negotiationStatus.value = order.negotiation_status || negotiationStatus.value;
+    await applyOrderResponse(order, proposal.id);
+    const label = proposalStatusLabel(nextStatus);
+    setToast(`Статус предложения: ${label}`, 'success');
+  } catch (error) {
+    setToast(`Не удалось изменить статус: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    proposalActionLoading.value = false;
+  }
+};
+
+const openProposalSend = async () => {
+  const proposal = activeProposal.value;
+  if (!proposal) return;
+  expandedDrawerSections.value.documents = true;
+  activeWorkspaceTarget.value = 'documents';
+  await nextTick();
+  const offerExists = orderDocuments.value.some((document) => (
+    document.doc_type === 'offer'
+    && (!document.proposal_id || document.proposal_id === proposal.id)
+  ));
+  if (offerExists) documentsPanelRef.value?.openSend();
+  else {
+    documentsPanelRef.value?.openCreate();
+    setToast('Сначала создайте коммерческое предложение для активного варианта', 'error');
+  }
+  document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+const handleWorkspaceNextAction = async () => {
+  const action = orderWorkspace.value.nextAction;
+  if (action.command === 'create_proposal') return createProposal();
+  if (action.command === 'finish_proposal') return changeActiveProposalStatus('ready_to_send');
+  if (action.command === 'send_proposal') return openProposalSend();
+  if (action.command === 'record_proposal_response') {
+    openWorkspaceTarget('proposal');
+    await nextTick();
+    proposalToolbarRef.value?.openResponse();
+    return;
+  }
+  if (action.command === 'create_proposal_variant') return duplicateProposal();
+  openWorkspaceTarget(action.target);
 };
 
 const toggleEstimateImport = async () => {
@@ -2203,6 +2290,7 @@ const removeProductLine = (index: number) => {
 const removeServiceLine = (index: number) => {
   if (!window.confirm('Удалить эту услугу из заказа?')) return;
   serviceLines.value.splice(index, 1);
+  editingServiceLineIndex.value = null;
   if (activeServiceSuggestionIndex.value === index) {
     activeServiceSuggestionIndex.value = null;
     serviceTariffOptions.value = [];
@@ -2355,14 +2443,13 @@ const handleSave = () => {
     installer_id: installerId.value,
     customer_branch_id: customerBranchId.value,
     customer_delivery_address: customerDeliveryAddress.value,
-    products: linePayload.products,
-    services: linePayload.services,
+    products: activeProposalLocked.value ? undefined : linePayload.products,
+    services: activeProposalLocked.value ? undefined : linePayload.services,
     measurement_required: measurementRequired.value,
     measurer_id: measurerId.value,
     measurement_result: measurementResult.value,
     additional_conditions: additionalConditions.value,
     negotiation_status: status.value === 'negotiation' ? negotiationStatus.value : undefined,
-    proposal_status: status.value === 'execution' ? 'approved' : proposalStatus.value,
     execution_status: status.value === 'execution' ? executionStatus.value : undefined,
     execution_without_payment: status.value === 'execution' ? executionWithoutPayment.value : false,
     execution_without_payment_reason: status.value === 'execution' && executionWithoutPayment.value ? executionWithoutPaymentReason.value : null,
@@ -2390,7 +2477,8 @@ const closeDrawer = (options?: { force?: boolean } | Event) => {
 const isDeleting = ref(false);
 const deleteOrder = async () => {
   if (!props.order?.id) return;
-  const proceed = window.confirm("Вы уверены? Это безвозвратно удалит заказ и все связанные с ним документы, выезды и платежи.");
+  const orderLabel = `Заказ №${props.order.id}${displayOrderTitle.value ? ` «${displayOrderTitle.value}»` : ''}`;
+  const proceed = window.confirm(`${orderLabel} будет безвозвратно удалён вместе со связанными документами, выездами и платежами. Продолжить?`);
   if (!proceed) return;
 
   isDeleting.value = true;
@@ -2546,9 +2634,10 @@ watch(
         :compact="compactWorkspaceHeader"
         @update:title="orderTitle = $event"
         @change-workflow="setWorkflowType"
-        @next="openWorkspaceTarget(orderWorkspace.nextAction.target)"
+        @next="handleWorkspaceNextAction"
         @payments="openWorkspaceTarget('payments')"
         @hold="toggleHold"
+        @delete="deleteOrder"
         @discard="discardUnsavedChanges"
         @save="handleSave"
         @close="closeDrawer"
@@ -2625,7 +2714,7 @@ watch(
       <OrderDrawerSection
         id="order-workspace-object"
         v-model:expanded="expandedDrawerSections.clientDetails"
-        title="Объект"
+        title="Подробнее об объекте"
         :summary="customerDetailsSummary"
         tone="default"
         :has-error="Boolean(getFieldError('customer_delivery_address') || getFieldError('comment'))"
@@ -2787,11 +2876,11 @@ watch(
 
 
       <!-- Планирование (Measurement & Logistics) -->
-      <section v-if="status === 'negotiation'" id="order-workspace-planning" class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-3">
+      <section v-if="status === 'negotiation'" id="order-workspace-planning" class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-3 dark:border-blue-500/30 dark:bg-blue-500/10">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
-            <h3 class="text-sm font-semibold text-blue-900">{{ planningTitle }}</h3>
-            <p class="mt-0.5 truncate text-xs text-blue-700/70">{{ planningSummary }}</p>
+            <h3 class="text-sm font-semibold text-blue-900 dark:text-blue-100">{{ planningTitle }}</h3>
+            <p class="mt-0.5 truncate text-xs text-blue-700/70 dark:text-blue-200/70">{{ planningSummary }}</p>
           </div>
           <button
             v-if="!measurementRequired"
@@ -2800,46 +2889,31 @@ watch(
             @click="measurementRequired = true"
           >
             <span class="material-icons-round text-[15px]">add_location_alt</span>
-            {{ isRepairWorkflow ? 'Выезд на диагностику' : 'Выезд на замер' }}
+            {{ isRepairWorkflow ? 'Назначить диагностику' : 'Назначить замер' }}
           </button>
-          <label v-else class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-blue-900 ring-1 ring-blue-100">
+          <label v-else class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-blue-900 ring-1 ring-blue-100 dark:bg-slate-900 dark:text-blue-100 dark:ring-blue-500/30">
             <input type="checkbox" v-model="measurementRequired" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
             {{ isRepairWorkflow ? 'Диагностика нужна' : 'Замер нужен' }}
           </label>
         </div>
 
-        <div class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-xs font-semibold uppercase tracking-[0.12em] text-blue-900/70">Состояние переговоров</p>
-            <span class="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-800">
-              {{ negotiationStatusLabel }}
-            </span>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              v-for="option in NEGOTIATION_STATUS_OPTIONS"
-              :key="option.value"
-              type="button"
-              class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition"
-              :class="negotiationStatus === option.value
-                ? 'border-blue-200 bg-blue-100 text-blue-900 shadow-sm'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800'"
-              @click="setNegotiationStatus(option.value)"
-            >
-              <span class="material-icons-round text-[15px]">{{ option.icon }}</span>
-              {{ option.label }}
-            </button>
-          </div>
-          <label class="mt-3 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900">
+        <div class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm dark:border-blue-500/30 dark:bg-slate-900">
+          <label class="block">
+            <span class="text-xs font-semibold uppercase tracking-[0.12em] text-blue-900/70 dark:text-blue-200/80">Состояние переговоров</span>
+            <select :value="negotiationStatus" class="field-input mt-2 bg-white dark:bg-slate-950" @change="setNegotiationStatus(($event.target as HTMLSelectElement).value)">
+              <option v-for="option in NEGOTIATION_STATUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+          <label class="mt-3 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
             <input v-model="autoExecutionOnPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
             <span>
-              <span class="block font-semibold">Перевести в работу после полной оплаты</span>
-              <span class="mt-0.5 block text-emerald-700/80">Сработает автоматически, когда долг по заказу станет нулевым.</span>
+              <span class="block font-semibold">После полной оплаты автоматически перевести заказ в этап «Работы»</span>
+              <span class="mt-0.5 block text-emerald-700/80 dark:text-emerald-200/70">Сработает автоматически, когда долг по заказу станет нулевым.</span>
             </span>
           </label>
         </div>
 
-        <div v-if="measurementRequired" class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+        <div v-if="measurementRequired" class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm dark:border-blue-500/30 dark:bg-slate-900">
           <DateTimeField v-model="assessmentDate" :label="isRepairWorkflow ? 'Дата и время диагностики' : 'Дата и время замера'" :error="getFieldError('measurement_date')" />
         </div>
 
@@ -3345,76 +3419,31 @@ watch(
         :has-error="Boolean(getFieldError('products') || getFieldError('services'))"
       >
         <div class="min-w-0">
-        <div class="mb-4 border-b border-gray-200 pb-3">
-          <div v-if="orderProposals.length" class="flex gap-2 overflow-x-auto pb-1">
-            <button
-              v-for="proposal in orderProposals"
-              :key="proposal.id"
-              type="button"
-              class="shrink-0 rounded-xl border px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-60"
-              :class="proposal.id === activeProposal?.id
-                ? 'border-teal-500 bg-teal-50 text-teal-900 shadow-sm'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-teal-200 hover:text-teal-800'"
-              :disabled="proposalActionLoading"
-              @click="onProposalClick(proposal)"
-              @dblclick.stop="selectProposalForOrder(proposal)"
-            >
-              <span class="flex items-center gap-1 font-semibold">
-                {{ proposal.name }}
-                <span v-if="proposal.is_selected" class="material-icons-round text-[14px] text-teal-600">check_circle</span>
-              </span>
-              <span class="mt-0.5 block whitespace-nowrap text-[11px] opacity-75">{{ formatMoney(proposal.total_amount || 0) }}</span>
-            </button>
-            <button
-              type="button"
-              class="flex min-h-[58px] w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-500 transition hover:border-teal-300 hover:text-teal-700"
-              :disabled="proposalActionLoading"
-              title="Добавить предложение"
-              @click="createProposal"
-            >
-              <span class="material-icons-round text-[20px]">add</span>
-            </button>
-          </div>
+        <OrderProposalToolbar
+          ref="proposalToolbarRef"
+          class="mb-4"
+          :proposals="orderProposals"
+          :active-proposal-id="activeProposal?.id"
+          :loading="proposalActionLoading"
+          @open="onProposalClick"
+          @select="selectProposalForOrder"
+          @create="createProposal"
+          @duplicate="duplicateProposal"
+          @rename="renameProposal"
+          @archive="archiveProposal"
+          @change-status="changeActiveProposalStatus"
+          @send="openProposalSend"
+        />
 
-          <div v-if="activeProposal" class="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              class="btn-mini whitespace-nowrap text-xs"
-              :disabled="proposalActionLoading || activeProposal.is_selected"
-              @click="selectProposalForOrder()"
-            >
-              <span class="material-icons-round text-[15px]">check_circle</span>
-              Выбрать
-            </button>
-            <button
-              type="button"
-              class="btn-mini-outline whitespace-nowrap text-xs"
-              :disabled="proposalActionLoading || !activeProposal"
-              @click="duplicateProposal"
-            >
-              <span class="material-icons-round text-[15px]">content_copy</span>
-              Копия
-            </button>
-            <button
-              type="button"
-              class="btn-mini-outline whitespace-nowrap text-xs"
-              :disabled="proposalActionLoading || !activeProposal"
-              @click="renameProposal"
-            >
-              <span class="material-icons-round text-[15px]">edit</span>
-              Название
-            </button>
-            <button
-              type="button"
-              class="flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
-              :disabled="proposalActionLoading || orderProposals.length <= 1"
-              @click="archiveProposal"
-              title="В архив"
-            >
-              <span class="material-icons-round text-[18px]">delete</span>
-            </button>
+        <div v-if="activeProposalLocked" class="mb-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+          <span>Эта редакция уже {{ activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Чтобы изменить состав или стоимость, создайте копию либо верните её в черновик.</span>
+          <div class="flex shrink-0 gap-2">
+            <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="duplicateProposal">Создать копию</button>
+            <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="changeActiveProposalStatus('draft')">В черновик</button>
           </div>
         </div>
+
+        <fieldset :disabled="activeProposalLocked" :class="activeProposalLocked ? 'opacity-60' : ''">
 
         <section v-if="showProductLinesSection" class="mt-2">
           <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -3564,6 +3593,7 @@ watch(
               class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
             >
               <button
+                v-if="editingServiceLineIndex === index"
                 type="button"
                 class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100"
                 :aria-label="`Удалить услугу #${index + 1}`"
@@ -3572,7 +3602,25 @@ watch(
               >
                 ×
               </button>
-              <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
+              <div v-if="editingServiceLineIndex !== index" class="flex min-w-0 items-start gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ line.title || 'Новая услуга' }}</p>
+                  <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                    <span>{{ line.quantity }} × {{ formatMoney(line.price) }}</span>
+                    <span class="font-semibold text-slate-800 dark:text-slate-200">{{ formatMoney(lineTotal(line)) }}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="btn-mini-outline h-9 w-9 shrink-0 justify-center p-0"
+                  :aria-label="`Редактировать услугу #${index + 1}`"
+                  title="Редактировать"
+                  @click="editingServiceLineIndex = index"
+                >
+                  <span class="material-icons-round text-[17px]">edit</span>
+                </button>
+              </div>
+              <div v-else class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
                 <div class="relative col-span-6 space-y-1 md:col-span-5">
                   <span class="flex min-h-6 items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
                     <span>Название</span>
@@ -3637,6 +3685,9 @@ watch(
                   <div class="rounded-lg bg-gray-50 px-3 py-2">
                     <p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p>
                   </div>
+                </div>
+                <div class="col-span-6 flex justify-end md:col-span-12">
+                  <button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingServiceLineIndex = null">Готово</button>
                 </div>
               </div>
             </div>
@@ -3714,6 +3765,7 @@ watch(
             </p>
           </div>
         </section>
+        </fieldset>
       </div>
       </OrderDrawerSection>
 
@@ -3751,6 +3803,7 @@ watch(
 
         <OrderDocumentsPanel
           v-if="order"
+          ref="documentsPanelRef"
           :order="order"
           :active-proposal-id="activeProposalId"
           :product-lines="productLines"
@@ -3969,12 +4022,6 @@ watch(
       </section>
       </OrderDrawerSection>
 
-      <footer class="mt-6 border-t border-gray-100 pt-4 dark:border-slate-800">
-        <button class="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30" :disabled="saving || isDeleting" @click="deleteOrder" title="Безвозвратное удаление">
-          <span class="material-icons-round text-[16px]">delete</span>
-          {{ isDeleting ? 'Удаление...' : 'Удалить заказ' }}
-        </button>
-      </footer>
       </div>
     </aside>
 

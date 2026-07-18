@@ -427,8 +427,12 @@ const inheritedDocumentRoleType = computed(() => normalizeRoleType(
     || props.order.effective_document_role_type
 ));
 const documentSummary = computed(() => {
-  const base = hasContract.value ? 'договор есть' : (hasOrderInvoice.value ? 'есть счет' : (hasClosingBaseDocument.value ? 'есть основание' : 'без основания'));
-  return `${documents.value.length} док. · ${base}`;
+  const count = documents.value.length;
+  if (!count) return 'Документов нет';
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  const noun = mod100 >= 11 && mod100 <= 14 ? 'документов' : mod10 === 1 ? 'документ' : mod10 >= 2 && mod10 <= 4 ? 'документа' : 'документов';
+  return `${count} ${noun}${hasContract.value ? '' : ' · договор не создан'}`;
 });
 const hasDocumentSetupWarning = computed(() => isCompanyOrder.value && !selectedCustomerContractId.value && !hasClosingBaseDocument.value);
 const suggestedDocumentType = computed(() => {
@@ -770,6 +774,11 @@ const openCreatePanel = () => {
     ensureAllWaybillComponents();
   }
 };
+
+defineExpose({
+  openSend: openDocumentSendModal,
+  openCreate: openCreatePanel,
+});
 
 const selectDocumentType = (type: string) => {
   selectedDocumentType.value = type;
@@ -1127,6 +1136,7 @@ const registerExternalContract = async () => {
 
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <button
+          v-if="documents.length"
           class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
           title="Отправить документы"
           :disabled="!documents.length || isUploadingDoc || !!processingDocId || isGeneratingDoc"
@@ -1137,6 +1147,7 @@ const registerExternalContract = async () => {
         </button>
 
         <button
+          v-if="documents.length"
           class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#007f80] px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
           :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"
           @click="openCreatePanel"
@@ -1231,8 +1242,12 @@ const registerExternalContract = async () => {
             </div>
           </div>
         </div>
-        <div v-else class="rounded-xl border border-dashed border-slate-300 py-5 text-center text-sm italic text-slate-500 dark:border-slate-700">
-          Нет сформированных документов
+        <div v-else class="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center dark:border-slate-700">
+          <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Документов нет</p>
+          <button type="button" class="btn-mini h-8 text-xs" @click="openCreatePanel">
+            <span class="material-icons-round text-[15px]">add</span>
+            Создать
+          </button>
         </div>
       </div>
 

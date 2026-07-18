@@ -1432,6 +1432,92 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
 
 
 @pytest.mark.asyncio
+async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(async_client, db):
+    customer = Customer(name="Lifecycle Customer", phone="+375296666668", type=CustomerType.individual)
+    product = Product(title="Lifecycle Product", slug="lifecycle-product", price=1200, area=25)
+    db.add_all([customer, product])
+    await db.commit()
+    await db.refresh(customer)
+    await db.refresh(product)
+
+    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+    headers = await _auth_headers(async_client)
+
+    create_lines = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"products": [{"product_id": product.id, "quantity": 1, "price": 1200, "cost": 700}]},
+        headers=headers,
+    )
+    assert create_lines.status_code == 200
+    proposal = create_lines.json()["proposals"][0]
+
+    empty_variant = await async_client.post(
+        f"/api/manager/orders/{order.id}/proposals",
+        json={"name": "Пустой вариант"},
+        headers=headers,
+    )
+    assert empty_variant.status_code == 200
+    empty_proposal = next(item for item in empty_variant.json()["proposals"] if item["name"] == "Пустой вариант")
+    empty_ready = await async_client.patch(
+        f"/api/manager/orders/{order.id}/proposals/{empty_proposal['id']}",
+        json={"status": "ready_to_send"},
+        headers=headers,
+    )
+    assert empty_ready.status_code == 400
+
+    ready = await async_client.patch(
+        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        json={"status": "ready_to_send"},
+        headers=headers,
+    )
+    assert ready.status_code == 200
+    assert ready.json()["proposal_status"] == "ready_to_send"
+    assert ready.json()["negotiation_status"] == "awaiting_offer"
+
+    invalid = await async_client.patch(
+        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        json={"status": "unknown"},
+        headers=headers,
+    )
+    assert invalid.status_code == 400
+
+    sent = await async_client.patch(
+        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        json={"status": "sent"},
+        headers=headers,
+    )
+    assert sent.status_code == 200
+    assert sent.json()["proposal_status"] == "sent"
+    assert sent.json()["negotiation_status"] == "proposal_sent"
+
+    locked_edit = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"products": [{"product_id": product.id, "quantity": 2, "price": 1200, "cost": 700}]},
+        headers=headers,
+    )
+    assert locked_edit.status_code == 400
+    assert "cannot be edited" in str(locked_edit.json())
+
+    draft = await async_client.patch(
+        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        json={"status": "draft"},
+        headers=headers,
+    )
+    assert draft.status_code == 200
+    assert draft.json()["proposal_status"] == "draft"
+    editable_again = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={"products": [{"product_id": product.id, "quantity": 2, "price": 1200, "cost": 700}]},
+        headers=headers,
+    )
+    assert editable_again.status_code == 200
+    assert editable_again.json()["total_amount"] == 2400
+
+
+@pytest.mark.asyncio
 async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db):
     customer = Customer(name="Transfer Customer", phone="+375291234000", type=CustomerType.individual)
     product = Product(title="Transfer Product", slug="transfer-product", price=1800, area=25)
@@ -1681,6 +1767,15 @@ async def test_manager_order_offer_generation_uses_requested_proposal_and_create
     assert first_offer["doc_id"] != second_offer["doc_id"]
     assert table_captures[-1][0][1] == "Proposal Doc P1"
     assert table_captures[-1][-1][-1] == "1000.00"
+
+    order_after_generation = await async_client.get(
+        f"/api/manager/orders/{order.id}",
+        headers=headers,
+    )
+    assert order_after_generation.status_code == 200
+    order_payload = order_after_generation.json()
+    assert order_payload["proposal_status"] == "draft"
+    assert {proposal["status"] for proposal in order_payload["proposals"]} == {"draft"}
 
 
 @pytest.mark.asyncio

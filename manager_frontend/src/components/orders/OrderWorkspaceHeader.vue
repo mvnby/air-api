@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { ArrowRight, Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, Undo2, X } from 'lucide-vue-next';
+import { ArrowRight, Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, Trash2, Undo2, X } from 'lucide-vue-next';
 import { formatMoney } from './order-utils';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
 import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStickyHeader';
@@ -27,6 +27,7 @@ const emit = defineEmits<{
   next: [];
   payments: [];
   hold: [];
+  delete: [];
   discard: [];
   save: [];
   close: [];
@@ -41,7 +42,7 @@ const focusLocksCompactMode = ref(false);
 const effectiveCompact = computed(() => Boolean(props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value));
 const showCustomerName = computed(() => {
   const customerName = String(props.customerName || '').trim();
-  return Boolean(customerName && customerName !== String(props.title || '').trim());
+  return Boolean(effectiveCompact.value && customerName && customerName !== String(props.title || '').trim());
 });
 let resizeAnimation: Animation | null = null;
 let contentAnimation: Animation | null = null;
@@ -222,6 +223,11 @@ const onWorkflowChange = async (event: Event) => {
               <Play v-if="isOnHold" :size="16" />
               <Pause v-else :size="16" />
               {{ isOnHold ? 'Вернуть в работу' : 'Отложить заказ' }}
+            </button>
+            <div class="my-1 border-t border-slate-200 dark:border-slate-700" />
+            <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30" @click="emit('delete'); menuOpen = false">
+              <Trash2 :size="16" />
+              Удалить заказ
             </button>
           </div>
         </div>

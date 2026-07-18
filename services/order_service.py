@@ -16,6 +16,13 @@ from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 from services.order_product_line_service import OrderProductLineService
+from services.order_proposal_lifecycle import (
+    PROPOSAL_STATUS_APPROVED,
+    PROPOSAL_STATUS_READY,
+    PROPOSAL_STATUS_SENT,
+    normalize_proposal_status,
+    sync_selected_proposal_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -690,6 +697,13 @@ class OrderService:
         )
 
     @staticmethod
+    def _legacy_default_proposal_status(order: Order) -> str:
+        """Only carry forward a legacy status when there is evidence of sending."""
+        if order.proposal_status == PROPOSAL_STATUS_SENT and order.proposal_sent_at:
+            return PROPOSAL_STATUS_SENT
+        return "draft"
+
+    @staticmethod
     async def ensure_default_proposal(session: AsyncSession, order: Order) -> OrderProposal:
         proposals = list(getattr(order, "proposals", []) or [])
         active = [proposal for proposal in proposals if not proposal.is_archived]
@@ -705,7 +719,7 @@ class OrderService:
         proposal = OrderProposal(
             order_id=int(order.id),
             name="Основное",
-            status=order.proposal_status or "draft",
+            status=OrderService._legacy_default_proposal_status(order),
             is_selected=True,
             sort_order=0,
         )
@@ -1078,7 +1092,7 @@ class OrderService:
         proposal = OrderProposal(
             order_id=int(order.id),
             name="Основное",
-            status=order.proposal_status or "draft",
+            status="draft",
             is_selected=True,
             sort_order=0,
         )
@@ -2374,11 +2388,23 @@ class OrderService:
         proposal = next((item for item in order.proposals if item.id == proposal_id), None)
         if not proposal:
             raise ValueError("Proposal not found")
-        fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+        fields_set = getattr(payload, "model_fields_set", None)
+        if fields_set is None:
+            fields_set = getattr(payload, "__fields_set__", set())
         if "name" in fields_set:
             proposal.name = OrderService._clean_proposal_name(payload.name, proposal.name)
-        if "status" in fields_set and payload.status is not None:
-            proposal.status = str(payload.status or "draft")
+        status_changed = "status" in fields_set and payload.status is not None
+        if status_changed:
+            next_status = normalize_proposal_status(payload.status)
+            if next_status == PROPOSAL_STATUS_READY:
+                product_links = [link for link in order.product_links if link.proposal_id == proposal.id]
+                service_links = [link for link in order.service_links if link.proposal_id == proposal.id]
+                total_amount, _, _ = OrderService._proposal_line_totals(product_links, service_links)
+                if not product_links and not service_links:
+                    raise ValueError("Proposal must contain at least one line before it is ready to send")
+                if total_amount <= 0:
+                    raise ValueError("Proposal total must be greater than zero before it is ready to send")
+            proposal.status = next_status
         if "sort_order" in fields_set and payload.sort_order is not None:
             proposal.sort_order = int(payload.sort_order)
         if "is_archived" in fields_set and payload.is_archived is not None:
@@ -2389,8 +2415,12 @@ class OrderService:
                 proposal.is_selected = False
                 if replacement:
                     replacement.is_selected = True
+                    replacement.status = normalize_proposal_status(replacement.status)
+                    sync_selected_proposal_status(order, replacement)
                     session.add(replacement)
         session.add(proposal)
+        if status_changed:
+            sync_selected_proposal_status(order, proposal)
         await session.flush()
         await OrderService._refresh_order_financials(session, order)
         session.add(order)
@@ -2406,7 +2436,8 @@ class OrderService:
         for item in order.proposals:
             item.is_selected = item.id == proposal.id
             session.add(item)
-        order.proposal_status = proposal.status or order.proposal_status or "draft"
+        proposal.status = normalize_proposal_status(proposal.status)
+        sync_selected_proposal_status(order, proposal)
         await session.flush()
         await OrderService._refresh_order_financials(session, order)
         session.add(order)
@@ -2854,6 +2885,8 @@ class OrderService:
             )
             if not target_proposal:
                 raise ValueError("Proposal not found")
+            if normalize_proposal_status(target_proposal.status) in {PROPOSAL_STATUS_SENT, PROPOSAL_STATUS_APPROVED}:
+                raise ValueError("Sent or accepted proposal cannot be edited. Return it to draft or create a copy")
             if "products" in fields_set and payload.products is not None:
                 for product_line in payload.products:
                     if product_line.quantity <= 0:
