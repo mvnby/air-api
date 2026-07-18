@@ -1,5 +1,7 @@
 """Staff-authorized task reads exposed to the Telegram bot API."""
 
+from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.bot_access_service import BotAccessService
@@ -17,6 +19,9 @@ class BotTaskReadService:
         *,
         telegram_id: int,
         limit: int,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        statuses: list[str] | None = None,
     ) -> list[dict]:
         context = await BotAccessService.get_context(session, telegram_id)
         if not context.is_staff:
@@ -27,4 +32,7 @@ class BotTaskReadService:
             session,
             int(context.legacy_installer_id),
             limit=limit,
+            date_from=date_from,
+            date_to=date_to,
+            statuses=statuses,
         )

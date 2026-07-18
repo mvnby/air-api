@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -59,6 +59,31 @@ class BotCatalogProductLookupResponse(BaseModel):
 class BotTaskListRequest(BaseModel):
     telegram_id: int = Field(ge=1)
     limit: int = Field(default=10, ge=1, le=20)
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    statuses: list[
+        Literal[
+            "planned",
+            "in_progress",
+            "completed",
+            "canceled",
+            "new_lead",
+            "negotiation",
+            "execution",
+            "closed",
+        ]
+    ] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "BotTaskListRequest":
+        if self.date_from and self.date_to:
+            from_is_aware = self.date_from.tzinfo is not None
+            to_is_aware = self.date_to.tzinfo is not None
+            if from_is_aware != to_is_aware:
+                raise ValueError("date_from and date_to must use the same timezone form")
+            if self.date_from > self.date_to:
+                raise ValueError("date_from must not be after date_to")
+        return self
 
 
 class BotTaskResponse(BaseModel):
@@ -67,6 +92,7 @@ class BotTaskResponse(BaseModel):
     kind: Literal["stage", "order"]
     id: int = Field(ge=1)
     order_id: int = Field(ge=1)
+    stage_id: int | None = Field(default=None, ge=1)
     title: str
     status: str
     start_time: datetime
@@ -74,6 +100,7 @@ class BotTaskResponse(BaseModel):
     customer_name: str = "Клиент"
     customer_phone: str | None = None
     comment: str | None = None
+    manager_url: str | None = None
 
 
 class BotTaskListResponse(BaseModel):

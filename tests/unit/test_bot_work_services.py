@@ -292,6 +292,10 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
         "Старый монтаж без даты",
     ]
     assert [task["kind"] for task in tasks] == ["stage", "stage", "order"]
+    assert tasks[0]["stage_id"] == tasks[0]["id"]
+    assert tasks[0]["manager_url"].endswith(
+        f"/orders/kanban?orderId={active_order.id}"
+    )
     assert not any(
         task["kind"] == "order" and task["order_id"] == active_order.id
         for task in tasks
@@ -300,6 +304,16 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
     limited = await BotTaskService.list_my_tasks(sqlite_staff_session, 12345, limit=2)
     assert [task["title"] for task in limited] == ["Ближайший монтаж", "Пусконаладка"]
 
+    reference_time = datetime.now()
+    today = await BotTaskService.list_my_tasks(
+        sqlite_staff_session,
+        12345,
+        date_from=reference_time + timedelta(days=1, hours=12),
+        date_to=reference_time + timedelta(days=2, hours=12),
+        statuses=["planned"],
+    )
+    assert [task["title"] for task in today] == ["Ближайший монтаж", "Пусконаладка"]
+
 
 @pytest.mark.asyncio
 async def test_my_tasks_handler_uses_gateway_without_opening_database(monkeypatch):
@@ -307,12 +321,14 @@ async def test_my_tasks_handler_uses_gateway_without_opening_database(monkeypatc
         kind="stage",
         id=7,
         order_id=42,
+        stage_id=7,
         title="Монтаж",
         status="planned",
         start_time=datetime(2026, 7, 20, 12, 0),
         customer_name="Иван",
         customer_phone="+375291234567",
         address="Победы 15",
+        manager_url="https://api.mvn.by/manager/orders/kanban?orderId=42",
     )
     gateway = SimpleNamespace(
         list_my_tasks=AsyncMock(return_value=BotTaskListResponse(items=[task]))
@@ -365,7 +381,14 @@ async def test_task_read_service_reuses_authorized_installer_mapping(monkeypatch
 
     assert tasks == []
     get_context.assert_awaited_once_with(session, 777)
-    list_installer_tasks.assert_awaited_once_with(session, 17, limit=10)
+    list_installer_tasks.assert_awaited_once_with(
+        session,
+        17,
+        limit=10,
+        date_from=None,
+        date_to=None,
+        statuses=None,
+    )
 
 
 def test_task_report_builder_keeps_text_report_plain():

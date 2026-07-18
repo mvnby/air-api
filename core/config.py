@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     BOT_API_TOKEN: str = ""
     BOT_API_BASE_URL: str = "http://app:8000/api/internal/bot/v1"
     BOT_API_TIMEOUT_SECONDS: float = 5.0
+    MANAGER_BASE_URL: str = "https://api.mvn.by/manager"
+    BOT_TASK_TIMEZONE: str = "Europe/Minsk"
     ADMIN_IDS: str = ""
     ADMIN_ID: int = 0
     SECRET_KEY: str

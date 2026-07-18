@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
@@ -394,13 +395,25 @@ async def test_internal_bot_catalog_denies_non_staff_identity(monkeypatch):
 async def test_internal_bot_task_list_returns_stable_projection(monkeypatch):
     monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
 
-    async def fake_list(_session, *, telegram_id, limit):
+    async def fake_list(
+        _session,
+        *,
+        telegram_id,
+        limit,
+        date_from,
+        date_to,
+        statuses,
+    ):
         assert (telegram_id, limit) == (123456, 10)
+        assert date_from is None
+        assert date_to is None
+        assert statuses == []
         return [
             {
                 "kind": "stage",
                 "id": 7,
                 "order_id": 42,
+                "stage_id": 7,
                 "title": "Монтаж",
                 "status": "planned",
                 "start_time": "2026-07-20T12:00:00",
@@ -408,6 +421,7 @@ async def test_internal_bot_task_list_returns_stable_projection(monkeypatch):
                 "customer_name": "Иван",
                 "customer_phone": "+375291234567",
                 "comment": "Позвонить заранее",
+                "manager_url": "https://api.mvn.by/manager/orders/kanban?orderId=42",
                 "private_field": "must not leak",
             }
         ]
@@ -434,6 +448,7 @@ async def test_internal_bot_task_list_returns_stable_projection(monkeypatch):
                 "kind": "stage",
                 "id": 7,
                 "order_id": 42,
+                "stage_id": 7,
                 "title": "Монтаж",
                 "status": "planned",
                 "start_time": "2026-07-20T12:00:00",
@@ -441,9 +456,44 @@ async def test_internal_bot_task_list_returns_stable_projection(monkeypatch):
                 "customer_name": "Иван",
                 "customer_phone": "+375291234567",
                 "comment": "Позвонить заранее",
+                "manager_url": "https://api.mvn.by/manager/orders/kanban?orderId=42",
             }
         ]
     }
+
+
+async def test_internal_bot_task_list_forwards_today_filters(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_list(_session, **kwargs):
+        assert kwargs["telegram_id"] == 123456
+        assert kwargs["date_from"] == datetime(2026, 7, 20, 0, 0)
+        assert kwargs["date_to"] == datetime(2026, 7, 20, 23, 59, 59)
+        assert kwargs["statuses"] == ["planned", "in_progress"]
+        return []
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotTaskReadService, "list_for_staff", fake_list)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        response = await _request(
+            "/api/internal/bot/v1/tasks/my",
+            token="expected-token",
+            method="POST",
+            json={
+                "telegram_id": 123456,
+                "date_from": "2026-07-20T00:00:00",
+                "date_to": "2026-07-20T23:59:59",
+                "statuses": ["planned", "in_progress"],
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
 
 
 async def test_internal_bot_task_list_denies_non_staff_identity(monkeypatch):
