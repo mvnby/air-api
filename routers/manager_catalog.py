@@ -28,6 +28,7 @@ from routers.manager_operation_ids import (
     PATCH_MANAGER_CUSTOMER_BRANCH,
     DELETE_MANAGER_CUSTOMER_BRANCH,
     GET_MANAGER_PRODUCTS,
+    GET_MANAGER_PRODUCT,
     PATCH_MANAGER_CUSTOMER,
     DELETE_MANAGER_CUSTOMER,
     CREATE_MANAGER_PRODUCT,
@@ -62,6 +63,7 @@ from schemas import (
     ManagerCustomerReconciliationDocumentResponse,
     ManagerCustomerReconciliationResponse,
     ManagerCatalogProductListResponse,
+    ManagerCatalogProductItemResponse,
     ManagerCustomerUpdatePayload,
     ManagerTagGroupResponse,
     OnlinerImportPayload,
@@ -725,6 +727,29 @@ async def smart_search_products(
         brand_slugs=brand_slugs,
         category_slug=category_slug,
     )
+
+
+@router.get(
+    "/products/{product_id}",
+    response_model=ManagerCatalogProductItemResponse,
+    operation_id=GET_MANAGER_PRODUCT,
+)
+async def get_product_for_manager(
+    product_id: int,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    product = await ManagerCatalogService.get_product(
+        session=session,
+        product_id=product_id,
+    )
+    if not product:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=GET_MANAGER_PRODUCT,
+            error_code=PRODUCT_NOT_FOUND,
+        )
+    return product
 
 
 @router.post(

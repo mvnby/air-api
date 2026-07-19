@@ -22,6 +22,8 @@ from services.communications.processing_scope import (
     ALL_TEMPLATE_KEYS,
     CANARY_EVENT_TYPES,
     CANARY_TEMPLATE_KEYS,
+    STAFF_BOT_EVENT_TYPES,
+    STAFF_BOT_TEMPLATE_KEYS,
     CommunicationProcessingScope,
 )
 from services.communications.recipient_directory import (
@@ -134,12 +136,17 @@ def test_processing_scope_factories_are_closed_immutable_allowlists():
         control_revision=7,
     )
     full = CommunicationProcessingScope.all(control_revision=8)
+    staff_bot = CommunicationProcessingScope.staff_bot(control_revision=9)
 
     assert canary.outbox_event_types == CANARY_EVENT_TYPES
     assert canary.delivery_template_keys == CANARY_TEMPLATE_KEYS
     assert canary.exact_event_id == telegram_canary_event_id(RUN_ID_A)
     assert full.outbox_event_types == ALL_EVENT_TYPES
     assert full.delivery_template_keys == ALL_TEMPLATE_KEYS
+    assert staff_bot.outbox_event_types == STAFF_BOT_EVENT_TYPES
+    assert staff_bot.delivery_template_keys == STAFF_BOT_TEMPLATE_KEYS
+    assert not set(STAFF_BOT_EVENT_TYPES).intersection(ALL_EVENT_TYPES)
+    assert not set(STAFF_BOT_TEMPLATE_KEYS).intersection(ALL_TEMPLATE_KEYS)
     with pytest.raises(FrozenInstanceError):
         canary.control_revision = 9  # type: ignore[misc]
 

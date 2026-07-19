@@ -13,9 +13,13 @@ from services.communications.template_registry import (
     TELEGRAM_CANARY_TEMPLATE_KEY,
     telegram_canary_event_id,
 )
+from services.communications.staff_task_contracts import (
+    STAFF_TASK_EVENT_TYPE_VALUES,
+    STAFF_TASK_TEMPLATE_KEY_VALUES,
+)
 
 
-ProcessingMode = Literal["canary", "all"]
+ProcessingMode = Literal["canary", "all", "staff_bot"]
 CANARY_EVENT_TYPES = (TELEGRAM_CANARY_REQUESTED_EVENT,)
 CANARY_TEMPLATE_KEYS = (TELEGRAM_CANARY_TEMPLATE_KEY,)
 ALL_EVENT_TYPES = (
@@ -28,6 +32,8 @@ ALL_TEMPLATE_KEYS = (
     CONTACT_LEAD_TEMPLATE_KEY,
     TELEGRAM_CANARY_TEMPLATE_KEY,
 )
+STAFF_BOT_EVENT_TYPES = STAFF_TASK_EVENT_TYPE_VALUES
+STAFF_BOT_TEMPLATE_KEYS = STAFF_TASK_TEMPLATE_KEY_VALUES
 
 
 @dataclass(frozen=True)
@@ -42,7 +48,7 @@ class CommunicationProcessingScope:
     canary_run_id: str | None = None
 
     def __post_init__(self) -> None:
-        if self.mode not in {"canary", "all"}:
+        if self.mode not in {"canary", "all", "staff_bot"}:
             raise ValueError("Communication processing mode is invalid")
         if type(self.control_revision) is not int or self.control_revision < 0:
             raise ValueError(
@@ -65,6 +71,14 @@ class CommunicationProcessingScope:
                 or self.exact_event_id != telegram_canary_event_id(normalized_run_id)
             ):
                 raise ValueError("Canary processing scope identity is inconsistent")
+        elif self.mode == "staff_bot":
+            if (
+                self.canary_run_id is not None
+                or self.exact_event_id is not None
+                or self.outbox_event_types != STAFF_BOT_EVENT_TYPES
+                or self.delivery_template_keys != STAFF_BOT_TEMPLATE_KEYS
+            ):
+                raise ValueError("Staff bot processing scope allowlist is inconsistent")
         elif (
             self.canary_run_id is not None
             or self.exact_event_id is not None
@@ -99,6 +113,15 @@ class CommunicationProcessingScope:
             control_revision=control_revision,
             outbox_event_types=ALL_EVENT_TYPES,
             delivery_template_keys=ALL_TEMPLATE_KEYS,
+        )
+
+    @classmethod
+    def staff_bot(cls, *, control_revision: int = 1) -> "CommunicationProcessingScope":
+        return cls(
+            mode="staff_bot",
+            control_revision=control_revision,
+            outbox_event_types=STAFF_BOT_EVENT_TYPES,
+            delivery_template_keys=STAFF_BOT_TEMPLATE_KEYS,
         )
 
     def matches_control(

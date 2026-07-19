@@ -1050,6 +1050,223 @@
         ]
       }
     },
+    "/api/internal/bot/v1/staff-notifications/claim": {
+      "post": {
+        "tags": [
+          "internal bot v1 staff notifications"
+        ],
+        "summary": "Claim Staff Notification",
+        "operationId": "claim_internal_bot_staff_notification_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotStaffNotificationClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStaffNotificationClaimResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/staff-notifications/{delivery_id}/renew": {
+      "post": {
+        "tags": [
+          "internal bot v1 staff notifications"
+        ],
+        "summary": "Renew Staff Notification",
+        "operationId": "renew_internal_bot_staff_notification_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Delivery Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotStaffNotificationRenewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStaffNotificationMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/staff-notifications/{delivery_id}/ack": {
+      "post": {
+        "tags": [
+          "internal bot v1 staff notifications"
+        ],
+        "summary": "Ack Staff Notification",
+        "operationId": "ack_internal_bot_staff_notification_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Delivery Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotStaffNotificationAckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStaffNotificationMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/staff-notifications/{delivery_id}/nack": {
+      "post": {
+        "tags": [
+          "internal bot v1 staff notifications"
+        ],
+        "summary": "Nack Staff Notification",
+        "operationId": "nack_internal_bot_staff_notification_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Delivery Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotStaffNotificationNackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStaffNotificationMutationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/bot/v1/catalog/selection": {
       "post": {
         "tags": [
@@ -4864,6 +5081,51 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Get Product For Manager",
+        "operationId": "get_manager_product",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCatalogProductItemResponse"
+                }
               }
             }
           },
@@ -21947,6 +22209,407 @@
           "telegram_id"
         ],
         "title": "BotStaffContextResponse"
+      },
+      "BotStaffNotificationAckRequest": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Worker Id"
+          },
+          "lease_token": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 32,
+            "title": "Lease Token"
+          },
+          "telegram_message_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Message Id"
+          },
+          "provider_latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 300000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Latency Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_id",
+          "lease_token",
+          "telegram_message_id"
+        ],
+        "title": "BotStaffNotificationAckRequest"
+      },
+      "BotStaffNotificationClaimRequest": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Worker Id"
+          },
+          "visibility_timeout_seconds": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 30.0,
+            "title": "Visibility Timeout Seconds",
+            "default": 90
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_id"
+        ],
+        "title": "BotStaffNotificationClaimRequest"
+      },
+      "BotStaffNotificationClaimResponse": {
+        "properties": {
+          "notification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotStaffNotificationItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "BotStaffNotificationClaimResponse"
+      },
+      "BotStaffNotificationItem": {
+        "properties": {
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Delivery Id"
+          },
+          "event_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Event Id"
+          },
+          "telegram_id": {
+            "type": "integer",
+            "title": "Telegram Id"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/BotStaffNotificationPayload"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Attempt"
+          },
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Attempts"
+          },
+          "lease_token": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 32,
+            "title": "Lease Token"
+          },
+          "lease_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Lease Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "event_id",
+          "telegram_id",
+          "payload",
+          "attempt",
+          "max_attempts",
+          "lease_token",
+          "lease_expires_at"
+        ],
+        "title": "BotStaffNotificationItem"
+      },
+      "BotStaffNotificationMutationResponse": {
+        "properties": {
+          "delivery_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Delivery Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "sent",
+              "retry",
+              "dead"
+            ],
+            "title": "Status"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "status"
+        ],
+        "title": "BotStaffNotificationMutationResponse"
+      },
+      "BotStaffNotificationNackRequest": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Worker Id"
+          },
+          "lease_token": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 32,
+            "title": "Lease Token"
+          },
+          "permanent": {
+            "type": "boolean",
+            "title": "Permanent",
+            "default": false
+          },
+          "error_code": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Error Code"
+          },
+          "retry_after_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3600.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry After Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_id",
+          "lease_token",
+          "error_code"
+        ],
+        "title": "BotStaffNotificationNackRequest"
+      },
+      "BotStaffNotificationPayload": {
+        "properties": {
+          "event_kind": {
+            "type": "string",
+            "enum": [
+              "assigned",
+              "rescheduled",
+              "canceled",
+              "departure_reminder"
+            ],
+            "title": "Event Kind"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Staff User Id"
+          },
+          "stage_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Stage Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "timezone": {
+            "type": "string",
+            "const": "Europe/Minsk",
+            "title": "Timezone",
+            "default": "Europe/Minsk"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          },
+          "change_fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "assignee",
+                "start_time",
+                "end_time",
+                "address"
+              ]
+            },
+            "type": "array",
+            "title": "Change Fields"
+          },
+          "reminder_offset_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Offset Minutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_kind",
+          "staff_user_id",
+          "stage_id",
+          "order_id",
+          "stage_name",
+          "status",
+          "manager_url"
+        ],
+        "title": "BotStaffNotificationPayload"
+      },
+      "BotStaffNotificationRenewRequest": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Worker Id"
+          },
+          "lease_token": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 32,
+            "title": "Lease Token"
+          },
+          "visibility_timeout_seconds": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 30.0,
+            "title": "Visibility Timeout Seconds",
+            "default": 90
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_id",
+          "lease_token"
+        ],
+        "title": "BotStaffNotificationRenewRequest"
       },
       "BotTaskListRequest": {
         "properties": {

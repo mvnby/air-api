@@ -15,6 +15,7 @@ import {
 } from './manager-navigation';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
+const ProductWorkspaceView = defineAsyncComponent(() => import('./views/ProductWorkspaceView.vue'));
 const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibraryView.vue'));
 const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
 const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerProfileView.vue'));
@@ -161,6 +162,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/supply')) return 'supply';
   if (path.startsWith('/manager/suppliers')) return 'suppliers';
   if (path.startsWith('/manager/supplier-mapping')) return 'supplier-mapping';
+  if (/^\/manager\/products\/\d+(?:\/|$)/.test(path)) return 'product-workspace';
   return 'products';
 });
 
@@ -658,6 +660,7 @@ watch(currentPath, () => {
       <SupplyRequestsView v-else-if="currentView === 'supply'" :key="currentLocation" />
       <SupplierFeedsView v-else-if="currentView === 'suppliers'" :key="currentLocation" />
       <SupplierMappingView v-else-if="currentView === 'supplier-mapping'" :key="currentLocation" />
+      <ProductWorkspaceView v-else-if="currentView === 'product-workspace'" :key="currentLocation" />
       <ProductsView v-else :key="currentLocation" />
     </main>
 

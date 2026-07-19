@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
@@ -25,6 +26,9 @@ from models import (
 )
 from schemas import ManagerOrderUpdatePayload, OrderWorkStageCreatePayload, OrderWorkStageUpdatePayload, PaymentCreatePayload
 from services.order_service import OrderService
+from services.staff_task_notification_event_service import (
+    StaffTaskNotificationEventService,
+)
 
 
 @pytest.fixture
@@ -155,6 +159,85 @@ async def test_service_validates_work_stage_status_and_order(sqlite_order_sessio
             999999,
             OrderWorkStageCreatePayload(name="Невозможный заказ"),
         )
+
+
+@pytest.mark.asyncio
+async def test_order_stage_mutations_enqueue_staff_notifications(
+    sqlite_order_session,
+    monkeypatch,
+):
+    customer = Customer(name="Notification Customer", phone="+375291234501")
+    installer = Installer(name="Notification Installer")
+    sqlite_order_session.add_all([customer, installer])
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(customer)
+    await sqlite_order_session.refresh(installer)
+    order = Order(
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        title="Монтаж",
+    )
+    sqlite_order_session.add(order)
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(order)
+
+    ensure_assignable = AsyncMock()
+    assigned = AsyncMock(return_value=True)
+    rescheduled = AsyncMock(return_value=True)
+    canceled = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        OrderService,
+        "_ensure_assignable_legacy_executor",
+        ensure_assignable,
+    )
+    monkeypatch.setattr(
+        StaffTaskNotificationEventService,
+        "enqueue_assigned",
+        assigned,
+    )
+    monkeypatch.setattr(
+        StaffTaskNotificationEventService,
+        "enqueue_rescheduled",
+        rescheduled,
+    )
+    monkeypatch.setattr(
+        StaffTaskNotificationEventService,
+        "enqueue_canceled",
+        canceled,
+    )
+
+    start_time = datetime(2026, 7, 20, 10, 0)
+    await OrderService.add_order_stage(
+        sqlite_order_session,
+        int(order.id),
+        OrderWorkStageCreatePayload(
+            name="Монтаж",
+            installer_id=int(installer.id),
+            start_time=start_time,
+        ),
+    )
+    stage = (await sqlite_order_session.execute(select(OrderWorkStage))).scalar_one()
+    ensure_assignable.assert_awaited_once_with(
+        sqlite_order_session,
+        int(installer.id),
+    )
+    assigned.assert_awaited_once()
+
+    await OrderService.update_order_stage(
+        sqlite_order_session,
+        int(order.id),
+        int(stage.id),
+        OrderWorkStageUpdatePayload(start_time=start_time + timedelta(hours=1)),
+    )
+    rescheduled.assert_awaited_once()
+
+    await OrderService.update_order_stage(
+        sqlite_order_session,
+        int(order.id),
+        int(stage.id),
+        OrderWorkStageUpdatePayload(status="canceled"),
+    )
+    canceled.assert_awaited_once()
 
 
 def test_service_display_order_title_hides_legacy_site_title():

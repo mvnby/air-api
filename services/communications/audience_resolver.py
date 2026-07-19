@@ -11,6 +11,12 @@ from services.communications.recipient_directory import (
     ManagementRecipientDirectory,
     OperationsCanaryRecipientDirectory,
 )
+from services.communications.staff_task_contracts import (
+    StaffTaskNotificationPayloadV1,
+)
+from services.communications.staff_task_recipient_directory import (
+    StaffTaskRecipientDirectory,
+)
 from services.communications.template_registry import UnsupportedCommunicationEvent
 
 
@@ -30,6 +36,14 @@ class CommunicationAudienceResolver:
             return await OperationsCanaryRecipientDirectory.list_telegram(
                 session,
                 required_recipient_keys=payload.recipient_keys,
+            )
+        if plan.audience == "staff_assignee":
+            payload = StaffTaskNotificationPayloadV1.model_validate(
+                plan.render_context
+            )
+            return await StaffTaskRecipientDirectory.list_telegram(
+                session,
+                payload=payload,
             )
         raise UnsupportedCommunicationEvent(
             f"Unsupported communication audience {plan.audience!r}"

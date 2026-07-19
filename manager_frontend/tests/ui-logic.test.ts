@@ -40,6 +40,11 @@ import {
 } from '../src/components/catalog-quality/catalog-quality-state';
 import { countLabel } from '../src/components/catalog-quality/catalog-quality-copy';
 import { navSections } from '../src/manager-navigation';
+import {
+  buildProductWorkspacePath,
+  getProductWorkspaceNeighbors,
+  parseProductWorkspaceLocation,
+} from '../src/utils/product-workspace';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -185,6 +190,30 @@ assert(!('page' in qualityView.filters) && !('view' in qualityView.filters), 'sa
 assert(countLabel(1, 'поставщик', 'поставщика', 'поставщиков') === '1 поставщик', 'catalog counts must use singular form');
 assert(countLabel(3, 'поставщик', 'поставщика', 'поставщиков') === '3 поставщика', 'catalog counts must use paucal form');
 assert(countLabel(12, 'поставщик', 'поставщика', 'поставщиков') === '12 поставщиков', 'catalog counts must use plural form');
+
+assert(
+  buildProductWorkspacePath(143, 'media') === '/manager/products/143/media',
+  'product workspace links must preserve the requested section',
+);
+const parsedProductWorkspace = parseProductWorkspaceLocation('/manager/products/143/specifications');
+assert(
+  parsedProductWorkspace?.productId === 143 && parsedProductWorkspace.section === 'specifications',
+  'product workspace location must restore product and section',
+);
+assert(
+  parseProductWorkspaceLocation('/manager/products/not-a-number').productId === null,
+  'invalid product workspace routes must not resolve',
+);
+const middleProductNeighbors = getProductWorkspaceNeighbors([11, 143, 22], 143);
+assert(
+  middleProductNeighbors.previousId === 11 && middleProductNeighbors.nextId === 22,
+  'product workspace navigation must follow the saved list order',
+);
+const edgeProductNeighbors = getProductWorkspaceNeighbors([11, 143, 22], 11);
+assert(
+  edgeProductNeighbors.previousId === null && edgeProductNeighbors.nextId === 143,
+  'product workspace navigation must stop at list boundaries',
+);
 
 const workspaceBase = {
   status: 'negotiation',

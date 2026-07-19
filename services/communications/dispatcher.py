@@ -171,7 +171,7 @@ class CommunicationOutboxDispatcher:
             raise ConsumerInboxConsistencyError(
                 "Consumer inbox exists without materialized deliveries"
             )
-        if plan.audience == "operations_canary":
+        if plan.audience in {"operations_canary", "staff_assignee"}:
             expected_recipients = await CommunicationAudienceResolver.list_telegram(
                 session,
                 plan=plan,
