@@ -103,7 +103,6 @@ class SeverconEnergoluxParser(BaseParser):
             "description": self._clean_text(self._text(offer, "description")),
             "price": int(self._price(offer)),
             "price_currency": (self._text(offer, "currencyId") or "RUB").upper(),
-            "area": metrics["area"],
             "main_image": pictures[0] if pictures else "",
             "images": pictures[1:] if len(pictures) > 1 else [],
             "save_gallery": True,

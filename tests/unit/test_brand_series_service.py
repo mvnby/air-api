@@ -95,8 +95,7 @@ async def test_sync_product_brand_series_prefers_manual_brand_tag_and_replaces_l
         title="LG Test Model",
         slug="lg-test-model-brand-sync",
         price=1200,
-        area=30,
-        specs={"brand": "LG"},
+        specs={"area_m2": 30, "brand": "LG"},
         is_published=True,
     )
     db.add(product)
@@ -148,7 +147,7 @@ async def test_sync_product_brand_series_works_without_loaded_tag_group(db):
         title="Any Model",
         slug="any-model-no-group-loaded",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
     )
     db.add(product)

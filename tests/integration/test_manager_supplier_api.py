@@ -146,7 +146,7 @@ async def test_manager_supplier_sync_and_mapping_flow(async_client, db, monkeypa
         title="Split AC MDSAG-09HRFN8",
         slug="mapped-ac",
         price=3000,
-        area=25,
+        specs={"area_m2": 25},
         source_url="https://catalog.onliner.by/conditioners/mdv/mdsag09hrfn8",
     )
     db.add(product)

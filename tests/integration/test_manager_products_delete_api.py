@@ -20,7 +20,7 @@ async def _auth_headers(async_client):
 async def test_manager_product_delete_blocked_if_used_in_orders(async_client, db):
     headers = await _auth_headers(async_client)
     customer = Customer(name="Prod Customer", phone="+375291000000", type=CustomerType.individual)
-    product = Product(title="Used Product", slug="used-product", price=3000, area=20)
+    product = Product(title="Used Product", slug="used-product", price=3000, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
     await db.commit()
@@ -48,7 +48,7 @@ async def test_manager_product_delete_blocked_if_used_in_orders(async_client, db
 @pytest.mark.asyncio
 async def test_manager_product_delete_success_when_unlinked(async_client, db):
     headers = await _auth_headers(async_client)
-    product = Product(title="Clean Product", slug="clean-product", price=2500, area=15)
+    product = Product(title="Clean Product", slug="clean-product", price=2500, specs={"area_m2": 15})
     db.add(product)
     await db.commit()
     await db.refresh(product)
@@ -71,8 +71,8 @@ async def test_manager_product_delete_success_when_unlinked(async_client, db):
 async def test_manager_bulk_delete_reports_deleted_and_blocked_products(async_client, db):
     headers = await _auth_headers(async_client)
     customer = Customer(name="Bulk Prod Customer", phone="+375291000001", type=CustomerType.individual)
-    deletable = Product(title="Bulk Clean Product", slug="bulk-clean-product", price=2500, area=15)
-    blocked = Product(title="Bulk Used Product", slug="bulk-used-product", price=3000, area=20)
+    deletable = Product(title="Bulk Clean Product", slug="bulk-clean-product", price=2500, specs={"area_m2": 15})
+    blocked = Product(title="Bulk Used Product", slug="bulk-used-product", price=3000, specs={"area_m2": 20})
     db.add_all([customer, deletable, blocked])
     await db.commit()
     await db.refresh(customer)
@@ -105,9 +105,9 @@ async def test_manager_bulk_delete_reports_deleted_and_blocked_products(async_cl
 @pytest.mark.asyncio
 async def test_manager_bulk_set_rrc_price_updates_only_products_with_rrc(async_client, db):
     headers = await _auth_headers(async_client)
-    with_rrc = Product(title="Bulk RRC Product", slug="bulk-rrc-product", price=2100, area=20)
-    without_rrc = Product(title="Bulk No RRC Product", slug="bulk-no-rrc-product", price=1900, area=20)
-    already_rrc = Product(title="Bulk Already RRC Product", slug="bulk-already-rrc-product", price=2700, area=20)
+    with_rrc = Product(title="Bulk RRC Product", slug="bulk-rrc-product", price=2100, specs={"area_m2": 20})
+    without_rrc = Product(title="Bulk No RRC Product", slug="bulk-no-rrc-product", price=1900, specs={"area_m2": 20})
+    already_rrc = Product(title="Bulk Already RRC Product", slug="bulk-already-rrc-product", price=2700, specs={"area_m2": 20})
     supplier = Supplier(name="Bulk RRC Supplier", code="bulk-rrc-supplier", priority=1)
     db.add_all([with_rrc, without_rrc, already_rrc, supplier])
     await db.commit()

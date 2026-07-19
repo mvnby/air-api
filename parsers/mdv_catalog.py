@@ -126,7 +126,6 @@ class MdvCatalogParser(BaseParser):
             "description": self._description(item),
             "price": int(price),
             "price_currency": "RUB",
-            "area": int(round(cooling_kw * 10)) if cooling_kw else 0,
             "main_image": self._absolute_url(item.get("PREVIEW_PICTURE") or item.get("DETAIL_PICTURE")),
             "images": images,
             "save_gallery": True,

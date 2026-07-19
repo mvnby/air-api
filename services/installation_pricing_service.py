@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import GlobalConfig, InstallationRate, Product, Service
+from services.product_area import area_from_specs
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +89,8 @@ class InstallationPricingService:
             if rate_slugs & tag_slugs:
                 return rate
 
-        product_area = int(getattr(product, "area", 0) or 0)
-        if product_area > 0:
+        product_area = area_from_specs(product.specs)
+        if product_area is not None:
             area_rates = sorted(
                 (
                     (rate, max_area)

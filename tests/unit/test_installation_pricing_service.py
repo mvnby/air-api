@@ -42,7 +42,7 @@ async def _seed_checkout_pricing(session: AsyncSession):
         title="Canonical Product",
         slug="canonical-product",
         price=2000,
-        area=50,
+        specs={"area_m2": 50},
         is_published=True,
     )
     product.tags.append(wall)

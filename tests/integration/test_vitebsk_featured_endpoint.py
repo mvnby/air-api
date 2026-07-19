@@ -18,7 +18,7 @@ async def test_vitebsk_featured_filters_by_stock_vitebsk_and_sorts(async_client:
         title="Older in stock",
         slug="older-in-stock",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
         created_at=now - timedelta(days=1),
         brand_id=brand.id,
@@ -27,7 +27,7 @@ async def test_vitebsk_featured_filters_by_stock_vitebsk_and_sorts(async_client:
         title="Newer in stock",
         slug="newer-in-stock",
         price=1200,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
         created_at=now,
     )
@@ -35,7 +35,7 @@ async def test_vitebsk_featured_filters_by_stock_vitebsk_and_sorts(async_client:
         title="Out of stock",
         slug="out-of-stock",
         price=1500,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
         created_at=now + timedelta(hours=1),
     )

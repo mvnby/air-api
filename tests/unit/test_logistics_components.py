@@ -13,8 +13,7 @@ def _link(
         title="Кондиционер Test-24",
         slug="conditioner-test-24",
         price=price,
-        area=70,
-        specs=specs or {},
+        specs={**(specs or {}), "area_m2": 70},
     )
     link = OrderProductLink(
         product_id=1,

@@ -38,7 +38,7 @@ async def test_catalog_quality_report_supports_normalized_workspace_filters(asyn
         title=f"{marker} misleading multi title",
         slug="quality-workbench-test",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         power_cooling=2.6,
         is_published=False,
     )

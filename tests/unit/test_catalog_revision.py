@@ -80,7 +80,7 @@ async def test_product_update_and_brand_update_bump_revision(sqlite_session):
         slug="revision-product",
         description="Demo",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
     )
     sqlite_session.add(product)
@@ -168,7 +168,7 @@ async def test_product_update_rolls_back_when_revision_bump_fails(sqlite_session
         slug="rollback-revision-product",
         description="Demo",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
     )
     sqlite_session.add(product)
@@ -204,7 +204,7 @@ async def test_product_update_purges_after_commit_and_ignores_purge_failure(sqli
         slug="post-commit-purge-product",
         description="Demo",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
     )
     sqlite_session.add(product)
@@ -251,7 +251,7 @@ async def test_product_price_update_resolves_product_slug_for_purge(sqlite_sessi
         slug="price-purge-product",
         description="Demo",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
     )
     sqlite_session.add(product)
@@ -283,7 +283,7 @@ async def test_public_product_detail_still_hides_unpublished_product(sqlite_sess
         slug="hidden-revision-product",
         description="Draft",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=False,
     )
     sqlite_session.add(product)

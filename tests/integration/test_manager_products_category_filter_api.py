@@ -54,9 +54,9 @@ async def test_manager_products_list_respects_category_slug(async_client, db):
     industrial_tag = await _get_or_create_category_tag(db, "cat-industrial", "Полупром")
 
     marker = "UNITCAT123"
-    p_house = Product(title=f"{marker} TCL Household", slug=f"{marker.lower()}-house", price=1000, area=20, is_published=True)
-    p_multi = Product(title=f"{marker} TCL Multi", slug=f"{marker.lower()}-multi", price=1100, area=20, is_published=True)
-    p_ind = Product(title=f"{marker} TCL Industrial", slug=f"{marker.lower()}-ind", price=1200, area=20, is_published=True)
+    p_house = Product(title=f"{marker} TCL Household", slug=f"{marker.lower()}-house", price=1000, specs={"area_m2": 20}, is_published=True)
+    p_multi = Product(title=f"{marker} TCL Multi", slug=f"{marker.lower()}-multi", price=1100, specs={"area_m2": 20}, is_published=True)
+    p_ind = Product(title=f"{marker} TCL Industrial", slug=f"{marker.lower()}-ind", price=1200, specs={"area_m2": 20}, is_published=True)
     db.add_all([p_house, p_multi, p_ind])
     await db.commit()
     for p in [p_house, p_multi, p_ind]:
@@ -97,28 +97,28 @@ async def test_manager_products_list_can_show_missing_category_products(async_cl
         title=f"{marker} Missing Category",
         slug=f"{marker.lower()}-missing",
         price=1000,
-        area=20,
+        specs={"area_m2": 20},
         is_published=True,
     )
     household = Product(
         title=f"{marker} Household",
         slug=f"{marker.lower()}-household",
         price=1100,
-        area=20,
+        specs={"area_m2": 20},
         is_published=True,
     )
     multi = Product(
         title=f"{marker} Multi",
         slug=f"{marker.lower()}-multi",
         price=1200,
-        area=20,
+        specs={"area_m2": 20},
         is_published=True,
     )
     industrial = Product(
         title=f"{marker} Industrial",
         slug=f"{marker.lower()}-industrial",
         price=1300,
-        area=20,
+        specs={"area_m2": 20},
         is_published=True,
     )
     db.add_all([missing, household, multi, industrial])
@@ -171,8 +171,8 @@ async def test_manager_products_smart_search_respects_category_slug(async_client
     multi_tag = await _get_or_create_category_tag(db, "cat-multi", "Мульти-сплит")
 
     marker = "UNITCATSMART456"
-    p_house = Product(title=f"{marker} TCL Household", slug=f"{marker.lower()}-house", price=1000, area=20, is_published=True)
-    p_multi = Product(title=f"{marker} TCL Multi", slug=f"{marker.lower()}-multi", price=1100, area=20, is_published=True)
+    p_house = Product(title=f"{marker} TCL Household", slug=f"{marker.lower()}-house", price=1000, specs={"area_m2": 20}, is_published=True)
+    p_multi = Product(title=f"{marker} TCL Multi", slug=f"{marker.lower()}-multi", price=1100, specs={"area_m2": 20}, is_published=True)
     db.add_all([p_house, p_multi])
     await db.commit()
     for p in [p_house, p_multi]:
@@ -231,14 +231,14 @@ async def test_manager_products_recommended_sort_boosts_favorites(async_client, 
         title=f"{marker} Regular",
         slug=f"{marker.lower()}-regular",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
     )
     favorite = Product(
         title=f"{marker} Favorite",
         slug=f"{marker.lower()}-favorite",
         price=1100,
-        area=35,
+        specs={"area_m2": 35},
         is_published=True,
     )
     db.add_all([regular, favorite])
@@ -296,31 +296,28 @@ async def test_manager_products_list_supports_catalog_style_filters(async_client
         title=f"{marker} MDV On-Off WiFi Fresh",
         slug=f"{marker.lower()}-matched",
         price=1000,
-        area=25,
         is_inverter=False,
         brand_id=mdv.id,
         is_published=True,
-        specs={"__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
+        specs={"area_m2": 25, "__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
     )
     wrong_brand = Product(
         title=f"{marker} Haier On-Off WiFi Fresh",
         slug=f"{marker.lower()}-wrong-brand",
         price=1000,
-        area=25,
         is_inverter=False,
         brand_id=haier.id,
         is_published=True,
-        specs={"__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
+        specs={"area_m2": 25, "__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
     )
     wrong_compressor = Product(
         title=f"{marker} MDV Inverter WiFi Fresh",
         slug=f"{marker.lower()}-wrong-compressor",
         price=1000,
-        area=25,
         is_inverter=True,
         brand_id=mdv.id,
         is_published=True,
-        specs={"__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
+        specs={"area_m2": 25, "__filter_wifi": True, "fresh_air": True, "__filter_min_heat": -25},
     )
     db.add_all([matched, wrong_brand, wrong_compressor])
     await db.commit()

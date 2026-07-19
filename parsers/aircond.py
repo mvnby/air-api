@@ -370,7 +370,6 @@ class AircondParser(BaseParser):
             "slug": slug,
             "description": description,
             "price": price,
-            "area": target_specs["area"],
             "main_image": main_image,
             "images": images[1:] if len(images) > 1 else [],
             "save_gallery": True,  # Signal to ImporterService to save gallery images

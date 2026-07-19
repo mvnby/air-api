@@ -92,8 +92,7 @@ async def _make_product(
         title=f"Legacy main {product_id or ''}".strip(),
         slug=f"legacy-main-{product_id or 'auto'}",
         price=1000,
-        area=20,
-        specs={},
+        specs={"area_m2": 20},
         main_image=main_image,
         is_published=is_published,
     )

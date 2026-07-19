@@ -76,7 +76,7 @@ async def test_manager_brand_delete_forbidden_when_products_linked(async_client,
         title="Brand Linked Product",
         slug="brand-linked-product",
         price=1000,
-        area=20,
+        specs={"area_m2": 20},
         brand_id=brand_id,
     )
     db.add(product)
@@ -318,7 +318,7 @@ async def test_manager_brand_series_delete_forbidden_when_products_linked(async_
         title="Linked Series Product",
         slug="linked-series-product",
         price=1000,
-        area=20,
+        specs={"area_m2": 20},
         brand_id=brand_id,
         series_id=series.id,
     )
@@ -350,25 +350,22 @@ async def test_manager_brand_series_list_auto_creates_series_from_product_specs(
             title="KINGHOME Cosmo KWH09AWAXB-K6DNA3B",
             slug="kinghome-auto-cosmo-1",
             price=1000,
-            area=25,
             brand_id=brand_id,
-            specs={"brand": "KINGHOME", "series": "COSMO inverter R32 WI-FI"},
+            specs={"area_m2": 25, "brand": "KINGHOME", "series": "COSMO inverter R32 WI-FI"},
         ),
         Product(
             title="KINGHOME Cosmo KWH12AWBXB-K6DNA3D",
             slug="kinghome-auto-cosmo-2",
             price=1200,
-            area=35,
             brand_id=brand_id,
-            specs={"brand": "KINGHOME", "series": "COSMO inverter R32 WI-FI"},
+            specs={"area_m2": 35, "brand": "KINGHOME", "series": "COSMO inverter R32 WI-FI"},
         ),
         Product(
             title="KINGHOME Luna Matt KWH09AYAXB-K6DNA5B",
             slug="kinghome-auto-luna-1",
             price=1300,
-            area=25,
             brand_id=brand_id,
-            specs={"brand": "KINGHOME", "series": "LUNA Matt inverter R32 WI-FI"},
+            specs={"area_m2": 25, "brand": "KINGHOME", "series": "LUNA Matt inverter R32 WI-FI"},
         ),
     ]
     db.add_all(products)

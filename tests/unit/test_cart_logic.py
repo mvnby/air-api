@@ -5,7 +5,7 @@ from models import Product
 
 async def test_cart_flow(db):
     # 1. Create test product
-    product = Product(id=1, title="Test AC", slug="test-ac", price=25000, area=20)
+    product = Product(id=1, title="Test AC", slug="test-ac", price=25000, specs={"area_m2": 20})
     db.add(product)
     await db.commit()
     await db.refresh(product)

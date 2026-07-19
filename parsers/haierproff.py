@@ -436,7 +436,6 @@ class HaierProffParser(BaseParser):
             "description": description,
             "price": price,
             "price_currency": "RUB",
-            "area": metrics["area"],
             "main_image": images[0] if images else "",
             "images": images[1:] if len(images) > 1 else [],
             "save_gallery": True,

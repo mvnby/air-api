@@ -49,25 +49,22 @@ async def test_mdv_legacy_replace_preview_splits_deletable_and_order_linked(sqli
         title="MDV old cassette",
         slug="mdv-old-cassette",
         price=100,
-        area=50,
         brand_id=brand.id,
-        specs={"brand": "MDV", "type": "полупромышленный кондиционер"},
+        specs={"area_m2": 50, "brand": "MDV", "type": "полупромышленный кондиционер"},
     )
     multi = Product(
         title="MDV old multi",
         slug="mdv-old-multi",
         price=100,
-        area=20,
         brand_id=brand.id,
-        specs={"brand": "MDV", "type": "наружный блок"},
+        specs={"area_m2": 20, "brand": "MDV", "type": "наружный блок"},
     )
     household = Product(
         title="MDV household",
         slug="mdv-household",
         price=100,
-        area=20,
         brand_id=brand.id,
-        specs={"brand": "MDV", "type": "сплит-система"},
+        specs={"area_m2": 20, "brand": "MDV", "type": "сплит-система"},
     )
     sqlite_session.add_all([semi, multi, household])
     await sqlite_session.flush()

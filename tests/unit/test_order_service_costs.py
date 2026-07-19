@@ -10,7 +10,7 @@ from services.product_supply_metrics_service import ProductSupplyMetricsService
 @pytest.mark.asyncio
 async def test_get_product_purchase_cost_uses_supply_metrics_and_cache(monkeypatch):
     calls = {"count": 0}
-    product = Product(id=7, title="Cost Product", slug="cost-product", price=2500, area=25)
+    product = Product(id=7, title="Cost Product", slug="cost-product", price=2500, specs={"area_m2": 25})
 
     async def fake_compute_for_products(_session, products):
         calls["count"] += 1
@@ -32,7 +32,7 @@ async def test_get_product_purchase_cost_uses_supply_metrics_and_cache(monkeypat
 
 @pytest.mark.asyncio
 async def test_get_product_purchase_cost_returns_zero_without_supplier_cost(monkeypatch):
-    product = Product(id=8, title="No Cost Product", slug="no-cost-product", price=1800, area=20)
+    product = Product(id=8, title="No Cost Product", slug="no-cost-product", price=1800, specs={"area_m2": 20})
 
     async def fake_compute_for_products(_session, _products):
         return {8: {"min_cost_byn": None}}

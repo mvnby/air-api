@@ -1,7 +1,6 @@
 from services.product_area import (
     area_from_specs,
     canonicalize_area_specs,
-    legacy_area_for_storage,
     parse_area_m2,
 )
 
@@ -20,12 +19,12 @@ def test_canonicalize_area_specs_collapses_legacy_alias() -> None:
 def test_canonical_area_wins_over_legacy_values() -> None:
     result = canonicalize_area_specs(
         {"area_m2": "50", "recommended_area_m2": "35"},
-        legacy_area=20,
+        fallback_area=20,
     )
 
     assert result == {"area_m2": 50}
 
 
-def test_legacy_column_mirror_rounds_up_decimal_area() -> None:
+def test_decimal_area_is_preserved() -> None:
     assert parse_area_m2("20,5 м²") == 20.5
-    assert legacy_area_for_storage({"area_m2": "20.5"}) == 21
+    assert canonicalize_area_specs({"area_m2": "20.5"})["area_m2"] == 20.5

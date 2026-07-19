@@ -36,10 +36,9 @@ async def test_manuals_are_serialized_for_public_and_manager_payloads(sqlite_ses
         slug="haier-flexis-manual-test",
         description="desc",
         price=3999,
-        area=35,
         is_inverter=True,
         is_published=True,
-        specs={"brand": "Haier", "type": "сплит-система"},
+        specs={"area_m2": 35, "brand": "Haier", "type": "сплит-система"},
     )
     sqlite_session.add(product)
     await sqlite_session.commit()
