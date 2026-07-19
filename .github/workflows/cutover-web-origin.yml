@@ -48,7 +48,7 @@ jobs:
             --dump-header "${headers}" --output /dev/null \
             https://mvn.by/catalog/
           grep -Eiq '^x-catalog-revision: [0-9]+' "${headers}"
-          grep -Eiq '^x-web-data-cache: (hit|miss|shared)$' "${headers}"
+          grep -Eiq '^x-web-data-cache: (hit|miss|shared)[[:space:]]*$' "${headers}"
 
       - name: Audit or switch Cloudflare web routing
         env:
@@ -70,7 +70,7 @@ jobs:
               --dump-header "${headers}" --output /dev/null \
               https://mvn.by/catalog/ \
               && grep -Eiq '^x-catalog-revision: [0-9]+' "${headers}" \
-              && grep -Eiq '^x-web-data-cache: (hit|miss|shared)$' "${headers}"; then
+              && grep -Eiq '^x-web-data-cache: (hit|miss|shared)[[:space:]]*$' "${headers}"; then
               rm -f "${headers}"
               exit 0
             fi
