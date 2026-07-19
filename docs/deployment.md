@@ -426,6 +426,15 @@ private `mvnby/mvn-web` repository. The API dispatch target is controlled by
 `WEB_REBUILD_GITHUB_OWNER`, `WEB_REBUILD_GITHUB_REPO`, and
 `WEB_REBUILD_GITHUB_REF`.
 
+The final Cloudflare routing change is owned by
+`.github/workflows/cutover-web-origin.yml`. Its default `audit` mode is
+read-only. `cutover` first proves DNS write permission with a temporary TXT
+record, verifies the direct SSR origin, detaches only `mvn.by` and `www.mvn.by`
+from the `mvn-by` Pages project, and creates proxied A records for
+`153.80.244.78`. `rollback` removes only those exact origin records and restores
+the Pages custom domains. Both mutating modes require the explicit target value
+shown by the workflow input.
+
 Required GitHub secrets:
 
 ```text
