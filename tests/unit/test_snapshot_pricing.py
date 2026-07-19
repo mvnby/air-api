@@ -5,7 +5,7 @@ from models import Product, OrderProductLink, OrderServiceLink, LeadSource, Orde
 
 async def test_snapshot_pricing(db):
     # 1. Create test product
-    product = Product(id=63, title="Hero Product", slug="hero-product", price=2500, area=30)
+    product = Product(id=63, title="Hero Product", slug="hero-product", price=2500, specs={"area_m2": 30})
     db.add(product)
     await db.commit()
     await db.refresh(product)
@@ -58,7 +58,7 @@ async def test_snapshot_pricing(db):
 
 async def test_order_without_installation(db):
     # 1. Create test product
-    product = Product(id=63, title="Hero Product", slug="hero-product", price=2500, area=30)
+    product = Product(id=63, title="Hero Product", slug="hero-product", price=2500, specs={"area_m2": 30})
     db.add(product)
     await db.commit()
     await db.refresh(product)
@@ -94,7 +94,7 @@ async def test_order_without_installation(db):
 
 
 async def test_create_from_website_supports_negotiation_status_and_preserves_checkout_data(db):
-    product = Product(id=64, title="Negotiation Product", slug="negotiation-product", price=1999, area=25)
+    product = Product(id=64, title="Negotiation Product", slug="negotiation-product", price=1999, specs={"area_m2": 25})
     db.add(product)
     await db.commit()
     await db.refresh(product)
@@ -131,7 +131,7 @@ async def test_create_from_website_supports_negotiation_status_and_preserves_che
 
 
 async def test_order_detail_does_not_double_count_installation_in_product_line(db):
-    product = Product(id=65, title="Line Total Product", slug="line-total-product", price=2000, area=25)
+    product = Product(id=65, title="Line Total Product", slug="line-total-product", price=2000, specs={"area_m2": 25})
     db.add(product)
     await db.commit()
     await db.refresh(product)

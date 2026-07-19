@@ -46,27 +46,24 @@ async def test_jsonb_filters_and_allowed_tag_groups(db):
         title="P1",
         slug="p1",
         price=1500,
-        area=35,
         is_inverter=True,
-        specs=normalize_specs({"temp_range_heat": "от -25 до +24", "wifi_ready": "да"}),
+        specs=normalize_specs({"area_m2": 35, "temp_range_heat": "от -25 до +24", "wifi_ready": "да"}),
         is_published=True,
     )
     p2 = Product(
         title="P2",
         slug="p2",
         price=1200,
-        area=25,
         is_inverter=False,
-        specs=normalize_specs({"temp_range_heat": "от -10 до +24", "wifi_ready": "нет"}),
+        specs=normalize_specs({"area_m2": 25, "temp_range_heat": "от -10 до +24", "wifi_ready": "нет"}),
         is_published=True,
     )
     p3 = Product(
         title="P3",
         slug="p3",
         price=1800,
-        area=45,
         is_inverter=True,
-        specs=normalize_specs({"temp_range_heat": "от -22 до +24", "wifi_ready": "да"}),
+        specs=normalize_specs({"area_m2": 45, "temp_range_heat": "от -22 до +24", "wifi_ready": "да"}),
         is_published=True,
     )
     db.add(p1)

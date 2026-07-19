@@ -15,7 +15,7 @@ from services.product_supply_metrics_service import ProductSupplyMetricsService
 # ---------------------------------------------------------------------------
 # BTU index → area (m²) and power_cooling (kW) ranges.
 # Ranges include a small "dictionary gap" so partial catalogue data still
-# matches (e.g. some units use area=0, relying on the title ILIKE fallback).
+# matches (for example, products without specs.area_m2 rely on the title fallback).
 # ---------------------------------------------------------------------------
 from models.product_constants import BTU_MAPPING
 
@@ -131,7 +131,7 @@ class ProductManagerService:
           (AND-chained across tokens).
         - Each *number* token is looked up in ``BTU_MAPPING``:
           - on hit  → filter on area range OR power_cooling range OR title ILIKE
-            (covers products where area=0 but BTU is embedded in the name).
+            (covers products without specs.area_m2 when BTU is embedded in the name).
           - on miss → plain title ILIKE fallback.
         """
         stmt = (
@@ -144,7 +144,7 @@ class ProductManagerService:
             .where(Product.is_published.is_(True))
         )
 
-        stmt = ProductDAO._apply_smart_search_filter(stmt, q)
+        stmt = ProductDAO._apply_smart_search_filter(session, stmt, q)
 
         stmt = ProductDAO._apply_common_filters(
             session=session,

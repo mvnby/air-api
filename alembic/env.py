@@ -27,6 +27,19 @@ config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 # for 'autogenerate' support
 target_metadata = SQLModel.metadata
 
+
+def include_object(object_, name, type_, reflected, compare_to):
+    """Allow only the temporary product.area expand-contract drift."""
+    if not reflected or compare_to is not None:
+        return True
+    table_name = getattr(getattr(object_, "table", None), "name", None)
+    if table_name == "product" and (
+        (type_ == "column" and name == "area")
+        or (type_ == "index" and name == "ix_product_area")
+    ):
+        return False
+    return True
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -61,7 +74,8 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection, 
         target_metadata=target_metadata,
-        render_as_batch=True
+        render_as_batch=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():

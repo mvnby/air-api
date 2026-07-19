@@ -12,7 +12,7 @@ async def cart_product(db):
         title="Cart Test Product",
         slug="cart-test-product",
         price=2000,
-        area=35,
+        specs={"area_m2": 35},
         is_published=True
     )
     rate = InstallationRate(

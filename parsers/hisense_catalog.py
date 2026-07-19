@@ -62,7 +62,6 @@ class HisenseCatalogParser(BaseParser):
             "slug": slugify(f"hisense-{model}", lowercase=True),
             "description": description,
             "price": 0,
-            "area": area or (int(round(cooling_kw * 10)) if cooling_kw else 0),
             "main_image": images[0] if images else "",
             "images": images,
             "save_gallery": True,

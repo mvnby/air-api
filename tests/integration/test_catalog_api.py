@@ -17,7 +17,7 @@ async def seed_product(db):
         title="Integration Test Product",
         slug="integration-test-product",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True
     )
     db.add(product)
@@ -74,7 +74,7 @@ async def test_public_product_detail_includes_canonical_brand(async_client: Asyn
         title="Haier Brand Detail Product",
         slug="haier-brand-detail-product",
         price=1200,
-        area=25,
+        specs={"area_m2": 25},
         brand_id=brand.id,
         is_published=True,
     )
@@ -99,7 +99,7 @@ async def test_public_product_detail_hides_unpublished_slug(async_client: AsyncC
         title="Hidden Detail Product",
         slug="hidden-detail-product",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=False,
     )
     db.add(product)
@@ -116,7 +116,7 @@ async def test_public_product_detail_hides_unpublished_id(async_client: AsyncCli
         title="Hidden Detail Product By ID",
         slug="hidden-detail-product-by-id",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=False,
     )
     db.add(product)
@@ -134,7 +134,7 @@ async def test_public_product_payload_exposes_approved_ready_image_variants(asyn
         title="Approved Variant Product",
         slug="approved-variant-product",
         price=1500,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
         main_image="/media/products/source.webp",
     )
@@ -207,7 +207,7 @@ async def test_public_product_search_returns_items_from_smart_search(async_clien
         title=f"{marker} Smart Search Product",
         slug=f"{marker.lower()}-smart-search-product",
         price=1234,
-        area=25,
+        specs={"area_m2": 25},
         is_inverter=True,
         is_published=True,
     )
@@ -230,7 +230,7 @@ async def test_public_catalog_search_count_matches_filtered_items(async_client: 
             title=f"{marker} Product {index}",
             slug=f"{marker.lower()}-product-{index}",
             price=1200 + index,
-            area=25,
+            specs={"area_m2": 25},
             is_published=True,
         )
         for index in range(2)
@@ -242,7 +242,7 @@ async def test_public_catalog_search_count_matches_filtered_items(async_client: 
                 title="Unrelated catalog count product",
                 slug="unrelated-catalog-count-product",
                 price=999,
-                area=20,
+                specs={"area_m2": 20},
                 is_published=True,
             ),
         ]
@@ -272,7 +272,7 @@ async def test_catalog_default_sort_uses_recommendation_score(async_client: Asyn
         title="Apartment in stock",
         slug="apartment-in-stock",
         price=1500,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
         created_at=now - timedelta(days=3),
     )
@@ -280,7 +280,7 @@ async def test_catalog_default_sort_uses_recommendation_score(async_client: Asyn
         title="Mid area in stock",
         slug="mid-area-in-stock",
         price=1700,
-        area=35,
+        specs={"area_m2": 35},
         is_published=True,
         created_at=now - timedelta(days=2),
     )
@@ -288,7 +288,7 @@ async def test_catalog_default_sort_uses_recommendation_score(async_client: Asyn
         title="Large area in stock",
         slug="large-area-in-stock",
         price=2200,
-        area=50,
+        specs={"area_m2": 50},
         is_published=True,
         created_at=now - timedelta(days=1),
     )
@@ -296,7 +296,7 @@ async def test_catalog_default_sort_uses_recommendation_score(async_client: Asyn
         title="Unavailable new",
         slug="unavailable-new",
         price=1200,
-        area=20,
+        specs={"area_m2": 20},
         is_published=True,
         created_at=now,
     )
@@ -338,19 +338,17 @@ async def test_catalog_filters_by_wifi_and_heating(async_client: AsyncClient, db
         title="Good",
         slug="good",
         price=1000,
-        area=35,
         is_inverter=True,
         is_published=True,
-        specs=normalize_specs({"temp_range_heat": "от -25 до +24", "wifi_ready": "да"}),
+        specs=normalize_specs({"area_m2": 35, "temp_range_heat": "от -25 до +24", "wifi_ready": "да"}),
     )
     weak = Product(
         title="Weak",
         slug="weak",
         price=1000,
-        area=35,
         is_inverter=True,
         is_published=True,
-        specs=normalize_specs({"temp_range_heat": "от -10 до +24", "wifi_ready": "нет"}),
+        specs=normalize_specs({"area_m2": 35, "temp_range_heat": "от -10 до +24", "wifi_ready": "нет"}),
     )
     db.add(good)
     db.add(weak)
@@ -372,41 +370,36 @@ async def test_catalog_filters_black_color_variants(async_client: AsyncClient, d
             title="Black Cyrillic",
             slug="black-cyrillic",
             price=1000,
-            area=25,
             is_published=True,
-            specs=normalize_specs({"Цвет корпуса": "Черный"}),
+            specs=normalize_specs({"area_m2": 25, "Цвет корпуса": "Черный"}),
         ),
         Product(
             title="Black English",
             slug="black-english",
             price=1100,
-            area=25,
             is_published=True,
-            specs=normalize_specs({"Цвет корпуса": "Black mirror"}),
+            specs=normalize_specs({"area_m2": 25, "Цвет корпуса": "Black mirror"}),
         ),
         Product(
             title="Black Combined",
             slug="black-combined",
             price=1200,
-            area=25,
             is_published=True,
-            specs=normalize_specs({"Цвет корпуса": "зеркальный, чёрный"}),
+            specs=normalize_specs({"area_m2": 25, "Цвет корпуса": "зеркальный, чёрный"}),
         ),
         Product(
             title="Graphite",
             slug="graphite",
             price=1300,
-            area=25,
             is_published=True,
-            specs=normalize_specs({"Цвет корпуса": "Графит"}),
+            specs=normalize_specs({"area_m2": 25, "Цвет корпуса": "Графит"}),
         ),
         Product(
             title="White",
             slug="white",
             price=900,
-            area=25,
             is_published=True,
-            specs=normalize_specs({"Цвет корпуса": "Белый"}),
+            specs=normalize_specs({"area_m2": 25, "Цвет корпуса": "Белый"}),
         ),
     ]
     db.add_all(products)
@@ -440,12 +433,12 @@ async def test_catalog_filters_by_brand_entity_slug(async_client: AsyncClient, d
 
     db.add_all(
         [
-            Product(title="MDV product", slug="mdv-product", price=1000, area=25, brand_id=mdv.id, is_published=True),
+            Product(title="MDV product", slug="mdv-product", price=1000, specs={"area_m2": 25}, brand_id=mdv.id, is_published=True),
             Product(
                 title="Haier product",
                 slug="haier-product",
                 price=1000,
-                area=25,
+                specs={"area_m2": 25},
                 brand_id=haier.id,
                 is_published=True,
             ),
@@ -473,16 +466,15 @@ async def test_catalog_filters_by_explicit_brand_slugs(async_client: AsyncClient
                 title="MDV explicit product",
                 slug="mdv-explicit-product",
                 price=1000,
-                area=25,
                 brand_id=mdv.id,
                 is_published=True,
-                specs={"brand": "Wrong free text"},
+                specs={"area_m2": 25, "brand": "Wrong free text"},
             ),
             Product(
                 title="Haier explicit product",
                 slug="haier-explicit-product",
                 price=1000,
-                area=25,
+                specs={"area_m2": 25},
                 brand_id=haier.id,
                 is_published=True,
             ),
@@ -503,17 +495,15 @@ async def test_catalog_filters_by_indoor_types(async_client: AsyncClient, db):
         title="Cassette Unit",
         slug="cassette-unit",
         price=2100,
-        area=80,
         is_published=True,
-        specs=normalize_specs({"Тип внутреннего блока": "кассетный"}),
+        specs=normalize_specs({"area_m2": 80, "Тип внутреннего блока": "кассетный"}),
     )
     duct = Product(
         title="Duct Unit",
         slug="duct-unit",
         price=2300,
-        area=90,
         is_published=True,
-        specs=normalize_specs({"Тип внутреннего блока": "канальный"}),
+        specs=normalize_specs({"area_m2": 90, "Тип внутреннего блока": "канальный"}),
     )
     db.add(cassette)
     db.add(duct)

@@ -105,8 +105,7 @@ async def _make_product(session: AsyncSession, idx: int = 1) -> Product:
         title=f"Variant product {idx}",
         slug=f"variant-product-{idx}",
         price=1000 + idx,
-        area=20,
-        specs={},
+        specs={"area_m2": 20},
     )
     session.add(product)
     await session.commit()
@@ -281,27 +280,24 @@ async def test_apply_gallery_to_series_preserves_installation_photos_and_replace
         title="Source product",
         slug="series-source-product",
         price=1000,
-        area=20,
         series_id=series.id,
         main_image="/media/products/shared/source-main.webp",
-        specs={},
+        specs={"area_m2": 20},
     )
     target = Product(
         title="Target product",
         slug="series-target-product",
         price=1100,
-        area=25,
         series_id=series.id,
         main_image="/media/products/shared/old-main.webp",
-        specs={},
+        specs={"area_m2": 25},
     )
     outside = Product(
         title="Outside product",
         slug="outside-product",
         price=1200,
-        area=30,
         main_image="/media/products/shared/outside.webp",
-        specs={},
+        specs={"area_m2": 30},
     )
     sqlite_session.add_all([source, target, outside])
     await sqlite_session.flush()

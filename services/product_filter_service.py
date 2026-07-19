@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
 
+from crud.product import ProductDAO
 from models import Brand, Product, Tag, TagGroup
 from services.tag_logic import is_invalid_brand_name, is_invalid_brand_slug
 
@@ -42,7 +43,10 @@ class ProductFilterService:
             select(func.min(Product.price), func.max(Product.price)).where(Product.is_published == True)
         )
         area_q = await session.execute(
-            select(func.min(Product.area), func.max(Product.area)).where(Product.is_published == True)
+            select(
+                func.min(ProductDAO.area_expr(session)),
+                func.max(ProductDAO.area_expr(session)),
+            ).where(Product.is_published == True)
         )
         price_min, price_max = price_q.one()
         area_min, area_max = area_q.one()

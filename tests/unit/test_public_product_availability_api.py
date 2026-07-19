@@ -15,7 +15,7 @@ def _make_product(product_id: int = 1) -> Product:
         description="Demo",
         price=2500,
         old_price=2700,
-        area=25,
+        specs={"area_m2": 25},
         is_inverter=True,
         is_published=True,
     )

@@ -5,7 +5,7 @@ All methods accept AsyncSession as first argument for DI/transaction control.
 """
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import Integer, Boolean, String, case, cast, func, and_, or_, exists
+from sqlalchemy import Integer, Float, Boolean, String, case, cast, func, and_, or_, exists
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -141,6 +141,16 @@ class ProductDAO:
         return cast(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key), Integer)
 
     @staticmethod
+    def area_expr(session: AsyncSession):
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+        if dialect == "sqlite":
+            return cast(func.json_extract(Product.specs, "$.area_m2"), Float)
+        return cast(
+            func.jsonb_extract_path_text(cast(Product.specs, JSONB), "area_m2"),
+            Float,
+        )
+
+    @staticmethod
     def _json_bool_expr(session: AsyncSession, key: str):
         dialect = session.bind.dialect.name if session.bind is not None else ""
         if dialect == "sqlite":
@@ -192,10 +202,11 @@ class ProductDAO:
         if is_published is not None:
             stmt = stmt.where(Product.is_published == is_published)
 
+        area_expr = ProductDAO.area_expr(session)
         if area_min is not None:
-            stmt = stmt.where(Product.area >= area_min)
+            stmt = stmt.where(area_expr >= area_min)
         if area_max is not None:
-            stmt = stmt.where(Product.area <= area_max)
+            stmt = stmt.where(area_expr <= area_max)
 
         if min_price is not None:
             stmt = stmt.where(Product.price >= min_price)
@@ -362,7 +373,7 @@ class ProductDAO:
         return stmt.where(~exists(category_subq))
 
     @staticmethod
-    def _apply_smart_search_filter(stmt, query: str):
+    def _apply_smart_search_filter(session: AsyncSession, stmt, query: str):
         if not query:
             return stmt
 
@@ -381,7 +392,7 @@ class ProductDAO:
             if num in BTU_MAPPING:
                 ranges = BTU_MAPPING[num]
                 num_filter = or_(
-                    Product.area.between(ranges["area"][0], ranges["area"][1]),
+                    ProductDAO.area_expr(session).between(ranges["area"][0], ranges["area"][1]),
                     Product.power_cooling.between(ranges["power"][0], ranges["power"][1]),
                     Product.title.ilike(f"%{num}%"),
                 )
@@ -393,7 +404,10 @@ class ProductDAO:
         return stmt
 
     @staticmethod
-    def _catalog_recommendation_score_expr(area_max: Optional[int] = None):
+    def _catalog_recommendation_score_expr(
+        session: AsyncSession,
+        area_max: Optional[int] = None,
+    ):
         favorite_tag_exists = exists(
             select(ProductTagLink.product_id)
             .join(Tag, ProductTagLink.tag_id == Tag.id)
@@ -436,65 +450,66 @@ class ProductDAO:
             (favorite_tag_exists, CATALOG_RANKING_WEIGHTS["manager_favorite"]),
             else_=0,
         )
+        area = ProductDAO.area_expr(session)
         area_threshold = int(area_max) if area_max else None
         if area_threshold and area_threshold > 35:
             if area_threshold <= 50:
                 area_score = case(
                     (
-                        and_(Product.area > 35, Product.area <= area_threshold),
+                        and_(area > 35, area <= area_threshold),
                         CATALOG_RANKING_WEIGHTS["area_to_25"],
                     ),
                     (
-                        and_(Product.area > 25, Product.area <= 35),
+                        and_(area > 25, area <= 35),
                         CATALOG_RANKING_WEIGHTS["area_to_35"],
                     ),
-                    (Product.area <= 25, CATALOG_RANKING_WEIGHTS["area_large"]),
+                    (area <= 25, CATALOG_RANKING_WEIGHTS["area_large"]),
                     else_=0,
                 )
             elif area_threshold <= 70:
                 area_score = case(
                     (
-                        and_(Product.area > 50, Product.area <= area_threshold),
+                        and_(area > 50, area <= area_threshold),
                         CATALOG_RANKING_WEIGHTS["area_to_25"],
                     ),
                     (
-                        and_(Product.area > 35, Product.area <= 50),
+                        and_(area > 35, area <= 50),
                         CATALOG_RANKING_WEIGHTS["area_to_35"],
                     ),
                     (
-                        and_(Product.area > 25, Product.area <= 35),
+                        and_(area > 25, area <= 35),
                         CATALOG_RANKING_WEIGHTS["area_large"],
                     ),
-                    (Product.area <= 25, 5),
+                    (area <= 25, 5),
                     else_=0,
                 )
             else:
                 area_score = case(
                     (
-                        and_(Product.area > 70, Product.area <= area_threshold),
+                        and_(area > 70, area <= area_threshold),
                         CATALOG_RANKING_WEIGHTS["area_to_25"],
                     ),
                     (
-                        and_(Product.area > 50, Product.area <= 70),
+                        and_(area > 50, area <= 70),
                         CATALOG_RANKING_WEIGHTS["area_to_35"],
                     ),
-                    (Product.area <= 50, CATALOG_RANKING_WEIGHTS["area_large"]),
+                    (area <= 50, CATALOG_RANKING_WEIGHTS["area_large"]),
                     else_=0,
                 )
         elif area_threshold and area_threshold > 25:
             area_score = case(
                 (
-                    and_(Product.area > 25, Product.area <= area_threshold),
+                    and_(area > 25, area <= area_threshold),
                     CATALOG_RANKING_WEIGHTS["area_to_25"],
                 ),
-                (Product.area <= 25, CATALOG_RANKING_WEIGHTS["area_to_35"]),
+                (area <= 25, CATALOG_RANKING_WEIGHTS["area_to_35"]),
                 else_=0,
             )
         else:
             area_score = case(
-                (Product.area <= 25, CATALOG_RANKING_WEIGHTS["area_to_25"]),
-                (Product.area <= 35, CATALOG_RANKING_WEIGHTS["area_to_35"]),
-                (Product.area > 35, CATALOG_RANKING_WEIGHTS["area_large"]),
+                (area <= 25, CATALOG_RANKING_WEIGHTS["area_to_25"]),
+                (area <= 35, CATALOG_RANKING_WEIGHTS["area_to_35"]),
+                (area > 35, CATALOG_RANKING_WEIGHTS["area_large"]),
                 else_=0,
             )
 
@@ -559,7 +574,7 @@ class ProductDAO:
             is_published=is_published,
         )
         if search_query:
-            stmt = ProductDAO._apply_smart_search_filter(stmt, search_query)
+            stmt = ProductDAO._apply_smart_search_filter(session, stmt, search_query)
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
 
         if sort == "price_asc":
@@ -567,14 +582,14 @@ class ProductDAO:
         elif sort == "price_desc":
             stmt = stmt.order_by(Product.price.desc())
         elif sort == "area_asc":
-            stmt = stmt.order_by(Product.area.asc())
+            stmt = stmt.order_by(ProductDAO.area_expr(session).asc())
         elif sort == "area_desc":
-            stmt = stmt.order_by(Product.area.desc())
+            stmt = stmt.order_by(ProductDAO.area_expr(session).desc())
         elif sort == "newest":
             stmt = stmt.order_by(Product.created_at.desc(), Product.id.desc())
         else:
             stmt = stmt.order_by(
-                ProductDAO._catalog_recommendation_score_expr(area_max=area_max).desc(),
+                ProductDAO._catalog_recommendation_score_expr(session, area_max=area_max).desc(),
                 ProductDAO._catalog_brand_priority_expr().asc(),
                 Product.created_at.desc(),
                 Product.id.desc(),
@@ -624,7 +639,7 @@ class ProductDAO:
             is_published=is_published,
         )
         if search_query:
-            stmt = ProductDAO._apply_smart_search_filter(stmt, search_query)
+            stmt = ProductDAO._apply_smart_search_filter(session, stmt, search_query)
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
         result = await session.execute(stmt)
         return result.scalar_one() or 0
@@ -756,7 +771,7 @@ class ProductDAO:
             stmt = stmt.order_by(Product.created_at.desc(), Product.id.desc())
         elif sort == "recommended":
             stmt = stmt.order_by(
-                ProductDAO._catalog_recommendation_score_expr(area_max=area_max).desc(),
+                ProductDAO._catalog_recommendation_score_expr(session, area_max=area_max).desc(),
                 ProductDAO._catalog_brand_priority_expr().asc(),
                 Product.created_at.desc(),
                 Product.id.desc(),

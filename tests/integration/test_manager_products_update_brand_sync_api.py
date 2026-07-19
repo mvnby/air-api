@@ -48,8 +48,7 @@ async def test_manager_product_patch_syncs_brand_entity_and_brand_tag(async_clie
         title="Кондиционер TCL Test",
         slug="tcl-test-brand-sync-api",
         price=1500,
-        area=30,
-        specs={"brand": "LG"},
+        specs={"area_m2": 30, "brand": "LG"},
         is_published=True,
     )
     db.add(product)

@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 # ---------------------------------------------------------------------------
 # BTU index → area (m²) and power_cooling (kW) ranges.
 # Ranges include a small "dictionary gap" so partial catalogue data still
-# matches (e.g. some units use area=0, relying on the title ILIKE fallback).
+# matches (for example, products without specs.area_m2 rely on the title fallback).
 # ---------------------------------------------------------------------------
 BTU_MAPPING: Dict[str, Dict[str, Tuple[float, float]]] = {
     "7":  {"area": (15, 24),   "power": (2.0, 2.4)},

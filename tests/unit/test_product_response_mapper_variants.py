@@ -22,7 +22,7 @@ def _product_with_variant(
         slug="variant-product",
         description="",
         price=1200,
-        area=25,
+        specs={"area_m2": 25},
         main_image="/media/products/source.webp",
         is_published=True,
     )
@@ -177,7 +177,7 @@ def test_map_product_to_response_keeps_legacy_product_without_variants_unchanged
         slug="legacy-product",
         description="",
         price=1200,
-        area=25,
+        specs={"area_m2": 25},
         main_image="/media/products/legacy.webp",
         is_published=True,
     )
@@ -215,7 +215,7 @@ def test_map_product_to_response_serializes_public_series():
         slug="elite-25",
         description="",
         price=1200,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
         series_id=series.id,
     )
@@ -257,7 +257,7 @@ def test_map_product_to_response_hides_unpublished_series():
         slug="draft-25",
         description="",
         price=1200,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
         series_id=series.id,
     )

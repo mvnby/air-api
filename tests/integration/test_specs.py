@@ -19,22 +19,20 @@ async def test_get_public_spec_keys(async_client: AsyncClient, db):
     """
     Test public endpoint GET /api/v1/specs/keys.
     - Create 2 products in the DB with different specs.
-    - Assert: Status 200. Response contains keys ["color", "size"].
+    - Assert: Status 200. Response contains the canonical area key and custom keys.
     """
     # 1. Setup: Create 2 products
     p1 = Product(
         title="Product 1",
         slug="product-1",
         price=1000,
-        area=25,
-        specs={"color": "red"}
+        specs={"area_m2": 25, "color": "red"}
     )
     p2 = Product(
         title="Product 2",
         slug="product-2",
         price=2000,
-        area=35,
-        specs={"color": "blue", "size": "M"}
+        specs={"area_m2": 35, "color": "blue", "size": "M"}
     )
     db.add(p1)
     db.add(p2)
@@ -47,7 +45,7 @@ async def test_get_public_spec_keys(async_client: AsyncClient, db):
     assert response.status_code == 200
     data = response.json()
     assert "keys" in data
-    assert sorted(data["keys"]) == sorted(["color", "size"])
+    assert sorted(data["keys"]) == sorted(["area_m2", "color", "size"])
     assert data["total_products_using"]["color"] == 2
     assert data["total_products_using"]["size"] == 1
 
@@ -79,7 +77,7 @@ async def test_bulk_update_logic(async_client: AsyncClient, db):
     """
     # 1. Setup: Create 3 products
     products = [
-        Product(title=f"P{i}", slug=f"p-{i}", price=100*i, area=20, specs={"old": "val"})
+        Product(title=f"P{i}", slug=f"p-{i}", price=100*i, specs={"area_m2": 20, "old": "val"})
         for i in range(1, 4)
     ]
     for p in products:
@@ -139,9 +137,8 @@ async def test_bulk_update_specs_creates_and_links_product_series(async_client: 
             title=f"KINGHOME Cosmo {i}",
             slug=f"kinghome-cosmo-{i}",
             price=1000 * i,
-            area=20,
             brand_id=brand.id,
-            specs={"brand": "KINGHOME"},
+            specs={"area_m2": 20, "brand": "KINGHOME"},
         )
         for i in range(1, 3)
     ]
@@ -202,10 +199,9 @@ async def test_bulk_update_specs_moves_product_to_new_series(async_client: Async
         title="KINGHOME Move Test",
         slug="kinghome-move-test",
         price=1000,
-        area=20,
         brand_id=brand.id,
         series_id=old_series.id,
-        specs={"brand": "KINGHOME", "series": "COSMO"},
+        specs={"area_m2": 20, "brand": "KINGHOME", "series": "COSMO"},
     )
     db.add(product)
     await db.flush()
@@ -267,10 +263,9 @@ async def test_bulk_update_specs_delete_series_key_clears_series_link(
         title="KINGHOME Delete Series",
         slug="kinghome-delete-series",
         price=1000,
-        area=20,
         brand_id=brand.id,
         series_id=series.id,
-        specs={"brand": "KINGHOME", "series": "COSMO", "wifi": "yes"},
+        specs={"area_m2": 20, "brand": "KINGHOME", "series": "COSMO", "wifi": "yes"},
     )
     db.add(product)
     await db.flush()
@@ -313,10 +308,9 @@ async def test_bulk_update_specs_replace_without_series_clears_series_link(
         title="KINGHOME Replace Series",
         slug="kinghome-replace-series",
         price=1200,
-        area=25,
         brand_id=brand.id,
         series_id=series.id,
-        specs={"brand": "KINGHOME", "series": "COSMO", "wifi": "yes"},
+        specs={"area_m2": 25, "brand": "KINGHOME", "series": "COSMO", "wifi": "yes"},
     )
     db.add(product)
     await db.flush()

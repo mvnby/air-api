@@ -107,8 +107,7 @@ async def _make_product_with_media(
         title=title,
         slug=slug,
         price=1000,
-        area=20,
-        specs={},
+        specs={"area_m2": 20},
     )
     session.add(product)
     await session.commit()

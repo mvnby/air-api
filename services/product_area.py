@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import re
 from typing import Any, Mapping
 
@@ -30,16 +29,10 @@ def area_from_specs(specs: Mapping[str, Any] | None) -> float | None:
     return parse_area_m2(specs.get(CANONICAL_AREA_KEY))
 
 
-def legacy_area_for_storage(specs: Mapping[str, Any] | None) -> int:
-    """Temporary integer mirror used only during the expand-contract rollout."""
-    value = area_from_specs(specs)
-    return math.ceil(value) if value is not None else 0
-
-
 def canonicalize_area_specs(
     specs: Mapping[str, Any] | None,
     *,
-    legacy_area: Any = None,
+    fallback_area: Any = None,
 ) -> dict[str, Any]:
     result = dict(specs or {})
     canonical = parse_area_m2(result.get(CANONICAL_AREA_KEY))
@@ -49,7 +42,7 @@ def canonicalize_area_specs(
             if canonical is not None:
                 break
     if canonical is None:
-        canonical = parse_area_m2(legacy_area)
+        canonical = parse_area_m2(fallback_area)
 
     for key in LEGACY_AREA_KEYS:
         result.pop(key, None)

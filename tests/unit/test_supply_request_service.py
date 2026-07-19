@@ -8,7 +8,7 @@ from services.supply_request_service import SupplierProfileService, SupplyReques
 
 
 async def _seed_supplier_product(db):
-    product = Product(title="MDV Iera 09", slug="mdv-iera-09-supply", price=2100, area=25)
+    product = Product(title="MDV Iera 09", slug="mdv-iera-09-supply", price=2100, specs={"area_m2": 25})
     supplier_a = Supplier(
         name="Оптконд",
         code="supply-optkond",

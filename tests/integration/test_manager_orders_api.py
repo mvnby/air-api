@@ -151,7 +151,7 @@ async def test_manager_orders_overdue_filter(async_client, db):
 @pytest.mark.asyncio
 async def test_manager_order_detail_uses_snapshot_prices(async_client, db):
     customer = Customer(name="Snapshot", phone="+375294444444", type=CustomerType.individual)
-    product = Product(title="Snapshot Product", slug="snapshot-product", price=5000, area=30)
+    product = Product(title="Snapshot Product", slug="snapshot-product", price=5000, specs={"area_m2": 30})
     db.add(customer)
     db.add(product)
     await db.commit()
@@ -254,7 +254,7 @@ async def test_manager_order_patch_closes_lost_without_deleting_order(async_clie
 @pytest.mark.asyncio
 async def test_manager_order_patch_moves_to_execution_without_payment_flag(async_client, db):
     customer = Customer(name="Trusted Customer", phone="+375295555557", type=CustomerType.individual)
-    product = Product(title="Trusted AC", slug="trusted-ac", price=1000, area=20)
+    product = Product(title="Trusted AC", slug="trusted-ac", price=1000, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
     await db.commit()
@@ -292,7 +292,7 @@ async def test_manager_order_patch_moves_to_execution_without_payment_flag(async
 @pytest.mark.asyncio
 async def test_manager_order_patch_recomputes_balance_before_closing_won(async_client, db):
     customer = Customer(name="Close Guard", phone="+375295555551", type=CustomerType.individual)
-    product = Product(title="Close Guard Product", slug="close-guard-product", price=500, area=20)
+    product = Product(title="Close Guard Product", slug="close-guard-product", price=500, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
     await db.commit()
@@ -1067,7 +1067,7 @@ async def test_manager_order_switch_customer_clears_incompatible_branch(async_cl
 @pytest.mark.asyncio
 async def test_manager_order_patch_lines_preserves_installers(async_client, db):
     customer = Customer(name="Lines", phone="+375296666666", type=CustomerType.individual)
-    product = Product(title="P", slug="prod-p", price=3000, area=30)
+    product = Product(title="P", slug="prod-p", price=3000, specs={"area_m2": 30})
     service = Service(title="S", slug="service-s", base_price=100)
     installer = Installer(name="Installer 1", is_active=True)
     db.add(customer)
@@ -1105,7 +1105,7 @@ async def test_manager_order_patch_lines_preserves_installers(async_client, db):
 @pytest.mark.asyncio
 async def test_manager_order_patch_product_price_preserves_supply_request_link(async_client, db):
     customer = Customer(name="Supply linked", phone="+375296666669", type=CustomerType.individual)
-    product = Product(title="Supply linked product", slug="supply-linked-product", price=2490, area=35)
+    product = Product(title="Supply linked product", slug="supply-linked-product", price=2490, specs={"area_m2": 35})
     supplier = Supplier(name="Supply linked supplier", code="supply-linked-order-update")
     db.add(customer)
     db.add(product)
@@ -1178,7 +1178,7 @@ async def test_manager_order_patch_product_price_preserves_supply_request_link(a
 @pytest.mark.asyncio
 async def test_manager_order_patch_lines_persists_logistics_components(async_client, db):
     customer = Customer(name="Logistics", phone="+375296666668", type=CustomerType.individual)
-    product = Product(title="Split Logistics", slug="split-logistics", price=1803, area=30)
+    product = Product(title="Split Logistics", slug="split-logistics", price=1803, specs={"area_m2": 30})
     db.add(customer)
     db.add(product)
     await db.commit()
@@ -1264,8 +1264,7 @@ async def test_manager_order_patch_lines_does_not_overwrite_product_logistics_te
         title="Split Logistics Existing",
         slug="split-logistics-existing",
         price=2000,
-        area=30,
-        specs={"logistics_components": existing_template},
+        specs={"area_m2": 30, "logistics_components": existing_template},
     )
     db.add(customer)
     db.add(product)
@@ -1313,8 +1312,8 @@ async def test_manager_order_patch_lines_does_not_overwrite_product_logistics_te
 @pytest.mark.asyncio
 async def test_manager_order_proposals_can_duplicate_edit_and_select(async_client, db):
     customer = Customer(name="Proposal Customer", phone="+375296666667", type=CustomerType.individual)
-    p1 = Product(title="Proposal P1", slug="proposal-p1", price=1000, area=25)
-    p2 = Product(title="Proposal P2", slug="proposal-p2", price=2000, area=35)
+    p1 = Product(title="Proposal P1", slug="proposal-p1", price=1000, specs={"area_m2": 25})
+    p2 = Product(title="Proposal P2", slug="proposal-p2", price=2000, specs={"area_m2": 35})
     s1 = Service(title="Proposal S1", slug="proposal-s1", category="maintenance", base_price=100)
     s2 = Service(title="Proposal S2", slug="proposal-s2", base_price=300)
     db.add(customer)
@@ -1434,7 +1433,7 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
 @pytest.mark.asyncio
 async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(async_client, db):
     customer = Customer(name="Lifecycle Customer", phone="+375296666668", type=CustomerType.individual)
-    product = Product(title="Lifecycle Product", slug="lifecycle-product", price=1200, area=25)
+    product = Product(title="Lifecycle Product", slug="lifecycle-product", price=1200, specs={"area_m2": 25})
     db.add_all([customer, product])
     await db.commit()
     await db.refresh(customer)
@@ -1520,7 +1519,7 @@ async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(a
 @pytest.mark.asyncio
 async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db):
     customer = Customer(name="Transfer Customer", phone="+375291234000", type=CustomerType.individual)
-    product = Product(title="Transfer Product", slug="transfer-product", price=1800, area=25)
+    product = Product(title="Transfer Product", slug="transfer-product", price=1800, specs={"area_m2": 25})
     service = Service(title="Transfer Service", slug="transfer-service", base_price=250)
     installer = Installer(name="Transfer Installer", is_active=True)
     db.add(customer)
@@ -1624,7 +1623,7 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
 @pytest.mark.asyncio
 async def test_manager_order_import_preview_blocks_missing_products(async_client, db):
     customer = Customer(name="Transfer Missing", phone="+375291234001", type=CustomerType.individual)
-    product = Product(title="Existing Transfer Product", slug="existing-transfer-product", price=900, area=20)
+    product = Product(title="Existing Transfer Product", slug="existing-transfer-product", price=900, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
     await db.commit()
@@ -1677,8 +1676,8 @@ async def test_manager_order_import_preview_blocks_missing_products(async_client
 @pytest.mark.asyncio
 async def test_manager_order_offer_generation_uses_requested_proposal_and_creates_each_time(async_client, db, monkeypatch):
     customer = Customer(name="Proposal Docs", phone="+375296666668", type=CustomerType.individual)
-    p1 = Product(title="Proposal Doc P1", slug="proposal-doc-p1", price=1000, area=25)
-    p2 = Product(title="Proposal Doc P2", slug="proposal-doc-p2", price=2000, area=35)
+    p1 = Product(title="Proposal Doc P1", slug="proposal-doc-p1", price=1000, specs={"area_m2": 25})
+    p2 = Product(title="Proposal Doc P2", slug="proposal-doc-p2", price=2000, specs={"area_m2": 35})
     db.add(customer)
     db.add(p1)
     db.add(p2)
@@ -1781,8 +1780,8 @@ async def test_manager_order_offer_generation_uses_requested_proposal_and_create
 @pytest.mark.asyncio
 async def test_manager_order_tn2_generation_uses_requested_proposal_logistics_components(async_client, db, monkeypatch):
     customer = Customer(name="Waybill Proposal", phone="+375296666669", type=CustomerType.individual)
-    p1 = Product(title="Waybill P1", slug="waybill-p1", price=1000, area=25)
-    p2 = Product(title="Waybill P2", slug="waybill-p2", price=1803, area=35)
+    p1 = Product(title="Waybill P1", slug="waybill-p1", price=1000, specs={"area_m2": 25})
+    p2 = Product(title="Waybill P2", slug="waybill-p2", price=1803, specs={"area_m2": 35})
     db.add(customer)
     db.add(p1)
     db.add(p2)
@@ -3217,7 +3216,7 @@ async def test_manager_doc_delete_blocks_base_document_with_dependents(async_cli
 @pytest.mark.asyncio
 async def test_manager_order_delete_cascades_related_entities(async_client, db, monkeypatch):
     customer = Customer(name="Delete Order", phone="+375290001234", type=CustomerType.individual)
-    product = Product(title="Delete Product", slug="delete-product", price=4000, area=35)
+    product = Product(title="Delete Product", slug="delete-product", price=4000, specs={"area_m2": 35})
     service = Service(title="Delete Service", slug="delete-service", base_price=200)
     installer = Installer(name="Delete Installer", is_active=True)
     db.add(customer)

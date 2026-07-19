@@ -33,9 +33,9 @@ async def test_filters_config_returns_ranges_and_allowed_tags(async_client, db):
 
     await db.flush()
 
-    p1 = Product(title="A", slug="a", price=1000, area=20, brand_id=brand.id, is_published=True)
-    p2 = Product(title="B", slug="b", price=2400, area=55, is_published=True)
-    p3 = Product(title="C", slug="c", price=1600, area=35, brand_id=priority_brand.id, is_published=True)
+    p1 = Product(title="A", slug="a", price=1000, specs={"area_m2": 20}, brand_id=brand.id, is_published=True)
+    p2 = Product(title="B", slug="b", price=2400, specs={"area_m2": 55}, is_published=True)
+    p3 = Product(title="C", slug="c", price=1600, specs={"area_m2": 35}, brand_id=priority_brand.id, is_published=True)
     db.add(p1)
     db.add(p2)
     db.add(p3)
@@ -70,7 +70,7 @@ async def test_filters_config_hides_obvious_pseudo_brands(async_client, db):
     db.add(valid_brand)
     db.add(pseudo_brand)
     await db.flush()
-    db.add(Product(title="A", slug="cfg-brand-a", price=1000, area=20, brand_id=valid_brand.id, is_published=True))
+    db.add(Product(title="A", slug="cfg-brand-a", price=1000, specs={"area_m2": 20}, brand_id=valid_brand.id, is_published=True))
     await db.commit()
 
     response = await async_client.get("/api/v1/filters/config")

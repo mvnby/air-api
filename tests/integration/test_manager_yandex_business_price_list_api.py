@@ -31,7 +31,7 @@ async def test_manager_yandex_business_price_list_exports_products_and_tariffs(a
         slug="daichi-alpha-12",
         description="Инверторный кондиционер для квартиры",
         price=1299,
-        area=35,
+        specs={"area_m2": 35},
         main_image="/media/products/daichi-alpha.jpg",
         is_published=True,
         brand=brand,

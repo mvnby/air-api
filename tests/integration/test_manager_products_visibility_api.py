@@ -22,7 +22,7 @@ async def test_manager_products_list_can_show_unpublished_product(async_client, 
         title=f"{marker} Draft Product",
         slug=f"{marker.lower()}-draft-product",
         price=1000,
-        area=25,
+        specs={"area_m2": 25},
         is_published=False,
     )
     db.add(product)
@@ -48,7 +48,7 @@ async def test_manager_product_detail_can_open_unpublished_product(async_client,
         title="Workspace Draft Product",
         slug="workspace-draft-product",
         price=1250,
-        area=32,
+        specs={"area_m2": 32},
         is_published=False,
     )
     db.add(product)

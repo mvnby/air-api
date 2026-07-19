@@ -110,7 +110,7 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
         title="TCL BreezeIN",
         slug="tcl-breezein",
         price=3200,
-        area=35,
+        specs={"area_m2": 35},
         is_published=True,
     )
     order = Order(
@@ -183,7 +183,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
         title="TCL BreezeIN",
         slug="tcl-breezein",
         price=3200,
-        area=35,
+        specs={"area_m2": 35},
         is_published=True,
     )
     customer = Customer(name="Старое имя", phone="+375 (29) 111-22-33")
@@ -251,7 +251,7 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
         title="TCL BreezeIN",
         slug="tcl-breezein",
         price=3200,
-        area=35,
+        specs={"area_m2": 35},
         is_published=True,
     )
     customer = Customer(name="Старое имя", phone="+375 (29) 111-22-33")

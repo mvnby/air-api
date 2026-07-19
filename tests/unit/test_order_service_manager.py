@@ -605,7 +605,7 @@ async def test_service_get_orders_for_manager_overdue_filter(db):
 @pytest.mark.asyncio
 async def test_service_update_order_for_manager_line_sync(db):
     customer = Customer(name="Edit", phone="+375294444444", type=CustomerType.individual)
-    product = Product(title="T1", slug="t1", price=1000, area=20)
+    product = Product(title="T1", slug="t1", price=1000, specs={"area_m2": 20})
     service = Service(title="Srv", slug="srv", base_price=150)
     db.add(customer)
     db.add(product)

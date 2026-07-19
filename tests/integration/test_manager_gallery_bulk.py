@@ -13,8 +13,7 @@ def _make_product(idx: int) -> Product:
         title=f"P{idx}",
         slug=f"p-{idx}",
         price=1000 + idx,
-        area=20,
-        specs={},
+        specs={"area_m2": 20},
     )
 
 

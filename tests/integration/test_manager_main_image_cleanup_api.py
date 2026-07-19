@@ -105,8 +105,7 @@ async def test_manager_main_image_cleanup_create_list_and_approve(
         title="Cleanup API product",
         slug="cleanup-api-product",
         price=1000,
-        area=20,
-        specs={},
+        specs={"area_m2": 20},
         main_image=source_url,
         images=[source_url],
     )

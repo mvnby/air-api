@@ -106,7 +106,7 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
         title="MDV Elite 35",
         slug="mdv-elite-35",
         price=1900,
-        area=35,
+        specs={"area_m2": 35},
         power_cooling=3.5,
         brand_id=brand.id,
         series_id=series.id,
@@ -116,7 +116,7 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
         title="MDV Elite 25",
         slug="mdv-elite-25",
         price=1500,
-        area=25,
+        specs={"area_m2": 25},
         power_cooling=2.6,
         brand_id=brand.id,
         series_id=series.id,
@@ -126,7 +126,7 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
         title="MDV Elite 50",
         slug="mdv-elite-50",
         price=2600,
-        area=50,
+        specs={"area_m2": 50},
         power_cooling=5.2,
         brand_id=brand.id,
         series_id=series.id,
@@ -136,7 +136,7 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
         title="MDV Other 25",
         slug="mdv-other-25",
         price=1300,
-        area=25,
+        specs={"area_m2": 25},
         brand_id=brand.id,
         is_published=True,
     )
@@ -281,31 +281,28 @@ async def test_public_series_navigation_covers_legacy_series_sources(sqlite_sess
         title="Legacy Line 35",
         slug="legacy-line-35",
         price=1700,
-        area=35,
-        specs={"series": "Legacy Line"},
+        specs={"area_m2": 35, "series": "Legacy Line"},
         is_published=True,
     )
     specs_sibling = Product(
         title="Legacy Line 25",
         slug="legacy-line-25",
         price=1400,
-        area=25,
-        specs={"series": "Legacy Line"},
+        specs={"area_m2": 25, "series": "Legacy Line"},
         is_published=True,
     )
     specs_single = Product(
         title="Solo Line 25",
         slug="solo-line-25",
         price=1200,
-        area=25,
-        specs={"series": "Solo Line"},
+        specs={"area_m2": 25, "series": "Solo Line"},
         is_published=True,
     )
     tag_single = Product(
         title="Tagged Series 25",
         slug="tagged-series-25",
         price=1300,
-        area=25,
+        specs={"area_m2": 25},
         is_published=True,
     )
     tag_group = TagGroup(title="Series", slug="series")

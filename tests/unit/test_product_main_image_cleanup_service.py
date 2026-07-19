@@ -97,8 +97,7 @@ async def _make_product(
         title=f"Cleanup product {idx}",
         slug=f"cleanup-product-{idx}",
         price=1000 + idx,
-        area=20,
-        specs={},
+        specs={"area_m2": 20},
         main_image=main_image,
         images=[main_image],
     )

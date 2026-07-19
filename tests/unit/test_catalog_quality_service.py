@@ -40,7 +40,7 @@ def test_collect_issues_flags_single_low_resolution_product_media():
     product.main_image = "/media/products/small.webp"
     product.brand_id = 1
     product.series_id = 2
-    product.area = 25
+    product.specs = {"area_m2": 25}
     product.power_cooling = 2.6
     issues = CatalogQualityService._collect_issues(
         product=product,

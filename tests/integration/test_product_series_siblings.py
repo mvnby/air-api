@@ -24,9 +24,9 @@ async def test_product_detail_contains_series_siblings(async_client, db):
     await db.refresh(brand_b)
     await db.refresh(series_x)
 
-    main = Product(title="Main", slug="main", price=1000, area=25, is_published=True)
-    sibling_same_brand = Product(title="Sibling A", slug="sibling-a", price=1400, area=30, is_published=True)
-    sibling_other_brand = Product(title="Sibling B", slug="sibling-b", price=1200, area=30, is_published=True)
+    main = Product(title="Main", slug="main", price=1000, specs={"area_m2": 25}, is_published=True)
+    sibling_same_brand = Product(title="Sibling A", slug="sibling-a", price=1400, specs={"area_m2": 30}, is_published=True)
+    sibling_other_brand = Product(title="Sibling B", slug="sibling-b", price=1200, specs={"area_m2": 30}, is_published=True)
     db.add(main)
     db.add(sibling_same_brand)
     db.add(sibling_other_brand)
@@ -79,7 +79,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         title="TCL FreshIN 35",
         slug="tcl-freshin-35",
         price=1900,
-        area=35,
+        specs={"area_m2": 35},
         power_cooling=3.5,
         brand_id=brand.id,
         series_id=series.id,
@@ -89,7 +89,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         title="TCL FreshIN 25",
         slug="tcl-freshin-25",
         price=1500,
-        area=25,
+        specs={"area_m2": 25},
         power_cooling=2.6,
         brand_id=brand.id,
         series_id=series.id,
@@ -99,7 +99,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         title="TCL FreshIN 50",
         slug="tcl-freshin-50",
         price=2600,
-        area=50,
+        specs={"area_m2": 50},
         power_cooling=5.2,
         brand_id=brand.id,
         series_id=series.id,
@@ -109,7 +109,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         title="TCL Elite 25",
         slug="tcl-elite-25",
         price=1300,
-        area=25,
+        specs={"area_m2": 25},
         brand_id=brand.id,
         is_published=True,
     )
