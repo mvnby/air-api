@@ -17,6 +17,7 @@ from typing import Any
 
 API_BASE = "https://api.cloudflare.com/client/v4"
 DEFAULT_DOMAINS = ("mvn.by", "www.mvn.by")
+WEB_RECORD_TYPES = frozenset({"A", "AAAA", "CNAME"})
 
 
 class CloudflareError(RuntimeError):
@@ -159,7 +160,11 @@ def audit(client: CloudflareClient) -> dict[str, Any]:
         "pages_domains": sorted(pages),
         "origin_ip": client.config.origin_ip,
         "dns": {
-            domain: [_safe_record(record) for record in client.dns_records(domain)]
+            domain: [
+                _safe_record(record)
+                for record in client.dns_records(domain)
+                if record.get("type") in WEB_RECORD_TYPES
+            ]
             for domain in client.config.domains
         },
     }
@@ -194,7 +199,11 @@ def _is_origin_record(record: dict[str, Any], config: Config) -> bool:
 
 
 def _single_record(client: CloudflareClient, domain: str) -> dict[str, Any] | None:
-    records = client.dns_records(domain)
+    records = [
+        record
+        for record in client.dns_records(domain)
+        if record.get("type") in WEB_RECORD_TYPES
+    ]
     if len(records) > 1:
         raise CloudflareError(f"refusing multiple DNS records for {domain}")
     return records[0] if records else None
@@ -213,10 +222,25 @@ def _wait_for(
 def _restore_pages_domain(client: CloudflareClient, domain: str) -> None:
     record = _single_record(client, domain)
     if record and _is_origin_record(record, client.config):
-        client.delete_dns_record(record["id"])
-        _wait_for(lambda: not client.dns_records(domain), f"DNS removal for {domain}")
+        client.update_dns_record(
+            record["id"],
+            {
+                "type": "CNAME",
+                "name": domain,
+                "content": f"{client.config.project}.pages.dev",
+                "ttl": 1,
+                "proxied": True,
+                "comment": "Cloudflare Pages storefront rollback",
+            },
+        )
     elif record:
-        raise CloudflareError(f"refusing to delete unexpected DNS record for {domain}")
+        expected_pages = (
+            record.get("type") == "CNAME"
+            and record.get("content") == f"{client.config.project}.pages.dev"
+            and record.get("proxied") is True
+        )
+        if not expected_pages:
+            raise CloudflareError(f"refusing to replace unexpected DNS record for {domain}")
     if domain not in client.pages_domains():
         client.add_pages_domain(domain)
     _wait_for(
@@ -244,19 +268,28 @@ def cutover(client: CloudflareClient) -> None:
                 lambda: domain not in client.pages_domains(),
                 f"Pages detachment for {domain}",
             )
-            _wait_for(
-                lambda: not client.dns_records(domain), f"managed DNS removal for {domain}"
-            )
-            client.create_dns_record(
-                {
-                    "type": "A",
-                    "name": domain,
-                    "content": client.config.origin_ip,
-                    "ttl": 1,
-                    "proxied": True,
-                    "comment": "Standalone mvn-web SSR origin",
-                }
-            )
+            origin_payload = {
+                "type": "A",
+                "name": domain,
+                "content": client.config.origin_ip,
+                "ttl": 1,
+                "proxied": True,
+                "comment": "Standalone mvn-web SSR origin",
+            }
+            current = _single_record(client, domain)
+            if current:
+                expected_pages = (
+                    current.get("type") == "CNAME"
+                    and current.get("content") == f"{client.config.project}.pages.dev"
+                    and current.get("proxied") is True
+                )
+                if not expected_pages:
+                    raise CloudflareError(
+                        f"refusing to replace unexpected DNS record for {domain}"
+                    )
+                client.update_dns_record(current["id"], origin_payload)
+            else:
+                client.create_dns_record(origin_payload)
             _wait_for(
                 lambda: bool(
                     (record := _single_record(client, domain))
