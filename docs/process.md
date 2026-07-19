@@ -18,6 +18,13 @@
    - do not reintroduce SQLAdmin or add legacy `/admin` UI workflows.
 3. Any new internal workflow must target manager routes and manager UI.
 
+## White-label platform direction
+
+The future multi-tenant storefront platform is documented in
+[`white-label-platform-plan.md`](white-label-platform-plan.md). New work in
+catalog, public checkout, CRM, pricing, domains, and access control must not
+introduce per-client forks or bypass the planned server-side tenant boundary.
+
 ## Static Content Image Workflow
 
 Use `docs/content-image-assets.md` for static storefront images committed under
