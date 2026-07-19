@@ -26,9 +26,14 @@ def test_bot_voice_audit_is_in_single_alembic_head_chain():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == [REVISION]
+    heads = script.get_heads()
+
+    assert len(heads) == 1
     assert revision is not None
     assert revision.down_revision == "8a3c5e7f9b21"
+    assert REVISION in {
+        item.revision for item in script.iterate_revisions(heads[0], "base")
+    }
 
 
 def test_bot_voice_audit_migration_upgrades_and_downgrades_sqlite():

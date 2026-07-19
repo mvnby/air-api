@@ -36,6 +36,7 @@ from .service_asset import (
     WarrantyPolicy,
 )
 from .staff import StaffUser
+from .tenancy import Storefront, StorefrontDomain, Tenant, TenantMembership
 from .order import (
     BankReceipt,
     Installer,
@@ -164,6 +165,10 @@ __all__ = [
     "StaffUser",
     "Tag",
     "TagGroup",
+    "Tenant",
+    "TenantMembership",
+    "Storefront",
+    "StorefrontDomain",
     "Payment",
     "PaymentType",
     "Supplier",
