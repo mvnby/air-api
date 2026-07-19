@@ -9,7 +9,6 @@ export type ProductDuplicatePayload = {
     old_price?: (number | null);
     slug?: (string | null);
     description?: (string | null);
-    area?: (number | null);
     is_inverter?: (boolean | null);
     power_cooling?: (number | null);
     main_image?: (string | null);

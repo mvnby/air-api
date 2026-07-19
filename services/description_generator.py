@@ -2,6 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from crud.product import ProductDAO
 from models import Product, Tag
+from services.product_area import area_from_specs
 
 class DescriptionGeneratorService:
     @staticmethod
@@ -24,7 +25,8 @@ class DescriptionGeneratorService:
         area_tag = tags_map.get('area', [None])[0]
         # Если сниппет начинается с глагола (например "обладает..."), убираем "это"
         # Универсальный вариант:
-        area_text = area_tag.ai_snippet if (area_tag and area_tag.ai_snippet) else f"рассчитана на помещение до {product.area} кв.м"
+        area = area_from_specs(product.specs)
+        area_text = area_tag.ai_snippet if (area_tag and area_tag.ai_snippet) else f"рассчитана на помещение до {area or 0:g} кв.м"
         
         # Хитрость: Если сниппет начинается не с "идеально...", а с глагола, лучше написать просто название + текст
         intro = f"Сплит-система **{product.title}** {area_text}."

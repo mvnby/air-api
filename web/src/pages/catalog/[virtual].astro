@@ -14,6 +14,7 @@ import {
 } from "../../utils/api";
 import { buildCatalogItemListSchema } from "../../utils/catalog-seo";
 import { safeJsonLd } from "../../utils/safe-json-ld.js";
+import { parseProductArea } from "../../utils/product-area";
 import { buildCatalogQueryFromVirtual } from "../../utils/virtual-category";
 
 export const prerender = !isRuntimeFreshnessEnabled();
@@ -37,7 +38,7 @@ interface Product {
     minsk_qty?: number;
     availability_status?: string | null;
     is_inverter?: boolean;
-    area?: number;
+    specs?: Record<string, unknown>;
     badges?: Array<{ text: string; class?: string }>;
     tags?: Array<{
         title: string;
@@ -92,7 +93,7 @@ const isCatalogAvailable = (product: Product) => {
 const staticPopularProducts =
     initialCategorySlug === "cat-household"
         ? popularProducts
-              .filter((product) => isCatalogAvailable(product) && Number(product.area || 0) <= Number(resolvedCategory.filters.area_max || 35))
+              .filter((product) => isCatalogAvailable(product) && parseProductArea(product) <= Number(resolvedCategory.filters.area_max || 35))
               .slice(0, 8)
         : [];
 ---

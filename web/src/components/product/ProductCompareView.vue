@@ -58,7 +58,7 @@ const availability = (product: Product) => {
 
 const rows = computed(() => [
   { label: "Цена", values: products.value.map((product) => product.price ? `${Number(product.price).toLocaleString("ru-RU")} BYN` : "Уточнить") },
-  { label: "Площадь", values: products.value.map((product) => product.area ? `до ${product.area} м²` : "Не указано") },
+  { label: "Площадь", values: products.value.map((product) => product.specs?.area_m2 ? `до ${product.specs.area_m2} м²` : "Не указано") },
   { label: "Компрессор", values: products.value.map(compressor) },
   { label: "Wi-Fi", values: products.value.map(wifi) },
   { label: "Обогрев", values: products.value.map(heating) },

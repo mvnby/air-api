@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import PriceWithToggle from './PriceWithToggle.vue';
 import { resolveImageUrl } from '../utils/api';
 import { buildProductCompareSnapshot } from '../utils/product-compare';
+import { parseProductArea } from '../utils/product-area';
 
 const props = defineProps({
   product: {
@@ -108,7 +109,8 @@ const displayFeatureTags = computed(() => {
 });
 
 // Fallback for legacy props if no tags present
-const showAreaBadge = computed(() => Boolean(props.product.area));
+const productArea = computed(() => parseProductArea(props.product));
+const showAreaBadge = computed(() => productArea.value > 0);
 const productCardImage = computed(() => props.product.card_image || props.product.main_image);
 const comparePayload = computed(() => JSON.stringify(buildProductCompareSnapshot(props.product)));
 </script>
@@ -130,7 +132,7 @@ const comparePayload = computed(() => JSON.stringify(buildProductCompareSnapshot
 
         <!-- Top Right: Area -->
         <div v-if="showAreaBadge" class="p-top-right-badge">
-          {{ formatAreaBadge(product.area) }}
+          {{ formatAreaBadge(productArea) }}
         </div>
 
         <!-- Bottom: Winter/Heat -->
@@ -156,7 +158,7 @@ const comparePayload = computed(() => JSON.stringify(buildProductCompareSnapshot
           currency="р."
           :showToggle="showInstallation"
           :tags="product.tags"
-          :area="product.area"
+          :area="productArea"
           :id="product.slug"
           :productId="product.id"
           :title="product.title"

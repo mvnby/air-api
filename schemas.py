@@ -222,7 +222,6 @@ class ProductBase(BaseModel):
     slug: Optional[str]
     price: int
     old_price: Optional[int]
-    area: int
     is_inverter: bool
     power_cooling: Optional[float]
     main_image: Optional[str]
@@ -279,7 +278,7 @@ class ProductSiblingResponse(BaseModel):
     slug: Optional[str]
     price: int
     old_price: Optional[int]
-    area: int
+    specs: Dict[str, Any] = Field(default_factory=dict)
     is_inverter: bool
     main_image: Optional[str]
 
@@ -1638,7 +1637,6 @@ class ManagerCatalogProductItemResponse(BaseModel):
     slug: Optional[str]
     price: int
     old_price: Optional[int]
-    area: int
     is_inverter: bool
     power_cooling: Optional[float]
     main_image: Optional[str]
@@ -2962,7 +2960,6 @@ class ProductUpdate(BaseModel):
     old_price: Optional[int] = None
     slug: Optional[str] = None
     description: Optional[str] = None
-    area: Optional[int] = None
     is_inverter: Optional[bool] = None
     power_cooling: Optional[float] = None
     main_image: Optional[str] = None
@@ -2981,7 +2978,6 @@ class ProductCreate(BaseModel):
     old_price: Optional[int] = None
     slug: Optional[str] = None
     description: str = ""
-    area: int = Field(default=0, ge=0)
     is_inverter: bool = False
     power_cooling: Optional[float] = None
     main_image: Optional[str] = None

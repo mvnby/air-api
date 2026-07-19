@@ -10,6 +10,7 @@ import {
 } from "../utils/api";
 import { buildCatalogItemListSchema } from "../utils/catalog-seo";
 import { safeJsonLd } from "../utils/safe-json-ld.js";
+import { parseProductArea } from "../utils/product-area";
 import { matchVirtualCategoryByFilters } from "../utils/virtual-category";
 import {
     VIRTUAL_CATEGORIES,
@@ -110,7 +111,7 @@ interface Product {
     minsk_qty?: number;
     availability_status?: string | null;
     is_inverter?: boolean;
-    area?: number;
+    specs?: Record<string, unknown>;
     badges?: Array<{ text: string; class?: string }>;
     tags?: Array<{
         title: string;
@@ -175,7 +176,7 @@ const pageDescription =
 const staticPopularProducts =
     initialCategorySlug === "cat-household"
         ? popularProducts
-              .filter((product) => isCatalogAvailable(product) && Number(product.area || 0) <= Number(parsedAreaMax || 35))
+              .filter((product) => isCatalogAvailable(product) && parseProductArea(product) <= Number(parsedAreaMax || 35))
               .slice(0, 8)
         : [];
 const initialFilters = {

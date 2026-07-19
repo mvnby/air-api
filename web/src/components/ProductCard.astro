@@ -5,6 +5,7 @@ import ProductCompareToggle from "./product/ProductCompareToggle.astro";
 import { resolveImageUrl } from "../utils/api";
 import { buildProductCompareSnapshot } from "../utils/product-compare";
 import { formatProductPrice, hasKnownProductPrice } from "../utils/product-display";
+import { parseProductArea } from "../utils/product-area";
 
 interface Props {
   product: {
@@ -20,7 +21,6 @@ interface Props {
     availability_status?: string | null;
     // Supports both old and new data structures
     is_inverter?: boolean;
-    area?: number;
     specs?: Record<string, any>;
     badges?: Array<{ text: string; class?: string }>; // Legacy support
     tags?: Array<{
@@ -67,6 +67,7 @@ const pricingProps = {
 const formatPrice = (price: number | null) => formatProductPrice(price);
 const productCardImage = product.card_image || product.main_image;
 const productDescription = product.description || "Кондиционер из каталога";
+const productArea = parseProductArea(product);
 
 // --- Logic for Tags & Badges ---
 
@@ -136,7 +137,7 @@ if (wifiBadgeText && !displayFeatureTags.some((t) => String(t.title || "").toLow
 }
 
 // Fallback for legacy props if no tags present
-const showAreaBadge = !!product.area;
+const showAreaBadge = productArea > 0;
 const compareSnapshot = buildProductCompareSnapshot(product);
 ---
 
@@ -168,7 +169,7 @@ const compareSnapshot = buildProductCompareSnapshot(product);
         {/* Top Right: Area */}
         {showAreaBadge && (
           <div class="p-top-right-badge">
-            {formatAreaBadge(product.area)}
+            {formatAreaBadge(productArea)}
           </div>
         )}
 
@@ -207,7 +208,7 @@ const compareSnapshot = buildProductCompareSnapshot(product);
             currency=""
             showToggle={showInstallation}
             tags={product.tags}
-            area={product.area}
+            area={productArea}
             id={product.slug}
             productId={product.id}
             title={product.title}
@@ -251,7 +252,7 @@ const compareSnapshot = buildProductCompareSnapshot(product);
             {/* Area Badge - Styled lighter for secondary info */}
             {showAreaBadge && (
               <span class="badge area-badge">
-                {formatAreaBadge(product.area)}
+                {formatAreaBadge(productArea)}
               </span>
             )}
           </div>
@@ -279,7 +280,7 @@ const compareSnapshot = buildProductCompareSnapshot(product);
             currency=""
             showToggle={true}
             tags={product.tags}
-            area={product.area}
+            area={productArea}
             id={product.slug}
             productId={product.id}
             title={product.title}

@@ -15,6 +15,7 @@ from services.catalog_revision_service import CatalogRevisionService
 from services.product_attachment_service import replace_manuals
 from services.spec_normalizer import normalize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
+from services.product_area import legacy_area_for_storage
 
 
 class ProductWriteService:
@@ -88,7 +89,7 @@ class ProductWriteService:
             description=str(payload.get("description") or ""),
             price=int(payload.get("price") or 0),
             old_price=payload.get("old_price"),
-            area=int(payload.get("area") or 0),
+            area=legacy_area_for_storage(specs),
             is_inverter=bool(payload.get("is_inverter", False)),
             power_cooling=payload.get("power_cooling"),
             main_image=payload.get("main_image"),
@@ -177,7 +178,7 @@ class ProductWriteService:
             description=str(payload.get("description", source.description or "")),
             price=int(payload.get("price", source.price) or 0),
             old_price=payload.get("old_price", source.old_price),
-            area=int(payload.get("area", source.area) or 0),
+            area=legacy_area_for_storage(specs),
             is_inverter=bool(payload.get("is_inverter", source.is_inverter)),
             power_cooling=payload.get("power_cooling", source.power_cooling),
             main_image=payload.get("main_image", source.main_image),
@@ -311,6 +312,7 @@ class ProductWriteService:
                 strict_wifi_from_tags=False,
                 title=payload.get("title") or (existing_product.title if existing_product else ""),
             )
+            payload["area"] = legacy_area_for_storage(payload["specs"])
 
         previous_brand_slugs = await CatalogRevisionService.get_product_brand_slugs(
             session,

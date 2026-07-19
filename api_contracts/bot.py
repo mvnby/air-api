@@ -28,6 +28,10 @@ class BotStaffContextResponse(BaseModel):
     is_executor: bool = False
 
 
+class BotCatalogSpecsResponse(BaseModel):
+    area_m2: float | None = None
+
+
 class BotCatalogProductResponse(BaseModel):
     """Small, stable product projection used by Telegram catalog cards."""
 
@@ -36,7 +40,7 @@ class BotCatalogProductResponse(BaseModel):
     slug: str = ""
     description: str = ""
     price: int
-    area: int = 0
+    specs: BotCatalogSpecsResponse = Field(default_factory=BotCatalogSpecsResponse)
     main_image: str | None = None
     categories: list[str] = Field(default_factory=list)
     vitebsk_qty: int = 0

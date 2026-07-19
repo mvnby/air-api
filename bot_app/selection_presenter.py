@@ -85,17 +85,7 @@ def _characteristics(product: dict[str, Any]) -> str:
             power = _spec_number(specs.get(key), nominal_from_range=True)
             if power is not None:
                 break
-    area = _spec_number(product.get("area"))
-    if area is None:
-        for key in (
-            "area_m2",
-            "Обслуживаемая площадь",
-            "Обслуживаемая площадь до",
-            "Рекомендуемая максимальная площадь помещения",
-        ):
-            area = _spec_number(specs.get(key))
-            if area is not None:
-                break
+    area = _spec_number(specs.get("area_m2"))
     parts = []
     if power is not None:
         parts.append(f"мощность {_decimal(power)} кВт")

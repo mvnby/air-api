@@ -563,10 +563,6 @@ class BotProductSelectionService:
 
     @classmethod
     def _product_area(cls, product: dict[str, Any]) -> float | None:
-        direct = cls._parse_spec_number(product.get("area"))
-        if direct is not None:
-            return direct
-
         specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
         for key in (
             "area_m2",

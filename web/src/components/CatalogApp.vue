@@ -5,6 +5,7 @@ import ProductCard from './ProductCard.vue';
 import { getCatalog, getFiltersConfig, resolveImageUrl } from '../utils/api';
 import { getBrandConfig } from '../utils/brands';
 import { createCatalogRequestGuard } from '../utils/catalog-request-guard';
+import { parseProductArea } from '../utils/product-area';
 
 const BASE_LIMIT = 20;
 const POPULAR_LIMIT = 80;
@@ -294,7 +295,7 @@ const popularAreaLimit = computed(() => {
 
 const diversifyPopularModels = (items, limit = 8) => {
   const candidates = items.filter((product) => (
-    isCatalogAvailable(product) && Number(product?.area || 0) <= popularAreaLimit.value
+    isCatalogAvailable(product) && parseProductArea(product) <= popularAreaLimit.value
   ));
   const groups = new Map();
   candidates.forEach((product) => {

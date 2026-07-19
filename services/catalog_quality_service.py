@@ -578,7 +578,7 @@ class CatalogQualityService:
                     message="Цена не заполнена или равна нулю.",
                 )
             )
-        if int(product.area or 0) <= 0 and not _as_int(_spec_value(specs, ("area_m2", "recommended_area_m2"))):
+        if not _as_int(_spec_value(specs, ("area_m2",))):
             issues.append(
                 QualityIssue(
                     code="missing_area",

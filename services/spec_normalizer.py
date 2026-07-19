@@ -9,6 +9,7 @@ from services.spec_registry import (
     normalize_registered_value,
 )
 from services.tag_logic import extract_brand_name, extract_brand_slug, is_invalid_brand_name
+from services.product_area import canonicalize_area_specs
 
 _TRIPLET_SPEC_KEYS = {
     "capacity_cooling_kw": ("capacity_cooling_min_kw", "capacity_cooling_max_kw"),
@@ -681,7 +682,7 @@ def normalize_specs(
     if not isinstance(specs, dict):
         specs = {}
         
-    old_specs = specs.copy()
+    old_specs = canonicalize_area_specs(specs)
 
     # Split composite dimension keys ("Габариты ... (ШхВхГ)" → width/height/depth)
     old_specs = _split_dimensions(old_specs)

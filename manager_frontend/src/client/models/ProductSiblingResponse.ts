@@ -8,7 +8,7 @@ export type ProductSiblingResponse = {
     slug: (string | null);
     price: number;
     old_price: (number | null);
-    area: number;
+    specs?: Record<string, any>;
     is_inverter: boolean;
     main_image: (string | null);
 };

@@ -11,7 +11,6 @@ export interface ProductCompareSnapshot {
     slug: string;
     title: string;
     price: number | null;
-    area: number | null;
     card_image: string;
     main_image: string;
     is_inverter: boolean | null;
@@ -22,6 +21,7 @@ export interface ProductCompareSnapshot {
 }
 
 const COMPARE_SPEC_KEYS = [
+    "area_m2",
     "compressor_type_norm",
     "wifi_ready",
     "wifi",
@@ -55,7 +55,6 @@ export function buildProductCompareSnapshot(
         slug: normalizeText(value?.slug, 180),
         title: normalizeText(value?.title, 240),
         price: normalizeNumber(value?.price),
-        area: normalizeNumber(value?.area),
         card_image: normalizeText(value?.card_image, 600),
         main_image: normalizeText(value?.main_image, 600),
         is_inverter:

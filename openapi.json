@@ -20911,10 +20911,8 @@
             "type": "integer",
             "title": "Price"
           },
-          "area": {
-            "type": "integer",
-            "title": "Area",
-            "default": 0
+          "specs": {
+            "$ref": "#/components/schemas/BotCatalogSpecsResponse"
           },
           "main_image": {
             "anyOf": [
@@ -20999,6 +20997,23 @@
         },
         "type": "object",
         "title": "BotCatalogSearchResponse"
+      },
+      "BotCatalogSpecsResponse": {
+        "properties": {
+          "area_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area M2"
+          }
+        },
+        "type": "object",
+        "title": "BotCatalogSpecsResponse"
       },
       "BotCuratedProductsRequest": {
         "properties": {
@@ -27882,10 +27897,6 @@
             ],
             "title": "Old Price"
           },
-          "area": {
-            "type": "integer",
-            "title": "Area"
-          },
           "is_inverter": {
             "type": "boolean",
             "title": "Is Inverter"
@@ -28014,7 +28025,6 @@
           "slug",
           "price",
           "old_price",
-          "area",
           "is_inverter",
           "power_cooling",
           "main_image",
@@ -43552,12 +43562,6 @@
             "title": "Description",
             "default": ""
           },
-          "area": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Area",
-            "default": 0
-          },
           "is_inverter": {
             "type": "boolean",
             "title": "Is Inverter",
@@ -43705,17 +43709,6 @@
               }
             ],
             "title": "Description"
-          },
-          "area": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Area"
           },
           "is_inverter": {
             "anyOf": [
@@ -45059,10 +45052,6 @@
             ],
             "title": "Old Price"
           },
-          "area": {
-            "type": "integer",
-            "title": "Area"
-          },
           "is_inverter": {
             "type": "boolean",
             "title": "Is Inverter"
@@ -45215,7 +45204,6 @@
           "slug",
           "price",
           "old_price",
-          "area",
           "is_inverter",
           "power_cooling",
           "main_image",
@@ -45651,9 +45639,10 @@
             ],
             "title": "Old Price"
           },
-          "area": {
-            "type": "integer",
-            "title": "Area"
+          "specs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Specs"
           },
           "is_inverter": {
             "type": "boolean",
@@ -45678,7 +45667,6 @@
           "slug",
           "price",
           "old_price",
-          "area",
           "is_inverter",
           "main_image"
         ],
@@ -45740,17 +45728,6 @@
               }
             ],
             "title": "Description"
-          },
-          "area": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Area"
           },
           "is_inverter": {
             "anyOf": [

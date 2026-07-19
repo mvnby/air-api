@@ -35,7 +35,7 @@ export function generateBentoCards(product: any): BentoCard[] {
     // --- Priority 1: Area ---
     // REMOVED per user feedback
     /*
-    const areaVal = fmt('area_m2', specs.area_m2 || product.area);
+    const areaVal = fmt('area_m2', specs.area_m2);
     if (areaVal) {
         cards.push({ id: 'area', ... });
     }

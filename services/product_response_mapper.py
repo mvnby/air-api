@@ -185,7 +185,7 @@ def map_product_to_response(
             slug=item.slug,
             price=item.price,
             old_price=item.old_price,
-            area=item.area,
+            specs=sanitize_specs(item.specs),
             is_inverter=item.is_inverter,
             main_image=item.main_image,
         )
@@ -219,7 +219,6 @@ def map_product_to_response(
         slug=product.slug,
         price=product.price,
         old_price=product.old_price,
-        area=product.area,
         is_inverter=product.is_inverter,
         power_cooling=product.power_cooling,
         main_image=_main_image_public_url(product),

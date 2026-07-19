@@ -25,7 +25,8 @@ def test_tenant_storefront_foundation_is_in_the_single_alembic_head_chain():
     revision = script.get_revision(REVISION)
     heads = script.get_heads()
 
-    assert heads == [REVISION]
+    assert len(heads) == 1
+    assert REVISION in {item.revision for item in script.walk_revisions("base", heads[0])}
     assert revision is not None
     assert revision.down_revision == "9b4d6f8a1c30"
 

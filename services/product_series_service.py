@@ -14,6 +14,8 @@ from schemas import (
     ProductSiblingResponse,
 )
 from services.product_series_payloads import build_product_series_response
+from services.product_area import area_from_specs
+from services.product_serialization import sanitize_specs
 
 
 class ProductSeriesService:
@@ -45,7 +47,7 @@ class ProductSeriesService:
 
             return (
                 same_brand,
-                numeric(item.area),
+                numeric(area_from_specs(item.specs)),
                 numeric(item.power_cooling),
                 numeric(item.price),
                 (item.title or "").casefold(),
@@ -62,7 +64,7 @@ class ProductSeriesService:
             slug=item.slug,
             price=item.price,
             old_price=item.old_price,
-            area=item.area,
+            specs=sanitize_specs(item.specs),
             is_inverter=item.is_inverter,
             main_image=item.main_image,
         )

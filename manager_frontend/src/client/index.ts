@@ -42,6 +42,7 @@ export type { BotCatalogProductLookupResponse } from './models/BotCatalogProduct
 export type { BotCatalogProductResponse } from './models/BotCatalogProductResponse';
 export type { BotCatalogSearchRequest } from './models/BotCatalogSearchRequest';
 export type { BotCatalogSearchResponse } from './models/BotCatalogSearchResponse';
+export type { BotCatalogSpecsResponse } from './models/BotCatalogSpecsResponse';
 export type { BotCuratedProductsRequest } from './models/BotCuratedProductsRequest';
 export type { BotCuratedProductsResponse } from './models/BotCuratedProductsResponse';
 export type { BotCustomerBriefResponse } from './models/BotCustomerBriefResponse';
