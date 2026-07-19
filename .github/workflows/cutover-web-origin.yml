@@ -60,39 +60,64 @@ jobs:
             --confirm "${{ inputs.confirmation }}" \
             | tee cloudflare-web-origin.log
 
-      - name: Verify public SSR after cutover
-        if: ${{ inputs.operation == 'cutover' }}
+      - name: Configure trusted verification host
+        if: ${{ inputs.operation != 'audit' }}
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 30); do
-            headers="$(mktemp)"
-            if curl --fail --silent --show-error --max-time 30 \
-              --dump-header "${headers}" --output /dev/null \
-              https://mvn.by/catalog/ \
-              && grep -Eiq '^x-catalog-revision: [0-9]+' "${headers}" \
-              && grep -Eiq '^x-web-data-cache: (hit|miss|shared)[[:space:]]*$' "${headers}"; then
-              rm -f "${headers}"
-              exit 0
-            fi
-            rm -f "${headers}"
-            sleep 5
-          done
-          echo "::error::Public mvn.by did not converge to the SSR origin"
-          exit 1
+          test -n "${SSH_KEY}"
+          test -n "${SSH_HOST_API}"
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/web_origin_verify_key
+          chmod 0600 ~/.ssh/web_origin_verify_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
 
-      - name: Verify public Pages after rollback
-        if: ${{ inputs.operation == 'rollback' }}
+      - name: Verify public routing from trusted API host
+        if: ${{ inputs.operation != 'audit' }}
+        env:
+          OPERATION: ${{ inputs.operation }}
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
         run: |
           set -euo pipefail
+          test -n "${SSH_HOST_API}"
+          test -n "${SSH_USER_API}"
+          case "${OPERATION}" in
+            cutover|rollback) ;;
+            *) echo "Invalid operation: ${OPERATION}" >&2; exit 1 ;;
+          esac
+          ssh \
+            -i ~/.ssh/web_origin_verify_key \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "${SSH_USER_API}@${SSH_HOST_API}" \
+            "bash -s -- ${OPERATION}" <<'REMOTE'
+          set -euo pipefail
+          operation="$1"
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error --max-time 30 \
-              https://mvn.by/release.json | grep -Eq '"sha":"[0-9a-f]{40}"'; then
+            if [ "${operation}" = "cutover" ]; then
+              headers="$(mktemp)"
+              if curl --fail --silent --show-error --max-time 30 \
+                --dump-header "${headers}" --output /dev/null \
+                https://mvn.by/catalog/ \
+                && grep -Eiq '^x-catalog-revision: [0-9]+' "${headers}" \
+                && grep -Eiq '^x-web-data-cache: (hit|miss|shared)[[:space:]]*$' "${headers}"; then
+                rm -f "${headers}"
+                exit 0
+              fi
+              rm -f "${headers}"
+            elif curl --fail --silent --show-error --max-time 30 \
+              https://mvn.by/release.json \
+              | grep -Eq '"sha":"[0-9a-f]{40}"'; then
               exit 0
             fi
             sleep 5
           done
-          echo "::error::Public mvn.by did not converge to Cloudflare Pages"
+          echo "Public routing did not converge for ${operation}" >&2
           exit 1
+          REMOTE
 
       - name: Upload routing audit
         if: ${{ always() }}
