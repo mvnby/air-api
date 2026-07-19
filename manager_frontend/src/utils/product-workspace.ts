@@ -1,4 +1,6 @@
-export type ProductWorkspaceSection = 'main' | 'media' | 'specifications' | 'suppliers' | 'publication';
+import type { Product } from '../api';
+
+export type ProductWorkspaceSection = 'main' | 'media' | 'specifications' | 'suppliers' | 'publication' | 'relations';
 
 export type ProductListWorkspaceContext = {
   returnTo: string;
@@ -17,6 +19,7 @@ const sectionPath: Record<ProductWorkspaceSection, string> = {
   specifications: '/specifications',
   suppliers: '/suppliers',
   publication: '/publication',
+  relations: '/relations',
 };
 
 export const buildProductWorkspacePath = (
@@ -28,7 +31,7 @@ export const parseProductWorkspaceLocation = (pathname: string): {
   productId: number | null;
   section: ProductWorkspaceSection;
 } => {
-  const match = pathname.match(/^\/manager\/products\/(\d+)(?:\/(media|specifications|suppliers|publication))?\/?$/);
+  const match = pathname.match(/^\/manager\/products\/(\d+)(?:\/(media|specifications|suppliers|publication|relations))?\/?$/);
   if (!match) return { productId: null, section: 'main' };
   const productId = Number(match[1]);
   return {
@@ -36,6 +39,20 @@ export const parseProductWorkspaceLocation = (pathname: string): {
     section: (match[2] || 'main') as ProductWorkspaceSection,
   };
 };
+
+export const getProductImageUrls = (product: Pick<Product, 'main_image' | 'gallery_images'>): string[] => {
+  const urls = [
+    product.main_image,
+    ...product.gallery_images.map((image) => image.url),
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(urls));
+};
+
+export const getProductImageCount = (product: Pick<Product, 'main_image' | 'gallery_images'>): number => (
+  getProductImageUrls(product).length
+);
 
 export const getProductWorkspaceNeighbors = (
   productIds: number[],

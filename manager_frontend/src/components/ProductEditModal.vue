@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { api, type Product, type ManagerBrand, type ProductCreate, type ProductDuplicatePayload, type ProductUpdate } from '../api';
-import { X, Save, Plus, Trash2, Edit3, Globe, Hash, Tag, CircleHelp } from 'lucide-vue-next';
+import { X, Save, Plus, Trash2, Edit3, Globe, Tag } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
-import SpecKeyCombobox from './SpecKeyCombobox.vue';
-import SpecValueInput from './SpecValueInput.vue';
+import ProductSpecificationsEditor from './products/ProductSpecificationsEditor.vue';
+import ProductSuppliersEditor from './products/ProductSuppliersEditor.vue';
 import { useSpecRegistry } from '../composables/useSpecRegistry';
+import { collapseWifiSpecs } from '../utils/product-spec-safety';
+import type { ProductWorkspaceSection } from '../utils/product-workspace';
+import type { SupplierOfferResponse } from '../client/models/SupplierOfferResponse';
 
 interface TagItem {
     id: number;
@@ -52,9 +55,13 @@ const props = withDefaults(defineProps<{
     product: Product | null;
     mode?: ProductEditorMode;
     presentation?: 'modal' | 'workspace';
+    workspaceSection?: ProductWorkspaceSection;
+    expertMode?: boolean;
 }>(), {
     mode: 'edit',
     presentation: 'modal',
+    workspaceSection: 'main',
+    expertMode: false,
 });
 
 const emit = defineEmits<{
@@ -84,7 +91,7 @@ const tagSearchQuery = ref('');
 const managerBrands = ref<ManagerBrand[]>([]);
 const selectedBrandEntityId = ref<number | null>(null);
 const vitebskQty = ref(0);
-const supplierOffers = ref<any[]>([]);
+const supplierOffers = ref<SupplierOfferResponse[]>([]);
 const localStockSaving = ref(false);
 const unlinkingMappingId = ref<number | null>(null);
 const COMPATIBLE_INDOOR_KEY = 'compatible_indoor_slugs';
@@ -117,6 +124,12 @@ const isCreateMode = computed(() => props.mode === 'create');
 const isDuplicateMode = computed(() => props.mode === 'duplicate');
 const isPersistedProduct = computed(() => props.mode === 'edit' && Boolean(props.product?.id));
 const isWorkspace = computed(() => props.presentation === 'workspace');
+const showMainSection = computed(() => !isWorkspace.value || props.workspaceSection === 'main');
+const showSpecificationsSection = computed(() => !isWorkspace.value || props.workspaceSection === 'specifications');
+const showSuppliersSection = computed(() => !isWorkspace.value || props.workspaceSection === 'suppliers');
+const showPublicationSection = computed(() => !isWorkspace.value || props.workspaceSection === 'publication');
+const showRelationsSection = computed(() => !isWorkspace.value || props.workspaceSection === 'relations');
+const effectiveExpertMode = computed(() => !isWorkspace.value || props.expertMode);
 const cleanFingerprint = ref('');
 const modalTitle = computed(() => {
     if (isCreateMode.value) return 'Создание товара';
@@ -138,32 +151,11 @@ const saveButtonText = computed(() => {
 const normalizeText = (value: unknown): string => String(value ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 const normalizeBrandToken = (value: unknown): string => normalizeText(value).replace(/[^a-z0-9а-я]/g, '');
 const {
-    getSpecConfig,
-    getSpecGroup,
-    getSpecGroupLabel,
-    getSpecHelpText,
     isHiddenSpecKey,
-    knownSpecKeys,
     loadSpecRegistry,
     normalizeValueForEdit,
     serializeSpecValue,
-    specGroupOrder,
 } = useSpecRegistry();
-const showSpecHelp = (key: string) => {
-    const text = getSpecHelpText(key);
-    if (text) window.alert(text);
-};
-const getSpecLabel = (key: string): string => getSpecConfig(key)?.label || key || 'Новая характеристика';
-const getSpecTypeHint = (key: string): string => {
-    const config = getSpecConfig(key);
-    if (!config) return '';
-    if (config.type === 'range') return 'диапазон';
-    if (config.type === 'number_list') return 'список';
-    if (config.type === 'number') return config.unit ? `число, ${config.unit}` : 'число';
-    if (config.type === 'select') return 'выбор';
-    if (config.type === 'boolean') return 'да / нет';
-    return '';
-};
 const INVALID_BRAND_TOKENS = new Set([
     'мультисплитсистема',
     'сплитсистема',
@@ -868,9 +860,12 @@ const fetchBrands = async (force = false) => {
 };
 
 const filteredTagGroups = computed(() => {
-    if (!tagSearchQuery.value.trim()) return tagGroups.value;
+    const visibleGroups = effectiveExpertMode.value
+        ? tagGroups.value
+        : tagGroups.value.filter((group) => normalizeText(group.slug) !== 'brand');
+    if (!tagSearchQuery.value.trim()) return visibleGroups;
     const q = tagSearchQuery.value.toLowerCase().trim();
-    return tagGroups.value
+    return visibleGroups
         .map(g => ({
             ...g,
             tags: g.tags.filter(t => t.title.toLowerCase().includes(q)),
@@ -878,33 +873,10 @@ const filteredTagGroups = computed(() => {
         .filter(g => g.tags.length > 0);
 });
 
-const groupedSpecRows = computed(() => {
-    const groups = new Map<string, {
-        group: string;
-        label: string;
-        entries: Array<{ row: { key: string; value: string }; index: number }>;
-    }>();
-
-    specs.value.forEach((row, index) => {
-        const group = row.key.trim() ? getSpecGroup(row.key) : 'other';
-        if (!groups.has(group)) {
-            groups.set(group, {
-                group,
-                label: getSpecGroupLabel(group),
-                entries: [],
-            });
-        }
-        groups.get(group)?.entries.push({ row, index });
-    });
-
-    return Array.from(groups.values()).sort((a, b) => {
-        const aIndex = specGroupOrder.indexOf(a.group as any);
-        const bIndex = specGroupOrder.indexOf(b.group as any);
-        const safeA = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
-        const safeB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
-        return safeA - safeB || a.label.localeCompare(b.label, 'ru');
-    });
-});
+const selectedTags = computed(() => tagGroups.value
+    .flatMap((group) => group.tags.map((tag) => ({ ...tag, groupSlug: group.slug })))
+    .filter((tag) => selectedTagIds.value.has(tag.id))
+    .filter((tag) => effectiveExpertMode.value || normalizeText(tag.groupSlug) !== 'brand'));
 
 const isTagSelected = (id: number) => selectedTagIds.value.has(id);
 
@@ -1005,7 +977,6 @@ const editorFingerprint = () => JSON.stringify({
     manuals: manuals.value,
     tagIds: Array.from(selectedTagIds.value).sort((a, b) => a - b),
     brandId: selectedBrandEntityId.value,
-    vitebskQty: vitebskQty.value,
     indoorSlugs: compatibilityIndoorSlugs.value,
     outdoorSlugs: compatibilityOutdoorSlugs.value,
     logisticsComponents: logisticsComponents.value,
@@ -1046,9 +1017,9 @@ const initializeEditor = async () => {
         ? 'strict'
         : 'free_match';
     capacityCombosInput.value = parseCapacityCombos((s as any)[MULTI_CAPACITY_COMBOS_KEY]).join(', ');
-    specs.value = Object.entries(s)
+    specs.value = collapseWifiSpecs(Object.entries(s)
         .filter(([key]) => !COMPATIBILITY_KEYS.has(key) && !isHiddenSpecKey(key))
-        .map(([key, value]) => ({ key, value: normalizeValueForEdit(key, value) }));
+        .map(([key, value]) => ({ key, value: normalizeValueForEdit(key, value) })));
     manuals.value = (((source as any)?.manuals || []) as Array<any>)
         .map((item) => ({
             title: String(item?.title || 'Инструкция').trim() || 'Инструкция',
@@ -1107,8 +1078,6 @@ const loadSupplierOffers = async () => {
     }
 };
 
-const addRow = () => specs.value.push({ key: '', value: '' });
-const removeRow = (index: number) => specs.value.splice(index, 1);
 const addManualRow = () => manuals.value.push({ title: 'Инструкция', url: '' });
 const removeManualRow = (index: number) => manuals.value.splice(index, 1);
 
@@ -1299,10 +1268,14 @@ defineExpose({ save, isDirty, loading });
             </div>
             
             <div class="flex-1 p-6" :class="isWorkspace ? '' : 'overflow-y-auto'">
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 gap-6" :class="isWorkspace ? '' : 'lg:grid-cols-2'">
                     <!-- Column 1: Basic Info -->
-                    <section id="product-section-main" class="scroll-mt-28 space-y-5">
-                        <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">Основные данные</h3>
+                    <section v-if="showMainSection || showSuppliersSection || showRelationsSection" id="product-section-main" class="scroll-mt-28 space-y-5">
+                        <template v-if="showMainSection">
+                        <div class="border-b border-gray-100 pb-4 dark:border-slate-800">
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-700 dark:text-teal-300">Основное</p>
+                            <h2 class="mt-1 text-xl font-bold text-gray-950 dark:text-white">Название, цена и публикация</h2>
+                        </div>
                         
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Название модели</label>
@@ -1367,45 +1340,22 @@ defineExpose({ save, isDirty, loading });
                                 <span class="ms-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Опубликовано</span>
                             </label>
                         </div>
+                        </template>
 
-                        <div id="product-section-suppliers" v-if="isPersistedProduct" class="scroll-mt-28 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
-                            <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Supply</h4>
-                            <div class="flex items-end gap-2">
-                                <div class="flex-1">
-                                    <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Склад Витебск (шт)</label>
-                                    <input v-model.number="vitebskQty" type="number" min="0" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-sm" />
-                                </div>
-                                <button
-                                    @click="saveLocalStock"
-                                    :disabled="localStockSaving"
-                                    class="px-3 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold disabled:opacity-50"
-                                >
-                                    {{ localStockSaving ? 'Сохранение...' : 'Сохранить' }}
-                                </button>
-                            </div>
-                            <div class="max-h-40 overflow-y-auto space-y-2">
-                                <div v-if="supplierOffers.length === 0" class="text-xs text-gray-500 dark:text-slate-400">Нет привязанных офферов</div>
-                                <div v-for="offer in supplierOffers" :key="`${offer.supplier_id}-${offer.external_id}`" class="text-xs border border-gray-100 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-900/40">
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="font-semibold text-gray-700 dark:text-slate-200">{{ offer.supplier_name || offer.supplier_id }} / {{ offer.external_id }}</div>
-                                        <button
-                                            v-if="offer.mapping_id"
-                                            @click="unlinkSupplierOffer(offer)"
-                                            :disabled="unlinkingMappingId === offer.mapping_id"
-                                            class="px-2 py-1 rounded border border-red-300 text-red-600 text-[11px] font-semibold disabled:opacity-50"
-                                        >
-                                            {{ unlinkingMappingId === offer.mapping_id ? '...' : 'Отвязать' }}
-                                        </button>
-                                    </div>
-                                    <div class="text-gray-500 dark:text-slate-400">
-                                        qty: {{ offer.qty }} | wholesale: {{ offer.wholesale_value ?? '—' }} {{ offer.wholesale_currency || '' }} | rrc: {{ offer.rrc_byn ?? '—' }}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <ProductSuppliersEditor
+                            v-if="showSuppliersSection && isPersistedProduct"
+                            id="product-section-suppliers"
+                            :offers="supplierOffers"
+                            :vitebsk-qty="vitebskQty"
+                            :stock-saving="localStockSaving"
+                            :unlinking-mapping-id="unlinkingMappingId"
+                            @update:vitebsk-qty="vitebskQty = $event"
+                            @save-stock="saveLocalStock"
+                            @unlink="unlinkSupplierOffer"
+                        />
 
                         <div
-                            v-if="isCurrentProductMulti"
+                            v-if="showRelationsSection && effectiveExpertMode && isCurrentProductMulti"
                             class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3"
                         >
                             <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Быстрые пресеты</h4>
@@ -1455,7 +1405,7 @@ defineExpose({ save, isDirty, loading });
                             </div>
                         </div>
 
-                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                        <div v-if="showMainSection" class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
                             <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Бренд</h4>
                             <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-start">
                                 <select
@@ -1477,9 +1427,8 @@ defineExpose({ save, isDirty, loading });
                                     Очистить
                                 </button>
                             </div>
-                            <p class="text-[11px] text-gray-500 dark:text-slate-400">
-                                Канонический источник бренда: <code>product.brand_id</code>.
-                            </p>
+                            <p class="text-[11px] text-emerald-700 dark:text-emerald-300">Связанные данные бренда синхронизируются при сохранении.</p>
+                            <template v-if="effectiveExpertMode">
                             <div class="h-px bg-gray-100 dark:bg-slate-700"></div>
                             <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">
                                 Совместимость (brand tag)
@@ -1523,9 +1472,10 @@ defineExpose({ save, isDirty, loading });
                             <p class="text-[11px] text-gray-500 dark:text-slate-400">
                                 При выборе бренда мы синхронизируем <code>brand_id</code>, тег группы <code>brand</code> и <code>specs.brand</code>.
                             </p>
+                            </template>
                         </div>
 
-                        <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                        <div v-if="showRelationsSection && isCurrentProductMulti" class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
                             <div class="flex items-start justify-between gap-2">
                                 <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Совместимость мульти</h4>
                                 <div class="text-[11px] text-gray-500 dark:text-slate-400 text-right">
@@ -1786,8 +1736,8 @@ defineExpose({ save, isDirty, loading });
                     </section>
 
                     <!-- Column 2: Specs -->
-                    <section id="product-section-specifications" class="scroll-mt-28 space-y-5">
-                        <div id="product-section-publication" class="scroll-mt-28 rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
+                    <section v-if="showPublicationSection || showSpecificationsSection" id="product-section-specifications" class="scroll-mt-28 space-y-5">
+                        <div v-if="showPublicationSection" id="product-section-publication" class="scroll-mt-28 rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
                             <div class="flex justify-between items-center">
                                 <h3 class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-widest">
                                     Инструкции и файлы
@@ -1820,7 +1770,7 @@ defineExpose({ save, isDirty, loading });
                             </div>
                         </div>
 
-                        <div class="rounded-2xl border border-teal-100 dark:border-teal-900 bg-teal-50/40 dark:bg-teal-950/20 p-3 space-y-3">
+                        <div v-if="showPublicationSection" class="rounded-2xl border border-teal-100 dark:border-teal-900 bg-teal-50/40 dark:bg-teal-950/20 p-3 space-y-3">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <h3 class="text-xs font-bold text-teal-700 dark:text-teal-300 uppercase tracking-widest">
@@ -1909,82 +1859,17 @@ defineExpose({ save, isDirty, loading });
                             </div>
                         </div>
 
-                        <div class="flex justify-between items-center">
-                            <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                                 Характеристики
-                            </h3>
-                            <button @click="addRow" class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm">
-                                <Plus class="w-3 h-3" /> Добавить
-                            </button>
-                        </div>
-
-                        <div class="space-y-4 bg-slate-100/50 dark:bg-slate-800/50 p-3 rounded-2xl border border-gray-100 dark:border-slate-800 max-h-[460px] overflow-y-auto">
-                            <div v-for="group in groupedSpecRows" :key="group.group" class="space-y-2">
-                                <div class="flex items-center gap-2 px-1">
-                                    <p class="text-[11px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                                        {{ group.label }}
-                                    </p>
-                                    <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400 shadow-sm dark:bg-slate-800 dark:text-slate-500">
-                                        {{ group.entries.length }}
-                                    </span>
-                                </div>
-
-                                <div
-                                    v-for="{ row, index } in group.entries"
-                                    :key="index"
-                                    class="rounded-xl border border-white/80 bg-white/70 p-2 shadow-sm transition-colors hover:border-teal-100 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-teal-900"
-                                >
-                                    <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_auto] sm:items-start">
-                                        <div class="min-w-0">
-                                            <SpecKeyCombobox
-                                                v-model="row.key"
-                                                :known-keys="knownSpecKeys"
-                                            />
-                                            <div v-if="row.key" class="mt-1 flex min-w-0 items-center gap-1.5">
-                                                <span class="truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400" :title="getSpecLabel(row.key)">
-                                                    {{ getSpecLabel(row.key) }}
-                                                </span>
-                                                <span v-if="getSpecTypeHint(row.key)" class="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                                                    {{ getSpecTypeHint(row.key) }}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <SpecValueInput
-                                            v-model="row.value"
-                                            :spec-key="row.key"
-                                            compact
-                                        />
-
-                                        <div class="flex items-center justify-end gap-1 sm:pt-1">
-                                            <button
-                                                v-if="getSpecHelpText(row.key)"
-                                                type="button"
-                                                class="rounded-full p-1.5 text-slate-400 transition hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-slate-700 dark:hover:text-teal-300"
-                                                :title="getSpecHelpText(row.key)"
-                                                @click="showSpecHelp(row.key)"
-                                            >
-                                                <CircleHelp class="h-4 w-4" />
-                                            </button>
-                                            <button @click="removeRow(index)" class="rounded-lg p-1.5 text-gray-300 transition-all hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30">
-                                                <Trash2 class="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div v-if="specs.length === 0" class="text-center py-6 text-gray-400 dark:text-slate-500">
-                                 <Hash class="w-6 h-6 mx-auto mb-1.5 opacity-20" />
-                                 <p class="text-xs">Нет характеристик</p>
-                            </div>
-                        </div>
+                        <ProductSpecificationsEditor v-if="showSpecificationsSection" v-model="specs" :expert-mode="effectiveExpertMode" />
                     </section>
                 </div>
 
-                <details id="product-section-links" class="scroll-mt-28 mt-6 border border-gray-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 group">
+                <details v-if="showRelationsSection" id="product-section-relations" class="scroll-mt-28 mt-6 border border-gray-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 group">
                     <summary class="cursor-pointer p-4 font-bold text-gray-700 dark:text-slate-300 flex justify-between items-center outline-none">
-                        <span class="flex items-center gap-2"><Tag class="w-4 h-4 text-gray-400 dark:text-slate-500"/> Теги ({{ selectedTagIds.size }} выбрано)</span>
+                        <span class="flex flex-wrap items-center gap-2">
+                            <Tag class="w-4 h-4 text-gray-400 dark:text-slate-500"/> Теги ({{ selectedTags.length }} выбрано)
+                            <span v-for="tag in selectedTags.slice(0, 4)" :key="tag.id" class="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-gray-600 shadow-sm dark:bg-slate-900 dark:text-slate-300">{{ tag.title }}</span>
+                            <span v-if="selectedTags.length > 4" class="text-xs text-gray-400">+{{ selectedTags.length - 4 }}</span>
+                        </span>
                     </summary>
                     <div class="p-4 border-t border-gray-200 dark:border-slate-700">
                         <input 

@@ -42,9 +42,15 @@ import { countLabel } from '../src/components/catalog-quality/catalog-quality-co
 import { navSections } from '../src/manager-navigation';
 import {
   buildProductWorkspacePath,
+  getProductImageCount,
   getProductWorkspaceNeighbors,
   parseProductWorkspaceLocation,
 } from '../src/utils/product-workspace';
+import {
+  canonicalEnergyClass,
+  collapseWifiSpecs,
+  getLegacySpecSuggestion,
+} from '../src/utils/product-spec-safety';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -195,6 +201,10 @@ assert(
   buildProductWorkspacePath(143, 'media') === '/manager/products/143/media',
   'product workspace links must preserve the requested section',
 );
+assert(
+  buildProductWorkspacePath(143, 'relations') === '/manager/products/143/relations',
+  'product workspace must expose relations as a real section',
+);
 const parsedProductWorkspace = parseProductWorkspaceLocation('/manager/products/143/specifications');
 assert(
   parsedProductWorkspace?.productId === 143 && parsedProductWorkspace.section === 'specifications',
@@ -213,6 +223,25 @@ const edgeProductNeighbors = getProductWorkspaceNeighbors([11, 143, 22], 11);
 assert(
   edgeProductNeighbors.previousId === null && edgeProductNeighbors.nextId === 143,
   'product workspace navigation must stop at list boundaries',
+);
+assert(
+  getProductImageCount({
+    main_image: '/media/main.webp',
+    gallery_images: [{ id: 1, url: '/media/main.webp' }, { id: 2, url: '/media/side.webp' }],
+  } as any) === 2,
+  'product media count must deduplicate the main image from the gallery',
+);
+const wifiSpecs = collapseWifiSpecs([
+  { key: 'wifi_ready', value: 'true' },
+  { key: 'wifi_builtin', value: 'true' },
+  { key: 'energy_class_cooling', value: 'А++' },
+]);
+assert(wifiSpecs.filter((row) => row.key.startsWith('wifi_')).length === 1, 'Wi-Fi aliases must collapse to one editor field');
+assert(wifiSpecs.find((row) => row.key === 'wifi_state')?.value === 'builtin', 'built-in Wi-Fi must take priority over ready');
+assert(canonicalEnergyClass(' А++ ') === 'A++', 'energy class must use canonical Latin A');
+assert(
+  getLegacySpecSuggestion('pipe_gas', '5')?.value === '5/8"',
+  'ambiguous legacy pipe values must offer an explicit conversion',
 );
 
 const workspaceBase = {
