@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Column, String, UniqueConstraint
+from sqlalchemy import Column, Float, Index, String, UniqueConstraint, cast, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, JSON, Relationship, SQLModel
 
 
@@ -106,6 +107,18 @@ class Product(SQLModel, table=True):
 
     def __str__(self):
         return f"{self.title} ({self.price} р)"
+
+
+Index(
+    "ix_product_specs_area_m2",
+    cast(
+        func.jsonb_extract_path_text(
+            cast(Product.__table__.c.specs, JSONB),
+            "area_m2",
+        ),
+        Float,
+    ),
+).ddl_if(dialect="postgresql")
 
 
 class ProductImage(SQLModel, table=True):
