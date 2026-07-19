@@ -74,6 +74,8 @@ async def test_catalog_quality_report_supports_normalized_workspace_filters(asyn
     assert payload["items"][0]["product_id"] == product.id
     assert payload["items"][0]["equipment_type"] == "cat-household"
     assert payload["groups"][0]["key"] == "equipment:cat-household"
+    assert "in_stock_products" in payload["groups"][0]
+    assert "shared_main_image_products" in payload["groups"][0]
     assert any(
         option["value"] == "cat-household"
         for option in payload["filter_options"]["equipment_types"]

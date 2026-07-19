@@ -308,6 +308,23 @@ def build_groups(rows: list[dict[str, Any]], group_by: str) -> list[dict[str, An
         row["group_label"] = label
     result = []
     for key, items in grouped.items():
+        image_counts: dict[str, int] = defaultdict(int)
+        for item in items:
+            image_url = str(item.get("main_image") or "").strip()
+            if image_url:
+                image_counts[image_url] += 1
+        shared_image_url, shared_image_products = max(
+            image_counts.items(),
+            key=lambda pair: pair[1],
+            default=("", 0),
+        )
+        shared_image_item = next(
+            (item for item in items if item.get("main_image") == shared_image_url),
+            {},
+        )
+        if shared_image_products < 2:
+            shared_image_products = 0
+            shared_image_item = {}
         result.append(
             {
                 "key": key,
@@ -315,12 +332,16 @@ def build_groups(rows: list[dict[str, Any]], group_by: str) -> list[dict[str, An
                 "count": len(items),
                 "average_score": round(sum(int(item.get("score") or 0) for item in items) / len(items)),
                 "critical_products": sum(1 for item in items if int(item.get("critical_issue_count") or 0) > 0),
+                "in_stock_products": sum(1 for item in items if int(item.get("available_qty") or 0) > 0),
                 "media_problem_products": sum(
                     1 for item in items if any(issue.get("category") == "media" for issue in item.get("issues") or [])
                 ),
                 "spec_problem_products": sum(
                     1 for item in items if any(issue.get("category") == "specs" for issue in item.get("issues") or [])
                 ),
+                "shared_main_image_products": shared_image_products,
+                "shared_main_image_width": shared_image_item.get("main_image_width"),
+                "shared_main_image_height": shared_image_item.get("main_image_height"),
             }
         )
     return sorted(result, key=lambda item: (-item["critical_products"], item["average_score"], _clean(item["label"])))

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { ExternalLink, Image as ImageIcon, Images, Wrench } from 'lucide-vue-next';
+import { ChevronDown, ExternalLink, Image as ImageIcon, Images, Wrench } from 'lucide-vue-next';
 import type { ManagerCatalogQualityReportResponse } from '../../api';
 import { countLabel } from './catalog-quality-copy';
 
@@ -21,6 +21,8 @@ const emit = defineEmits<{
   openSeriesMedia: [product: QualityProduct];
 }>();
 const failedImages = ref(new Set<number>());
+const expandedSeriesGroups = ref(new Set<string>());
+const expandedIssueProducts = ref(new Set<number>());
 
 const groupedItems = computed(() => {
   const buckets = new Map<string, { key: string; label: string; items: QualityProduct[] }>();
@@ -35,6 +37,14 @@ const groupedItems = computed(() => {
 });
 
 const groupSummary = (key: string) => props.groups?.find((group) => group.key === key);
+const isSeriesGroup = (key: string) => key.startsWith('series:') && key !== 'series:missing';
+const isGroupExpanded = (key: string) => !isSeriesGroup(key) || expandedSeriesGroups.value.has(key);
+const toggleGroup = (key: string) => {
+  const next = new Set(expandedSeriesGroups.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedSeriesGroups.value = next;
+};
 const seriesMediaProduct = (group: { key: string; items: QualityProduct[] }) =>
   group.key.startsWith('series:') ? group.items.find((product) => product.series_id) : undefined;
 const imageSrc = (url?: string | null) => !url ? '' : url.startsWith('http') || url.startsWith('/') ? url : `/${url}`;
@@ -47,7 +57,6 @@ const publicSiteBaseUrl = (() => {
   return `${window.location.protocol}//${window.location.host}`;
 })();
 const publicProductUrl = (slug: string) => `${publicSiteBaseUrl}/product/${slug}/`;
-const formatNumber = (value?: number | null) => new Intl.NumberFormat('ru-RU').format(Number(value || 0));
 const scoreTone = (score: number) => score >= 85
   ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:ring-emerald-800'
   : score >= 65
@@ -95,23 +104,56 @@ const visibleIssues = (product: QualityProduct) => (product.issues ?? []).filter
   && product.work_priority === 'low'
   && Number(product.available_qty || 0) === 0
 ));
+const displayedIssues = (product: QualityProduct) => expandedIssueProducts.value.has(product.product_id)
+  ? visibleIssues(product)
+  : visibleIssues(product).slice(0, 3);
+const toggleIssues = (productId: number) => {
+  const next = new Set(expandedIssueProducts.value);
+  if (next.has(productId)) next.delete(productId);
+  else next.add(productId);
+  expandedIssueProducts.value = next;
+};
+const sharedImageLabel = (key: string) => {
+  const summary = groupSummary(key);
+  if (!summary?.shared_main_image_products) return '';
+  const size = summary.shared_main_image_width && summary.shared_main_image_height
+    ? ` ${summary.shared_main_image_width} × ${summary.shared_main_image_height} px`
+    : '';
+  return `Одно главное фото${size} у ${countLabel(summary.shared_main_image_products, 'модели', 'моделей', 'моделей')}`;
+};
 </script>
 
 <template>
   <div class="space-y-5 px-4 py-4 sm:px-5">
     <section v-for="group in groupedItems" :key="group.key">
-      <header v-if="grouped" class="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-2 dark:border-slate-700">
+      <header
+        v-if="grouped"
+        class="mb-2 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-2 dark:border-slate-700"
+        :class="isSeriesGroup(group.key) ? 'rounded-lg border bg-gray-50 p-3 shadow-sm dark:bg-slate-800' : ''"
+      >
         <div>
           <h2 class="font-bold text-gray-950 dark:text-slate-100">{{ group.label }}</h2>
-          <p class="text-xs text-gray-500 dark:text-slate-400">{{ countLabel(groupSummary(group.key)?.count ?? group.items.length, 'товар', 'товара', 'товаров') }} · score {{ groupSummary(group.key)?.average_score ?? '—' }} · критичных {{ groupSummary(group.key)?.critical_products || 0 }}</p>
+          <p class="text-xs text-gray-500 dark:text-slate-400">
+            {{ isSeriesGroup(group.key)
+              ? countLabel(groupSummary(group.key)?.count ?? group.items.length, 'модель', 'модели', 'моделей')
+              : countLabel(groupSummary(group.key)?.count ?? group.items.length, 'товар', 'товара', 'товаров') }}
+            · score {{ groupSummary(group.key)?.average_score ?? '—' }}
+            <template v-if="isSeriesGroup(group.key)"> · в наличии {{ groupSummary(group.key)?.in_stock_products || 0 }}</template>
+            <template v-else> · критичных {{ groupSummary(group.key)?.critical_products || 0 }}</template>
+          </p>
+          <p v-if="sharedImageLabel(group.key)" class="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">{{ sharedImageLabel(group.key) }}</p>
         </div>
-        <div v-if="groupSummary(group.key)?.media_problem_products" class="flex flex-wrap items-center gap-2">
-          <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200"><Images class="h-3.5 w-3.5" /> Медиа: {{ groupSummary(group.key)?.media_problem_products }}</span>
-          <button v-if="seriesMediaProduct(group)" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700" @click="openGroupMedia(group)"><Images class="h-3.5 w-3.5" />Исправить медиа серии</button>
+        <div class="flex flex-wrap items-center gap-2">
+          <span v-if="groupSummary(group.key)?.media_problem_products" class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200"><Images class="h-3.5 w-3.5" /> Медиа: {{ groupSummary(group.key)?.media_problem_products }}</span>
+          <button v-if="groupSummary(group.key)?.media_problem_products && seriesMediaProduct(group)" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700" @click="openGroupMedia(group)"><Images class="h-3.5 w-3.5" />Исправить медиа серии</button>
+          <button v-if="isSeriesGroup(group.key)" class="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-teal-300 hover:text-teal-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" :aria-expanded="isGroupExpanded(group.key)" @click="toggleGroup(group.key)">
+            {{ isGroupExpanded(group.key) ? 'Скрыть модели' : 'Показать модели' }}
+            <ChevronDown class="h-3.5 w-3.5 transition-transform" :class="isGroupExpanded(group.key) ? 'rotate-180' : ''" />
+          </button>
         </div>
       </header>
 
-      <div class="grid gap-3 xl:grid-cols-2">
+      <div v-if="isGroupExpanded(group.key)" class="grid gap-3 xl:grid-cols-2">
         <article v-for="product in group.items" :key="product.product_id" class="grid min-h-36 grid-cols-[92px,minmax(0,1fr)] gap-3 rounded-lg border border-l-4 border-gray-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900" :class="priorityBorder(product.work_priority)">
           <button class="relative aspect-[4/3] self-start overflow-hidden rounded-lg bg-gray-100 dark:bg-slate-800" @click="emit('open', product)">
             <img v-if="product.main_image && !failedImages.has(product.product_id)" :src="imageSrc(product.main_image)" :alt="product.title" class="h-full w-full object-contain" loading="lazy" @error="markImageFailed(product.product_id)">
@@ -139,14 +181,16 @@ const visibleIssues = (product: QualityProduct) => (product.issues ?? []).filter
             </div>
 
             <div class="mt-2 flex flex-wrap gap-1">
-              <span v-for="issue in visibleIssues(product).slice(0, 3)" :key="issue.code" class="rounded-md px-1.5 py-1 text-[11px] font-semibold" :class="severityTone(issue.severity)" :title="issue.detail || issue.message">{{ issue.label }}</span>
-              <span v-if="visibleIssues(product).length > 3" class="rounded-md bg-gray-100 px-1.5 py-1 text-[11px] font-semibold text-gray-500 dark:bg-slate-800 dark:text-slate-300">Ещё {{ formatNumber(visibleIssues(product).length - 3) }}</span>
+              <span v-for="issue in displayedIssues(product)" :key="issue.code" class="rounded-md px-1.5 py-1 text-[11px] font-semibold" :class="severityTone(issue.severity)" :title="issue.detail || issue.message">{{ issue.label }}</span>
+              <button v-if="visibleIssues(product).length > 3" class="rounded-md bg-gray-100 px-1.5 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700" :aria-expanded="expandedIssueProducts.has(product.product_id)" @click="toggleIssues(product.product_id)">
+                {{ expandedIssueProducts.has(product.product_id) ? 'Скрыть дополнительные' : `Ещё ${countLabel(visibleIssues(product).length - 3, 'замечание', 'замечания', 'замечаний')}` }}
+              </button>
             </div>
 
             <div class="mt-2 flex flex-wrap gap-2 border-t border-gray-100 pt-2 dark:border-slate-700">
               <button v-if="hasIssueCategory(product, 'media')" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-200 dark:hover:bg-teal-900" @click="emit('openMedia', product)"><Images class="h-3.5 w-3.5" />Исправить медиа</button>
               <button class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-700 hover:border-teal-300 hover:text-teal-800 dark:border-slate-600 dark:text-slate-200 dark:hover:border-teal-600 dark:hover:text-teal-200" @click="emit('open', product)"><Wrench class="h-3.5 w-3.5" />Открыть карточку</button>
-              <a v-if="product.slug" class="grid h-8 w-8 place-items-center rounded-lg border border-gray-200 text-gray-500 hover:border-teal-300 hover:text-teal-700 dark:border-slate-600 dark:text-slate-300 dark:hover:border-teal-600 dark:hover:text-teal-200" :href="publicProductUrl(product.slug)" target="_blank" rel="noopener noreferrer" title="Открыть на сайте"><ExternalLink class="h-3.5 w-3.5" /></a>
+              <a v-if="product.slug" class="grid h-8 w-8 place-items-center rounded-lg border border-gray-200 text-gray-500 hover:border-teal-300 hover:text-teal-700 dark:border-slate-600 dark:text-slate-300 dark:hover:border-teal-600 dark:hover:text-teal-200" :href="publicProductUrl(product.slug)" target="_blank" rel="noopener noreferrer" title="Открыть товар на сайте" aria-label="Открыть товар на сайте"><ExternalLink class="h-3.5 w-3.5" /></a>
             </div>
           </div>
         </article>

@@ -16,6 +16,7 @@ import CatalogQualitySummary from '../components/catalog-quality/CatalogQualityS
 import CatalogQualityTable from '../components/catalog-quality/CatalogQualityTable.vue';
 import {
   applyCatalogQualityView,
+  catalogQualityViewFiltersFromState,
   catalogQualityBuiltinViews,
   createDefaultCatalogQualityState,
   parseCatalogQualityState,
@@ -36,6 +37,7 @@ const loading = ref(false);
 const error = ref('');
 const requestId = ref(0);
 const customViews = ref<CatalogQualitySavedView[]>(readCatalogQualitySavedViews(window.localStorage));
+const appliedViewId = ref<string | null>(null);
 const filtersAnchor = ref<HTMLElement | null>(null);
 
 const savedViews = computed(() => [...catalogQualityBuiltinViews, ...customViews.value]);
@@ -132,6 +134,7 @@ const updateState = (next: CatalogQualityFilterState) => {
 const resetFilters = () => {
   const defaults = createDefaultCatalogQualityState();
   state.value = { ...defaults, view: state.value.view, limit: state.value.limit };
+  appliedViewId.value = null;
 };
 
 const selectIssue = (code: string) => {
@@ -140,11 +143,22 @@ const selectIssue = (code: string) => {
 
 const applySavedView = (view: CatalogQualitySavedView) => {
   state.value = applyCatalogQualityView(state.value, view.filters);
+  appliedViewId.value = view.id;
 };
 
 const saveCurrentView = (name: string) => {
-  const filters = { ...state.value, page: 1, q: '' };
-  const next = [...customViews.value, { id: `custom-${Date.now()}`, name, filters }];
+  const filters = catalogQualityViewFiltersFromState(state.value);
+  const id = `custom-${Date.now()}`;
+  const next = [...customViews.value, { id, name, filters }];
+  customViews.value = next;
+  appliedViewId.value = id;
+  writeCatalogQualitySavedViews(window.localStorage, next);
+};
+
+const updateSavedView = (id: string) => {
+  const next = customViews.value.map((view) => view.id === id
+    ? { ...view, filters: catalogQualityViewFiltersFromState(state.value) }
+    : view);
   customViews.value = next;
   writeCatalogQualitySavedViews(window.localStorage, next);
 };
@@ -152,6 +166,7 @@ const saveCurrentView = (name: string) => {
 const deleteSavedView = (id: string) => {
   const next = customViews.value.filter((view) => view.id !== id);
   customViews.value = next;
+  if (appliedViewId.value === id) appliedViewId.value = null;
   writeCatalogQualitySavedViews(window.localStorage, next);
 };
 
@@ -180,6 +195,7 @@ const goToPage = (page: number) => {
 
 const handlePopState = () => {
   state.value = parseCatalogQualityState(window.location.search);
+  appliedViewId.value = null;
 };
 
 const restoreScroll = async () => {
@@ -224,11 +240,13 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
           :options="report?.filter_options"
           :saved-views="savedViews"
           :view-counts="report?.builtin_view_counts"
+          :applied-view-id="appliedViewId"
           :loading="loading"
           @update:model-value="updateState"
           @apply-view="applySavedView"
           @save-view="saveCurrentView"
           @delete-view="deleteSavedView"
+          @update-view="updateSavedView"
         />
       </div>
 
@@ -292,7 +310,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
         <label class="flex items-center gap-2 text-sm text-gray-500">На странице
           <select v-model.number="state.limit" class="h-9 rounded-lg border border-gray-200 bg-white px-2 font-semibold text-gray-800"><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select>
         </label>
-        <div class="flex items-center gap-2">
+        <div v-if="totalPages > 1" class="flex items-center gap-2">
           <button class="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm font-semibold disabled:opacity-40" :disabled="state.page <= 1 || loading" @click="goToPage(state.page - 1)">Назад</button>
           <span class="min-w-20 text-center text-sm font-semibold text-gray-600">{{ state.page }} / {{ totalPages }}</span>
           <button class="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm font-semibold disabled:opacity-40" :disabled="state.page >= totalPages || loading" @click="goToPage(state.page + 1)">Дальше</button>

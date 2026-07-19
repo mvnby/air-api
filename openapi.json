@@ -28269,6 +28269,11 @@
             "title": "Critical Products",
             "default": 0
           },
+          "in_stock_products": {
+            "type": "integer",
+            "title": "In Stock Products",
+            "default": 0
+          },
           "media_problem_products": {
             "type": "integer",
             "title": "Media Problem Products",
@@ -28278,6 +28283,33 @@
             "type": "integer",
             "title": "Spec Problem Products",
             "default": 0
+          },
+          "shared_main_image_products": {
+            "type": "integer",
+            "title": "Shared Main Image Products",
+            "default": 0
+          },
+          "shared_main_image_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Main Image Width"
+          },
+          "shared_main_image_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Main Image Height"
           }
         },
         "type": "object",

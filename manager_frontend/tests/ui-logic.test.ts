@@ -32,11 +32,14 @@ import {
 } from '../src/components/orders/proposal-lifecycle';
 import {
   applyCatalogQualityView,
+  catalogQualityStateMatchesView,
+  catalogQualityViewFiltersFromState,
   createDefaultCatalogQualityState,
   parseCatalogQualityState,
   serializeCatalogQualityState,
 } from '../src/components/catalog-quality/catalog-quality-state';
 import { countLabel } from '../src/components/catalog-quality/catalog-quality-copy';
+import { navSections } from '../src/manager-navigation';
 import {
   buildProductWorkspacePath,
   getProductWorkspaceNeighbors,
@@ -46,6 +49,12 @@ import {
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
 };
+
+assert(
+  navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')
+    === 'Кондиционеры|Бренды|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
+  'catalog navigation must follow the product data workflow',
+);
 
 assert(ADDRESS_SUGGEST_DEBOUNCE_MS === 800, 'address debounce must remain 800 ms');
 assert(
@@ -170,6 +179,14 @@ const savedQualityView = applyCatalogQualityView(
 assert(savedQualityView.availability === 'in_stock' && savedQualityView.category === 'media', 'saved catalog view must apply its filters');
 assert(savedQualityView.view === 'table' && savedQualityView.limit === 100, 'saved catalog view must preserve personal display preferences');
 assert(savedQualityView.page === 1, 'saved catalog view must restart pagination');
+const qualityView = {
+  id: 'custom-quality',
+  name: 'KINGHOME media',
+  filters: catalogQualityViewFiltersFromState(savedQualityView),
+};
+assert(catalogQualityStateMatchesView(savedQualityView, qualityView), 'saved catalog view must match its source filters');
+assert(!catalogQualityStateMatchesView({ ...savedQualityView, brandId: '4' }, qualityView), 'changed filters must mark applied view as changed');
+assert(!('page' in qualityView.filters) && !('view' in qualityView.filters), 'saved view must not persist pagination or display mode');
 assert(countLabel(1, 'поставщик', 'поставщика', 'поставщиков') === '1 поставщик', 'catalog counts must use singular form');
 assert(countLabel(3, 'поставщик', 'поставщика', 'поставщиков') === '3 поставщика', 'catalog counts must use paucal form');
 assert(countLabel(12, 'поставщик', 'поставщика', 'поставщиков') === '12 поставщиков', 'catalog counts must use plural form');

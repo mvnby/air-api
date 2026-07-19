@@ -4,6 +4,7 @@ import { Bookmark, BookmarkPlus, ChevronDown, Search, SlidersHorizontal, X } fro
 import type { ManagerCatalogQualityFilterOptionsResponse } from '../../client';
 import {
   createDefaultCatalogQualityState,
+  catalogQualityStateMatchesView,
   type CatalogQualityFilterState,
   type CatalogQualitySavedView,
 } from './catalog-quality-state';
@@ -13,6 +14,7 @@ const props = defineProps<{
   options?: ManagerCatalogQualityFilterOptionsResponse;
   savedViews: CatalogQualitySavedView[];
   viewCounts?: Record<string, number>;
+  appliedViewId?: string | null;
   loading?: boolean;
 }>();
 
@@ -21,10 +23,15 @@ const emit = defineEmits<{
   'apply-view': [view: CatalogQualitySavedView];
   'save-view': [name: string];
   'delete-view': [id: string];
+  'update-view': [id: string];
 }>();
 
 const showSaveInput = ref(false);
 const viewName = ref('');
+const appliedView = computed(() => props.savedViews.find((view) => view.id === props.appliedViewId));
+const appliedViewChanged = computed(() => Boolean(
+  appliedView.value && !catalogQualityStateMatchesView(props.modelValue, appliedView.value),
+));
 
 const patchState = (patch: Partial<CatalogQualityFilterState>) => {
   emit('update:modelValue', { ...props.modelValue, ...patch, page: 1 });
@@ -87,17 +94,7 @@ watch(advancedActiveCount, (count) => {
   if (count > 0) showAdvanced.value = true;
 });
 
-const viewComparisonKeys: Array<keyof CatalogQualityFilterState> = [
-  'q', 'equipmentType', 'equipmentSubtype', 'brandId', 'seriesId', 'seriesState',
-  'supplierId', 'supplierState', 'publication', 'availability', 'priority',
-  'scoreMin', 'scoreMax', 'category', 'severity', 'issueCode', 'onlyProblems',
-  'onlyFixable', 'sortBy', 'groupBy',
-];
-
-const isViewActive = (view: CatalogQualitySavedView) => {
-  const target = { ...createDefaultCatalogQualityState(), ...view.filters };
-  return viewComparisonKeys.every((key) => props.modelValue[key] === target[key]);
-};
+const isViewActive = (view: CatalogQualitySavedView) => catalogQualityStateMatchesView(props.modelValue, view);
 
 const clearChip = (key: keyof CatalogQualityFilterState) => {
   const defaults = createDefaultCatalogQualityState();
@@ -113,6 +110,11 @@ const submitView = () => {
   emit('save-view', name);
   viewName.value = '';
   showSaveInput.value = false;
+};
+
+const saveChangedAsNew = () => {
+  viewName.value = appliedView.value ? `${appliedView.value.name} - копия` : '';
+  showSaveInput.value = true;
 };
 </script>
 
@@ -158,6 +160,12 @@ const submitView = () => {
         <button class="h-8 rounded-lg bg-teal-600 px-2.5 text-xs font-semibold text-white">Сохранить</button>
         <button class="grid h-8 w-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" @click="showSaveInput = false"><X class="h-4 w-4" /></button>
       </form>
+    </div>
+
+    <div v-if="appliedViewChanged && appliedView" class="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+      <span class="font-semibold">Фильтры вида «{{ appliedView.name }}» изменены.</span>
+      <button v-if="!appliedView.builtin" class="font-bold underline underline-offset-2" @click="emit('update-view', appliedView.id)">Обновить вид</button>
+      <button class="font-bold underline underline-offset-2" @click="saveChangedAsNew">Сохранить как новый</button>
     </div>
 
     <div class="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-[minmax(280px,1.4fr)_repeat(4,minmax(145px,0.8fr))]">
