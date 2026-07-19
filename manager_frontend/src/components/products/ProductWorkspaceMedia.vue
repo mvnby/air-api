@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { Images, ImagePlus, Star, ExternalLink } from 'lucide-vue-next';
 import type { Product } from '../../api';
+import { getProductImageCount } from '../../utils/product-workspace';
 
 const props = defineProps<{
   product: Product;
@@ -21,7 +22,7 @@ const galleryImages = computed(() => (
   props.product.gallery_images.filter((image) => image.url !== props.product.main_image)
 ));
 
-const imageCount = computed(() => galleryImages.value.length + (props.product.main_image ? 1 : 0));
+const imageCount = computed(() => getProductImageCount(props.product));
 </script>
 
 <template>

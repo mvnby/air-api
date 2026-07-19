@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,8 +17,10 @@ import {
   Settings2,
   Store,
   Trash2,
+  Wrench,
 } from 'lucide-vue-next';
-import { api, type Product } from '../api';
+import { api, type ManagerCatalogQualityReportResponse, type Product } from '../api';
+import type { WebRebuildStatusResponse } from '../client/models/WebRebuildStatusResponse';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import ProductWorkspaceMedia from '../components/products/ProductWorkspaceMedia.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -27,8 +29,11 @@ import {
   getProductWorkspaceNeighbors,
   loadProductWorkspaceContext,
   parseProductWorkspaceLocation,
+  getProductImageCount,
   type ProductWorkspaceSection,
 } from '../utils/product-workspace';
+
+type QualityProduct = ManagerCatalogQualityReportResponse['items'][number];
 
 type ProductEditorExpose = {
   save: () => Promise<boolean>;
@@ -44,6 +49,11 @@ const errorMessage = ref('');
 const toast = ref('');
 const moreOpen = ref(false);
 const supplierOfferCount = ref(0);
+const qualityProduct = ref<QualityProduct | null>(null);
+const qualityLoaded = ref(false);
+const rebuildStatus = ref<WebRebuildStatusResponse | null>(null);
+const rebuildLoading = ref(false);
+const expertMode = ref(window.localStorage.getItem('manager:product-workspace:expert') === '1');
 const location = parseProductWorkspaceLocation(window.location.pathname);
 const productId = location.productId;
 const activeSection = ref<ProductWorkspaceSection>(location.section);
@@ -56,7 +66,10 @@ const sections: Array<{ id: ProductWorkspaceSection; label: string; icon: typeof
   { id: 'specifications', label: 'Характеристики', icon: Settings2 },
   { id: 'suppliers', label: 'Поставщики', icon: Store },
   { id: 'publication', label: 'Публикация и файлы', icon: FileText },
+  { id: 'relations', label: 'Связи и теги', icon: Link2 },
 ];
+
+const mediaCount = computed(() => product.value ? getProductImageCount(product.value) : 0);
 
 const publicProductUrl = computed(() => {
   if (!product.value?.slug) return null;
@@ -76,17 +89,23 @@ const availabilityLabel = computed(() => {
 });
 
 const qualityIssues = computed(() => {
-  const current = product.value;
-  if (!current) return [];
-  const issues: Array<{ label: string; section: ProductWorkspaceSection; critical?: boolean }> = [];
-  if (!current.main_image) issues.push({ label: 'Нет главного изображения', section: 'media', critical: true });
-  if (current.gallery_images.length < 2) issues.push({ label: 'Мало изображений в галерее', section: 'media' });
-  if (!current.price || current.price <= 0) issues.push({ label: 'Не указана цена', section: 'main', critical: true });
-  if (!current.brand_id) issues.push({ label: 'Не выбран бренд', section: 'main' });
-  if (!current.series_id) issues.push({ label: 'Не выбрана серия', section: 'main' });
-  if (supplierOfferCount.value === 0) issues.push({ label: 'Нет предложений поставщиков', section: 'suppliers' });
-  return issues;
+  const sectionByCategory: Record<string, ProductWorkspaceSection> = {
+    media: 'media', specs: 'specifications', supplier: 'suppliers', commerce: 'main', identity: 'main',
+  };
+  return (qualityProduct.value?.issues || []).map((issue) => ({
+    label: issue.message || issue.label,
+    section: sectionByCategory[issue.category] || 'main',
+    critical: issue.severity === 'critical',
+  }));
 });
+
+const saveStateLabel = computed(() => saving.value ? 'Сохранение…' : dirty.value ? 'Есть несохранённые изменения' : 'Сохранено');
+
+const setExpertMode = (value: boolean) => {
+  expertMode.value = value;
+  window.localStorage.setItem('manager:product-workspace:expert', value ? '1' : '0');
+  moreOpen.value = false;
+};
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -101,6 +120,19 @@ const navigate = (path: string, replace = false) => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
+const loadProductQuality = async (detail: Product) => {
+  qualityLoaded.value = false;
+  qualityProduct.value = null;
+  const quality = await api.getCatalogQualityReport({
+    q: detail.slug || detail.title,
+    onlyProblems: false,
+    limit: 20,
+  }).catch(() => null);
+  if (product.value?.id !== detail.id) return;
+  qualityProduct.value = quality?.items.find((item) => item.product_id === detail.id) || null;
+  qualityLoaded.value = true;
+};
+
 const loadProduct = async () => {
   if (!productId) {
     errorMessage.value = 'Некорректный ID товара';
@@ -110,16 +142,33 @@ const loadProduct = async () => {
   loading.value = true;
   errorMessage.value = '';
   try {
-    const [detail, offers] = await Promise.all([
+    const [detail, offers, rebuild] = await Promise.all([
       api.getManagerProduct(productId),
       api.getProductSupplierOffers(productId).catch(() => ({ items: [] } as any)),
+      api.getWebRebuildStatus().catch(() => null),
     ]);
     product.value = detail;
     supplierOfferCount.value = Number(offers?.items?.length || 0);
+    rebuildStatus.value = rebuild;
+    loading.value = false;
+    void loadProductQuality(detail);
   } catch (error) {
     errorMessage.value = `Не удалось открыть товар: ${getApiErrorMessage(error)}`;
   } finally {
     loading.value = false;
+  }
+};
+
+const rebuildSite = async () => {
+  if (rebuildLoading.value) return;
+  rebuildLoading.value = true;
+  try {
+    rebuildStatus.value = await api.rebuildWeb();
+    setToast('Пересборка сайта запущена');
+  } catch (error) {
+    setToast(`Не удалось запустить сборку: ${getApiErrorMessage(error)}`);
+  } finally {
+    rebuildLoading.value = false;
   }
 };
 
@@ -135,13 +184,9 @@ const navigateProduct = (targetId: number | null) => {
   navigate(buildProductWorkspacePath(targetId, activeSection.value));
 };
 
-const scrollToSection = async (section: ProductWorkspaceSection) => {
+const scrollToSection = (section: ProductWorkspaceSection) => {
   activeSection.value = section;
   window.history.replaceState({}, '', buildProductWorkspacePath(productId || 0, section));
-  if (section === 'media') return;
-  await nextTick();
-  const targetId = section === 'main' ? 'product-section-main' : `product-section-${section}`;
-  document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 const saveCurrent = async (): Promise<boolean> => {
@@ -228,7 +273,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
               <span>Товары</span><span>/</span><span>#{{ productId }}</span>
-              <span v-if="dirty" class="rounded-md bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">Есть изменения</span>
+              <span class="rounded-md px-2 py-0.5 font-semibold" :class="dirty ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'">{{ saveStateLabel }}</span>
             </div>
             <h1 class="mt-0.5 truncate text-lg font-bold text-gray-950 dark:text-white sm:text-xl" :title="product?.title || ''">
               {{ product?.title || 'Карточка товара' }}
@@ -254,6 +299,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
             <div v-if="moreOpen" class="absolute right-0 top-11 z-40 w-56 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
               <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!publicProductUrl" @click="openPublicProduct"><ExternalLink class="h-4 w-4" />Открыть на сайте</button>
               <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!publicProductUrl" @click="copyPublicProductLink"><ClipboardCopy class="h-4 w-4" />Копировать ссылку</button>
+              <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-800" @click="setExpertMode(!expertMode)"><Wrench class="h-4 w-4" />{{ expertMode ? 'Выключить экспертный режим' : 'Экспертный режим' }}</button>
               <div class="my-1 border-t border-gray-100 dark:border-slate-800" />
               <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="deleting" @click="deleteProduct"><Trash2 class="h-4 w-4" />Удалить товар</button>
             </div>
@@ -282,25 +328,27 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
       <nav class="sticky top-[132px] z-20 -mx-4 flex gap-1 overflow-x-auto border-y border-gray-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-950 xl:mx-0 xl:block xl:self-start xl:border-0 xl:bg-transparent xl:px-0 xl:py-0">
         <button v-for="section in sections" :key="section.id" type="button" class="flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition xl:mb-1 xl:w-full" :class="activeSection === section.id ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200' : 'text-gray-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-900'" @click="scrollToSection(section.id)">
           <component :is="section.icon" class="h-4 w-4" />{{ section.label }}
-          <span v-if="section.id === 'media'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800">{{ product.gallery_images.length }}</span>
+          <span v-if="section.id === 'media'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800">{{ mediaCount }}</span>
           <span v-if="section.id === 'suppliers'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800">{{ supplierOfferCount }}</span>
+          <span v-if="section.id === 'publication' && rebuildStatus?.needs_rebuild" class="ml-auto h-2 w-2 rounded-full bg-amber-500" title="Сайт требует пересборки" />
         </button>
       </nav>
 
       <main class="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <ProductWorkspaceMedia v-show="activeSection === 'media'" :product="product" @open-editor="openMediaEditor" />
-        <ProductEditModal ref="editor" v-show="activeSection !== 'media'" :model-value="true" :product="product" mode="edit" presentation="workspace" @update:model-value="goBack" @dirty-change="dirty = $event" />
+        <ProductEditModal ref="editor" v-show="activeSection !== 'media'" :model-value="true" :product="product" mode="edit" presentation="workspace" :workspace-section="activeSection" :expert-mode="expertMode" @update:model-value="goBack" @dirty-change="dirty = $event" />
       </main>
 
       <aside class="space-y-4 xl:sticky xl:top-[132px] xl:self-start">
         <section class="border-y border-gray-200 bg-white py-4 dark:border-slate-800 dark:bg-slate-950 xl:rounded-lg xl:border xl:p-4">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Базовая готовность</p>
-              <p class="mt-1 text-lg font-bold text-gray-950 dark:text-white">{{ qualityIssues.length ? `${qualityIssues.length} проблем` : 'Явных проблем нет' }}</p>
+              <p class="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Качество карточки</p>
+              <p v-if="qualityProduct" class="mt-1 text-lg font-bold text-gray-950 dark:text-white">{{ qualityProduct.score }} / 100</p>
+              <p v-else class="mt-1 text-sm font-bold text-gray-700 dark:text-slate-200">{{ qualityLoaded ? 'Нет данных отчёта' : 'Проверяем…' }}</p>
             </div>
-            <CheckCircle2 v-if="qualityIssues.length === 0" class="h-7 w-7 text-emerald-500" />
-            <CircleAlert v-else class="h-7 w-7 text-amber-500" />
+            <CheckCircle2 v-if="qualityProduct && qualityIssues.length === 0" class="h-7 w-7 text-emerald-500" />
+            <CircleAlert v-else-if="qualityProduct" class="h-7 w-7 text-amber-500" />
           </div>
           <div v-if="qualityIssues.length" class="mt-3 space-y-1.5">
             <button v-for="issue in qualityIssues" :key="issue.label" type="button" class="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-slate-900" :class="issue.critical ? 'text-red-700 dark:text-red-300' : 'text-gray-600 dark:text-slate-300'" @click="scrollToSection(issue.section)">
@@ -320,8 +368,10 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
           </dl>
         </section>
 
-        <section class="border-y border-blue-200 bg-blue-50 py-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100 xl:rounded-lg xl:border xl:p-4">
-          <div class="flex items-start gap-2"><Link2 class="mt-0.5 h-4 w-4 shrink-0" /><p>Сохранение меняет данные CRM. Публичный Astro-сайт обновится после отдельной пересборки.</p></div>
+        <section class="border-y py-4 text-sm xl:rounded-lg xl:border xl:p-4" :class="!rebuildStatus ? 'border-gray-200 bg-gray-50 text-gray-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300' : rebuildStatus.needs_rebuild ? 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100' : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100'">
+          <div class="flex items-start gap-2"><Link2 class="mt-0.5 h-4 w-4 shrink-0" /><p>{{ !rebuildStatus ? 'Статус публикации сайта сейчас недоступен.' : rebuildStatus.needs_rebuild ? 'В CRM есть изменения, которые ещё не опубликованы на сайте.' : 'Публичный сайт синхронизирован с каталогом.' }}</p></div>
+          <p v-if="rebuildStatus?.last_error" class="mt-2 text-xs font-semibold text-red-700 dark:text-red-300">{{ rebuildStatus.last_error }}</p>
+          <button v-if="rebuildStatus?.needs_rebuild" type="button" class="mt-3 inline-flex h-9 w-full items-center justify-center rounded-lg bg-amber-600 px-3 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50" :disabled="rebuildLoading" @click="rebuildSite">{{ rebuildLoading ? 'Запускаем…' : 'Пересобрать сайт' }}</button>
         </section>
       </aside>
     </div>
