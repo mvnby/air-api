@@ -1,0 +1,607 @@
+{
+  "report_version": 1,
+  "generated_at": "2026-07-19",
+  "scope": "Read-only production snapshot from api.mvn.by PostgreSQL, queried 2026-07-19. The live set contained 66 products with an empty specs.area_m2.",
+  "methodology": [
+    "Official manufacturer/distributor source URL stored on the product record is preferred.",
+    "Hisense high-confidence values are explicit manufacturer recommended areas from official series catalogs.",
+    "Haier and MDV entries are model-capacity-class inferences and are marked medium; no 1 kW per 10 m2 fallback is used.",
+    "Non-equipment items remain without area."
+  ],
+  "entries": [
+    {
+      "product_id": 300,
+      "model": "AS70SHP2HRA-S / 1U70SHP2FRA",
+      "proposed_area_m2": 70,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS70SHP2HRA-S-1U70SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS70 в модели соответствует классу 70 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 301,
+      "model": "AS70SHP2HRA-C / 1U70SHP2FRA",
+      "proposed_area_m2": 70,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS70SHP2HRA-C-1U70SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS70 в модели соответствует классу 70 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 302,
+      "model": "AS70SHP2HRA-W / 1U70SHP2FRA",
+      "proposed_area_m2": 70,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS70SHP2HRA-W-1U70SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS70 в модели соответствует классу 70 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 311,
+      "model": "AS50SHP2HRA-S / 1U50SHP2FRA",
+      "proposed_area_m2": 50,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS50SHP2HRA-S-1U50SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS50 в модели соответствует классу 50 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 314,
+      "model": "AS50SHP2HRA-C / 1U50SHP2FRA",
+      "proposed_area_m2": 50,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS50SHP2HRA-C-1U50SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS50 в модели соответствует классу 50 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 315,
+      "model": "AS50SHP2HRA-W / 1U50SHP2FRA",
+      "proposed_area_m2": 50,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS50SHP2HRA-W-1U50SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS50 в модели соответствует классу 50 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 351,
+      "model": "AS35SHP2HRA-S / 1U35SHP2FRA",
+      "proposed_area_m2": 35,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS35SHP2HRA-S-1U35SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS35 в модели соответствует классу 35 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 354,
+      "model": "AS35SHP2HRA-C / 1U35SHP2FRA",
+      "proposed_area_m2": 35,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS35SHP2HRA-C-1U35SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS35 в модели соответствует классу 35 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 355,
+      "model": "AS35SHP2HRA-W / 1U35SHP2FRA",
+      "proposed_area_m2": 35,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS35SHP2HRA-W-1U35SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS35 в модели соответствует классу 35 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 358,
+      "model": "AS25SHP2HRA-S / 1U25SHP2FRA",
+      "proposed_area_m2": 25,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS25SHP2HRA-S-1U25SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS25 в модели соответствует классу 25 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 365,
+      "model": "AS20SHP2HRA-S / 1U20SHP2FRA",
+      "proposed_area_m2": 20,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS20SHP2HRA-S-1U20SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS20 в модели соответствует классу 20 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 366,
+      "model": "AS25SHP2HRA-С / 1U25SHP2FRA",
+      "proposed_area_m2": 25,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS25SHP2HRA-C-1U25SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS25 в модели соответствует классу 25 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 367,
+      "model": "AS25SHP2HRA-W / 1U25SHP2FRA",
+      "proposed_area_m2": 25,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS25SHP2HRA-W-1U25SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS25 в модели соответствует классу 25 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 374,
+      "model": "AS20SHP2HRA-C / 1U20SHP2FRA",
+      "proposed_area_m2": 20,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS20SHP2HRA-C-1U20SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS20 в модели соответствует классу 20 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 375,
+      "model": "AS20SHP2HRA-W / 1U20SHP2FRA",
+      "proposed_area_m2": 20,
+      "source": "https://haierproff.ru/catalog/cond/products/split-sistema-haier-stellar-hp-AS20SHP2HRA-W-1U20SHP2FRA",
+      "confidence": "medium",
+      "explanation": "В production specs есть номинальная холодопроизводительность, а индекс AS20 в модели соответствует классу 20 м2. Явного поля площади на источнике не сохранено; это модельное соответствие, не формула 1 кВт на 10 м2.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 919,
+      "model": "MDCA2I-18HRFN8",
+      "proposed_area_m2": 50,
+      "source": "https://mdv-aircond.ru/catalog/bytovye-split-sistemy/kassetnye-kanalnye-konsolnye-split-sistemy/kassetnye-odnopotochnye-split-sistemy-mdca2i/mdca2i-18hrfn8-mdoag-18hfn8-t-mbq1-utb-a-ted/",
+      "confidence": "medium",
+      "explanation": "Официальный URL производителя сохранён в source_url; размерный индекс 18HRFN8 задаёт стандартный класс мощности. На сохранённом снимке нет отдельного поля площади, поэтому значение требует review как модельное соответствие.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 920,
+      "model": "MDCA2I-24HRFN8",
+      "proposed_area_m2": 70,
+      "source": "https://mdv-aircond.ru/catalog/bytovye-split-sistemy/kassetnye-kanalnye-konsolnye-split-sistemy/kassetnye-odnopotochnye-split-sistemy-mdca2i/mdca2i-24hrfn8-mdoag-24hfn8-t-mbq1-utb-a-ted/",
+      "confidence": "medium",
+      "explanation": "Официальный URL производителя сохранён в source_url; размерный индекс 24HRFN8 задаёт стандартный класс мощности. На сохранённом снимке нет отдельного поля площади, поэтому значение требует review как модельное соответствие.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 921,
+      "model": "MDCA2I-09HRFN8",
+      "proposed_area_m2": 25,
+      "source": "https://mdv-aircond.ru/catalog/bytovye-split-sistemy/kassetnye-kanalnye-konsolnye-split-sistemy/kassetnye-odnopotochnye-split-sistemy-mdca2i/mdca2i-09hrfn8-mdoag-09hfn8-t-mbq1-uta-a-ted/",
+      "confidence": "medium",
+      "explanation": "Официальный URL производителя сохранён в source_url; размерный индекс 09HRFN8 задаёт стандартный класс мощности. На сохранённом снимке нет отдельного поля площади, поэтому значение требует review как модельное соответствие.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 922,
+      "model": "MDCA2I-12HRFN8",
+      "proposed_area_m2": 35,
+      "source": "https://mdv-aircond.ru/catalog/bytovye-split-sistemy/kassetnye-kanalnye-konsolnye-split-sistemy/kassetnye-odnopotochnye-split-sistemy-mdca2i/mdca2i-12hrfn8-mdoag-12hfn8-t-mbq1-uta-a-ted/",
+      "confidence": "medium",
+      "explanation": "Официальный URL производителя сохранён в source_url; размерный индекс 12HRFN8 задаёт стандартный класс мощности. На сохранённом снимке нет отдельного поля площади, поэтому значение требует review как модельное соответствие.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1074,
+      "model": "ACT-12UR4RCC8",
+      "proposed_area_m2": 35,
+      "source": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=ACT-12UR4RCC8%2FAUW-12U4RS8%2FPE-QEA%2FLD",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1075,
+      "model": "ACT-12UR4RCC8",
+      "proposed_area_m2": 35,
+      "source": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/?2058=Hisense&2063=%D0%9A%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%BD%D1%8B%D0%B9&#model=ACT-12UR4RCC8%2FPE-QEA%2FLD%20WI-FI",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1076,
+      "model": "ACT-18UR4RCC8",
+      "proposed_area_m2": 50,
+      "source": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=ACT-18UR4RCC8%2FAUW-18U4RS7%2FPE-QEA%2FLD",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1077,
+      "model": "ACT-18UR4RCC8",
+      "proposed_area_m2": 50,
+      "source": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/?2058=Hisense&2063=%D0%9A%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%BD%D1%8B%D0%B9&#model=ACT-18UR4RCC8%2FPE-QEA%2FLD%20WI-FI",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1078,
+      "model": "ACT-24UR4RJC8",
+      "proposed_area_m2": 70,
+      "source": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=ACT-24UR4RJC8%2FAUW-24U4RJ7%2FPE-QFA%2FCD",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1079,
+      "model": "ACT-24UR4RJC8",
+      "proposed_area_m2": 70,
+      "source": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/?2058=Hisense&2063=%D0%9A%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%BD%D1%8B%D0%B9&#model=ACT-24UR4RJC8%2FPE-QFA%2FCD%20WI-FI",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1086,
+      "model": "AEH-W4G1",
+      "proposed_area_m2": null,
+      "source": "https://hisense-air.ru/product/mob-cond-c#model=AEH-W4G1",
+      "confidence": "medium",
+      "explanation": "Официальный каталог определяет AEH-W4G1 как Wi-Fi USB модуль, а не климатическое оборудование.",
+      "status": "not_applicable"
+    },
+    {
+      "product_id": 1126,
+      "model": "AS-07HR4RLRKC00",
+      "proposed_area_m2": 24,
+      "source": "https://hisense-air.ru/product/era-classic-a-wi-fi#model=AS-07HR4RLRKC00",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1131,
+      "model": "AS-07UW4RYRKB00",
+      "proposed_area_m2": 23,
+      "source": "https://hisense-air.ru/product/zoom-2-0-dc-inverter#model=AS-07UW4RYRKB00%20WI-FI",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1133,
+      "model": "AS-09HR4RLRKC01",
+      "proposed_area_m2": 26,
+      "source": "https://hisense-air.ru/product/era-classic-a-wi-fi#model=AS-09HR4RLRKC01",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1136,
+      "model": "AS-09UW4RYRKB05",
+      "proposed_area_m2": 28,
+      "source": "https://hisense-air.ru/product/zoom-2-0-dc-inverter#model=AS-09UW4RYRKB05%20WI-FI",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1138,
+      "model": "AS-10UW4RLCHB00",
+      "proposed_area_m2": 28,
+      "source": "https://hisense-air.ru/product/vibe-pro-silver-eu-dc-inverter#model=AS-10UW4RLCHB00%28B%29",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1140,
+      "model": "AS-10UW4RLCHD00",
+      "proposed_area_m2": 28,
+      "source": "https://hisense-air.ru/product/vibe-pro-silver-eu-dc-inverter#model=AS-10UW4RLCHD00%28C%29",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1146,
+      "model": "AS-10UW4RYDTV02",
+      "proposed_area_m2": 27,
+      "source": "https://hisense-air.ru/product/expert-pro-dc-inverter-r32#model=AS-10UW4RYDTV02%20WI-FI",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1148,
+      "model": "AS-12HR4RLRKC01",
+      "proposed_area_m2": 34,
+      "source": "https://hisense-air.ru/product/era-classic-a-wi-fi#model=AS-12HR4RLRKC01",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1151,
+      "model": "AS-13UR4SYDTDI7",
+      "proposed_area_m2": 37,
+      "source": "https://hisense-air.ru/product/expert-pro-dc-inverter-r32#model=AS-13UR4SYDTDI7",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1152,
+      "model": "AS-13UW4RLCHB00",
+      "proposed_area_m2": 37,
+      "source": "https://hisense-air.ru/product/vibe-pro-silver-eu-dc-inverter#model=AS-13UW4RLCHB00%28B%29",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1154,
+      "model": "AS-13UW4RLCHD00",
+      "proposed_area_m2": 37,
+      "source": "https://hisense-air.ru/product/vibe-pro-silver-eu-dc-inverter#model=AS-13UW4RLCHD00%28C%29",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1163,
+      "model": "AS-18HR4RMSKC00",
+      "proposed_area_m2": 55,
+      "source": "https://hisense-air.ru/product/era-classic-a-wi-fi#model=AS-18HR4RMSKC00",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1168,
+      "model": "AS-18UW4RMSKB01",
+      "proposed_area_m2": 57,
+      "source": "https://hisense-air.ru/product/zoom-2-0-dc-inverter#model=AS-18UW4RMSKB01%20WI-FI",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1170,
+      "model": "AS-18UW4RXPHB00",
+      "proposed_area_m2": 58,
+      "source": "https://hisense-air.ru/product/vibe-pro-silver-eu-dc-inverter#model=AS-18UW4RXPHB00%28B%29",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1172,
+      "model": "AS-18UW4SXATV07",
+      "proposed_area_m2": 55,
+      "source": "https://hisense-air.ru/product/expert-pro-dc-inverter-r32#model=AS-18UW4SXATV07%20%20WI-FI",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1175,
+      "model": "AS-24UW4RBBTV03",
+      "proposed_area_m2": 70,
+      "source": "https://hisense-air.ru/product/expert-pro-dc-inverter-r32#model=AS-24UW4RBBTV03%20WI-FI",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1177,
+      "model": "AS-24UW4RBTKB00",
+      "proposed_area_m2": 76,
+      "source": "https://hisense-air.ru/product/zoom-2-0-dc-inverter#model=AS-24UW4RBTKB00%20WI-FI",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1180,
+      "model": "AS-36HR4SDKVT",
+      "proposed_area_m2": 94,
+      "source": "https://hisense-air.ru/product/strong-neo-premium-classic-a#model=AS-36HR4SDKVT",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1181,
+      "model": "AS-36HW4RKZHB",
+      "proposed_area_m2": 100,
+      "source": "https://hisense-air.ru/product/vibe-classic-a#model=AS-36HW4RKZHB",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1182,
+      "model": "AUC-12HR4SAA",
+      "proposed_area_m2": 35,
+      "source": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-12HR4SAA%20%7C%20AUC-650%20%7C%20AUW-12H4SV",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1183,
+      "model": "AUC-18HR4RCC2",
+      "proposed_area_m2": 50,
+      "source": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-18HR4RCC2%20%7C%20PE-QEA%2FLD%20%7C%20AUW-18H4RS2",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1184,
+      "model": "AUC-18HR4SAA1",
+      "proposed_area_m2": 50,
+      "source": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-18HR4SAA1%20%7C%20AUC-650%20%7C%20AUW-18H4SS",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1185,
+      "model": "AUC-24HR4RJC2",
+      "proposed_area_m2": 70,
+      "source": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-24HR4RJC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-24H4RF2",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1186,
+      "model": "AUC-24HR4SJA",
+      "proposed_area_m2": 70,
+      "source": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-24HR4SJA%20%7C%20AUC-950R%20%7C%20AUW-24H4SF",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1187,
+      "model": "AUC-36HR4RKC2",
+      "proposed_area_m2": 100,
+      "source": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-36HR4RKC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-36H6RK2",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1188,
+      "model": "AUC-36HR4SKA",
+      "proposed_area_m2": 100,
+      "source": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-36HR4SKA%20%7C%20AUC-950R%20%7C%20AUW-36H6SD",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1189,
+      "model": "AUC-36UR4RKC8",
+      "proposed_area_m2": 100,
+      "source": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=AUC-36UR4RKC8%2FAUW-36U4RK7%2FPE-QFA%2FCD",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1190,
+      "model": "AUC-48HR4RKC2",
+      "proposed_area_m2": 135,
+      "source": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-48HR4RKC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-48H6RQ2",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1191,
+      "model": "AUC-48HR4SKA",
+      "proposed_area_m2": 135,
+      "source": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-48HR4SKA%20%7C%20AUC-950R%20%7C%20AUW-48H6SE1",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1192,
+      "model": "AUC-48UR4RKC8",
+      "proposed_area_m2": 135,
+      "source": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=AUC-48UR4RKC8%2FAUW-48U6RN8%2FPE-QFA%2FCD",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1193,
+      "model": "AUC-60HR4RKC2",
+      "proposed_area_m2": 160,
+      "source": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-60HR4RKC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-60H6RN2",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1194,
+      "model": "AUC-60HR4SKA",
+      "proposed_area_m2": 160,
+      "source": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-60HR4SKA%20%7C%20AUC-950R%20%7C%20AUW-60H6SP1",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1195,
+      "model": "AUC-60UR4RKC8",
+      "proposed_area_m2": 160,
+      "source": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=AUC-60UR4RKC8%2FAUW-60U6RW8%2FPE-QFA%2FCD",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1197,
+      "model": "AUD-18HX4RV2",
+      "proposed_area_m2": 50,
+      "source": "https://hisense-air.ru/product/hi-split-sistemi-kanalnogo-tipa#model=AUD-18HX4RV2%2FAUW-18H4RS2",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1199,
+      "model": "AUD-24HX4RGM2",
+      "proposed_area_m2": 70,
+      "source": "https://hisense-air.ru/product/hi-split-sistemi-kanalnogo-tipa#model=AUD-24HX4RGM2%2FAUW-24H4RF2",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1202,
+      "model": "AUD-36HX4RFM2",
+      "proposed_area_m2": 100,
+      "source": "https://hisense-air.ru/product/hi-split-sistemi-kanalnogo-tipa#model=AUD-36HX4RFM2%2FAUW-36H6RK2",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1205,
+      "model": "AUD-48HX4REM2",
+      "proposed_area_m2": 135,
+      "source": "https://hisense-air.ru/product/hi-split-sistemi-kanalnogo-tipa#model=AUD-48HX4REM2%2FAUW-48H6RQ2",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1208,
+      "model": "AUD-60HX4REM2",
+      "proposed_area_m2": 160,
+      "source": "https://hisense-air.ru/product/hi-split-sistemi-kanalnogo-tipa#model=AUD-60HX4REM2%2FAUW-60H6RN2",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1211,
+      "model": "AUD-85UX4RPH8",
+      "proposed_area_m2": 230,
+      "source": "https://hisense-air.ru/product/split-sistem-kanal-heavy-eu-dc-inverter-r32-wi-fi#model=AUD-85UX4RPH8%2FAUW-85U6RZ8",
+      "confidence": "high",
+      "explanation": "Официальный каталог Hisense для соответствующей серии публикует «Эффективен для помещений площадью до … м2» для этой модели.",
+      "status": "candidate"
+    },
+    {
+      "product_id": 1230,
+      "model": "F15(Е)",
+      "proposed_area_m2": null,
+      "source": "https://breez.ru/products/ultra-multi-dc-inverter/?1957=Hisense&#model=F15%28%D0%95%29",
+      "confidence": "medium",
+      "explanation": "Размерный класс и площадь взяты из сохранённого источника дистрибьютора; до применения нужно подтвердить значение официальным каталогом Hisense.",
+      "status": "not_applicable"
+    }
+  ]
+}
