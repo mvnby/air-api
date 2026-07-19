@@ -29,13 +29,12 @@ target_metadata = SQLModel.metadata
 
 
 def include_object(object_, name, type_, reflected, compare_to):
-    """Allow only the temporary product.area expand-contract drift."""
-    if not reflected or compare_to is not None:
-        return True
+    """Skip PostgreSQL's unstable rendering of the area expression index."""
     table_name = getattr(getattr(object_, "table", None), "name", None)
-    if table_name == "product" and (
-        (type_ == "column" and name == "area")
-        or (type_ == "index" and name == "ix_product_area")
+    if (
+        type_ == "index"
+        and table_name == "product"
+        and name == "ix_product_specs_area_m2"
     ):
         return False
     return True
