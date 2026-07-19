@@ -96,7 +96,7 @@ function getProductCategoryTitle(product) {
 function getProductSpecParts(product) {
     const parts = [];
     const title = sanitizeSeoText(product?.title).toLowerCase();
-    const area = formatNumber(product?.area);
+    const area = formatNumber(product?.specs?.area_m2);
     const powerCooling = formatNumber(product?.power_cooling);
 
     if (product?.is_inverter || title.includes("инвертор")) {

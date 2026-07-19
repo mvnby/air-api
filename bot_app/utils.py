@@ -37,12 +37,14 @@ def format_caption(product):
     if product.get('categories') and isinstance(product['categories'], list):
         specs_str += f"📌 {escape(', '.join(str(category) for category in product['categories']))}\n"
     
+    specs = product.get("specs") if isinstance(product.get("specs"), dict) else {}
+    area = specs.get("area_m2") or "-"
     return (
         f"❄️ <b>{escape(str(product['title']))}</b>\n"
         f"{_availability_badge(product)}"
         f"{_availability_details(product)}"
         f"💰 <b>{escape(str(product['price']))} руб.</b>\n"
-        f"🏠 Площадь: {escape(str(product.get('area', '-')))} м²\n"
+        f"🏠 Площадь: {escape(str(area))} м²\n"
         f"{specs_str}"
         f"📝 {escape(str(product.get('description', ''))[:200])}\n"
         f"🔗 {escape(product_url(product))}"

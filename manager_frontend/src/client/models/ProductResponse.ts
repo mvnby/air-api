@@ -14,7 +14,6 @@ export type ProductResponse = {
     slug: (string | null);
     price: number;
     old_price: (number | null);
-    area: number;
     is_inverter: boolean;
     power_cooling: (number | null);
     main_image: (string | null);

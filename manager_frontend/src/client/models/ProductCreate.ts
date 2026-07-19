@@ -9,7 +9,6 @@ export type ProductCreate = {
     old_price?: (number | null);
     slug?: (string | null);
     description?: string;
-    area?: number;
     is_inverter?: boolean;
     power_cooling?: (number | null);
     main_image?: (string | null);

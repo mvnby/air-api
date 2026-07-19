@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BotCatalogSpecsResponse } from './BotCatalogSpecsResponse';
 /**
  * Small, stable product projection used by Telegram catalog cards.
  */
@@ -11,7 +12,7 @@ export type BotCatalogProductResponse = {
     slug?: string;
     description?: string;
     price: number;
-    area?: number;
+    specs?: BotCatalogSpecsResponse;
     main_image?: (string | null);
     categories?: Array<string>;
     vitebsk_qty?: number;

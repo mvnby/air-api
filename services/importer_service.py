@@ -24,6 +24,7 @@ from services.product_attachment_service import replace_manuals
 from services.product_image_variant_service import ProductImageVariantService
 from services.product_import_match_service import find_existing_product_for_import
 from services.spec_normalizer import normalize_specs
+from services.product_area import canonicalize_area_specs, legacy_area_for_storage
 from services.tag_logic import (
     CATEGORY_TAG_TITLES,
     detect_category_slug,
@@ -255,7 +256,7 @@ class ImporterService:
 
             auto_tag_slugs_from_normalizer: List[str] = []
             normalized_specs = normalize_specs(
-                raw_specs,
+                canonicalize_area_specs(raw_specs, legacy_area=data.get("area")),
                 wifi_tag_slugs=[slug for slug in auto_slugs if slug in {"wifi-builtin", "wifi-ready"}],
                 strict_wifi_from_tags=False,
                 title=title,
@@ -369,7 +370,7 @@ class ImporterService:
                     existing.title = data["title"]
                 existing.description = data.get('description', existing.description)
                 existing.price = data.get('price', existing.price)
-                existing.area = data.get('area', existing.area)
+                existing.area = legacy_area_for_storage(normalized_specs)
                 existing.is_inverter = metrics.get('is_inverter', existing.is_inverter)
                 existing.power_cooling = metrics.get('power_cooling', existing.power_cooling)
                 existing.specs = normalized_specs
@@ -398,7 +399,7 @@ class ImporterService:
                     slug=slug,
                     description=data['description'],
                     price=data['price'],
-                    area=data['area'],
+                    area=legacy_area_for_storage(normalized_specs),
                     is_inverter=metrics.get('is_inverter', False),
                     power_cooling=metrics.get('power_cooling'),
                     main_image=local_main_image,  # Use local path

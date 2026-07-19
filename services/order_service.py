@@ -15,6 +15,7 @@ from models.common import ClosingResult
 from services.customer_contract_service import CustomerContractService
 from services.document_role_service import DocumentRoleService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
+from services.product_area import area_from_specs
 from services.order_product_line_service import OrderProductLineService
 from services.order_proposal_lifecycle import (
     PROPOSAL_STATUS_APPROVED,
@@ -1210,8 +1211,8 @@ class OrderService:
                     power_str = ""
                     
                     # Use product area if available
-                    if product and product.area:
-                        area = product.area
+                    area = area_from_specs(product.specs) if product else None
+                    if area:
                         if area <= 35:
                             power_str = "до 4 кВт"
                         elif area <= 70:

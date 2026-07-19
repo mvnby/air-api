@@ -82,7 +82,7 @@ async def test_auto_search_uses_internal_api_gateway(monkeypatch):
                         title="Midea 12",
                         slug="midea-12",
                         price=3200,
-                        area=35,
+                        specs={"area_m2": 35},
                     )
                 ]
             )
@@ -113,7 +113,7 @@ async def test_auto_search_uses_internal_api_gateway(monkeypatch):
             "slug": "midea-12",
             "description": "",
             "price": 3200,
-            "area": 35,
+            "specs": {"area_m2": 35},
             "main_image": None,
             "categories": [],
             "vitebsk_qty": 0,
@@ -152,7 +152,7 @@ async def test_search_details_renders_product_from_internal_api(monkeypatch):
         slug="midea-12",
         description="Тихий инвертор",
         price=3200,
-        area=35,
+        specs={"area_m2": 35},
         categories=["Настенные"],
         minsk_qty=2,
         availability_status="available_2_3_days",

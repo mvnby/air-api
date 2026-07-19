@@ -166,7 +166,7 @@ const formatSeriesPrice = (value: unknown) => {
     return formatted === "Цену уточняйте" ? formatted : `${formatted} Br`;
 };
 const formatSeriesArea = (item: any) => {
-    const rawArea = item?.area ?? item?.specs?.area_m2;
+    const rawArea = item?.specs?.area_m2;
     const area = Number(rawArea);
     if (Number.isFinite(area) && area > 0) return `до ${area} м²`;
     const textArea = asText(rawArea);
@@ -347,7 +347,7 @@ const seriesSiblings = Array.isArray(product.series_siblings)
                         basePrice={product.price}
                         oldPrice={product.old_price}
                         tags={product.tags}
-                        area={product.area}
+                        area={Number(product.specs?.area_m2) || 0}
                         large={true}
                         id={product.slug}
                         productId={product.id}

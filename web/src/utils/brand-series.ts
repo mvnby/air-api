@@ -1,7 +1,6 @@
 export interface BrandSeriesProduct {
     title: string;
     slug?: string;
-    area?: number;
     specs?: Record<string, unknown>;
     series?: {
         title?: string | null;
@@ -362,7 +361,7 @@ const normalizeCapacityToken = (value: unknown) => {
 };
 
 const formatProductPowerLabel = (product: BrandSeriesProduct) => {
-    const rawArea = product.area ?? product.specs?.area_m2;
+    const rawArea = product.specs?.area_m2;
     const area = parseSpecNumber(rawArea);
     if (area && area > 0) return `до ${formatDecimal(area)} м²`;
 

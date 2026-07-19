@@ -14,6 +14,7 @@ def map_product_to_dict(
     sanitize_specs_payload: bool = False,
 ) -> Dict[str, Any]:
     data = product.model_dump()
+    data.pop("area", None)
     tags = list(product.tags or [])
     data["categories"] = [tag.title for tag in tags]
 

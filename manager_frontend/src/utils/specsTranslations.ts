@@ -25,7 +25,6 @@ export const specsTranslations: Record<string, SpecConfig> = {
     capacity_cooling_kw: { label: 'Мощность охлаждения', type: 'number', unit: 'кВт' },
     capacity_heating_kw: { label: 'Мощность обогрева', type: 'number', unit: 'кВт' },
     area_m2: { label: 'Площадь', type: 'number', unit: 'м²' },
-    recommended_area_m2: { label: 'Рекомендуемая площадь', type: 'number', unit: 'м²' },
     airflow_max: { label: 'Расход воздуха', type: 'number', unit: 'м³/ч' },
     noise_level_db: { label: 'Уровень шума', type: 'number', unit: 'дБ' },
     energy_efficiency_class: { label: 'Класс энергоэффективности', type: 'text' },
