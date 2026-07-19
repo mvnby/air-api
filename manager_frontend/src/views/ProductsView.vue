@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import {
     api,
@@ -28,6 +28,13 @@ import {
 } from '../utils/media-processing';
 import { optimizeImageForUpload } from '../utils/image-upload-optimization';
 import { uploadSequentially } from '../utils/sequential-upload';
+import {
+    buildProductWorkspacePath,
+    loadProductWorkspaceContext,
+    saveProductWorkspaceContext,
+    type ProductListWorkspaceContext,
+    type ProductWorkspaceSection,
+} from '../utils/product-workspace';
 
 // Product state
 const products = ref<Product[]>([]);
@@ -234,6 +241,51 @@ const CATEGORY_FILTER_TABS: Array<{ value: CatalogCategoryFilterValue; title: st
     { value: 'cat-industrial', title: 'Полупром' },
     { value: 'missing', title: 'Без категории' },
 ];
+const skipNextSearchReload = ref(false);
+
+const currentRelativeUrl = () => `${window.location.pathname}${window.location.search}`;
+const getProductsScrollContainer = (): HTMLElement | null => document.querySelector('main.flex-1.overflow-auto');
+
+const productListState = (): Record<string, unknown> => ({
+    searchQuery: searchQuery.value,
+    areaMin: areaMin.value ?? null,
+    areaMax: areaMax.value ?? null,
+    isInverter: isInverter.value ?? null,
+    heatingMin: heatingMin.value ?? null,
+    hasWifi: hasWifi.value ?? null,
+    hasFreshAir: hasFreshAir.value ?? null,
+    selectedBrandSlug: selectedBrandSlug.value,
+    selectedSeriesId: selectedSeriesId.value,
+    selectedSeriesTitle: selectedSeriesTitle.value,
+    filtersOpen: filtersOpen.value,
+    viewType: viewType.value,
+    sortMode: sortMode.value,
+    categoryFilter: categoryFilter.value,
+});
+
+const restoreProductListState = (context: ProductListWorkspaceContext): void => {
+    const state = context.listState;
+    const restoredSearch = typeof state.searchQuery === 'string' ? state.searchQuery : '';
+    if (restoredSearch !== searchQuery.value) skipNextSearchReload.value = true;
+    searchQuery.value = restoredSearch;
+    areaMin.value = state.areaMin == null ? undefined : Number(state.areaMin);
+    areaMax.value = state.areaMax == null ? undefined : Number(state.areaMax);
+    isInverter.value = typeof state.isInverter === 'boolean' ? state.isInverter : undefined;
+    heatingMin.value = state.heatingMin == null ? undefined : Number(state.heatingMin);
+    hasWifi.value = typeof state.hasWifi === 'boolean' ? state.hasWifi : undefined;
+    hasFreshAir.value = typeof state.hasFreshAir === 'boolean' ? state.hasFreshAir : undefined;
+    selectedBrandSlug.value = typeof state.selectedBrandSlug === 'string' ? state.selectedBrandSlug : null;
+    selectedSeriesId.value = state.selectedSeriesId == null ? null : Number(state.selectedSeriesId);
+    selectedSeriesTitle.value = typeof state.selectedSeriesTitle === 'string' ? state.selectedSeriesTitle : '';
+    filtersOpen.value = Boolean(state.filtersOpen);
+    viewType.value = state.viewType === 'table' ? 'table' : 'grid';
+    sortMode.value = ['newest', 'price_asc', 'price_desc', 'title'].includes(String(state.sortMode))
+        ? state.sortMode as typeof sortMode.value
+        : 'recommended';
+    categoryFilter.value = CATEGORY_FILTER_TABS.some((item) => item.value === state.categoryFilter)
+        ? state.categoryFilter as CatalogCategoryFilterValue
+        : 'cat-household';
+};
 const isMissingCategoryFilter = computed(() => categoryFilter.value === 'missing');
 const categorySlug = computed<CatalogCategorySlug | undefined>(() => (
     isMissingCategoryFilter.value || categoryFilter.value === 'all' ? undefined : categoryFilter.value as CatalogCategorySlug
@@ -718,15 +770,22 @@ const loadProducts = async () => {
       hasMore.value = products.value.length >= limit;
     }
     if (pendingEditProductId.value && !pendingEditHandled.value) {
-      const target = products.value.find((p) => p.id === pendingEditProductId.value)
+      let target = products.value.find((p) => p.id === pendingEditProductId.value)
         || (pendingEditProductQuery.value
           ? products.value.find((p) => p.title.toLowerCase().includes(pendingEditProductQuery.value.toLowerCase()))
           : null);
+      if (!target) {
+        try {
+          target = await api.getManagerProduct(pendingEditProductId.value);
+        } catch (error) {
+          console.error(error);
+        }
+      }
       if (target) {
         pendingEditHandled.value = true;
         if (pendingProductPanel.value === 'media') openSearchModal(target);
         else openEditModal(target);
-      } else if (searchQuery.value.trim()) {
+      } else {
         pendingEditHandled.value = true;
         setToast(`Товар #${pendingEditProductId.value} не найден`);
       }
@@ -867,6 +926,23 @@ const openEditModal = (product: Product) => {
     editingProduct.value = product;
     productEditorMode.value = 'edit';
     showEditModal.value = true;
+};
+
+const openProductWorkspace = (
+    product: Product,
+    section: ProductWorkspaceSection = 'main',
+) => {
+    const scrollTop = getProductsScrollContainer()?.scrollTop || 0;
+    saveProductWorkspaceContext({
+        returnTo: currentRelativeUrl(),
+        productIds: products.value.map((item) => item.id),
+        currentProductId: product.id,
+        scrollTop,
+        page: page.value,
+        listState: productListState(),
+    });
+    window.history.pushState({}, '', buildProductWorkspacePath(product.id, section));
+    window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
 const openCreateProductModal = () => {
@@ -1405,8 +1481,15 @@ const selectImage = async (url: string) => {
 };
 
 // Intersection Observer for infinite scroll
-onMounted(() => {
+onMounted(async () => {
     const params = new URLSearchParams(window.location.search);
+    const savedContext = loadProductWorkspaceContext();
+    const contextMatchesList = Boolean(
+        savedContext
+        && !params.has('editProductId')
+        && savedContext.returnTo === currentRelativeUrl()
+    );
+    if (savedContext && contextMatchesList) restoreProductListState(savedContext);
     const seriesIdRaw = Number(params.get('seriesId'));
     if (Number.isInteger(seriesIdRaw) && seriesIdRaw > 0) {
         selectedSeriesId.value = seriesIdRaw;
@@ -1421,16 +1504,17 @@ onMounted(() => {
     pendingEditProductQuery.value = params.get('editProductQuery') || '';
     pendingReturnTo.value = params.get('returnTo') || '';
     pendingProductPanel.value = params.get('productPanel') === 'media' ? 'media' : 'edit';
-    if (!searchQuery.value) {
-        if (pendingEditProductQuery.value) {
-            searchQuery.value = pendingEditProductQuery.value;
-        } else if (pendingEditProductId.value) {
-            searchQuery.value = String(pendingEditProductId.value);
-        }
-    }
     document.addEventListener('paste', onProductImagePaste);
-    loadBrands();
-    loadProducts();
+    void loadBrands();
+    await loadProducts();
+    if (savedContext && contextMatchesList) {
+        while (page.value < savedContext.page && hasMore.value) {
+            await loadMore();
+        }
+        await nextTick();
+        const scrollContainer = getProductsScrollContainer();
+        if (scrollContainer) scrollContainer.scrollTop = savedContext.scrollTop;
+    }
 
     const observer = new IntersectionObserver((entries) => {
         if (entries[0]?.isIntersecting && hasMore.value && !loadingMore.value) {
@@ -1473,6 +1557,10 @@ const deleteProduct = async (product: Product) => {
 watchDebounced(
     searchQuery,
     () => {
+        if (skipNextSearchReload.value) {
+            skipNextSearchReload.value = false;
+            return;
+        }
         page.value = 1;
         loadProducts();
     },
@@ -1484,7 +1572,10 @@ watchDebounced(
   <div class="p-6">
     <!-- Header -->
     <header class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-      <div class="flex flex-wrap items-center gap-3 sm:gap-4">
+      <div
+        class="flex flex-wrap items-center gap-3 sm:gap-4"
+        :class="pendingReturnTo ? 'pl-12 sm:pl-0' : ''"
+      >
           <button
             v-if="pendingReturnTo"
             @click="navigateBackFromProducts"
@@ -1493,7 +1584,7 @@ watchDebounced(
             <ArrowLeft class="w-4 h-4" />
             Назад
           </button>
-          <h1 class="pl-20 text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3 sm:pl-0">
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3 sm:pl-0" :class="pendingReturnTo ? 'pl-0' : 'pl-20'">
             <span class="material-icons-round text-teal-600 dark:text-teal-400">inventory_2</span>
             Товары
           </h1>
@@ -1849,8 +1940,9 @@ watchDebounced(
       <!-- Grid View -->
       <div v-if="viewType === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
         <div v-for="product in products" :key="product.id" 
-             class="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden group border-2 transition-all hover:shadow-md relative"
+             class="relative cursor-pointer overflow-hidden rounded-lg border-2 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-800"
              :class="selectedProductIds.has(product.id) ? 'border-teal-500 ring-2 ring-teal-100 dark:ring-teal-900/50' : 'border-transparent'"
+             @click="openProductWorkspace(product)"
         >
              <!-- Selection Checkbox Overlay -->
              <div class="absolute top-2.5 left-2.5 z-10">
@@ -1872,35 +1964,14 @@ watchDebounced(
                     />
                  </button>
              </div>
-            <div class="aspect-video bg-gray-100 dark:bg-slate-700 relative">
-                <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-cover" />
+            <div class="aspect-[16/8.5] bg-gray-100 dark:bg-slate-700 relative" title="Открыть быстрый редактор фотографий" @click.stop="openSearchModal(product)">
+                <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-contain p-2" />
                 <div v-else class="w-full h-full flex items-center justify-center text-gray-300">
                     <Package class="w-10 h-10" />
                 </div>
-                
-                <!-- Overlay Actions -->
-                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                    <button
-                      @click.stop="deleteProduct(product)"
-                      :disabled="isDeletingProduct === product.id"
-                      class="absolute top-2.5 right-11 flex h-7 w-7 items-center justify-center rounded-full bg-red-600/90 text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-50"
-                      title="Удалить"
-                    >
-                      <span class="material-icons-round text-[16px] leading-none">close</span>
-                    </button>
-                    <button @click="openSearchModal(product)" class="bg-teal-600 text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-teal-700 text-sm font-medium transition-colors w-36 justify-center">
-                        <Images class="w-4 h-4" /> Фото
-                    </button>
-                    <button @click="openEditModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
-                        <Settings class="w-4 h-4 text-teal-600" /> Изменить
-                    </button>
-                    <button @click="openDuplicateProductModal(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
-                        <Copy class="w-4 h-4 text-teal-600" /> Дублировать
-                    </button>
-                    <button @click="copyPublicProductLink(product)" class="bg-white text-gray-900 px-4 py-2 rounded-full flex items-center gap-2 hover:bg-gray-100 text-sm font-medium transition-colors w-36 justify-center">
-                        <Link2 class="w-4 h-4 text-teal-600" /> Ссылка
-                    </button>
-                </div>
+                <span class="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-gray-950/70 px-2 py-1 text-[11px] font-semibold text-white">
+                    <Images class="h-3.5 w-3.5" /> {{ product.gallery_images.length }}
+                </span>
             </div>
             <div class="p-3.5">
                 <h3 class="font-medium text-gray-900 dark:text-slate-200 text-sm truncate" :title="product.title">{{ product.title }}</h3>
@@ -1915,7 +1986,7 @@ watchDebounced(
                             class="w-24 px-1 py-0.5 border border-teal-500 dark:border-teal-400 rounded text-sm outline-none bg-teal-50 dark:bg-teal-900/30 text-gray-900 dark:text-slate-200"
                             auto-focus
                         />
-                        <span class="text-xs text-teal-600 dark:text-teal-400 ml-1">руб.</span>
+                        <span class="text-xs text-teal-600 dark:text-teal-400 ml-1">BYN</span>
                     </template>
                     <p 
                         v-else 
@@ -1923,10 +1994,10 @@ watchDebounced(
                         class="text-teal-700 dark:text-teal-400 font-semibold text-sm cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/40 rounded px-1 -ml-1 transition-colors"
                         title="Нажмите, чтобы изменить цену"
                     >
-                        {{ product.price }} руб.
+                        {{ product.price }} BYN
                     </p>
                     <button
-                        @click="openPublicProductPage(product)"
+                        @click.stop="openPublicProductPage(product)"
                         class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-teal-50 dark:disabled:hover:bg-teal-900/30"
                         :disabled="!product.slug"
                         :title="product.slug ? 'Открыть карточку товара на сайте' : 'У товара нет публичного slug'"
@@ -1966,6 +2037,26 @@ watchDebounced(
                     <span v-if="product.gallery_images.length > 6" class="w-7 h-7 bg-gray-100 rounded flex items-center justify-center text-[10px] text-gray-500">+{{ product.gallery_images.length - 6 }}</span>
                 </div>
             </div>
+            <div class="grid grid-cols-[1fr_1fr_auto] border-t border-gray-100 dark:border-slate-700">
+                <button type="button" class="inline-flex h-10 items-center justify-center gap-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 hover:text-teal-700 dark:text-slate-300 dark:hover:bg-slate-700" @click.stop="openSearchModal(product)">
+                    <Images class="h-4 w-4" /> Фото
+                </button>
+                <button type="button" class="inline-flex h-10 items-center justify-center gap-1.5 border-l border-gray-100 text-xs font-semibold text-teal-700 transition hover:bg-teal-50 dark:border-slate-700 dark:text-teal-300 dark:hover:bg-slate-700" @click.stop="openProductWorkspace(product)">
+                    <ExternalLink class="h-4 w-4" /> Открыть
+                </button>
+                <details class="relative border-l border-gray-100 dark:border-slate-700" @click.stop>
+                    <summary class="flex h-10 w-10 cursor-pointer list-none items-center justify-center text-gray-500 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-700" title="Дополнительные действия">
+                        <MoreHorizontal class="h-4 w-4" />
+                    </summary>
+                    <div class="absolute bottom-11 right-1 z-30 w-52 rounded-lg border border-gray-200 bg-white p-1.5 text-left shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                        <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" @click="openDuplicateProductModal(product)"><Copy class="h-4 w-4" />Дублировать</button>
+                        <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="copyPublicProductLink(product)"><Link2 class="h-4 w-4" />Копировать ссылку</button>
+                        <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="openPublicProductPage(product)"><ExternalLink class="h-4 w-4" />Открыть на сайте</button>
+                        <div class="my-1 border-t border-gray-100 dark:border-slate-800" />
+                        <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="isDeletingProduct === product.id" @click="deleteProduct(product)"><Trash2 class="h-4 w-4" />Удалить</button>
+                    </div>
+                </details>
+            </div>
         </div>
       </div>
 
@@ -1989,18 +2080,19 @@ watchDebounced(
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
             <tr v-for="product in products" :key="product.id" 
-                class="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                class="cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
                 :class="{ 'bg-teal-50/50 dark:bg-teal-900/20': selectedProductIds.has(product.id) }"
+                @click="openProductWorkspace(product)"
             >
               <td class="p-4">
-                <button @click="toggleSelection(product.id)" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
+                <button @click.stop="toggleSelection(product.id)" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
                   <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-teal-600" />
                   <Square v-else class="w-5 h-5" />
                 </button>
               </td>
               <td class="p-4">
-                <div class="w-16 h-10 bg-gray-100 dark:bg-slate-700 rounded overflow-hidden shadow-sm relative group/thumb cursor-pointer" @click="openEditModal(product)">
-                    <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-cover" />
+                <div class="w-16 h-10 bg-gray-100 dark:bg-slate-700 rounded overflow-hidden shadow-sm relative cursor-pointer" title="Открыть фотографии" @click.stop="openSearchModal(product)">
+                    <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-contain p-0.5" />
                     <div v-else class="w-full h-full flex items-center justify-center text-gray-300">
                       <Package class="w-5 h-5" />
                     </div>
@@ -2013,7 +2105,7 @@ watchDebounced(
               </td>
               <td class="p-4">
                 <div class="text-sm font-semibold text-teal-700 dark:text-teal-400">
-                   {{ product.price }} руб.
+                   {{ product.price }} BYN
                 </div>
               </td>
               <td class="p-4 text-xs text-gray-600 dark:text-slate-400">
@@ -2024,7 +2116,7 @@ watchDebounced(
               <td class="p-4 text-right">
                 <div class="flex justify-end gap-2 text-gray-400">
                   <button
-                    @click="toggleFavoriteProduct(product)"
+                    @click.stop="toggleFavoriteProduct(product)"
                     :disabled="favoriteUpdatingIds.has(product.id)"
                     class="p-2 transition-colors disabled:opacity-50"
                     :class="isFavoriteProduct(product) ? 'text-amber-500 hover:text-amber-600' : 'hover:text-amber-500'"
@@ -2032,24 +2124,22 @@ watchDebounced(
                   >
                     <Star class="w-4 h-4" :class="{ 'fill-amber-400': isFavoriteProduct(product) }" />
                   </button>
-                  <button @click="copyPublicProductLink(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" :title="product.slug ? 'Скопировать ссылку на сайт' : 'У товара нет публичного slug'" :disabled="!product.slug">
-                    <Link2 class="w-4 h-4" />
-                  </button>
-                  <button @click="openPublicProductPage(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" :title="product.slug ? 'Открыть сайт' : 'У товара нет публичного slug'" :disabled="!product.slug">
-                    <ExternalLink class="w-4 h-4" />
-                  </button>
-                  <button @click="openSearchModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Фото">
+                  <button @click.stop="openSearchModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Фото">
                     <Images class="w-4 h-4" />
                   </button>
-                  <button @click="openEditModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Изменить">
-                    <Settings class="w-4 h-4" />
+                  <button @click.stop="openProductWorkspace(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Открыть товар">
+                    <ExternalLink class="w-4 h-4" />
                   </button>
-                  <button @click="openDuplicateProductModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Дублировать">
-                    <Copy class="w-4 h-4" />
-                  </button>
-                  <button @click.stop="deleteProduct(product)" :disabled="isDeletingProduct === product.id" class="p-2 hover:text-red-600 transition-colors" title="Удалить">
-                    <span class="material-icons-round text-[18px]">delete</span>
-                  </button>
+                  <details class="relative" @click.stop>
+                    <summary class="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-slate-700" title="Дополнительные действия"><MoreHorizontal class="h-4 w-4" /></summary>
+                    <div class="absolute right-0 top-9 z-30 w-52 rounded-lg border border-gray-200 bg-white p-1.5 text-left shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                      <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" @click="openDuplicateProductModal(product)"><Copy class="h-4 w-4" />Дублировать</button>
+                      <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="copyPublicProductLink(product)"><Link2 class="h-4 w-4" />Копировать ссылку</button>
+                      <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="openPublicProductPage(product)"><ExternalLink class="h-4 w-4" />Открыть на сайте</button>
+                      <div class="my-1 border-t border-gray-100 dark:border-slate-800" />
+                      <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="isDeletingProduct === product.id" @click="deleteProduct(product)"><Trash2 class="h-4 w-4" />Удалить</button>
+                    </div>
+                  </details>
                 </div>
               </td>
             </tr>
@@ -2095,28 +2185,35 @@ watchDebounced(
   <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="showModal = false">
       <div class="relative bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl">
           <!-- Tabs -->
-          <div class="flex border-b bg-gray-50 rounded-t-xl">
+          <div class="flex min-w-0 border-b bg-gray-50 rounded-t-xl">
+            <div class="flex min-w-0 flex-1 overflow-x-auto">
                <button 
                   @click="activeTab = 'upload'" 
-                  class="px-6 py-3 font-medium border-b-2 text-sm transition-colors"
+                  class="shrink-0 px-4 py-3 font-medium border-b-2 text-sm transition-colors sm:px-6"
                   :class="activeTab === 'upload' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
                >Загрузить</button>
                <button 
                   @click="activeTab = 'search'" 
-                  class="px-6 py-3 font-medium border-b-2 text-sm transition-colors"
+                  class="shrink-0 px-4 py-3 font-medium border-b-2 text-sm transition-colors sm:px-6"
                   :class="activeTab === 'search' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
                >Поиск изображений</button>
                <button 
                   @click="activeTab = 'reuse'" 
-                  class="px-6 py-3 font-medium border-b-2 text-sm transition-colors"
+                  class="shrink-0 px-4 py-3 font-medium border-b-2 text-sm transition-colors sm:px-6"
                   :class="activeTab === 'reuse' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
                >Из каталога</button>
-               <div v-if="isBulkMode" class="flex items-center text-sm text-teal-700 font-medium px-3">
+               <div v-if="isBulkMode" class="flex shrink-0 items-center text-sm text-teal-700 font-medium px-3">
                   {{ selectedIdsArray.length }} товаров
                </div>
-               <div class="flex-1 flex justify-end items-center px-4">
-                   <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 text-sm transition-colors">Закрыть</button>
-               </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Закрыть"
+              class="flex h-11 w-11 shrink-0 items-center justify-center border-l border-gray-200 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              @click="showModal = false"
+            >
+              <X class="h-5 w-5" />
+            </button>
           </div>
 
           <!-- Tab Content -->

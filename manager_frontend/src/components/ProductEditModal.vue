@@ -51,13 +51,16 @@ const props = withDefaults(defineProps<{
     modelValue: boolean;
     product: Product | null;
     mode?: ProductEditorMode;
+    presentation?: 'modal' | 'workspace';
 }>(), {
     mode: 'edit',
+    presentation: 'modal',
 });
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
     (e: 'success'): void;
+    (e: 'dirty-change', value: boolean): void;
 }>();
 
 const form = ref<any>({
@@ -113,6 +116,8 @@ const logisticsComponents = ref<ProductLogisticsComponent[]>([]);
 const isCreateMode = computed(() => props.mode === 'create');
 const isDuplicateMode = computed(() => props.mode === 'duplicate');
 const isPersistedProduct = computed(() => props.mode === 'edit' && Boolean(props.product?.id));
+const isWorkspace = computed(() => props.presentation === 'workspace');
+const cleanFingerprint = ref('');
 const modalTitle = computed(() => {
     if (isCreateMode.value) return 'Создание товара';
     if (isDuplicateMode.value) return 'Дублирование товара';
@@ -991,7 +996,28 @@ const resetEditorState = () => {
     selectedBrandEntityId.value = null;
     vitebskQty.value = 0;
     supplierOffers.value = [];
+    cleanFingerprint.value = '';
 };
+
+const editorFingerprint = () => JSON.stringify({
+    form: form.value,
+    specs: specs.value,
+    manuals: manuals.value,
+    tagIds: Array.from(selectedTagIds.value).sort((a, b) => a - b),
+    brandId: selectedBrandEntityId.value,
+    vitebskQty: vitebskQty.value,
+    indoorSlugs: compatibilityIndoorSlugs.value,
+    outdoorSlugs: compatibilityOutdoorSlugs.value,
+    logisticsComponents: logisticsComponents.value,
+    comboRules: multiComboRules.value,
+    compatMode: multiCompatMode.value,
+    capacityCombos: capacityCombosInput.value,
+});
+
+const isDirty = computed(() => Boolean(
+    cleanFingerprint.value
+    && cleanFingerprint.value !== editorFingerprint()
+));
 
 const getDuplicateSlug = (product: Product | null): string => {
     const sourceSlug = String(product?.slug || '').trim();
@@ -1057,15 +1083,18 @@ const initializeEditor = async () => {
 
     if (isPersistedProduct.value) {
         vitebskQty.value = Number((source as any)?.vitebsk_qty || 0);
-        loadSupplierOffers();
+        await loadSupplierOffers();
     }
+    cleanFingerprint.value = editorFingerprint();
 };
 
 watch(() => [props.modelValue, props.mode, props.product?.id] as const, async ([val]) => {
     if (val) {
         await initializeEditor();
     }
-});
+}, { immediate: true });
+
+watch(isDirty, (value) => emit('dirty-change', value));
 
 const loadSupplierOffers = async () => {
     if (!props.product) return;
@@ -1099,8 +1128,8 @@ const saveLocalStock = async () => {
     }
 };
 
-const save = async () => {
-    if ((isDuplicateMode.value || props.mode === 'edit') && !props.product) return;
+const save = async (): Promise<boolean> => {
+    if ((isDuplicateMode.value || props.mode === 'edit') && !props.product) return false;
     
     // Process specs back to object
     const validSpecs: Record<string, any> = {};
@@ -1188,8 +1217,10 @@ const save = async () => {
         } else {
             await api.updateProduct(props.product!.id, updateData);
         }
+        cleanFingerprint.value = editorFingerprint();
         emit('success');
-        close();
+        if (!isWorkspace.value) close();
+        return true;
     } catch (e) {
         const parsed = parseApiFieldErrors(e, [
             'title',
@@ -1205,6 +1236,7 @@ const save = async () => {
         formServerErrors.value = parsed.fieldErrors;
         formMessage.value = parsed.message || `Ошибка при сохранении: ${getApiErrorMessage(e)}`;
         console.error(e);
+        return false;
     } finally {
         loading.value = false;
     }
@@ -1226,13 +1258,29 @@ const unlinkSupplierOffer = async (offer: any) => {
         unlinkingMappingId.value = null;
     }
 };
+
+const handleBackdropClick = () => {
+    if (!isWorkspace.value) close();
+};
+
+defineExpose({ save, isDirty, loading });
 </script>
 
 <template>
-    <div v-if="modelValue" class="product-edit-modal fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" @click.self="close">
-        <div class="bg-slate-50 dark:bg-slate-900 rounded-2xl w-full max-w-5xl flex flex-col max-h-[90vh] shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden">
+    <div
+        v-if="modelValue"
+        class="product-edit-modal"
+        :class="isWorkspace ? 'w-full' : 'fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm'"
+        @click.self="handleBackdropClick"
+    >
+        <div
+            class="w-full bg-slate-50 dark:bg-slate-900"
+            :class="isWorkspace
+                ? 'min-w-0'
+                : 'flex max-w-5xl flex-col max-h-[90vh] overflow-hidden rounded-2xl border border-gray-100 shadow-2xl dark:border-slate-800'"
+        >
             <!-- Header -->
-            <header class="p-5 border-b dark:border-slate-800 flex justify-between items-center bg-slate-100/50 dark:bg-slate-800/50">
+            <header v-if="!isWorkspace" class="p-5 border-b dark:border-slate-800 flex justify-between items-center bg-slate-100/50 dark:bg-slate-800/50">
                 <div class="flex items-center gap-3">
                     <div class="p-2 bg-teal-100 rounded-lg text-teal-700">
                         <Edit3 class="w-5 h-5" />
@@ -1250,10 +1298,10 @@ const unlinkSupplierOffer = async (offer: any) => {
                 {{ formMessage }}
             </div>
             
-            <div class="flex-1 overflow-y-auto p-6">
+            <div class="flex-1 p-6" :class="isWorkspace ? '' : 'overflow-y-auto'">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <!-- Column 1: Basic Info -->
-                    <section class="space-y-5">
+                    <section id="product-section-main" class="scroll-mt-28 space-y-5">
                         <h3 class="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">Основные данные</h3>
                         
                         <div>
@@ -1293,7 +1341,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                                         class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-bold text-teal-700 dark:text-teal-400 text-sm"
                                         :class="formServerErrors.price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
                                     />
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">руб.</span>
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
                                 </div>
                                 <p v-if="formServerErrors.price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.price }}</p>
                             </div>
@@ -1306,7 +1354,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                                         class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-500 dark:text-slate-400 text-sm"
                                         :class="formServerErrors.old_price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
                                     />
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">руб.</span>
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
                                 </div>
                                 <p v-if="formServerErrors.old_price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.old_price }}</p>
                             </div>
@@ -1320,7 +1368,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                             </label>
                         </div>
 
-                        <div v-if="isPersistedProduct" class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
+                        <div id="product-section-suppliers" v-if="isPersistedProduct" class="scroll-mt-28 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3">
                             <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">Supply</h4>
                             <div class="flex items-end gap-2">
                                 <div class="flex-1">
@@ -1738,8 +1786,8 @@ const unlinkSupplierOffer = async (offer: any) => {
                     </section>
 
                     <!-- Column 2: Specs -->
-                    <section class="space-y-5">
-                        <div class="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
+                    <section id="product-section-specifications" class="scroll-mt-28 space-y-5">
+                        <div id="product-section-publication" class="scroll-mt-28 rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
                             <div class="flex justify-between items-center">
                                 <h3 class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-widest">
                                     Инструкции и файлы
@@ -1934,7 +1982,7 @@ const unlinkSupplierOffer = async (offer: any) => {
                     </section>
                 </div>
 
-                <details class="mt-6 border border-gray-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 group">
+                <details id="product-section-links" class="scroll-mt-28 mt-6 border border-gray-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 group">
                     <summary class="cursor-pointer p-4 font-bold text-gray-700 dark:text-slate-300 flex justify-between items-center outline-none">
                         <span class="flex items-center gap-2"><Tag class="w-4 h-4 text-gray-400 dark:text-slate-500"/> Теги ({{ selectedTagIds.size }} выбрано)</span>
                     </summary>
@@ -1971,7 +2019,7 @@ const unlinkSupplierOffer = async (offer: any) => {
             </div>
             
             <!-- Footer -->
-            <footer class="p-5 border-t dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/50 flex justify-end gap-3">
+            <footer v-if="!isWorkspace" class="p-5 border-t dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/50 flex justify-end gap-3">
                 <button @click="close" class="px-5 py-2 text-sm font-bold text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-all">
                     Отмена
                 </button>
