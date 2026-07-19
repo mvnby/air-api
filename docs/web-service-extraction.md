@@ -28,13 +28,16 @@ The only runtime connection is HTTP through `INTERNAL_API_URL` and
 web commit SHA and a catalog revision, but it must not receive database or bot
 credentials.
 
-## Current coupling to remove
+## Current production contract
 
-1. Web deployment workflows and release scripts live in the API repository.
-2. `SystemService` dispatches `rebuild-web.yml` in the API repository.
-3. The web rebuild callback and deployment secrets are configured for that
-   workflow location.
-4. Root Docker Compose files still describe the storefront runtime.
+1. `SystemService` dispatches `rebuild-web.yml` in the private
+   `mvnby/mvn-web` repository with the requested catalog revision.
+2. The standalone workflow verifies that the SSR runtime has reached that
+   revision and reports the existing signed callback.
+3. The API production workflow cannot call the legacy static storefront
+   publisher, and the monolith `rebuild-web.yml` fails closed.
+4. The last atomic static release remains on the web VPS only as the immediate
+   nginx rollback target until the public SSR cutover is proven.
 
 The local `web` scripts are now self-contained and `npm run audit:boundary`
 prevents source imports, package scripts, and sensitive runtime configuration
@@ -60,7 +63,7 @@ No traffic or production configuration changes in this phase.
 
 The monolith remains the production source during comparison.
 
-### 3. Decouple catalog rebuild dispatch
+### 3. Decouple catalog rebuild dispatch (complete)
 
 - Configure the API with explicit web repository owner, name, workflow, and
   branch settings.
@@ -69,7 +72,7 @@ The monolith remains the production source during comparison.
 - Preserve the signed callback to `/api/system/rebuild-web/complete`.
 - Prove success, failure, retry, and duplicate-dispatch behavior.
 
-### 4. Shadow deployment
+### 4. Shadow deployment (complete)
 
 - Deploy `mvn-web` to a separate Cloudflare preview and SSR shadow runtime.
 - Compare catalog totals, canonical URLs, sitemaps, key product pages, asset

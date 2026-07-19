@@ -582,7 +582,7 @@ Switch back to the repo-tracked files after the emergency is resolved.
 Manual deploy verification:
 
 ```bash
-gh workflow run deploy.yml --repo mvnby/air-api --ref main -f deploy_frontend=false
+gh workflow run deploy.yml --repo mvnby/air-api --ref main
 ```
 
 The command is accepted only for `main` commits that already have a successful

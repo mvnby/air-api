@@ -22,7 +22,7 @@ async def get_rebuild_web_status(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Return whether the static Astro storefront is behind catalog data.
+    Return whether the storefront has acknowledged the latest catalog revision.
     """
     logger.debug("User %s checked web rebuild status.", username)
     return await CatalogRevisionService.get_static_rebuild_status(session)
@@ -34,7 +34,7 @@ async def trigger_rebuild_web(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Trigger a turbo-rebuild of the frontend Astro site.
+    Trigger catalog revision verification in the standalone storefront runtime.
     Accessible only by authenticated managers/admins.
     """
     status = await CatalogRevisionService.get_static_rebuild_status(session)
@@ -70,7 +70,7 @@ async def trigger_rebuild_web(
 
     return {
         **status,
-        "message": "Rebuild triggered successfully. The site will be updated in ~2 minutes.",
+        "message": "Storefront catalog synchronization started.",
     }
 
 
@@ -81,7 +81,7 @@ async def complete_rebuild_web(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Callback for GitHub Actions after the static storefront deploy completes.
+    Signed callback after the standalone storefront verifies catalog freshness.
     """
     if not settings.WEB_REBUILD_CALLBACK_TOKEN:
         raise HTTPException(status_code=503, detail="Web rebuild callback token is not configured")
