@@ -94,23 +94,8 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert standby_call["with"]["backend_image"] == "${{ needs.backend-release.outputs.backend_image }}"
     assert standby_call["secrets"] == "inherit"
 
-    web_workflow = _workflow(".github/workflows/deploy-web.yml")
-    web_job = web_workflow["jobs"]["production-web"]
-    assert web_job["environment"] == "production-web"
-    web_checkout = next(
-        step
-        for step in web_job["steps"]
-        if step.get("uses")
-        == "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
-    )
-    assert web_checkout["with"]["ref"] == "${{ inputs.deploy_sha }}"
-    web_call = jobs["deploy-frontend"]
-    assert web_call["uses"] == "./.github/workflows/deploy-web.yml"
-    assert "always()" in web_call["if"]
-    assert "needs.backend-release.result == 'success'" in web_call["if"]
-    assert web_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
-    assert web_call["secrets"] == "inherit"
-    assert "backend-release" in web_call["needs"]
+    assert "deploy-frontend" not in jobs
+    assert "detect-frontend-changes" not in jobs
 
     workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
     assert "backend:latest" not in workflow_text
@@ -121,16 +106,14 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert 'reference="ghcr.io/${{ steps.prep.outputs.repo }}/backend@${digest}"' in workflow_text
 
 
-def test_frontend_detection_compares_against_the_deployed_release_sha():
+def test_backend_release_cannot_publish_the_legacy_storefront():
     workflow = _workflow(".github/workflows/deploy.yml")
-    detect = _step(workflow["jobs"]["detect-frontend-changes"], "Detect storefront-relevant changes")[
-        "run"
-    ]
+    workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
 
-    assert "https://mvn.by/release.json?ci_run=${GITHUB_RUN_ID}" in detect
-    assert 'git merge-base --is-ancestor "${deployed_web_sha}" "${after}"' in detect
-    assert 'git diff --name-only "${deployed_web_sha}" "${after}"' in detect
-    assert "deploying frontend conservatively" in detect
+    assert "deploy-frontend" not in workflow["jobs"]
+    assert "detect-frontend-changes" not in workflow["jobs"]
+    assert "deploy_frontend" not in workflow_text
+    assert "./.github/workflows/deploy-web.yml" not in workflow_text
 
 
 def test_backend_release_is_scoped_and_has_guarded_rollback():

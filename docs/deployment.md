@@ -345,11 +345,10 @@ The workflow requires these env vars in the build step:
    guarded Patroni cutover, role-aware mode probes both nodes, migrates only on
    the current primary, updates the fenced replica, then blue-greens the primary.
 3. **backend-release:** Requires exactly one physical or Patroni deployment path
-   to succeed before the web release may continue.
-4. **deploy-frontend:** When web files changed (or manual rebuild was requested),
-   builds Astro once, validates the static artifact and release marker, deploys
-   a Cloudflare Pages canary, atomically promotes the same artifact on the VPS,
-   and finally promotes it to the Pages production branch.
+   to succeed. It never publishes storefront files.
+4. **standalone storefront:** `mvnby/mvn-web` owns its immutable SSR image,
+   shadow deployment, catalog synchronization, and public cutover. The last
+   atomic static release remains available as an nginx rollback target.
 
 The three GitHub environments are deployment audit boundaries. They contain no
 new secrets by default; existing repository secrets remain the credential source.
@@ -415,11 +414,17 @@ image automatically if the post-activation Google durability probe fails.
 The old `deploy_api.sh` source-bind path is intentionally retired. Production
 changes must use the CI-tested immutable-image workflow.
 
-### Web Release Safety
+### Legacy Web Release Safety
 
-Both automatic releases and `rebuild-web.yml` call
-`.github/workflows/deploy-web.yml`. They share the `production-release`
-concurrency group, so a catalog rebuild cannot race a normal production release.
+The monolith publisher is retired: `.github/workflows/deploy.yml` has no
+storefront job and `.github/workflows/rebuild-web.yml` fails closed. The old
+`.github/workflows/deploy-web.yml` and atomic release scripts are retained only
+for audited rollback history while the standalone SSR cutover is observed.
+
+Active storefront deployment and catalog revision verification live in the
+private `mvnby/mvn-web` repository. The API dispatch target is controlled by
+`WEB_REBUILD_GITHUB_OWNER`, `WEB_REBUILD_GITHUB_REPO`, and
+`WEB_REBUILD_GITHUB_REF`.
 
 Required GitHub secrets:
 

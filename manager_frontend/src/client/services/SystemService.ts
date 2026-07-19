@@ -11,7 +11,7 @@ import { request as __request } from '../core/request';
 export class SystemService {
     /**
      * Get Rebuild Web Status
-     * Return whether the static Astro storefront is behind catalog data.
+     * Return whether the storefront has acknowledged the latest catalog revision.
      * @returns WebRebuildStatusResponse Successful Response
      * @throws ApiError
      */
@@ -23,7 +23,7 @@ export class SystemService {
     }
     /**
      * Trigger Rebuild Web
-     * Trigger a turbo-rebuild of the frontend Astro site.
+     * Trigger catalog revision verification in the standalone storefront runtime.
      * Accessible only by authenticated managers/admins.
      * @returns WebRebuildTriggerResponse Successful Response
      * @throws ApiError
@@ -36,7 +36,7 @@ export class SystemService {
     }
     /**
      * Complete Rebuild Web
-     * Callback for GitHub Actions after the static storefront deploy completes.
+     * Signed callback after the standalone storefront verifies catalog freshness.
      * @param requestBody
      * @param xWebRebuildToken
      * @returns WebRebuildStatusResponse Successful Response

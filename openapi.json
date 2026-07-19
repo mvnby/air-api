@@ -19405,7 +19405,7 @@
           "system"
         ],
         "summary": "Get Rebuild Web Status",
-        "description": "Return whether the static Astro storefront is behind catalog data.",
+        "description": "Return whether the storefront has acknowledged the latest catalog revision.",
         "operationId": "get_rebuild_web_status_api_system_rebuild_web_status_get",
         "responses": {
           "200": {
@@ -19432,7 +19432,7 @@
           "system"
         ],
         "summary": "Trigger Rebuild Web",
-        "description": "Trigger a turbo-rebuild of the frontend Astro site.\nAccessible only by authenticated managers/admins.",
+        "description": "Trigger catalog revision verification in the standalone storefront runtime.\nAccessible only by authenticated managers/admins.",
         "operationId": "trigger_rebuild_web_api_system_rebuild_web_post",
         "responses": {
           "200": {
@@ -19459,7 +19459,7 @@
           "system"
         ],
         "summary": "Complete Rebuild Web",
-        "description": "Callback for GitHub Actions after the static storefront deploy completes.",
+        "description": "Signed callback after the standalone storefront verifies catalog freshness.",
         "operationId": "complete_rebuild_web_api_system_rebuild_web_complete_post",
         "parameters": [
           {

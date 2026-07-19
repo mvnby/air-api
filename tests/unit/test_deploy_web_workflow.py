@@ -47,27 +47,19 @@ def test_reusable_web_release_promotes_one_immutable_artifact_in_safe_order():
     assert "CLOUDFLARE_PAGES_PROJECT='${CLOUDFLARE_PAGES_PROJECT}' bash -s" in stable_smoke
 
 
-def test_release_and_manual_rebuild_call_the_same_web_workflow():
+def test_legacy_web_publishers_are_disconnected_from_active_workflows():
     deploy = _workflow(".github/workflows/deploy.yml")
     rebuild = _workflow(".github/workflows/rebuild-web.yml")
-    automatic = deploy["jobs"]["deploy-frontend"]
-    manual = rebuild["jobs"]["rebuild"]
+    retired = _step(rebuild["jobs"]["retired"], "Refuse legacy storefront publication")["run"]
 
-    assert automatic["uses"] == "./.github/workflows/deploy-web.yml"
-    assert automatic["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
-    assert manual["uses"] == "./.github/workflows/deploy-web.yml"
-    assert manual["with"]["deploy_sha"] == "${{ github.sha }}"
-    assert manual["needs"] == "main-branch-guard"
-    assert rebuild["jobs"]["callback"]["if"] == "${{ always() }}"
-    callback = _step(rebuild["jobs"]["callback"], "Report catalog rebuild result")["run"]
-    assert "for attempt in 1 2 3 4 5" in callback
-    assert 'printf \'%s\\n%s\\n%s\\n\'' in callback
-    assert "| ssh \\" in callback
-    assert '"${SSH_USER_API}@${SSH_HOST_API}"' in callback
-    assert "X-Web-Rebuild-Token: ${callback_token}" in callback
+    assert "deploy-frontend" not in deploy["jobs"]
+    assert "detect-frontend-changes" not in deploy["jobs"]
+    assert "mvnby/mvn-web" in retired
+    assert "exit 1" in retired
 
     workflow_text = "\n".join(
         (REPO_ROOT / path).read_text(encoding="utf-8")
         for path in (".github/workflows/deploy.yml", ".github/workflows/rebuild-web.yml")
     )
+    assert "uses: ./.github/workflows/deploy-web.yml" not in workflow_text
     assert "rsync -avz --delete" not in workflow_text

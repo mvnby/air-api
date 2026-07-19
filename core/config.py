@@ -350,6 +350,9 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = ""
     GITHUB_OWNER: str = "mvnby"
     GITHUB_REPO: str = "air-api"
+    WEB_REBUILD_GITHUB_OWNER: str = "mvnby"
+    WEB_REBUILD_GITHUB_REPO: str = "mvn-web"
+    WEB_REBUILD_GITHUB_REF: str = "main"
     WEB_REBUILD_CALLBACK_TOKEN: str = ""
 
     # Destructive restore is intentionally disabled by default. Enabling this

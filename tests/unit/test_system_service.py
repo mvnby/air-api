@@ -27,8 +27,9 @@ async def test_trigger_web_rebuild_sends_catalog_revision_input(monkeypatch):
             return DummyResponse()
 
     monkeypatch.setattr(system_service_module.settings, "GITHUB_TOKEN", "token")
-    monkeypatch.setattr(system_service_module.settings, "GITHUB_OWNER", "owner")
-    monkeypatch.setattr(system_service_module.settings, "GITHUB_REPO", "repo")
+    monkeypatch.setattr(system_service_module.settings, "WEB_REBUILD_GITHUB_OWNER", "owner")
+    monkeypatch.setattr(system_service_module.settings, "WEB_REBUILD_GITHUB_REPO", "repo")
+    monkeypatch.setattr(system_service_module.settings, "WEB_REBUILD_GITHUB_REF", "stable")
     monkeypatch.setattr(system_service_module.httpx, "AsyncClient", lambda: DummyAsyncClient())
 
     result = await SystemService.trigger_web_rebuild(catalog_revision=17)
@@ -38,7 +39,7 @@ async def test_trigger_web_rebuild_sends_catalog_revision_input(monkeypatch):
         "https://api.github.com/repos/owner/repo/actions/workflows/rebuild-web.yml/dispatches"
     )
     assert captured["json"] == {
-        "ref": "main",
+        "ref": "stable",
         "inputs": {"catalog_revision": "17"},
     }
     assert captured["timeout"] == 10.0

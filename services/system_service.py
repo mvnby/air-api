@@ -6,15 +6,16 @@ class SystemService:
     @staticmethod
     async def trigger_web_rebuild(catalog_revision: int | None = None) -> dict:
         """
-        Triggers the 'rebuild-web.yml' workflow in GitHub Actions.
-        Requires GITHUB_TOKEN to be set in .env.
+        Ask the standalone storefront to verify the requested catalog revision.
+        Requires GITHUB_TOKEN with Actions access to the private web repository.
         """
         if not settings.GITHUB_TOKEN:
             logger.error("GITHUB_TOKEN is not set. Cannot trigger rebuild.")
             return {"success": False, "error": "GITHUB_TOKEN_MISSING"}
 
-        owner = settings.GITHUB_OWNER
-        repo = settings.GITHUB_REPO
+        owner = settings.WEB_REBUILD_GITHUB_OWNER
+        repo = settings.WEB_REBUILD_GITHUB_REPO
+        ref = settings.WEB_REBUILD_GITHUB_REF
         workflow_id = "rebuild-web.yml"
         
         url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches"
@@ -26,18 +27,18 @@ class SystemService:
         }
         
         payload: dict[str, object] = {
-            "ref": "main"  # Build from main branch
+            "ref": ref,
         }
         if catalog_revision is not None:
             payload["inputs"] = {"catalog_revision": str(max(0, int(catalog_revision)))}
         
         async with httpx.AsyncClient() as client:
             try:
-                logger.info(f"Triggering GitHub rebuild for {owner}/{repo}...")
+                logger.info("Triggering storefront catalog sync for %s/%s at %s.", owner, repo, ref)
                 response = await client.post(url, headers=headers, json=payload, timeout=10.0)
                 
                 if response.status_code == 204:
-                    logger.info("Successfully triggered rebuild-web workflow.")
+                    logger.info("Successfully triggered storefront catalog sync workflow.")
                     return {"success": True}
                 else:
                     try:
