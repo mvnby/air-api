@@ -466,6 +466,19 @@ def test_timer_units_and_wrappers_use_clean_pinned_execution():
     assert ":ro" in restore_source
 
 
+def test_pitr_preflight_prefetches_the_pinned_basebackup_image():
+    source = (REPO_ROOT / "scripts/ha/bootstrap_postgres_pitr.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'PITR_BASEBACKUP_IMAGE="postgres:15.18-alpine@sha256:' in source
+    assert 'docker pull --platform linux/amd64 "${PITR_BASEBACKUP_IMAGE}"' in source
+    assert 'docker image inspect "${PITR_BASEBACKUP_IMAGE}"' in source
+    assert source.index("ensure_basebackup_image") < source.index("preflight()")
+    preflight = source[source.index("preflight()") : source.index("provision_node()")]
+    assert '  ensure_basebackup_image\n' in preflight
+
+
 def test_explicit_upload_helper_precedes_image_package_import():
     for name in (
         "check_postgres_pitr_remote.py",
