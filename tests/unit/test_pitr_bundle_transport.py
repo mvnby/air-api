@@ -58,8 +58,8 @@ def _remote_namespace(tmp_path):
     return namespace, project, compose, tool
 
 
-def _payload(namespace, project, compose, tool, *, tool_content=b"new-tool"):
-    contents = {str(compose): b"new-compose", str(tool): tool_content}
+def _payload(namespace, project, compose, tool, *, tool_content=b"new-tool", compose_content=b"new-compose"):
+    contents = {str(compose): compose_content, str(tool): tool_content}
     modes = {str(compose): 0o644, str(tool): 0o755}
     files = [
         {
@@ -270,6 +270,34 @@ def test_apply_and_finalize_accept_identical_old_and_new_generation(tmp_path):
     assert namespace["execute"](
         "finalize", TXID, str(project), compose.name, b""
     ) == "finalized"
+
+
+def test_apply_reconciles_only_exact_target_generation_after_finalized_release(tmp_path):
+    namespace, project, compose, tool = _remote_namespace(tmp_path)
+    _write(compose, b"old-compose", 0o644)
+    _write(tool, b"old-tool", 0o755)
+    old_payload, _ = _payload(namespace, project, compose, tool, tool_content=b"old-tool", compose_content=b"old-compose")
+    assert namespace["execute"]("apply", "1" * 32, str(project), compose.name, old_payload) == "applied"
+    assert namespace["execute"]("finalize", "1" * 32, str(project), compose.name, b"") == "finalized"
+
+    target_payload, _ = _payload(namespace, project, compose, tool)
+    _write(compose, b"new-compose", 0o644)
+    assert namespace["execute"]("inspect", TXID, str(project), compose.name, target_payload) == "fresh"
+    assert namespace["execute"]("apply", TXID, str(project), compose.name, target_payload) == "applied"
+
+
+def test_apply_rejects_unreviewed_generation_after_finalized_release(tmp_path):
+    namespace, project, compose, tool = _remote_namespace(tmp_path)
+    _write(compose, b"old-compose", 0o644)
+    _write(tool, b"old-tool", 0o755)
+    old_payload, _ = _payload(namespace, project, compose, tool, tool_content=b"old-tool", compose_content=b"old-compose")
+    assert namespace["execute"]("apply", "1" * 32, str(project), compose.name, old_payload) == "applied"
+    assert namespace["execute"]("finalize", "1" * 32, str(project), compose.name, b"") == "finalized"
+
+    target_payload, _ = _payload(namespace, project, compose, tool)
+    _write(compose, b"unreviewed-compose", 0o644)
+    with pytest.raises(RuntimeError, match="current file does not match"):
+        namespace["execute"]("inspect", TXID, str(project), compose.name, target_payload)
 
 
 def test_apply_accepts_only_exact_previous_manifest_missing_new_safe_lock_helper(tmp_path):

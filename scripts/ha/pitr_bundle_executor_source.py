@@ -484,7 +484,7 @@ def verify_rollback_generations(receipt):
         if (not generation["present"]
                 or hashlib.sha256(content).hexdigest() != generation["sha256"]):
             raise RuntimeError("recorded rollback generation does not match: " + generation["path"])
-def read_release_manifest(modes, project_dir, allow_previous=False):
+def read_release_manifest(modes, project_dir, allow_previous=False, target_files=()):
     try:
         content, _ = read_regular(RELEASE_MANIFEST, exact_mode=0o600, max_bytes=MAX_BUNDLE)
     except FileNotFoundError:
@@ -523,9 +523,11 @@ def read_release_manifest(modes, project_dir, allow_previous=False):
                          and paths == sorted(set(modes) - missing))
     if paths != sorted(modes) and not previous_is_valid:
         raise RuntimeError("release manifest path set is incomplete")
+    targets = {entry["path"]: entry for entry in (target_files or ())}
     for item in files:
         content, _ = read_regular(item["path"], exact_mode=item["mode"])
-        if hashlib.sha256(content).hexdigest() != item["sha256"]:
+        digest, target = hashlib.sha256(content).hexdigest(), targets.get(item["path"])
+        if digest != item["sha256"] and (not target or target["mode"] != item["mode"] or digest != target["sha256"]):
             raise RuntimeError("current file does not match the release manifest: " + item["path"])
     return manifest
 def clear_completed_marker(txid):
@@ -555,7 +557,7 @@ def inspect_release(txid, project_dir, modes, release, descriptors):
             if file_generation(entry["path"], entry["old"], entry["sha256"], entry["mode"]) == "unknown":
                 raise RuntimeError("active release transaction has an unknown generation")
         return "matching-active"
-    completed = read_release_manifest(modes, project_dir, allow_previous=True)
+    completed = read_release_manifest(modes, project_dir, allow_previous=True, target_files=descriptors)
     if completed is not None and completed["txid"] == txid:
         if completed["release_sha256"] != release or completed["files"] != expected:
             raise RuntimeError("transaction id already finalized another release")
@@ -585,7 +587,7 @@ def execute(action, txid, project_dir, compose_file, payload):
         txdir = os.path.join(TRANSACTION_ROOT, txid)
         has_tx = transaction_exists(txdir)
         completed = None if has_tx else read_release_manifest(
-            modes, project_dir, allow_previous=action == "apply"
+            modes, project_dir, allow_previous=action == "apply", target_files=descriptors
         )
         if completed is not None and completed["txid"] == txid:
             if has_tx:
