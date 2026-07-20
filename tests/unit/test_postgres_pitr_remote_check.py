@@ -436,14 +436,33 @@ def test_manifest_proof_rejects_oversized_head_before_get():
     assert client.get_calls == []
 
 
-def test_manifest_proof_rejects_last_modified_before_completion():
+def test_manifest_proof_accepts_small_object_storage_clock_skew():
     payload = _manifest_payload()
     client, key, _raw = _manifest_client(payload)
     client.heads[key]["LastModified"] = datetime(
-        2026, 7, 14, 1, 4, tzinfo=timezone.utc
+        2026, 7, 14, 1, 4, 59, tzinfo=timezone.utc
     )
 
-    with pytest.raises(pitr_remote.StatusProofError, match="LastModified"):
+    proof, _size = pitr_remote._load_manifest_proof(
+        client,
+        bucket="private",
+        key=key,
+        key_prefix="postgres/pitr",
+        cluster="mvn-api",
+        expected_system_identifier=SYSTEM_IDENTIFIER,
+    )
+
+    assert proof.backup_id == "backup-1"
+
+
+def test_manifest_proof_rejects_last_modified_before_completion_beyond_clock_skew():
+    payload = _manifest_payload()
+    client, key, _raw = _manifest_client(payload)
+    client.heads[key]["LastModified"] = datetime(
+        2026, 7, 14, 0, 59, 59, tzinfo=timezone.utc
+    )
+
+    with pytest.raises(pitr_remote.StatusProofError, match="clock skew"):
         pitr_remote._load_manifest_proof(
             client,
             bucket="private",

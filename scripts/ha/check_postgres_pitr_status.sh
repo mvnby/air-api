@@ -311,22 +311,32 @@ SELECT
   coalesce(last_archived_time::text, '<none>'),
   failed_count,
   coalesce(last_failed_wal, '<none>'),
-  coalesce(last_failed_time::text, '<none>')
+  coalesce(last_failed_time::text, '<none>'),
+  CASE
+    WHEN last_failed_time IS NULL THEN 'false'
+    WHEN last_archived_time IS NULL THEN 'true'
+    WHEN last_failed_time > last_archived_time THEN 'true'
+    ELSE 'false'
+  END
 FROM pg_stat_archiver;
 SQL
 )"
-IFS='|' read -r archived_count last_archived_wal last_archived_time failed_count last_failed_wal last_failed_time <<< "${archiver_output}"
+IFS='|' read -r archived_count last_archived_wal last_archived_time failed_count last_failed_wal last_failed_time unresolved_archive_failure <<< "${archiver_output}"
 archived_count="${archived_count:-0}"
 failed_count="${failed_count:-0}"
 
 log info "archived_count=${archived_count} last_archived_wal=${last_archived_wal:-<none>} last_archived_time=${last_archived_time:-<none>}"
-log info "failed_count=${failed_count} last_failed_wal=${last_failed_wal:-<none>} last_failed_time=${last_failed_time:-<none>}"
+log info "failed_count=${failed_count} last_failed_wal=${last_failed_wal:-<none>} last_failed_time=${last_failed_time:-<none>} unresolved_archive_failure=${unresolved_archive_failure:-<none>}"
 
 if [[ "${PITR_REQUIRED}" == "true" ]]; then
   if ! is_unsigned_int "${failed_count}"; then
     fail "pg_stat_archiver failed_count is not numeric: ${failed_count}"
-  elif (( failed_count > PITR_MAX_ARCHIVER_FAILURES )); then
+  elif [[ "${unresolved_archive_failure}" != "true" && "${unresolved_archive_failure}" != "false" ]]; then
+    fail "pg_stat_archiver unresolved failure state is invalid: ${unresolved_archive_failure:-<empty>}"
+  elif (( failed_count > PITR_MAX_ARCHIVER_FAILURES )) && [[ "${unresolved_archive_failure}" == "true" ]]; then
     fail "pg_stat_archiver failed_count=${failed_count} exceeds ${PITR_MAX_ARCHIVER_FAILURES}"
+  elif (( failed_count > PITR_MAX_ARCHIVER_FAILURES )); then
+    log warn "pg_stat_archiver failed_count=${failed_count} is historical; a newer WAL archive succeeded"
   else
     ok "pg_stat_archiver failed_count=${failed_count}"
   fi
