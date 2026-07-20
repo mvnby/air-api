@@ -479,6 +479,16 @@ def test_pitr_preflight_prefetches_the_pinned_basebackup_image():
     assert '  ensure_basebackup_image\n' in preflight
 
 
+def test_pitr_status_distinguishes_historical_archiver_failures_from_live_ones():
+    source = (REPO_ROOT / "scripts/ha/check_postgres_pitr_status.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "WHEN last_failed_time > last_archived_time THEN 'true'" in source
+    assert '[[ "${unresolved_archive_failure}" == "true" ]]' in source
+    assert "is historical; a newer WAL archive succeeded" in source
+
+
 def test_explicit_upload_helper_precedes_image_package_import():
     for name in (
         "check_postgres_pitr_remote.py",

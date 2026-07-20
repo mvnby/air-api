@@ -74,6 +74,7 @@ SOURCE_NODES = {"mvn-api", "zakup"}
 EXPECTED_UPLOADER = "mvn-postgres-pitr"
 WAL_SEGMENT_BYTES = 16 * 1024 * 1024
 MAX_MANIFEST_BYTES = 256 * 1024
+MAX_MANIFEST_CLOCK_SKEW = timedelta(minutes=5)
 MAX_MANIFEST_FILES = 128
 MAX_LIST_PAGES = 256
 MAX_LIST_OBJECTS = 100_000
@@ -393,9 +394,9 @@ def _load_manifest_proof(
         expected_system_identifier=expected_system_identifier,
     )
     publish_delay = last_modified - proof.completed_at
-    if publish_delay < timedelta(0):
+    if publish_delay < -MAX_MANIFEST_CLOCK_SKEW:
         raise StatusProofError(
-            "basebackup manifest LastModified does not match its completion time"
+            "basebackup manifest LastModified predates its completion time beyond clock skew"
         )
     return proof, expected_size
 
