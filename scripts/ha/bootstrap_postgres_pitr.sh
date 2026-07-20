@@ -16,6 +16,7 @@ STATUS_HELPER="${STATUS_HELPER:-/usr/local/sbin/mvn-postgres-pitr-status}"
 RESTORE_DRILL_HELPER="${RESTORE_DRILL_HELPER:-/usr/local/sbin/mvn-postgres-pitr-restore-drill}"
 RUNTIME_CHECK_HELPER="${RUNTIME_CHECK_HELPER:-/usr/local/sbin/mvn-postgres-pitr-runtime-check}"
 TOOL_RUNNER_HELPER="${TOOL_RUNNER_HELPER:-/usr/local/sbin/mvn-postgres-pitr-tool-runner}"
+PITR_BASEBACKUP_IMAGE="postgres:15.18-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f"
 BLUE_GREEN_HELPER="${BLUE_GREEN_HELPER:-/usr/local/libexec/mvn-pitr/deploy_backend_blue_green.sh}"
 BLUE_GREEN_SAFETY_HELPER="${API_BLUE_GREEN_SAFETY_HELPER:-/usr/local/libexec/mvn-pitr/deploy_backend_blue_green_safety.sh}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-/usr/local/libexec/mvn-pitr/safe_deploy_lock.py}"
@@ -76,6 +77,14 @@ require_command() {
 }
 require_executable() {
   [[ -x "$1" ]] || die "required helper is not executable: $1"
+}
+ensure_basebackup_image() {
+  require_command docker
+  log "prefetching pinned pg_basebackup image before maintenance"
+  docker pull --platform linux/amd64 "${PITR_BASEBACKUP_IMAGE}" >/dev/null ||
+    die "could not prefetch the pinned pg_basebackup image"
+  docker image inspect "${PITR_BASEBACKUP_IMAGE}" >/dev/null ||
+    die "pinned pg_basebackup image is unavailable after prefetch"
 }
 require_active_patroni_compose() {
   local db_container managed_configs runtime_policy target_config
@@ -289,6 +298,7 @@ preflight() {
   require_executable "${RESTORE_DRILL_HELPER}"
   require_executable "${RUNTIME_CHECK_HELPER}"
   require_executable "${TOOL_RUNNER_HELPER}"
+  ensure_basebackup_image
   print_archive_settings
   require_env_input_file
   log "validating PITR input env with dry-run configure helper"
