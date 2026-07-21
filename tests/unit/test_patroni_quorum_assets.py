@@ -52,6 +52,7 @@ def test_renderer_builds_synchronous_tls_patroni_config(patroni_env):
     expected_pg_hba = [
         "local all all trust",
         "host all all 127.0.0.1/32 scram-sha-256",
+        "host replication mvn_replicator 127.0.0.1/32 scram-sha-256",
         "host all all 172.16.0.0/12 scram-sha-256",
         "host replication mvn_replicator 172.16.0.0/12 scram-sha-256",
         "host replication mvn_replicator 10.77.0.0/24 scram-sha-256",
