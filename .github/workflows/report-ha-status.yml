@@ -33,7 +33,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup API SSH Key
+        if: ${{ (vars.API_DB_HA_MODE || 'physical') == 'patroni' }}
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/ha_status_key
+          chmod 600 ~/.ssh/ha_status_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Detect official Patroni maintenance
+        id: maintenance
+        if: ${{ (vars.API_DB_HA_MODE || 'physical') == 'patroni' }}
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          API_STANDBY_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
+          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+          API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
+        run: |
+          set -euo pipefail
+          export SSH_OPTS="-i ~/.ssh/ha_status_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20"
+          export API_NODE_SSH="${SSH_USER_API}@${SSH_HOST_API}"
+          export RESERVE_NODE_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
+          export API_NODE_PROJECT_DIR="${API_PROJECT_DIR}"
+          export RESERVE_NODE_PROJECT_DIR="${API_STANDBY_PROJECT_DIR}"
+          python3 scripts/ha/check_patroni_maintenance.py \
+            --github-output "${GITHUB_OUTPUT}" 2>&1 | tee ha-status-report.log
+
       - name: Run HA status report
+        if: steps.maintenance.outputs.active != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           HA_EXTERNAL_METADATA_SOURCE: env
@@ -65,7 +105,7 @@ jobs:
           if [ "${HA_STATUS_SKIP_LIVE}" = "true" ]; then
             args+=(--skip-live)
           fi
-          python3 scripts/ha/report_ha_status.py "${args[@]}" 2>&1 | tee ha-status-report.log
+          python3 scripts/ha/report_ha_status.py "${args[@]}" 2>&1 | tee -a ha-status-report.log
 
       - name: Write Summary
         if: always()
@@ -74,6 +114,7 @@ jobs:
             echo "## API HA Status Report"
             echo "- require_strict: ${HA_STATUS_REQUIRE_STRICT}"
             echo "- skip_live: ${HA_STATUS_SKIP_LIVE}"
+            echo "- official_maintenance: ${{ steps.maintenance.outputs.active || 'false' }}"
             echo "- primary_origin: ${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}"
             echo "- standby_origin: ${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}"
             echo "- log_artifact: ha-status-report-log-${{ github.run_id }}"

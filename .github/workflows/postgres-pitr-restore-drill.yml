@@ -93,6 +93,9 @@ jobs:
           unset SSH_KEY
           trap 'ssh_identity=' EXIT
           args=(--phase restore-drill)
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            args+=(--allow-maintenance-skip)
+          fi
           if [ -n "${PITR_RESTORE_BACKUP_ID}" ]; then
             args+=(--backup-id "${PITR_RESTORE_BACKUP_ID}")
           fi

@@ -44,7 +44,28 @@ jobs:
           ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
           ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
 
+      - name: Detect official Patroni maintenance
+        id: maintenance
+        if: ${{ (vars.API_DB_HA_MODE || 'physical') == 'patroni' }}
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          API_STANDBY_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
+          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
+        run: |
+          set -euo pipefail
+          export SSH_OPTS="-i ~/.ssh/postgres_replication_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+          export API_NODE_SSH="${SSH_USER_API}@${SSH_HOST_API}"
+          export RESERVE_NODE_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
+          export API_NODE_PROJECT_DIR="${API_NODE_PROJECT_DIR}"
+          export RESERVE_NODE_PROJECT_DIR="${API_STANDBY_PROJECT_DIR}"
+          python3 scripts/ha/check_patroni_maintenance.py \
+            --github-output "${GITHUB_OUTPUT}" 2>&1 | tee postgres-replication-check.log
+
       - name: Run PostgreSQL replication check
+        if: steps.maintenance.outputs.active != 'true'
         env:
           API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
           SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
@@ -74,12 +95,12 @@ jobs:
               export RESERVE_NODE_COMPOSE_FILE=docker-compose.patroni.yml
               export API_NODE_WG_IP="${EXPECTED_PRIMARY_WG_IP}"
               export RESERVE_NODE_WG_IP="${EXPECTED_STANDBY_WG_IP}"
-              python3 scripts/ha/check_patroni_production.py | tee postgres-replication-check.log
+              python3 scripts/ha/check_patroni_production.py | tee -a postgres-replication-check.log
               ;;
             physical)
               export PRIMARY_SSH="${SSH_USER_API}@${SSH_HOST_API}"
               export STANDBY_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
-              bash scripts/ha/check_postgres_replication.sh | tee postgres-replication-check.log
+              bash scripts/ha/check_postgres_replication.sh | tee -a postgres-replication-check.log
               ;;
             *)
               echo "::error::API_DB_HA_MODE must be physical or patroni"
@@ -99,6 +120,7 @@ jobs:
             echo "- standby_project_dir: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}"
             echo "- expected_slot: ${{ vars.POSTGRES_STANDBY_SLOT || 'zakup_standby' }}"
             echo "- max_replay_lag_bytes: ${{ github.event_name == 'workflow_dispatch' && inputs.max_replay_lag_bytes || vars.POSTGRES_REPLICATION_MAX_LAG_BYTES || '1048576' }}"
+            echo "- official_maintenance: ${{ steps.maintenance.outputs.active || 'false' }}"
             echo "- log_artifact: postgres-replication-check-log-${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
