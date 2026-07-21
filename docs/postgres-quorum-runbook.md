@@ -445,6 +445,23 @@ role-aware instead of treating the API VPS as a permanent primary:
 - both workflows retain the existing Telegram failure action and diagnostic
   artifacts.
 
+Scheduled HA checks recognize an official maintenance window only after
+`scripts/ha/check_patroni_maintenance.py` proves the marker independently on
+both hosts. Both markers must be root-owned regular `0600` files with one link,
+contain the same 32-character transaction id, be no older than two hours, and
+remain stable while read. Both role agents must still be active and every PITR
+timer must be inactive. A valid window is logged and reported as maintenance,
+not as a passing infrastructure check; the disruptive check itself is skipped.
+Missing markers on both nodes mean normal operation. A partial, mismatched,
+unsafe, future-dated, or stale marker fails closed and still sends the normal
+alert.
+
+This gate is applied to replication, active/passive invariants, HA readiness,
+VPS health, HA status rollups, and the strict PITR check. Scheduled restore
+drills may also skip a proven maintenance window. Manually dispatched restore
+drills never skip it silently: they fail with an explicit maintenance error so
+an operator cannot mistake a non-run drill for a recovery proof.
+
 The production checker requires all of these invariants at the same time:
 
 1. exactly one Patroni primary and one running replica;
