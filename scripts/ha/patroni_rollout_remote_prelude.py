@@ -49,7 +49,7 @@ JOURNAL_ACTIONS = {
     "abort", "apply-archive-command", "finalize", "prove-archive",
     "revert-archive-command", "rollback-node", "switchover", "update-node",
 }
-READ_ACTIONS = {"attest-archive-runtime", "attest-current-runtime", "attest-runtime-ownership", "attest-target-runtime", "check-legacy-dcs", "check-target-dcs", "preflight", "prove-etcd", "stage"}
+READ_ACTIONS = {"attest-archive-runtime", "attest-current-runtime", "attest-runtime-ownership", "attest-target-runtime", "check-baseline-dcs", "check-legacy-dcs", "check-target-dcs", "preflight", "prove-etcd", "stage"}
 COMPLETED = JOURNAL_ACTIONS | {"record:" + name for name in RECORDS}
 CLEAN_ENV = {
     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",

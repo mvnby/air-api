@@ -1,6 +1,21 @@
 """Runtime-ownership proof embedded into the Patroni rollout executor."""
 
 REMOTE_RUNTIME_PROOF = r'''
+def compose_args(project, compose):
+    return ["docker", "compose", "-f", compose]
+
+def unit_state(unit):
+    return run(["systemctl", "show", "--property=ActiveState", "--value", unit])
+
+def validate_units():
+    if unit_state("mvn-patroni-role-agent.service") != "active":
+        die("Patroni role agent must be active")
+    if run(["systemctl", "is-enabled", "mvn-patroni-role-agent.service"]) != "enabled":
+        die("Patroni role agent must be enabled")
+    for unit in UNITS_INACTIVE:
+        if unit_state(unit) != "inactive":
+            die("PITR unit must remain inactive: " + unit)
+
 def read_proc_file(path, maximum=131072):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     try:
@@ -189,9 +204,9 @@ def prove_final_generation(project, compose, compose_project, volume, payload, j
     attest_archive_runtime(project, compose, payload["target_image"], payload["helper_sha256"])
     attest_runtime_ownership(project, compose, final_role)
 
-def prove_aborted_generation(project, compose, compose_project, volume, payload):
+def prove_aborted_generation(project, compose, compose_project, volume, payload, journal):
     validate_compose(project, compose, compose_project, volume,
                      payload["current_image"], payload["compose_contract_sha256"], payload)
     runtime_attestation(project, compose, payload["current_image"])
-    check_legacy_dcs(project, compose, payload["legacy_command_sha256"])
+    check_baseline_dcs(project, compose, journal)
 '''

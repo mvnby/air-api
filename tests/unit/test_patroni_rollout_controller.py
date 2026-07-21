@@ -63,7 +63,10 @@ class FakeOperations:
         "revert-archive-command", "rollback-node", "switchover", "update-node",
     }
 
-    def __init__(self, *, switched=False, existing=False, baseline_primary="mvn-api"):
+    def __init__(
+        self, *, switched=False, existing=False, baseline_primary="mvn-api",
+        archive_command=LEGACY_ARCHIVE_COMMAND,
+    ):
         self.switched = switched
         self.baseline_primary = baseline_primary
         self.events = []
@@ -82,7 +85,8 @@ class FakeOperations:
         self.ambiguous_switch = False
         self.fail_discover = False
         self.lose_after_completion = []
-        self.archive_command = LEGACY_ARCHIVE_COMMAND
+        self.archive_command = archive_command
+        self.baseline_archive_command = archive_command
         self.prepared = {node.alias for node in PATRONI_NODES} if existing else set()
         standby = "zakup" if baseline_primary == "mvn-api" else "mvn-api"
         self.images = {node.alias: CURRENT for node in PATRONI_NODES}
@@ -111,10 +115,10 @@ class FakeOperations:
     def remote(self, *, action, node, extra=None, **_kwargs):
         self.events.append((action, node.alias, dict(extra or {})))
         if (
-            action == "check-legacy-dcs"
-            and self.archive_command != LEGACY_ARCHIVE_COMMAND
+            action == "check-baseline-dcs"
+            and self.archive_command != self.baseline_archive_command
         ):
-            raise RuntimeError("legacy DCS archive command drifted")
+            raise RuntimeError("baseline DCS archive command drifted")
         if (
             action == "check-target-dcs"
             and self.archive_command != EXPECTED_ARCHIVE_COMMAND
@@ -155,7 +159,7 @@ class FakeOperations:
         if action == "apply-archive-command":
             self.archive_command = EXPECTED_ARCHIVE_COMMAND
         if action == "revert-archive-command":
-            self.archive_command = LEGACY_ARCHIVE_COMMAND
+            self.archive_command = self.baseline_archive_command
         if action in self.JOURNAL_ACTIONS:
             self.statuses[node.alias]["operation"] = "idle"
             if action not in self.statuses[node.alias]["completed"]:
@@ -303,6 +307,28 @@ def test_rollout_orders_both_images_before_archive_command(tmp_path):
     assert result.timeline == 10
 
 
+def test_rollout_accepts_already_promoted_archive_command_baseline(tmp_path):
+    operations = FakeOperations(archive_command=EXPECTED_ARCHIVE_COMMAND)
+
+    result = _orchestrator(tmp_path, operations).run()
+
+    assert result.final_primary == "zakup"
+    assert operations.archive_command == EXPECTED_ARCHIVE_COMMAND
+    assert "check-baseline-dcs" in _mutation_names(operations.events)
+
+
+def test_target_archive_baseline_is_preserved_when_archive_proof_fails(tmp_path):
+    operations = FakeOperations(archive_command=EXPECTED_ARCHIVE_COMMAND)
+    operations.fail_action = "prove-archive"
+
+    with pytest.raises(
+        RuntimeError, match="journaled archive_command generation was restored"
+    ):
+        _orchestrator(tmp_path, operations).run()
+
+    assert operations.archive_command == EXPECTED_ARCHIVE_COMMAND
+
+
 def test_lost_switchover_response_is_discovered_and_rolls_forward(tmp_path):
     operations = FakeOperations()
     operations.ambiguous_switch = True
@@ -401,7 +427,7 @@ def test_archive_proof_failure_compensates_exact_legacy_command(tmp_path):
     operations = FakeOperations()
     operations.fail_action = "prove-archive"
 
-    with pytest.raises(RuntimeError, match="legacy archive_command was restored"):
+    with pytest.raises(RuntimeError, match="journaled archive_command generation was restored"):
         _orchestrator(tmp_path, operations).run()
 
     names = _mutation_names(operations.events)
@@ -412,7 +438,7 @@ def test_archive_proof_failure_compensates_exact_legacy_command(tmp_path):
 def test_compensated_archive_proof_converges_on_one_resume(tmp_path):
     operations = FakeOperations()
     operations.fail_action = "prove-archive"
-    with pytest.raises(RuntimeError, match="legacy archive_command was restored"):
+    with pytest.raises(RuntimeError, match="journaled archive_command generation was restored"):
         _orchestrator(tmp_path, operations).run()
 
     operations.fail_action = None

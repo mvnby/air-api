@@ -141,15 +141,17 @@ def load_journal(path, node, txid, payload):
     }
     if (not isinstance(data, dict) or data.get("version") != 1
             or any(data.get(key) != value for key, value in expected.items())
+            or not {"baseline_archive_command", "dcs_baseline",
+                    "dcs_baseline_sha256"}.issubset(data)
             or not isinstance(data.get("completed"), list)
             or not isinstance(data.get("operation"), str)
             or len(data["completed"]) != len(set(data["completed"]))
             or any(item not in COMPLETED for item in data["completed"])
             or data["operation"] not in ({"idle"} | COMPLETED)):
         die("rollout journal contract mismatch")
-    allowed = set(expected) | {"baseline_primary", "baseline_system_identifier",
-        "baseline_timeline", "completed", "dcs_baseline", "dcs_baseline_sha256",
-        "last_error", "legacy_archive_command", "operation", "version"}
+    allowed = set(expected) | {"baseline_archive_command", "baseline_primary",
+        "baseline_system_identifier", "baseline_timeline", "completed", "dcs_baseline",
+        "dcs_baseline_sha256", "last_error", "legacy_archive_command", "operation", "version"}
     if set(data) - allowed or raw != canonical(data):
         die("rollout journal is not canonical or has extra fields")
     return data
