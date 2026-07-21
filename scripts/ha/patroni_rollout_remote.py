@@ -49,6 +49,7 @@ ACTIONS = {
     "attest-archive-runtime",
     "attest-current-runtime",
     "attest-runtime-ownership",
+    "check-baseline-dcs",
     "check-legacy-dcs",
     "check-target-dcs",
     "finalize",

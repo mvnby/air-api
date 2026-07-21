@@ -465,7 +465,7 @@ class _Orchestrator:
                         try:
                             for node in PATRONI_NODES:
                                 self._remote("attest-current-runtime", node)
-                            self._remote("check-legacy-dcs", current.primary)
+                            self._remote("check-baseline-dcs", current.primary)
                             for node in PATRONI_NODES:
                                 self._remote("abort", node)
                         except BaseException as mixed_error:
@@ -491,7 +491,7 @@ class _Orchestrator:
                     system_identifier=original.system_identifier,
                     timeline=original.timeline,
                 )
-                self._remote("check-legacy-dcs", current.primary)
+                self._remote("check-baseline-dcs", current.primary)
                 if not self._has_record(statuses, "standby-updated"):
                     self.db_mutation_attempted = True
                 self._remote(
@@ -590,8 +590,8 @@ class _Orchestrator:
                             f"reversion could not be proved: {proof_error}; {compensation_error}"
                         ) from proof_error
                     raise RuntimeError(
-                        "archive helper proof failed; exact legacy archive_command was "
-                        f"restored and the transaction remains fenced: {proof_error}"
+                        "archive helper proof failed; exact journaled archive_command "
+                        f"generation was restored and the transaction remains fenced: {proof_error}"
                     ) from proof_error
                 statuses = self._ensure_record(self._statuses(), "archive-proved")
             final = self._wait_topology(

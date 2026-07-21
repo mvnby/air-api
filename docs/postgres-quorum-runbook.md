@@ -355,10 +355,13 @@ variable while Patroni is still managing either database node.
 
 Use `.github/workflows/rollout-patroni-image.yml` only for the reviewed
 two-node transition from the exact current Patroni digest to one exact
-published target digest. The supported starting DCS generation is deliberately
-narrow: `archive_mode=on`, `archive_timeout=300`, and the compiled legacy local
-copy `archive_command`. This controller does not authorize an `off -> on` PITR
-migration or any other DCS edit.
+published target digest. The supported starting DCS generations are deliberately
+narrow: `archive_mode=on`, `archive_timeout=300`, and either the compiled legacy
+local-copy `archive_command` or the already-promoted immutable helper command.
+The controller journals the complete starting DCS document on both nodes,
+rejects every other command, and allows no drift outside the reviewed
+archive-command transition. It does not authorize an `off -> on` PITR migration
+or any other DCS edit.
 
 The approved workflow requires the tested `deploy_sha`, both immutable image
 digests, the exact successful `Publish Patroni Image` `publish_run_id` and

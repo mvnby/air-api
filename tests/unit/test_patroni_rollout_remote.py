@@ -353,12 +353,32 @@ def test_target_dcs_rejects_any_extra_drift_from_journaled_baseline():
     target["postgresql"]["parameters"]["archive_command"] = namespace["EXPECTED_COMMAND"]
     target["loop_wait"] = 11
     journal = {
+        "baseline_archive_command": namespace["LEGACY_COMMAND"],
         "dcs_baseline": baseline,
         "dcs_baseline_sha256": namespace["sha"](namespace["canonical"](baseline)),
     }
     namespace["yaml_config"] = lambda *_args: target
     with pytest.raises(RuntimeError, match="drifted from the journaled baseline"):
         namespace["check_target_dcs"]("/opt/air-api", "compose.yml", journal)
+
+
+def test_target_dcs_accepts_unchanged_target_baseline():
+    namespace = _remote_namespace()
+    baseline = {
+        "loop_wait": 10,
+        "postgresql": {"parameters": {
+            "archive_mode": "on", "archive_timeout": "300",
+            "archive_command": namespace["EXPECTED_COMMAND"],
+        }},
+    }
+    journal = {
+        "baseline_archive_command": namespace["EXPECTED_COMMAND"],
+        "dcs_baseline": baseline,
+        "dcs_baseline_sha256": namespace["sha"](namespace["canonical"](baseline)),
+    }
+    namespace["yaml_config"] = lambda *_args: copy.deepcopy(baseline)
+
+    namespace["check_target_dcs"]("/opt/air-api", "compose.yml", journal)
 
 
 @pytest.mark.parametrize("operation", ["apply", "revert"])
@@ -372,7 +392,7 @@ def test_dcs_retry_rejects_extra_drift_after_a_committed_edit(operation):
     live["postgresql"]["parameters"]["archive_command"] = namespace["EXPECTED_COMMAND"]
     live["loop_wait"] = 11
     journal = {
-        "legacy_archive_command": namespace["LEGACY_COMMAND"],
+        "baseline_archive_command": namespace["LEGACY_COMMAND"],
         "dcs_baseline": baseline,
         "dcs_baseline_sha256": namespace["sha"](namespace["canonical"](baseline)),
     }

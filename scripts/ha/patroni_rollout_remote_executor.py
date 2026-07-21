@@ -13,21 +13,6 @@ except ModuleNotFoundError:
 
 REMOTE_EXECUTOR = REMOTE_PRELUDE + REMOTE_CONTRACT + REMOTE_RUNTIME_PROOF + r'''
 
-def compose_args(project, compose):
-    return ["docker", "compose", "-f", compose]
-
-def unit_state(unit):
-    return run(["systemctl", "show", "--property=ActiveState", "--value", unit])
-
-def validate_units():
-    if unit_state("mvn-patroni-role-agent.service") != "active":
-        die("Patroni role agent must be active")
-    if run(["systemctl", "is-enabled", "mvn-patroni-role-agent.service"]) != "enabled":
-        die("Patroni role agent must be enabled")
-    for unit in UNITS_INACTIVE:
-        if unit_state(unit) != "inactive":
-            die("PITR unit must remain inactive: " + unit)
-
 def validate_role_assets(payload):
     assets = (("/usr/local/sbin/mvn-patroni-role-agent", 0o755, payload["role_agent_sha256"]),
         ("/usr/local/sbin/patroni_local_identity.py", 0o644, payload["role_identity_sha256"]),
@@ -238,13 +223,17 @@ def check_legacy_dcs(project, compose, legacy_digest):
     if values["archive_command"] != LEGACY_COMMAND or sha(values["archive_command"]) != legacy_digest:
         die("legacy DCS archive command digest drifted")
 
-def check_supported_dcs(project, compose, legacy_digest):
-    values = archive_values(yaml_config(project, compose))
+def supported_archive_command(config, legacy_digest):
+    values = archive_values(config)
     if values["archive_mode"] != "on" or values["archive_timeout"] != "300":
         die("DCS archive mode/timeout drifted")
     command = values["archive_command"]
     if command != EXPECTED_COMMAND and sha(command) != legacy_digest:
         die("DCS archive command is outside the approved generations")
+    return command
+
+def check_supported_dcs(project, compose, legacy_digest):
+    return supported_archive_command(yaml_config(project, compose), legacy_digest)
 
 def diff_paths(before, after, prefix=()):
     if isinstance(before, dict) and isinstance(after, dict):
@@ -260,11 +249,18 @@ def journal_dcs_baseline(journal):
     if (not isinstance(baseline, dict) or not isinstance(digest, str)
             or not DIGEST_RE.fullmatch(digest) or sha(canonical(baseline)) != digest):
         die("journal has no canonical DCS baseline")
+    command = journal.get("baseline_archive_command")
+    if command not in {LEGACY_COMMAND, EXPECTED_COMMAND}:
+        die("journal DCS baseline command is outside the approved generations")
     if archive_values(baseline) != {
             "archive_mode": "on", "archive_timeout": "300",
-            "archive_command": LEGACY_COMMAND}:
-        die("journal DCS baseline is not the reviewed legacy generation")
+            "archive_command": command}:
+        die("journal DCS baseline differs from the reviewed generation")
     return baseline
+
+def check_baseline_dcs(project, compose, journal):
+    if yaml_config(project, compose) != journal_dcs_baseline(journal):
+        die("DCS generation drifted from the journaled baseline")
 
 def check_target_dcs(project, compose, journal=None):
     current = yaml_config(project, compose)
@@ -272,30 +268,29 @@ def check_target_dcs(project, compose, journal=None):
     if values != {"archive_mode": "on", "archive_timeout": "300",
                   "archive_command": EXPECTED_COMMAND}:
         die("DCS archive settings do not match the reviewed target")
-    if journal is not None and diff_paths(journal_dcs_baseline(journal), current) != [
-            ("postgresql", "parameters", "archive_command")]:
-        die("target DCS generation drifted from the journaled baseline")
+    if journal is not None:
+        baseline = journal_dcs_baseline(journal)
+        expected_diff = ([] if journal["baseline_archive_command"] == EXPECTED_COMMAND
+                         else [("postgresql", "parameters", "archive_command")])
+        if diff_paths(baseline, current) != expected_diff:
+            die("target DCS generation drifted from the journaled baseline")
 
 def apply_archive_command(project, compose, legacy_digest, journal_path, journal):
     identifier = container_id(project, compose)
     before = yaml_config(project, compose)
     values = archive_values(before)
-    if "dcs_baseline" not in journal:
-        if values != {"archive_mode": "on", "archive_timeout": "300",
-                      "archive_command": LEGACY_COMMAND}:
-            die("cannot establish the exact legacy DCS baseline")
-        journal["legacy_archive_command"] = values["archive_command"]
-        journal["dcs_baseline"] = before
-        journal["dcs_baseline_sha256"] = sha(canonical(before))
-        save_journal(journal_path, journal)
     baseline = journal_dcs_baseline(journal)
+    baseline_command = journal["baseline_archive_command"]
     if values["archive_command"] == EXPECTED_COMMAND:
+        expected_diff = ([] if baseline_command == EXPECTED_COMMAND
+                         else [("postgresql", "parameters", "archive_command")])
         if (values != {"archive_mode": "on", "archive_timeout": "300",
                        "archive_command": EXPECTED_COMMAND}
-                or diff_paths(baseline, before) != [
-                    ("postgresql", "parameters", "archive_command")]):
+                or diff_paths(baseline, before) != expected_diff):
             die("target DCS generation drifted from the journaled baseline")
         return
+    if baseline_command != LEGACY_COMMAND:
+        die("target DCS baseline cannot transition through the legacy generation")
     if before != baseline:
         die("legacy DCS generation drifted from the journaled baseline")
     check_legacy_dcs(project, compose, legacy_digest)
@@ -310,17 +305,22 @@ def apply_archive_command(project, compose, legacy_digest, journal_path, journal
         die("DCS archive settings do not match the reviewed target")
 
 def revert_archive_command(project, compose, legacy_digest, journal):
-    legacy = journal.get("legacy_archive_command")
-    if legacy != LEGACY_COMMAND or sha(legacy) != legacy_digest:
-        die("journal has no attested legacy archive command")
+    original = journal.get("baseline_archive_command")
+    if original not in {LEGACY_COMMAND, EXPECTED_COMMAND}:
+        die("journal has no attested baseline archive command")
+    if original == LEGACY_COMMAND and sha(original) != legacy_digest:
+        die("journal legacy archive command digest drifted")
     identifier = container_id(project, compose)
     baseline = journal_dcs_baseline(journal)
     before = yaml_config(project, compose)
     values = archive_values(before)
-    if values["archive_command"] == legacy:
+    if values["archive_command"] == original:
         if before != baseline:
             die("compensated DCS generation drifted from the journaled baseline")
-        check_legacy_dcs(project, compose, legacy_digest)
+        if original == LEGACY_COMMAND:
+            check_legacy_dcs(project, compose, legacy_digest)
+        else:
+            check_target_dcs(project, compose, journal)
         return
     if (values != {"archive_mode": "on", "archive_timeout": "300",
                    "archive_command": EXPECTED_COMMAND}
@@ -328,11 +328,14 @@ def revert_archive_command(project, compose, legacy_digest, journal):
                 ("postgresql", "parameters", "archive_command")]):
         die("cannot compensate an unreviewed DCS generation")
     run(["docker", "exec", identifier, "patronictl", "-c", "/etc/patroni/patroni.yml",
-         "edit-config", "mvn-postgres", "--pg", "archive_command=" + legacy, "--force"])
+         "edit-config", "mvn-postgres", "--pg", "archive_command=" + original, "--force"])
     after = yaml_config(project, compose)
     if after != baseline:
         die("compensating DCS mutation did not restore the exact baseline")
-    check_legacy_dcs(project, compose, legacy_digest)
+    if original == LEGACY_COMMAND:
+        check_legacy_dcs(project, compose, legacy_digest)
+    else:
+        check_target_dcs(project, compose, journal)
 
 def sql(project, compose, statement):
     command = compose_args(project, compose) + ["exec", "-T", "db", "sh", "-lc",
@@ -480,7 +483,11 @@ def main():
                 if not payload["resume"]:
                     die("existing transaction requires resume=true")
             except FileNotFoundError:
+                baseline_dcs = yaml_config(project, compose)
+                baseline_archive_command = supported_archive_command(
+                    baseline_dcs, payload["legacy_command_sha256"])
                 journal = {"completed": [], "current_image": payload["current_image"],
+                    "baseline_archive_command": baseline_archive_command,
                     "baseline_primary": baseline_primary,
                     "baseline_system_identifier": baseline_system,
                     "baseline_timeline": int(baseline_timeline),
@@ -498,7 +505,9 @@ def main():
                     "role_identity_sha256": payload["role_identity_sha256"],
                     "role_unit_sha256": payload["role_unit_sha256"],
                     "node": node, "operation": "idle", "target_image": payload["target_image"],
-                    "transaction_id": txid, "version": 1}
+                    "transaction_id": txid, "version": 1,
+                    "dcs_baseline": baseline_dcs,
+                    "dcs_baseline_sha256": sha(canonical(baseline_dcs))}
                 save_journal(journal_path, journal)
             marker(marker_path, txid, create=True)
             print("prepared")
@@ -515,7 +524,8 @@ def main():
                     prove_final_generation(project, compose, compose_project, volume,
                                            payload, journal, node)
                 else:
-                    prove_aborted_generation(project, compose, compose_project, volume, payload)
+                    prove_aborted_generation(
+                        project, compose, compose_project, volume, payload, journal)
                 remove_marker_if_owned(marker_path, txid)
                 print(action + "=already-passed")
                 return
@@ -613,6 +623,8 @@ def main():
             attest_archive_runtime(project, compose, payload["target_image"], payload["helper_sha256"])
         elif action == "prove-etcd":
             prove_etcd(payload)
+        elif action == "check-baseline-dcs":
+            check_baseline_dcs(project, compose, journal)
         elif action == "check-legacy-dcs":
             check_legacy_dcs(project, compose, payload["legacy_command_sha256"])
         elif action == "check-target-dcs":
@@ -635,7 +647,7 @@ def main():
             require_completed(journal, "record:standby-updated")
             if local_patroni_role() != "primary": die("switchover source is not primary")
             prove_etcd(payload)
-            check_legacy_dcs(project, compose, payload["legacy_command_sha256"])
+            check_baseline_dcs(project, compose, journal)
             identifier = container_id(project, compose)
             run(["docker", "exec", identifier, "patronictl", "-c", "/etc/patroni/patroni.yml",
                  "switchover", "mvn-postgres", "--primary", expected_primary,
@@ -659,7 +671,8 @@ def main():
             print(action + "=passed")
             return
         elif action == "abort":
-            prove_aborted_generation(project, compose, compose_project, volume, payload)
+            prove_aborted_generation(
+                project, compose, compose_project, volume, payload, journal)
             complete(journal_path, journal, action)
             remove_marker_if_owned(marker_path, txid)
             print(action + "=passed")
