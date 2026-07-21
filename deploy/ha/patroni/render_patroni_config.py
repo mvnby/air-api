@@ -119,6 +119,9 @@ def render_config() -> dict[str, Any]:
     reviewed_pg_hba = [
         "local all all trust",
         "host all all 127.0.0.1/32 scram-sha-256",
+        # Patroni checks a demoted node's timeline through its local TCP
+        # replication connection before allowing it to rejoin or fail over.
+        f"host replication {replication_user} 127.0.0.1/32 scram-sha-256",
         "host all all 172.16.0.0/12 scram-sha-256",
         f"host replication {replication_user} 172.16.0.0/12 scram-sha-256",
         f"host replication {replication_user} 10.77.0.0/24 scram-sha-256",
