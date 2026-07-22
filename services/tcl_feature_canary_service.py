@@ -311,9 +311,10 @@ class TclFeatureCanaryService:
     def _normalized_specs(specs: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
         probe = dict(specs)
         if "wifi_state" in state:
-            probe["wifi_state"] = state["wifi_state"]
-            probe.pop("wifi_ready", None)
-            probe.pop("wifi_builtin", None)
+            wifi_state = state["wifi_state"]
+            probe["wifi_state"] = wifi_state
+            probe["wifi_ready"] = wifi_state in {"builtin", "ready"}
+            probe["wifi_builtin"] = wifi_state == "builtin"
         if "min_heat" in state:
             probe["temp_range_heat"] = f"от {state['min_heat']} до +30 °C"
         normalized = normalize_specs(probe, keep_units=True)

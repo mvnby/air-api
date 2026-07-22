@@ -111,7 +111,12 @@ async def _seed(db):
             brand_id=brand.id,
             series_id=series["elite-inverter-c-paneliu-xa71n"].id,
             is_inverter=True,
-            specs={"compressor_type_norm": "inverter", "wifi_ready": False, "__filter_min_heat": -10},
+            specs={
+                "compressor_type_norm": "inverter",
+                "wifi_ready": False,
+                "wifi_module": True,
+                "__filter_min_heat": -10,
+            },
         ),
         Product(
             title="TCL Elite TAC-09CHSA/XAB1N",
