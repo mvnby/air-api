@@ -34,7 +34,6 @@
       "name": "Встроенный Wi-Fi",
       "category_slug": "control",
       "scope_type": "derived",
-      "brand_slug": "tcl",
       "short_description": "Встроенный модуль позволяет управлять кондиционером через совместимое приложение.",
       "full_description": "Встроенный Wi-Fi даёт доступ к удалённому управлению режимами и настройками кондиционера без покупки отдельного модуля.",
       "aliases": ["Built-in Wi-Fi", "IoT Wi-Fi-управление", "Встроенный Wi-Fi-модуль"],
@@ -47,7 +46,6 @@
       "name": "Wi-Fi Ready",
       "category_slug": "control",
       "scope_type": "derived",
-      "brand_slug": "tcl",
       "short_description": "Удалённое управление доступно после установки совместимого Wi-Fi-модуля.",
       "full_description": "Кондиционер подготовлен для подключения Wi-Fi, но модуль приобретается или устанавливается отдельно.",
       "aliases": ["Optional Wi-Fi", "Опциональный Wi-Fi", "Wi-Fi-модуль (опция)"],
@@ -58,8 +56,10 @@
     {
       "slug": "heating-minus-20",
       "name": "Обогрев до −20 °C",
-      "category_slug": "performance",
+      "category_slug": "heating",
       "scope_type": "derived",
+      "is_active": false,
+      "replaced_by": "low-temperature-heating",
       "short_description": "Режим обогрева рассчитан на работу при наружной температуре до −20 °C.",
       "full_description": "Модель может использоваться для обогрева в пределах указанного производителем диапазона наружных температур, включая температуру до −20 °C.",
       "aliases": ["Heating to -20 C", "Обогрев при −20 °C"],
@@ -70,14 +70,28 @@
     {
       "slug": "heating-minus-25",
       "name": "Обогрев до −25 °C",
-      "category_slug": "performance",
+      "category_slug": "heating",
       "scope_type": "derived",
+      "is_active": false,
+      "replaced_by": "low-temperature-heating",
       "short_description": "Режим обогрева рассчитан на работу при наружной температуре до −25 °C.",
       "full_description": "Модель может использоваться для обогрева в пределах указанного производителем диапазона наружных температур, включая температуру до −25 °C.",
       "aliases": ["Heating to -25 C", "Обогрев при −25 °C"],
       "source_notes": "TCL 2026: BreezeIN 2.0, рабочий диапазон обогрева до −25 °C (PDF p.15, p.32).",
       "sort_order": 50,
       "rules": [{"spec_key": "__filter_min_heat", "operator": "eq", "target_value": -25}]
+    },
+    {
+      "slug": "low-temperature-heating",
+      "name": "Обогрев при низкой температуре",
+      "category_slug": "heating",
+      "scope_type": "derived",
+      "short_description": "Режим обогрева рассчитан на работу при отрицательной наружной температуре.",
+      "full_description": "Модель может использоваться для обогрева при низкой наружной температуре в пределах диапазона, указанного производителем.",
+      "aliases": ["Зимний обогрев", "Low Temperature Heating", "Nordic"],
+      "source_notes": "TCL 2026: рабочие диапазоны обогрева моделей (PDF p.7, p.15, p.32). Конкретная температура выводится из характеристики модели.",
+      "sort_order": 40,
+      "rules": [{"spec_key": "__filter_min_heat", "operator": "lte", "target_value": -15}]
     },
     {
       "slug": "freshin-plus",
@@ -133,8 +147,7 @@
       "reuse_required": true,
       "name": "Биполярный ионизатор",
       "category_slug": "air-quality",
-      "scope_type": "brand",
-      "brand_slug": "tcl",
+      "scope_type": "universal",
       "short_description": "Ионизатор дополняет систему обработки воздуха во время работы кондиционера.",
       "full_description": "Биполярный ионизатор создаёт положительно и отрицательно заряженные ионы и используется как дополнительная ступень обработки проходящего воздуха.",
       "aliases": ["Bipolar Ionizer", "Биполярный ионизатор"],
@@ -147,8 +160,7 @@
       "reuse_required": true,
       "name": "УФ-лампа (UVC)",
       "category_slug": "air-quality",
-      "scope_type": "brand",
-      "brand_slug": "tcl",
+      "scope_type": "universal",
       "short_description": "Встроенная UVC-лампа дополняет обработку внутренних поверхностей блока.",
       "full_description": "UVC-лампа используется внутри кондиционера как дополнительный элемент обработки внутренних поверхностей воздушного тракта.",
       "aliases": ["UVC", "УФ-лампа", "BIG CARE"],
@@ -162,6 +174,8 @@
       "category_slug": "efficiency",
       "scope_type": "brand",
       "brand_slug": "tcl",
+      "is_active": false,
+      "replaced_by": "inverter-control",
       "short_description": "Инверторная система регулирует производительность для более стабильного поддержания температуры.",
       "full_description": "TCL Smart Inverter плавно изменяет производительность компрессора, помогая быстрее выходить на заданный режим и избегать лишних пусков.",
       "aliases": ["Smart Inverter", "TCL Smart Inverter"],
@@ -182,11 +196,17 @@
     }
   ],
   "series_links": {
-    "freshin3-0": ["freshin-plus", "quadripuri", "air-quality-indicator", "smart-inverter-tcl"],
-    "breeze-in-2-0-a": ["gentle-breeze", "smart-inverter-tcl", "bipoliarnyi-ionizator", "uf-sterilizatsiia", "vstroennyi-wi-fi"],
-    "elite-inverter-c-paneliu-xa71n": ["smart-inverter-tcl"],
+    "freshin3-0": ["freshin-plus", "quadripuri", "air-quality-indicator"],
+    "breeze-in-2-0-a": ["gentle-breeze", "bipoliarnyi-ionizator", "uf-sterilizatsiia", "vstroennyi-wi-fi"],
+    "elite-inverter-c-paneliu-xa71n": [],
     "elite-on": ["eight-airflow-modes"]
   },
+  "series_links_to_remove": {
+    "freshin3-0": ["smart-inverter-tcl"],
+    "breeze-in-2-0-a": ["smart-inverter-tcl"],
+    "elite-inverter-c-paneliu-xa71n": ["smart-inverter-tcl"]
+  },
+  "product_links_to_remove": ["heating-minus-20", "heating-minus-25"],
   "product_states": [
     {"series_slug": "freshin3-0", "model_marker": "/FCI", "wifi_state": "builtin"},
     {"series_slug": "breeze-in-2-0-a", "model_marker": "/UG11V3AH", "wifi_state": "builtin"},
@@ -197,7 +217,6 @@
     {"feature_slug": "inverter-control", "series_slugs": ["freshin3-0", "breeze-in-2-0-a", "elite-inverter-c-paneliu-xa71n"]},
     {"feature_slug": "vstroennyi-wi-fi", "series_slugs": ["freshin3-0", "elite-inverter-c-paneliu-xa71n"], "wifi_state": "builtin"},
     {"feature_slug": "wifi-ready", "series_slugs": ["elite-inverter-c-paneliu-xa71n"], "wifi_state": "ready"},
-    {"feature_slug": "heating-minus-20", "series_slugs": ["freshin3-0"]},
-    {"feature_slug": "heating-minus-25", "series_slugs": ["breeze-in-2-0-a"]}
+    {"feature_slug": "low-temperature-heating", "series_slugs": ["freshin3-0", "breeze-in-2-0-a"]}
   ]
 }
