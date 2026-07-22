@@ -38,7 +38,7 @@ def test_ha_status_report_workflow_runs_scheduled_operator_rollup():
     assert "scripts/ha/report_ha_status.py" in run
     assert "--require-strict" in run
     assert "--skip-live" in run
-    assert "tee ha-status-report.log" in run
+    assert "tee -a ha-status-report.log" in run
 
     artifact_step = _step(workflow, "Upload HA status report log")
     assert artifact_step["uses"] == "actions/upload-artifact@v7"

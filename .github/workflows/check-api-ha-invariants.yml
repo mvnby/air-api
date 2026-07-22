@@ -30,7 +30,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup API SSH Key
+        if: ${{ (vars.API_DB_HA_MODE || 'physical') == 'patroni' }}
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_HOST_API}" ] || [ -z "${SSH_USER_API}" ] || [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing one of required secrets: SSH_HOST_API, SSH_USER_API, SSH_KEY"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/api_ha_invariant_key
+          chmod 600 ~/.ssh/api_ha_invariant_key
+          ssh-keyscan -T 10 -H "${SSH_HOST_API}" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H "${API_STANDBY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Detect official Patroni maintenance
+        id: maintenance
+        if: ${{ (vars.API_DB_HA_MODE || 'physical') == 'patroni' }}
+        env:
+          SSH_HOST_API: ${{ secrets.SSH_HOST_API }}
+          SSH_USER_API: ${{ secrets.SSH_USER_API }}
+          API_STANDBY_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          API_STANDBY_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
+          API_PROJECT_DIR: ${{ vars.API_PROJECT_DIR || '/opt/air-api' }}
+          API_STANDBY_PROJECT_DIR: ${{ vars.API_STANDBY_PROJECT_DIR || '/opt/mvn-reserve' }}
+        run: |
+          set -euo pipefail
+          export SSH_OPTS="-i ~/.ssh/api_ha_invariant_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20"
+          export API_NODE_SSH="${SSH_USER_API}@${SSH_HOST_API}"
+          export RESERVE_NODE_SSH="${API_STANDBY_USER}@${API_STANDBY_HOST}"
+          export API_NODE_PROJECT_DIR="${API_PROJECT_DIR}"
+          export RESERVE_NODE_PROJECT_DIR="${API_STANDBY_PROJECT_DIR}"
+          python3 scripts/ha/check_patroni_maintenance.py \
+            --github-output "${GITHUB_OUTPUT}" 2>&1 | tee api-ha-invariant.log
+
       - name: Run active-passive invariant check
+        if: steps.maintenance.outputs.active != 'true'
         env:
           API_HOST: api.mvn.by
           PUBLIC_BASE_URL: https://api.mvn.by
@@ -40,7 +80,7 @@ jobs:
           STANDBY_ROLE: standby
           DISCOVER_PRIMARY_FROM_READY: ${{ vars.API_DB_HA_MODE == 'patroni' && 'true' || 'false' }}
           CHECK_PUBLIC_READY: "false"
-        run: bash scripts/ha/check_active_passive.sh | tee api-ha-invariant.log
+        run: bash scripts/ha/check_active_passive.sh | tee -a api-ha-invariant.log
 
       - name: Upload HA invariant log
         if: always()

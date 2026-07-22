@@ -47,9 +47,12 @@ jobs:
           ssh_identity="${SSH_KEY}"
           unset SSH_KEY
           trap 'ssh_identity=' EXIT
+          args=(--phase logical-restore-drill)
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            args+=(--allow-maintenance-skip)
+          fi
           printf '%s\n' "${ssh_identity}" \
-            | python3 -I scripts/ha/run_postgres_pitr_workflow.py \
-                --phase logical-restore-drill 2>&1 \
+            | python3 -I scripts/ha/run_postgres_pitr_workflow.py "${args[@]}" 2>&1 \
             | tee api-restore-drill.log
 
       - name: Upload restore drill log

@@ -1,5 +1,6 @@
 import io
 import subprocess
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -13,6 +14,21 @@ IDENTITY = b"""-----BEGIN OPENSSH PRIVATE KEY-----
 dGVzdC1vbmx5
 -----END OPENSSH PRIVATE KEY-----
 """
+ABSENT_MARKER = '{"status":"absent"}\n'
+
+
+def _is_maintenance_probe(args) -> bool:
+    return bool(args) and args[-1] == "exec /usr/bin/python3 -I -"
+
+
+def _active_marker_payload(transaction_id: str = "a" * 32) -> str:
+    return (
+        f'{{"mtime_ns":{time.time_ns()},"role_agent_state":"active",'
+        '"status":"active","timer_states":{'
+        '"mvn-postgres-basebackup.timer":"inactive",'
+        '"mvn-postgres-wal-upload.timer":"inactive"},'
+        f'"transaction_id":"{transaction_id}"}}\n'
+    )
 
 
 def _topology(*, primary_index: int = 0, timeline: int = 9) -> ClusterTopology:
@@ -91,6 +107,9 @@ def test_execute_uses_pinned_alias_proves_topology_twice_and_cleans_context(
 
     def runner(args, stdin=None):
         commands.append((list(args), stdin))
+        if _is_maintenance_probe(args):
+            assert stdin == workflow_runner.REMOTE_PROBE
+            return subprocess.CompletedProcess(list(args), 0, ABSENT_MARKER, "")
         return subprocess.CompletedProcess(list(args), 0, "guarded proof passed\n", "")
 
     monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
@@ -108,8 +127,8 @@ def test_execute_uses_pinned_alias_proves_topology_twice_and_cleans_context(
     )
 
     assert len(proofs) == 2
-    assert len(commands) == 1
-    args, stdin = commands[0]
+    assert len(commands) == 3
+    args, stdin = commands[-1]
     assert stdin is None
     assert args[-2] == "mvn-api"
     assert "/usr/local/sbin/mvn-postgres-pitr-manual-runner" in args[-1]
@@ -134,13 +153,18 @@ def test_execute_fails_if_topology_changes_and_still_cleans_context(
     monkeypatch.setattr(workflow_runner.secrets, "token_hex", lambda _: "d" * 32)
     monkeypatch.setattr(workflow_runner, "_expected_release_sha256", lambda _: "f" * 64)
 
+    def runner(args, stdin=None):
+        if _is_maintenance_probe(args):
+            return subprocess.CompletedProcess(args, 0, ABSENT_MARKER, "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
     with pytest.raises(workflow_runner.WorkflowError, match="topology changed"):
         workflow_runner.execute(
             phase="logical-restore-drill",
             backup_id="",
             target_time="",
             identity_stream=io.BytesIO(IDENTITY),
-            runner=lambda args, stdin=None: subprocess.CompletedProcess(args, 0, "", ""),
+            runner=runner,
         )
 
     assert not list(tmp_path.iterdir())
@@ -161,18 +185,78 @@ def test_execute_reproves_topology_after_a_remote_failure(tmp_path, monkeypatch)
     monkeypatch.setattr(workflow_runner.secrets, "token_hex", lambda _: "e" * 32)
     monkeypatch.setattr(workflow_runner, "_expected_release_sha256", lambda _: "f" * 64)
 
+    def runner(args, stdin=None):
+        if _is_maintenance_probe(args):
+            return subprocess.CompletedProcess(args, 0, ABSENT_MARKER, "")
+        return subprocess.CompletedProcess(args, 75, "", "operation lock busy\n")
+
     with pytest.raises(workflow_runner.WorkflowError, match="status 75"):
         workflow_runner.execute(
             phase="verify",
             backup_id="",
             target_time="",
             identity_stream=io.BytesIO(IDENTITY),
-            runner=lambda args, stdin=None: subprocess.CompletedProcess(
-                args, 75, "", "operation lock busy\n"
-            ),
+            runner=runner,
         )
 
     assert proof_count == 2
+    assert not list(tmp_path.iterdir())
+
+
+def test_execute_skips_verify_during_proven_two_node_maintenance(tmp_path, monkeypatch):
+    transaction_id = "a" * 32
+    active = _active_marker_payload(transaction_id)
+    commands = []
+
+    def runner(args, stdin=None):
+        commands.append(list(args))
+        return subprocess.CompletedProcess(args, 0, active, "")
+
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.setattr(workflow_runner, "validate_effective_config", lambda *_: None)
+
+    workflow_runner.execute(
+        phase="verify",
+        backup_id="",
+        target_time="",
+        identity_stream=io.BytesIO(IDENTITY),
+        runner=runner,
+    )
+
+    assert len(commands) == 2
+    assert all(_is_maintenance_probe(command) for command in commands)
+    assert not list(tmp_path.iterdir())
+
+
+def test_manual_restore_drill_fails_but_scheduled_drill_skips_during_maintenance(
+    tmp_path, monkeypatch
+):
+    active = _active_marker_payload()
+
+    def runner(args, stdin=None):
+        return subprocess.CompletedProcess(args, 0, active, "")
+
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.setattr(workflow_runner, "validate_effective_config", lambda *_: None)
+
+    with pytest.raises(workflow_runner.WorkflowError, match="manual drill"):
+        workflow_runner.execute(
+            phase="restore-drill",
+            backup_id="",
+            target_time="",
+            identity_stream=io.BytesIO(IDENTITY),
+            runner=runner,
+        )
+    assert not list(tmp_path.iterdir())
+
+    workflow_runner.execute(
+        phase="restore-drill",
+        backup_id="",
+        target_time="",
+        allow_maintenance_skip=True,
+        identity_stream=io.BytesIO(IDENTITY),
+        runner=runner,
+    )
     assert not list(tmp_path.iterdir())
 
 

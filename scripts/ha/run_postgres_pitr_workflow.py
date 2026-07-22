@@ -39,6 +39,7 @@ try:
         validate_effective_config,
     )
     from scripts.ha.pitr_remote_execution import build_host_release_bundle
+    from scripts.ha.patroni_maintenance_window import REMOTE_PROBE, detect_window
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
     from pitr_cluster_topology import (  # type: ignore[no-redef]
         ClusterTopology,
@@ -53,6 +54,10 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
         validate_effective_config,
     )
     from pitr_remote_execution import build_host_release_bundle  # type: ignore[no-redef]
+    from patroni_maintenance_window import (  # type: ignore[no-redef]
+        REMOTE_PROBE,
+        detect_window,
+    )
 
 
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
@@ -225,11 +230,31 @@ def _same_topology(before: ClusterTopology, after: ClusterTopology) -> bool:
     )
 
 
+def _detect_pinned_maintenance(
+    *,
+    context: PinnedSshContext,
+    runner: Runner,
+):
+    nodes_by_alias = {node.alias: node for node in PATRONI_NODES}
+
+    def remote(target: str, source: str) -> subprocess.CompletedProcess[str]:
+        if source != REMOTE_PROBE:
+            raise WorkflowError("unreviewed maintenance probe source")
+        node = nodes_by_alias[target]
+        return runner([*ssh_args(node, context), "exec /usr/bin/python3 -I -"], source)
+
+    return detect_window(
+        tuple((node.alias, node.alias) for node in PATRONI_NODES),
+        runner=remote,
+    )
+
+
 def execute(
     *,
     phase: str,
     backup_id: str,
     target_time: str,
+    allow_maintenance_skip: bool = False,
     identity_stream: BinaryIO,
     runner: Runner | None = None,
 ) -> None:
@@ -247,6 +272,21 @@ def execute(
         context: PinnedSshContext = create_context(temporary, identity)
         for node in PATRONI_NODES:
             validate_effective_config(node, context)
+        maintenance = _detect_pinned_maintenance(
+            context=context,
+            runner=actual_runner,
+        )
+        if maintenance.active:
+            if phase == "verify" or allow_maintenance_skip:
+                print(
+                    "[pitr-workflow][maintenance] status=skipped "
+                    f"transaction={maintenance.transaction_id} "
+                    f"age_seconds={maintenance.age_seconds} nodes=2"
+                )
+                return
+            raise WorkflowError(
+                "official Patroni maintenance is active; this manual drill was not skipped"
+            )
         before = discover_cluster_topology(context=context, runner=actual_runner)
         operation_id = secrets.token_hex(16)
         expected_release_sha256 = _expected_release_sha256(before)
@@ -306,6 +346,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--backup-id", default="")
     parser.add_argument("--target-time", default="")
+    parser.add_argument(
+        "--allow-maintenance-skip",
+        action="store_true",
+        help="Skip a scheduled drill only while both nodes prove official maintenance",
+    )
     args = parser.parse_args(argv)
     if args.phase != "restore-drill" and (args.backup_id or args.target_time):
         parser.error("backup/target overrides are valid only for restore-drill")
@@ -328,6 +373,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             phase=args.phase,
             backup_id=args.backup_id,
             target_time=args.target_time,
+            allow_maintenance_skip=args.allow_maintenance_skip,
             identity_stream=sys.stdin.buffer,
         )
         return 0
