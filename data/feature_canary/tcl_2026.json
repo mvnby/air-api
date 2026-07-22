@@ -1,0 +1,203 @@
+{
+  "catalog": {
+    "name": "TCL 2026",
+    "source_url": "https://tcl-shop.by/doc/catalog-compress.pdf",
+    "brand_slug": "tcl"
+  },
+  "series_allowlist": {
+    "freshin3-0": "FreshIN 3.0 / FCI",
+    "breeze-in-2-0-a": "BreezeIN 2.0 / UG11V3AH",
+    "elite-inverter-c-paneliu-xa71n": "Elite Inverter / XA71IF, XA71IN",
+    "elite-on": "Elite On/Off / XAB1"
+  },
+  "legacy_brand_links_to_remove": [
+    "vstroennyi-wi-fi",
+    "bipoliarnyi-ionizator",
+    "uf-sterilizatsiia"
+  ],
+  "features": [
+    {
+      "slug": "inverter-control",
+      "name": "Инверторное управление",
+      "category_slug": "efficiency",
+      "scope_type": "derived",
+      "short_description": "Компрессор плавно регулирует производительность вместо постоянных включений и остановок.",
+      "full_description": "Инверторное управление помогает точнее поддерживать заданную температуру и снижает лишние пусковые нагрузки при длительной работе.",
+      "aliases": ["Inverter", "Инвертор", "Инверторное управление компрессором"],
+      "source_notes": "TCL 2026: технические таблицы FreshIN 3.0 (PDF p.7), BreezeIN 2.0 (PDF p.15), Elite Inverter (PDF p.26).",
+      "sort_order": 10,
+      "rules": [{"spec_key": "compressor_type_norm", "operator": "in", "target_value": ["inverter", "full_dc"]}]
+    },
+    {
+      "slug": "vstroennyi-wi-fi",
+      "reuse_required": true,
+      "name": "Встроенный Wi-Fi",
+      "category_slug": "control",
+      "scope_type": "derived",
+      "brand_slug": "tcl",
+      "short_description": "Встроенный модуль позволяет управлять кондиционером через совместимое приложение.",
+      "full_description": "Встроенный Wi-Fi даёт доступ к удалённому управлению режимами и настройками кондиционера без покупки отдельного модуля.",
+      "aliases": ["Built-in Wi-Fi", "IoT Wi-Fi-управление", "Встроенный Wi-Fi-модуль"],
+      "source_notes": "TCL 2026: FreshIN 3.0 (PDF p.6-7), BreezeIN 2.0 (PDF p.13-15), Elite Inverter XA71IN (PDF p.24, p.26).",
+      "sort_order": 20,
+      "rules": [{"spec_key": "wifi_state", "operator": "eq", "target_value": "builtin"}]
+    },
+    {
+      "slug": "wifi-ready",
+      "name": "Wi-Fi Ready",
+      "category_slug": "control",
+      "scope_type": "derived",
+      "brand_slug": "tcl",
+      "short_description": "Удалённое управление доступно после установки совместимого Wi-Fi-модуля.",
+      "full_description": "Кондиционер подготовлен для подключения Wi-Fi, но модуль приобретается или устанавливается отдельно.",
+      "aliases": ["Optional Wi-Fi", "Опциональный Wi-Fi", "Wi-Fi-модуль (опция)"],
+      "source_notes": "TCL 2026: Elite Inverter XA71IF, модуль устанавливается по желанию заказчика (PDF p.24, p.26).",
+      "sort_order": 30,
+      "rules": [{"spec_key": "wifi_state", "operator": "eq", "target_value": "ready"}]
+    },
+    {
+      "slug": "heating-minus-20",
+      "name": "Обогрев до −20 °C",
+      "category_slug": "performance",
+      "scope_type": "derived",
+      "short_description": "Режим обогрева рассчитан на работу при наружной температуре до −20 °C.",
+      "full_description": "Модель может использоваться для обогрева в пределах указанного производителем диапазона наружных температур, включая температуру до −20 °C.",
+      "aliases": ["Heating to -20 C", "Обогрев при −20 °C"],
+      "source_notes": "TCL 2026: FreshIN 3.0, рабочий диапазон обогрева до −20 °C (PDF p.7, p.32).",
+      "sort_order": 40,
+      "rules": [{"spec_key": "__filter_min_heat", "operator": "eq", "target_value": -20}]
+    },
+    {
+      "slug": "heating-minus-25",
+      "name": "Обогрев до −25 °C",
+      "category_slug": "performance",
+      "scope_type": "derived",
+      "short_description": "Режим обогрева рассчитан на работу при наружной температуре до −25 °C.",
+      "full_description": "Модель может использоваться для обогрева в пределах указанного производителем диапазона наружных температур, включая температуру до −25 °C.",
+      "aliases": ["Heating to -25 C", "Обогрев при −25 °C"],
+      "source_notes": "TCL 2026: BreezeIN 2.0, рабочий диапазон обогрева до −25 °C (PDF p.15, p.32).",
+      "sort_order": 50,
+      "rules": [{"spec_key": "__filter_min_heat", "operator": "eq", "target_value": -25}]
+    },
+    {
+      "slug": "freshin-plus",
+      "name": "FreshIN+",
+      "category_slug": "air-quality",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Система подаёт в помещение наружный воздух через отдельный канал.",
+      "full_description": "FreshIN+ организует контролируемую подачу наружного воздуха и предварительно обрабатывает его перед поступлением в помещение.",
+      "aliases": ["FreshIN+", "Подача свежего воздуха", "Режим подачи свежего воздуха FreshIN+"],
+      "source_notes": "TCL 2026: FreshIN 3.0 / FCI, описание технологии и таблица модели (PDF p.5, p.7).",
+      "sort_order": 100
+    },
+    {
+      "slug": "quadripuri",
+      "name": "QuadriPuri",
+      "category_slug": "air-quality",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Четырёхступенчатая система фильтрации дополняет обработку проходящего воздуха.",
+      "full_description": "QuadriPuri объединяет предварительный фильтр, слой с ионами серебра, HEPA-фильтр и фильтр высокой плотности для последовательной фильтрации воздуха.",
+      "aliases": ["QuadriPuri", "Фильтры QuadriPuri", "Четырёхступенчатая фильтрация"],
+      "source_notes": "TCL 2026: FreshIN 3.0 / FCI, состав фильтров QuadriPuri (PDF p.5, p.7).",
+      "legal_notes": "Не использовать формулировки о гарантированной защите от вирусов или стерилизации помещения.",
+      "sort_order": 110
+    },
+    {
+      "slug": "air-quality-indicator",
+      "name": "Индикатор качества воздуха",
+      "category_slug": "air-quality",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Цветовой индикатор показывает текущее состояние воздуха в помещении.",
+      "full_description": "Индикатор в реальном времени помогает оценивать состояние воздуха и выбирать подходящий режим работы кондиционера.",
+      "aliases": ["Air Quality Indicator", "Цветовой индикатор качества воздуха"],
+      "source_notes": "TCL 2026: FreshIN 3.0 / FCI, индикатор качества воздуха (PDF p.5).",
+      "sort_order": 120
+    },
+    {
+      "slug": "gentle-breeze",
+      "name": "Gentle Breeze",
+      "category_slug": "comfort",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Перфорированные жалюзи рассеивают поток и уменьшают ощущение прямого холодного обдува.",
+      "full_description": "В режиме Gentle Breeze вертикальные жалюзи дробят прямой поток на множество небольших струй, делая охлаждение мягче и комфортнее.",
+      "aliases": ["Gentle Breeze", "Мягкий поток", "Охлаждение без ветра"],
+      "source_notes": "TCL 2026: BreezeIN 2.0 / UG11V3AH, описание Gentle Breeze и таблица модели (PDF p.13, p.15).",
+      "sort_order": 130
+    },
+    {
+      "slug": "bipoliarnyi-ionizator",
+      "reuse_required": true,
+      "name": "Биполярный ионизатор",
+      "category_slug": "air-quality",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Ионизатор дополняет систему обработки воздуха во время работы кондиционера.",
+      "full_description": "Биполярный ионизатор создаёт положительно и отрицательно заряженные ионы и используется как дополнительная ступень обработки проходящего воздуха.",
+      "aliases": ["Bipolar Ionizer", "Биполярный ионизатор"],
+      "source_notes": "TCL 2026: BreezeIN 2.0 / UG11V3AH, описание и таблица модели (PDF p.15).",
+      "legal_notes": "Не заявлять стерилизацию помещения, защиту от вирусов или гарантированное уничтожение микроорганизмов.",
+      "sort_order": 135
+    },
+    {
+      "slug": "uf-sterilizatsiia",
+      "reuse_required": true,
+      "name": "УФ-лампа (UVC)",
+      "category_slug": "air-quality",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Встроенная UVC-лампа дополняет обработку внутренних поверхностей блока.",
+      "full_description": "UVC-лампа используется внутри кондиционера как дополнительный элемент обработки внутренних поверхностей воздушного тракта.",
+      "aliases": ["UVC", "УФ-лампа", "BIG CARE"],
+      "source_notes": "TCL 2026: BreezeIN 2.0 / UG11V3AH, описание и таблица модели (PDF p.15).",
+      "legal_notes": "Не использовать медицинские обещания и не описывать функцию как стерилизацию воздуха во всём помещении.",
+      "sort_order": 136
+    },
+    {
+      "slug": "smart-inverter-tcl",
+      "name": "Smart Inverter",
+      "category_slug": "efficiency",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Инверторная система регулирует производительность для более стабильного поддержания температуры.",
+      "full_description": "TCL Smart Inverter плавно изменяет производительность компрессора, помогая быстрее выходить на заданный режим и избегать лишних пусков.",
+      "aliases": ["Smart Inverter", "TCL Smart Inverter"],
+      "source_notes": "TCL 2026: FreshIN 3.0 (PDF p.7), BreezeIN 2.0 (PDF p.15), Elite Inverter (PDF p.25-26).",
+      "sort_order": 140
+    },
+    {
+      "slug": "eight-airflow-modes",
+      "name": "8 режимов подачи воздуха",
+      "category_slug": "comfort",
+      "scope_type": "brand",
+      "brand_slug": "tcl",
+      "short_description": "Восемь положений жалюзи помогают точнее направить поток вверх или вниз.",
+      "full_description": "Набор из восьми положений подачи воздуха позволяет подобрать направление потока под расположение людей и сценарий использования помещения.",
+      "aliases": ["8 airflow modes", "8 режимов подачи воздуха вверх-вниз"],
+      "source_notes": "TCL 2026: Elite On/Off / XAB1, таблица модели (PDF p.31).",
+      "sort_order": 150
+    }
+  ],
+  "series_links": {
+    "freshin3-0": ["freshin-plus", "quadripuri", "air-quality-indicator", "smart-inverter-tcl"],
+    "breeze-in-2-0-a": ["gentle-breeze", "smart-inverter-tcl", "bipoliarnyi-ionizator", "uf-sterilizatsiia", "vstroennyi-wi-fi"],
+    "elite-inverter-c-paneliu-xa71n": ["smart-inverter-tcl"],
+    "elite-on": ["eight-airflow-modes"]
+  },
+  "product_states": [
+    {"series_slug": "freshin3-0", "model_marker": "/FCI", "wifi_state": "builtin"},
+    {"series_slug": "breeze-in-2-0-a", "model_marker": "/UG11V3AH", "wifi_state": "builtin"},
+    {"series_slug": "elite-inverter-c-paneliu-xa71n", "model_marker": "/XA71IN", "wifi_state": "builtin", "min_heat": -15},
+    {"series_slug": "elite-inverter-c-paneliu-xa71n", "model_marker": "/XA71IF", "wifi_state": "ready", "min_heat": -15}
+  ],
+  "derived_apply": [
+    {"feature_slug": "inverter-control", "series_slugs": ["freshin3-0", "breeze-in-2-0-a", "elite-inverter-c-paneliu-xa71n"]},
+    {"feature_slug": "vstroennyi-wi-fi", "series_slugs": ["freshin3-0", "elite-inverter-c-paneliu-xa71n"], "wifi_state": "builtin"},
+    {"feature_slug": "wifi-ready", "series_slugs": ["elite-inverter-c-paneliu-xa71n"], "wifi_state": "ready"},
+    {"feature_slug": "heating-minus-20", "series_slugs": ["freshin3-0"]},
+    {"feature_slug": "heating-minus-25", "series_slugs": ["breeze-in-2-0-a"]}
+  ]
+}
