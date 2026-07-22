@@ -28,6 +28,7 @@ import {
 } from '../utils/media-processing';
 import { optimizeImageForUpload } from '../utils/image-upload-optimization';
 import { uploadSequentially } from '../utils/sequential-upload';
+import { confirmDialog } from '../services/ui-feedback';
 import {
     buildProductWorkspacePath,
     loadProductWorkspaceContext,
@@ -1312,13 +1313,21 @@ const applyGalleryToSeries = async () => {
         const obsoleteList = shownUrls.length
             ? `\n\nБудут сняты из серии:\n${shownUrls.map((url: string) => `- ${url}`).join('\n')}${hiddenCount ? `\n...и еще ${hiddenCount}` : ''}`
             : '';
-        const proceed = window.confirm(
-            `Применить галерею к товарам серии?\n\nТоваров будет обновлено: ${preview.updated_products}.\nИзображений в новой галерее: ${preview.images_applied}.\nСсылок будет заменено: ${preview.replaced_links}.\nМонтажные фото будут сохранены: ${preview.preserved_installation_links}.${obsoleteList}`,
-        );
+        const proceed = await confirmDialog({
+            title: 'Применить галерею ко всей серии?',
+            description: `Товаров будет обновлено: ${preview.updated_products}.\nИзображений в новой галерее: ${preview.images_applied}.\nСсылок будет заменено: ${preview.replaced_links}.\nМонтажные фото будут сохранены: ${preview.preserved_installation_links}.${obsoleteList}`,
+            confirmText: 'Применить галерею',
+            variant: 'warning',
+        });
         if (!proceed) return;
 
         const deleteUnreferenced = (preview.obsolete_urls?.length || 0) > 0
-            ? window.confirm('Удалить физические файлы, которые после отвязки больше нигде не используются?')
+            ? await confirmDialog({
+                title: 'Удалить неиспользуемые файлы?',
+                description: 'Будут удалены физические файлы, на которые после отвязки не останется ссылок.',
+                confirmText: 'Удалить файлы',
+                variant: 'danger',
+            })
             : false;
         const result = await api.applyGalleryToSeries(selectedProduct.value.id, false, deleteUnreferenced);
         await loadProducts();
@@ -1534,7 +1543,12 @@ onUnmounted(() => {
 
 const isDeletingProduct = ref<number | null>(null);
 const deleteProduct = async (product: Product) => {
-    const proceed = window.confirm(`Вы уверены, что хотите удалить товар "${product.title}"? Если товар используется в заказах, удаление будет отклонено.`);
+    const proceed = await confirmDialog({
+        title: 'Удалить товар?',
+        description: `«${product.title}». Если товар используется в заказах, удаление будет отклонено.`,
+        confirmText: 'Удалить товар',
+        variant: 'danger',
+    });
     if (!proceed) return;
 
     isDeletingProduct.value = product.id;

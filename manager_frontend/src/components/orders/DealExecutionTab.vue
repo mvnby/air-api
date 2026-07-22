@@ -7,6 +7,7 @@ import DateTimeField from '../ui/DateTimeField.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { fromLocalDateTimeInput } from '../../utils/datetime';
+import { confirmDialog } from '../../services/ui-feedback';
 
 const props = withDefaults(defineProps<{
   order: ManagerOrderDetailResponse;
@@ -67,7 +68,7 @@ const updateStageStatus = async (stageId: number, newStatus: string) => {
 };
 
 const deleteStage = async (stageId: number, stageName: string) => {
-    if (!window.confirm(`Удалить выезд «${stageName}»?`)) return;
+    if (!await confirmDialog({ title: 'Удалить выезд?', description: stageName, confirmText: 'Удалить', variant: 'danger' })) return;
     try {
         await ManagerOrdersService.deleteManagerOrderStage(props.order.id, stageId);
         emit('refresh');

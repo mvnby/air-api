@@ -6,6 +6,7 @@ import type { ManagerCustomerBranchItemResponse, ManagerOrderUpdatePayload } fro
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../../composables/useB2BLookup';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
+import { notify } from '../../services/ui-feedback';
 
 const props = defineProps<{
   lead: LeadsInboxItemResponse;
@@ -236,7 +237,7 @@ const createBranchForExistingCustomer = async () => {
   if (!existingCustomerId.value || creatingBranch.value) return;
   const deliveryAddress = newBranchAddress.value.trim();
   if (!deliveryAddress) {
-    alert('Введите адрес филиала');
+    notify('Введите адрес филиала', 'error');
     return;
   }
   creatingBranch.value = true;
@@ -253,7 +254,7 @@ const createBranchForExistingCustomer = async () => {
     newBranchAddress.value = '';
   } catch (error) {
     console.error('Failed to create branch', error);
-    alert('Не удалось создать филиал');
+    notify('Не удалось создать филиал', 'error');
   } finally {
     creatingBranch.value = false;
   }
@@ -349,7 +350,7 @@ const submitQualify = async () => {
     emit('success', props.lead.id);
   } catch (e) {
     console.error(e);
-    alert('Ошибка при сохранении данных');
+    notify('Ошибка при сохранении данных', 'error');
   } finally {
     isLoading.value = false;
   }

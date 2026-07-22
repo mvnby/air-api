@@ -8,6 +8,7 @@ import EquipmentWarrantyPanel from '../components/equipment/EquipmentWarrantyPan
 import { equipmentWarrantySummary } from '../components/equipment/equipmentWarrantySummary';
 import { listAllCustomerEquipment } from '../components/equipment/loadAllCustomerEquipment';
 import { api } from '../api';
+import { confirmDialog } from '../services/ui-feedback';
 import {
   ManagerContractsService,
   ManagerDocsService,
@@ -1089,7 +1090,7 @@ const uploadContract = async () => {
 
 const archiveContract = async (contract: ManagerCustomerContractItemResponse) => {
   if (!customerId.value) return;
-  if (!confirm(`Архивировать договор ${contract.number}?`)) return;
+  if (!await confirmDialog({ title: 'Архивировать договор?', description: contract.number, confirmText: 'Архивировать', variant: 'warning' })) return;
   try {
     await ManagerContractsService.archiveManagerCustomerContract(customerId.value, contract.id);
     await loadCustomerContracts();
@@ -1101,7 +1102,12 @@ const archiveContract = async (contract: ManagerCustomerContractItemResponse) =>
 
 const deleteContract = async (contract: ManagerCustomerContractItemResponse) => {
   if (!customerId.value) return;
-  if (!confirm(`Удалить договор ${contract.number} из базы и Google Drive?`)) return;
+  if (!await confirmDialog({
+    title: 'Удалить договор?',
+    description: `${contract.number} будет удалён из CRM и Google Drive.`,
+    confirmText: 'Удалить договор',
+    variant: 'danger',
+  })) return;
   try {
     await ManagerContractsService.deleteManagerCustomerContract(customerId.value, contract.id);
     await loadCustomerContracts();
@@ -1269,7 +1275,12 @@ const saveCustomer = async () => {
 const isDeleting = ref(false);
 const deleteCustomer = async () => {
   if (!customer.value?.id) return;
-  const proceed = window.confirm("Вы уверены? Это действие безвозвратно удалит карточку клиента.");
+  const proceed = await confirmDialog({
+    title: 'Удалить карточку клиента?',
+    description: 'Это действие нельзя отменить.',
+    confirmText: 'Удалить клиента',
+    variant: 'danger',
+  });
   if (!proceed) return;
 
   isDeleting.value = true;

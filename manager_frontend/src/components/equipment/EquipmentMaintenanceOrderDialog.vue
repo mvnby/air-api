@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { LoaderCircle, Wrench, X } from 'lucide-vue-next';
 import { equipmentLocation, equipmentTitle } from './registry';
 import type { EquipmentRegistryItem } from './types';
-import { useDialogA11y } from './useDialogA11y';
+import { useDialogA11y } from '../../composables/useDialogA11y';
 
 const props = defineProps<{
   equipment: EquipmentRegistryItem;

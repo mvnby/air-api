@@ -5,6 +5,7 @@ import SpecKeyCombobox from '../SpecKeyCombobox.vue';
 import SpecValueInput from '../SpecValueInput.vue';
 import { useSpecRegistry } from '../../composables/useSpecRegistry';
 import { getLegacySpecSuggestion, isTechnicalSpecKey, type EditableSpec } from '../../utils/product-spec-safety';
+import { messageDialog } from '../../services/ui-feedback';
 
 type FilterMode = 'filled' | 'problems' | 'all';
 
@@ -84,9 +85,9 @@ const replaceRow = (index: number, patch: Partial<EditableSpec>) => {
 const addRow = () => emit('update:modelValue', [...props.modelValue, { key: '', value: '' }]);
 const removeRow = (index: number) => emit('update:modelValue', props.modelValue.filter((_, rowIndex) => rowIndex !== index));
 
-const showHelp = (key: string) => {
+const showHelp = async (key: string) => {
   const text = getSpecHelpText(key);
-  if (text) window.alert(text);
+  if (text) await messageDialog({ title: 'Подсказка по характеристике', description: text });
 };
 </script>
 

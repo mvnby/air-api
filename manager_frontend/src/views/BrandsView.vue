@@ -4,6 +4,7 @@ import { api, type ManagerBrand, type ManagerBrandFeature, type ManagerBrandSeri
 import IconPicker from '../components/IconPicker.vue';
 import MediaField from '../components/MediaField.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { confirmDialog } from '../services/ui-feedback';
 
 type BrandForm = {
     title: string;
@@ -784,7 +785,7 @@ const deleteBrandFeature = async (feature: ManagerBrandFeature) => {
         seriesError.value = `Фича "${feature.title}" используется в сериях. Сначала отвяжите ее от серий, затем удалите.`;
         return;
     }
-    if (!confirm(`Удалить фичу "${feature.title}" из библиотеки бренда?`)) return;
+    if (!await confirmDialog({ title: 'Удалить фичу из библиотеки?', description: feature.title, confirmText: 'Удалить', variant: 'danger' })) return;
 
     featureSaving.value = true;
     seriesError.value = '';
@@ -888,7 +889,7 @@ const onBrandDrop = async (brand: ManagerBrand) => {
 };
 
 const deleteBrand = async (brand: ManagerBrand) => {
-    if (!confirm(`Удалить бренд "${brand.title}"?`)) return;
+    if (!await confirmDialog({ title: 'Удалить бренд?', description: brand.title, confirmText: 'Удалить', variant: 'danger' })) return;
     error.value = '';
     try {
         await api.deleteManagerBrand(brand.id);
@@ -1002,7 +1003,7 @@ const onSeriesDrop = async (series: ManagerBrandSeries) => {
 
 const deleteSeries = async (series: ManagerBrandSeries) => {
     if (!selectedBrandId.value) return;
-    if (!confirm(`Удалить серию "${series.title}"?`)) return;
+    if (!await confirmDialog({ title: 'Удалить серию?', description: series.title, confirmText: 'Удалить', variant: 'danger' })) return;
 
     seriesError.value = '';
     try {

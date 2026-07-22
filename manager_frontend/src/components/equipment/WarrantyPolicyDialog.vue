@@ -13,7 +13,7 @@ import {
   type SupplierResponse,
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
-import { useDialogA11y } from './useDialogA11y';
+import { useDialogA11y } from '../../composables/useDialogA11y';
 
 type ScopeType = 'supplier' | 'brand' | 'series' | 'product';
 

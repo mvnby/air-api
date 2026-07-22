@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { confirmDialog } from '../services/ui-feedback';
 
 const loading = ref(false);
 const error = ref('');
@@ -215,7 +216,12 @@ const startSourceUrlImport = async () => {
     setToast('Нет выбранных ссылок');
     return;
   }
-  if (!confirm(`Запустить импорт ${uniqueUrls.length} товаров из source URL?`)) return;
+  if (!await confirmDialog({
+    title: 'Запустить импорт?',
+    description: `Будет импортировано товаров: ${uniqueUrls.length}.`,
+    confirmText: 'Запустить импорт',
+    variant: 'warning',
+  })) return;
 
   sourceUrlImportLoading.value = true;
   try {

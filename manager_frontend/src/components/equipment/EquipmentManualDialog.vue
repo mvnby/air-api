@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { LoaderCircle, Plus, X } from 'lucide-vue-next';
-import { useDialogA11y } from './useDialogA11y';
+import { useDialogA11y } from '../../composables/useDialogA11y';
 
 const props = defineProps<{
   open: boolean;

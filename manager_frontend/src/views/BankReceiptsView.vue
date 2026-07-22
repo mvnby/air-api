@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, ExternalLink, RefreshCw, Search, Trash2, X
 import { ManagerMailService } from '../client';
 import type { BankReceiptResponse } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { confirmDialog, promptDialog } from '../services/ui-feedback';
 
 type GroupOrderCandidate = {
   order_id?: number;
@@ -224,9 +225,9 @@ const attachGroup = async (receipt: BankReceiptResponse) => {
     const title = item.title ? ` · ${item.title}` : '';
     return `#${item.order_id}${title}: ${formatMoneyValue(item.balance_due, receipt.currency)}`;
   });
-  const confirmed = window.confirm(
-    [
-      `Разнести поступление #${receipt.id} на ${orders.length} заказа(ов)?`,
+  const confirmed = await confirmDialog({
+    title: `Разнести поступление #${receipt.id}?`,
+    description: [
       groupMatchLabel(receipt),
       '',
       ...orderLines,
@@ -236,7 +237,9 @@ const attachGroup = async (receipt: BankReceiptResponse) => {
         ? `Всего открыто по УНП: ${formatMoneyValue(groupMatch(receipt)?.open_balance_due, receipt.currency)}`
         : '',
     ].join('\n'),
-  );
+    confirmText: 'Разнести поступление',
+    variant: 'warning',
+  });
   if (!confirmed) return;
 
   actionId.value = receipt.id;
@@ -257,7 +260,15 @@ const attachGroup = async (receipt: BankReceiptResponse) => {
 };
 
 const markVoid = async (receipt: BankReceiptResponse) => {
-  const reason = window.prompt('Причина пометки платежа ошибочным', 'Отозван/ошибочный банковский платеж');
+  const reason = await promptDialog({
+    title: 'Пометить платёж ошибочным',
+    inputLabel: 'Причина',
+    initialValue: 'Отозван/ошибочный банковский платеж',
+    inputKind: 'textarea',
+    required: true,
+    confirmText: 'Пометить ошибочным',
+    variant: 'danger',
+  });
   if (reason === null) return;
   actionId.value = receipt.id;
   error.value = '';
@@ -277,13 +288,29 @@ const markVoid = async (receipt: BankReceiptResponse) => {
 };
 
 const markClosedOrders = async (receipt: BankReceiptResponse) => {
-  const reason = window.prompt('Комментарий к оплате закрытых заказов', 'Оплата по актам/закрытым заказам');
+  const reason = await promptDialog({
+    title: 'Оплата закрытых заказов',
+    inputLabel: 'Комментарий',
+    initialValue: 'Оплата по актам/закрытым заказам',
+    inputKind: 'textarea',
+    required: true,
+    confirmText: 'Сохранить статус',
+    variant: 'warning',
+  });
   if (reason === null) return;
   await updateReceiptStatus(receipt, 'closed_orders', reason.trim() || 'Оплата закрытых заказов', `Поступление #${receipt.id} помечено оплатой закрытых заказов.`);
 };
 
 const markNonOrderIncome = async (receipt: BankReceiptResponse) => {
-  const reason = window.prompt('Почему поступление не относится к заказам', 'Не CRM-поступление');
+  const reason = await promptDialog({
+    title: 'Не относится к заказам',
+    inputLabel: 'Причина',
+    initialValue: 'Не CRM-поступление',
+    inputKind: 'textarea',
+    required: true,
+    confirmText: 'Сохранить статус',
+    variant: 'warning',
+  });
   if (reason === null) return;
   await updateReceiptStatus(receipt, 'non_order_income', reason.trim() || 'Не относится к заказам', `Поступление #${receipt.id} помечено как не CRM.`);
 };
@@ -307,7 +334,12 @@ const updateReceiptStatus = async (receipt: BankReceiptResponse, nextStatus: str
 };
 
 const deleteReceipt = async (receipt: BankReceiptResponse) => {
-  if (!confirm(`Удалить непривязанное поступление #${receipt.id}?`)) return;
+  if (!await confirmDialog({
+    title: `Удалить поступление #${receipt.id}?`,
+    description: 'Удалить можно только непривязанное поступление.',
+    confirmText: 'Удалить',
+    variant: 'danger',
+  })) return;
   actionId.value = receipt.id;
   error.value = '';
   notice.value = '';

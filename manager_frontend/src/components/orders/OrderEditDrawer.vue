@@ -15,6 +15,7 @@ import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
+import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
@@ -1861,7 +1862,13 @@ const onProposalClick = (proposal: OrderProposalResponse) => {
 
 const createProposal = async () => {
   if (!props.order?.id || proposalActionLoading.value) return;
-  const name = window.prompt('Название нового предложения', `Вариант ${orderProposals.value.length + 1}`);
+  const name = await promptDialog({
+    title: 'Новое предложение',
+    inputLabel: 'Название',
+    initialValue: `Вариант ${orderProposals.value.length + 1}`,
+    required: true,
+    confirmText: 'Создать',
+  });
   if (name === null) return;
   proposalActionLoading.value = true;
   try {
@@ -1879,7 +1886,13 @@ const createProposal = async () => {
 
 const duplicateProposal = async () => {
   if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
-  const name = window.prompt('Название копии', `${activeProposal.value.name} копия`);
+  const name = await promptDialog({
+    title: 'Копия предложения',
+    inputLabel: 'Название',
+    initialValue: `${activeProposal.value.name} копия`,
+    required: true,
+    confirmText: 'Создать копию',
+  });
   if (name === null) return;
   proposalActionLoading.value = true;
   try {
@@ -1898,7 +1911,13 @@ const duplicateProposal = async () => {
 
 const renameProposal = async () => {
   if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
-  const name = window.prompt('Новое название предложения', activeProposal.value.name);
+  const name = await promptDialog({
+    title: 'Переименовать предложение',
+    inputLabel: 'Название',
+    initialValue: activeProposal.value.name,
+    required: true,
+    confirmText: 'Переименовать',
+  });
   if (name === null || !name.trim()) return;
   proposalActionLoading.value = true;
   try {
@@ -1920,7 +1939,12 @@ const archiveProposal = async () => {
     setToast('Нельзя удалить единственное предложение', 'error');
     return;
   }
-  if (!window.confirm(`Убрать предложение «${activeProposal.value.name}» в архив?`)) return;
+  if (!await confirmDialog({
+    title: 'Архивировать предложение?',
+    description: activeProposal.value.name,
+    confirmText: 'Архивировать',
+    variant: 'warning',
+  })) return;
   const archivedId = activeProposal.value.id;
   proposalActionLoading.value = true;
   try {
@@ -1965,8 +1989,18 @@ const changeActiveProposalStatus = async (nextStatus: ProposalLifecycleStatus) =
       return;
     }
   }
-  if (nextStatus === 'sent' && !window.confirm('Отметить предложение отправленным другим способом? Для отправки по email используйте основную кнопку.')) return;
-  if (nextStatus === 'draft' && activeProposalLocked.value && !window.confirm('Вернуть предложение в черновик? После этого его можно будет редактировать.')) return;
+  if (nextStatus === 'sent' && !await confirmDialog({
+    title: 'Отметить предложение отправленным?',
+    description: 'Используйте это действие, если предложение отправлено не через CRM. Для email используйте основную кнопку отправки.',
+    confirmText: 'Отметить отправленным',
+    variant: 'warning',
+  })) return;
+  if (nextStatus === 'draft' && activeProposalLocked.value && !await confirmDialog({
+    title: 'Вернуть предложение в черновик?',
+    description: 'После этого предложение снова можно будет редактировать.',
+    confirmText: 'Вернуть в черновик',
+    variant: 'warning',
+  })) return;
 
   proposalActionLoading.value = true;
   try {
@@ -2086,13 +2120,18 @@ const selectServiceTariffForLine = (index: number, option: ManagerQuickTariffRes
   serviceTariffOptions.value = [];
 };
 
-const setServiceLineDescriptionMode = (index: number, mode: ServiceDescriptionMode) => {
+const setServiceLineDescriptionMode = async (index: number, mode: ServiceDescriptionMode) => {
   const row = serviceLines.value[index];
   if (!row) return;
-  replaceLineDescription(
+  await replaceLineDescription(
     row,
     mode,
-    () => window.confirm('Название уже изменено вручную. Заменить его текстом из шаблона?'),
+    () => confirmDialog({
+      title: 'Заменить изменённое название?',
+      description: 'Текст был отредактирован вручную. При замене эти изменения будут потеряны.',
+      confirmText: mode === 'full' ? 'Заменить на подробное' : 'Заменить на краткое',
+      variant: 'warning',
+    }),
   );
 };
 
@@ -2143,7 +2182,12 @@ const setWorkflowType = async (next: OrderWorkflowType) => {
     || Boolean(installationDate.value)
     || Boolean(measurementResult.value.trim());
   if (hasScenarioData) {
-    const confirmed = window.confirm('В заказе уже есть данные. Сменить сценарий? Скрытые разделы сохранятся и останутся доступны после возврата к сценарию.');
+    const confirmed = await confirmDialog({
+      title: 'Сменить сценарий заказа?',
+      description: 'В заказе уже есть данные. Скрытые разделы сохранятся и останутся доступны после возврата к сценарию.',
+      confirmText: 'Сменить сценарий',
+      variant: 'warning',
+    });
     if (!confirmed) return;
   }
   const requestId = ++workflowChangeRequestId;
@@ -2278,8 +2322,8 @@ const applyEstimateToServices = async () => {
   }
 };
 
-const removeProductLine = (index: number) => {
-  if (!window.confirm('Удалить этот товар из заказа?')) return;
+const removeProductLine = async (index: number) => {
+  if (!await confirmDialog({ title: 'Удалить товар из заказа?', confirmText: 'Удалить', variant: 'danger' })) return;
   productLines.value.splice(index, 1);
   if (activeSuggestionIndex.value === index) {
     activeSuggestionIndex.value = null;
@@ -2287,8 +2331,8 @@ const removeProductLine = (index: number) => {
   }
 };
 
-const removeServiceLine = (index: number) => {
-  if (!window.confirm('Удалить эту услугу из заказа?')) return;
+const removeServiceLine = async (index: number) => {
+  if (!await confirmDialog({ title: 'Удалить услугу из заказа?', confirmText: 'Удалить', variant: 'danger' })) return;
   serviceLines.value.splice(index, 1);
   editingServiceLineIndex.value = null;
   if (activeServiceSuggestionIndex.value === index) {
@@ -2461,12 +2505,17 @@ const handleSave = () => {
   emit('save', { orderId: props.order.id, data: payload });
 };
 
-const closeDrawer = (options?: { force?: boolean } | Event) => {
+const closeDrawer = async (options?: { force?: boolean } | Event) => {
   const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
   const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
   if (!force && hasUnsavedChanges.value) {
     persistDraft();
-    const discard = window.confirm('Есть несохранённые изменения. Закрыть карточку без сохранения?');
+    const discard = await confirmDialog({
+      title: 'Закрыть без сохранения?',
+      description: 'В карточке есть несохранённые изменения. Они будут потеряны.',
+      confirmText: 'Закрыть без сохранения',
+      variant: 'warning',
+    });
     if (!discard) return;
   }
   pendingDraftClearOrderId.value = null;
@@ -2478,7 +2527,12 @@ const isDeleting = ref(false);
 const deleteOrder = async () => {
   if (!props.order?.id) return;
   const orderLabel = `Заказ №${props.order.id}${displayOrderTitle.value ? ` «${displayOrderTitle.value}»` : ''}`;
-  const proceed = window.confirm(`${orderLabel} будет безвозвратно удалён вместе со связанными документами, выездами и платежами. Продолжить?`);
+  const proceed = await confirmDialog({
+    title: `Удалить ${orderLabel}?`,
+    description: 'Заказ будет безвозвратно удалён вместе со связанными документами, выездами и платежами.',
+    confirmText: 'Удалить заказ',
+    variant: 'danger',
+  });
   if (!proceed) return;
 
   isDeleting.value = true;
@@ -2488,7 +2542,7 @@ const deleteOrder = async () => {
     setTimeout(() => {
       toast.value = '';
       emit('deleted', props.order!.id);
-      closeDrawer({ force: true });
+      void closeDrawer({ force: true });
     }, 1500);
   } catch (err: any) {
     localFormError.value = getApiErrorMessage(err) || 'Ошибка при удалении заказа';

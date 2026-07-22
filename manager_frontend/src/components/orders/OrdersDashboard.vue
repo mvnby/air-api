@@ -18,7 +18,6 @@ import OrdersListTable from './OrdersListTable.vue';
 import OrderEditDrawer from './OrderEditDrawer.vue';
 import {
   BOARD_COLUMNS,
-  EXECUTION_STATUS_LABELS,
   STATUS_LABELS,
   STATUS_ORDER,
   buildCustomerOrderRenderItems,
@@ -26,6 +25,12 @@ import {
   getOrderBoardColumn,
 } from './order-utils';
 import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
+import { confirmDialog, promptDialog } from '../../services/ui-feedback';
+import {
+  buildBoardTransitionPayload,
+  needsExecutionWithoutPaymentConfirmation,
+  runOptimisticOrderTransition,
+} from './order-transition';
 
 const ORDERS_SEGMENT_STORAGE_KEY = 'manager_orders_segment';
 const ORDERS_VIEW_STORAGE_KEY = 'manager_orders_view';
@@ -397,64 +402,6 @@ const clearOrderFilters = async () => {
   await loadOrders();
 };
 
-const buildBoardTransitionPayload = (order: ManagerOrderListItemResponse, column: string): ManagerOrderUpdatePayload | null => {
-  if (column.startsWith('execution:')) {
-    const executionStatus = column.slice('execution:'.length);
-    if (!EXECUTION_STATUS_LABELS[executionStatus]) return null;
-    const balanceDue = Number(order.balance_due || 0);
-    const payload: ManagerOrderUpdatePayload = {
-      status: 'execution',
-      execution_status: executionStatus,
-      closing_result: null,
-      reject_reason: null,
-    };
-    if (balanceDue > 0 && !order.execution_without_payment && executionStatus !== 'awaiting_payment') {
-      const approved = window.confirm('По заказу есть долг. Перенести в работу без оплаты?');
-      if (!approved) return null;
-      payload.execution_without_payment = true;
-      payload.execution_without_payment_reason = window.prompt('Причина переноса без оплаты', 'Доверенный клиент') || 'Без предоплаты';
-    }
-    return payload;
-  }
-  if (column === 'closed_lost') return null;
-  if (column === 'closed_won') {
-    return { status: 'closed', closing_result: 'won', reject_reason: null };
-  }
-  if (column === 'execution') {
-    const balanceDue = Number(order.balance_due || 0);
-    const payload: ManagerOrderUpdatePayload = {
-      status: 'execution',
-      closing_result: null,
-      reject_reason: null,
-    };
-    if (balanceDue > 0 && !order.execution_without_payment) {
-      const approved = window.confirm('По заказу есть долг. Перенести в работу без оплаты?');
-      if (!approved) return null;
-      payload.execution_without_payment = true;
-      payload.execution_without_payment_reason = window.prompt('Причина переноса без оплаты', 'Доверенный клиент') || 'Без предоплаты';
-    }
-    return payload;
-  }
-  if (column === 'negotiation') {
-    return {
-      status: 'negotiation',
-      closing_result: null,
-      reject_reason: null,
-      execution_without_payment: false,
-      execution_without_payment_reason: null,
-    };
-  }
-  return {
-    status: 'negotiation',
-    negotiation_status: column,
-    closing_result: null,
-    reject_reason: null,
-    execution_without_payment: false,
-    execution_without_payment_reason: null,
-    measurement_required: column === 'awaiting_visit' ? true : undefined,
-  };
-};
-
 const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload) => {
   const item = orders.value.find((order) => order.id === orderId);
   if (!item) return;
@@ -477,30 +424,68 @@ const replaceOrderLocally = (updatedOrder: ManagerOrderListItemResponse) => {
   if (index >= 0) orders.value[index] = updatedOrder;
 };
 
+const commitOrderMove = async (orderId: number, updatePayload: ManagerOrderUpdatePayload) => {
+  const snapshot = orders.value.map((item) => ({ ...item }));
+  movingOrderIds.value.push(orderId);
+  try {
+    const updatedOrder = await runOptimisticOrderTransition({
+      snapshot,
+      apply: () => applyStatusLocally(orderId, updatePayload),
+      persist: () => api.patchManagerOrder(orderId, updatePayload),
+      rollback: (previousOrders) => { orders.value = previousOrders; },
+    });
+    replaceOrderLocally(updatedOrder);
+  } finally {
+    movingOrderIds.value = movingOrderIds.value.filter((id) => id !== orderId);
+  }
+};
+
 const onMoveOrder = async (payload: { orderId: number; oldStatus: string; newStatus: string }) => {
   if (movingOrderIds.value.includes(payload.orderId)) return;
   const item = orders.value.find((order) => order.id === payload.orderId);
   if (!item) return;
+
+  if (needsExecutionWithoutPaymentConfirmation(item, payload.newStatus)) {
+    const reason = await promptDialog({
+      title: 'Назначить работы без оплаты?',
+      description: 'У заказа нет полной зарегистрированной оплаты. Укажите причину перевода в работы.',
+      inputLabel: 'Причина',
+      initialValue: 'Доверенный клиент',
+      inputKind: 'textarea',
+      required: true,
+      confirmText: 'Назначить работы',
+      variant: 'warning',
+      onConfirm: async (value) => {
+        const updatePayload = buildBoardTransitionPayload(item, payload.newStatus, value || 'Без предоплаты');
+        if (!updatePayload) throw new Error('Недоступный статус заказа');
+        await commitOrderMove(payload.orderId, updatePayload);
+      },
+      getErrorMessage: (error) => `Не удалось назначить работы: ${getApiErrorMessage(error)}`,
+    });
+    if (reason !== null) setToast('Статус обновлен');
+    return;
+  }
+
   const updatePayload = buildBoardTransitionPayload(item, payload.newStatus);
   if (!updatePayload) return;
-  const snapshot = orders.value.map((item) => ({ ...item }));
-  movingOrderIds.value.push(payload.orderId);
-  applyStatusLocally(payload.orderId, updatePayload);
   try {
-    const updatedOrder = await api.patchManagerOrder(payload.orderId, updatePayload);
-    replaceOrderLocally(updatedOrder);
+    await commitOrderMove(payload.orderId, updatePayload);
     setToast('Статус обновлен');
   } catch (error) {
     console.error(error);
-    orders.value = snapshot;
     setToast(`Ошибка обновления статуса: ${getApiErrorMessage(error)}`);
-  } finally {
-    movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
   }
 };
 
 const onCancelOrder = async (payload: { orderId: number }) => {
-  const reason = window.prompt('Причина отказа / неуспешного завершения');
+  const reason = await promptDialog({
+    title: 'Пометить заказ отказом',
+    inputLabel: 'Причина отказа или неуспешного завершения',
+    inputKind: 'textarea',
+    placeholder: 'Кратко опишите причину',
+    confirmText: 'Пометить отказом',
+    variant: 'danger',
+  });
   if (reason === null) return;
   const trimmedReason = reason.trim() || 'Без пояснения';
   const snapshot = orders.value.map((item) => ({ ...item }));
@@ -533,24 +518,29 @@ const onCloseDebt = async (payload: { orderId: number }) => {
     setToast('Долг уже закрыт');
     return;
   }
-  const confirmed = window.confirm(`Добавить оплату ${formatMoney(amount)} и закрыть долг по заказу #${payload.orderId}?`);
-  if (!confirmed) return;
-
-  movingOrderIds.value.push(payload.orderId);
-  try {
-    await ManagerOrdersService.addManagerOrderPayment(payload.orderId, {
-      amount,
-      currency: 'BYN',
-      type: 'postpayment',
-      comment: 'Закрытие долга из канбан-карточки',
-    });
+  const confirmed = await confirmDialog({
+    title: `Закрыть долг по заказу #${payload.orderId}?`,
+    description: `Будет добавлена оплата ${formatMoney(amount)}.`,
+    confirmText: 'Добавить оплату',
+    variant: 'warning',
+    onConfirm: async () => {
+      movingOrderIds.value.push(payload.orderId);
+      try {
+        await ManagerOrdersService.addManagerOrderPayment(payload.orderId, {
+          amount,
+          currency: 'BYN',
+          type: 'postpayment',
+          comment: 'Закрытие долга из канбан-карточки',
+        });
+        await loadOrders();
+      } finally {
+        movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
+      }
+    },
+    getErrorMessage: (error) => `Не удалось закрыть долг: ${getApiErrorMessage(error)}`,
+  });
+  if (confirmed) {
     setToast('Долг закрыт');
-    await loadOrders();
-  } catch (error) {
-    console.error(error);
-    setToast(`Не удалось закрыть долг: ${getApiErrorMessage(error)}`);
-  } finally {
-    movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
   }
 };
 

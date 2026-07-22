@@ -9,6 +9,7 @@ import { useSpecRegistry } from '../composables/useSpecRegistry';
 import { collapseWifiSpecs } from '../utils/product-spec-safety';
 import type { ProductWorkspaceSection } from '../utils/product-workspace';
 import type { SupplierOfferResponse } from '../client/models/SupplierOfferResponse';
+import { confirmDialog } from '../services/ui-feedback';
 
 interface TagItem {
     id: number;
@@ -1214,7 +1215,12 @@ const save = async (): Promise<boolean> => {
 const unlinkSupplierOffer = async (offer: any) => {
     const mappingId = Number(offer?.mapping_id || 0);
     if (!mappingId) return;
-    if (!confirm('Отвязать этот прайс от товара?')) return;
+    if (!await confirmDialog({
+        title: 'Отвязать прайс от товара?',
+        description: 'Позиция поставщика останется в прайсе, но связь с товаром будет удалена.',
+        confirmText: 'Отвязать',
+        variant: 'warning',
+    })) return;
     unlinkingMappingId.value = mappingId;
     formMessage.value = '';
     try {

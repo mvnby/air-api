@@ -24,6 +24,7 @@ import type { ServiceAttachmentEquipmentOption } from '../service-attachments/ty
 import EquipmentLinkDialog from './EquipmentLinkDialog.vue';
 import EquipmentManualDialog from './EquipmentManualDialog.vue';
 import { listAllCustomerEquipment } from './loadAllCustomerEquipment';
+import { confirmDialog } from '../../services/ui-feedback';
 
 const props = withDefaults(defineProps<{
   orderId: number;
@@ -287,7 +288,12 @@ const createManual = async (payload: {
 
 const unlink = async (link: ManagerOrderEquipmentLinkItemResponse) => {
   if (!link.link_id || action.value) return;
-  if (!window.confirm(`Убрать связь с «${equipmentTitle(link.equipment)}»? Само оборудование сохранится.`)) return;
+  if (!await confirmDialog({
+    title: 'Убрать связь с оборудованием?',
+    description: `«${equipmentTitle(link.equipment)}» останется в реестре оборудования.`,
+    confirmText: 'Убрать связь',
+    variant: 'warning',
+  })) return;
   action.value = `unlink-${link.link_id}`;
   error.value = '';
   try {

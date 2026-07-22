@@ -15,6 +15,7 @@ import type {
 import { ManagerDocsService, ManagerRepairComplaintsService, ManagerSettingsService } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
+import { confirmDialog } from '../services/ui-feedback';
 
 const settings = ref<ManagerSettingResponse[]>([]);
 const loading = ref(false);
@@ -599,7 +600,7 @@ const deleteRepairComplaintPreset = async (preset: RepairComplaintPresetForm) =>
         repairComplaintPresets.value = repairComplaintPresets.value.filter((item) => item !== preset);
         return;
     }
-    if (!confirm(`Удалить пресет "${preset.customer_phrase}"?`)) return;
+    if (!await confirmDialog({ title: 'Удалить пресет?', description: preset.customer_phrase, confirmText: 'Удалить', variant: 'danger' })) return;
     deletingRepairComplaintId.value = preset.id;
     try {
         await ManagerRepairComplaintsService.deleteManagerRepairComplaintPreset(preset.id);
@@ -712,7 +713,7 @@ const deleteDocumentTemplate = async (template: DocumentTemplateForm) => {
         documentTemplates.value = documentTemplates.value.filter((item) => item !== template);
         return;
     }
-    if (!confirm(`Удалить шаблон "${template.name}"?`)) return;
+    if (!await confirmDialog({ title: 'Удалить шаблон?', description: template.name, confirmText: 'Удалить', variant: 'danger' })) return;
     deletingTemplateId.value = template.document_template_id;
     try {
         await ManagerDocsService.deleteManagerDocumentTemplate(template.document_template_id);

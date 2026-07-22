@@ -17,6 +17,7 @@ import AdditionalConditionsLibrary from './AdditionalConditionsLibrary.vue';
 import DocumentSendModal from './DocumentSendModal.vue';
 import OrderEmailHistory from './OrderEmailHistory.vue';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
+import { confirmDialog } from '../../services/ui-feedback';
 
 type ToastType = 'success' | 'error';
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
@@ -1054,7 +1055,7 @@ const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
 };
 
 const deleteDocument = async (docId: number) => {
-  if (!confirm('Удалить документ?')) return;
+  if (!await confirmDialog({ title: 'Удалить документ?', confirmText: 'Удалить', variant: 'danger' })) return;
   processingDocId.value = docId;
   try {
     await ManagerDocsService.deleteManagerDoc(docId);

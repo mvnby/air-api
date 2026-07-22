@@ -91,10 +91,10 @@ export const useServiceDescriptionMode = () => {
     });
   };
 
-  const replaceLineDescription = (
+  const replaceLineDescription = async (
     row: ServiceDescriptionLine,
     mode: ServiceDescriptionMode,
-    confirmReplacement: () => boolean,
+    confirmReplacement: () => boolean | Promise<boolean>,
   ) => {
     if (!row.template_short_name) return false;
     const nextTitle = resolveServiceDescription(
@@ -111,7 +111,7 @@ export const useServiceDescriptionMode = () => {
         row.template_short_name,
         row.template_full_description,
       )
-      && !confirmReplacement()
+      && !await confirmReplacement()
     ) {
       return false;
     }

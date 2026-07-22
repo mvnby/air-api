@@ -6,6 +6,7 @@ import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import SpecKeyCombobox from './SpecKeyCombobox.vue';
 import SpecValueInput from './SpecValueInput.vue';
 import { useSpecRegistry } from '../composables/useSpecRegistry';
+import { confirmDialog, messageDialog } from '../services/ui-feedback';
 
 const props = defineProps<{
     modelValue: boolean; // isOpen
@@ -29,9 +30,9 @@ const {
     serializeSpecValue,
 } = useSpecRegistry();
 
-const showSpecHelp = (key: string) => {
+const showSpecHelp = async (key: string) => {
     const text = getSpecHelpText(key);
-    if (text) window.alert(text);
+    if (text) await messageDialog({ title: 'Подсказка по характеристике', description: text });
 };
 
 watch(() => props.modelValue, (val) => {
@@ -79,7 +80,12 @@ const save = async () => {
          // For merge/replace, empty might mean clear all or nothing
          if (operation.value === 'replace') {
              // If manual clear (no rows or empty rows)
-             if (!confirm('Будут очищены все характеристики у выбранных товаров. Продолжить?')) return;
+             if (!await confirmDialog({
+                 title: 'Очистить все характеристики?',
+                 description: `Изменение затронет выбранные товары: ${props.selectedProductIds.length}.`,
+                 confirmText: 'Очистить',
+                 variant: 'danger',
+             })) return;
          } else {
              // Merge with empty = do nothing
              formMessage.value = 'Нет изменений для применения';

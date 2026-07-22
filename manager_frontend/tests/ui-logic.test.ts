@@ -51,6 +51,20 @@ import {
   collapseWifiSpecs,
   getLegacySpecSuggestion,
 } from '../src/utils/product-spec-safety';
+import {
+  cancelActiveDialog,
+  confirmDialog,
+  promptDialog,
+  resetUiFeedbackForTests,
+  setDialogInput,
+  submitActiveDialog,
+  uiDialogState,
+} from '../src/services/ui-feedback';
+import {
+  buildBoardTransitionPayload,
+  needsExecutionWithoutPaymentConfirmation,
+  runOptimisticOrderTransition,
+} from '../src/components/orders/order-transition';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -58,7 +72,7 @@ const assert = (condition: unknown, message: string) => {
 
 assert(
   navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')
-    === 'Кондиционеры|Бренды|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
+    === 'Кондиционеры|Бренды|Фичи|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
   'catalog navigation must follow the product data workflow',
 );
 
@@ -296,5 +310,94 @@ assert(
   buildMeasurementSummary({ required: true, result: 'Осмотр выполнен', kind: 'diagnostic' }) === 'Диагностика выполнена',
   'completed diagnostic must use the correct wording',
 );
+
+resetUiFeedbackForTests();
+const confirmation = confirmDialog({ title: 'Подтвердить действие' });
+assert(uiDialogState.open && uiDialogState.kind === 'confirm', 'confirmation dialog must open through the shared host state');
+await submitActiveDialog();
+assert(await confirmation === true, 'confirmation must resolve true after submit');
+
+const cancellation = confirmDialog({ title: 'Отменить действие' });
+cancelActiveDialog();
+assert(await cancellation === false, 'confirmation must resolve false after cancel or Escape');
+
+let asyncConfirmCalls = 0;
+let releaseAsyncConfirm!: () => void;
+const asyncGate = new Promise<void>((resolve) => { releaseAsyncConfirm = resolve; });
+const asyncConfirmation = confirmDialog({
+  title: 'Асинхронное действие',
+  onConfirm: async () => {
+    asyncConfirmCalls += 1;
+    await asyncGate;
+  },
+});
+const firstSubmit = submitActiveDialog();
+const duplicateSubmit = submitActiveDialog();
+assert(uiDialogState.loading, 'dialog must expose loading state during async confirmation');
+assert(asyncConfirmCalls === 1, 'loading dialog must ignore repeated confirmation clicks');
+cancelActiveDialog();
+assert(uiDialogState.open, 'Escape or backdrop must not cancel a running operation');
+releaseAsyncConfirm();
+await Promise.all([firstSubmit, duplicateSubmit]);
+assert(await asyncConfirmation === true, 'async confirmation must resolve after its action succeeds');
+
+const failedConfirmation = confirmDialog({
+  title: 'Ошибка операции',
+  onConfirm: async () => { throw new Error('API unavailable'); },
+  getErrorMessage: (error) => `Ошибка: ${(error as Error).message}`,
+});
+await submitActiveDialog();
+assert(uiDialogState.open, 'failed async confirmation must stay open');
+assert(uiDialogState.error === 'Ошибка: API unavailable', 'failed confirmation must expose a useful error');
+cancelActiveDialog();
+assert(await failedConfirmation === false, 'failed confirmation must remain cancellable after the request ends');
+
+const prompt = promptDialog({ title: 'Причина', required: true });
+await submitActiveDialog();
+assert(uiDialogState.error.length > 0 && uiDialogState.open, 'required prompt must validate before resolving');
+setDialogInput('Доверенный клиент');
+await submitActiveDialog();
+assert(await prompt === 'Доверенный клиент', 'prompt must resolve the validated input value');
+
+const unpaidOrder = { balance_due: 500, execution_without_payment: false } as any;
+assert(
+  needsExecutionWithoutPaymentConfirmation(unpaidOrder, 'execution'),
+  'moving an unpaid order to works must require confirmation',
+);
+assert(
+  !needsExecutionWithoutPaymentConfirmation(unpaidOrder, 'execution:awaiting_payment'),
+  'moving an unpaid order to awaiting payment must not require the exception dialog',
+);
+assert(
+  !needsExecutionWithoutPaymentConfirmation({ balance_due: 0, execution_without_payment: false } as any, 'execution'),
+  'paid order transition must continue without confirmation',
+);
+const unpaidTransition = buildBoardTransitionPayload(unpaidOrder, 'execution', 'Доверенный клиент');
+assert(
+  unpaidTransition?.status === 'execution'
+    && unpaidTransition.execution_without_payment === true
+    && unpaidTransition.execution_without_payment_reason === 'Доверенный клиент',
+  'confirmed unpaid transition must preserve the existing business flags and reason',
+);
+let optimisticStatus = 'negotiation';
+let rollbackCalls = 0;
+await runOptimisticOrderTransition({
+  snapshot: 'negotiation',
+  apply: () => { optimisticStatus = 'execution'; },
+  persist: async () => ({ status: 'execution' }),
+  rollback: (snapshot) => { optimisticStatus = snapshot; rollbackCalls += 1; },
+});
+assert(optimisticStatus === 'execution' && rollbackCalls === 0, 'successful order transition must remain in its target column');
+try {
+  await runOptimisticOrderTransition({
+    snapshot: 'negotiation',
+    apply: () => { optimisticStatus = 'execution'; },
+    persist: async () => { throw new Error('API failed'); },
+    rollback: (snapshot) => { optimisticStatus = snapshot; rollbackCalls += 1; },
+  });
+} catch {
+  // Expected: the dialog keeps the error visible while the card returns to its source column.
+}
+assert(optimisticStatus === 'negotiation' && rollbackCalls === 1, 'failed order transition must roll the card back exactly once');
 
 console.log('Manager UI logic tests passed');
