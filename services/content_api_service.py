@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import Brand, Feature, FeatureBrandLink, GlobalConfig, Product, Service
+from services.feature_scope_policy import FeatureScopePolicy
 
 
 class ContentApiService:
@@ -201,6 +202,15 @@ class ContentApiService:
                 )
             ).scalars().all()
         )
+        features = [
+            feature
+            for feature in features
+            if FeatureScopePolicy.allows_target(
+                feature,
+                target_type="brand",
+                brand_id=int(brand.id),
+            )
+        ]
         brand.__dict__["_resolved_brand_features"] = features
         return ContentApiService._serialize_brand(brand, products_count=products_count, include_features=True)
 

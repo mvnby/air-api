@@ -58,6 +58,7 @@ async def list_features(
     search: str | None = Query(None),
     category_id: int | None = Query(None),
     brand_id: int | None = Query(None),
+    product_id: int | None = Query(None),
     scope_type: Literal["universal", "brand", "series", "product", "derived"] | None = Query(None),
     is_active: bool | None = Query(True),
     session: AsyncSession = Depends(get_session),
@@ -68,6 +69,7 @@ async def list_features(
         search=search,
         category_id=category_id,
         brand_id=brand_id,
+        product_id=product_id,
         scope_type=scope_type,
         is_active=is_active,
     )

@@ -17,6 +17,7 @@ from models import (
 )
 from schemas_features import FeatureCategoryResponse, FeatureLinkPayload, PublicFeatureResponse
 from services.feature_rule_engine import describe_rules, matches_all_rules
+from services.feature_scope_policy import FeatureScopePolicy
 
 
 class FeatureResolverService:
@@ -78,12 +79,21 @@ class FeatureResolverService:
             inherited: list[PublicFeatureResponse] = []
             manual: list[PublicFeatureResponse] = []
             disabled_ids: list[int] = []
+            applicable_feature_ids: set[int] = set()
 
             for feature_id, feature in features.items():
                 p_link = product_link_map.get(pid, {}).get(feature_id)
                 s_link = series_link_map.get(int(product.series_id or 0), {}).get(feature_id)
                 b_link = brand_link_map.get(int(product.brand_id or 0), {}).get(feature_id)
                 matched = matches_all_rules(specs, list(feature.rules or []))
+                if not FeatureScopePolicy.allows_product(
+                    feature,
+                    product,
+                    has_series_link=s_link is not None,
+                    has_product_link=p_link is not None,
+                ):
+                    continue
+                applicable_feature_ids.add(feature_id)
                 chosen = None
                 source = None
 
@@ -126,7 +136,18 @@ class FeatureResolverService:
                         manual.append(item)
                     continue
 
-                if include_suggestions and matched and feature.rules:
+                if (
+                    include_suggestions
+                    and matched
+                    and feature.rules
+                    and FeatureScopePolicy.allows_product(
+                        feature,
+                        product,
+                        has_series_link=s_link is not None,
+                        has_product_link=p_link is not None,
+                        mode="suggestion",
+                    )
+                ):
                     suggestions.append(
                         FeatureResolverService._serialize_resolved(
                             feature,
@@ -144,7 +165,9 @@ class FeatureResolverService:
                 "inherited": sorted(inherited, key=sort_key),
                 "manual": sorted(manual, key=sort_key),
                 "manual_assignments": FeatureResolverService._manual_assignments(
-                    product_link_map.get(pid, {}).values()
+                    link
+                    for feature_id, link in product_link_map.get(pid, {}).items()
+                    if feature_id in applicable_feature_ids
                 ),
                 "disabled_feature_ids": sorted(set(disabled_ids)),
             }
@@ -157,6 +180,13 @@ class FeatureResolverService:
                 for feature_id, feature in features.items():
                     s_link = series_link_map.get(int(product.series_id or 0), {}).get(feature_id)
                     b_link = brand_link_map.get(int(product.brand_id or 0), {}).get(feature_id)
+                    if not FeatureScopePolicy.allows_product(
+                        feature,
+                        product,
+                        has_series_link=s_link is not None,
+                        has_product_link=False,
+                    ):
+                        continue
                     chosen, source = (s_link, "series") if s_link is not None else (b_link, "brand")
                     if chosen is None or not chosen.is_enabled:
                         continue

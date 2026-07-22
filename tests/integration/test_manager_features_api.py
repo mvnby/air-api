@@ -167,6 +167,12 @@ async def test_feature_resolution_precedence_derived_apply_and_public_dto(async_
         override_title="Персональный поток",
     ))
     db.add(FeatureBrandLink(brand_id=brand.id, feature_id=suppressed.id))
+    db.add(FeatureRule(
+        feature_id=suppressed.id,
+        spec_key="wifi",
+        operator="eq",
+        target_value=True,
+    ))
     db.add(FeatureProductLink(
         product_id=product.id,
         feature_id=suppressed.id,
@@ -262,13 +268,48 @@ async def test_feature_resolution_precedence_derived_apply_and_public_dto(async_
     )
     assert repeated.status_code == 200, repeated.text
 
+    converted = await async_client.put(
+        f"/api/manager/products/{product.id}/features",
+        headers=headers,
+        json={
+            "assignments": [
+                *body["manual_assignments"],
+                {
+                    "feature_id": derived.id,
+                    "source": "manual",
+                    "is_enabled": True,
+                    "sort_order": 50,
+                    "override_title": "Большая площадь с override",
+                },
+            ]
+        },
+    )
+    assert converted.status_code == 200, converted.text
+    converted_item = next(
+        item for item in converted.json()["effective"] if item["id"] == derived.id
+    )
+    assert converted_item["source"] == "product_override"
+    assert converted_item["name"] == "Большая площадь с override"
+    product_links = list(
+        (
+            await db.execute(
+                FeatureProductLink.__table__.select().where(
+                    FeatureProductLink.product_id == product.id,
+                    FeatureProductLink.feature_id == derived.id,
+                )
+            )
+        ).all()
+    )
+    assert len(product_links) == 1
+    assert product_links[0].source == "manual"
+
     public = await async_client.get(f"/api/v1/products/{product.slug}")
     assert public.status_code == 200, public.text
     public_features = public.json()["features"]
     assert [(item["slug"], item["source"]) for item in public_features] == [
         ("air-flow-test", "product_override"),
-        ("large-room-test", "derived"),
         ("inherited-over-derived-test", "brand"),
+        ("large-room-test", "product_override"),
     ]
     assert all("category" in item and "feature_sort_order" in item for item in public_features)
 
@@ -279,3 +320,136 @@ async def test_feature_resolution_precedence_derived_apply_and_public_dto(async_
     assert [item["slug"] for item in removed.json()["automatic_suggestions"]] == [
         "large-room-test"
     ]
+
+
+@pytest.mark.asyncio
+async def test_feature_scope_isolation_and_universal_assignments(async_client, db):
+    category = FeatureCategory(slug="scope-test", name="Scope", sort_order=10)
+    tcl = Brand(title="Scope TCL", slug="scope-tcl", is_published=True)
+    mdv = Brand(title="Scope MDV", slug="scope-mdv", is_published=True)
+    db.add_all([category, tcl, mdv])
+    await db.flush()
+    tcl_series = ProductSeries(
+        brand_id=tcl.id,
+        title="Scope TCL Series",
+        slug="scope-tcl-series",
+        is_published=True,
+    )
+    mdv_series = ProductSeries(
+        brand_id=mdv.id,
+        title="Scope MDV Series",
+        slug="scope-mdv-series",
+        is_published=True,
+    )
+    db.add_all([tcl_series, mdv_series])
+    await db.flush()
+    tcl_product = Product(
+        title="Scope TCL Product",
+        slug="scope-tcl-product",
+        price=1000,
+        specs={"wifi_state": "builtin"},
+        brand_id=tcl.id,
+        series_id=tcl_series.id,
+        is_published=True,
+    )
+    mdv_product = Product(
+        title="Scope MDV Product",
+        slug="scope-mdv-product",
+        price=1000,
+        specs={"wifi_state": "builtin"},
+        brand_id=mdv.id,
+        series_id=mdv_series.id,
+        is_published=True,
+    )
+    db.add_all([tcl_product, mdv_product])
+    await db.flush()
+    tcl_feature = Feature(
+        slug="scope-tcl-freshin",
+        name="TCL FreshIN",
+        category_id=category.id,
+        scope_type="brand",
+        brand_id=tcl.id,
+    )
+    tcl_derived = Feature(
+        slug="scope-tcl-derived",
+        name="TCL Derived",
+        category_id=category.id,
+        scope_type="derived",
+        brand_id=tcl.id,
+    )
+    universal = Feature(
+        slug="scope-universal-wifi",
+        name="Universal Wi-Fi",
+        category_id=category.id,
+        scope_type="universal",
+    )
+    db.add_all([tcl_feature, tcl_derived, universal])
+    await db.flush()
+    for feature in (tcl_derived, universal):
+        db.add(
+            FeatureRule(
+                feature_id=feature.id,
+                spec_key="wifi_state",
+                operator="eq",
+                target_value="builtin",
+            )
+        )
+
+    # Simulate legacy/corrupted cross-brand rows: reads must still remain isolated.
+    db.add_all(
+        [
+            FeatureBrandLink(brand_id=mdv.id, feature_id=tcl_feature.id),
+            FeatureSeriesLink(series_id=mdv_series.id, feature_id=tcl_feature.id),
+            FeatureProductLink(product_id=mdv_product.id, feature_id=tcl_feature.id),
+        ]
+    )
+    await db.commit()
+    headers = await _auth_headers(async_client)
+
+    mdv_workspace = await async_client.get(
+        f"/api/manager/products/{mdv_product.id}/features",
+        headers=headers,
+    )
+    assert mdv_workspace.status_code == 200, mdv_workspace.text
+    assert [item["slug"] for item in mdv_workspace.json()["effective"]] == []
+    assert [item["slug"] for item in mdv_workspace.json()["automatic_suggestions"]] == [
+        "scope-universal-wifi"
+    ]
+
+    mdv_library = await async_client.get(
+        "/api/manager/features",
+        headers=headers,
+        params={"product_id": mdv_product.id},
+    )
+    assert mdv_library.status_code == 200, mdv_library.text
+    library_slugs = {item["slug"] for item in mdv_library.json()["items"]}
+    assert "scope-tcl-freshin" not in library_slugs
+    assert "scope-tcl-derived" not in library_slugs
+    assert "scope-universal-wifi" in library_slugs
+
+    invalid_manual = await async_client.put(
+        f"/api/manager/products/{mdv_product.id}/features",
+        headers=headers,
+        json={
+            "assignments": [
+                {"feature_id": tcl_feature.id, "source": "manual"}
+            ]
+        },
+    )
+    assert invalid_manual.status_code == 400
+
+    invalid_series = await async_client.put(
+        f"/api/manager/features/{tcl_feature.id}/series/{mdv_series.id}",
+        headers=headers,
+        json={},
+    )
+    assert invalid_series.status_code == 400
+
+    for product in (tcl_product, mdv_product):
+        applied = await async_client.post(
+            f"/api/manager/products/{product.id}/features/suggestions/apply",
+            headers=headers,
+            json={"feature_ids": [universal.id]},
+        )
+        assert applied.status_code == 200, applied.text
+        assert any(item["id"] == universal.id for item in applied.json()["effective"])

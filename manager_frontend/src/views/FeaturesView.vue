@@ -81,6 +81,7 @@ const load = async () => {
         search.value.trim() || undefined,
         categoryId.value || undefined,
         brandId.value || undefined,
+        undefined,
         scope.value || undefined,
         !showArchived.value,
       ),
