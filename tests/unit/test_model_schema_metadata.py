@@ -7,6 +7,7 @@ import models  # noqa: F401
 def test_required_model_columns_match_database_nullability():
     required_columns = {
         "brand_feature": ("aliases",),
+        "feature": ("aliases",),
         "customer_equipment": ("equipment_type", "equipment_source"),
         "equipment_component": ("component_type",),
         "equipment_service_history": ("event_type",),
@@ -48,6 +49,10 @@ def test_model_foreign_keys_match_database_delete_actions():
         ("order", "customer_branch_id"): "SET NULL",
         ("product", "brand_id"): "SET NULL",
         ("product", "series_id"): "SET NULL",
+        ("feature", "brand_id"): "SET NULL",
+        ("feature_brand_link", "feature_id"): "CASCADE",
+        ("feature_series_link", "feature_id"): "CASCADE",
+        ("feature_product_link", "feature_id"): "CASCADE",
         ("product_attachment", "product_id"): "CASCADE",
         ("product_image_variant", "product_image_id"): "CASCADE",
         ("product_main_image_cleanup_item", "batch_id"): "SET NULL",

@@ -128,6 +128,13 @@ export type { EmailLeadDecisionResponse } from './models/EmailLeadDecisionRespon
 export type { EmailLeadImportJobResponse } from './models/EmailLeadImportJobResponse';
 export type { EmailLeadImportResponse } from './models/EmailLeadImportResponse';
 export type { EquipmentServiceEventType } from './models/EquipmentServiceEventType';
+export type { FeatureCategoryResponse } from './models/FeatureCategoryResponse';
+export type { FeatureCreatePayload } from './models/FeatureCreatePayload';
+export type { FeatureLinkPayload } from './models/FeatureLinkPayload';
+export type { FeatureRulePayload } from './models/FeatureRulePayload';
+export type { FeatureRuleResponse } from './models/FeatureRuleResponse';
+export type { FeatureTargetLinkPayload } from './models/FeatureTargetLinkPayload';
+export type { FeatureUpdatePayload } from './models/FeatureUpdatePayload';
 export type { FilterRange } from './models/FilterRange';
 export type { FiltersConfigResponse } from './models/FiltersConfigResponse';
 export type { FilterTagOption } from './models/FilterTagOption';
@@ -221,6 +228,9 @@ export type { ManagerEquipmentUpdatePayload } from './models/ManagerEquipmentUpd
 export type { ManagerEquipmentWarrantyCoverageResponse } from './models/ManagerEquipmentWarrantyCoverageResponse';
 export type { ManagerEstimateLineResponse } from './models/ManagerEstimateLineResponse';
 export type { ManagerEstimateRuleInputPayload } from './models/ManagerEstimateRuleInputPayload';
+export type { ManagerFeatureListResponse } from './models/ManagerFeatureListResponse';
+export type { ManagerFeatureResponse } from './models/ManagerFeatureResponse';
+export type { ManagerFeatureSuggestionsApplyPayload } from './models/ManagerFeatureSuggestionsApplyPayload';
 export type { ManagerGoogleAuthStatusResponse } from './models/ManagerGoogleAuthStatusResponse';
 export type { ManagerGoogleAuthUrlResponse } from './models/ManagerGoogleAuthUrlResponse';
 export type { ManagerInstallerCreatePayload } from './models/ManagerInstallerCreatePayload';
@@ -288,6 +298,8 @@ export type { ManagerOrderTransferServiceLine } from './models/ManagerOrderTrans
 export type { ManagerOrderTransferServiceRef } from './models/ManagerOrderTransferServiceRef';
 export type { ManagerOrderTransferWorkStage } from './models/ManagerOrderTransferWorkStage';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
+export type { ManagerProductFeaturesUpdatePayload } from './models/ManagerProductFeaturesUpdatePayload';
+export type { ManagerProductFeatureWorkspaceResponse } from './models/ManagerProductFeatureWorkspaceResponse';
 export type { ManagerQuickTariffListResponse } from './models/ManagerQuickTariffListResponse';
 export type { ManagerQuickTariffResponse } from './models/ManagerQuickTariffResponse';
 export type { ManagerRepairActAiDraftPayload } from './models/ManagerRepairActAiDraftPayload';
@@ -418,6 +430,7 @@ export type { PublicBrandDetailResponse } from './models/PublicBrandDetailRespon
 export type { PublicBrandResponse } from './models/PublicBrandResponse';
 export type { PublicContactLeadPayload } from './models/PublicContactLeadPayload';
 export type { PublicContactLeadResponse } from './models/PublicContactLeadResponse';
+export type { PublicFeatureResponse } from './models/PublicFeatureResponse';
 export type { PublicOrderPricingErrorDetail } from './models/PublicOrderPricingErrorDetail';
 export type { PublicOrderPricingErrorResponse } from './models/PublicOrderPricingErrorResponse';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
@@ -503,6 +516,7 @@ export { ManagerDashboardService } from './services/ManagerDashboardService';
 export { ManagerDocsService } from './services/ManagerDocsService';
 export { ManagerEquipmentService } from './services/ManagerEquipmentService';
 export { ManagerEquipmentLinksService } from './services/ManagerEquipmentLinksService';
+export { ManagerFeaturesService } from './services/ManagerFeaturesService';
 export { ManagerGoogleAuthService } from './services/ManagerGoogleAuthService';
 export { ManagerInstallersService } from './services/ManagerInstallersService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';

@@ -15,7 +15,17 @@ from .common import (
 )
 from .customer import Customer, CustomerBranch, CustomerContract, CustomerRequisitesRecognition, Lead
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
-from .brand import Brand, BrandFeature, ProductSeries, ProductSeriesFeatureLink
+from .brand import Brand, ProductSeries
+from .feature import (
+    Feature,
+    FeatureBrandLink,
+    FeatureCategory,
+    FeatureProductLink,
+    FeatureRule,
+    FeatureSeriesLink,
+    LegacyBrandFeature,
+    LegacyProductSeriesFeatureLink,
+)
 from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
 from .cart import Cart, CartItem
@@ -93,7 +103,14 @@ __all__ = [
     "Cart",
     "CartItem",
     "Brand",
-    "BrandFeature",
+    "Feature",
+    "FeatureBrandLink",
+    "FeatureCategory",
+    "FeatureProductLink",
+    "FeatureRule",
+    "FeatureSeriesLink",
+    "LegacyBrandFeature",
+    "LegacyProductSeriesFeatureLink",
     "BotFsmState",
     "BotRuntimeLease",
     "BotVoiceTranscriptionAudit",
@@ -158,7 +175,6 @@ __all__ = [
     "ProductMainImageCleanupItem",
     "ProductImageVariant",
     "ProductSeries",
-    "ProductSeriesFeatureLink",
     "ProductTagLink",
     "Service",
     "ServiceAttachment",

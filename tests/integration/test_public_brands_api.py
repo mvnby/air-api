@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient
 
-from models import Brand, BrandFeature, Product
+from models import Brand, Feature, FeatureBrandLink, FeatureCategory, Product
 
 
 @pytest.mark.asyncio
@@ -22,29 +22,38 @@ async def test_public_brands_include_only_published_brands_with_published_produc
     empty = Brand(title="Empty", slug="empty", is_published=True, sort_order=30)
     db.add_all([tcl, mdv, hidden, empty])
     await db.flush()
-    db.add_all(
-        [
-            BrandFeature(
+    category = FeatureCategory(slug="comfort", name="Комфорт", sort_order=10)
+    db.add(category)
+    await db.flush()
+    active_feature = Feature(
                 brand_id=tcl.id,
-                title="Fresh Air",
+                category_id=category.id,
+                scope_type="brand",
+                name="Fresh Air",
                 slug="fresh-air",
-                text="Фильтрация воздуха в бытовых сериях.",
+                full_description="Фильтрация воздуха в бытовых сериях.",
                 image_url="/media/brands/tcl/fresh-air.webp",
                 icon="air",
                 footnote="Доступно не во всех моделях",
                 aliases=["filter"],
-                is_published=True,
+                is_active=True,
                 sort_order=20,
-            ),
-            BrandFeature(
+            )
+    draft_feature = Feature(
                 brand_id=tcl.id,
-                title="Draft feature",
+                category_id=category.id,
+                scope_type="brand",
+                name="Draft feature",
                 slug="draft-feature",
-                is_published=False,
+                is_active=False,
                 sort_order=10,
-            ),
-        ]
-    )
+            )
+    db.add_all([active_feature, draft_feature])
+    await db.flush()
+    db.add_all([
+        FeatureBrandLink(brand_id=tcl.id, feature_id=active_feature.id, sort_order=20),
+        FeatureBrandLink(brand_id=tcl.id, feature_id=draft_feature.id, sort_order=10),
+    ])
 
     db.add_all(
         [

@@ -90,6 +90,7 @@ class Product(SQLModel, table=True):
     )
     brand: Optional["Brand"] = Relationship(back_populates="products")
     series: Optional["ProductSeries"] = Relationship(back_populates="products")
+    feature_links: List["FeatureProductLink"] = Relationship(back_populates="product")
 
     specs: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
 

@@ -7,6 +7,7 @@ import type { ProductImageResponse } from './ProductImageResponse';
 import type { ProductManualResponse } from './ProductManualResponse';
 import type { ProductSeriesResponse } from './ProductSeriesResponse';
 import type { ProductSiblingResponse } from './ProductSiblingResponse';
+import type { PublicFeatureResponse } from './PublicFeatureResponse';
 import type { TagResponse } from './TagResponse';
 export type ProductResponse = {
     id: number;
@@ -32,5 +33,6 @@ export type ProductResponse = {
     gallery_images?: Array<ProductImageResponse>;
     manuals?: Array<ProductManualResponse>;
     series_siblings?: Array<ProductSiblingResponse>;
+    features?: Array<PublicFeatureResponse>;
 };
 

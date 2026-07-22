@@ -246,4 +246,5 @@ def map_product_to_response(
         gallery_images=gallery,
         manuals=manuals_payload,
         series_siblings=siblings_payload,
+        features=list(getattr(product, "__dict__", {}).get("_resolved_features") or []),
     )

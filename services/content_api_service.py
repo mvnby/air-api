@@ -6,10 +6,9 @@ from bs4 import BeautifulSoup
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Brand, BrandFeature, GlobalConfig, Product, Service
+from models import Brand, Feature, FeatureBrandLink, GlobalConfig, Product, Service
 
 
 class ContentApiService:
@@ -88,29 +87,29 @@ class ContentApiService:
         }
 
     @staticmethod
-    def _serialize_brand_feature(feature: BrandFeature) -> Dict[str, Any]:
+    def _serialize_brand_feature(feature: Feature) -> Dict[str, Any]:
         return {
             "id": feature.id,
-            "title": feature.title,
+            "title": feature.name,
             "slug": feature.slug,
-            "text": feature.text,
+            "text": feature.full_description,
             "image_url": feature.image_url,
             "icon": feature.icon,
             "footnote": feature.footnote,
             "source_url": feature.source_url,
             "aliases": feature.aliases or [],
-            "is_published": feature.is_published,
+            "is_published": feature.is_active,
             "sort_order": int(feature.sort_order or 0),
         }
 
     @staticmethod
     def _serialize_brand_features(brand: Brand) -> List[Dict[str, Any]]:
-        features = list(getattr(brand, "__dict__", {}).get("feature_library") or [])
-        published = [feature for feature in features if getattr(feature, "is_published", False)]
+        features = list(getattr(brand, "__dict__", {}).get("_resolved_brand_features") or [])
+        published = [feature for feature in features if getattr(feature, "is_active", False)]
         published.sort(
             key=lambda feature: (
                 int(getattr(feature, "sort_order", 0) or 0),
-                str(getattr(feature, "title", "") or "").casefold(),
+                str(getattr(feature, "name", "") or "").casefold(),
                 int(getattr(feature, "id", 0) or 0),
             )
         )
@@ -177,7 +176,6 @@ class ContentApiService:
     async def get_public_brand_by_slug(session: AsyncSession, slug: str) -> Dict[str, Any] | None:
         stmt = (
             select(Brand, func.count(Product.id).label("products_count"))
-            .options(selectinload(Brand.feature_library))
             .join(Product, Product.brand_id == Brand.id)
             .where(Brand.is_published == True)
             .where(Brand.slug == slug)
@@ -189,6 +187,21 @@ class ContentApiService:
         if row is None:
             return None
         brand, products_count = row
+        features = list(
+            (
+                await session.execute(
+                    select(Feature)
+                    .join(FeatureBrandLink, FeatureBrandLink.feature_id == Feature.id)
+                    .where(
+                        FeatureBrandLink.brand_id == brand.id,
+                        FeatureBrandLink.is_enabled.is_(True),
+                        Feature.is_active.is_(True),
+                    )
+                    .order_by(FeatureBrandLink.sort_order, Feature.sort_order, Feature.name)
+                )
+            ).scalars().all()
+        )
+        brand.__dict__["_resolved_brand_features"] = features
         return ContentApiService._serialize_brand(brand, products_count=products_count, include_features=True)
 
     @staticmethod

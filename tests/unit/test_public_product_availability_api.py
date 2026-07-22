@@ -4,6 +4,7 @@ import pytest
 from core.database import get_session
 from main import app
 from models import Product
+from services.feature_resolver_service import FeatureResolverService
 from services.product_service import ProductService
 
 
@@ -43,8 +44,12 @@ async def test_public_catalog_includes_city_availability(monkeypatch):
             }
         }
 
+    async def fake_resolve_features(*args, **kwargs):
+        return {}
+
     monkeypatch.setattr(ProductService, "get_catalog_page", fake_get_catalog_page)
     monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
+    monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
     app.dependency_overrides[get_session] = override_get_session
 
     transport = ASGITransport(app=app)
@@ -83,9 +88,13 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
             }
         }
 
+    async def fake_resolve_features(*args, **kwargs):
+        return {}
+
     monkeypatch.setattr(ProductService, "get_public_product_by_identifier", fake_get_public_product_by_identifier)
     monkeypatch.setattr(ProductService, "get_series_siblings", fake_get_series_siblings)
     monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
+    monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
     app.dependency_overrides[get_session] = override_get_session
 
     transport = ASGITransport(app=app)

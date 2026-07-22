@@ -5,6 +5,7 @@
 import type { ManagerCatalogProductImageResponse } from './ManagerCatalogProductImageResponse';
 import type { ManagerCatalogProductManualResponse } from './ManagerCatalogProductManualResponse';
 import type { ManagerCatalogProductTagResponse } from './ManagerCatalogProductTagResponse';
+import type { ManagerProductFeatureWorkspaceResponse } from './ManagerProductFeatureWorkspaceResponse';
 export type ManagerCatalogProductItemResponse = {
     id: number;
     brand_id?: (number | null);
@@ -29,5 +30,6 @@ export type ManagerCatalogProductItemResponse = {
     vitebsk_qty?: number;
     minsk_qty?: number;
     availability_status?: string;
+    features_workspace?: (ManagerProductFeatureWorkspaceResponse | null);
 };
 
