@@ -13,6 +13,7 @@ from routers import manager_docs
 from routers import manager_equipment
 from routers import manager_equipment_links
 from routers import manager_google_auth
+from routers import manager_features
 from routers import manager_leads
 from routers import manager_mail
 from routers import manager_media
@@ -35,6 +36,7 @@ from routers import manager_warranties
 router = APIRouter()
 router.include_router(manager_backups.router)
 router.include_router(manager_google_auth.router)
+router.include_router(manager_features.router)
 router.include_router(manager_catalog.router)
 router.include_router(manager_catalog_quality.router)
 router.include_router(manager_media.router)

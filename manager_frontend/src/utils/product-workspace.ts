@@ -1,6 +1,6 @@
 import type { Product } from '../api';
 
-export type ProductWorkspaceSection = 'main' | 'media' | 'specifications' | 'suppliers' | 'publication' | 'relations';
+export type ProductWorkspaceSection = 'main' | 'media' | 'specifications' | 'features' | 'suppliers' | 'publication' | 'relations';
 
 export type ProductListWorkspaceContext = {
   returnTo: string;
@@ -17,6 +17,7 @@ const sectionPath: Record<ProductWorkspaceSection, string> = {
   main: '',
   media: '/media',
   specifications: '/specifications',
+  features: '/features',
   suppliers: '/suppliers',
   publication: '/publication',
   relations: '/relations',
@@ -31,7 +32,7 @@ export const parseProductWorkspaceLocation = (pathname: string): {
   productId: number | null;
   section: ProductWorkspaceSection;
 } => {
-  const match = pathname.match(/^\/manager\/products\/(\d+)(?:\/(media|specifications|suppliers|publication|relations))?\/?$/);
+  const match = pathname.match(/^\/manager\/products\/(\d+)(?:\/(media|specifications|features|suppliers|publication|relations))?\/?$/);
   if (!match) return { productId: null, section: 'main' };
   const productId = Number(match[1]);
   return {

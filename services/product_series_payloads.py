@@ -16,24 +16,24 @@ def serialize_series_brand_features(series: ProductSeries) -> List[ProductSeries
     payload: list[ProductSeriesBrandFeatureResponse] = []
     for link in links:
         feature = getattr(link, "__dict__", {}).get("feature")
-        if not feature or not getattr(feature, "is_published", False):
+        if not feature or not getattr(feature, "is_active", False):
             continue
         payload.append(
             ProductSeriesBrandFeatureResponse(
                 id=feature.id,
-                title=getattr(link, "title_override", None) or feature.title,
+                title=getattr(link, "override_title", None) or feature.name,
                 slug=feature.slug,
                 text=(
-                    getattr(link, "text_override", None)
-                    if getattr(link, "text_override", None) is not None
-                    else feature.text
+                    getattr(link, "override_description", None)
+                    if getattr(link, "override_description", None) is not None
+                    else feature.full_description
                 ),
-                image_url=getattr(link, "image_url_override", None) or feature.image_url,
-                icon=getattr(link, "icon_override", None) or feature.icon,
-                footnote=getattr(link, "footnote_override", None) or feature.footnote,
+                image_url=getattr(link, "override_image_url", None) or feature.image_url,
+                icon=getattr(link, "override_icon", None) or feature.icon,
+                footnote=getattr(link, "override_footnote", None) or feature.footnote,
                 source_url=feature.source_url,
                 aliases=_normalize_string_list(feature.aliases),
-                is_published=feature.is_published,
+                is_published=feature.is_active,
                 sort_order=int(
                     getattr(link, "sort_order", None)
                     if getattr(link, "sort_order", None) is not None
@@ -58,6 +58,7 @@ def build_product_series_response(series: ProductSeries | None) -> ProductSeries
         gallery_images=series.gallery_images or [],
         features=series.features or [],
         brand_features=serialize_series_brand_features(series),
+        catalog_features=list(getattr(series, "__dict__", {}).get("_resolved_features") or []),
         feature_blocks=series.feature_blocks or [],
         content_blocks=series.content_blocks or [],
         footnotes=series.footnotes or [],

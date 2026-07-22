@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Product, ProductSeries, ProductSeriesFeatureLink, ProductTagLink, Tag
+from models import Product, ProductSeries, FeatureSeriesLink, ProductTagLink, Tag
 from schemas import (
     ProductSeriesNavigationItemResponse,
     ProductSeriesNavigationResponse,
@@ -136,11 +136,14 @@ class ProductSeriesService:
             .options(
                 selectinload(Product.series)
                 .selectinload(ProductSeries.feature_links)
-                .selectinload(ProductSeriesFeatureLink.feature),
+                .selectinload(FeatureSeriesLink.feature),
                 selectinload(Product.tags).selectinload(Tag.group),
             )
         )
         products = list((await session.execute(stmt)).scalars().all())
+        from services.feature_resolver_service import FeatureResolverService
+
+        await FeatureResolverService.resolve_for_products(session, products)
 
         product_group_keys: Dict[int, List[str]] = {}
         groups: Dict[str, List[Product]] = {}

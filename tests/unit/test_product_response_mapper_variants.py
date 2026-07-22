@@ -234,6 +234,7 @@ def test_map_product_to_response_serializes_public_series():
         "hero_image": "/media/series/elite.webp",
         "gallery_images": [],
         "features": [],
+        "catalog_features": [],
         "brand_features": [],
         "feature_blocks": [],
         "content_blocks": [],

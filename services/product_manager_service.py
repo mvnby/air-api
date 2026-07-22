@@ -80,6 +80,7 @@ class ProductManagerService:
             "vitebsk_qty": supply_metrics.get("vitebsk_qty", 0),
             "minsk_qty": supply_metrics.get("minsk_qty", 0),
             "availability_status": supply_metrics.get("availability_status", "out_of_stock"),
+            "features_workspace": getattr(product, "__dict__", {}).get("_feature_workspace"),
         }
 
     @staticmethod
@@ -99,6 +100,13 @@ class ProductManagerService:
         product = result.scalars().first()
         if not product:
             return None
+        from services.feature_resolver_service import FeatureResolverService
+
+        await FeatureResolverService.resolve_for_products(
+            session,
+            [product],
+            include_suggestions=True,
+        )
         supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, [product])
         return ProductManagerService._serialize_manager_product(
             product,

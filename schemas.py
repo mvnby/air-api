@@ -22,6 +22,7 @@ from schemas_public_checkout import (
     PublicContactLeadResponse,
     PublicOrderPricingErrorResponse,
 )
+from schemas_features import ManagerProductFeatureWorkspaceResponse, PublicFeatureResponse
 
 # --- SHARED ---
 
@@ -331,6 +332,7 @@ class ProductSeriesResponse(BaseModel):
     gallery_images: List[str] = Field(default_factory=list)
     features: List[str] = Field(default_factory=list)
     brand_features: List[ProductSeriesBrandFeatureResponse] = Field(default_factory=list)
+    catalog_features: List[PublicFeatureResponse] = Field(default_factory=list)
     feature_blocks: List[ProductSeriesFeatureBlockResponse] = Field(default_factory=list)
     content_blocks: List[ProductSeriesContentBlockResponse] = Field(default_factory=list)
     footnotes: List[str] = Field(default_factory=list)
@@ -360,6 +362,7 @@ class ProductResponse(ProductBase):
     gallery_images: List[ProductImageResponse] = [] # New
     manuals: List[ProductManualResponse] = []
     series_siblings: List[ProductSiblingResponse] = []
+    features: List[PublicFeatureResponse] = []
 
 
 class ProductListResponse(ProductBase):
@@ -1653,6 +1656,7 @@ class ManagerCatalogProductItemResponse(BaseModel):
     vitebsk_qty: int = 0
     minsk_qty: int = 0
     availability_status: str = "out_of_stock"
+    features_workspace: Optional[ManagerProductFeatureWorkspaceResponse] = None
 
 
 class ManagerCatalogProductListResponse(BaseModel):

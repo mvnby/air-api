@@ -9,11 +9,12 @@ from sqlmodel import SQLModel
 from crud.product import ProductDAO
 from models import (
     Brand,
-    BrandFeature,
+    Feature,
+    FeatureCategory,
     Product,
     ProductLocalStock,
     ProductSeries,
-    ProductSeriesFeatureLink,
+    FeatureSeriesLink,
     ProductTagLink,
     Tag,
     TagGroup,
@@ -38,6 +39,9 @@ async def sqlite_session(tmp_path: Path):
 
 
 async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
+    category = FeatureCategory(slug="comfort", name="Comfort", sort_order=10)
+    session.add(category)
+    await session.flush()
     brand = Brand(title="MDV", slug="mdv", is_published=True)
     session.add(brand)
     await session.flush()
@@ -79,22 +83,24 @@ async def _seed_series_products(session: AsyncSession) -> dict[str, Product]:
     session.add(series)
     await session.flush()
 
-    brand_feature = BrandFeature(
+    brand_feature = Feature(
         brand_id=brand.id,
-        title="Gentle Breeze",
+        category_id=category.id,
+        scope_type="brand",
+        name="Gentle Breeze",
         slug="gentle-breeze",
-        text="Soft airflow without direct draft",
+        full_description="Soft airflow without direct draft",
         image_url="/media/series/gentle-breeze.webp",
         icon="wind",
         footnote="Available on selected models",
         aliases=["soft airflow"],
-        is_published=True,
+        is_active=True,
         sort_order=5,
     )
     session.add(brand_feature)
     await session.flush()
     session.add(
-        ProductSeriesFeatureLink(
+        FeatureSeriesLink(
             series_id=series.id,
             feature_id=brand_feature.id,
             sort_order=10,
@@ -187,7 +193,7 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
         "hero_image": "/media/series/elite.webp",
         "gallery_images": ["/media/series/elite-hero.webp"],
         "features": ["Quiet mode", "Wi-Fi ready"],
-        "brand_features": [
+            "brand_features": [
             {
                 "id": detail_payload.series.brand_features[0].id,
                 "title": "Gentle Breeze",
@@ -200,8 +206,9 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
                 "aliases": ["soft airflow"],
                 "is_published": True,
                 "sort_order": 10,
-            }
-        ],
+                }
+            ],
+            "catalog_features": [],
         "feature_blocks": [
             {
                 "title": "Quiet mode",

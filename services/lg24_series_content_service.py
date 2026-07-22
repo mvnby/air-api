@@ -13,7 +13,15 @@ from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Brand, BrandFeature, MediaAsset, ProductSeries, ProductSeriesFeatureLink
+from models import (
+    Brand,
+    Feature,
+    FeatureBrandLink,
+    FeatureCategory,
+    FeatureSeriesLink,
+    MediaAsset,
+    ProductSeries,
+)
 from parsers.lg24 import Lg24Parser
 from services.catalog_revision_service import CatalogRevisionService
 from services.lg24_series_content_data import BRAND_FEATURE_SEEDS, SERIES_SEEDS, Lg24SeriesSeed
@@ -350,31 +358,48 @@ async def upsert_brand_features(
     overwrite: bool,
 ) -> dict[str, int]:
     existing = (
-        await session.execute(select(BrandFeature).where(BrandFeature.brand_id == brand_id))
+        await session.execute(select(Feature).where(Feature.brand_id == brand_id))
     ).scalars().all()
     by_slug = {feature.slug: feature for feature in existing}
     ids: dict[str, int] = {}
+    category_id: int | None = None
 
     for index, seed in enumerate(BRAND_FEATURE_SEEDS):
         feature = by_slug.get(seed.slug)
         if feature is None:
             if not execute:
                 continue
-            feature = BrandFeature(
+            if category_id is None:
+                category_id = (
+                    await session.execute(
+                        select(FeatureCategory.id).where(FeatureCategory.slug == "comfort")
+                    )
+                ).scalar_one()
+            feature = Feature(
                 brand_id=brand_id,
+                category_id=category_id,
+                scope_type="brand",
                 slug=seed.slug,
-                title=seed.title,
-                text=seed.text,
+                name=seed.title,
+                full_description=seed.text,
                 icon=seed.icon,
                 aliases=list(seed.aliases),
                 sort_order=(index + 1) * 10,
-                is_published=True,
+                is_active=True,
             )
             session.add(feature)
             await session.flush()
+            session.add(
+                FeatureBrandLink(
+                    brand_id=brand_id,
+                    feature_id=int(feature.id),
+                    source="manual",
+                    sort_order=feature.sort_order,
+                )
+            )
         elif overwrite:
-            feature.title = seed.title
-            feature.text = seed.text
+            feature.name = seed.title
+            feature.full_description = seed.text
             feature.icon = seed.icon
             feature.aliases = list(seed.aliases)
             feature.sort_order = (index + 1) * 10
@@ -399,7 +424,7 @@ async def sync_series_feature_links(
 
     existing = (
         await session.execute(
-            select(ProductSeriesFeatureLink).where(ProductSeriesFeatureLink.series_id == series.id)
+            select(FeatureSeriesLink).where(FeatureSeriesLink.series_id == series.id)
         )
     ).scalars().all()
     existing_ids = {int(link.feature_id) for link in existing}
@@ -410,9 +435,10 @@ async def sync_series_feature_links(
     base_order = max((int(link.sort_order or 0) for link in existing), default=0)
     for offset, feature_id in enumerate(to_add, start=1):
         session.add(
-            ProductSeriesFeatureLink(
+            FeatureSeriesLink(
                 series_id=int(series.id),
                 feature_id=feature_id,
+                source="manual",
                 sort_order=base_order + offset * 10,
             )
         )

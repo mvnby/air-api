@@ -15,6 +15,7 @@ import {
   Package,
   Save,
   Settings2,
+  Sparkles,
   Store,
   Trash2,
   Wrench,
@@ -23,6 +24,7 @@ import { api, type ManagerCatalogQualityReportResponse, type Product } from '../
 import type { WebRebuildStatusResponse } from '../client/models/WebRebuildStatusResponse';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import ProductWorkspaceMedia from '../components/products/ProductWorkspaceMedia.vue';
+import ProductWorkspaceFeatures from '../components/products/ProductWorkspaceFeatures.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 import {
   buildProductWorkspacePath,
@@ -64,6 +66,7 @@ const sections: Array<{ id: ProductWorkspaceSection; label: string; icon: typeof
   { id: 'main', label: 'Основное', icon: Package },
   { id: 'media', label: 'Медиа', icon: Images },
   { id: 'specifications', label: 'Характеристики', icon: Settings2 },
+  { id: 'features', label: 'Фичи', icon: Sparkles },
   { id: 'suppliers', label: 'Поставщики', icon: Store },
   { id: 'publication', label: 'Публикация и файлы', icon: FileText },
   { id: 'relations', label: 'Связи и теги', icon: Link2 },
@@ -311,7 +314,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
             <button type="button" class="flex h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-800" :disabled="!neighbors.previousId" @click="navigateProduct(neighbors.previousId)"><ChevronLeft class="h-4 w-4" />Предыдущий</button>
             <button type="button" class="flex h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-800" :disabled="!neighbors.nextId" @click="navigateProduct(neighbors.nextId)">Следующий<ArrowRight class="h-4 w-4" /></button>
           </div>
-          <button v-if="neighbors.nextId && activeSection !== 'media'" type="button" class="hidden h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 sm:flex" :disabled="saving" @click="saveAndNext">Сохранить и дальше<ArrowRight class="h-4 w-4" /></button>
+          <button v-if="neighbors.nextId && !['media', 'features'].includes(activeSection)" type="button" class="hidden h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 sm:flex" :disabled="saving" @click="saveAndNext">Сохранить и дальше<ArrowRight class="h-4 w-4" /></button>
         </div>
       </div>
     </header>
@@ -336,7 +339,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
 
       <main class="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <ProductWorkspaceMedia v-show="activeSection === 'media'" :product="product" @open-editor="openMediaEditor" />
-        <ProductEditModal ref="editor" v-show="activeSection !== 'media'" :model-value="true" :product="product" mode="edit" presentation="workspace" :workspace-section="activeSection" :expert-mode="expertMode" @update:model-value="goBack" @dirty-change="dirty = $event" />
+        <ProductWorkspaceFeatures v-if="activeSection === 'features'" :product="product" />
+        <ProductEditModal ref="editor" v-show="!['media', 'features'].includes(activeSection)" :model-value="true" :product="product" mode="edit" presentation="workspace" :workspace-section="activeSection" :expert-mode="expertMode" @update:model-value="goBack" @dirty-change="dirty = $event" />
       </main>
 
       <aside class="space-y-4 xl:sticky xl:top-[132px] xl:self-start">

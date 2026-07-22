@@ -1,11 +1,23 @@
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 from slugify import slugify
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Brand, BrandFeature, Product, ProductSeries, ProductSeriesFeatureLink, ProductTagLink, Tag, TagGroup
+from models import (
+    Brand,
+    Feature,
+    FeatureBrandLink,
+    FeatureCategory,
+    FeatureSeriesLink,
+    Product,
+    ProductSeries,
+    ProductTagLink,
+    Tag,
+    TagGroup,
+)
 from services.brand_series_service import extract_series_name, sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
 
@@ -38,11 +50,12 @@ class ManagerBrandService:
 
         rows = (
             await session.execute(
-                select(BrandFeature, func.count(ProductSeriesFeatureLink.id).label("series_count"))
-                .outerjoin(ProductSeriesFeatureLink, ProductSeriesFeatureLink.feature_id == BrandFeature.id)
-                .where(BrandFeature.brand_id == brand_id)
-                .group_by(BrandFeature.id)
-                .order_by(BrandFeature.sort_order.asc(), BrandFeature.title.asc())
+                select(Feature, func.count(FeatureSeriesLink.id).label("series_count"))
+                .outerjoin(FeatureSeriesLink, FeatureSeriesLink.feature_id == Feature.id)
+                .where(Feature.brand_id == brand_id)
+                .where(Feature.is_active.is_(True))
+                .group_by(Feature.id)
+                .order_by(Feature.sort_order.asc(), Feature.name.asc())
             )
         ).all()
         return [
@@ -67,20 +80,41 @@ class ManagerBrandService:
         slug = ManagerBrandService._build_feature_slug(payload.get("slug"), title)
         await ManagerBrandService._ensure_brand_feature_slug_available(session, brand_id=brand_id, slug=slug)
 
-        feature = BrandFeature(
+        category_id = (
+            await session.execute(
+                select(FeatureCategory.id).where(FeatureCategory.slug == "comfort")
+            )
+        ).scalar_one_or_none()
+        if category_id is None:
+            category = FeatureCategory(slug="comfort", name="Комфорт", sort_order=10)
+            session.add(category)
+            await session.flush()
+            category_id = int(category.id)
+        feature = Feature(
             brand_id=brand_id,
-            title=title,
+            category_id=category_id,
+            scope_type="brand",
+            name=title,
             slug=slug,
-            text=ManagerBrandService._clean_optional_text(payload.get("text")),
+            full_description=ManagerBrandService._clean_optional_text(payload.get("text")),
             image_url=ManagerBrandService._clean_optional_text(payload.get("image_url")),
             icon=ManagerBrandService._clean_optional_text(payload.get("icon")),
             footnote=ManagerBrandService._clean_optional_text(payload.get("footnote")),
             source_url=ManagerBrandService._clean_optional_text(payload.get("source_url")),
             aliases=ManagerBrandService._normalize_string_list(payload.get("aliases")),
-            is_published=bool(payload.get("is_published", True)),
+            is_active=bool(payload.get("is_published", True)),
             sort_order=int(payload.get("sort_order") or 0),
         )
         session.add(feature)
+        await session.flush()
+        session.add(
+            FeatureBrandLink(
+                brand_id=brand_id,
+                feature_id=int(feature.id),
+                source="manual",
+                sort_order=feature.sort_order,
+            )
+        )
         await CatalogRevisionService.bump_commit_and_purge(
             session,
             scope="brand_feature_create",
@@ -105,9 +139,9 @@ class ManagerBrandService:
             title = str(payload["title"]).strip()
             if not title:
                 raise HTTPException(status_code=400, detail="Название фичи не может быть пустым.")
-            feature.title = title
+            feature.name = title
         if "slug" in payload and payload["slug"] is not None:
-            slug = ManagerBrandService._build_feature_slug(payload["slug"], feature.title)
+            slug = ManagerBrandService._build_feature_slug(payload["slug"], feature.name)
             if slug != feature.slug:
                 await ManagerBrandService._ensure_brand_feature_slug_available(
                     session,
@@ -117,7 +151,7 @@ class ManagerBrandService:
                 )
                 feature.slug = slug
         if "text" in payload:
-            feature.text = ManagerBrandService._clean_optional_text(payload["text"])
+            feature.full_description = ManagerBrandService._clean_optional_text(payload["text"])
         if "image_url" in payload:
             feature.image_url = ManagerBrandService._clean_optional_text(payload["image_url"])
         if "icon" in payload:
@@ -129,7 +163,7 @@ class ManagerBrandService:
         if "aliases" in payload and payload["aliases"] is not None:
             feature.aliases = ManagerBrandService._normalize_string_list(payload["aliases"])
         if "is_published" in payload and payload["is_published"] is not None:
-            feature.is_published = bool(payload["is_published"])
+            feature.is_active = bool(payload["is_published"])
         if "sort_order" in payload and payload["sort_order"] is not None:
             feature.sort_order = int(payload["sort_order"])
 
@@ -158,10 +192,11 @@ class ManagerBrandService:
         if series_count > 0:
             raise HTTPException(
                 status_code=400,
-                detail="Нельзя удалить фичу: она используется в сериях. Сначала уберите ее из серий.",
+                detail="Нельзя удалить фичу: она привязана к сериям бренда.",
             )
-
-        await session.delete(feature)
+        feature.is_active = False
+        feature.archived_at = datetime.now()
+        session.add(feature)
         await CatalogRevisionService.bump_commit_and_purge(
             session,
             scope="brand_feature_delete",
@@ -649,7 +684,7 @@ class ManagerBrandService:
 
         link_rows = (
             await session.execute(
-                select(ProductSeriesFeatureLink).where(ProductSeriesFeatureLink.series_id == series.id)
+                select(FeatureSeriesLink).where(FeatureSeriesLink.series_id == series.id)
             )
         ).scalars().all()
         for link in link_rows:
@@ -709,19 +744,19 @@ class ManagerBrandService:
         }
 
     @staticmethod
-    def _serialize_brand_feature(feature: BrandFeature, *, series_count: int = 0) -> Dict[str, Any]:
+    def _serialize_brand_feature(feature: Feature, *, series_count: int = 0) -> Dict[str, Any]:
         return {
             "id": feature.id,
             "brand_id": feature.brand_id,
-            "title": feature.title,
+            "title": feature.name,
             "slug": feature.slug,
-            "text": feature.text,
+            "text": feature.full_description,
             "image_url": feature.image_url,
             "icon": feature.icon,
             "footnote": feature.footnote,
             "source_url": feature.source_url,
             "aliases": ManagerBrandService._normalize_string_list(feature.aliases),
-            "is_published": feature.is_published,
+            "is_published": feature.is_active,
             "sort_order": int(feature.sort_order or 0),
             "created_at": feature.created_at,
             "updated_at": feature.updated_at,
@@ -730,20 +765,20 @@ class ManagerBrandService:
 
     @staticmethod
     def _serialize_series_feature_link(
-        link: ProductSeriesFeatureLink,
-        feature: BrandFeature,
+        link: FeatureSeriesLink,
+        feature: Feature,
     ) -> Dict[str, Any]:
         return {
             "id": feature.id,
-            "title": link.title_override or feature.title,
+            "title": link.override_title or feature.name,
             "slug": feature.slug,
-            "text": link.text_override if link.text_override is not None else feature.text,
-            "image_url": link.image_url_override or feature.image_url,
-            "icon": link.icon_override or feature.icon,
-            "footnote": link.footnote_override or feature.footnote,
+            "text": link.override_description if link.override_description is not None else feature.full_description,
+            "image_url": link.override_image_url or feature.image_url,
+            "icon": link.override_icon or feature.icon,
+            "footnote": link.override_footnote or feature.footnote,
             "source_url": feature.source_url,
             "aliases": ManagerBrandService._normalize_string_list(feature.aliases),
-            "is_published": feature.is_published,
+            "is_published": feature.is_active,
             "sort_order": int(link.sort_order if link.sort_order is not None else feature.sort_order or 0),
         }
 
@@ -758,14 +793,14 @@ class ManagerBrandService:
 
         rows = (
             await session.execute(
-                select(ProductSeriesFeatureLink, BrandFeature)
-                .join(BrandFeature, BrandFeature.id == ProductSeriesFeatureLink.feature_id)
-                .where(ProductSeriesFeatureLink.series_id.in_(normalized_ids))
+                select(FeatureSeriesLink, Feature)
+                .join(Feature, Feature.id == FeatureSeriesLink.feature_id)
+                .where(FeatureSeriesLink.series_id.in_(normalized_ids))
                 .order_by(
-                    ProductSeriesFeatureLink.series_id.asc(),
-                    ProductSeriesFeatureLink.sort_order.asc(),
-                    BrandFeature.sort_order.asc(),
-                    BrandFeature.title.asc(),
+                    FeatureSeriesLink.series_id.asc(),
+                    FeatureSeriesLink.sort_order.asc(),
+                    Feature.sort_order.asc(),
+                    Feature.name.asc(),
                 )
             )
         ).all()
@@ -800,9 +835,19 @@ class ManagerBrandService:
             found_ids = set(
                 (
                     await session.execute(
-                        select(BrandFeature.id).where(
-                            BrandFeature.brand_id == brand_id,
-                            BrandFeature.id.in_(normalized_ids),
+                        select(Feature.id)
+                        .outerjoin(
+                            FeatureBrandLink,
+                            FeatureBrandLink.feature_id == Feature.id,
+                        )
+                        .where(
+                            Feature.id.in_(normalized_ids),
+                            Feature.is_active.is_(True),
+                            or_(
+                                Feature.brand_id == brand_id,
+                                Feature.scope_type.in_(("universal", "derived")),
+                                FeatureBrandLink.brand_id == brand_id,
+                            ),
                         )
                     )
                 ).scalars().all()
@@ -816,7 +861,7 @@ class ManagerBrandService:
 
         existing_links = (
             await session.execute(
-                select(ProductSeriesFeatureLink).where(ProductSeriesFeatureLink.series_id == series.id)
+                select(FeatureSeriesLink).where(FeatureSeriesLink.series_id == series.id)
             )
         ).scalars().all()
         existing_by_feature_id = {int(link.feature_id): link for link in existing_links}
@@ -829,7 +874,7 @@ class ManagerBrandService:
         for index, feature_id in enumerate(normalized_ids):
             link = existing_by_feature_id.get(feature_id)
             if link is None:
-                link = ProductSeriesFeatureLink(
+                link = FeatureSeriesLink(
                     series_id=int(series.id),
                     feature_id=feature_id,
                 )
@@ -840,8 +885,8 @@ class ManagerBrandService:
     async def _brand_feature_series_count(session: AsyncSession, feature_id: int) -> int:
         count = (
             await session.execute(
-                select(func.count(ProductSeriesFeatureLink.id)).where(
-                    ProductSeriesFeatureLink.feature_id == feature_id
+                select(func.count(FeatureSeriesLink.id)).where(
+                    FeatureSeriesLink.feature_id == feature_id
                 )
             )
         ).scalar_one()
@@ -852,12 +897,12 @@ class ManagerBrandService:
         session: AsyncSession,
         brand_id: int,
         feature_id: int,
-    ) -> BrandFeature:
+    ) -> Feature:
         feature = (
             await session.execute(
-                select(BrandFeature).where(
-                    BrandFeature.id == feature_id,
-                    BrandFeature.brand_id == brand_id,
+                select(Feature).where(
+                    Feature.id == feature_id,
+                    Feature.brand_id == brand_id,
                 )
             )
         ).scalar_one_or_none()
@@ -912,12 +957,9 @@ class ManagerBrandService:
         slug: str,
         exclude_feature_id: Optional[int] = None,
     ) -> None:
-        query = select(BrandFeature).where(
-            BrandFeature.brand_id == brand_id,
-            BrandFeature.slug == slug,
-        )
+        query = select(Feature).where(Feature.slug == slug)
         if exclude_feature_id is not None:
-            query = query.where(BrandFeature.id != exclude_feature_id)
+            query = query.where(Feature.id != exclude_feature_id)
         existing = (await session.execute(query)).scalar_one_or_none()
         if existing is not None:
             raise HTTPException(

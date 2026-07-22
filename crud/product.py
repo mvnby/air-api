@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Brand, Product, ProductImage, ProductSeries, ProductSeriesFeatureLink, Tag, TagGroup, ProductTagLink
+from models import Brand, Product, ProductImage, ProductSeries, FeatureSeriesLink, Tag, TagGroup, ProductTagLink
 from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierOffer
 
@@ -54,7 +54,7 @@ class ProductDAO:
         return (
             selectinload(Product.series)
             .selectinload(ProductSeries.feature_links)
-            .selectinload(ProductSeriesFeatureLink.feature)
+            .selectinload(FeatureSeriesLink.feature)
         )
 
     @staticmethod

@@ -14,6 +14,7 @@ import {
   ReceiptText,
   Settings,
   ShieldCheck,
+  Sparkles,
   ShoppingCart,
   Tags,
   Truck,
@@ -53,6 +54,7 @@ export const navSections: NavSection[] = [
     items: [
       { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix' },
       { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix' },
+      { path: '/manager/features', label: 'Фичи', icon: Sparkles, match: 'prefix' },
       { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix' },
       { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix' },
       { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix' },

@@ -20,6 +20,7 @@ from services.description_generator import DescriptionGeneratorService
 from services.catalog import CatalogService
 from services.product_response_mapper import map_product_to_response
 from services.product_service import ProductService
+from services.feature_resolver_service import FeatureResolverService
 
 router = APIRouter(tags=["api"])
 
@@ -103,6 +104,7 @@ async def get_catalog(
         search=q,
     )
     supply_metrics = await ProductService.get_supply_metrics_map(session, payload["items"])
+    await FeatureResolverService.resolve_for_products(session, payload["items"])
 
     return CatalogResponse(
         items=[
@@ -124,6 +126,7 @@ async def get_catalog(
 async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_session)):
     products = await CatalogService.get_vitebsk_featured_products(session, limit=6)
     supply_metrics = await ProductService.get_supply_metrics_map(session, products)
+    await FeatureResolverService.resolve_for_products(session, products)
     return [
         map_product_to_response(
             product,
@@ -149,6 +152,7 @@ async def get_product_by_identifier(identifier: str, session: AsyncSession = Dep
         raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
     siblings = await ProductService.get_series_siblings(session, product, limit=8)
     supply_metrics = await ProductService.get_supply_metrics_map(session, [product])
+    await FeatureResolverService.resolve_for_products(session, [product])
     return map_product_to_response(
         product,
         series_siblings=siblings,
