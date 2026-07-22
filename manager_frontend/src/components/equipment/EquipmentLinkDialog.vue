@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { Link2, LoaderCircle, X } from 'lucide-vue-next';
 import type { ManagerEquipmentItemResponse } from '../../client';
-import { useDialogA11y } from './useDialogA11y';
+import { useDialogA11y } from '../../composables/useDialogA11y';
 
 const props = defineProps<{
   open: boolean;

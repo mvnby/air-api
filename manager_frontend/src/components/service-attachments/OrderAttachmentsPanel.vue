@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { serviceAttachmentsApi } from './api';
 import ServiceAttachmentViewer from './ServiceAttachmentViewer.vue';
+import { confirmDialog } from '../../services/ui-feedback';
 import {
   SERVICE_ATTACHMENT_CATEGORIES,
   formatAttachmentDate,
@@ -318,7 +319,7 @@ const saveEdit = async () => {
 const deleteAttachment = async (item: ServiceAttachmentItem) => {
   const attachmentId = persistedId(item);
   if (attachmentId === null) return;
-  if (!window.confirm(`Архивировать файл «${item.filename}»?`)) return;
+  if (!await confirmDialog({ title: 'Архивировать файл?', description: item.filename, confirmText: 'Архивировать', variant: 'warning' })) return;
   deletingId.value = attachmentId;
   actionError.value = '';
   try {

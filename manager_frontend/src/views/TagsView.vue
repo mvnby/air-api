@@ -4,6 +4,7 @@ import { api } from '../api';
 import type { ManagerTagGroupResponse, ManagerTagOptionResponse } from '../client';
 import TagGroupModal from '../components/TagGroupModal.vue';
 import TagModal from '../components/TagModal.vue';
+import { confirmDialog, notify } from '../services/ui-feedback';
 
 const groups = ref<ManagerTagGroupResponse[]>([]);
 const selectedGroupId = ref<number | null>(null);
@@ -54,13 +55,13 @@ const openEditGroup = (group: ManagerTagGroupResponse) => {
 };
 
 const deleteGroup = async (group: ManagerTagGroupResponse) => {
-  if (!confirm(`Вы действительно хотите удалить группу "${group.title}"?`)) return;
+  if (!await confirmDialog({ title: 'Удалить группу тегов?', description: group.title, confirmText: 'Удалить', variant: 'danger' })) return;
   try {
     await api.deleteManagerTagGroup(group.id);
     if (selectedGroupId.value === group.id) selectedGroupId.value = null;
     await fetchTags();
   } catch (err: any) {
-    alert(err?.body?.detail || 'Ошибка при удалении');
+    notify(err?.body?.detail || 'Ошибка при удалении', 'error');
   }
 };
 
@@ -77,12 +78,12 @@ const openEditTag = (tag: ManagerTagOptionResponse) => {
 };
 
 const deleteTag = async (tag: ManagerTagOptionResponse) => {
-  if (!confirm(`Вы действительно хотите удалить тег "${tag.title}"?`)) return;
+  if (!await confirmDialog({ title: 'Удалить тег?', description: tag.title, confirmText: 'Удалить', variant: 'danger' })) return;
   try {
     await api.deleteManagerTag(tag.id);
     await fetchTags();
   } catch (err: any) {
-    alert(err?.body?.detail || 'Ошибка при удалении');
+    notify(err?.body?.detail || 'Ошибка при удалении', 'error');
   }
 };
 

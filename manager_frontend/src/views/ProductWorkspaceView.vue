@@ -26,6 +26,7 @@ import ProductEditModal from '../components/ProductEditModal.vue';
 import ProductWorkspaceMedia from '../components/products/ProductWorkspaceMedia.vue';
 import ProductWorkspaceFeatures from '../components/products/ProductWorkspaceFeatures.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { confirmDialog } from '../services/ui-feedback';
 import {
   buildProductWorkspacePath,
   getProductWorkspaceNeighbors,
@@ -175,15 +176,20 @@ const rebuildSite = async () => {
   }
 };
 
-const confirmLeave = (): boolean => !dirty.value || window.confirm('В товаре есть несохранённые изменения. Выйти без сохранения?');
+const confirmLeave = async (): Promise<boolean> => !dirty.value || confirmDialog({
+  title: 'Выйти без сохранения?',
+  description: 'В товаре есть несохранённые изменения. Они будут потеряны.',
+  confirmText: 'Выйти без сохранения',
+  variant: 'warning',
+});
 
-const goBack = () => {
-  if (!confirmLeave()) return;
+const goBack = async () => {
+  if (!await confirmLeave()) return;
   navigate(context?.returnTo || '/manager/products');
 };
 
-const navigateProduct = (targetId: number | null) => {
-  if (!targetId || !confirmLeave()) return;
+const navigateProduct = async (targetId: number | null) => {
+  if (!targetId || !await confirmLeave()) return;
   navigate(buildProductWorkspacePath(targetId, activeSection.value));
 };
 
@@ -210,11 +216,11 @@ const saveCurrent = async (): Promise<boolean> => {
 
 const saveAndNext = async () => {
   const saved = await saveCurrent();
-  if (saved && neighbors.value.nextId) navigateProduct(neighbors.value.nextId);
+  if (saved && neighbors.value.nextId) await navigateProduct(neighbors.value.nextId);
 };
 
-const openMediaEditor = () => {
-  if (!product.value || !confirmLeave()) return;
+const openMediaEditor = async () => {
+  if (!product.value || !await confirmLeave()) return;
   const returnTo = buildProductWorkspacePath(product.value.id, 'media');
   const params = new URLSearchParams({
     editProductId: String(product.value.id),
@@ -238,7 +244,12 @@ const copyPublicProductLink = async () => {
 
 const deleteProduct = async () => {
   if (!product.value || deleting.value) return;
-  if (!window.confirm(`Удалить товар «${product.value.title}»? Товар со связями удалить не получится.`)) return;
+  if (!await confirmDialog({
+    title: 'Удалить товар?',
+    description: `«${product.value.title}». Товар со связями удалить не получится.`,
+    confirmText: 'Удалить товар',
+    variant: 'danger',
+  })) return;
   deleting.value = true;
   try {
     await api.deleteProduct(product.value.id);

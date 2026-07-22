@@ -3,6 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue';
 import { api, type Product } from '../api';
 import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images } from 'lucide-vue-next';
 import BulkSpecsModal from './BulkSpecsModal.vue';
+import { notify } from '../services/ui-feedback';
 
 // ... (state refs) ...
 const products = ref<Product[]>([]);
@@ -117,16 +118,16 @@ const uploadFiles = async (files: FileList) => {
     try {
         if (isBulkMode.value) {
             const res = await api.bulkUploadLocalImages(selectedIdsArray.value, files);
-            alert(`Uploaded ${res.uploaded_links} links`);
+            notify(`Загружено ссылок: ${res.uploaded_links}`, 'success');
             await loadCommonGallery();
         } else {
             const res = await api.uploadLocalImages(selectedProduct.value!.id, files);
-            alert(`Uploaded ${res.uploaded} images`);
+            notify(`Загружено изображений: ${res.uploaded}`, 'success');
             refreshSelectedProduct();
         }
         await loadProducts();
     } catch (e) {
-        alert('Upload failed');
+        notify('Не удалось загрузить изображения', 'error');
         console.error(e);
     } finally {
         searchLoading.value = false;
@@ -209,7 +210,7 @@ const handleImageSearch = async () => {
         const results = await api.searchImages(imageQuery.value);
         imageSearchResults.value = results;
     } catch (e) {
-        alert('Search failed');
+        notify('Поиск изображений не удался', 'error');
     } finally {
         searchLoading.value = false;
     }
@@ -237,15 +238,15 @@ const addToGallery = async (url: string) => {
     try {
         if (isBulkMode.value) {
             await bulkAddFromUrls([url], false);
-            alert('Added to selected products');
+            notify('Изображение добавлено к выбранным товарам', 'success');
         } else {
             await api.linkSearchResult(selectedProduct.value!.id, url);
             await loadProducts();
             refreshSelectedProduct();
-            alert('Added to gallery');
+            notify('Изображение добавлено в галерею', 'success');
         }
     } catch (e) {
-        alert('Failed to add');
+        notify('Не удалось добавить изображение', 'error');
     } finally {
         uploadingImageId.value = null;
     }
@@ -257,7 +258,7 @@ const triggerCleanup = async () => {
         const res = await api.cleanupMedia(false);
         cleanupStats.value = res;
     } catch (e) {
-        alert('Cleanup failed');
+        notify('Не удалось очистить изображения', 'error');
     } finally {
         cleanupLoading.value = false;
     }
@@ -277,23 +278,23 @@ const reuseImage = async (sourceUrl: string) => {
     try {
         if (isBulkMode.value) {
             await bulkAddFromUrls([sourceUrl], false);
-            alert('Image reused for selected products');
+            notify('Изображение использовано для выбранных товаров', 'success');
         } else {
             await api.reuseImage(selectedProduct.value!.id, sourceUrl);
-            alert('Image reused');
+            notify('Изображение использовано повторно', 'success');
             await loadProducts();
             refreshSelectedProduct();
         }
-    } catch (e) { alert('Failed'); }
+    } catch (e) { notify('Операция не выполнена', 'error'); }
 };
 
 const setAsMain = async (id: number) => {
     try {
         await api.setMainImage(id);
-        alert('Updated');
+        notify('Изменения сохранены', 'success');
         await loadProducts();
         refreshSelectedProduct();
-    } catch (e) { alert('Failed'); }
+    } catch (e) { notify('Операция не выполнена', 'error'); }
 };
 
 const confirmDeleteId = ref<number | null>(null);
@@ -311,7 +312,7 @@ const removeFromGallery = async (id: number) => {
         await api.deleteGalleryImage(id);
         await loadProducts();
         refreshSelectedProduct();
-    } catch (e) { alert('Failed'); }
+    } catch (e) { notify('Операция не выполнена', 'error'); }
 };
 
 const removeCommonImage = async (url: string) => {
@@ -330,7 +331,7 @@ const removeCommonImage = async (url: string) => {
         await loadProducts();
         await loadCommonGallery();
     } catch (e) {
-        alert('Failed');
+        notify('Операция не выполнена', 'error');
     }
 };
 
@@ -349,7 +350,7 @@ const selectImage = async (url: string) => {
     try {
         if (isBulkMode.value) {
             await bulkAddFromUrls([url], true);
-            alert('Set as main for selected products');
+            notify('Главное изображение задано выбранным товарам', 'success');
         } else {
             const response = await api.uploadImage(selectedProduct.value!.id, url);
             if (response && response.url) {
@@ -357,11 +358,11 @@ const selectImage = async (url: string) => {
                  refreshSelectedProduct();
                  showModal.value = false;
             } else {
-                 alert('Upload succeeded but no URL returned');
+                 notify('Файл загружен, но сервер не вернул ссылку', 'error');
             }
         }
     } catch (e) {
-        alert('Upload failed');
+        notify('Не удалось загрузить файл', 'error');
     } finally {
         uploadingImageId.value = null;
     }

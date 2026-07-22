@@ -5,6 +5,8 @@ import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
 import type { ManagerAuthStatusResponse } from './client';
+import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
+import { confirmDialog } from './services/ui-feedback';
 import {
   coreNavItems,
   defaultExpandedNavSections,
@@ -330,7 +332,13 @@ const renderTelegramLogin = async () => {
 };
 
 const handleRebuild = async () => {
-  if (!confirm('Вы уверены, что хотите обновить сайт? Это займет около 2 минут.')) return;
+  const confirmed = await confirmDialog({
+    title: 'Пересобрать сайт?',
+    description: 'GitHub Actions запустит новую сборку Astro. Обычно это занимает около двух минут.',
+    confirmText: 'Запустить сборку',
+    variant: 'warning',
+  });
+  if (!confirmed) return;
   rebuildLoading.value = true;
   try {
     const result = await api.rebuildWeb();
@@ -676,5 +684,6 @@ watch(currentPath, () => {
         {{ toast }}
       </div>
     </Transition>
+    <UiFeedbackHost />
   </div>
 </template>

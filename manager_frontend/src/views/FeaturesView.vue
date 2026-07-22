@@ -12,6 +12,7 @@ import {
 } from '../client';
 import MediaField from '../components/MediaField.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { confirmDialog } from '../services/ui-feedback';
 
 type RuleDraft = FeatureRulePayload & { valueText: string };
 type FeatureDraft = Omit<FeatureCreatePayload, 'rules'> & { rules: RuleDraft[] };
@@ -188,7 +189,7 @@ const save = async () => {
 };
 
 const archive = async (feature: ManagerFeatureResponse) => {
-  if (!window.confirm(`Архивировать фичу «${feature.name}»?`)) return;
+  if (!await confirmDialog({ title: 'Архивировать фичу?', description: feature.name, confirmText: 'Архивировать', variant: 'warning' })) return;
   try {
     await ManagerFeaturesService.archiveManagerFeature(feature.id);
     await load();

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useDialogA11y } from '../equipment/useDialogA11y';
+import { useDialogA11y } from '../../composables/useDialogA11y';
 import { serviceAttachmentsApi } from './api';
 import {
   formatAttachmentDate,

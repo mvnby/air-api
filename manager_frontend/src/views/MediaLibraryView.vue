@@ -29,6 +29,7 @@ import {
 import { uploadSequentially } from '../utils/sequential-upload';
 import { optimizeImageForUpload } from '../utils/image-upload-optimization';
 import ImageCropSelector, { type ImageCropSourceSize, type ImageCropValue } from '../components/ImageCropSelector.vue';
+import { confirmDialog } from '../services/ui-feedback';
 
 type MediaKind = { value: string; label: string };
 type BackgroundRemovalModelOption = {
@@ -455,7 +456,12 @@ const copyUrl = async (asset = selectedAsset.value) => {
 const deleteSelected = async () => {
   if (!selectedAsset.value) return;
   const used = Number(selectedAsset.value.usage_count || 0) > 0;
-  if (!confirm(used ? 'Файл используется. Удалить metadata принудительно?' : 'Удалить файл из медиатеки?')) return;
+  if (!await confirmDialog({
+    title: used ? 'Файл используется' : 'Удалить файл из медиатеки?',
+    description: used ? 'Удалить метаданные принудительно? Связанные места могут потерять изображение.' : '',
+    confirmText: 'Удалить',
+    variant: 'danger',
+  })) return;
   const assetId = selectedAsset.value.id;
   deleting.value = true;
   try {

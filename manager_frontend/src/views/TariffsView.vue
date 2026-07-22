@@ -9,6 +9,7 @@ import type {
 import { getApiErrorMessage } from '../utils/api-errors';
 import TariffEditModal from '../components/TariffEditModal.vue';
 import TariffRuleEditModal from '../components/TariffRuleEditModal.vue';
+import { confirmDialog } from '../services/ui-feedback';
 
 const tariffs = ref<ManagerTariffResponse[]>([]);
 const loading = ref(false);
@@ -83,7 +84,7 @@ const openEditTariff = (tariff: ManagerTariffResponse) => {
 };
 
 const confirmDeleteTariff = async (tariff: ManagerTariffResponse) => {
-  if (!window.confirm(`Удалить тариф "${tariffShortName(tariff)}"?`)) return;
+  if (!await confirmDialog({ title: 'Удалить тариф?', description: tariffShortName(tariff), confirmText: 'Удалить', variant: 'danger' })) return;
   try {
     await api.deleteManagerTariff(tariff.id);
     setToast('Тариф удален');
@@ -106,7 +107,7 @@ const openEditRule = (tariffId: number, rule: ManagerTariffRuleResponse) => {
 };
 
 const confirmDeleteRule = async (tariffId: number, rule: ManagerTariffRuleResponse) => {
-  if (!window.confirm(`Удалить правило "${rule.name}"?`)) return;
+  if (!await confirmDialog({ title: 'Удалить правило?', description: rule.name, confirmText: 'Удалить', variant: 'danger' })) return;
   try {
     await api.deleteManagerTariffRule(tariffId, rule.id);
     setToast('Правило удалено');

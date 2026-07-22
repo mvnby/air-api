@@ -9,6 +9,7 @@ import type {
   ManagerTariffServiceKind,
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { confirmDialog } from '../services/ui-feedback';
 
 const tariffs = ref<ManagerTariffResponse[]>([]);
 const loadingTariffs = ref(false);
@@ -242,7 +243,12 @@ const saveEstimate = async () => {
 };
 
 const deleteEstimate = async (estimate: ManagerServiceEstimateResponse) => {
-  const ok = window.confirm(`Удалить смету #${estimate.id}? Это действие нельзя отменить.`);
+  const ok = await confirmDialog({
+    title: `Удалить смету #${estimate.id}?`,
+    description: 'Это действие нельзя отменить.',
+    confirmText: 'Удалить смету',
+    variant: 'danger',
+  });
   if (!ok) return;
 
   deletingEstimateId.value = estimate.id;

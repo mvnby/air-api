@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
+import { confirmDialog } from '../services/ui-feedback';
 import {
   Building2,
   CheckCircle2,
@@ -220,7 +221,12 @@ const saveSupplier = async () => {
 
 const deleteSupplier = async () => {
   if (!activeSupplier.value?.id) return;
-  if (!confirm('Удалить поставщика со всеми прайсами и закупочными заявками?')) return;
+  if (!await confirmDialog({
+    title: 'Удалить поставщика?',
+    description: 'Будут также удалены его прайсы и закупочные заявки.',
+    confirmText: 'Удалить поставщика',
+    variant: 'danger',
+  })) return;
   deletingSupplierId.value = activeSupplier.value.id;
   try {
     await api.deleteSupplier(activeSupplier.value.id);
@@ -276,7 +282,7 @@ const editContact = (contact: any) => {
 };
 
 const deleteContact = async (contactId: number) => {
-  if (!activeSupplier.value?.id || !confirm('Удалить контакт?')) return;
+  if (!activeSupplier.value?.id || !await confirmDialog({ title: 'Удалить контакт?', confirmText: 'Удалить', variant: 'danger' })) return;
   deletingContactId.value = contactId;
   try {
     await api.deleteSupplierContact(activeSupplier.value.id, contactId);
@@ -329,7 +335,7 @@ const editWarehouse = (warehouseItem: any) => {
 };
 
 const deleteWarehouse = async (warehouseId: number) => {
-  if (!activeSupplier.value?.id || !confirm('Удалить склад отгрузки?')) return;
+  if (!activeSupplier.value?.id || !await confirmDialog({ title: 'Удалить склад отгрузки?', confirmText: 'Удалить', variant: 'danger' })) return;
   deletingWarehouseId.value = warehouseId;
   try {
     await api.deleteSupplierWarehouse(activeSupplier.value.id, warehouseId);
@@ -424,7 +430,7 @@ const editSource = async (source: any) => {
 };
 
 const deleteSource = async (sourceId: number) => {
-  if (!confirm('Удалить источник?')) return;
+  if (!await confirmDialog({ title: 'Удалить источник прайса?', confirmText: 'Удалить', variant: 'danger' })) return;
   deletingSourceId.value = sourceId;
   try {
     await api.deleteSupplierSource(sourceId);

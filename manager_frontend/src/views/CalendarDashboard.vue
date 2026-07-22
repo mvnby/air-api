@@ -10,6 +10,7 @@ import { api } from '../api';
 import { Loader2, RefreshCw, Trash2, XCircle } from 'lucide-vue-next';
 import OrderEditDrawer from '../components/orders/OrderEditDrawer.vue';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
+import { confirmDialog } from '../services/ui-feedback';
 
 const isLoading = ref(false);
 const error = ref<string | null>(null);
@@ -114,7 +115,7 @@ const refreshCalendar = () => {
 };
 
 const cancelStaleStage = async (stage: ManagerStaleWorkStageItem) => {
-  if (!window.confirm(`Отменить задачу «${stage.name}» по заказу #${stage.order_id}?`)) return;
+  if (!await confirmDialog({ title: 'Отменить задачу?', description: `«${stage.name}» · заказ #${stage.order_id}`, confirmText: 'Отменить задачу', variant: 'warning' })) return;
   try {
     await ManagerOrdersService.cancelManagerOrderStageDirect(stage.id);
     setToast('Задача отменена');
@@ -126,7 +127,7 @@ const cancelStaleStage = async (stage: ManagerStaleWorkStageItem) => {
 };
 
 const deleteStaleStage = async (stage: ManagerStaleWorkStageItem) => {
-  if (!window.confirm(`Удалить задачу «${stage.name}» по заказу #${stage.order_id}?`)) return;
+  if (!await confirmDialog({ title: 'Удалить задачу?', description: `«${stage.name}» · заказ #${stage.order_id}`, confirmText: 'Удалить', variant: 'danger' })) return;
   try {
     await ManagerOrdersService.deleteManagerOrderStageDirect(stage.id);
     setToast('Задача удалена');
