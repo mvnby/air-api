@@ -29,6 +29,7 @@ from schemas_features import (
     ManagerFeatureResponse,
 )
 from services.catalog_revision_service import CatalogRevisionService
+from services.feature_scope_policy import FeatureScopePolicy
 
 
 class FeatureLibraryService:
@@ -50,6 +51,7 @@ class FeatureLibraryService:
         search: str | None = None,
         category_id: int | None = None,
         brand_id: int | None = None,
+        product_id: int | None = None,
         scope_type: str | None = None,
         is_active: bool | None = True,
     ) -> list[ManagerFeatureResponse]:
@@ -68,6 +70,41 @@ class FeatureLibraryService:
             stmt = stmt.where(Feature.is_active == is_active)
         stmt = stmt.order_by(Feature.sort_order, Feature.name, Feature.id)
         features = list((await session.execute(stmt)).scalars().all())
+        if product_id is not None:
+            product = await session.get(Product, product_id)
+            if product is None:
+                raise HTTPException(status_code=404, detail="Товар не найден")
+            product_feature_ids = set(
+                (
+                    await session.execute(
+                        select(FeatureProductLink.feature_id).where(
+                            FeatureProductLink.product_id == product_id
+                        )
+                    )
+                ).scalars().all()
+            )
+            series_feature_ids: set[int] = set()
+            if product.series_id is not None:
+                series_feature_ids = set(
+                    (
+                        await session.execute(
+                            select(FeatureSeriesLink.feature_id).where(
+                                FeatureSeriesLink.series_id == product.series_id
+                            )
+                        )
+                    ).scalars().all()
+                )
+            features = [
+                feature
+                for feature in features
+                if FeatureScopePolicy.allows_product(
+                    feature,
+                    product,
+                    has_series_link=int(feature.id) in series_feature_ids,
+                    has_product_link=int(feature.id) in product_feature_ids,
+                    mode="manual",
+                )
+            ]
         return await FeatureLibraryService._serialize_many(session, features)
 
     @staticmethod

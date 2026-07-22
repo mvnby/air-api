@@ -53,6 +53,7 @@ async def test_public_brands_include_only_published_brands_with_published_produc
     db.add_all([
         FeatureBrandLink(brand_id=tcl.id, feature_id=active_feature.id, sort_order=20),
         FeatureBrandLink(brand_id=tcl.id, feature_id=draft_feature.id, sort_order=10),
+        FeatureBrandLink(brand_id=mdv.id, feature_id=active_feature.id, sort_order=5),
     ])
 
     db.add_all(
@@ -128,6 +129,10 @@ async def test_public_brands_include_only_published_brands_with_published_produc
             "sort_order": 20,
         }
     ]
+
+    mdv_detail_response = await async_client.get("/api/v1/content/brands/mdv")
+    assert mdv_detail_response.status_code == 200, mdv_detail_response.text
+    assert mdv_detail_response.json()["features"] == []
 
     for slug in ("hidden", "empty", "missing"):
         missing_response = await async_client.get(f"/api/v1/content/brands/{slug}")

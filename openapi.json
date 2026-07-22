@@ -3920,6 +3920,22 @@
             }
           },
           {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
+            }
+          },
+          {
             "name": "scope_type",
             "in": "query",
             "required": false,

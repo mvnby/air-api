@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 from slugify import slugify
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
@@ -20,6 +20,7 @@ from models import (
 )
 from services.brand_series_service import extract_series_name, sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
+from services.feature_scope_policy import FeatureScopePolicy
 
 
 class ManagerBrandService:
@@ -793,8 +794,9 @@ class ManagerBrandService:
 
         rows = (
             await session.execute(
-                select(FeatureSeriesLink, Feature)
+                select(FeatureSeriesLink, Feature, ProductSeries.brand_id)
                 .join(Feature, Feature.id == FeatureSeriesLink.feature_id)
+                .join(ProductSeries, ProductSeries.id == FeatureSeriesLink.series_id)
                 .where(FeatureSeriesLink.series_id.in_(normalized_ids))
                 .order_by(
                     FeatureSeriesLink.series_id.asc(),
@@ -805,7 +807,13 @@ class ManagerBrandService:
             )
         ).all()
         out: Dict[int, List[Dict[str, Any]]] = {series_id: [] for series_id in normalized_ids}
-        for link, feature in rows:
+        for link, feature, brand_id in rows:
+            if not FeatureScopePolicy.allows_target(
+                feature,
+                target_type="series",
+                brand_id=brand_id,
+            ):
+                continue
             out.setdefault(int(link.series_id), []).append(
                 ManagerBrandService._serialize_series_feature_link(link, feature)
             )
@@ -832,26 +840,26 @@ class ManagerBrandService:
                 normalized_ids.append(feature_id)
 
         if normalized_ids:
-            found_ids = set(
+            candidates = list(
                 (
                     await session.execute(
-                        select(Feature.id)
-                        .outerjoin(
-                            FeatureBrandLink,
-                            FeatureBrandLink.feature_id == Feature.id,
-                        )
-                        .where(
+                        select(Feature).where(
                             Feature.id.in_(normalized_ids),
                             Feature.is_active.is_(True),
-                            or_(
-                                Feature.brand_id == brand_id,
-                                Feature.scope_type.in_(("universal", "derived")),
-                                FeatureBrandLink.brand_id == brand_id,
-                            ),
+                            Feature.archived_at.is_(None),
                         )
                     )
                 ).scalars().all()
             )
+            found_ids = {
+                int(feature.id)
+                for feature in candidates
+                if FeatureScopePolicy.allows_target(
+                    feature,
+                    target_type="series",
+                    brand_id=brand_id,
+                )
+            }
             missing_ids = [feature_id for feature_id in normalized_ids if feature_id not in found_ids]
             if missing_ids:
                 raise HTTPException(

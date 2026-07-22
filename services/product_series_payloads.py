@@ -4,6 +4,7 @@ from typing import Any, List
 
 from models import ProductSeries
 from schemas import ProductSeriesBrandFeatureResponse, ProductSeriesResponse
+from services.feature_scope_policy import FeatureScopePolicy
 
 
 def serialize_series_brand_features(series: ProductSeries) -> List[ProductSeriesBrandFeatureResponse]:
@@ -17,6 +18,12 @@ def serialize_series_brand_features(series: ProductSeries) -> List[ProductSeries
     for link in links:
         feature = getattr(link, "__dict__", {}).get("feature")
         if not feature or not getattr(feature, "is_active", False):
+            continue
+        if not FeatureScopePolicy.allows_target(
+            feature,
+            target_type="series",
+            brand_id=series.brand_id,
+        ):
             continue
         payload.append(
             ProductSeriesBrandFeatureResponse(

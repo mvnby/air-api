@@ -66,7 +66,7 @@ const load = async () => {
   try {
     const [featureData, libraryData] = await Promise.all([
       ManagerFeaturesService.getManagerProductFeatures(props.product.id),
-      ManagerFeaturesService.listManagerFeatures(undefined, undefined, undefined, undefined, true),
+      ManagerFeaturesService.listManagerFeatures(undefined, undefined, undefined, props.product.id, undefined, true),
     ]);
     workspace.value = normalizeWorkspace(featureData);
     library.value = libraryData.items;

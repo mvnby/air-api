@@ -31,6 +31,7 @@ export class ManagerFeaturesService {
      * @param search
      * @param categoryId
      * @param brandId
+     * @param productId
      * @param scopeType
      * @param isActive
      * @returns ManagerFeatureListResponse Successful Response
@@ -40,6 +41,7 @@ export class ManagerFeaturesService {
         search?: (string | null),
         categoryId?: (number | null),
         brandId?: (number | null),
+        productId?: (number | null),
         scopeType?: ('universal' | 'brand' | 'series' | 'product' | 'derived' | null),
         isActive?: (boolean | null),
     ): CancelablePromise<ManagerFeatureListResponse> {
@@ -50,6 +52,7 @@ export class ManagerFeaturesService {
                 'search': search,
                 'category_id': categoryId,
                 'brand_id': brandId,
+                'product_id': productId,
                 'scope_type': scopeType,
                 'is_active': isActive,
             },
