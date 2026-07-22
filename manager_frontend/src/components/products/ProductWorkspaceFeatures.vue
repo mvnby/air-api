@@ -102,7 +102,7 @@ const toggleFeature = async (feature: ManagerFeatureResponse) => {
     return;
   }
   if (inheritedIds.value.has(feature.id)) {
-    await toggleInherited(feature as PublicFeatureResponse);
+    await toggleInherited(feature);
     return;
   }
   const index = assignments.value.findIndex((item) => item.feature_id === feature.id);
@@ -111,7 +111,7 @@ const toggleFeature = async (feature: ManagerFeatureResponse) => {
   await persist();
 };
 
-const toggleInherited = async (feature: PublicFeatureResponse) => {
+const toggleInherited = async (feature: { id: number; sort_order?: number }) => {
   const index = assignments.value.findIndex((item) => item.feature_id === feature.id);
   if (index >= 0) assignments.value.splice(index, 1);
   else assignments.value.push({ feature_id: feature.id, source: 'manual', is_enabled: false, sort_order: feature.sort_order || 0 });
