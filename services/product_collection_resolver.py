@@ -9,6 +9,7 @@ from crud.product_collection import ProductCollectionDAO
 from models import ProductCollection
 from services.feature_resolver_service import FeatureResolverService
 from services.product_collection_eligibility import ProductCollectionEligibility
+from services.product_collection_rule_matcher import ProductCollectionRuleMatcher
 from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
 
@@ -58,7 +59,14 @@ class ProductCollectionResolver:
         visited.add(collection_id)
 
         item_rows = await ProductCollectionDAO.list_items(session, collection_id)
-        product_ids = [int(item.product_id) for item in item_rows]
+        manual_rows = (
+            item_rows
+            if collection.mode == "manual"
+            else [item for item in item_rows if item.is_pinned]
+            if collection.mode == "hybrid"
+            else []
+        )
+        product_ids = [int(item.product_id) for item in manual_rows]
         products = await ProductDAO.get_by_ids(
             session,
             product_ids,
@@ -71,7 +79,7 @@ class ProductCollectionResolver:
 
         selected: list[dict] = []
         excluded: list[dict] = []
-        for item in item_rows:
+        for item in manual_rows:
             product = product_map.get(int(item.product_id))
             if product is None:
                 excluded.append(
@@ -114,6 +122,84 @@ class ProductCollectionResolver:
             )
             if len(selected) >= collection.max_items:
                 break
+
+        rule_config = dict(collection.rule_config or {})
+        if (
+            collection.mode in {"automatic", "hybrid"}
+            and len(selected) < collection.max_items
+            and any(value not in (None, [], "") for value in rule_config.values())
+        ):
+            automatic_products = await ProductDAO.get_filtered(
+                session,
+                area_min=rule_config.get("min_area_m2"),
+                area_max=rule_config.get("max_area_m2"),
+                min_price=rule_config.get("min_price"),
+                max_price=rule_config.get("max_price"),
+                is_inverter=rule_config.get("is_inverter"),
+                brand_ids=rule_config.get("brand_ids"),
+                series_ids=rule_config.get("series_ids"),
+                product_kinds=rule_config.get("product_kinds"),
+                is_published=True,
+                sort=collection.sort_mode,
+                page=1,
+                limit=500,
+                load_image_variants=True,
+            )
+            await FeatureResolverService.resolve_for_products(session, automatic_products)
+            automatic_metrics = await ProductReadService.get_supply_metrics_map(
+                session,
+                automatic_products,
+            )
+            selected_ids = {
+                int(item["product"].id)
+                for item in selected
+            }
+            for candidate_position, product in enumerate(automatic_products):
+                product_id = int(product.id)
+                if product_id in selected_ids:
+                    continue
+                metrics = automatic_metrics.get(product_id, {})
+                if not ProductCollectionRuleMatcher.matches(
+                    product,
+                    rule_config=rule_config,
+                    supply_metrics=metrics,
+                ):
+                    continue
+                eligibility = ProductCollectionEligibility.evaluate(
+                    product,
+                    surface_key=surface_key,
+                    slot_key=slot_key,
+                    supply_metrics=metrics,
+                )
+                if not eligibility.is_eligible:
+                    if len(excluded) < 50:
+                        excluded.append(
+                            {
+                                "product_id": product_id,
+                                "product_title": product.title,
+                                "position": candidate_position,
+                                "reason_codes": list(eligibility.reason_codes),
+                                "reasons": list(eligibility.reasons),
+                            }
+                        )
+                    continue
+                selected.append(
+                    {
+                        "selection_source": (
+                            selection_source
+                            if selection_source == "fallback"
+                            else "automatic"
+                        ),
+                        "position": len(selected),
+                        "product": map_product_to_response(
+                            product,
+                            supply_metrics=metrics,
+                        ),
+                    }
+                )
+                selected_ids.add(product_id)
+                if len(selected) >= collection.max_items:
+                    break
 
         below_min = len(selected) < collection.min_items
         if below_min and collection.fallback_collection_id:

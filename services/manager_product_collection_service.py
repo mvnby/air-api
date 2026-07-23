@@ -23,6 +23,28 @@ def utc_now() -> datetime:
 
 class ManagerProductCollectionService:
     @staticmethod
+    async def get_rule_options(session: AsyncSession) -> dict:
+        rows = await ProductCollectionDAO.list_rule_option_rows(session)
+        return {
+            "brands": [
+                {"id": int(item.id), "label": item.title}
+                for item in rows["brands"]
+            ],
+            "series": [
+                {
+                    "id": int(item.id),
+                    "label": item.title,
+                    "parent_id": int(item.brand_id),
+                }
+                for item in rows["series"]
+            ],
+            "features": [
+                {"id": int(item.id), "label": item.name}
+                for item in rows["features"]
+            ],
+        }
+
+    @staticmethod
     async def list_collections(session: AsyncSession) -> list[dict]:
         rows = await ProductCollectionDAO.list_all(session)
         return [ManagerProductCollectionService._serialize(row) for row in rows]
@@ -44,6 +66,10 @@ class ManagerProductCollectionService:
     ) -> dict:
         data = ManagerProductCollectionService._clean_fields(payload)
         ManagerProductCollectionService._validate_required_text(data)
+        ManagerProductCollectionService._validate_automation(
+            mode=data.get("mode", "manual"),
+            rule_config=data.get("rule_config") or {},
+        )
         data["slug"] = await ManagerProductCollectionService._unique_slug(
             session,
             requested=data.get("slug"),
@@ -99,6 +125,10 @@ class ManagerProductCollectionService:
         ends_at = data.get("ends_at", collection.ends_at)
         if starts_at and ends_at and ends_at <= starts_at:
             raise HTTPException(status_code=400, detail="Дата окончания должна быть позже начала.")
+        ManagerProductCollectionService._validate_automation(
+            mode=data.get("mode", collection.mode),
+            rule_config=data.get("rule_config", collection.rule_config) or {},
+        )
 
         for field, value in data.items():
             setattr(collection, field, value)
@@ -230,7 +260,9 @@ class ManagerProductCollectionService:
             cta_url=source.cta_url,
             editorial_note=source.editorial_note,
             status="draft",
-            mode="manual",
+            mode=source.mode,
+            sort_mode=source.sort_mode,
+            rule_config=dict(source.rule_config or {}),
             min_items=source.min_items,
             max_items=source.max_items,
             fallback_collection_id=source.fallback_collection_id,
@@ -269,6 +301,8 @@ class ManagerProductCollectionService:
             "editorial_note": collection.editorial_note,
             "status": collection.status,
             "mode": collection.mode,
+            "sort_mode": collection.sort_mode,
+            "rule_config": dict(collection.rule_config or {}),
             "min_items": collection.min_items,
             "max_items": collection.max_items,
             "fallback_collection_id": collection.fallback_collection_id,
@@ -340,6 +374,16 @@ class ManagerProductCollectionService:
         ):
             if field in data and not data[field]:
                 raise HTTPException(status_code=400, detail=f"{label} не может быть пустым.")
+
+    @staticmethod
+    def _validate_automation(*, mode: str, rule_config: dict[str, Any]) -> None:
+        if mode == "manual":
+            return
+        if not any(value not in (None, [], "") for value in rule_config.values()):
+            raise HTTPException(
+                status_code=400,
+                detail="Для automatic/hybrid задайте хотя бы одно типизированное условие.",
+            )
 
     @staticmethod
     async def _unique_slug(

@@ -129,6 +129,21 @@ def _main_image_public_url(product: Product) -> Optional[str]:
     return _ready_original_variant_url(source_image) or product.main_image
 
 
+def resolve_public_stock_state(
+    availability_status: str | None,
+) -> tuple[str, int | None, int | None]:
+    stock_state_map = {
+        "in_stock_now": ("local_stock", 0, 0),
+        "available_2_3_days": ("supplier_stock", 2, 3),
+        "check_availability": ("available_to_order", None, None),
+        "out_of_stock": ("out_of_stock", None, None),
+    }
+    return stock_state_map.get(
+        availability_status,
+        ("out_of_stock", None, None),
+    )
+
+
 def map_product_to_response(
     product: Product,
     series_siblings: Optional[List[Product]] = None,
@@ -214,15 +229,8 @@ def map_product_to_response(
         )
 
     availability_status = (supply_metrics or {}).get("availability_status")
-    stock_state_map = {
-        "in_stock_now": ("local_stock", 0, 0),
-        "available_2_3_days": ("supplier_stock", 2, 3),
-        "check_availability": ("available_to_order", None, None),
-        "out_of_stock": ("out_of_stock", None, None),
-    }
-    public_stock_state, delivery_min_days, delivery_max_days = stock_state_map.get(
-        availability_status,
-        ("out_of_stock", None, None),
+    public_stock_state, delivery_min_days, delivery_max_days = resolve_public_stock_state(
+        availability_status
     )
 
     return ProductResponse(

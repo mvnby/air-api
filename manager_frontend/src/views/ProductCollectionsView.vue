@@ -23,6 +23,8 @@ import {
   type ManagerProductCollectionPlacementResponse,
   type ManagerProductCollectionResponse,
   type ProductCollectionPreviewResponse,
+  type ProductCollectionRuleConfig,
+  type ProductCollectionRuleOptionsResponse,
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
@@ -34,6 +36,9 @@ type CollectionForm = {
   public_description: string;
   public_badge: string;
   status: 'draft' | 'published' | 'archived';
+  mode: 'manual' | 'automatic' | 'hybrid';
+  sort_mode: 'recommended' | 'price_asc' | 'price_desc' | 'area_asc' | 'area_desc' | 'newest';
+  rule_config: ProductCollectionRuleConfig;
   min_items: number;
   max_items: number;
   fallback_collection_id: number | null;
@@ -46,6 +51,7 @@ const active = ref<ManagerProductCollectionResponse | null>(null);
 const items = ref<ManagerProductCollectionItemResponse[]>([]);
 const placements = ref<ManagerProductCollectionPlacementResponse[]>([]);
 const preview = ref<ProductCollectionPreviewResponse | null>(null);
+const ruleOptions = ref<ProductCollectionRuleOptionsResponse>({});
 const searchQuery = ref('');
 const searchResults = ref<ManagerCatalogProductItemResponse[]>([]);
 const loading = ref(false);
@@ -54,6 +60,23 @@ const searching = ref(false);
 const message = ref('');
 const error = ref('');
 
+const emptyRuleConfig = (): ProductCollectionRuleConfig => ({
+  product_kinds: ['complete_split_system'],
+  min_price: null,
+  max_price: null,
+  min_area_m2: null,
+  max_area_m2: null,
+  max_noise_min_db: null,
+  max_heating_min_c: null,
+  is_inverter: null,
+  wifi_states: [],
+  brand_ids: [],
+  series_ids: [],
+  colors: [],
+  feature_ids: [],
+  public_stock_states: [],
+});
+
 const emptyForm = (): CollectionForm => ({
   slug: '',
   internal_name: '',
@@ -61,6 +84,9 @@ const emptyForm = (): CollectionForm => ({
   public_description: '',
   public_badge: '',
   status: 'draft',
+  mode: 'manual',
+  sort_mode: 'recommended',
+  rule_config: emptyRuleConfig(),
   min_items: 1,
   max_items: 6,
   fallback_collection_id: null,
@@ -74,6 +100,11 @@ const apiDate = (value: string) => value ? new Date(value).toISOString() : null;
 const eligibleFallbacks = computed(() => collections.value.filter(row => row.id !== active.value?.id && row.status !== 'archived'));
 const selectedProductIds = computed(() => new Set(items.value.map(item => item.product_id)));
 const isNew = computed(() => !active.value?.id);
+const availableSeries = computed(() => {
+  const brandIds = new Set(form.value.rule_config.brand_ids || []);
+  if (!brandIds.size) return ruleOptions.value.series || [];
+  return (ruleOptions.value.series || []).filter(row => row.parent_id && brandIds.has(row.parent_id));
+});
 
 const statusLabel = (status?: string) => ({
   draft: 'Черновик',
@@ -91,6 +122,19 @@ const kindLabel = (kind?: string | null) => ({
   consumable: 'Расходник',
   other: 'Другое',
 }[kind || 'unknown'] || kind || 'Тип не задан');
+
+const sourceLabel = (source?: string) => ({
+  manual: 'Закреплён',
+  automatic: 'Подобран правилом',
+  fallback: 'Из резерва',
+}[source || 'manual'] || source || '');
+
+const setColors = (event: Event) => {
+  form.value.rule_config.colors = (event.target as HTMLInputElement).value
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+};
 
 const applyCollection = (collection: ManagerProductCollectionResponse | null) => {
   active.value = collection;
@@ -120,6 +164,12 @@ const applyCollection = (collection: ManagerProductCollectionResponse | null) =>
     public_description: collection.public_description || '',
     public_badge: collection.public_badge || '',
     status: collection.status || 'draft',
+    mode: collection.mode || 'manual',
+    sort_mode: collection.sort_mode || 'recommended',
+    rule_config: {
+      ...emptyRuleConfig(),
+      ...(collection.rule_config || {}),
+    },
     min_items: collection.min_items || 1,
     max_items: collection.max_items || 6,
     fallback_collection_id: collection.fallback_collection_id || null,
@@ -144,6 +194,15 @@ const loadCollections = async (keepId?: number) => {
     error.value = getApiErrorMessage(caught);
   } finally {
     loading.value = false;
+  }
+};
+
+const loadRuleOptions = async () => {
+  try {
+    ruleOptions.value =
+      await ManagerProductCollectionsService.getManagerProductCollectionRuleOptions();
+  } catch (caught) {
+    error.value = getApiErrorMessage(caught);
   }
 };
 
@@ -222,7 +281,9 @@ const save = async () => {
       public_description: form.value.public_description.trim() || null,
       public_badge: form.value.public_badge.trim() || null,
       status: form.value.status,
-      mode: 'manual',
+      mode: form.value.mode,
+      sort_mode: form.value.sort_mode,
+      rule_config: form.value.rule_config,
       min_items: Number(form.value.min_items),
       max_items: Number(form.value.max_items),
       fallback_collection_id: form.value.fallback_collection_id || null,
@@ -292,8 +353,11 @@ const archiveCollection = async () => {
   await loadCollections(archived.id);
 };
 
-onMounted(() => {
-  void loadCollections();
+onMounted(async () => {
+  await Promise.all([
+    loadCollections(),
+    loadRuleOptions(),
+  ]);
 });
 </script>
 
@@ -360,6 +424,8 @@ onMounted(() => {
           <label class="space-y-1 md:col-span-2"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Описание на сайте</span><textarea v-model="form.public_description" class="field-input min-h-20" /></label>
           <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Плашка</span><input v-model="form.public_badge" class="field-input" placeholder="Например: Выбор мастера" /></label>
           <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Статус</span><select v-model="form.status" class="field-input"><option value="draft">Черновик</option><option value="published">Опубликована</option><option value="archived">Архив</option></select></label>
+          <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Формирование</span><select v-model="form.mode" class="field-input"><option value="manual">Вручную</option><option value="automatic">Автоматически</option><option value="hybrid">Закреплённые + правила</option></select></label>
+          <label v-if="form.mode !== 'manual'" class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Сортировка автоподбора</span><select v-model="form.sort_mode" class="field-input"><option value="recommended">Рекомендованная</option><option value="price_asc">Сначала дешевле</option><option value="price_desc">Сначала дороже</option><option value="area_asc">Сначала меньшая площадь</option><option value="area_desc">Сначала большая площадь</option><option value="newest">Сначала новые</option></select></label>
           <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Минимум товаров</span><input v-model.number="form.min_items" class="field-input" min="1" max="24" type="number" /></label>
           <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Максимум товаров</span><input v-model.number="form.max_items" class="field-input" min="1" max="24" type="number" /></label>
           <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Начало публикации</span><input v-model="form.starts_at" class="field-input" type="datetime-local" /></label>
@@ -367,7 +433,46 @@ onMounted(() => {
           <label class="space-y-1 md:col-span-2"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Резервная подборка</span><select v-model="form.fallback_collection_id" class="field-input"><option :value="null">Без резерва</option><option v-for="row in eligibleFallbacks" :key="row.id" :value="row.id">{{ row.internal_name }}</option></select></label>
         </div>
 
-        <div class="space-y-3 border-t border-gray-200 pt-6 dark:border-slate-800">
+        <div v-if="form.mode !== 'manual'" class="space-y-4 border-t border-gray-200 pt-6 dark:border-slate-800">
+          <div><h3 class="font-bold text-gray-900 dark:text-white">Условия автоподбора</h3><p class="text-xs text-gray-500">Все заполненные условия применяются одновременно.</p></div>
+          <fieldset class="space-y-2">
+            <legend class="text-xs font-semibold text-gray-600 dark:text-slate-300">Тип товара</legend>
+            <div class="flex flex-wrap gap-x-4 gap-y-2">
+              <label v-for="kind in [
+                ['complete_split_system', 'Готовая сплит-система'],
+                ['indoor_unit', 'Внутренний блок'],
+                ['outdoor_unit', 'Наружный блок'],
+                ['panel', 'Панель'],
+                ['accessory', 'Аксессуар'],
+                ['consumable', 'Расходник'],
+                ['other', 'Другое'],
+              ]" :key="kind[0]" class="flex items-center gap-2 text-xs">
+                <input v-model="form.rule_config.product_kinds" type="checkbox" :value="kind[0]" /> {{ kind[1] }}
+              </label>
+            </div>
+          </fieldset>
+          <div class="grid gap-4 md:grid-cols-4">
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Цена от</span><input v-model.number="form.rule_config.min_price" class="field-input" min="0" type="number" /></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Цена до</span><input v-model.number="form.rule_config.max_price" class="field-input" min="0" type="number" /></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Площадь от, м²</span><input v-model.number="form.rule_config.min_area_m2" class="field-input" min="0" type="number" /></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Площадь до, м²</span><input v-model.number="form.rule_config.max_area_m2" class="field-input" min="0" type="number" /></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Шум не выше, дБ</span><input v-model.number="form.rule_config.max_noise_min_db" class="field-input" min="0" step="0.1" type="number" /></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Обогрев до, °C</span><input v-model.number="form.rule_config.max_heating_min_c" class="field-input" max="30" min="-60" step="1" type="number" /></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Инвертор</span><select v-model="form.rule_config.is_inverter" class="field-input"><option :value="null">Не важно</option><option :value="true">Да</option><option :value="false">Нет</option></select></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Цвета</span><input :value="(form.rule_config.colors || []).join(', ')" class="field-input" placeholder="чёрный, серебристый" @input="setColors" /></label>
+          </div>
+          <div class="grid gap-4 md:grid-cols-3">
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Бренды</span><select v-model="form.rule_config.brand_ids" class="field-input min-h-32" multiple><option v-for="row in ruleOptions.brands || []" :key="row.id" :value="row.id">{{ row.label }}</option></select></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Серии</span><select v-model="form.rule_config.series_ids" class="field-input min-h-32" multiple><option v-for="row in availableSeries" :key="row.id" :value="row.id">{{ row.label }}</option></select></label>
+            <label class="space-y-1"><span class="text-xs font-semibold text-gray-600 dark:text-slate-300">Feature</span><select v-model="form.rule_config.feature_ids" class="field-input min-h-32" multiple><option v-for="row in ruleOptions.features || []" :key="row.id" :value="row.id">{{ row.label }}</option></select></label>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2">
+            <fieldset class="space-y-2"><legend class="text-xs font-semibold text-gray-600 dark:text-slate-300">Wi‑Fi</legend><div class="flex flex-wrap gap-4"><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.wifi_states" type="checkbox" value="builtin" /> Встроенный</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.wifi_states" type="checkbox" value="ready" /> Опциональный</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.wifi_states" type="checkbox" value="none" /> Нет</label></div></fieldset>
+            <fieldset class="space-y-2"><legend class="text-xs font-semibold text-gray-600 dark:text-slate-300">Доступность</legend><div class="flex flex-wrap gap-4"><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="local_stock" /> Локально</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="supplier_stock" /> У поставщика</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="available_to_order" /> Под заказ</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="out_of_stock" /> Нет в наличии</label></div></fieldset>
+          </div>
+        </div>
+
+        <div v-if="form.mode !== 'automatic'" class="space-y-3 border-t border-gray-200 pt-6 dark:border-slate-800">
           <div class="flex flex-wrap items-end justify-between gap-3">
             <div><h3 class="font-bold text-gray-900 dark:text-white">Товары</h3><p class="text-xs text-gray-500">Порядок сверху вниз станет порядком карточек.</p></div>
             <form class="flex min-w-[280px] flex-1 gap-2 sm:max-w-lg" @submit.prevent="searchProducts">
@@ -388,7 +493,7 @@ onMounted(() => {
                 <div class="mt-1 flex flex-wrap gap-2 text-[11px]"><span>{{ kindLabel(item.product_kind) }}</span><span>{{ item.price }} BYN</span><span :class="item.is_published ? 'text-emerald-700' : 'text-red-700'">{{ item.is_published ? 'Опубликован' : 'Скрыт' }}</span></div>
               </div>
               <div class="flex items-center gap-1">
-                <label class="mr-2 flex items-center gap-1 text-xs"><input v-model="item.is_pinned" type="checkbox" /> Закреплён</label>
+                <label v-if="form.mode === 'hybrid'" class="mr-2 flex items-center gap-1 text-xs"><input v-model="item.is_pinned" type="checkbox" /> Закреплён</label>
                 <button class="icon-button" type="button" title="Выше" :disabled="index === 0" @click="moveItem(index, -1)"><ArrowUp class="h-4 w-4" /></button>
                 <button class="icon-button" type="button" title="Ниже" :disabled="index === items.length - 1" @click="moveItem(index, 1)"><ArrowDown class="h-4 w-4" /></button>
                 <button class="icon-button text-red-600" type="button" title="Убрать" @click="removeItem(item.product_id)"><Trash2 class="h-4 w-4" /></button>
@@ -420,7 +525,7 @@ onMounted(() => {
             <div v-for="item in (preview?.items || [])" :key="item.product.id" class="border border-gray-200 p-3 dark:border-slate-800">
               <img v-if="item.product.card_image || item.product.main_image" :src="item.product.card_image || item.product.main_image || ''" class="mb-2 aspect-[4/3] w-full object-contain" alt="" />
               <strong class="block text-sm">{{ item.product.title }}</strong>
-              <span class="text-xs text-gray-500">{{ item.selection_source }} · {{ item.product.price }} BYN</span>
+              <span class="text-xs text-gray-500">{{ sourceLabel(item.selection_source) }} · {{ item.product.price }} BYN</span>
             </div>
           </div>
           <div v-if="(preview?.excluded_items || []).length" class="divide-y divide-red-100 border-y border-red-200 dark:divide-red-950 dark:border-red-900">

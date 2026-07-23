@@ -282,3 +282,161 @@ async def test_collection_duplicate_archive_and_validation(async_client, db):
     async_client.cookies.clear()
     unauthenticated = await async_client.get("/api/manager/product-collections")
     assert unauthenticated.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_hybrid_collection_pins_then_fills_by_typed_rules(async_client, db):
+    headers = await _auth_headers(async_client)
+    pinned = _product(
+        title="Pinned premium",
+        slug="pinned-premium",
+        price=3000,
+        specs={"area_m2": 35, "__filter_noise_min": 18},
+    )
+    automatic = _product(
+        title="Automatic quiet",
+        slug="automatic-quiet",
+        price=1200,
+        specs={"area_m2": 25, "__filter_noise_min": 19},
+    )
+    automatic_second = _product(
+        title="Automatic quiet second",
+        slug="automatic-quiet-second",
+        price=1300,
+        specs={"area_m2": 30, "__filter_noise_min": 20},
+    )
+    too_loud = _product(
+        title="Too loud",
+        slug="too-loud",
+        price=1000,
+        specs={"area_m2": 25, "__filter_noise_min": 31},
+    )
+    component = _product(
+        title="Indoor candidate",
+        slug="indoor-candidate",
+        product_kind="indoor_unit",
+        price=900,
+        specs={"area_m2": 25, "__filter_noise_min": 18},
+    )
+    for product in (pinned, automatic, automatic_second, too_loud, component):
+        product.is_inverter = True
+    db.add_all([pinned, automatic, automatic_second, too_loud, component])
+    await db.commit()
+
+    created = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Hybrid",
+            "public_title": "Тихие модели",
+            "status": "published",
+            "mode": "hybrid",
+            "sort_mode": "price_asc",
+            "min_items": 3,
+            "max_items": 3,
+            "rule_config": {
+                "product_kinds": ["complete_split_system"],
+                "max_price": 1500,
+                "max_noise_min_db": 20,
+                "is_inverter": True,
+            },
+        },
+    )
+    assert created.status_code == 200, created.text
+    collection = created.json()
+    items = await async_client.put(
+        f"/api/manager/product-collections/{collection['id']}/items",
+        headers=headers,
+        json={
+            "items": [
+                {"product_id": component.id, "is_pinned": True},
+                {"product_id": pinned.id, "is_pinned": True},
+                {"product_id": automatic.id, "is_pinned": False},
+            ]
+        },
+    )
+    assert items.status_code == 200, items.text
+
+    preview = await async_client.get(
+        f"/api/manager/product-collections/{collection['id']}/preview",
+        headers=headers,
+    )
+    assert preview.status_code == 200, preview.text
+    payload = preview.json()
+    assert [
+        (item["selection_source"], item["product"]["slug"])
+        for item in payload["items"]
+    ] == [
+        ("manual", "pinned-premium"),
+        ("automatic", "automatic-quiet"),
+        ("automatic", "automatic-quiet-second"),
+    ]
+    exclusions = {
+        item["product_id"]: item["reason_codes"]
+        for item in payload["excluded_items"]
+    }
+    assert exclusions[component.id] == ["unsupported_product_kind"]
+    assert payload["below_min_items"] is False
+
+
+@pytest.mark.asyncio
+async def test_automatic_collection_requires_rules_and_duplicate_keeps_them(async_client):
+    headers = await _auth_headers(async_client)
+    options = await async_client.get(
+        "/api/manager/product-collections/rule-options",
+        headers=headers,
+    )
+    assert options.status_code == 200, options.text
+    assert set(options.json()) == {"brands", "series", "features"}
+
+    invalid = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Unsafe automatic",
+            "public_title": "Unsafe",
+            "mode": "automatic",
+        },
+    )
+    assert invalid.status_code == 400
+
+    invalid_range = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Invalid range",
+            "public_title": "Invalid range",
+            "mode": "automatic",
+            "rule_config": {
+                "product_kinds": ["complete_split_system"],
+                "min_price": 2000,
+                "max_price": 1000,
+            },
+        },
+    )
+    assert invalid_range.status_code == 422
+
+    created = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Automatic",
+            "public_title": "Автоматическая",
+            "mode": "automatic",
+            "sort_mode": "area_desc",
+            "rule_config": {
+                "product_kinds": ["complete_split_system"],
+                "max_area_m2": 35,
+            },
+        },
+    )
+    assert created.status_code == 200, created.text
+    duplicate = await async_client.post(
+        f"/api/manager/product-collections/{created.json()['id']}/duplicate",
+        headers=headers,
+    )
+    assert duplicate.status_code == 200, duplicate.text
+    payload = duplicate.json()
+    assert payload["mode"] == "automatic"
+    assert payload["sort_mode"] == "area_desc"
+    assert payload["rule_config"]["max_area_m2"] == 35

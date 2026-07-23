@@ -6,6 +6,9 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import (
+    Brand,
+    Feature,
+    ProductSeries,
     ProductCollection,
     ProductCollectionItem,
     ProductCollectionPlacement,
@@ -13,6 +16,36 @@ from models import (
 
 
 class ProductCollectionDAO:
+    @staticmethod
+    async def list_rule_option_rows(session: AsyncSession) -> dict[str, list]:
+        brands = list(
+            (
+                await session.execute(
+                    select(Brand).order_by(Brand.title.asc(), Brand.id.asc())
+                )
+            ).scalars().all()
+        )
+        series = list(
+            (
+                await session.execute(
+                    select(ProductSeries).order_by(
+                        ProductSeries.title.asc(),
+                        ProductSeries.id.asc(),
+                    )
+                )
+            ).scalars().all()
+        )
+        features = list(
+            (
+                await session.execute(
+                    select(Feature)
+                    .where(Feature.is_active.is_(True), Feature.archived_at.is_(None))
+                    .order_by(Feature.name.asc(), Feature.id.asc())
+                )
+            ).scalars().all()
+        )
+        return {"brands": brands, "series": series, "features": features}
+
     @staticmethod
     async def list_all(session: AsyncSession) -> list[ProductCollection]:
         result = await session.execute(

@@ -9,10 +9,22 @@ import type { ManagerProductCollectionPlacementsPayload } from '../models/Manage
 import type { ManagerProductCollectionResponse } from '../models/ManagerProductCollectionResponse';
 import type { ManagerProductCollectionUpdate } from '../models/ManagerProductCollectionUpdate';
 import type { ProductCollectionPreviewResponse } from '../models/ProductCollectionPreviewResponse';
+import type { ProductCollectionRuleOptionsResponse } from '../models/ProductCollectionRuleOptionsResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerProductCollectionsService {
+    /**
+     * Get Manager Product Collection Rule Options
+     * @returns ProductCollectionRuleOptionsResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerProductCollectionRuleOptions(): CancelablePromise<ProductCollectionRuleOptionsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/product-collections/rule-options',
+        });
+    }
     /**
      * List Manager Product Collections
      * @returns ManagerProductCollectionListResponse Successful Response
