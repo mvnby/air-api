@@ -233,12 +233,17 @@ class BankReceiptService:
         receipt: BankReceipt,
         *,
         order_ids: Optional[List[int]] = None,
+        allow_closed_order_ids: Optional[set[int]] = None,
     ) -> list[Order]:
         unique_order_ids = sorted({int(order_id) for order_id in (order_ids or []) if order_id})
         if not unique_order_ids and not receipt.payer_unp:
             return []
 
-        conditions = [Order.status != OrderStatus.CLOSED]
+        allowed_closed_ids = {int(order_id) for order_id in (allow_closed_order_ids or set()) if order_id}
+        active_order_condition = Order.status != OrderStatus.CLOSED
+        if allowed_closed_ids:
+            active_order_condition = or_(active_order_condition, Order.id.in_(allowed_closed_ids))
+        conditions = [active_order_condition]
         if unique_order_ids:
             conditions.append(Order.id.in_(unique_order_ids))
         else:
@@ -269,7 +274,7 @@ class BankReceiptService:
         return orders
 
     @staticmethod
-    def _order_to_group_item(order: Order) -> dict[str, Any]:
+    def _order_to_group_item(order: Order, *, balance_due: Optional[float] = None) -> dict[str, Any]:
         return {
             "order_id": int(order.id or 0),
             "title": order.title,
@@ -277,7 +282,7 @@ class BankReceiptService:
             "status": order.status.value if hasattr(order.status, "value") else str(order.status),
             "total_amount": BankReceiptService._money(order.total_amount),
             "total_payments": BankReceiptService._money(order.total_payments),
-            "balance_due": BankReceiptService._money(order.balance_due),
+            "balance_due": BankReceiptService._money(order.balance_due if balance_due is None else balance_due),
         }
 
     @staticmethod
@@ -540,49 +545,33 @@ class BankReceiptService:
         order_id: int,
         payment_type: str = "postpayment",
     ) -> BankReceipt:
+        from services.bank_receipt_allocation_service import BankReceiptAllocationService
+
         receipt = await session.get(BankReceipt, receipt_id)
         if not receipt:
             raise ValueError("Bank receipt not found")
-        if receipt.status == "matched" or receipt.matched_payment_id:
+        existing_payment_result = await session.execute(
+            select(Payment).where(Payment.bank_receipt_id == receipt.id).limit(1)
+        )
+        if receipt.status in {"matched", "partially_allocated"} or receipt.matched_payment_id or existing_payment_result.scalar_one_or_none():
             raise ValueError("Bank receipt is already attached")
         if receipt.amount <= 0:
             raise ValueError("Bank receipt amount is not valid")
 
-        order = await session.get(Order, order_id)
-        if not order:
-            raise ValueError("Order not found")
-
-        try:
-            ptype = PaymentType(payment_type)
-        except ValueError as exc:
-            raise ValueError(f"Invalid payment type: {payment_type}") from exc
-
-        payment = Payment(
-            order_id=order_id,
-            bank_receipt_id=receipt.id,
-            amount=receipt.amount,
-            currency=receipt.currency,
-            date=receipt.received_at,
-            type=ptype,
-            comment=f"Разнесено вручную по банковскому поступлению #{receipt.id}",
+        detail = await BankReceiptAllocationService.get_detail(session, receipt_id=receipt_id)
+        candidate = next((item for item in detail["orders"] if item["order_id"] == order_id), None)
+        if not candidate:
+            raise ValueError("Order is not an unpaid order of the bank receipt payer")
+        amount = BankReceiptService._money(
+            min(float(receipt.amount), float(candidate["balance_due_before_receipt"]))
         )
-        session.add(payment)
-        await session.flush()
-
-        await OrderService._refresh_order_financials(session, order)
-        order.is_paid = order.balance_due <= BankReceiptService.EXACT_AMOUNT_TOLERANCE
-        session.add(order)
-
-        meta = dict(receipt.match_meta or {})
-        meta["manual_attached"] = True
-        receipt.status = "matched"
-        receipt.matched_order_id = order_id
-        receipt.matched_payment_id = int(payment.id)
-        receipt.match_meta = meta
-        session.add(receipt)
-        await session.commit()
-        await session.refresh(receipt)
-        return receipt
+        return await BankReceiptAllocationService.replace(
+            session,
+            receipt_id=receipt_id,
+            allocations=[{"order_id": order_id, "amount": amount}],
+            payment_type=payment_type,
+            metadata_updates={"manual_attached": True},
+        )
 
     @staticmethod
     async def attach_receipt_to_order_group(
@@ -592,6 +581,8 @@ class BankReceiptService:
         order_ids: Optional[List[int]] = None,
         payment_type: str = "postpayment",
     ) -> BankReceipt:
+        from services.bank_receipt_allocation_service import BankReceiptAllocationService
+
         receipt = await session.get(BankReceipt, receipt_id)
         if not receipt:
             raise ValueError("Bank receipt not found")
@@ -625,16 +616,27 @@ class BankReceiptService:
         if foreign_orders:
             raise ValueError("Selected orders do not belong to the bank receipt payer UNP")
 
-        await BankReceiptService._apply_group_receipt_payment(
+        allocations = [
+            {
+                "order_id": int(order.id or 0),
+                "amount": BankReceiptService._money(order.balance_due),
+            }
+            for order in orders
+            if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE
+        ]
+        total_allocated = BankReceiptService._money(sum(item["amount"] for item in allocations))
+        if abs(total_allocated - BankReceiptService._money(receipt.amount)) > BankReceiptService.EXACT_AMOUNT_TOLERANCE:
+            raise ValueError(
+                f"Receipt amount {BankReceiptService._money(receipt.amount)} "
+                f"does not match group debt {total_allocated}"
+            )
+        return await BankReceiptAllocationService.replace(
             session,
-            receipt,
-            orders,
-            payment_type=ptype,
-            manual=True,
+            receipt_id=receipt_id,
+            allocations=allocations,
+            payment_type=ptype.value,
+            metadata_updates={"manual_group_attached": True},
         )
-        await session.commit()
-        await session.refresh(receipt)
-        return receipt
 
     @staticmethod
     async def update_receipt_status(
@@ -649,9 +651,17 @@ class BankReceiptService:
             raise ValueError("Bank receipt not found")
 
         normalized_status = str(status or "").strip().lower()
-        if normalized_status not in {"requires_review", "matched", "void", "parse_failed", "closed_orders", "non_order_income"}:
+        if normalized_status not in {
+            "requires_review",
+            "matched",
+            "partially_allocated",
+            "void",
+            "parse_failed",
+            "closed_orders",
+            "non_order_income",
+        }:
             raise ValueError("Unsupported bank receipt status")
-        if normalized_status == "matched":
+        if normalized_status in {"matched", "partially_allocated"}:
             raise ValueError("Use attach action to match a bank receipt")
 
         old_payment_id = receipt.matched_payment_id

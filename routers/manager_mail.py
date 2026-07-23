@@ -13,6 +13,7 @@ from routers.manager_operation_ids import (
     ATTACH_MANAGER_BANK_RECEIPT_GROUP,
     COMPOSE_MANAGER_ORDER_EMAIL,
     DELETE_MANAGER_BANK_RECEIPT,
+    GET_MANAGER_BANK_RECEIPT_ALLOCATION,
     IMPORT_MANAGER_BANK_RECEIPTS,
     IMPORT_MANAGER_BANK_STATEMENT,
     IMPORT_MANAGER_EMAIL_LEADS,
@@ -22,12 +23,15 @@ from routers.manager_operation_ids import (
     LIST_MANAGER_ORDER_OUTGOING_EMAILS,
     LIST_MANAGER_OUTGOING_EMAILS,
     PATCH_MANAGER_BANK_RECEIPT_STATUS,
+    REPLACE_MANAGER_BANK_RECEIPT_ALLOCATIONS,
     RETRY_MANAGER_OUTGOING_EMAIL,
     SEND_MANAGER_ORDER_EMAIL,
     SEND_MANAGER_TEST_EMAIL,
 )
 from schemas import (
     BankReceiptAttachPayload,
+    BankReceiptAllocationDetailResponse,
+    BankReceiptAllocationsReplacePayload,
     BankReceiptGroupAttachPayload,
     BankReceiptImportResponse,
     BankReceiptListResponse,
@@ -45,6 +49,7 @@ from schemas import (
     OutgoingEmailResponse,
     OutgoingEmailSendPayload,
 )
+from services.bank_receipt_allocation_service import BankReceiptAllocationService
 from services.bank_receipt_service import BankReceiptService
 from services.bank_statement_csv_service import BankStatementCsvService
 from services.email_lead_import_job_service import EmailLeadImportJobService, EmailLeadImportJobSnapshot
@@ -62,6 +67,27 @@ router = APIRouter(
     tags=["manager/mail"],
     dependencies=[Depends(get_current_username)],
 )
+
+
+async def _bank_receipt_response(
+    session: AsyncSession,
+    receipt,
+    totals: dict[int, dict[str, float | int]] | None = None,
+) -> BankReceiptResponse:
+    receipt_id = int(receipt.id)
+    allocation_totals = (
+        totals
+        if totals is not None
+        else await BankReceiptAllocationService.get_totals(session, [receipt_id])
+    )
+    allocated_amount = float(allocation_totals.get(receipt_id, {}).get("allocated_amount") or 0)
+    return BankReceiptResponse.model_validate(receipt).model_copy(
+        update={
+            "allocated_amount": allocated_amount,
+            "unallocated_amount": max(0.0, round(float(receipt.amount or 0) - allocated_amount, 2)),
+            "allocation_count": int(allocation_totals.get(receipt_id, {}).get("allocation_count") or 0),
+        }
+    )
 
 
 def _email_lead_import_response(result) -> EmailLeadImportResponse | None:
@@ -200,7 +226,16 @@ async def list_manager_bank_receipts(
         payer_unp=payer_unp,
         order_id=order_id,
     )
-    return BankReceiptListResponse(items=items, total=total, page=page, limit=limit)
+    totals = await BankReceiptAllocationService.get_totals(
+        session,
+        [int(item.id) for item in items if item.id],
+    )
+    return BankReceiptListResponse(
+        items=[await _bank_receipt_response(session, item, totals) for item in items],
+        total=total,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.post(
@@ -214,12 +249,13 @@ async def attach_manager_bank_receipt(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await BankReceiptService.attach_receipt_to_order(
+        receipt = await BankReceiptService.attach_receipt_to_order(
             session,
             receipt_id=receipt_id,
             order_id=payload.order_id,
             payment_type=payload.payment_type,
         )
+        return await _bank_receipt_response(session, receipt)
     except Exception as exc:
         raise manager_http_error(
             status_code=400,
@@ -240,16 +276,67 @@ async def attach_manager_bank_receipt_group(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await BankReceiptService.attach_receipt_to_order_group(
+        receipt = await BankReceiptService.attach_receipt_to_order_group(
             session,
             receipt_id=receipt_id,
             order_ids=payload.order_ids,
             payment_type=payload.payment_type,
         )
+        return await _bank_receipt_response(session, receipt)
     except Exception as exc:
         raise manager_http_error(
             status_code=400,
             endpoint=ATTACH_MANAGER_BANK_RECEIPT_GROUP,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/bank-receipts/{receipt_id}/allocation",
+    response_model=BankReceiptAllocationDetailResponse,
+    operation_id=GET_MANAGER_BANK_RECEIPT_ALLOCATION,
+)
+async def get_manager_bank_receipt_allocation(
+    receipt_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await BankReceiptAllocationService.get_detail(
+            session,
+            receipt_id=receipt_id,
+        )
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=GET_MANAGER_BANK_RECEIPT_ALLOCATION,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.put(
+    "/bank-receipts/{receipt_id}/allocations",
+    response_model=BankReceiptResponse,
+    operation_id=REPLACE_MANAGER_BANK_RECEIPT_ALLOCATIONS,
+)
+async def replace_manager_bank_receipt_allocations(
+    receipt_id: int,
+    payload: BankReceiptAllocationsReplacePayload,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        receipt = await BankReceiptAllocationService.replace(
+            session,
+            receipt_id=receipt_id,
+            allocations=[item.model_dump() for item in payload.allocations],
+            payment_type=payload.payment_type,
+        )
+        return await _bank_receipt_response(session, receipt)
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=REPLACE_MANAGER_BANK_RECEIPT_ALLOCATIONS,
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
@@ -266,12 +353,13 @@ async def patch_manager_bank_receipt_status(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await BankReceiptService.update_receipt_status(
+        receipt = await BankReceiptService.update_receipt_status(
             session,
             receipt_id=receipt_id,
             status=payload.status,
             reason=payload.reason,
         )
+        return await _bank_receipt_response(session, receipt)
     except Exception as exc:
         raise manager_http_error(
             status_code=400,

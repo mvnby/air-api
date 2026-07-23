@@ -93,14 +93,25 @@ class CustomerReconciliationService:
         ]
 
     @staticmethod
-    def _payment_payload(payment: Payment, order: Order) -> Dict[str, Any]:
+    def _payment_payload(
+        payment: Payment,
+        order: Order,
+        *,
+        amount_override: Optional[float] = None,
+        allocated_amount: Optional[float] = None,
+    ) -> Dict[str, Any]:
         receipt = payment.bank_receipt
         return {
             "payment_id": payment.id,
             "order_id": order.id,
             "order_title": order.title or f"Заказ #{order.id}",
             "date": payment.date,
-            "amount": CustomerReconciliationService._money(payment.amount),
+            "amount": CustomerReconciliationService._money(
+                payment.amount if amount_override is None else amount_override
+            ),
+            "allocated_amount": CustomerReconciliationService._money(
+                payment.amount if allocated_amount is None else allocated_amount
+            ),
             "currency": payment.currency,
             "payment_type": payment.type,
             "comment": payment.comment,
@@ -361,6 +372,16 @@ class CustomerReconciliationService:
         payments_total = 0.0
         document_rows: list[Dict[str, Any]] = []
         payment_rows: list[Dict[str, Any]] = []
+        seen_bank_receipt_ids: set[int] = set()
+        allocated_by_bank_receipt: dict[int, float] = {}
+        for order in orders:
+            for payment in order.payments:
+                if not payment.bank_receipt_id:
+                    continue
+                receipt_id = int(payment.bank_receipt_id)
+                allocated_by_bank_receipt[receipt_id] = cls._money(
+                    allocated_by_bank_receipt.get(receipt_id, 0) + payment.amount
+                )
 
         for order in orders:
             delivery_docs = [doc for doc in order.documents if doc.doc_type in DELIVERY_DOC_TYPES]
@@ -385,14 +406,31 @@ class CustomerReconciliationService:
                     )
 
             for payment in order.payments:
-                amount = cls._money(payment.amount)
+                receipt = payment.bank_receipt
+                if receipt and receipt.id:
+                    receipt_id = int(receipt.id)
+                    if receipt_id in seen_bank_receipt_ids:
+                        continue
+                    seen_bank_receipt_ids.add(receipt_id)
+                    amount = cls._money(receipt.amount)
+                    allocated_amount = allocated_by_bank_receipt.get(receipt_id, 0.0)
+                else:
+                    amount = cls._money(payment.amount)
+                    allocated_amount = amount
                 if amount <= 0:
                     continue
                 if payment.date < period.start:
                     opening_payments_total += amount
                 elif payment.date <= period.end:
                     payments_total += amount
-                    payment_rows.append(cls._payment_payload(payment, order))
+                    payment_rows.append(
+                        cls._payment_payload(
+                            payment,
+                            order,
+                            amount_override=amount,
+                            allocated_amount=allocated_amount,
+                        )
+                    )
 
         opening_balance = cls._money(opening_documents_total - opening_payments_total)
         documents_total = cls._money(documents_total)

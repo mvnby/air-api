@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BankReceiptAllocationDetailResponse } from '../models/BankReceiptAllocationDetailResponse';
+import type { BankReceiptAllocationsReplacePayload } from '../models/BankReceiptAllocationsReplacePayload';
 import type { BankReceiptAttachPayload } from '../models/BankReceiptAttachPayload';
 import type { BankReceiptGroupAttachPayload } from '../models/BankReceiptGroupAttachPayload';
 import type { BankReceiptImportResponse } from '../models/BankReceiptImportResponse';
@@ -165,6 +167,50 @@ export class ManagerMailService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/mail/bank-receipts/{receipt_id}/attach-group',
+            path: {
+                'receipt_id': receiptId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Bank Receipt Allocation
+     * @param receiptId
+     * @returns BankReceiptAllocationDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerBankReceiptAllocation(
+        receiptId: number,
+    ): CancelablePromise<BankReceiptAllocationDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/mail/bank-receipts/{receipt_id}/allocation',
+            path: {
+                'receipt_id': receiptId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Replace Manager Bank Receipt Allocations
+     * @param receiptId
+     * @param requestBody
+     * @returns BankReceiptResponse Successful Response
+     * @throws ApiError
+     */
+    public static replaceManagerBankReceiptAllocations(
+        receiptId: number,
+        requestBody: BankReceiptAllocationsReplacePayload,
+    ): CancelablePromise<BankReceiptResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/mail/bank-receipts/{receipt_id}/allocations',
             path: {
                 'receipt_id': receiptId,
             },

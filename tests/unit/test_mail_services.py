@@ -9,8 +9,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import BankReceipt, Customer, LeadSource, Order, OrderDocument, OrderProposal, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency
+from models import BankReceipt, Customer, LeadSource, Order, OrderDocument, OrderProposal, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency, PaymentType
 from services.bank_email_parser_service import BankEmailParserService
+from services.bank_receipt_allocation_service import BankReceiptAllocationService
 from services.bank_receipt_service import BankReceiptService
 from services.bank_statement_csv_service import BankStatementCsvService
 from services.bot_service import BotService
@@ -713,6 +714,221 @@ async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
     payments = (await sqlite_session.execute(select(Payment))).scalars().all()
     assert len(payments) == 1
     assert payments[0].bank_receipt_id == receipt.id
+
+
+@pytest.mark.asyncio
+async def test_bank_receipt_allocations_keep_overpayment_as_unallocated_remainder(sqlite_session):
+    customer = Customer(name="Тестовый плательщик", phone="+375291111120", type="company", inn="300999001")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    amounts = [500, 880, 1110, 485]
+    orders = [
+        Order(customer_id=customer.id, status="execution", title=f"Акт {index}")
+        for index in range(1, 5)
+    ]
+    sqlite_session.add_all(orders)
+    await sqlite_session.commit()
+    for order, amount in zip(orders, amounts):
+        await sqlite_session.refresh(order)
+        sqlite_session.add(
+            OrderServiceLink(order_id=order.id, title="Работы", quantity=1, price=amount, cost=0)
+        )
+
+    receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Поступление с переплатой",
+        fingerprint="allocation-overpayment-receipt",
+        received_at=datetime(2026, 7, 23, 12, 0),
+        amount=2990,
+        currency=PaymentCurrency.BYN,
+        payer_name="Тестовый плательщик",
+        payer_unp="300999001",
+        payment_purpose="Оплата по четырем актам",
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+
+    allocated = await BankReceiptAllocationService.replace(
+        sqlite_session,
+        receipt_id=receipt.id,
+        allocations=[
+            {"order_id": order.id, "amount": amount}
+            for order, amount in zip(orders, amounts)
+        ],
+    )
+
+    assert allocated.status == "partially_allocated"
+    assert allocated.match_meta["allocated_amount"] == 2975
+    assert allocated.match_meta["unallocated_amount"] == 15
+    payments = (
+        await sqlite_session.execute(
+            select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.order_id)
+        )
+    ).scalars().all()
+    assert sum(payment.amount for payment in payments) == 2975
+    assert len(payments) == 4
+    for order in orders:
+        await sqlite_session.refresh(order)
+        assert order.balance_due == 0
+
+    detail = await BankReceiptAllocationService.get_detail(
+        sqlite_session,
+        receipt_id=receipt.id,
+    )
+    assert detail["allocated_amount"] == 2975
+    assert detail["unallocated_amount"] == 15
+
+
+@pytest.mark.asyncio
+async def test_bank_receipt_allocations_support_underpayment_and_idempotent_save(sqlite_session):
+    customer = Customer(name="Частичная оплата", phone="+375291111121", type="company", inn="300999002")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+    orders = [
+        Order(customer_id=customer.id, status="execution", title="Старый акт"),
+        Order(customer_id=customer.id, status="execution", title="Новый акт"),
+    ]
+    sqlite_session.add_all(orders)
+    await sqlite_session.commit()
+    for order in orders:
+        await sqlite_session.refresh(order)
+        sqlite_session.add(OrderServiceLink(order_id=order.id, title="Работы", quantity=1, price=700, cost=0))
+    receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Частичная оплата",
+        fingerprint="allocation-underpayment-receipt",
+        received_at=datetime(2026, 7, 23, 12, 5),
+        amount=1000,
+        currency=PaymentCurrency.BYN,
+        payer_name="Частичная оплата",
+        payer_unp="300999002",
+        payment_purpose="Частичная оплата актов",
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+
+    payload = [
+        {"order_id": orders[0].id, "amount": 700},
+        {"order_id": orders[1].id, "amount": 300},
+    ]
+    allocated = await BankReceiptAllocationService.replace(
+        sqlite_session,
+        receipt_id=receipt.id,
+        allocations=payload,
+    )
+    assert allocated.status == "matched"
+    first_payments = (
+        await sqlite_session.execute(
+            select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.order_id)
+        )
+    ).scalars().all()
+    first_ids = [payment.id for payment in first_payments]
+
+    allocated_again = await BankReceiptAllocationService.replace(
+        sqlite_session,
+        receipt_id=receipt.id,
+        allocations=payload,
+    )
+    second_payments = (
+        await sqlite_session.execute(
+            select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.order_id)
+        )
+    ).scalars().all()
+    assert allocated_again.status == "matched"
+    assert [payment.id for payment in second_payments] == first_ids
+    await sqlite_session.refresh(orders[0])
+    await sqlite_session.refresh(orders[1])
+    assert orders[0].balance_due == 0
+    assert orders[1].balance_due == 400
+
+
+@pytest.mark.asyncio
+async def test_bank_receipt_can_replace_legacy_full_allocation_across_orders(sqlite_session):
+    customer = Customer(name="Переразнесение", phone="+375291111122", type="company", inn="300999003")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+    orders = [
+        Order(customer_id=customer.id, status="execution", title="Акт 1"),
+        Order(customer_id=customer.id, status="execution", title="Акт 2"),
+    ]
+    sqlite_session.add_all(orders)
+    await sqlite_session.commit()
+    for order, amount in zip(orders, [500, 880]):
+        await sqlite_session.refresh(order)
+        sqlite_session.add(OrderServiceLink(order_id=order.id, title="Работы", quantity=1, price=amount, cost=0))
+    receipt = BankReceipt(
+        status="matched",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Старое ошибочное разнесение",
+        fingerprint="allocation-legacy-full-receipt",
+        received_at=datetime(2026, 7, 23, 12, 10),
+        amount=1400,
+        currency=PaymentCurrency.BYN,
+        payer_name="Переразнесение",
+        payer_unp="300999003",
+        payment_purpose="Оплата актов",
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+    legacy_payments = [
+        Payment(
+            order_id=orders[0].id,
+            bank_receipt_id=receipt.id,
+            amount=700,
+            currency=PaymentCurrency.BYN,
+            date=receipt.received_at,
+            type=PaymentType.POSTPAYMENT,
+        )
+        for _ in range(2)
+    ]
+    sqlite_session.add_all(legacy_payments)
+    await sqlite_session.commit()
+    for payment in legacy_payments:
+        await sqlite_session.refresh(payment)
+    receipt.matched_order_id = orders[0].id
+    receipt.matched_payment_id = legacy_payments[0].id
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+
+    detail = await BankReceiptAllocationService.get_detail(
+        sqlite_session,
+        receipt_id=receipt.id,
+    )
+    first_order = next(item for item in detail["orders"] if item["order_id"] == orders[0].id)
+    assert first_order["current_allocation"] == 1400
+    assert first_order["balance_due_before_receipt"] == 500
+
+    reallocated = await BankReceiptAllocationService.replace(
+        sqlite_session,
+        receipt_id=receipt.id,
+        allocations=[
+            {"order_id": orders[0].id, "amount": 500},
+            {"order_id": orders[1].id, "amount": 880},
+        ],
+    )
+    assert reallocated.status == "partially_allocated"
+    assert reallocated.match_meta["unallocated_amount"] == 20
+    payments = (
+        await sqlite_session.execute(
+            select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount)
+        )
+    ).scalars().all()
+    assert [payment.amount for payment in payments] == [500, 880]
 
 
 @pytest.mark.asyncio

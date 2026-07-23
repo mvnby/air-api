@@ -9,6 +9,7 @@ export type ManagerCustomerReconciliationPaymentItem = {
     order_title: string;
     date: string;
     amount: number;
+    allocated_amount?: (number | null);
     currency: PaymentCurrency;
     payment_type: string;
     comment?: (string | null);
