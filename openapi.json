@@ -2304,6 +2304,59 @@
         }
       }
     },
+    "/api/v1/content/brands/{brand_slug}/series/{series_slug}": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Public Brand Series",
+        "description": "Get one published series and its public product cards.",
+        "operationId": "get_public_brand_series",
+        "parameters": [
+          {
+            "name": "brand_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Brand Slug"
+            }
+          },
+          {
+            "name": "series_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Series Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSeriesPageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/services/options": {
       "get": {
         "tags": [
@@ -48636,6 +48689,81 @@
           "detail"
         ],
         "title": "PublicOrderPricingErrorResponse"
+      },
+      "PublicRelatedSeriesResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
+          "hero_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hero Image"
+          },
+          "products_count": {
+            "type": "integer",
+            "title": "Products Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "slug"
+        ],
+        "title": "PublicRelatedSeriesResponse"
+      },
+      "PublicSeriesPageResponse": {
+        "properties": {
+          "brand": {
+            "$ref": "#/components/schemas/ProductBrandResponse"
+          },
+          "series": {
+            "$ref": "#/components/schemas/ProductSeriesResponse"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/ProductResponse"
+            },
+            "type": "array",
+            "title": "Products"
+          },
+          "related_series": {
+            "items": {
+              "$ref": "#/components/schemas/PublicRelatedSeriesResponse"
+            },
+            "type": "array",
+            "title": "Related Series"
+          }
+        },
+        "type": "object",
+        "required": [
+          "brand",
+          "series"
+        ],
+        "title": "PublicSeriesPageResponse"
       },
       "RepairDiagnosticLeadResponse": {
         "properties": {

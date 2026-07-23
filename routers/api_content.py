@@ -5,10 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from core.database import get_session
-from schemas import ArticleResponse, PublicBrandDetailResponse, PublicBrandResponse, ServiceResponse
+from schemas import (
+    ArticleResponse,
+    PublicBrandDetailResponse,
+    PublicBrandResponse,
+    PublicSeriesPageResponse,
+    ServiceResponse,
+)
 from services.article_service import ArticleService
 from services.content_api_service import ContentApiService
 from services.installation_service import InstallationService
+from services.public_series_page_service import PublicSeriesPageService
 
 router = APIRouter(tags=["api"])
 
@@ -51,6 +58,30 @@ async def get_public_brand(slug: str, session: AsyncSession = Depends(get_sessio
     if not brand:
         raise HTTPException(status_code=404, detail=f"Brand with slug '{slug}' not found")
     return brand
+
+
+@router.get(
+    "/v1/content/brands/{brand_slug}/series/{series_slug}",
+    response_model=PublicSeriesPageResponse,
+    operation_id="get_public_brand_series",
+)
+async def get_public_brand_series(
+    brand_slug: str,
+    series_slug: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get one published series and its public product cards."""
+    payload = await PublicSeriesPageService.get_by_slugs(
+        session,
+        brand_slug=brand_slug,
+        series_slug=series_slug,
+    )
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Published series '{brand_slug}/{series_slug}' not found",
+        )
+    return payload
 
 
 @router.get("/v1/services/options", response_model=List[ServiceResponse])
