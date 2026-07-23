@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 
@@ -12,6 +13,15 @@ KNOWN_PRODUCT_KINDS = {
     "other",
 }
 
+PRODUCT_KIND_BY_SYSTEM_TYPE = {
+    "сплит-система": "complete_split_system",
+    "внутренний блок": "indoor_unit",
+    "наружный блок": "outdoor_unit",
+    "мобильный": "other",
+    "мульти-сплит-система": "other",
+    "полупромышленный кондиционер": "other",
+}
+
 
 def _as_bool(value: Any) -> bool | None:
     if isinstance(value, bool):
@@ -24,12 +34,37 @@ def _as_bool(value: Any) -> bool | None:
     return None
 
 
+def _spec_value(values: dict[str, Any], key: str) -> Any:
+    if values.get(key) is not None:
+        return values[key]
+    typed = values.get("__typed_specs")
+    if not isinstance(typed, dict):
+        return None
+    entry = typed.get(key)
+    if not isinstance(entry, dict):
+        return None
+    if entry.get("value") is not None:
+        return entry["value"]
+    return entry.get("raw")
+
+
+def _kind_from_system_type(value: Any) -> str | None:
+    normalized = str(value or "").strip().lower().replace("ё", "е")
+    normalized = normalized.replace("—", "-")
+    normalized = re.sub(r"\s+", " ", normalized)
+    return PRODUCT_KIND_BY_SYSTEM_TYPE.get(normalized)
+
+
 class ProductKindService:
     @staticmethod
     def derive_from_specs(specs: dict[str, Any] | None) -> str:
         values = specs or {}
-        includes_indoor = _as_bool(values.get("includes_indoor_unit"))
-        includes_outdoor = _as_bool(values.get("includes_outdoor_unit"))
+        system_type_kind = _kind_from_system_type(_spec_value(values, "type"))
+        if system_type_kind is not None:
+            return system_type_kind
+
+        includes_indoor = _as_bool(_spec_value(values, "includes_indoor_unit"))
+        includes_outdoor = _as_bool(_spec_value(values, "includes_outdoor_unit"))
         if includes_indoor is True and includes_outdoor is True:
             return "complete_split_system"
         if includes_indoor is True and includes_outdoor is False:
