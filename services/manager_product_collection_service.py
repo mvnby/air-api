@@ -163,7 +163,6 @@ class ManagerProductCollectionService:
             items=items,
         )
         collection.updated_at = utc_now()
-        session.add(collection)
         await session.commit()
         return await ManagerProductCollectionService.get_collection(session, collection_id)
 
@@ -200,7 +199,6 @@ class ManagerProductCollectionService:
             placements=placements,
         )
         collection.updated_at = utc_now()
-        session.add(collection)
         await session.commit()
         return await ManagerProductCollectionService.get_collection(session, collection_id)
 

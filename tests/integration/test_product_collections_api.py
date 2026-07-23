@@ -40,6 +40,75 @@ def _product(
 
 
 @pytest.mark.asyncio
+async def test_published_collection_can_replace_existing_children(async_client, db):
+    headers = await _auth_headers(async_client)
+    product = _product(title="Publish-safe split", slug="publish-safe-split")
+    db.add(product)
+    await db.commit()
+
+    create = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Publish-safe collection",
+            "public_title": "Надёжная публикация",
+            "status": "draft",
+            "min_items": 1,
+            "max_items": 6,
+        },
+    )
+    assert create.status_code == 200, create.text
+    collection_id = create.json()["id"]
+    items_payload = {"items": [{"product_id": product.id}]}
+    placements_payload = {
+        "placements": [
+            {
+                "surface_key": "home",
+                "slot_key": "publish_safe",
+                "position": 1,
+                "is_enabled": True,
+            }
+        ]
+    }
+
+    first_items = await async_client.put(
+        f"/api/manager/product-collections/{collection_id}/items",
+        headers=headers,
+        json=items_payload,
+    )
+    assert first_items.status_code == 200, first_items.text
+    first_placements = await async_client.put(
+        f"/api/manager/product-collections/{collection_id}/placements",
+        headers=headers,
+        json=placements_payload,
+    )
+    assert first_placements.status_code == 200, first_placements.text
+
+    publish = await async_client.patch(
+        f"/api/manager/product-collections/{collection_id}",
+        headers=headers,
+        json={"status": "published"},
+    )
+    assert publish.status_code == 200, publish.text
+
+    replaced_items = await async_client.put(
+        f"/api/manager/product-collections/{collection_id}/items",
+        headers=headers,
+        json=items_payload,
+    )
+    assert replaced_items.status_code == 200, replaced_items.text
+    assert [item["product_id"] for item in replaced_items.json()["items"]] == [product.id]
+
+    replaced_placements = await async_client.put(
+        f"/api/manager/product-collections/{collection_id}/placements",
+        headers=headers,
+        json=placements_payload,
+    )
+    assert replaced_placements.status_code == 200, replaced_placements.text
+    assert len(replaced_placements.json()["placements"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_manager_collection_preview_matches_public_placement(async_client, db):
     headers = await _auth_headers(async_client)
     valid = _product(title="Ready Split", slug="ready-split")
