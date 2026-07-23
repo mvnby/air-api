@@ -11,6 +11,7 @@ import {
   Link2,
   Mail,
   Package,
+  GalleryVerticalEnd,
   ReceiptText,
   Settings,
   ShieldCheck,
@@ -53,6 +54,7 @@ export const navSections: NavSection[] = [
     label: 'Каталог',
     items: [
       { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix' },
+      { path: '/manager/product-collections', label: 'Подборки', icon: GalleryVerticalEnd, match: 'prefix' },
       { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix' },
       { path: '/manager/features', label: 'Фичи', icon: Sparkles, match: 'prefix' },
       { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix' },

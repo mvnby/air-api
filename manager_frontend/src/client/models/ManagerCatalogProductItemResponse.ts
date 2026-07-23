@@ -14,6 +14,7 @@ export type ManagerCatalogProductItemResponse = {
     slug: (string | null);
     price: number;
     old_price: (number | null);
+    product_kind?: 'unknown' | 'complete_split_system' | 'indoor_unit' | 'outdoor_unit' | 'panel' | 'accessory' | 'consumable' | 'other';
     is_inverter: boolean;
     power_cooling: (number | null);
     main_image: (string | null);

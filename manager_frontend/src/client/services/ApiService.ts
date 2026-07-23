@@ -18,6 +18,7 @@ import type { PublicBrandDetailResponse } from '../models/PublicBrandDetailRespo
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { PublicContactLeadPayload } from '../models/PublicContactLeadPayload';
 import type { PublicContactLeadResponse } from '../models/PublicContactLeadResponse';
+import type { PublicProductCollectionPlacementResponse } from '../models/PublicProductCollectionPlacementResponse';
 import type { PublicSeriesPageResponse } from '../models/PublicSeriesPageResponse';
 import type { RepairDiagnosticLeadResponse } from '../models/RepairDiagnosticLeadResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
@@ -690,6 +691,29 @@ export class ApiService {
             url: '/api/v1/address-suggest',
             query: {
                 'q': q,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Public Product Collection Placement
+     * @param surfaceKey
+     * @param slotKey
+     * @returns PublicProductCollectionPlacementResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicProductCollectionPlacement(
+        surfaceKey: string,
+        slotKey: string,
+    ): CancelablePromise<PublicProductCollectionPlacementResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/content/placements/{surface_key}/{slot_key}/collections',
+            path: {
+                'surface_key': surfaceKey,
+                'slot_key': slotKey,
             },
             errors: {
                 422: `Validation Error`,

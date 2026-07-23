@@ -153,6 +153,7 @@ class ProductDAO:
         stmt = select(Product).where(Product.id.in_(product_ids)).options(
             selectinload(Product.brand),
             ProductDAO._series_option(),
+            selectinload(Product.tags).selectinload(Tag.group),
             ProductDAO._gallery_images_option(load_image_variants=load_image_variants),
             selectinload(Product.attachments),
         )

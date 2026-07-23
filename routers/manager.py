@@ -14,6 +14,7 @@ from routers import manager_equipment
 from routers import manager_equipment_links
 from routers import manager_google_auth
 from routers import manager_features
+from routers import manager_product_collections
 from routers import manager_leads
 from routers import manager_mail
 from routers import manager_media
@@ -65,3 +66,4 @@ router.include_router(manager_tags.router)
 router.include_router(manager_supply.router)
 router.include_router(manager_yandex_business.router)
 router.include_router(manager_warranties.router)
+router.include_router(manager_product_collections.router)

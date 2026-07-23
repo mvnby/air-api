@@ -77,6 +77,7 @@ const form = ref<any>({
     price: 0,
     old_price: null,
     is_published: true,
+    product_kind: 'unknown',
 });
 
 const specs = ref<{ key: string; value: string }[]>([]);
@@ -1006,6 +1007,7 @@ const initializeEditor = async () => {
         price: Number(source?.price || 0),
         old_price: source?.old_price ?? null,
         is_published: source?.is_published ?? true,
+        product_kind: (source as any)?.product_kind || 'unknown',
     };
     await loadSpecRegistry();
 
@@ -1198,6 +1200,7 @@ const save = async (): Promise<boolean> => {
             'price',
             'old_price',
             'is_published',
+            'product_kind',
             'brand_id',
             'specs',
             'tag_ids',
@@ -1346,6 +1349,20 @@ defineExpose({ save, isDirty, loading });
                                 <span class="ms-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Опубликовано</span>
                             </label>
                         </div>
+                        <label class="block space-y-1">
+                            <span class="text-sm font-semibold text-gray-700 dark:text-slate-300">Канонический тип товара</span>
+                            <select v-model="form.product_kind" class="w-full rounded-lg border border-gray-200 bg-slate-100 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
+                                <option value="unknown">Не задан</option>
+                                <option value="complete_split_system">Готовая сплит-система</option>
+                                <option value="indoor_unit">Внутренний блок</option>
+                                <option value="outdoor_unit">Наружный блок</option>
+                                <option value="panel">Панель</option>
+                                <option value="accessory">Аксессуар</option>
+                                <option value="consumable">Расходный материал</option>
+                                <option value="other">Другое</option>
+                            </select>
+                            <p class="text-[11px] text-gray-500 dark:text-slate-400">От этого поля зависит допуск товара в потребительские витрины.</p>
+                        </label>
                         </template>
 
                         <ProductSuppliersEditor

@@ -3636,6 +3636,62 @@
         }
       }
     },
+    "/api/v1/content/placements/{surface_key}/{slot_key}/collections": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Public Product Collection Placement",
+        "operationId": "get_public_product_collection_placement",
+        "parameters": [
+          {
+            "name": "surface_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "title": "Surface Key"
+            }
+          },
+          {
+            "name": "slot_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "title": "Slot Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProductCollectionPlacementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/backups": {
       "get": {
         "tags": [
@@ -20323,6 +20379,453 @@
         }
       }
     },
+    "/api/manager/product-collections": {
+      "get": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "List Manager Product Collections",
+        "operationId": "list_manager_product_collections",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Create Manager Product Collection",
+        "operationId": "create_manager_product_collection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerProductCollectionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/product-collections/{collection_id}": {
+      "get": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Get Manager Product Collection",
+        "operationId": "get_manager_product_collection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Update Manager Product Collection",
+        "operationId": "update_manager_product_collection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerProductCollectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/product-collections/{collection_id}/duplicate": {
+      "post": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Duplicate Manager Product Collection",
+        "operationId": "duplicate_manager_product_collection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/product-collections/{collection_id}/archive": {
+      "post": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Archive Manager Product Collection",
+        "operationId": "archive_manager_product_collection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/product-collections/{collection_id}/items": {
+      "put": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Replace Manager Product Collection Items",
+        "operationId": "replace_manager_product_collection_items",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerProductCollectionItemsPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/product-collections/{collection_id}/placements": {
+      "put": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Replace Manager Product Collection Placements",
+        "operationId": "replace_manager_product_collection_placements",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerProductCollectionPlacementsPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/product-collections/{collection_id}/preview": {
+      "get": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Preview Manager Product Collection",
+        "operationId": "preview_manager_product_collection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          },
+          {
+            "name": "surface",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "home",
+              "title": "Surface"
+            }
+          },
+          {
+            "name": "slot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "featured_products",
+              "title": "Slot"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductCollectionPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/rebuild-web/status": {
       "get": {
         "tags": [
@@ -29785,6 +30288,21 @@
               }
             ],
             "title": "Old Price"
+          },
+          "product_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "complete_split_system",
+              "indoor_unit",
+              "outdoor_unit",
+              "panel",
+              "accessory",
+              "consumable",
+              "other"
+            ],
+            "title": "Product Kind",
+            "default": "unknown"
           },
           "is_inverter": {
             "type": "boolean",
@@ -40080,6 +40598,804 @@
         "type": "object",
         "title": "ManagerOrderUpdatePayload"
       },
+      "ManagerProductCollectionCreate": {
+        "properties": {
+          "internal_name": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Internal Name"
+          },
+          "public_title": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Public Title"
+          },
+          "public_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Description"
+          },
+          "public_badge": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Badge"
+          },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "cta_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Url"
+          },
+          "editorial_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorial Note"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "title": "Status",
+            "default": "draft"
+          },
+          "mode": {
+            "type": "string",
+            "const": "manual",
+            "title": "Mode",
+            "default": "manual"
+          },
+          "min_items": {
+            "type": "integer",
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Min Items",
+            "default": 1
+          },
+          "max_items": {
+            "type": "integer",
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Max Items",
+            "default": 6
+          },
+          "fallback_collection_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Collection Id"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "internal_name",
+          "public_title"
+        ],
+        "title": "ManagerProductCollectionCreate"
+      },
+      "ManagerProductCollectionItemPayload": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "default": true
+          },
+          "editorial_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorial Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id"
+        ],
+        "title": "ManagerProductCollectionItemPayload"
+      },
+      "ManagerProductCollectionItemResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned"
+          },
+          "editorial_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorial Note"
+          },
+          "product_title": {
+            "type": "string",
+            "title": "Product Title"
+          },
+          "product_slug": {
+            "type": "string",
+            "title": "Product Slug"
+          },
+          "product_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "complete_split_system",
+              "indoor_unit",
+              "outdoor_unit",
+              "panel",
+              "accessory",
+              "consumable",
+              "other"
+            ],
+            "title": "Product Kind"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "product_id",
+          "position",
+          "is_pinned",
+          "product_title",
+          "product_slug",
+          "product_kind",
+          "is_published",
+          "price"
+        ],
+        "title": "ManagerProductCollectionItemResponse"
+      },
+      "ManagerProductCollectionItemsPayload": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionItemPayload"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ManagerProductCollectionItemsPayload"
+      },
+      "ManagerProductCollectionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ManagerProductCollectionListResponse"
+      },
+      "ManagerProductCollectionPlacementPayload": {
+        "properties": {
+          "surface_key": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Surface Key"
+          },
+          "slot_key": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Slot Key"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Position",
+            "default": 0
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled",
+            "default": true
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "surface_key",
+          "slot_key"
+        ],
+        "title": "ManagerProductCollectionPlacementPayload"
+      },
+      "ManagerProductCollectionPlacementResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "surface_key": {
+            "type": "string",
+            "title": "Surface Key"
+          },
+          "slot_key": {
+            "type": "string",
+            "title": "Slot Key"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "surface_key",
+          "slot_key",
+          "position",
+          "is_enabled"
+        ],
+        "title": "ManagerProductCollectionPlacementResponse"
+      },
+      "ManagerProductCollectionPlacementsPayload": {
+        "properties": {
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionPlacementPayload"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Placements"
+          }
+        },
+        "type": "object",
+        "title": "ManagerProductCollectionPlacementsPayload"
+      },
+      "ManagerProductCollectionResponse": {
+        "properties": {
+          "internal_name": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Internal Name"
+          },
+          "public_title": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Public Title"
+          },
+          "public_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Description"
+          },
+          "public_badge": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Badge"
+          },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "cta_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Url"
+          },
+          "editorial_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorial Note"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "title": "Status",
+            "default": "draft"
+          },
+          "mode": {
+            "type": "string",
+            "const": "manual",
+            "title": "Mode",
+            "default": "manual"
+          },
+          "min_items": {
+            "type": "integer",
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Min Items",
+            "default": 1
+          },
+          "max_items": {
+            "type": "integer",
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Max Items",
+            "default": 6
+          },
+          "fallback_collection_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Collection Id"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionPlacementResponse"
+            },
+            "type": "array",
+            "title": "Placements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "internal_name",
+          "public_title",
+          "id",
+          "slug",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ManagerProductCollectionResponse"
+      },
+      "ManagerProductCollectionUpdate": {
+        "properties": {
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "internal_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 180,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Name"
+          },
+          "public_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 180,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Title"
+          },
+          "public_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Description"
+          },
+          "public_badge": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Badge"
+          },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "cta_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Url"
+          },
+          "editorial_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorial Note"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "published",
+                  "archived"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "manual"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "min_items": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Items"
+          },
+          "max_items": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Items"
+          },
+          "fallback_collection_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Collection Id"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          }
+        },
+        "type": "object",
+        "title": "ManagerProductCollectionUpdate"
+      },
       "ManagerProductFeatureWorkspaceResponse": {
         "properties": {
           "effective": {
@@ -45970,6 +47286,87 @@
         ],
         "title": "ProductBrandResponse"
       },
+      "ProductCollectionExclusionResponse": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "product_title": {
+            "type": "string",
+            "title": "Product Title"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reason Codes"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "product_title",
+          "position",
+          "reason_codes",
+          "reasons"
+        ],
+        "title": "ProductCollectionExclusionResponse"
+      },
+      "ProductCollectionPreviewResponse": {
+        "properties": {
+          "collection_id": {
+            "type": "integer",
+            "title": "Collection Id"
+          },
+          "collection_slug": {
+            "type": "string",
+            "title": "Collection Slug"
+          },
+          "below_min_items": {
+            "type": "boolean",
+            "title": "Below Min Items"
+          },
+          "fallback_used": {
+            "type": "boolean",
+            "title": "Fallback Used",
+            "default": false
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProductCollectionItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "excluded_items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductCollectionExclusionResponse"
+            },
+            "type": "array",
+            "title": "Excluded Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collection_id",
+          "collection_slug",
+          "below_min_items"
+        ],
+        "title": "ProductCollectionPreviewResponse"
+      },
       "ProductCreate": {
         "properties": {
           "title": {
@@ -45993,6 +47390,21 @@
               }
             ],
             "title": "Old Price"
+          },
+          "product_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "complete_split_system",
+              "indoor_unit",
+              "outdoor_unit",
+              "panel",
+              "accessory",
+              "consumable",
+              "other"
+            ],
+            "title": "Product Kind",
+            "default": "unknown"
           },
           "slug": {
             "anyOf": [
@@ -46135,6 +47547,27 @@
               }
             ],
             "title": "Old Price"
+          },
+          "product_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "complete_split_system",
+                  "indoor_unit",
+                  "outdoor_unit",
+                  "panel",
+                  "accessory",
+                  "consumable",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Kind"
           },
           "slug": {
             "anyOf": [
@@ -47500,6 +48933,21 @@
             ],
             "title": "Old Price"
           },
+          "product_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "complete_split_system",
+              "indoor_unit",
+              "outdoor_unit",
+              "panel",
+              "accessory",
+              "consumable",
+              "other"
+            ],
+            "title": "Product Kind",
+            "default": "unknown"
+          },
           "is_inverter": {
             "type": "boolean",
             "title": "Is Inverter"
@@ -47577,6 +49025,45 @@
               }
             ],
             "title": "Availability Status"
+          },
+          "public_stock_state": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local_stock",
+                  "supplier_stock",
+                  "available_to_order",
+                  "out_of_stock"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Stock State"
+          },
+          "delivery_min_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Min Days"
+          },
+          "delivery_max_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Max Days"
           },
           "brand": {
             "anyOf": [
@@ -48170,6 +49657,27 @@
             ],
             "title": "Old Price"
           },
+          "product_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "complete_split_system",
+                  "indoor_unit",
+                  "outdoor_unit",
+                  "panel",
+                  "accessory",
+                  "consumable",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Kind"
+          },
           "slug": {
             "anyOf": [
               {
@@ -48689,6 +50197,137 @@
           "detail"
         ],
         "title": "PublicOrderPricingErrorResponse"
+      },
+      "PublicProductCollectionItemResponse": {
+        "properties": {
+          "selection_source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "fallback"
+            ],
+            "title": "Selection Source",
+            "default": "manual"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ProductResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "product"
+        ],
+        "title": "PublicProductCollectionItemResponse"
+      },
+      "PublicProductCollectionPlacementResponse": {
+        "properties": {
+          "surface": {
+            "type": "string",
+            "title": "Surface"
+          },
+          "slot": {
+            "type": "string",
+            "title": "Slot"
+          },
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProductCollectionResponse"
+            },
+            "type": "array",
+            "title": "Collections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "surface",
+          "slot"
+        ],
+        "title": "PublicProductCollectionPlacementResponse"
+      },
+      "PublicProductCollectionResponse": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "badge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge"
+          },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "cta_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Url"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProductCollectionItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "position",
+          "updated_at"
+        ],
+        "title": "PublicProductCollectionResponse"
       },
       "PublicRelatedSeriesResponse": {
         "properties": {

@@ -13,6 +13,7 @@ from models import Product, ProductImage, Tag
 from services.brand_series_service import sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
 from services.product_attachment_service import replace_manuals
+from services.product_kind_service import ProductKindService
 from services.spec_normalizer import normalize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 
@@ -88,6 +89,10 @@ class ProductWriteService:
             description=str(payload.get("description") or ""),
             price=int(payload.get("price") or 0),
             old_price=payload.get("old_price"),
+            product_kind=ProductKindService.resolve(
+                payload.get("product_kind"),
+                specs=specs,
+            ),
             is_inverter=bool(payload.get("is_inverter", False)),
             power_cooling=payload.get("power_cooling"),
             main_image=payload.get("main_image"),
@@ -176,6 +181,11 @@ class ProductWriteService:
             description=str(payload.get("description", source.description or "")),
             price=int(payload.get("price", source.price) or 0),
             old_price=payload.get("old_price", source.old_price),
+            product_kind=ProductKindService.resolve(
+                payload.get("product_kind"),
+                specs=specs,
+                fallback=source.product_kind,
+            ),
             is_inverter=bool(payload.get("is_inverter", source.is_inverter)),
             power_cooling=payload.get("power_cooling", source.power_cooling),
             main_image=payload.get("main_image", source.main_image),
@@ -317,6 +327,14 @@ class ProductWriteService:
         product = await ProductDAO.update_full(session, product_id, payload, tag_ids, commit=False)
         if not product:
             return None
+        if (
+            product.product_kind == "unknown"
+            and "specs" in payload
+            and "product_kind" not in payload
+        ):
+            product.product_kind = ProductKindService.derive_from_specs(product.specs)
+            session.add(product)
+            await session.flush()
 
         if manuals_payload is not None:
             await replace_manuals(

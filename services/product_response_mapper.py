@@ -213,12 +213,25 @@ def map_product_to_response(
             )
         )
 
+    availability_status = (supply_metrics or {}).get("availability_status")
+    stock_state_map = {
+        "in_stock_now": ("local_stock", 0, 0),
+        "available_2_3_days": ("supplier_stock", 2, 3),
+        "check_availability": ("available_to_order", None, None),
+        "out_of_stock": ("out_of_stock", None, None),
+    }
+    public_stock_state, delivery_min_days, delivery_max_days = stock_state_map.get(
+        availability_status,
+        ("out_of_stock", None, None),
+    )
+
     return ProductResponse(
         id=product.id,
         title=product.title,
         slug=product.slug,
         price=product.price,
         old_price=product.old_price,
+        product_kind=product.product_kind,
         is_inverter=product.is_inverter,
         power_cooling=product.power_cooling,
         main_image=_main_image_public_url(product),
@@ -228,7 +241,10 @@ def map_product_to_response(
         created_at=product.created_at,
         vitebsk_qty=int((supply_metrics or {}).get("vitebsk_qty", 0) or 0),
         minsk_qty=int((supply_metrics or {}).get("minsk_qty", 0) or 0),
-        availability_status=(supply_metrics or {}).get("availability_status"),
+        availability_status=availability_status,
+        public_stock_state=public_stock_state,
+        delivery_min_days=delivery_min_days,
+        delivery_max_days=delivery_max_days,
         brand=(
             ProductBrandResponse(
                 id=product.brand.id,
