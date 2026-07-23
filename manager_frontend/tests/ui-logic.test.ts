@@ -288,6 +288,53 @@ assert(
   buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'rejected' }).nextAction.command === 'create_proposal_variant',
   'rejected proposal must lead to a new variant',
 );
+const invoiceDocument = {
+  id: 101,
+  doc_type: 'invoice',
+  number: 'СЧ-101',
+  date: '2026-07-23T10:00:00',
+};
+assert(
+  buildOrderWorkspaceViewModel({
+    ...workspaceBase,
+    activeProposalStatus: 'draft',
+    documents: [invoiceDocument],
+  }).nextAction.label === 'Отправить счёт',
+  'created invoice must be sendable without forcing a commercial offer',
+);
+assert(
+  buildOrderWorkspaceViewModel({
+    ...workspaceBase,
+    activeProposalStatus: 'draft',
+    documents: [invoiceDocument],
+    sentDocumentTypes: ['invoice'],
+  }).nextAction.target === 'payments',
+  'sent invoice must advance the workspace to payment waiting',
+);
+assert(
+  buildOrderWorkspaceViewModel({
+    ...workspaceBase,
+    activeProposalStatus: 'draft',
+    negotiationStatus: 'awaiting_signature',
+    documents: [{
+      id: 102,
+      doc_type: 'contract',
+      number: 'Д-102',
+      date: '2026-07-23T10:00:00',
+    }],
+    sentDocumentTypes: ['contract'],
+  }).nextAction.label === 'Ожидать подписанный договор',
+  'sent contract must advance the workspace without requiring a commercial offer',
+);
+assert(
+  buildOrderWorkspaceViewModel({
+    ...workspaceBase,
+    activeProposalStatus: 'sent',
+    documents: [invoiceDocument],
+    sentDocumentTypes: ['offer'],
+  }).nextAction.label === 'Отправить счёт',
+  'a prepared invoice must be offered after a commercial offer was sent',
+);
 assert(proposalPrimaryAction('approved') === null, 'accepted proposal must not expose another proposal action');
 assert(isProposalRevisionLocked('sent'), 'sent proposal revision must be locked');
 assert(isProposalRevisionLocked('approved'), 'accepted proposal revision must be locked');

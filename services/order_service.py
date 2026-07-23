@@ -65,6 +65,7 @@ class OrderService:
         "awaiting_offer",
         "awaiting_visit",
         "proposal_sent",
+        "awaiting_signature",
         "awaiting_payment",
         "follow_up",
     }
@@ -2010,6 +2011,9 @@ class OrderService:
             "bank_name": customer.bank_name,
             "bic": customer.bic,
             "iban": customer.iban,
+            "signer_position": customer.signer_position,
+            "signer_name": customer.signer_name,
+            "acting_basis": customer.acting_basis,
         }
 
     @staticmethod

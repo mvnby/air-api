@@ -11,6 +11,7 @@ export const NEGOTIATION_STATUS_OPTIONS = [
     { value: 'awaiting_offer', label: 'Ждет предложение', icon: 'rate_review', tone: 'sky' },
     { value: 'awaiting_visit', label: 'Ждет выезд', icon: 'location_on', tone: 'violet' },
     { value: 'proposal_sent', label: 'Ожидаем ответ', icon: 'send', tone: 'amber' },
+    { value: 'awaiting_signature', label: 'Ожидаем договор', icon: 'draw', tone: 'amber' },
     { value: 'awaiting_payment', label: 'Ожидаем оплату', icon: 'payments', tone: 'emerald' },
     { value: 'follow_up', label: 'Требуется уточнение', icon: 'contact_phone', tone: 'slate' },
 ] as const;
@@ -68,6 +69,11 @@ export const BOARD_COLUMN_TONE_CLASSES: Record<string, { column: string; badge: 
         text: 'text-violet-800 dark:text-violet-200',
     },
     proposal_sent: {
+        column: 'border-amber-100 bg-amber-50/70 dark:border-amber-500/20 dark:bg-amber-500/10',
+        badge: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
+        text: 'text-amber-800 dark:text-amber-200',
+    },
+    awaiting_signature: {
         column: 'border-amber-100 bg-amber-50/70 dark:border-amber-500/20 dark:bg-amber-500/10',
         badge: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
         text: 'text-amber-800 dark:text-amber-200',
@@ -134,6 +140,7 @@ export const BOARD_CARD_ACCENT_CLASSES: Record<string, string> = {
     awaiting_offer: 'border-sky-200 bg-sky-50/50 shadow-sky-100/80 hover:shadow-sky-200/80 dark:border-sky-500/30 dark:bg-sky-500/10 dark:shadow-none',
     awaiting_visit: 'border-violet-200 bg-violet-50/55 shadow-violet-100/80 hover:shadow-violet-200/80 dark:border-violet-500/30 dark:bg-violet-500/10 dark:shadow-none',
     proposal_sent: 'border-amber-200 bg-amber-50/60 shadow-amber-100/80 hover:shadow-amber-200/80 dark:border-amber-500/30 dark:bg-amber-500/10 dark:shadow-none',
+    awaiting_signature: 'border-amber-200 bg-amber-50/60 shadow-amber-100/80 hover:shadow-amber-200/80 dark:border-amber-500/30 dark:bg-amber-500/10 dark:shadow-none',
     awaiting_payment: 'border-emerald-200 bg-emerald-50/55 shadow-emerald-100/80 hover:shadow-emerald-200/80 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:shadow-none',
     follow_up: 'border-slate-300 bg-slate-50 shadow-slate-100/80 hover:shadow-slate-200/80 dark:border-slate-600 dark:bg-slate-700/40 dark:shadow-none',
     execution: 'border-teal-200 bg-teal-50/55 shadow-teal-100/80 hover:shadow-teal-200/80 dark:border-teal-500/30 dark:bg-teal-500/10 dark:shadow-none',

@@ -1150,6 +1150,11 @@ async def test_send_order_email_attaches_documents_and_marks_offer_sent(sqlite_s
     persisted_email = (await sqlite_session.execute(select(OutgoingEmail).where(OutgoingEmail.id == email_row.id))).scalar_one()
     assert persisted_email.recipient_email == "client@example.com"
     assert persisted_email.attachments[0]["mime_type"] == "application/pdf"
+    assert persisted_email.attachments[0]["document_id"] == offer.id
+    assert persisted_email.attachments[0]["document_type"] == "offer"
+    assert persisted_email.attachments[0]["document_number"] == offer.number
+    assert persisted_email.attachments[1]["document_type"] == "invoice"
+    assert refreshed_order.negotiation_status == "awaiting_payment"
 
 
 @pytest.mark.asyncio
@@ -1197,6 +1202,54 @@ async def test_send_order_email_without_offer_keeps_proposal_status(sqlite_sessi
     refreshed_order = await sqlite_session.get(Order, order.id)
     assert refreshed_order.proposal_status == "draft"
     assert refreshed_order.proposal_sent_at is None
+    assert refreshed_order.negotiation_status == "awaiting_payment"
+
+
+@pytest.mark.asyncio
+async def test_send_contract_email_moves_negotiation_to_awaiting_signature(sqlite_session, monkeypatch):
+    monkeypatch.setattr(settings, "MAIL_SMTP_USERNAME", "a@mvn.by")
+    monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")
+    monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
+
+    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(customer_id=customer.id, status="negotiation", proposal_status="draft")
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+
+    contract = OrderDocument(
+        order_id=order.id,
+        doc_type="contract",
+        number="Д-2026-002",
+        google_file_id="contract-file",
+        google_edit_url="https://docs.example/contract",
+    )
+    sqlite_session.add(contract)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(contract)
+
+    async def fake_download(_session, doc_id: int):
+        return b"%PDF-1.4", f"document-{doc_id}.pdf"
+
+    monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
+    monkeypatch.setattr(MailSmtpService, "send_message", lambda _message: None)
+
+    await MailSmtpService.send_order_email(
+        sqlite_session,
+        order_id=order.id,
+        to_email="client@example.com",
+        subject="Договор",
+        body_text="Здравствуйте, договор во вложении.",
+        document_ids=[contract.id],
+    )
+
+    refreshed_order = await sqlite_session.get(Order, order.id)
+    assert refreshed_order.proposal_status == "draft"
+    assert refreshed_order.negotiation_status == "awaiting_signature"
 
 
 @pytest.mark.asyncio
@@ -1250,4 +1303,5 @@ async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, m
     refreshed_proposal = await sqlite_session.get(OrderProposal, proposal.id)
     assert refreshed_order.proposal_status == "ready_to_send"
     assert refreshed_order.proposal_sent_at is None
+    assert refreshed_order.negotiation_status == "awaiting_offer"
     assert refreshed_proposal.status == "ready_to_send"

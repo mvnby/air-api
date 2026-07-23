@@ -10,6 +10,7 @@ export type OrderWorkspaceCommand =
   | 'create_proposal'
   | 'finish_proposal'
   | 'send_proposal'
+  | 'send_documents'
   | 'record_proposal_response'
   | 'create_proposal_variant';
 
@@ -74,6 +75,7 @@ export type OrderWorkspaceInput = {
   linkedEquipmentCount: number;
   documents: ManagerOrderDocumentItem[];
   documentEmailStatus?: 'unknown' | 'none' | 'pending' | 'sent' | 'failed';
+  sentDocumentTypes?: string[];
   missingReferencedInvoice?: string | null;
   total: number;
   paid: number;
@@ -126,6 +128,15 @@ const documentDeliveryLabel = (status: OrderWorkspaceInput['documentEmailStatus'
   none: 'нужно проверить и отправить',
 }[status || 'none']);
 
+const documentSendActionLabel = (types: Set<string>) => {
+  const hasInvoice = types.has('invoice');
+  const hasContract = types.has('contract');
+  if (hasInvoice && hasContract) return 'Отправить счёт и договор';
+  if (hasInvoice) return 'Отправить счёт';
+  if (hasContract) return 'Отправить договор';
+  return 'Отправить документы';
+};
+
 export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderWorkspaceViewModel => {
   const inExecution = input.status === 'execution';
   const isClosed = input.status === 'closed';
@@ -151,9 +162,21 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   const proposalStatus = normalizeProposalStatus(input.activeProposalStatus);
   const hasActiveProposal = Boolean(input.activeProposalId);
   const proposalHasValidLines = Number(input.activeProposalLineCount || 0) > 0 && Number(input.activeProposalTotal || 0) > 0;
+  const sentDocumentTypes = new Set(input.sentDocumentTypes || []);
+  const createdDocumentTypes = new Set(input.documents.map((item) => item.doc_type));
+  const hasAlternativeDocuments = createdDocumentTypes.has('invoice') || createdDocumentTypes.has('contract');
 
   let nextAction: OrderWorkspaceViewModel['nextAction'];
   if (isClosed) nextAction = { label: 'Проверить историю', target: 'documents', tone: 'slate', command: 'open' };
+  else if (!inExecution && (sentDocumentTypes.has('invoice') || substatus === 'awaiting_payment')) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
+  else if (!inExecution && (sentDocumentTypes.has('contract') || substatus === 'awaiting_signature')) nextAction = { label: 'Ожидать подписанный договор', target: 'documents', tone: 'amber', command: 'open' };
+  else if (!inExecution && hasAlternativeDocuments) nextAction = {
+    label: input.documentEmailStatus === 'failed' ? 'Повторить отправку документов' : documentSendActionLabel(createdDocumentTypes),
+    target: 'documents',
+    tone: input.documentEmailStatus === 'failed' ? 'rose' : 'sky',
+    command: 'send_documents',
+  };
+  else if (!inExecution && (sentDocumentTypes.has('offer') || substatus === 'proposal_sent')) nextAction = { label: 'Зафиксировать ответ', target: 'proposal', tone: 'amber', command: 'record_proposal_response' };
   else if (!inExecution && !hasActiveProposal) nextAction = { label: 'Создать предложение', target: 'proposal', tone: 'sky', command: 'create_proposal' };
   else if (!inExecution && proposalStatus === 'draft' && !proposalHasValidLines) nextAction = { label: 'Заполнить предложение', target: 'proposal', tone: 'sky', command: 'open' };
   else if (!inExecution && proposalStatus === 'draft') nextAction = { label: 'Завершить подготовку', target: 'proposal', tone: 'sky', command: 'finish_proposal' };
@@ -163,7 +186,6 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   else if (!inExecution && proposalStatus === 'approved' && input.autoExecutionOnPayment && input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
   else if (!inExecution && proposalStatus === 'approved' && !input.installationDate) nextAction = { label: 'Назначить работы', target: 'planning', tone: 'teal', command: 'open' };
   else if (!inExecution && substatus === 'awaiting_visit') nextAction = { label: 'Назначить выезд', target: 'planning', tone: 'sky', command: 'open' };
-  else if (!inExecution && substatus === 'awaiting_payment') nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
   else if (!inExecution) nextAction = { label: 'Открыть предложение', target: 'proposal', tone: 'sky', command: 'open' };
   else if (substatus === 'order_equipment' || substatus === 'awaiting_equipment') nextAction = { label: 'Проверить товар', target: 'proposal', tone: 'amber', command: 'open' };
   else if (substatus === 'needs_schedule' || substatus === 'scheduled') nextAction = { label: 'Открыть планирование', target: 'planning', tone: 'teal', command: 'open' };
