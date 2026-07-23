@@ -18,6 +18,7 @@ import type { PublicBrandDetailResponse } from '../models/PublicBrandDetailRespo
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { PublicContactLeadPayload } from '../models/PublicContactLeadPayload';
 import type { PublicContactLeadResponse } from '../models/PublicContactLeadResponse';
+import type { PublicSeriesPageResponse } from '../models/PublicSeriesPageResponse';
 import type { RepairDiagnosticLeadResponse } from '../models/RepairDiagnosticLeadResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
 import type { SpecRegistryResponse } from '../models/SpecRegistryResponse';
@@ -211,6 +212,30 @@ export class ApiService {
             url: '/api/v1/content/brands/{slug}',
             path: {
                 'slug': slug,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Public Brand Series
+     * Get one published series and its public product cards.
+     * @param brandSlug
+     * @param seriesSlug
+     * @returns PublicSeriesPageResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicBrandSeries(
+        brandSlug: string,
+        seriesSlug: string,
+    ): CancelablePromise<PublicSeriesPageResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/content/brands/{brand_slug}/series/{series_slug}',
+            path: {
+                'brand_slug': brandSlug,
+                'series_slug': seriesSlug,
             },
             errors: {
                 422: `Validation Error`,

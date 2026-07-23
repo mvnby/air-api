@@ -441,6 +441,8 @@ export type { PublicContactLeadResponse } from './models/PublicContactLeadRespon
 export type { PublicFeatureResponse } from './models/PublicFeatureResponse';
 export type { PublicOrderPricingErrorDetail } from './models/PublicOrderPricingErrorDetail';
 export type { PublicOrderPricingErrorResponse } from './models/PublicOrderPricingErrorResponse';
+export type { PublicRelatedSeriesResponse } from './models/PublicRelatedSeriesResponse';
+export type { PublicSeriesPageResponse } from './models/PublicSeriesPageResponse';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
 export type { ServiceResponse } from './models/ServiceResponse';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';

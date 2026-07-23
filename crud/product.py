@@ -116,6 +116,32 @@ class ProductDAO:
         return list(result.scalars().all())
 
     @staticmethod
+    async def get_published_by_series_id(
+        session: AsyncSession,
+        series_id: int,
+        *,
+        load_image_variants: bool = False,
+    ) -> List[Product]:
+        stmt = (
+            select(Product)
+            .where(
+                Product.series_id == series_id,
+                Product.is_published.is_(True),
+            )
+            .options(
+                selectinload(Product.brand),
+                ProductDAO._series_option(),
+                selectinload(Product.tags).selectinload(Tag.group),
+                ProductDAO._gallery_images_option(
+                    load_image_variants=load_image_variants
+                ),
+                selectinload(Product.attachments),
+            )
+            .order_by(Product.title.asc(), Product.id.asc())
+        )
+        return list((await session.execute(stmt)).scalars().all())
+
+    @staticmethod
     async def get_by_ids(
         session: AsyncSession,
         product_ids: List[int],

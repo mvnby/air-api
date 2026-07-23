@@ -502,6 +502,21 @@ class PublicBrandResponse(BaseModel):
 class PublicBrandDetailResponse(PublicBrandResponse):
     features: List[ProductSeriesBrandFeatureResponse] = Field(default_factory=list)
 
+
+class PublicRelatedSeriesResponse(BaseModel):
+    title: str
+    slug: str
+    short_description: Optional[str] = None
+    hero_image: Optional[str] = None
+    products_count: int = 0
+
+
+class PublicSeriesPageResponse(BaseModel):
+    brand: ProductBrandResponse
+    series: ProductSeriesResponse
+    products: List[ProductResponse] = Field(default_factory=list)
+    related_series: List[PublicRelatedSeriesResponse] = Field(default_factory=list)
+
 # --- ORDERS ---
 
 class CalendarEventType(str, Enum):
