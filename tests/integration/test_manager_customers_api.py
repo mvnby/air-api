@@ -124,6 +124,38 @@ async def test_manager_customer_patch_updates_requisites(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_manager_customer_patch_defaults_blank_required_requisites(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    customer = Customer(
+        name="ООО Клиент",
+        phone="+375291112233",
+        type=CustomerType.company,
+        signer_position="Директор",
+        acting_basis="Доверенности",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    patch_resp = await async_client.patch(
+        f"/api/manager/customers/{customer.id}",
+        headers=headers,
+        json={
+            "phone": "+375 (29) 591-26-81",
+            "signer_position": "",
+            "acting_basis": None,
+        },
+    )
+
+    assert patch_resp.status_code == 200
+    patched = patch_resp.json()
+    assert patched["phone"] == "+375 (29) 591-26-81"
+    assert patched["signer_position"] == "директора"
+    assert patched["acting_basis"] == "Устава"
+
+
+@pytest.mark.asyncio
 async def test_manager_customer_favorite_patch_and_sort(async_client, db):
     headers = await _auth_headers(async_client)
 
