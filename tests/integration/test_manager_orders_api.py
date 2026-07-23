@@ -2287,6 +2287,91 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
 
 
 @pytest.mark.asyncio
+async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(async_client, db):
+    customer = Customer(
+        name='ООО "Сверка распределения"',
+        phone="+375297777780",
+        type=CustomerType.company,
+        inn="192663085",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+    orders = [
+        Order(
+            customer_id=customer.id,
+            status=OrderStatus.CLOSED,
+            title="Акт 1",
+            total_amount=500,
+            created_at=datetime(2026, 7, 1),
+        ),
+        Order(
+            customer_id=customer.id,
+            status=OrderStatus.CLOSED,
+            title="Акт 2",
+            total_amount=880,
+            created_at=datetime(2026, 7, 2),
+        ),
+    ]
+    db.add_all(orders)
+    await db.commit()
+    for order in orders:
+        await db.refresh(order)
+    receipt = BankReceipt(
+        status="partially_allocated",
+        sender_email="bank@example.com",
+        subject="Платеж с переплатой",
+        fingerprint="reconciliation-split-payment",
+        received_at=datetime(2026, 7, 5),
+        amount=1400,
+        currency=PaymentCurrency.BYN,
+        payer_name=customer.name,
+        payer_unp=customer.inn,
+        payment_document_number="43",
+        payment_purpose="Оплата двух актов",
+        raw_body="body",
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+    db.add_all(
+        [
+            Payment(
+                order_id=orders[0].id,
+                bank_receipt_id=receipt.id,
+                amount=500,
+                currency=PaymentCurrency.BYN,
+                date=receipt.received_at,
+            ),
+            Payment(
+                order_id=orders[1].id,
+                bank_receipt_id=receipt.id,
+                amount=880,
+                currency=PaymentCurrency.BYN,
+                date=receipt.received_at,
+            ),
+        ]
+    )
+    await db.commit()
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.get(
+        f"/api/manager/customers/{customer.id}/reconciliation",
+        params={"date_from": "2026-01-01", "date_to": "2026-12-31"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["documents_total"] == 1380
+    assert data["payments_total"] == 1400
+    assert data["closing_balance"] == -20
+    assert len(data["payments"]) == 1
+    assert data["payments"][0]["amount"] == 1400
+    assert data["payments"][0]["allocated_amount"] == 1380
+
+
+@pytest.mark.asyncio
 async def test_manager_customer_reconciliation_document_generation(async_client, db, monkeypatch):
     customer = Customer(
         name='ООО "Док сверки"',

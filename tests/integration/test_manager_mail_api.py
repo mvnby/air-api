@@ -200,6 +200,93 @@ async def test_manager_mail_manually_attaches_review_group_bank_receipt(async_cl
 
 
 @pytest.mark.asyncio
+async def test_manager_mail_replaces_partial_bank_receipt_allocations(async_client, db):
+    customer = Customer(
+        name="ООО Частичное распределение",
+        phone="+375291234569",
+        type=CustomerType.company,
+        inn="300123458",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+    order_a = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
+    order_b = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
+    db.add_all([order_a, order_b])
+    await db.commit()
+    await db.refresh(order_a)
+    await db.refresh(order_b)
+    db.add_all(
+        [
+            OrderServiceLink(order_id=order_a.id, title="Работы", quantity=1, price=500, cost=0),
+            OrderServiceLink(order_id=order_b.id, title="Работы", quantity=1, price=880, cost=0),
+        ]
+    )
+    receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Поступление с остатком",
+        fingerprint="partial-allocation-api-test",
+        received_at=datetime(2026, 7, 23, 12, 0),
+        amount=1400,
+        currency=PaymentCurrency.BYN,
+        payer_name=customer.name,
+        payer_unp=customer.inn,
+        payment_purpose="Оплата двух актов",
+        raw_body="raw",
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+    headers = await _auth_headers(async_client)
+
+    preview = await async_client.get(
+        f"/api/manager/mail/bank-receipts/{receipt.id}/allocation",
+        headers=headers,
+    )
+    assert preview.status_code == 200, preview.text
+    assert {item["order_id"] for item in preview.json()["orders"]} == {order_a.id, order_b.id}
+
+    response = await async_client.put(
+        f"/api/manager/mail/bank-receipts/{receipt.id}/allocations",
+        headers=headers,
+        json={
+            "allocations": [
+                {"order_id": order_a.id, "amount": 500},
+                {"order_id": order_b.id, "amount": 880},
+            ],
+            "payment_type": "postpayment",
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "partially_allocated"
+    assert payload["allocated_amount"] == 1380
+    assert payload["unallocated_amount"] == 20
+    assert payload["allocation_count"] == 2
+
+    replacement = await async_client.put(
+        f"/api/manager/mail/bank-receipts/{receipt.id}/allocations",
+        headers=headers,
+        json={
+            "allocations": [
+                {"order_id": order_a.id, "amount": 400},
+                {"order_id": order_b.id, "amount": 600},
+            ]
+        },
+    )
+    assert replacement.status_code == 200, replacement.text
+    assert replacement.json()["allocated_amount"] == 1000
+    payments = (
+        await db.execute(
+            select(Payment).where(Payment.bank_receipt_id == receipt.id).order_by(Payment.amount)
+        )
+    ).scalars().all()
+    assert [payment.amount for payment in payments] == [400, 600]
+
+
+@pytest.mark.asyncio
 async def test_manager_mail_import_endpoint_uses_imap_service(async_client, monkeypatch):
     notified_receipt_ids = []
 

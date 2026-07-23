@@ -914,6 +914,7 @@ class ManagerCustomerReconciliationPaymentItem(BaseModel):
     order_title: str
     date: datetime
     amount: float
+    allocated_amount: Optional[float] = None
     currency: PaymentCurrency
     payment_type: str
     comment: Optional[str] = None
@@ -4219,6 +4220,9 @@ class BankReceiptResponse(BaseModel):
     matched_order_id: Optional[int] = None
     matched_payment_id: Optional[int] = None
     match_meta: Optional[Dict[str, Any]] = None
+    allocated_amount: float = 0.0
+    unallocated_amount: float = 0.0
+    allocation_count: int = 0
     raw_body: str
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -4302,6 +4306,39 @@ class BankReceiptAttachPayload(BaseModel):
 class BankReceiptGroupAttachPayload(BaseModel):
     order_ids: List[int] = Field(default_factory=list)
     payment_type: str = "postpayment"
+
+
+class BankReceiptAllocationPayload(BaseModel):
+    order_id: int
+    amount: float = Field(gt=0)
+
+
+class BankReceiptAllocationsReplacePayload(BaseModel):
+    allocations: List[BankReceiptAllocationPayload] = Field(default_factory=list)
+    payment_type: str = "postpayment"
+
+
+class BankReceiptAllocationOrderResponse(BaseModel):
+    order_id: int
+    title: Optional[str] = None
+    customer_name: Optional[str] = None
+    status: str
+    created_at: datetime
+    total_amount: float
+    total_payments: float
+    balance_due_before_receipt: float
+    current_allocation: float
+    resulting_balance_due: float
+
+
+class BankReceiptAllocationDetailResponse(BaseModel):
+    receipt_id: int
+    status: str
+    currency: PaymentCurrency
+    receipt_amount: float
+    allocated_amount: float
+    unallocated_amount: float
+    orders: List[BankReceiptAllocationOrderResponse] = Field(default_factory=list)
 
 
 class BankReceiptStatusPayload(BaseModel):

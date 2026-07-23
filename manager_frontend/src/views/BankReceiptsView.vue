@@ -1,33 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, CheckCircle2, ExternalLink, RefreshCw, Search, Trash2, XCircle } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, ExternalLink, RefreshCw, Search, SlidersHorizontal, Trash2, XCircle } from 'lucide-vue-next';
 import { ManagerMailService } from '../client';
-import type { BankReceiptResponse } from '../client';
+import type {
+  BankReceiptAllocationDetailResponse,
+  BankReceiptAllocationPayload,
+  BankReceiptResponse,
+} from '../client';
+import BankReceiptAllocationDialog from '../components/payments/BankReceiptAllocationDialog.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
+import {
+  BANK_RECEIPT_STATUS_OPTIONS as statusOptions,
+  bankReceiptCandidateOrders as candidateOrders,
+  bankReceiptGroupMatch as groupMatch,
+  bankReceiptGroupMatchLabel as groupMatchLabel,
+  bankReceiptGroupOrderIds as groupOrderIds,
+  bankReceiptGroupOrders as groupOrders,
+  bankReceiptStatusClass as statusClass,
+  bankReceiptStatusLabel as statusLabel,
+  canAttachBankReceiptGroup as canAttachGroup,
+  canManageBankReceiptAllocations as canManageAllocations,
+} from '../utils/bank-receipts';
 import { confirmDialog, promptDialog } from '../services/ui-feedback';
-
-type GroupOrderCandidate = {
-  order_id?: number;
-  title?: string | null;
-  customer_name?: string | null;
-  status?: string | null;
-  total_amount?: number;
-  total_payments?: number;
-  balance_due?: number;
-};
-
-type GroupMatchMeta = {
-  available?: boolean;
-  is_exact?: boolean;
-  selection_mode?: string | null;
-  total_balance_due?: number;
-  open_balance_due?: number;
-  receipt_amount?: number;
-  order_ids?: number[];
-  orders?: GroupOrderCandidate[];
-  open_order_ids?: number[];
-  open_orders?: GroupOrderCandidate[];
-};
 
 const receipts = ref<BankReceiptResponse[]>([]);
 const loading = ref(false);
@@ -44,56 +38,14 @@ const status = ref('');
 const payerUnp = ref('');
 const orderId = ref('');
 const expandedId = ref<number | null>(null);
+const allocationReceipt = ref<BankReceiptResponse | null>(null);
+const allocationDetail = ref<BankReceiptAllocationDetailResponse | null>(null);
+const allocationLoading = ref(false);
+const allocationSaving = ref(false);
+const allocationError = ref('');
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)));
 
-const statusOptions = [
-  { value: '', label: 'Все' },
-  { value: 'requires_review', label: 'Требуют проверки' },
-  { value: 'matched', label: 'Разнесены' },
-  { value: 'closed_orders', label: 'Закрытые заказы' },
-  { value: 'non_order_income', label: 'Не CRM' },
-  { value: 'void', label: 'Ошибочные' },
-  { value: 'parse_failed', label: 'Ошибки парсинга' },
-];
-
-const statusLabel = (value?: string | null) => {
-  switch (value) {
-    case 'matched':
-      return 'Разнесен';
-    case 'requires_review':
-      return 'Проверить';
-    case 'closed_orders':
-      return 'Закрытые заказы';
-    case 'non_order_income':
-      return 'Не CRM';
-    case 'void':
-      return 'Ошибочный';
-    case 'parse_failed':
-      return 'Не распознан';
-    default:
-      return value || 'Новый';
-  }
-};
-
-const statusClass = (value?: string | null) => {
-  switch (value) {
-    case 'matched':
-      return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20';
-    case 'requires_review':
-      return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20';
-    case 'closed_orders':
-      return 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20';
-    case 'non_order_income':
-      return 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20';
-    case 'void':
-      return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/50 dark:text-slate-300 dark:border-slate-600';
-    case 'parse_failed':
-      return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/20';
-    default:
-      return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600';
-  }
-};
 
 const formatDate = (value?: string | null) => {
   if (!value) return '—';
@@ -112,46 +64,6 @@ const formatMoneyValue = (amount?: number | null, currency = 'BYN') => {
 
 const formatAmount = (receipt: BankReceiptResponse) => {
   return formatMoneyValue(receipt.amount, receipt.currency);
-};
-
-const candidateOrders = (receipt: BankReceiptResponse) => {
-  const ids = receipt.match_meta?.candidate_order_ids;
-  return Array.isArray(ids) ? ids.filter(Boolean) : [];
-};
-
-const groupMatch = (receipt: BankReceiptResponse): GroupMatchMeta | null => {
-  const raw = receipt.match_meta?.group_match;
-  return raw && typeof raw === 'object' ? raw as GroupMatchMeta : null;
-};
-
-const groupOrders = (receipt: BankReceiptResponse) => {
-  const items = groupMatch(receipt)?.orders;
-  return Array.isArray(items) ? items.filter((item) => item?.order_id) : [];
-};
-
-const groupOrderIds = (receipt: BankReceiptResponse) => {
-  const ids = groupMatch(receipt)?.order_ids;
-  if (Array.isArray(ids) && ids.length) return ids.map(Number).filter(Boolean);
-  return groupOrders(receipt).map((item) => Number(item.order_id)).filter(Boolean);
-};
-
-const groupMatchLabel = (receipt: BankReceiptResponse) => {
-  const match = groupMatch(receipt);
-  if (!match) return '';
-  if (match.selection_mode === 'exact_subset') return 'Подобрана часть открытых актов';
-  if (match.is_exact) return 'Открытая задолженность совпадает';
-  return 'Открытая задолженность по УНП';
-};
-
-const canAttachGroup = (receipt: BankReceiptResponse) => {
-  const match = groupMatch(receipt);
-  return Boolean(
-    match?.available
-    && match?.is_exact
-    && groupOrderIds(receipt).length > 1
-    && receipt.status !== 'matched'
-    && !receipt.matched_payment_id,
-  );
 };
 
 const loadReceipts = async () => {
@@ -256,6 +168,49 @@ const attachGroup = async (receipt: BankReceiptResponse) => {
     error.value = getApiErrorMessage(err);
   } finally {
     actionId.value = null;
+  }
+};
+
+const openAllocation = async (receipt: BankReceiptResponse) => {
+  allocationReceipt.value = receipt;
+  allocationDetail.value = null;
+  allocationError.value = '';
+  allocationLoading.value = true;
+  try {
+    allocationDetail.value = await ManagerMailService.getManagerBankReceiptAllocation(receipt.id);
+  } catch (err) {
+    allocationError.value = getApiErrorMessage(err);
+  } finally {
+    allocationLoading.value = false;
+  }
+};
+
+const closeAllocation = () => {
+  if (allocationSaving.value) return;
+  allocationReceipt.value = null;
+  allocationDetail.value = null;
+  allocationError.value = '';
+};
+
+const saveAllocations = async (allocations: BankReceiptAllocationPayload[]) => {
+  if (!allocationReceipt.value) return;
+  allocationSaving.value = true;
+  allocationError.value = '';
+  try {
+    await ManagerMailService.replaceManagerBankReceiptAllocations(
+      allocationReceipt.value.id,
+      { allocations, payment_type: 'postpayment' },
+    );
+    notice.value = allocations.length
+      ? `Распределение поступления #${allocationReceipt.value.id} сохранено.`
+      : `Распределение поступления #${allocationReceipt.value.id} очищено.`;
+    allocationSaving.value = false;
+    closeAllocation();
+    await loadReceipts();
+  } catch (err) {
+    allocationError.value = getApiErrorMessage(err);
+  } finally {
+    allocationSaving.value = false;
   }
 };
 
@@ -474,11 +429,19 @@ onMounted(loadReceipts);
                     <div class="text-xs text-gray-500 dark:text-slate-400">УНП {{ receipt.payer_unp || '—' }}</div>
                     <div class="text-xs text-gray-500 dark:text-slate-400">Док. {{ receipt.payment_document_number || '—' }}</div>
                   </td>
-                  <td class="whitespace-nowrap px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">{{ formatAmount(receipt) }}</td>
+                  <td class="whitespace-nowrap px-4 py-3 text-gray-900 dark:text-slate-100">
+                    <div class="font-semibold">{{ formatAmount(receipt) }}</div>
+                    <div v-if="receipt.allocation_count" class="mt-1 text-xs font-medium text-teal-700 dark:text-teal-300">
+                      Распределено {{ formatMoneyValue(receipt.allocated_amount, receipt.currency) }}
+                    </div>
+                    <div v-if="Number(receipt.unallocated_amount || 0) > 0" class="text-xs font-medium text-amber-700 dark:text-amber-300">
+                      Остаток {{ formatMoneyValue(receipt.unallocated_amount, receipt.currency) }}
+                    </div>
+                  </td>
                   <td class="px-4 py-3">
                     <span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold" :class="statusClass(receipt.status)">
                       <CheckCircle2 v-if="receipt.status === 'matched'" class="h-3.5 w-3.5" />
-                      <AlertTriangle v-else-if="receipt.status === 'requires_review'" class="h-3.5 w-3.5" />
+                      <AlertTriangle v-else-if="receipt.status === 'requires_review' || receipt.status === 'partially_allocated'" class="h-3.5 w-3.5" />
                       <CheckCircle2 v-else-if="receipt.status === 'closed_orders' || receipt.status === 'non_order_income'" class="h-3.5 w-3.5" />
                       <XCircle v-else-if="receipt.status === 'void'" class="h-3.5 w-3.5" />
                       {{ statusLabel(receipt.status) }}
@@ -542,6 +505,14 @@ onMounted(loadReceipts);
                         <CheckCircle2 class="h-4 w-4" />
                         {{ actionId === receipt.id ? 'Разносим...' : 'Разнести по этим заказам' }}
                       </button>
+                      <button
+                        v-else-if="canManageAllocations(receipt)"
+                        class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-current px-3 py-2 text-xs font-semibold transition hover:bg-white/60 dark:hover:bg-slate-950/30"
+                        @click.stop="openAllocation(receipt)"
+                      >
+                        <SlidersHorizontal class="h-4 w-4" />
+                        {{ receipt.allocation_count ? 'Переразнести' : 'Распределить вручную' }}
+                      </button>
                     </div>
                   </td>
                   <td class="px-4 py-3">
@@ -551,6 +522,15 @@ onMounted(loadReceipts);
                   </td>
                   <td class="px-4 py-3 text-right">
                     <div class="flex justify-end gap-2">
+                      <button
+                        v-if="canManageAllocations(receipt)"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-teal-200 text-teal-700 hover:bg-teal-50 disabled:opacity-40 dark:border-teal-500/30 dark:text-teal-300 dark:hover:bg-teal-500/10"
+                        :title="receipt.allocation_count ? 'Переразнести поступление' : 'Распределить поступление'"
+                        :disabled="actionId === receipt.id"
+                        @click="openAllocation(receipt)"
+                      >
+                        <SlidersHorizontal class="h-4 w-4" />
+                      </button>
                       <button
                         v-if="canAttachGroup(receipt)"
                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:border-emerald-500/30 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
@@ -615,5 +595,14 @@ onMounted(loadReceipts);
         </div>
       </section>
     </div>
+    <BankReceiptAllocationDialog
+      :open="Boolean(allocationReceipt)"
+      :detail="allocationDetail"
+      :loading="allocationLoading"
+      :saving="allocationSaving"
+      :error="allocationError"
+      @close="closeAllocation"
+      @save="saveAllocations"
+    />
   </div>
 </template>

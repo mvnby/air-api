@@ -13839,6 +13839,110 @@
         }
       }
     },
+    "/api/manager/mail/bank-receipts/{receipt_id}/allocation": {
+      "get": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Get Manager Bank Receipt Allocation",
+        "operationId": "get_manager_bank_receipt_allocation",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankReceiptAllocationDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/bank-receipts/{receipt_id}/allocations": {
+      "put": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Replace Manager Bank Receipt Allocations",
+        "operationId": "replace_manager_bank_receipt_allocations",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankReceiptAllocationsReplacePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankReceiptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/mail/bank-receipts/{receipt_id}/status": {
       "patch": {
         "tags": [
@@ -20372,6 +20476,158 @@
         ],
         "title": "ArticleResponse"
       },
+      "BankReceiptAllocationDetailResponse": {
+        "properties": {
+          "receipt_id": {
+            "type": "integer",
+            "title": "Receipt Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/PaymentCurrency"
+          },
+          "receipt_amount": {
+            "type": "number",
+            "title": "Receipt Amount"
+          },
+          "allocated_amount": {
+            "type": "number",
+            "title": "Allocated Amount"
+          },
+          "unallocated_amount": {
+            "type": "number",
+            "title": "Unallocated Amount"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/BankReceiptAllocationOrderResponse"
+            },
+            "type": "array",
+            "title": "Orders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "receipt_id",
+          "status",
+          "currency",
+          "receipt_amount",
+          "allocated_amount",
+          "unallocated_amount"
+        ],
+        "title": "BankReceiptAllocationDetailResponse"
+      },
+      "BankReceiptAllocationOrderResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "total_amount": {
+            "type": "number",
+            "title": "Total Amount"
+          },
+          "total_payments": {
+            "type": "number",
+            "title": "Total Payments"
+          },
+          "balance_due_before_receipt": {
+            "type": "number",
+            "title": "Balance Due Before Receipt"
+          },
+          "current_allocation": {
+            "type": "number",
+            "title": "Current Allocation"
+          },
+          "resulting_balance_due": {
+            "type": "number",
+            "title": "Resulting Balance Due"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "status",
+          "created_at",
+          "total_amount",
+          "total_payments",
+          "balance_due_before_receipt",
+          "current_allocation",
+          "resulting_balance_due"
+        ],
+        "title": "BankReceiptAllocationOrderResponse"
+      },
+      "BankReceiptAllocationPayload": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "amount"
+        ],
+        "title": "BankReceiptAllocationPayload"
+      },
+      "BankReceiptAllocationsReplacePayload": {
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/BankReceiptAllocationPayload"
+            },
+            "type": "array",
+            "title": "Allocations"
+          },
+          "payment_type": {
+            "type": "string",
+            "title": "Payment Type",
+            "default": "postpayment"
+          }
+        },
+        "type": "object",
+        "title": "BankReceiptAllocationsReplacePayload"
+      },
       "BankReceiptAttachPayload": {
         "properties": {
           "order_id": {
@@ -20673,6 +20929,21 @@
               }
             ],
             "title": "Match Meta"
+          },
+          "allocated_amount": {
+            "type": "number",
+            "title": "Allocated Amount",
+            "default": 0.0
+          },
+          "unallocated_amount": {
+            "type": "number",
+            "title": "Unallocated Amount",
+            "default": 0.0
+          },
+          "allocation_count": {
+            "type": "integer",
+            "title": "Allocation Count",
+            "default": 0
           },
           "raw_body": {
             "type": "string",
@@ -31246,6 +31517,17 @@
           "amount": {
             "type": "number",
             "title": "Amount"
+          },
+          "allocated_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allocated Amount"
           },
           "currency": {
             "$ref": "#/components/schemas/PaymentCurrency"

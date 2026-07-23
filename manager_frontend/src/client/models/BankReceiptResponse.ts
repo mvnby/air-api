@@ -27,6 +27,9 @@ export type BankReceiptResponse = {
     matched_order_id?: (number | null);
     matched_payment_id?: (number | null);
     match_meta?: (Record<string, any> | null);
+    allocated_amount?: number;
+    unallocated_amount?: number;
+    allocation_count?: number;
     raw_body: string;
     created_at: string;
     updated_at?: (string | null);
