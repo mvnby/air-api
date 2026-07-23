@@ -217,12 +217,31 @@ class ManagerBackgroundRemovalConfigResponse(BaseModel):
 
 # --- CATALOG ---
 
+ProductKind = Literal[
+    "unknown",
+    "complete_split_system",
+    "indoor_unit",
+    "outdoor_unit",
+    "panel",
+    "accessory",
+    "consumable",
+    "other",
+]
+PublicStockState = Literal[
+    "local_stock",
+    "supplier_stock",
+    "available_to_order",
+    "out_of_stock",
+]
+
+
 class ProductBase(BaseModel):
     id: int
     title: str
     slug: Optional[str]
     price: int
     old_price: Optional[int]
+    product_kind: ProductKind = "unknown"
     is_inverter: bool
     power_cooling: Optional[float]
     main_image: Optional[str]
@@ -354,6 +373,9 @@ class ProductResponse(ProductBase):
     vitebsk_qty: int = 0
     minsk_qty: int = 0
     availability_status: Optional[str] = None
+    public_stock_state: Optional[PublicStockState] = None
+    delivery_min_days: Optional[int] = None
+    delivery_max_days: Optional[int] = None
     brand: Optional[ProductBrandResponse] = None
     series: Optional[ProductSeriesResponse] = None
     tags: List[TagResponse] = []
@@ -1659,6 +1681,7 @@ class ManagerCatalogProductItemResponse(BaseModel):
     slug: Optional[str]
     price: int
     old_price: Optional[int]
+    product_kind: ProductKind = "unknown"
     is_inverter: bool
     power_cooling: Optional[float]
     main_image: Optional[str]
@@ -2981,6 +3004,7 @@ class ProductUpdate(BaseModel):
     title: Optional[str] = None
     price: Optional[int] = None
     old_price: Optional[int] = None
+    product_kind: Optional[ProductKind] = None
     slug: Optional[str] = None
     description: Optional[str] = None
     is_inverter: Optional[bool] = None
@@ -2999,6 +3023,7 @@ class ProductCreate(BaseModel):
     title: str = Field(min_length=1)
     price: int = Field(default=0, ge=0)
     old_price: Optional[int] = None
+    product_kind: ProductKind = "unknown"
     slug: Optional[str] = None
     description: str = ""
     is_inverter: bool = False

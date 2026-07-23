@@ -84,6 +84,11 @@ from .product import (
     Tag,
     TagGroup,
 )
+from .product_collection import (
+    ProductCollection,
+    ProductCollectionItem,
+    ProductCollectionPlacement,
+)
 from .supplier import (
     ProductLocalStock,
     ProductSupplierMapping,
@@ -169,6 +174,9 @@ __all__ = [
     "OutgoingEmail",
     "PaymentCurrency",
     "Product",
+    "ProductCollection",
+    "ProductCollectionItem",
+    "ProductCollectionPlacement",
     "ProductAttachment",
     "ProductImage",
     "ProductMainImageCleanupBatch",

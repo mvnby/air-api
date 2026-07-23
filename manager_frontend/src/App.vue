@@ -17,6 +17,7 @@ import {
 } from './manager-navigation';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
+const ProductCollectionsView = defineAsyncComponent(() => import('./views/ProductCollectionsView.vue'));
 const ProductWorkspaceView = defineAsyncComponent(() => import('./views/ProductWorkspaceView.vue'));
 const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibraryView.vue'));
 const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
@@ -151,6 +152,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/equipment')) return 'equipment';
   if (path.startsWith('/manager/media')) return 'media-library';
   if (path.startsWith('/manager/catalog-quality')) return 'catalog-quality';
+  if (path.startsWith('/manager/product-collections')) return 'product-collections';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
@@ -656,6 +658,7 @@ watch(currentPath, () => {
       <EquipmentRegistryView v-else-if="currentView === 'equipment'" :key="currentLocation" />
       <MediaLibraryView v-else-if="currentView === 'media-library'" :key="currentLocation" />
       <CatalogQualityView v-else-if="currentView === 'catalog-quality'" :key="currentLocation" />
+      <ProductCollectionsView v-else-if="currentView === 'product-collections'" :key="currentLocation" />
       <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />

@@ -64,6 +64,10 @@ class Product(SQLModel, table=True):
 
     price: int
     old_price: Optional[int] = None
+    product_kind: str = Field(
+        default="unknown",
+        sa_column=Column(String(40), nullable=False, index=True),
+    )
     is_inverter: bool = Field(default=False, index=True)
     power_cooling: Optional[float] = Field(default=None, index=True)
 

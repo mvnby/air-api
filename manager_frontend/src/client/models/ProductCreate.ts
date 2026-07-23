@@ -7,6 +7,7 @@ export type ProductCreate = {
     title: string;
     price?: number;
     old_price?: (number | null);
+    product_kind?: 'unknown' | 'complete_split_system' | 'indoor_unit' | 'outdoor_unit' | 'panel' | 'accessory' | 'consumable' | 'other';
     slug?: (string | null);
     description?: string;
     is_inverter?: boolean;
