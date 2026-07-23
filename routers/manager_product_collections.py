@@ -9,6 +9,7 @@ from api_contracts.product_collections import (
     ManagerProductCollectionResponse,
     ManagerProductCollectionUpdate,
     ProductCollectionPreviewResponse,
+    ProductCollectionRuleOptionsResponse,
 )
 from core.database import get_session
 from core.security import get_current_username
@@ -17,6 +18,7 @@ from routers.manager_operation_ids import (
     CREATE_MANAGER_PRODUCT_COLLECTION,
     DUPLICATE_MANAGER_PRODUCT_COLLECTION,
     GET_MANAGER_PRODUCT_COLLECTION,
+    GET_MANAGER_PRODUCT_COLLECTION_RULE_OPTIONS,
     LIST_MANAGER_PRODUCT_COLLECTIONS,
     PREVIEW_MANAGER_PRODUCT_COLLECTION,
     REPLACE_MANAGER_PRODUCT_COLLECTION_ITEMS,
@@ -30,6 +32,18 @@ router = APIRouter(
     prefix="/api/manager/product-collections",
     tags=["manager product collections"],
 )
+
+
+@router.get(
+    "/rule-options",
+    response_model=ProductCollectionRuleOptionsResponse,
+    operation_id=GET_MANAGER_PRODUCT_COLLECTION_RULE_OPTIONS,
+)
+async def get_manager_product_collection_rule_options(
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    return await ManagerProductCollectionService.get_rule_options(session)
 
 
 @router.get(

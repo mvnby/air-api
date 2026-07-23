@@ -31,9 +31,9 @@ The public placement endpoint omits inactive collections and collections that do
 reach `min_items`. A valid fallback may supply the items while the original
 collection retains its editorial title and placement.
 
-## Extension rules
+## Automatic and hybrid modes
 
-Automatic and hybrid modes must extend the existing resolver:
+Automatic and hybrid modes extend the existing resolver:
 
 1. evaluate typed, allow-listed rules;
 2. place valid pinned items first;
@@ -43,3 +43,14 @@ Automatic and hybrid modes must extend the existing resolver:
 6. apply `min_items` and fallback exactly once.
 
 Do not add snapshots of commercial product data or execute user-defined expressions.
+
+`rule_config` is a typed allow-list rather than a generic expression language. It
+supports product kind, price, area, minimum indoor noise, minimum outdoor heating
+temperature, inverter state, Wi-Fi state, brand, series, color, resolved Feature,
+and public stock state. Every populated condition is combined with AND semantics.
+Multiple values inside one condition use OR semantics, except `feature_ids`, where
+all selected Features must be effective for the product.
+
+Automatic results use one of the stable catalog sort modes. Hybrid results always
+place valid pinned items first, then fill the remaining capacity with automatic
+results while removing duplicates.

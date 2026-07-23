@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ProductCollectionRuleConfig } from './ProductCollectionRuleConfig';
 export type ManagerProductCollectionUpdate = {
     slug?: (string | null);
     internal_name?: (string | null);
@@ -12,7 +13,9 @@ export type ManagerProductCollectionUpdate = {
     cta_url?: (string | null);
     editorial_note?: (string | null);
     status?: ('draft' | 'published' | 'archived' | null);
-    mode?: (string | null);
+    mode?: ('manual' | 'automatic' | 'hybrid' | null);
+    sort_mode?: ('recommended' | 'price_asc' | 'price_desc' | 'area_asc' | 'area_desc' | 'newest' | null);
+    rule_config?: (ProductCollectionRuleConfig | null);
     min_items?: (number | null);
     max_items?: (number | null);
     fallback_collection_id?: (number | null);

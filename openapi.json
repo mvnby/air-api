@@ -20379,6 +20379,32 @@
         }
       }
     },
+    "/api/manager/product-collections/rule-options": {
+      "get": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Get Manager Product Collection Rule Options",
+        "operationId": "get_manager_product_collection_rule_options",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductCollectionRuleOptionsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/product-collections": {
       "get": {
         "tags": [
@@ -40682,9 +40708,29 @@
           },
           "mode": {
             "type": "string",
-            "const": "manual",
+            "enum": [
+              "manual",
+              "automatic",
+              "hybrid"
+            ],
             "title": "Mode",
             "default": "manual"
+          },
+          "sort_mode": {
+            "type": "string",
+            "enum": [
+              "recommended",
+              "price_asc",
+              "price_desc",
+              "area_asc",
+              "area_desc",
+              "newest"
+            ],
+            "title": "Sort Mode",
+            "default": "recommended"
+          },
+          "rule_config": {
+            "$ref": "#/components/schemas/ProductCollectionRuleConfig"
           },
           "min_items": {
             "type": "integer",
@@ -41108,9 +41154,29 @@
           },
           "mode": {
             "type": "string",
-            "const": "manual",
+            "enum": [
+              "manual",
+              "automatic",
+              "hybrid"
+            ],
             "title": "Mode",
             "default": "manual"
+          },
+          "sort_mode": {
+            "type": "string",
+            "enum": [
+              "recommended",
+              "price_asc",
+              "price_desc",
+              "area_asc",
+              "area_desc",
+              "newest"
+            ],
+            "title": "Sort Mode",
+            "default": "recommended"
+          },
+          "rule_config": {
+            "$ref": "#/components/schemas/ProductCollectionRuleConfig"
           },
           "min_items": {
             "type": "integer",
@@ -41323,13 +41389,46 @@
             "anyOf": [
               {
                 "type": "string",
-                "const": "manual"
+                "enum": [
+                  "manual",
+                  "automatic",
+                  "hybrid"
+                ]
               },
               {
                 "type": "null"
               }
             ],
             "title": "Mode"
+          },
+          "sort_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recommended",
+                  "price_asc",
+                  "price_desc",
+                  "area_asc",
+                  "area_desc",
+                  "newest"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Mode"
+          },
+          "rule_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductCollectionRuleConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "min_items": {
             "anyOf": [
@@ -47367,6 +47466,229 @@
         ],
         "title": "ProductCollectionPreviewResponse"
       },
+      "ProductCollectionRuleChoiceResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ProductCollectionRuleChoiceResponse"
+      },
+      "ProductCollectionRuleConfig": {
+        "properties": {
+          "product_kinds": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "unknown",
+                "complete_split_system",
+                "indoor_unit",
+                "outdoor_unit",
+                "panel",
+                "accessory",
+                "consumable",
+                "other"
+              ]
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Product Kinds"
+          },
+          "min_price": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Price"
+          },
+          "max_price": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Price"
+          },
+          "min_area_m2": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Area M2"
+          },
+          "max_area_m2": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Area M2"
+          },
+          "max_noise_min_db": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Noise Min Db"
+          },
+          "max_heating_min_c": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 30.0,
+                "minimum": -60.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Heating Min C"
+          },
+          "is_inverter": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Inverter"
+          },
+          "wifi_states": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "builtin",
+                "ready",
+                "none"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Wifi States"
+          },
+          "brand_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Brand Ids"
+          },
+          "series_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Series Ids"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Colors"
+          },
+          "feature_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Feature Ids"
+          },
+          "public_stock_states": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "local_stock",
+                "supplier_stock",
+                "available_to_order",
+                "out_of_stock"
+              ]
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Public Stock States"
+          }
+        },
+        "type": "object",
+        "title": "ProductCollectionRuleConfig"
+      },
+      "ProductCollectionRuleOptionsResponse": {
+        "properties": {
+          "brands": {
+            "items": {
+              "$ref": "#/components/schemas/ProductCollectionRuleChoiceResponse"
+            },
+            "type": "array",
+            "title": "Brands"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/ProductCollectionRuleChoiceResponse"
+            },
+            "type": "array",
+            "title": "Series"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/ProductCollectionRuleChoiceResponse"
+            },
+            "type": "array",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "title": "ProductCollectionRuleOptionsResponse"
+      },
       "ProductCreate": {
         "properties": {
           "title": {
@@ -50204,6 +50526,7 @@
             "type": "string",
             "enum": [
               "manual",
+              "automatic",
               "fallback"
             ],
             "title": "Selection Source",

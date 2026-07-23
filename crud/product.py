@@ -567,6 +567,9 @@ class ProductDAO:
         indoor_types: Optional[List[str]] = None,
         tag_slugs: Optional[List[str]] = None,
         brand_slugs: Optional[List[str]] = None,
+        brand_ids: Optional[List[int]] = None,
+        series_ids: Optional[List[int]] = None,
+        product_kinds: Optional[List[str]] = None,
         is_published: Optional[bool] = True,
         sort: str = "recommended",
         page: int = 1,
@@ -600,6 +603,12 @@ class ProductDAO:
             brand_slugs=brand_slugs,
             is_published=is_published,
         )
+        if brand_ids:
+            stmt = stmt.where(Product.brand_id.in_(brand_ids))
+        if series_ids:
+            stmt = stmt.where(Product.series_id.in_(series_ids))
+        if product_kinds:
+            stmt = stmt.where(Product.product_kind.in_(product_kinds))
         if search_query:
             stmt = ProductDAO._apply_smart_search_filter(session, stmt, search_query)
         stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)

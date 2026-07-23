@@ -412,6 +412,9 @@ export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabili
 export type { ProductBrandResponse } from './models/ProductBrandResponse';
 export type { ProductCollectionExclusionResponse } from './models/ProductCollectionExclusionResponse';
 export type { ProductCollectionPreviewResponse } from './models/ProductCollectionPreviewResponse';
+export type { ProductCollectionRuleChoiceResponse } from './models/ProductCollectionRuleChoiceResponse';
+export type { ProductCollectionRuleConfig } from './models/ProductCollectionRuleConfig';
+export type { ProductCollectionRuleOptionsResponse } from './models/ProductCollectionRuleOptionsResponse';
 export type { ProductCreate } from './models/ProductCreate';
 export type { ProductDuplicatePayload } from './models/ProductDuplicatePayload';
 export type { ProductImageCropPayload } from './models/ProductImageCropPayload';

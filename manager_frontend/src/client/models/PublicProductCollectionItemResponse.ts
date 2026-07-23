@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { ProductResponse } from './ProductResponse';
 export type PublicProductCollectionItemResponse = {
-    selection_source?: 'manual' | 'fallback';
+    selection_source?: 'manual' | 'automatic' | 'fallback';
     position: number;
     product: ProductResponse;
 };

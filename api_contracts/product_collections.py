@@ -3,11 +3,55 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from schemas import ProductKind, ProductResponse
+from schemas import ProductKind, ProductResponse, PublicStockState
 
 
 CollectionStatus = Literal["draft", "published", "archived"]
-CollectionMode = Literal["manual"]
+CollectionMode = Literal["manual", "automatic", "hybrid"]
+CollectionSortMode = Literal[
+    "recommended",
+    "price_asc",
+    "price_desc",
+    "area_asc",
+    "area_desc",
+    "newest",
+]
+WifiState = Literal["builtin", "ready", "none"]
+
+
+class ProductCollectionRuleConfig(BaseModel):
+    product_kinds: list[ProductKind] = Field(default_factory=list, max_length=8)
+    min_price: int | None = Field(default=None, ge=0)
+    max_price: int | None = Field(default=None, ge=0)
+    min_area_m2: float | None = Field(default=None, ge=0)
+    max_area_m2: float | None = Field(default=None, ge=0)
+    max_noise_min_db: float | None = Field(default=None, ge=0)
+    max_heating_min_c: float | None = Field(default=None, ge=-60, le=30)
+    is_inverter: bool | None = None
+    wifi_states: list[WifiState] = Field(default_factory=list, max_length=3)
+    brand_ids: list[int] = Field(default_factory=list, max_length=100)
+    series_ids: list[int] = Field(default_factory=list, max_length=200)
+    colors: list[str] = Field(default_factory=list, max_length=20)
+    feature_ids: list[int] = Field(default_factory=list, max_length=100)
+    public_stock_states: list[PublicStockState] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        if self.min_price is not None and self.max_price is not None and self.max_price < self.min_price:
+            raise ValueError("max_price must be greater than or equal to min_price")
+        if (
+            self.min_area_m2 is not None
+            and self.max_area_m2 is not None
+            and self.max_area_m2 < self.min_area_m2
+        ):
+            raise ValueError("max_area_m2 must be greater than or equal to min_area_m2")
+        return self
+
+    def has_conditions(self) -> bool:
+        return any(
+            value not in (None, [], "")
+            for value in self.model_dump().values()
+        )
 class ProductCollectionFields(BaseModel):
     internal_name: str = Field(min_length=1, max_length=180)
     public_title: str = Field(min_length=1, max_length=180)
@@ -18,6 +62,8 @@ class ProductCollectionFields(BaseModel):
     editorial_note: str | None = None
     status: CollectionStatus = "draft"
     mode: CollectionMode = "manual"
+    sort_mode: CollectionSortMode = "recommended"
+    rule_config: ProductCollectionRuleConfig = Field(default_factory=ProductCollectionRuleConfig)
     min_items: int = Field(default=1, ge=1, le=24)
     max_items: int = Field(default=6, ge=1, le=24)
     fallback_collection_id: int | None = None
@@ -48,6 +94,8 @@ class ManagerProductCollectionUpdate(BaseModel):
     editorial_note: str | None = None
     status: CollectionStatus | None = None
     mode: CollectionMode | None = None
+    sort_mode: CollectionSortMode | None = None
+    rule_config: ProductCollectionRuleConfig | None = None
     min_items: int | None = Field(default=None, ge=1, le=24)
     max_items: int | None = Field(default=None, ge=1, le=24)
     fallback_collection_id: int | None = None
@@ -121,6 +169,18 @@ class ManagerProductCollectionListResponse(BaseModel):
     items: list[ManagerProductCollectionResponse] = Field(default_factory=list)
 
 
+class ProductCollectionRuleChoiceResponse(BaseModel):
+    id: int
+    label: str
+    parent_id: int | None = None
+
+
+class ProductCollectionRuleOptionsResponse(BaseModel):
+    brands: list[ProductCollectionRuleChoiceResponse] = Field(default_factory=list)
+    series: list[ProductCollectionRuleChoiceResponse] = Field(default_factory=list)
+    features: list[ProductCollectionRuleChoiceResponse] = Field(default_factory=list)
+
+
 class ProductCollectionExclusionResponse(BaseModel):
     product_id: int
     product_title: str
@@ -130,7 +190,7 @@ class ProductCollectionExclusionResponse(BaseModel):
 
 
 class PublicProductCollectionItemResponse(BaseModel):
-    selection_source: Literal["manual", "fallback"] = "manual"
+    selection_source: Literal["manual", "automatic", "fallback"] = "manual"
     position: int
     product: ProductResponse
 

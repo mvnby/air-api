@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, JSON, String, Text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -25,6 +25,10 @@ class ProductCollection(SQLModel, table=True):
             "min_items >= 1 AND max_items >= min_items AND max_items <= 24",
             name="ck_product_collection_item_limits",
         ),
+        CheckConstraint(
+            "sort_mode IN ('recommended', 'price_asc', 'price_desc', 'area_asc', 'area_desc', 'newest')",
+            name="ck_product_collection_sort_mode",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -38,6 +42,8 @@ class ProductCollection(SQLModel, table=True):
     editorial_note: Optional[str] = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="draft", sa_column=Column(String(24), nullable=False, index=True))
     mode: str = Field(default="manual", sa_column=Column(String(24), nullable=False, index=True))
+    sort_mode: str = Field(default="recommended", sa_column=Column(String(32), nullable=False))
+    rule_config: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     min_items: int = Field(default=1)
     max_items: int = Field(default=6)
     fallback_collection_id: Optional[int] = Field(
