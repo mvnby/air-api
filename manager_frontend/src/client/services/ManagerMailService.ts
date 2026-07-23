@@ -11,6 +11,8 @@ import type { BankReceiptStatusPayload } from '../models/BankReceiptStatusPayloa
 import type { BankStatementImportResponse } from '../models/BankStatementImportResponse';
 import type { Body_import_manager_bank_statement } from '../models/Body_import_manager_bank_statement';
 import type { EmailLeadImportJobResponse } from '../models/EmailLeadImportJobResponse';
+import type { OrderEmailComposePayload } from '../models/OrderEmailComposePayload';
+import type { OrderEmailComposeResponse } from '../models/OrderEmailComposeResponse';
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
 import type { OutgoingEmailDetailResponse } from '../models/OutgoingEmailDetailResponse';
 import type { OutgoingEmailListResponse } from '../models/OutgoingEmailListResponse';
@@ -338,6 +340,30 @@ export class ManagerMailService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/mail/email/send-test',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Compose Manager Order Email
+     * @param orderId
+     * @param requestBody
+     * @returns OrderEmailComposeResponse Successful Response
+     * @throws ApiError
+     */
+    public static composeManagerOrderEmail(
+        orderId: number,
+        requestBody: OrderEmailComposePayload,
+    ): CancelablePromise<OrderEmailComposeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/orders/{order_id}/compose',
+            path: {
+                'order_id': orderId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

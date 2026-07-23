@@ -14,5 +14,8 @@ export type OrderCustomerBrief = {
     bank_name?: (string | null);
     bic?: (string | null);
     iban?: (string | null);
+    signer_position?: (string | null);
+    signer_name?: (string | null);
+    acting_basis?: (string | null);
 };
 

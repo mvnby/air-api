@@ -14319,6 +14319,63 @@
         ]
       }
     },
+    "/api/manager/mail/orders/{order_id}/compose": {
+      "post": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Compose Manager Order Email",
+        "operationId": "compose_manager_order_email",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderEmailComposePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderEmailComposeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/mail/orders/{order_id}/email": {
       "post": {
         "tags": [
@@ -43748,6 +43805,39 @@
               }
             ],
             "title": "Iban"
+          },
+          "signer_position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Position"
+          },
+          "signer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Name"
+          },
+          "acting_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acting Basis"
           }
         },
         "type": "object",
@@ -43821,6 +43911,93 @@
         ],
         "title": "OrderCustomerContractBrief"
       },
+      "OrderEmailComposePayload": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Document Ids"
+          },
+          "template_key": {
+            "type": "string",
+            "title": "Template Key",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "title": "OrderEmailComposePayload"
+      },
+      "OrderEmailComposeResponse": {
+        "properties": {
+          "template_key": {
+            "type": "string",
+            "title": "Template Key"
+          },
+          "template_options": {
+            "items": {
+              "$ref": "#/components/schemas/OrderEmailTemplateOptionResponse"
+            },
+            "type": "array",
+            "title": "Template Options"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "body_text": {
+            "type": "string",
+            "title": "Body Text"
+          },
+          "document_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Document Ids"
+          },
+          "document_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Document Labels"
+          },
+          "missing_requisites": {
+            "items": {
+              "$ref": "#/components/schemas/OrderEmailMissingRequisiteResponse"
+            },
+            "type": "array",
+            "title": "Missing Requisites"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template_key",
+          "subject",
+          "body_text"
+        ],
+        "title": "OrderEmailComposeResponse"
+      },
+      "OrderEmailMissingRequisiteResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "OrderEmailMissingRequisiteResponse"
+      },
       "OrderEmailSendPayload": {
         "properties": {
           "to_email": {
@@ -43878,6 +44055,29 @@
           "subject"
         ],
         "title": "OrderEmailSendPayload"
+      },
+      "OrderEmailTemplateOptionResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "requires_documents": {
+            "type": "boolean",
+            "title": "Requires Documents",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "OrderEmailTemplateOptionResponse"
       },
       "OrderPayload": {
         "properties": {
@@ -44616,6 +44816,39 @@
               }
             ],
             "title": "Storage Key"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Type"
+          },
+          "document_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Number"
           }
         },
         "type": "object",

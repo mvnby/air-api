@@ -7,5 +7,8 @@ export type OutgoingEmailAttachmentResponse = {
     mime_type?: (string | null);
     size?: (number | null);
     storage_key?: (string | null);
+    document_id?: (number | null);
+    document_type?: (string | null);
+    document_number?: (string | null);
 };
 

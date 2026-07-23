@@ -678,6 +678,38 @@ const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sent' | '
   if (latestDocumentEmail.status === 'failed') return 'failed';
   return 'none';
 });
+const normalizeDocumentIdentity = (value: unknown) => (
+  String(value || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '')
+);
+const sentDocumentTypes = computed(() => {
+  const types = new Set<string>();
+  const documentsByNumber = new Map(
+    orderDocuments.value
+      .filter((document) => document.number)
+      .map((document) => [normalizeDocumentIdentity(document.number), document.doc_type]),
+  );
+  for (const email of orderEmails.value) {
+    if (email.status !== 'sent') continue;
+    for (const attachment of email.attachments || []) {
+      const metadata = attachment as typeof attachment & {
+        document_type?: string | null;
+        document_number?: string | null;
+      };
+      if (metadata.document_type) {
+        types.add(metadata.document_type);
+        continue;
+      }
+      const filename = normalizeDocumentIdentity(metadata.document_number || metadata.filename);
+      for (const [number, docType] of documentsByNumber) {
+        if (number && filename.includes(number)) {
+          types.add(docType);
+          break;
+        }
+      }
+    }
+  }
+  return [...types];
+});
 const normalizeDocumentNumber = (value: string) => value.toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
 const missingReferencedInvoice = computed(() => {
   const invoiceNumbers = new Set(
@@ -712,6 +744,7 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   linkedEquipmentCount: props.order?.linked_equipment_count || 0,
   documents: orderDocuments.value,
   documentEmailStatus: documentEmailStatus.value,
+  sentDocumentTypes: sentDocumentTypes.value,
   missingReferencedInvoice: missingReferencedInvoice.value,
   total: totalPreview.value,
   paid: totalPaymentsPreview.value,
@@ -2036,11 +2069,20 @@ const openProposalSend = async () => {
   document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
+const openDocumentsSend = async () => {
+  expandedDrawerSections.value.documents = true;
+  activeWorkspaceTarget.value = 'documents';
+  await nextTick();
+  documentsPanelRef.value?.openSend();
+  document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
 const handleWorkspaceNextAction = async () => {
   const action = orderWorkspace.value.nextAction;
   if (action.command === 'create_proposal') return createProposal();
   if (action.command === 'finish_proposal') return changeActiveProposalStatus('ready_to_send');
   if (action.command === 'send_proposal') return openProposalSend();
+  if (action.command === 'send_documents') return openDocumentsSend();
   if (action.command === 'record_proposal_response') {
     openWorkspaceTarget('proposal');
     await nextTick();

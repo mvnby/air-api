@@ -578,3 +578,40 @@ async def test_manager_mail_send_order_email_passes_document_ids(async_client, m
     assert payload["id"] == 100
     assert payload["order_id"] == 123
     assert len(payload["attachments"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_manager_mail_composes_adaptive_order_email(async_client, monkeypatch):
+    async def fake_compose(_session, **kwargs):
+        assert kwargs == {
+            "order_id": 123,
+            "document_ids": [10, 11],
+            "template_key": "auto",
+        }
+        return {
+            "template_key": "documents",
+            "template_options": [
+                {"key": "auto", "label": "Автоматически", "requires_documents": True},
+                {"key": "documents", "label": "Комплект документов", "requires_documents": True},
+            ],
+            "subject": "Счёт и договор на техническое обслуживание кондиционеров",
+            "body_text": "Добрый день!\n\nНаправляем счёт и договор.",
+            "document_ids": [10, 11],
+            "document_labels": ["Счёт СЧ-10", "Договор Д-11"],
+            "missing_requisites": [{"key": "signer_name", "label": "ФИО подписанта"}],
+        }
+
+    monkeypatch.setattr("routers.manager_mail.OrderEmailTemplateService.compose", fake_compose)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        "/api/manager/mail/orders/123/compose",
+        headers=headers,
+        json={"document_ids": [10, 11], "template_key": "auto"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["template_key"] == "documents"
+    assert payload["subject"] == "Счёт и договор на техническое обслуживание кондиционеров"
+    assert payload["missing_requisites"] == [{"key": "signer_name", "label": "ФИО подписанта"}]

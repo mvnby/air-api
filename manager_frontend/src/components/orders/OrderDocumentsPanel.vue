@@ -757,10 +757,6 @@ const openCustomerProfileForContract = () => {
 };
 
 const openDocumentSendModal = () => {
-  if (!documents.value.length) {
-    notify('Сначала создайте или загрузите документ', 'error');
-    return;
-  }
   showDocumentSendModal.value = true;
 };
 
@@ -1137,14 +1133,13 @@ const registerExternalContract = async () => {
 
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <button
-          v-if="documents.length"
           class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
-          title="Отправить документы"
-          :disabled="!documents.length || isUploadingDoc || !!processingDocId || isGeneratingDoc"
+          title="Отправить письмо"
+          :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc"
           @click="openDocumentSendModal"
         >
           <span class="material-icons-round text-[18px]">send</span>
-          Отправить
+          Письмо
         </button>
 
         <button

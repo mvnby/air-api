@@ -19,6 +19,7 @@ class MailAttachment:
     filename: str
     content: bytes
     mime_type: str = "application/octet-stream"
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class MailSmtpService:
@@ -98,10 +99,16 @@ class MailSmtpService:
         customer_id: Optional[int] = None,
         attachments: Optional[List[MailAttachment]] = None,
     ) -> OutgoingEmail:
-        attachment_meta: List[Dict[str, Any]] = [
-            {"filename": item.filename, "mime_type": item.mime_type, "size": len(item.content)}
-            for item in attachments or []
-        ]
+        attachment_meta: List[Dict[str, Any]] = []
+        for item in attachments or []:
+            attachment_meta.append(
+                {
+                    "filename": item.filename,
+                    "mime_type": item.mime_type,
+                    "size": len(item.content),
+                    **dict(item.metadata or {}),
+                }
+            )
         row = OutgoingEmail(
             status="pending",
             order_id=order_id,
@@ -161,10 +168,12 @@ class MailSmtpService:
         attachments: List[MailAttachment] = []
         has_offer_document = False
         offer_proposal_ids: set[int] = set()
+        sent_document_types: set[str] = set()
         for doc_id in document_ids or []:
             doc = await session.get(OrderDocument, doc_id)
             if not doc or doc.order_id != order_id:
                 raise ValueError(f"Document {doc_id} not found on order")
+            sent_document_types.add(doc.doc_type)
             if doc.doc_type == "offer":
                 has_offer_document = True
                 if doc.proposal_id is not None:
@@ -173,7 +182,18 @@ class MailSmtpService:
             if not stream:
                 raise ValueError(f"Document {doc_id} cannot be downloaded")
             encoded = getattr(stream, "getvalue", lambda: bytes(stream))()
-            attachments.append(MailAttachment(filename=filename or f"document-{doc_id}.pdf", content=encoded, mime_type="application/pdf"))
+            attachments.append(
+                MailAttachment(
+                    filename=filename or f"document-{doc_id}.pdf",
+                    content=encoded,
+                    mime_type="application/pdf",
+                    metadata={
+                        "document_id": int(doc_id),
+                        "document_type": doc.doc_type,
+                        "document_number": doc.number,
+                    },
+                )
+            )
 
         email_row = await MailSmtpService.send_and_record(
             session,
@@ -186,8 +206,8 @@ class MailSmtpService:
             customer_id=order.customer_id,
             attachments=attachments,
         )
+        sent_at = email_row.sent_at or datetime.now()
         if has_offer_document:
-            sent_at = datetime.now()
             if offer_proposal_ids:
                 proposals = list(
                     (
@@ -220,6 +240,17 @@ class MailSmtpService:
                 order.proposal_sent_at = sent_at
                 order.negotiation_status = "proposal_sent"
                 order.negotiation_status_changed_at = sent_at
+
+        order_status = getattr(order.status, "value", order.status)
+        if order_status == "negotiation":
+            if "invoice" in sent_document_types:
+                order.negotiation_status = "awaiting_payment"
+                order.negotiation_status_changed_at = sent_at
+            elif "contract" in sent_document_types:
+                order.negotiation_status = "awaiting_signature"
+                order.negotiation_status_changed_at = sent_at
+
+        if sent_document_types:
             session.add(order)
             await session.commit()
             await session.refresh(email_row)

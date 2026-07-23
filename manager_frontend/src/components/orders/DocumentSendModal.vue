@@ -34,10 +34,25 @@ const selectedDocumentIds = ref<number[]>([]);
 const toEmail = ref('');
 const subject = ref('');
 const bodyText = ref('');
+const templateKey = ref('auto');
+const templateOptions = ref<Array<{ key: string; label: string; requires_documents?: boolean }>>([
+  { key: 'auto', label: 'Автоматически', requires_documents: true },
+  { key: 'offer', label: 'Коммерческое предложение', requires_documents: true },
+  { key: 'invoice', label: 'Счёт', requires_documents: true },
+  { key: 'contract', label: 'Договор', requires_documents: true },
+  { key: 'documents', label: 'Комплект документов', requires_documents: true },
+  { key: 'act', label: 'Акт', requires_documents: true },
+  { key: 'request_requisites', label: 'Запросить реквизиты', requires_documents: false },
+  { key: 'request_signer', label: 'Запросить данные подписанта', requires_documents: false },
+  { key: 'custom', label: 'Произвольное письмо', requires_documents: false },
+]);
+const missingRequisites = ref<Array<{ key: string; label: string }>>([]);
 const error = ref('');
 const sending = ref(false);
+const composing = ref(false);
 const subjectTouched = ref(false);
 const bodyTouched = ref(false);
+let composeRequestId = 0;
 
 const selectedDocuments = computed(() => {
   const selected = new Set(selectedDocumentIds.value);
@@ -45,19 +60,35 @@ const selectedDocuments = computed(() => {
 });
 
 const hasOfferSelected = computed(() => selectedDocuments.value.some((doc) => doc.doc_type === 'offer'));
+const activeTemplate = computed(() => (
+  templateOptions.value.find((item) => item.key === templateKey.value) || templateOptions.value[0]
+));
+const documentsRequired = computed(() => activeTemplate.value?.requires_documents !== false);
 
 const documentLabel = (doc: ManagerOrderDocumentItem) => {
   const typeLabel = DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type || 'Документ';
   return `${typeLabel} ${doc.number || `#${doc.id}`}`;
 };
 
-const latestDefaultDocumentIds = () => {
-  const ids: number[] = [];
-  for (const type of ['offer', 'contract', 'invoice']) {
-    const doc = props.documents.find((item) => item.doc_type === type);
-    if (doc && !ids.includes(doc.id)) ids.push(doc.id);
+const templateAvailable = (key: string) => {
+  if (['request_requisites', 'request_signer', 'custom'].includes(key)) return true;
+  if (key === 'auto' || key === 'documents') return props.documents.length > 0;
+  if (key === 'act') {
+    const actTypes = new Set(['act', 'service_act', 'maintenance_service_act', 'defect_act', 'retail_receipt']);
+    return props.documents.some((item) => actTypes.has(item.doc_type));
   }
-  return ids.length ? ids : props.documents.slice(0, 1).map((doc) => doc.id);
+  return props.documents.some((item) => item.doc_type === key);
+};
+
+const latestDefaultDocumentIds = () => {
+  const advancedIds: number[] = [];
+  for (const type of ['invoice', 'contract']) {
+    const doc = props.documents.find((item) => item.doc_type === type);
+    if (doc && !advancedIds.includes(doc.id)) advancedIds.push(doc.id);
+  }
+  if (advancedIds.length) return advancedIds;
+  const offer = props.documents.find((item) => item.doc_type === 'offer');
+  return offer ? [offer.id] : props.documents.slice(0, 1).map((doc) => doc.id);
 };
 
 const buildSubject = () => (
@@ -83,11 +114,53 @@ const buildBody = () => {
 const refreshDefaults = () => {
   selectedDocumentIds.value = latestDefaultDocumentIds();
   toEmail.value = props.order.customer?.email || '';
+  templateKey.value = props.documents.length ? 'auto' : 'request_requisites';
   subject.value = buildSubject();
   bodyText.value = buildBody();
+  missingRequisites.value = [];
   error.value = '';
   subjectTouched.value = false;
   bodyTouched.value = false;
+  void applyTemplate(true);
+};
+
+const applyTemplate = async (force = false) => {
+  if (!props.modelValue || templateKey.value === 'custom') return;
+  const requestId = ++composeRequestId;
+  composing.value = true;
+  try {
+    const result = await ManagerMailService.composeManagerOrderEmail(props.order.id, {
+      document_ids: selectedDocumentIds.value,
+      template_key: templateKey.value,
+    });
+    if (requestId !== composeRequestId) return;
+    templateOptions.value = result.template_options || templateOptions.value;
+    missingRequisites.value = result.missing_requisites || [];
+    if (force || !subjectTouched.value) subject.value = result.subject;
+    if (force || !bodyTouched.value) bodyText.value = result.body_text;
+    error.value = '';
+  } catch (err) {
+    if (requestId !== composeRequestId) return;
+    error.value = getApiErrorMessage(err);
+  } finally {
+    if (requestId === composeRequestId) composing.value = false;
+  }
+};
+
+const changeTemplate = () => {
+  if (templateKey.value === 'request_requisites' || templateKey.value === 'request_signer') {
+    selectedDocumentIds.value = [];
+  } else if (['offer', 'invoice', 'contract'].includes(templateKey.value)) {
+    const document = props.documents.find((item) => item.doc_type === templateKey.value);
+    if (document) selectedDocumentIds.value = [document.id];
+  } else if (templateKey.value === 'act') {
+    const actTypes = new Set(['act', 'service_act', 'maintenance_service_act', 'defect_act', 'retail_receipt']);
+    const document = props.documents.find((item) => actTypes.has(item.doc_type));
+    if (document) selectedDocumentIds.value = [document.id];
+  }
+  subjectTouched.value = false;
+  bodyTouched.value = false;
+  void applyTemplate(true);
 };
 
 watch(
@@ -98,8 +171,9 @@ watch(
 );
 
 watch(selectedDocumentIds, () => {
-  if (!subjectTouched.value) subject.value = buildSubject();
-  if (!bodyTouched.value) bodyText.value = buildBody();
+  if (!props.modelValue) return;
+  if (templateKey.value === 'custom') return;
+  void applyTemplate(false);
 });
 
 const close = () => {
@@ -109,7 +183,7 @@ const close = () => {
 
 const sendEmail = async () => {
   error.value = '';
-  if (!selectedDocumentIds.value.length) {
+  if (documentsRequired.value && !selectedDocumentIds.value.length) {
     error.value = 'Выберите хотя бы один документ';
     return;
   }
@@ -181,6 +255,36 @@ const sendEmail = async () => {
           </div>
 
           <div>
+            <div class="mb-1 flex items-center justify-between gap-3">
+              <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Шаблон письма</label>
+              <button
+                v-if="subjectTouched || bodyTouched"
+                type="button"
+                class="text-xs font-semibold text-teal-700 hover:text-teal-800 dark:text-teal-300"
+                :disabled="composing"
+                @click="applyTemplate(true)"
+              >
+                Обновить по шаблону
+              </button>
+            </div>
+            <select
+              v-model="templateKey"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              :disabled="composing"
+              @change="changeTemplate"
+            >
+              <option
+                v-for="option in templateOptions"
+                :key="option.key"
+                :value="option.key"
+                :disabled="!templateAvailable(option.key)"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+
+          <div>
             <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Документы</label>
             <div v-if="documents.length" class="space-y-2">
               <label
@@ -203,6 +307,17 @@ const sendEmail = async () => {
             <div v-else class="rounded-xl border border-dashed border-slate-300 py-5 text-center text-sm text-slate-500 dark:border-slate-700">
               Нет сформированных документов
             </div>
+            <p v-if="!documentsRequired" class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              Для этого шаблона вложения не обязательны.
+            </p>
+          </div>
+
+          <div
+            v-if="missingRequisites.length"
+            class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+          >
+            <p class="font-semibold">В карточке клиента не заполнено</p>
+            <p class="mt-1">{{ missingRequisites.map((item) => item.label).join(', ') }}</p>
           </div>
 
           <div>
@@ -242,12 +357,13 @@ const sendEmail = async () => {
           <button
             type="button"
             class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-teal-700 disabled:opacity-50"
-            :disabled="sending || !documents.length"
+            :disabled="sending || composing || (documentsRequired && !selectedDocumentIds.length)"
             @click="sendEmail"
           >
             <span v-if="sending" class="material-icons-round animate-spin text-[18px]">loop</span>
+            <span v-else-if="composing" class="material-icons-round animate-spin text-[18px]">loop</span>
             <span v-else class="material-icons-round text-[18px]">send</span>
-            {{ sending ? 'Отправляем...' : 'Отправить' }}
+            {{ sending ? 'Отправляем...' : composing ? 'Готовим...' : 'Отправить' }}
           </button>
         </footer>
       </div>

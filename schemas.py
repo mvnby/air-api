@@ -638,6 +638,9 @@ class OrderCustomerBrief(BaseModel):
     bank_name: Optional[str] = None
     bic: Optional[str] = None
     iban: Optional[str] = None
+    signer_position: Optional[str] = None
+    signer_name: Optional[str] = None
+    acting_basis: Optional[str] = None
 
 
 class OrderCustomerBranchBrief(BaseModel):
@@ -4339,11 +4342,40 @@ class OrderEmailSendPayload(OutgoingEmailSendPayload):
     document_ids: List[int] = Field(default_factory=list)
 
 
+class OrderEmailComposePayload(BaseModel):
+    document_ids: List[int] = Field(default_factory=list)
+    template_key: str = "auto"
+
+
+class OrderEmailTemplateOptionResponse(BaseModel):
+    key: str
+    label: str
+    requires_documents: bool = True
+
+
+class OrderEmailMissingRequisiteResponse(BaseModel):
+    key: str
+    label: str
+
+
+class OrderEmailComposeResponse(BaseModel):
+    template_key: str
+    template_options: List[OrderEmailTemplateOptionResponse] = Field(default_factory=list)
+    subject: str
+    body_text: str
+    document_ids: List[int] = Field(default_factory=list)
+    document_labels: List[str] = Field(default_factory=list)
+    missing_requisites: List[OrderEmailMissingRequisiteResponse] = Field(default_factory=list)
+
+
 class OutgoingEmailAttachmentResponse(BaseModel):
     filename: Optional[str] = None
     mime_type: Optional[str] = None
     size: Optional[int] = None
     storage_key: Optional[str] = None
+    document_id: Optional[int] = None
+    document_type: Optional[str] = None
+    document_number: Optional[str] = None
 
 
 class OutgoingEmailResponse(BaseModel):

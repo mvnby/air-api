@@ -11,6 +11,7 @@ from core.security import get_current_username
 from routers.manager_operation_ids import (
     ATTACH_MANAGER_BANK_RECEIPT,
     ATTACH_MANAGER_BANK_RECEIPT_GROUP,
+    COMPOSE_MANAGER_ORDER_EMAIL,
     DELETE_MANAGER_BANK_RECEIPT,
     IMPORT_MANAGER_BANK_RECEIPTS,
     IMPORT_MANAGER_BANK_STATEMENT,
@@ -36,6 +37,8 @@ from schemas import (
     EmailLeadDecisionResponse,
     EmailLeadImportJobResponse,
     EmailLeadImportResponse,
+    OrderEmailComposePayload,
+    OrderEmailComposeResponse,
     OrderEmailSendPayload,
     OutgoingEmailDetailResponse,
     OutgoingEmailListResponse,
@@ -48,6 +51,7 @@ from services.email_lead_import_job_service import EmailLeadImportJobService, Em
 from services.mail_imap_service import MailImapService
 from services.mail_smtp_service import MailSmtpService
 from services.notification_service import NotificationService
+from services.order_email_template_service import OrderEmailTemplateService
 from services.outgoing_email_service import OutgoingEmailService
 
 
@@ -110,7 +114,7 @@ async def import_manager_bank_receipts(
                     result.created_receipt_ids,
                 )
         return BankReceiptImportResponse(**result.__dict__)
-    except Exception as exc:
+    except ValueError as exc:
         raise manager_http_error(
             status_code=400,
             endpoint=IMPORT_MANAGER_BANK_RECEIPTS,
@@ -422,6 +426,32 @@ async def send_manager_test_email(
         raise manager_http_error(
             status_code=400,
             endpoint=SEND_MANAGER_TEST_EMAIL,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/orders/{order_id}/compose",
+    response_model=OrderEmailComposeResponse,
+    operation_id=COMPOSE_MANAGER_ORDER_EMAIL,
+)
+async def compose_manager_order_email(
+    order_id: int,
+    payload: OrderEmailComposePayload,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await OrderEmailTemplateService.compose(
+            session,
+            order_id=order_id,
+            document_ids=payload.document_ids,
+            template_key=payload.template_key,
+        )
+    except Exception as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=COMPOSE_MANAGER_ORDER_EMAIL,
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
