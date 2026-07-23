@@ -63,6 +63,8 @@ class TclFeatureCanaryService:
         await self._load_inventory()
         await self._upsert_features()
         await self._remove_legacy_brand_links()
+        await self._remove_stale_series_links()
+        await self._remove_stale_product_links()
         await self._normalize_product_states()
         await self._upsert_series_links()
         await self._upsert_derived_links()
@@ -142,6 +144,12 @@ class TclFeatureCanaryService:
 
         feature_slugs = {item["slug"] for item in self.manifest["features"]}
         feature_slugs.update(self.manifest["legacy_brand_links_to_remove"])
+        feature_slugs.update(
+            slug
+            for slugs in self.manifest.get("series_links_to_remove", {}).values()
+            for slug in slugs
+        )
+        feature_slugs.update(self.manifest.get("product_links_to_remove", []))
         feature_rows = list(
             (
                 await self.session.execute(
@@ -180,6 +188,7 @@ class TclFeatureCanaryService:
                 self._action("create_feature", feature=feature.slug)
             set_committed_value(feature, "category", category)
 
+            is_active = bool(spec.get("is_active", True))
             desired = {
                 "name": spec["name"],
                 "short_description": spec.get("short_description"),
@@ -192,8 +201,8 @@ class TclFeatureCanaryService:
                 "source_notes": spec.get("source_notes"),
                 "legal_notes": spec.get("legal_notes"),
                 "sort_order": int(spec.get("sort_order", 0)),
-                "is_active": True,
-                "archived_at": None,
+                "is_active": is_active,
+                "archived_at": None if is_active else feature.archived_at or datetime.now(),
             }
             changes = {}
             for field, value in desired.items():
@@ -273,6 +282,54 @@ class TclFeatureCanaryService:
             feature = next(item for item in self.features.values() if item.id == link.feature_id)
             await self.session.delete(link)
             self._action("remove_legacy_brand_link", feature=feature.slug)
+
+    async def _remove_stale_series_links(self) -> None:
+        for series_slug, feature_slugs in self.manifest.get("series_links_to_remove", {}).items():
+            series = self.series[series_slug]
+            feature_ids = [int(self.features[slug].id) for slug in feature_slugs]
+            links = list(
+                (
+                    await self.session.execute(
+                        select(FeatureSeriesLink).where(
+                            FeatureSeriesLink.series_id == series.id,
+                            FeatureSeriesLink.feature_id.in_(feature_ids),
+                        )
+                    )
+                ).scalars().all()
+            )
+            for link in links:
+                feature = next(item for item in self.features.values() if item.id == link.feature_id)
+                await self.session.delete(link)
+                self._action(
+                    "remove_stale_series_link",
+                    series=series_slug,
+                    feature=feature.slug,
+                )
+
+    async def _remove_stale_product_links(self) -> None:
+        feature_slugs = self.manifest.get("product_links_to_remove", [])
+        if not feature_slugs:
+            return
+        feature_ids = [int(self.features[slug].id) for slug in feature_slugs]
+        product_ids = [int(product.id) for product in self.products]
+        links = list(
+            (
+                await self.session.execute(
+                    select(FeatureProductLink).where(
+                        FeatureProductLink.product_id.in_(product_ids),
+                        FeatureProductLink.feature_id.in_(feature_ids),
+                    )
+                )
+            ).scalars().all()
+        )
+        for link in links:
+            feature = next(item for item in self.features.values() if item.id == link.feature_id)
+            await self.session.delete(link)
+            self._action(
+                "remove_stale_product_link",
+                product_id=int(link.product_id),
+                feature=feature.slug,
+            )
 
     async def _normalize_product_states(self) -> None:
         matched_ids: set[int] = set()
@@ -354,7 +411,12 @@ class TclFeatureCanaryService:
                     link = FeatureSeriesLink(series_id=int(series.id), feature_id=int(feature.id))
                     self.session.add(link)
                 desired_order = int(feature.sort_order or 0) + index
-                changed = link.id is None or link.source != "manual" or not link.is_enabled or link.sort_order != desired_order
+                changed = (
+                    link.id is None
+                    or link.source != "manual"
+                    or not link.is_enabled
+                    or link.sort_order != desired_order
+                )
                 link.source = "manual"
                 link.is_enabled = True
                 link.sort_order = desired_order

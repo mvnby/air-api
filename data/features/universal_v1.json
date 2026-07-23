@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "library": "Universal Feature Library v1",
+  "purpose": "Canonical buyer-facing Feature taxonomy for climate equipment",
+  "categories": [
+    {
+      "slug": "comfort",
+      "name": "Комфорт",
+      "sort_order": 10,
+      "buyer_question": "Насколько приятно пользоваться кондиционером каждый день?",
+      "use_for": ["мягкий поток", "тишина", "сон", "автоматическое поддержание комфорта"],
+      "do_not_use_for": ["мощность", "энергопотребление", "способы управления"]
+    },
+    {
+      "slug": "air-quality",
+      "name": "Воздух и очистка",
+      "sort_order": 20,
+      "buyer_question": "Что кондиционер делает с качеством воздуха?",
+      "use_for": ["приток воздуха", "фильтрация", "очистка", "ионизация", "контроль качества воздуха"],
+      "do_not_use_for": ["медицинские обещания", "способы управления"]
+    },
+    {
+      "slug": "control",
+      "name": "Управление",
+      "sort_order": 30,
+      "buyer_question": "Как удобно управлять кондиционером?",
+      "use_for": ["пульт", "приложение", "Wi-Fi", "голос", "таймер", "умный дом"],
+      "do_not_use_for": ["экономию энергии", "мощность"]
+    },
+    {
+      "slug": "efficiency",
+      "name": "Энергоэффективность",
+      "sort_order": 40,
+      "buyer_question": "Сколько будет стоить эксплуатация?",
+      "use_for": ["снижение энергопотребления", "инверторное регулирование", "ECO", "контроль потребления"],
+      "do_not_use_for": ["скорость охлаждения", "зимний обогрев"]
+    },
+    {
+      "slug": "performance",
+      "name": "Производительность",
+      "sort_order": 50,
+      "buyer_question": "Справится ли кондиционер с моей задачей?",
+      "use_for": ["мощность", "скорость выхода на режим", "Turbo", "обслуживаемую площадь"],
+      "do_not_use_for": ["температуру зимнего обогрева", "уровень шума"]
+    },
+    {
+      "slug": "heating",
+      "name": "Обогрев",
+      "sort_order": 60,
+      "buyer_question": "Можно ли использовать кондиционер зимой?",
+      "use_for": ["низкотемпературную работу", "тепловой насос", "поддержание температуры", "зимний комплект"],
+      "do_not_use_for": ["обычную холодопроизводительность"]
+    },
+    {
+      "slug": "design",
+      "name": "Дизайн",
+      "sort_order": 70,
+      "buyer_question": "Как техника впишется в интерьер?",
+      "use_for": ["цвет", "материалы панели", "скрытый дисплей", "компактный корпус"],
+      "do_not_use_for": ["общие рекламные слова без видимого отличия"]
+    },
+    {
+      "slug": "reliability",
+      "name": "Надёжность",
+      "sort_order": 80,
+      "buyer_question": "Насколько долго и стабильно будет работать оборудование?",
+      "use_for": ["защиту компрессора", "антикоррозийное покрытие", "самодиагностику", "защиту напряжения"],
+      "do_not_use_for": ["уровень шума", "дизайн"]
+    },
+    {
+      "slug": "installation",
+      "name": "Монтаж и совместимость",
+      "sort_order": 90,
+      "buyer_question": "Подойдёт ли решение для моего объекта?",
+      "use_for": ["совместимость блоков", "Free Match", "длину трассы", "особенности установки"],
+      "do_not_use_for": ["обычные монтажные характеристики без покупательского смысла"]
+    }
+  ],
+  "features": [
+    {
+      "slug": "inverter-control",
+      "name": "Инверторное управление",
+      "category_slug": "efficiency",
+      "short_description": "Плавно регулирует производительность и точнее поддерживает температуру.",
+      "full_description": "Инверторное управление изменяет производительность компрессора без постоянных пусков и остановок, помогая точнее поддерживать температуру и рациональнее расходовать электроэнергию.",
+      "scope": "universal",
+      "assignment_mode": "derived",
+      "aliases": ["Инвертор", "Inverter", "Smart Inverter", "DC Inverter"],
+      "possible_derived_rules": [{"spec_key": "compressor_type_norm", "operator": "in", "target_value": ["inverter", "full_dc"]}],
+      "notes": "Брендовые названия инвертора не должны создавать вторую Feature без отдельной покупательской пользы."
+    },
+    {
+      "slug": "vstroennyi-wi-fi",
+      "name": "Встроенный Wi-Fi",
+      "category_slug": "control",
+      "short_description": "Управление через приложение доступно без покупки отдельного модуля.",
+      "full_description": "Встроенный Wi-Fi позволяет удалённо менять режимы и настройки через совместимое приложение без установки дополнительного адаптера.",
+      "scope": "universal",
+      "assignment_mode": "derived",
+      "aliases": ["Built-in Wi-Fi", "Wi-Fi встроенный", "Встроенный Wi-Fi-модуль"],
+      "possible_derived_rules": [{"spec_key": "wifi_state", "operator": "eq", "target_value": "builtin"}],
+      "notes": "Не объединять с Wi-Fi Ready: покупательский комплект отличается."
+    },
+    {
+      "slug": "wifi-ready",
+      "name": "Wi-Fi Ready",
+      "category_slug": "control",
+      "short_description": "Удалённое управление доступно после установки совместимого модуля.",
+      "full_description": "Кондиционер подготовлен для подключения Wi-Fi, но совместимый модуль приобретается или устанавливается отдельно.",
+      "scope": "universal",
+      "assignment_mode": "derived",
+      "aliases": ["Optional Wi-Fi", "Опциональный Wi-Fi", "Wi-Fi модуль опция"],
+      "possible_derived_rules": [{"spec_key": "wifi_state", "operator": "eq", "target_value": "ready"}],
+      "notes": "В описании обязательно сообщать, что модуль не встроен."
+    },
+    {
+      "slug": "low-noise",
+      "name": "Низкий уровень шума",
+      "category_slug": "comfort",
+      "short_description": "Тихая работа подходит для спальни и спокойных помещений.",
+      "full_description": "Низкий минимальный уровень шума внутреннего блока делает работу кондиционера менее заметной в спальне, кабинете или детской.",
+      "scope": "universal",
+      "assignment_mode": "derived",
+      "aliases": ["Тихая работа", "Quiet", "Low Noise"],
+      "possible_derived_rules": [{"spec_key": "noise_indoor_min_db", "operator": "lte", "target_value": 22}],
+      "notes": "Порог должен зависеть от типа внутреннего блока; 22 дБ — стартовое правило для настенных моделей."
+    },
+    {
+      "slug": "sleep-mode",
+      "name": "Режим сна",
+      "category_slug": "comfort",
+      "short_description": "Адаптирует работу кондиционера для ночного использования.",
+      "full_description": "Режим сна корректирует температуру и интенсивность работы в течение ночи, чтобы уменьшить шум и резкие изменения микроклимата.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Sleep", "Ночной режим", "Sleep Mode"],
+      "possible_derived_rules": [],
+      "notes": "Не выводить автоматически только по наличию таймера."
+    },
+    {
+      "slug": "timer",
+      "name": "Таймер",
+      "category_slug": "control",
+      "short_description": "Позволяет заранее назначить включение или выключение.",
+      "full_description": "Таймер помогает запускать или останавливать кондиционер по расписанию без дополнительного действия пользователя.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["24h Timer", "Таймер 24 часа"],
+      "possible_derived_rules": [],
+      "notes": "Расписание по дням недели является отдельной, более широкой возможностью."
+    },
+    {
+      "slug": "auto-restart",
+      "name": "Авторестарт",
+      "category_slug": "reliability",
+      "short_description": "Возобновляет работу после восстановления питания.",
+      "full_description": "После кратковременного отключения электричества кондиционер автоматически возвращается к работе, обычно сохраняя предыдущие настройки.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Auto Restart", "Автоматический перезапуск"],
+      "possible_derived_rules": [],
+      "notes": "Не обещать сохранение всех настроек, если это не подтверждено источником."
+    },
+    {
+      "slug": "heat-exchanger-self-clean",
+      "name": "Самоочистка теплообменника",
+      "category_slug": "air-quality",
+      "short_description": "Просушивает или очищает теплообменник после работы.",
+      "full_description": "Цикл самоочистки помогает удалять влагу и загрязнения с теплообменника внутреннего блока, поддерживая его в более чистом состоянии.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Self Clean", "Самоочистка", "Auto Clean", "I-Clean"],
+      "possible_derived_rules": [],
+      "notes": "Не заменяет регулярное техническое обслуживание."
+    },
+    {
+      "slug": "automatic-airflow",
+      "name": "Автоматическое распределение воздуха",
+      "category_slug": "comfort",
+      "short_description": "Автоматика направляет поток для более равномерного комфорта.",
+      "full_description": "Кондиционер автоматически изменяет положение жалюзи или направление потока, помогая равномернее распределять воздух по помещению.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Smart Airflow", "Автоматические жалюзи", "Auto Swing"],
+      "possible_derived_rules": [],
+      "notes": "Не путать с 3D Airflow, где подтверждено движение в двух плоскостях."
+    },
+    {
+      "slug": "3d-airflow",
+      "name": "3D Airflow",
+      "category_slug": "comfort",
+      "short_description": "Распределяет поток по вертикали и горизонтали.",
+      "full_description": "Автоматическое движение вертикальных и горизонтальных жалюзи помогает направлять воздух в разные зоны помещения.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["3D обдув", "3D Air Flow", "4-way swing"],
+      "possible_derived_rules": [],
+      "notes": "Создавать только при подтверждённой автоматике обеих плоскостей."
+    },
+    {
+      "slug": "turbo",
+      "name": "Быстрый старт Turbo",
+      "category_slug": "performance",
+      "short_description": "Быстрее выводит помещение на заданную температуру.",
+      "full_description": "В режиме Turbo кондиционер временно использует повышенную производительность вентилятора и системы для более быстрого охлаждения или обогрева.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Turbo", "Powerful", "Быстрое охлаждение"],
+      "possible_derived_rules": [],
+      "notes": "Не указывать конкретное время без подтверждённого теста производителя."
+    },
+    {
+      "slug": "eco",
+      "name": "Экономичный режим ECO",
+      "category_slug": "efficiency",
+      "short_description": "Ограничивает энергопотребление в экономичном сценарии.",
+      "full_description": "Режим ECO корректирует производительность и настройки кондиционера, чтобы снизить энергопотребление при сохранении приемлемого комфорта.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["ECO", "Eco Mode", "Экорежим"],
+      "possible_derived_rules": [],
+      "notes": "Процент экономии указывать только со ссылкой на методику производителя."
+    },
+    {
+      "slug": "low-temperature-heating",
+      "name": "Обогрев при низкой температуре",
+      "category_slug": "heating",
+      "short_description": "Работает на обогрев при отрицательной наружной температуре.",
+      "full_description": "Модель рассчитана на работу в режиме обогрева при низкой наружной температуре в пределах диапазона, указанного производителем.",
+      "scope": "universal",
+      "assignment_mode": "derived",
+      "aliases": ["Зимний обогрев", "Heating to -20 C", "Heating to -25 C", "Nordic"],
+      "possible_derived_rules": [{"spec_key": "__filter_min_heat", "operator": "lte", "target_value": -15}],
+      "notes": "Конкретную предельную температуру показывать из характеристики модели, а не зашивать в общий текст."
+    },
+    {
+      "slug": "heat-pump",
+      "name": "Тепловой насос",
+      "category_slug": "heating",
+      "short_description": "Использует холодильный цикл для эффективного обогрева помещения.",
+      "full_description": "В режиме теплового насоса кондиционер переносит тепло с улицы в помещение и может расходовать меньше электроэнергии, чем прямой электрический нагрев.",
+      "scope": "universal",
+      "assignment_mode": "derived",
+      "aliases": ["Heat Pump", "Воздушный тепловой насос"],
+      "possible_derived_rules": [{"spec_key": "has_heating", "operator": "eq", "target_value": true}],
+      "notes": "Не обещать одинаковую эффективность при любой наружной температуре."
+    },
+    {
+      "slug": "uf-sterilizatsiia",
+      "name": "УФ-обработка",
+      "category_slug": "air-quality",
+      "short_description": "Дополняет обработку внутренних поверхностей воздушного тракта.",
+      "full_description": "Встроенный источник ультрафиолета используется как дополнительный элемент обработки внутренних поверхностей или проходящего воздуха в пределах конструкции кондиционера.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["UVC", "УФ-лампа", "UV-C", "BIG CARE"],
+      "possible_derived_rules": [],
+      "notes": "Не использовать медицинские обещания и формулировку о стерилизации всего помещения."
+    },
+    {
+      "slug": "bipoliarnyi-ionizator",
+      "name": "Ионизация",
+      "category_slug": "air-quality",
+      "short_description": "Дополняет систему обработки воздуха заряженными ионами.",
+      "full_description": "Ионизатор создаёт заряженные ионы и используется как дополнительная ступень обработки проходящего через кондиционер воздуха.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Ионизатор", "Ionizer", "Биполярный ионизатор", "Cold Plasma"],
+      "possible_derived_rules": [],
+      "notes": "Не заявлять лечение, стерилизацию помещения или гарантированное уничтожение микроорганизмов."
+    },
+    {
+      "slug": "air-quality-control",
+      "name": "Контроль качества воздуха",
+      "category_slug": "air-quality",
+      "short_description": "Показывает или учитывает состояние воздуха в помещении.",
+      "full_description": "Датчик или индикатор помогает оценивать качество воздуха и, если это предусмотрено моделью, учитывать его при автоматической работе.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Air Quality Control", "Датчик качества воздуха", "Автоматический контроль воздуха"],
+      "possible_derived_rules": [],
+      "notes": "В описании модели различать простой индикатор и автоматическое управление по датчику."
+    },
+    {
+      "slug": "plus-8-maintenance",
+      "name": "Поддержание +8°C",
+      "category_slug": "heating",
+      "short_description": "Поддерживает минимальное тепло в пустующем помещении.",
+      "full_description": "Режим поддерживает около +8 °C, помогая не допустить сильного охлаждения дачи, гаража или другого временно пустующего помещения.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["8C Heating", "+8°C", "Дежурный обогрев"],
+      "possible_derived_rules": [],
+      "notes": "Не позиционировать как полноценную защиту инженерных систем от замерзания без расчёта объекта."
+    },
+    {
+      "slug": "voltage-protection",
+      "name": "Защита от перепадов напряжения",
+      "category_slug": "reliability",
+      "short_description": "Помогает защитить электронику при нестабильном питании.",
+      "full_description": "Встроенная защита контролирует параметры электропитания и ограничивает работу при опасных отклонениях, снижая риск повреждения электроники.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Voltage Protection", "Защита по напряжению", "Wide Voltage"],
+      "possible_derived_rules": [],
+      "notes": "Не заменяет внешний стабилизатор или защитную автоматику, если они требуются условиями объекта."
+    },
+    {
+      "slug": "voice-control",
+      "name": "Голосовое управление",
+      "category_slug": "control",
+      "short_description": "Позволяет выполнять команды через совместимого голосового помощника.",
+      "full_description": "Кондиционером можно управлять голосовыми командами через поддерживаемую экосистему или приложение при выполнении требований производителя.",
+      "scope": "universal",
+      "assignment_mode": "manual",
+      "aliases": ["Voice Control", "Алиса", "Google Assistant", "Amazon Alexa"],
+      "possible_derived_rules": [],
+      "notes": "Обязательно указывать подтверждённые экосистемы и региональные ограничения."
+    }
+  ]
+}

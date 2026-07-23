@@ -9,6 +9,7 @@ from models import (
     FeatureBrandLink,
     FeatureCategory,
     FeatureProductLink,
+    FeatureSeriesLink,
     Product,
     ProductSeries,
 )
@@ -29,6 +30,7 @@ async def _seed(db):
         FeatureCategory(slug="air-quality", name="Очистка воздуха", sort_order=30),
         FeatureCategory(slug="efficiency", name="Энергоэффективность", sort_order=40),
         FeatureCategory(slug="performance", name="Производительность", sort_order=50),
+        FeatureCategory(slug="heating", name="Обогрев", sort_order=60),
     ]
     brand = Brand(title="TCL", slug="tcl", is_published=True)
     db.add_all([*categories, brand])
@@ -129,6 +131,54 @@ async def _seed(db):
         ),
     ]
     db.add_all(products)
+    await db.flush()
+
+    stale_smart_inverter = Feature(
+        slug="smart-inverter-tcl",
+        name="Smart Inverter",
+        category_id=by_category["efficiency"].id,
+        scope_type="brand",
+        brand_id=brand.id,
+    )
+    stale_heating_20 = Feature(
+        slug="heating-minus-20",
+        name="Обогрев до −20 °C",
+        category_id=by_category["performance"].id,
+        scope_type="derived",
+    )
+    stale_heating_25 = Feature(
+        slug="heating-minus-25",
+        name="Обогрев до −25 °C",
+        category_id=by_category["performance"].id,
+        scope_type="derived",
+    )
+    db.add_all([stale_smart_inverter, stale_heating_20, stale_heating_25])
+    await db.flush()
+    db.add_all(
+        [
+            FeatureSeriesLink(
+                series_id=series[series_slug].id,
+                feature_id=stale_smart_inverter.id,
+            )
+            for series_slug in (
+                "freshin3-0",
+                "breeze-in-2-0-a",
+                "elite-inverter-c-paneliu-xa71n",
+            )
+        ]
+        + [
+            FeatureProductLink(
+                product_id=next(item.id for item in products if item.slug == "freshin-fci"),
+                feature_id=stale_heating_20.id,
+                source="derived",
+            ),
+            FeatureProductLink(
+                product_id=next(item.id for item in products if item.slug == "breeze-ug11"),
+                feature_id=stale_heating_25.id,
+                source="derived",
+            ),
+        ]
+    )
     await db.commit()
     return brand, products
 
@@ -175,6 +225,52 @@ async def test_tcl_feature_canary_is_scoped_verified_and_idempotent(db):
     assert "vstroennyi-wi-fi" not in if_features
 
     uvc = (await db.execute(select(Feature).where(Feature.slug == "uf-sterilizatsiia"))).scalar_one()
+    assert uvc.scope_type == "universal"
+    assert uvc.brand_id is None
+    builtin_wifi = (
+        await db.execute(select(Feature).where(Feature.slug == "vstroennyi-wi-fi"))
+    ).scalar_one()
+    assert builtin_wifi.scope_type == "derived"
+    assert builtin_wifi.brand_id is None
+    heating = (
+        await db.execute(select(Feature).where(Feature.slug == "low-temperature-heating"))
+    ).scalar_one()
+    heating_category = await db.get(FeatureCategory, heating.category_id)
+    assert heating_category.slug == "heating"
+    smart_inverter = (
+        await db.execute(select(Feature).where(Feature.slug == "smart-inverter-tcl"))
+    ).scalar_one()
+    assert smart_inverter.is_active is False
+    assert smart_inverter.archived_at is not None
+    stale_series_links = list(
+        (
+            await db.execute(
+                select(FeatureSeriesLink).where(
+                    FeatureSeriesLink.feature_id == smart_inverter.id
+                )
+            )
+        ).scalars().all()
+    )
+    assert stale_series_links == []
+    stale_heating_ids = list(
+        (
+            await db.execute(
+                select(Feature.id).where(
+                    Feature.slug.in_(("heating-minus-20", "heating-minus-25"))
+                )
+            )
+        ).scalars().all()
+    )
+    stale_heating_links = list(
+        (
+            await db.execute(
+                select(FeatureProductLink).where(
+                    FeatureProductLink.feature_id.in_(stale_heating_ids)
+                )
+            )
+        ).scalars().all()
+    )
+    assert stale_heating_links == []
     breeze = by_slug["breeze-ug11"]
     freshin = by_slug["freshin-fci"]
     breeze_links = set(
