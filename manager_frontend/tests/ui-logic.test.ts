@@ -65,10 +65,49 @@ import {
   needsExecutionWithoutPaymentConfirmation,
   runOptimisticOrderTransition,
 } from '../src/components/orders/order-transition';
+import {
+  buildCustomerPatchPayload,
+  type CustomerForm,
+} from '../src/components/customers/customer-profile-form';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
 };
+
+const customerForm: CustomerForm = {
+  name: 'ООО Клиент',
+  phone: '+375 (29) 591-26-81',
+  email: 'CLIENT@EXAMPLE.COM ',
+  type: 'company',
+  inn: '123 456 789',
+  kpp: '',
+  full_legal_name: 'ООО Клиент',
+  legal_address: '',
+  actual_address: '',
+  bank_name: '',
+  bic: '',
+  iban: 'BY12 AKBB 3012 0000 0000 0000 0000',
+  signer_position: '',
+  signer_name: '',
+  acting_basis: '',
+};
+const phoneOnlyPatch = buildCustomerPatchPayload(customerForm, { phone: true });
+assert(
+  Object.keys(phoneOnlyPatch).join(',') === 'phone',
+  'customer PATCH must contain only fields changed by the user',
+);
+assert(
+  phoneOnlyPatch.phone === '+375 (29) 591-26-81',
+  'changed customer phone must be normalized before PATCH',
+);
+const blankSignerPatch = buildCustomerPatchPayload(customerForm, {
+  signer_position: true,
+  acting_basis: true,
+});
+assert(
+  blankSignerPatch.signer_position === '' && blankSignerPatch.acting_basis === '',
+  'explicitly cleared signer requisites must reach the API for safe defaulting',
+);
 
 assert(
   navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')

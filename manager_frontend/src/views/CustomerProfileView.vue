@@ -7,6 +7,10 @@ import EquipmentAttachmentsPanel from '../components/equipment/EquipmentAttachme
 import EquipmentWarrantyPanel from '../components/equipment/EquipmentWarrantyPanel.vue';
 import { equipmentWarrantySummary } from '../components/equipment/equipmentWarrantySummary';
 import { listAllCustomerEquipment } from '../components/equipment/loadAllCustomerEquipment';
+import {
+  buildCustomerPatchPayload,
+  type CustomerForm,
+} from '../components/customers/customer-profile-form';
 import { api } from '../api';
 import { confirmDialog } from '../services/ui-feedback';
 import {
@@ -38,7 +42,6 @@ import { useB2BLookup } from '../composables/useB2BLookup';
 import { dispatchCustomerUpdated } from '../utils/customer-events';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import { normalizeIban, normalizeUnp } from '../utils/legal-requisites';
-import { normalizePhoneForApi } from '../utils/phone';
 import {
   normalizeEmail,
   validateOptionalBelarusPhone,
@@ -46,24 +49,6 @@ import {
   validateOptionalByUnp,
   validateOptionalEmail,
 } from '../utils/validation';
-
-type CustomerForm = {
-  name: string;
-  phone: string;
-  email: string;
-  type: 'individual' | 'company';
-  inn: string;
-  kpp: string;
-  full_legal_name: string;
-  legal_address: string;
-  actual_address: string;
-  bank_name: string;
-  bic: string;
-  iban: string;
-  signer_position: string;
-  signer_name: string;
-  acting_basis: string;
-};
 
 type EquipmentForm = {
   customer_branch_id: number | null;
@@ -1202,35 +1187,7 @@ const validateForm = (): boolean => {
 const saveCustomer = async () => {
   if (!customer.value || !hasChanges.value || !validateForm()) return;
 
-  const payload: Record<string, string> = {};
-  (Object.keys(formDiff.value) as (keyof CustomerForm)[]).forEach((key) => {
-    if (!formDiff.value[key]) return;
-    payload[key] = currentForm.value[key]?.trim?.() ?? currentForm.value[key];
-  });
-
-  payload.phone = normalizePhoneForApi(form.value.phone || '');
-  payload.email = normalizeEmail(form.value.email || '');
-  payload.inn = normalizeUnp(form.value.inn || '');
-  payload.iban = normalizeIban(form.value.iban || '');
-
-  const optionalKeys: (keyof CustomerForm)[] = [
-    'email',
-    'inn',
-    'kpp',
-    'full_legal_name',
-    'legal_address',
-    'actual_address',
-    'bank_name',
-    'bic',
-    'iban',
-    'signer_position',
-    'signer_name',
-    'acting_basis',
-  ];
-  optionalKeys.forEach((key) => {
-    if (!(key in payload)) return;
-    if (!payload[key]) payload[key] = '';
-  });
+  const payload = buildCustomerPatchPayload(currentForm.value, formDiff.value);
 
   saving.value = true;
   success.value = '';

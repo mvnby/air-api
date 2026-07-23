@@ -236,6 +236,10 @@ class CustomerService:
         if not customer:
             return None
 
+        defaulted_text_fields = {
+            "signer_position": "директора",
+            "acting_basis": "Устава",
+        }
         optional_text_fields = (
             "email",
             "inn",
@@ -246,9 +250,7 @@ class CustomerService:
             "bank_name",
             "bic",
             "iban",
-            "signer_position",
             "signer_name",
-            "acting_basis",
         )
 
         if "name" in payload and payload["name"] is not None:
@@ -262,6 +264,13 @@ class CustomerService:
 
         if "is_favorite" in payload and payload["is_favorite"] is not None:
             customer.is_favorite = bool(payload["is_favorite"])
+
+        for field, default_value in defaulted_text_fields.items():
+            if field not in payload:
+                continue
+            value = payload[field]
+            trimmed = str(value).strip() if value is not None else ""
+            setattr(customer, field, trimmed or default_value)
 
         for field in optional_text_fields:
             if field not in payload:
