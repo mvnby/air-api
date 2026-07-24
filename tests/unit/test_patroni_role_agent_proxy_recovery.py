@@ -1,3 +1,4 @@
+import json
 import fcntl
 import subprocess
 from pathlib import Path
@@ -61,7 +62,16 @@ class _Runtime:
         if args[:3] == ("ps", "--status", "running"):
             return SimpleNamespace(
                 returncode=0,
-                stdout="\n".join(sorted(self.services)) + "\n",
+                stdout="\n".join(
+                    json.dumps(
+                        {
+                            "Service": service,
+                            "Labels": "com.docker.compose.oneoff=False",
+                        }
+                    )
+                    for service in sorted(self.services)
+                )
+                + ("\n" if self.services else ""),
                 stderr="",
             )
         if args[:3] == ("ps", "--all", "--quiet"):

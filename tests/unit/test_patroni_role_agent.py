@@ -1,3 +1,4 @@
+import json
 import fcntl
 import subprocess
 import urllib.error
@@ -134,7 +135,19 @@ class _ComposeRuntime:
         del check, timeout
         self.calls.append(args)
         if args[:3] == ("ps", "--status", "running"):
-            return SimpleNamespace(returncode=0, stdout="\n".join(sorted(self.services)) + "\n")
+            return SimpleNamespace(
+                returncode=0,
+                stdout="\n".join(
+                    json.dumps(
+                        {
+                            "Service": service,
+                            "Labels": "com.docker.compose.oneoff=False",
+                        }
+                    )
+                    for service in sorted(self.services)
+                )
+                + ("\n" if self.services else ""),
+            )
         if args[:3] == ("ps", "--all", "--quiet"):
             service = args[-1]
             output = f"id-{service}\n" if service in self.services else ""
@@ -171,6 +184,77 @@ def test_reconcile_standby_fences_bot_and_apps_before_restarting_safe_app(
     assert runtime.services == {"app"}
     assert "API_READY_ENABLED=false" in config.app_role_env.read_text()
     assert config.state_file.read_text() == "standby\n"
+
+
+def test_running_services_ignores_compose_oneoff_containers(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    records = [
+        {
+            "Service": "app-blue",
+            "Labels": "com.docker.compose.oneoff=False,com.docker.compose.project=air-api",
+        },
+        {
+            "Service": "app-green",
+            "Labels": "com.docker.compose.oneoff=True,com.mvn.purpose=api-restore-drill",
+        },
+        {
+            "Service": "db",
+            "Labels": {
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "air-api",
+            },
+        },
+    ]
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_run_compose",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="\n".join(json.dumps(record) for record in records),
+        ),
+    )
+
+    assert patroni_role_agent._running_services(config) == {"app-blue", "db"}
+
+
+def test_standby_does_not_fence_oneoff_restore_container(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    config.active_slot_file.write_text("blue\n", encoding="utf-8")
+    config.app_role_env.write_text(role_env("standby", bot_process=False))
+    config.bot_role_env.write_text(
+        role_env("standby", bot_process=True, bot_enabled=False)
+    )
+    config.state_file.write_text("standby\n", encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+    records = [
+        {
+            "Service": "app-blue",
+            "Labels": "com.docker.compose.oneoff=False",
+        },
+        {
+            "Service": "app-green",
+            "Labels": (
+                "com.docker.compose.oneoff=True,"
+                "com.mvn.purpose=api-restore-drill"
+            ),
+        },
+    ]
+
+    def compose(_config, *args, **_kwargs):
+        calls.append(args)
+        if args[:3] == ("ps", "--status", "running"):
+            return SimpleNamespace(
+                returncode=0,
+                stdout="\n".join(json.dumps(record) for record in records),
+                stderr="",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", compose)
+    monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
+
+    assert reconcile(config, "standby") is False
+    assert not any(call[0] in {"rm", "kill", "stop"} for call in calls)
 
 
 def test_standby_fences_docker_and_operations_before_fallible_systemd_query(
@@ -241,7 +325,7 @@ def test_standby_fast_fence_precedes_failed_or_hung_compose_inventory(
     with pytest.raises((RuntimeError, subprocess.TimeoutExpired)):
         reconcile(config, "standby")
 
-    inventory_index = calls.index(("ps", "--status", "running", "--services"))
+    inventory_index = calls.index(("ps", "--status", "running", "--format", "json"))
     removed = [call[-1] for call in calls[:inventory_index] if call[:3] == ("rm", "--stop", "--force")]
     assert removed == ["bot", "app", "app-blue", "app-green"]
     assert config.app_role_env.read_text() == role_env("standby", bot_process=False)
@@ -269,7 +353,16 @@ def test_incomplete_standby_fence_persists_retry_state_until_exact_retry_succeed
             if args[:3] == ("ps", "--status", "running"):
                 return SimpleNamespace(
                     returncode=0,
-                    stdout="\n".join(sorted(self.services)) + "\n",
+                    stdout="\n".join(
+                        json.dumps(
+                            {
+                                "Service": service,
+                                "Labels": "com.docker.compose.oneoff=False",
+                            }
+                        )
+                        for service in sorted(self.services)
+                    )
+                    + ("\n" if self.services else ""),
                     stderr="",
                 )
             if args[:3] == ("ps", "--all", "--quiet"):
@@ -589,7 +682,7 @@ def test_reconcile_does_not_recreate_services_when_compose_ps_fails(
 
     with pytest.raises(RuntimeError, match="docker busy"):
         reconcile(config, "primary")
-    assert calls == [("ps", "--status", "running", "--services")]
+    assert calls == [("ps", "--status", "running", "--format", "json")]
 
 
 def test_network_error_is_treated_as_standby(tmp_path, monkeypatch):
