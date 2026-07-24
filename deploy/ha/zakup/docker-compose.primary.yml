@@ -61,6 +61,7 @@ services:
       BACKGROUND_REMOVAL_PROCESS_MAX_MEMORY_MB: "384"
       BACKGROUND_REMOVAL_PROCESS_MAX_CPU_SECONDS: "45"
       GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
+      GOOGLE_VISION_CREDENTIALS_FILE: /app/g-vision-ocr.json
     ports:
       - "127.0.0.1:${MVN_RESERVE_APP_PORT:-18000}:8000"
     volumes:
