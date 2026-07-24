@@ -251,6 +251,31 @@ def test_cancel_all_project_operations_fences_every_phase(monkeypatch):
     assert terminated == [logical.operation_id]
 
 
+def test_cancel_project_operations_accepts_explicit_safe_rolling_contract(
+    monkeypatch,
+):
+    logical = replace(
+        _record(),
+        phase="logical-restore-drill",
+        command="/usr/local/sbin/mvn-restore-drill-latest-db",
+    )
+    terminated = []
+    monkeypatch.setattr(guard, "list_records", lambda **_kwargs: [logical])
+    monkeypatch.setattr(
+        guard,
+        "terminate_record",
+        lambda record: terminated.append(record.operation_id),
+    )
+
+    cancelled = guard.cancel_project_operations(
+        "/opt/air-api",
+        preserve_standby_safe=True,
+    )
+
+    assert cancelled == []
+    assert terminated == []
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="PDEATHSIG is Linux-specific")
 @pytest.mark.parametrize("release_barrier", [False, True])
 def test_parent_death_never_leaves_the_guarded_payload_running(

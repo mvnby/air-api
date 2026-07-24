@@ -475,12 +475,16 @@ def _cancel_project_operations(
     return cancelled
 
 
-def cancel_project_operations(project_dir: str) -> list[str]:
+def cancel_project_operations(
+    project_dir: str,
+    *,
+    preserve_standby_safe: bool = True,
+) -> list[str]:
     """Fence mutating work while preserving a standby-safe logical drill."""
 
     return _cancel_project_operations(
         project_dir,
-        preserve_standby_safe=True,
+        preserve_standby_safe=preserve_standby_safe,
     )
 
 
