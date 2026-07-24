@@ -40,6 +40,8 @@ def test_build_routing_for_normal_mvn_api_primary():
     assert variables["API_STANDBY_HEALTH_URL"] == "http://localhost:18000/api/health"
     assert variables["API_COPY_COMPOSE"] == "true"
     assert variables["API_STANDBY_COPY_COMPOSE"] == "true"
+    assert variables["PATRONI_MVN_API_HOST"] == "185.250.45.54"
+    assert variables["PATRONI_ZAKUP_HOST"] == "193.47.42.213"
 
 
 def test_build_routing_for_promoted_zakup_primary():
@@ -59,6 +61,8 @@ def test_build_routing_for_promoted_zakup_primary():
     assert variables["API_STANDBY_PROJECT_DIR"] == "/opt/air-api"
     assert variables["API_STANDBY_COMPOSE_SOURCE_FILE"] == "deploy/ha/mvn-api/docker-compose.standby.yml"
     assert variables["API_STANDBY_HEALTH_URL"] == "http://localhost:8000/api/health"
+    assert variables["PATRONI_MVN_API_HOST"] == "185.250.45.54"
+    assert variables["PATRONI_ZAKUP_HOST"] == "193.47.42.213"
 
 
 def test_dry_run_prints_plan_without_writes(monkeypatch, capsys):
@@ -102,6 +106,8 @@ def test_confirm_sets_secret_then_variables_without_values_in_args(monkeypatch):
     assert "API_PROJECT_DIR" in variable_names
     assert "API_STANDBY_HOST" in variable_names
     assert "API_PRIMARY_ORIGIN" in variable_names
+    assert "PATRONI_MVN_API_HOST" in variable_names
+    assert "PATRONI_ZAKUP_HOST" in variable_names
     assert all("193.47.42.213" not in args for args, _stdin in calls)
     assert any(args[3] == "API_PROJECT_DIR" and stdin == "/opt/mvn-reserve\n" for args, stdin in variable_calls)
 

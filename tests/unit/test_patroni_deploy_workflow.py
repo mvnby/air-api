@@ -78,6 +78,29 @@ def test_patroni_release_orders_migration_replica_then_primary():
     assert "docker compose" not in text
 
 
+def test_patroni_release_keeps_physical_node_identity_across_role_switches():
+    jobs = _workflow(".github/workflows/deploy-api-patroni.yml")["jobs"]
+    api_jobs = (
+        "probe-api-node",
+        "migrate-api-node",
+        "deploy-replica-api",
+        "deploy-primary-api",
+    )
+    reserve_jobs = (
+        "probe-reserve-node",
+        "migrate-reserve-node",
+        "deploy-replica-reserve",
+        "deploy-primary-reserve",
+    )
+
+    for job_name in api_jobs:
+        env = jobs[job_name]["steps"][-1]["env"]
+        assert "PATRONI_MVN_API_HOST" in env["API_NODE_HOST"]
+    for job_name in reserve_jobs:
+        env = jobs[job_name]["steps"][-1]["env"]
+        assert "PATRONI_ZAKUP_HOST" in env["API_NODE_HOST"]
+
+
 def test_patroni_deployment_completion_rejects_both_or_neither_branch():
     jobs = _workflow(".github/workflows/deploy-api-patroni.yml")["jobs"]
     complete = jobs["deployment-complete"]

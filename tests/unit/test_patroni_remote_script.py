@@ -378,6 +378,11 @@ def test_patroni_workflow_pins_every_remote_invocation_to_physical_node_key():
     assert workflow.count("API_NODE_SSH_HOST_KEY_SOURCE:") == 8
     assert workflow.count("mvn-api-ssh-host-key.pub") == 4
     assert workflow.count("zakup-ssh-host-key.pub") == 4
+    assert workflow.count("vars.PATRONI_MVN_API_HOST") == 4
+    assert workflow.count("vars.PATRONI_ZAKUP_HOST") == 4
+    assert "vars.API_NODE_HOST" not in workflow
+    assert "secrets.SSH_HOST_API" not in workflow
+    assert "vars.API_STANDBY_HOST" not in workflow
 
     expected_jobs = {
         "mvn-api-ssh-host-key.pub": (

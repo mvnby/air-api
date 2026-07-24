@@ -300,6 +300,7 @@ def run_manual(
     expected_release_sha256: str,
     backup_id: str = "",
     target_time: str = "",
+    expected_database_role: str = "",
 ) -> int:
     if os.geteuid() != 0:
         raise RuntimeError("root execution is required")
@@ -325,6 +326,11 @@ def run_manual(
         raise RuntimeError("manual PITR target time is invalid")
     if phase != "restore-drill" and (backup_id or target_time):
         raise RuntimeError(f"{phase} does not accept restore selectors")
+    if phase == "logical-restore-drill":
+        if expected_database_role not in {"primary", "standby"}:
+            raise RuntimeError("logical restore drill requires a reviewed database role")
+    elif expected_database_role:
+        raise RuntimeError(f"{phase} does not accept an expected database role")
 
     shared_lock = _open_lock()
     try:
@@ -356,6 +362,7 @@ def run_manual(
                     {
                         "DRILL_ROOT": str(LOGICAL_STATE_ROOT),
                         "RESTORE_DRILL_CLEANUP_SCRIPT": str(LOGICAL_CLEANUP),
+                        "EXPECTED_DATABASE_ROLE": expected_database_role,
                     }
                 )
                 command = [str(LOGICAL_DRILL)]
@@ -397,6 +404,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--expected-release-sha256", required=True)
     parser.add_argument("--backup-id", default="")
     parser.add_argument("--target-time", default="")
+    parser.add_argument(
+        "--expected-database-role",
+        choices=("primary", "standby"),
+        default="",
+    )
     return parser.parse_args(argv)
 
 
@@ -412,6 +424,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_release_sha256=args.expected_release_sha256,
             backup_id=args.backup_id,
             target_time=args.target_time,
+            expected_database_role=args.expected_database_role,
         )
     except (OSError, RuntimeError) as exc:
         print(f"manual PITR runner: {exc}", file=sys.stderr)

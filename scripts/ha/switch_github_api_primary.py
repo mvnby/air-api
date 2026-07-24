@@ -114,6 +114,11 @@ def build_routing(primary_name: str) -> tuple[str, Mapping[str, str]]:
     primary = HOSTS[primary_name]
     standby = HOSTS[opposite_host(primary_name)]
     variables = {
+        # Physical Patroni node identity never changes during a role switch.
+        # Monitoring workflows must not infer these values from the dynamic
+        # primary/standby routing variables below.
+        "PATRONI_MVN_API_HOST": HOSTS["mvn-api"].origin,
+        "PATRONI_ZAKUP_HOST": HOSTS["zakup"].origin,
         "API_PRIMARY_ORIGIN": primary.origin,
         "API_STANDBY_ORIGIN": standby.origin,
         "API_PROJECT_DIR": primary.project_dir,

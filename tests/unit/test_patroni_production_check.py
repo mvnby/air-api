@@ -482,9 +482,10 @@ def test_api_vps_health_workflow_targets_current_patroni_primary():
     setup = next(step for step in steps if step.get("name") == "Setup API SSH Key")
     check = next(step for step in steps if step.get("name") == "Run API VPS Health Check")
 
-    assert "API_STANDBY_HOST" in setup["env"]
-    assert '"${API_STANDBY_HOST}"' in setup["run"]
+    assert "PATRONI_MVN_API_HOST" in setup["env"]
+    assert "PATRONI_ZAKUP_HOST" in setup["env"]
+    assert '"${PATRONI_ZAKUP_HOST}"' in setup["run"]
     assert "API_DB_HA_MODE" in check["env"]
     assert "check_patroni_production.py --resolve-primary" in check["run"]
-    assert 'target_host="${API_STANDBY_HOST}"' in check["run"]
+    assert 'target_host="${PATRONI_ZAKUP_HOST}"' in check["run"]
     assert "API_DB_HA_MODE must be physical or patroni" in check["run"]
