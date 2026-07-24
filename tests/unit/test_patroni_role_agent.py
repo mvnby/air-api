@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.ha import patroni_role_agent
+from scripts.ha import pitr_operation_guard
 from scripts.ha.patroni_role_agent import (
     AgentConfig,
     app_service,
@@ -123,6 +124,27 @@ def test_app_service_follows_blue_green_slot(tmp_path):
 
 def test_app_service_override_supports_in_place_standby(tmp_path):
     assert app_service(_config(tmp_path, app_service_override="app")) == "app"
+
+
+def test_role_agent_preserves_standby_safe_pitr_operations(tmp_path, monkeypatch):
+    record_root = tmp_path / "operations"
+    record_root.mkdir()
+    calls = []
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "PITR_OPERATION_RECORD_ROOT",
+        record_root,
+    )
+
+    def cancel(project_dir, *, preserve_standby_safe=False):
+        calls.append((project_dir, preserve_standby_safe))
+        return []
+
+    monkeypatch.setattr(pitr_operation_guard, "cancel_project_operations", cancel)
+
+    config = _config(tmp_path)
+    assert patroni_role_agent._cancel_pitr_operations(config) == []
+    assert calls == [(str(tmp_path), True)]
 
 
 class _ComposeRuntime:
