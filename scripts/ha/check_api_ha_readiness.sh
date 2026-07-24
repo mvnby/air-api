@@ -27,6 +27,8 @@ API_NODE_PROJECT_DIR="${API_NODE_PROJECT_DIR:-${PRIMARY_PROJECT_DIR}}"
 RESERVE_NODE_PROJECT_DIR="${RESERVE_NODE_PROJECT_DIR:-${STANDBY_PROJECT_DIR}}"
 API_NODE_COMPOSE_FILE="${API_NODE_COMPOSE_FILE:-${PRIMARY_COMPOSE_FILE}}"
 RESERVE_NODE_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE:-${STANDBY_COMPOSE_FILE}}"
+API_NODE_ORIGIN="${API_NODE_ORIGIN:-185.250.45.54}"
+RESERVE_NODE_ORIGIN="${RESERVE_NODE_ORIGIN:-193.47.42.213}"
 CONFIGURED_PRIMARY_ORIGIN="${PRIMARY_ORIGIN}"
 CONFIGURED_STANDBY_ORIGIN="${STANDBY_ORIGIN}"
 
@@ -205,13 +207,35 @@ case "${API_DB_HA_MODE}" in
       log fail "could not resolve current Patroni primary"
       exit 1
     fi
-    if [[ "${patroni_primary_label}" == "reserve" ]]; then
-      swap="${PRIMARY_SSH}"; PRIMARY_SSH="${STANDBY_SSH}"; STANDBY_SSH="${swap}"
-      swap="${PRIMARY_PROJECT_DIR}"; PRIMARY_PROJECT_DIR="${STANDBY_PROJECT_DIR}"; STANDBY_PROJECT_DIR="${swap}"
-      swap="${PRIMARY_COMPOSE_FILE}"; PRIMARY_COMPOSE_FILE="${STANDBY_COMPOSE_FILE}"; STANDBY_COMPOSE_FILE="${swap}"
-      swap="${PRIMARY_ORIGIN}"; PRIMARY_ORIGIN="${STANDBY_ORIGIN}"; STANDBY_ORIGIN="${swap}"
-    elif [[ "${patroni_primary_label}" != "api" ]]; then
-      log fail "unexpected Patroni primary label: ${patroni_primary_label:-<empty>}"
+    case "${patroni_primary_label}" in
+      api)
+        PRIMARY_SSH="${API_NODE_SSH}"
+        PRIMARY_PROJECT_DIR="${API_NODE_PROJECT_DIR}"
+        PRIMARY_COMPOSE_FILE="${API_NODE_COMPOSE_FILE}"
+        PRIMARY_ORIGIN="${API_NODE_ORIGIN}"
+        STANDBY_SSH="${RESERVE_NODE_SSH}"
+        STANDBY_PROJECT_DIR="${RESERVE_NODE_PROJECT_DIR}"
+        STANDBY_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE}"
+        STANDBY_ORIGIN="${RESERVE_NODE_ORIGIN}"
+        ;;
+      reserve)
+        PRIMARY_SSH="${RESERVE_NODE_SSH}"
+        PRIMARY_PROJECT_DIR="${RESERVE_NODE_PROJECT_DIR}"
+        PRIMARY_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE}"
+        PRIMARY_ORIGIN="${RESERVE_NODE_ORIGIN}"
+        STANDBY_SSH="${API_NODE_SSH}"
+        STANDBY_PROJECT_DIR="${API_NODE_PROJECT_DIR}"
+        STANDBY_COMPOSE_FILE="${API_NODE_COMPOSE_FILE}"
+        STANDBY_ORIGIN="${API_NODE_ORIGIN}"
+        ;;
+      *)
+        log fail "unexpected Patroni primary label: ${patroni_primary_label:-<empty>}"
+        exit 1
+        ;;
+    esac
+    if [[ "${CONFIGURED_PRIMARY_ORIGIN}" != "${PRIMARY_ORIGIN}" ||
+          "${CONFIGURED_STANDBY_ORIGIN}" != "${STANDBY_ORIGIN}" ]]; then
+      log fail "configured API role origins disagree with the proven Patroni topology"
       exit 1
     fi
     ;;

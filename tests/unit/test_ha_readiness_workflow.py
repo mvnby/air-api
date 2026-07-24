@@ -2,6 +2,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -47,6 +48,10 @@ def test_ha_readiness_workflow_wires_core_and_soft_blocker_inputs():
     assert "PATRONI_ZAKUP_HOST" in audit_step["env"]
     assert 'API_NODE_PROJECT_DIR="/opt/air-api"' in audit_step["run"]
     assert 'RESERVE_NODE_PROJECT_DIR="/opt/mvn-reserve"' in audit_step["run"]
+    assert 'API_NODE_COMPOSE_FILE="docker-compose.patroni.yml"' in audit_step["run"]
+    assert 'RESERVE_NODE_COMPOSE_FILE="docker-compose.patroni.yml"' in audit_step["run"]
+    assert 'API_NODE_ORIGIN="${PATRONI_MVN_API_HOST}"' in audit_step["run"]
+    assert 'RESERVE_NODE_ORIGIN="${PATRONI_ZAKUP_HOST}"' in audit_step["run"]
     assert "PITR_WORKFLOW_IDENTITY_FILE" in audit_step["run"]
     assert "api-ha-readiness.log" in audit_step["run"]
     assert "strict:" in summary_step["run"]
@@ -65,6 +70,73 @@ def test_ha_readiness_resolves_patroni_primary_and_uses_role_aware_monitor():
     assert 'PITR_WORKFLOW_IDENTITY_FILE' in script
     assert 'API_DB_HA_MODE="${API_DB_HA_MODE:-physical}"' in script
     assert 'CONFIGURED_PRIMARY_ORIGIN="${PRIMARY_ORIGIN}"' in script
+    assert 'PRIMARY_SSH="${RESERVE_NODE_SSH}"' in script
+    assert 'PRIMARY_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE}"' in script
+    assert "configured API role origins disagree" in script
+
+
+@pytest.mark.parametrize(
+    ("primary_label", "configured_primary", "configured_standby", "expected_log"),
+    (
+        (
+            "api",
+            "1.1.1.1",
+            "2.2.2.2",
+            "primary=1.1.1.1 standby=2.2.2.2 primary_ssh=api-node standby_ssh=reserve-node",
+        ),
+        (
+            "reserve",
+            "2.2.2.2",
+            "1.1.1.1",
+            "primary=2.2.2.2 standby=1.1.1.1 primary_ssh=reserve-node standby_ssh=api-node",
+        ),
+    ),
+)
+def test_ha_readiness_maps_proven_patroni_role_from_physical_nodes(
+    tmp_path,
+    primary_label,
+    configured_primary,
+    configured_standby,
+    expected_log,
+):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python3"
+    fake_python.write_text(f"#!/bin/sh\nprintf '%s\\n' {primary_label}\n")
+    fake_python.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}:{env['PATH']}",
+            "API_DB_HA_MODE": "patroni",
+            "API_NODE_SSH": "api-node",
+            "RESERVE_NODE_SSH": "reserve-node",
+            "API_NODE_PROJECT_DIR": "/opt/air-api",
+            "RESERVE_NODE_PROJECT_DIR": "/opt/mvn-reserve",
+            "API_NODE_COMPOSE_FILE": "docker-compose.patroni.yml",
+            "RESERVE_NODE_COMPOSE_FILE": "docker-compose.patroni.yml",
+            "API_NODE_ORIGIN": "1.1.1.1",
+            "RESERVE_NODE_ORIGIN": "2.2.2.2",
+            "PRIMARY_ORIGIN": configured_primary,
+            "STANDBY_ORIGIN": configured_standby,
+            "CHECK_ACTIVE_PASSIVE": "false",
+            "CHECK_POSTGRES_REPLICATION": "false",
+            "CHECK_MEDIA_CDN_DB": "false",
+            "CHECK_POSTGRES_PITR": "false",
+            "CHECK_CLOUDFLARE_LB": "false",
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts/ha/check_api_ha_readiness.sh")],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert expected_log in result.stdout
 
 
 def test_ha_invariant_workflow_skips_public_cloudflare_challenge_from_runner():
