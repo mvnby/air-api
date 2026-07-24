@@ -49,6 +49,7 @@ except ModuleNotFoundError:
 
 
 OPERATION_GUARD_PATH = Path("/usr/local/sbin/mvn_postgres_pitr_operation_guard.py")
+PITR_OPERATION_RECORD_ROOT = Path("/run/mvn-postgres-pitr-operations")
 COMMAND_TIMEOUT_SECONDS = 60
 EXPECTED_LOCAL_PATRONI_URL = "http://127.0.0.1:8008/patroni"
 EXPECTED_PATRONI_SCOPE = "mvn-postgres"
@@ -300,7 +301,7 @@ def _stop_service_verified(config: AgentConfig, service: str) -> None:
 
 
 def _cancel_pitr_operations(config: AgentConfig) -> list[str]:
-    if not Path("/run/mvn-postgres-pitr-operations").exists():
+    if not PITR_OPERATION_RECORD_ROOT.exists():
         return []
     try:
         from scripts.ha.pitr_operation_guard import cancel_project_operations
@@ -317,7 +318,13 @@ def _cancel_pitr_operations(config: AgentConfig) -> list[str]:
         sys.modules[specification.name] = module
         specification.loader.exec_module(module)
         cancel_project_operations = module.cancel_project_operations
-    return cancel_project_operations(str(config.project_dir))
+    # A logical restore drill only reads the managed database identity and
+    # restores into an isolated temporary PostgreSQL container. It is safe to
+    # keep running on a standby. Every mutating PITR phase remains fenced.
+    return cancel_project_operations(
+        str(config.project_dir),
+        preserve_standby_safe=True,
+    )
 
 
 def _systemd_units_match(config: AgentConfig, role: str) -> bool:
