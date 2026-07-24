@@ -108,7 +108,7 @@ jobs:
       - name: Probe API node Patroni role
         id: probe
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_HOST: ${{ vars.PATRONI_MVN_API_HOST || '185.250.45.54' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/mvn-api-ssh-host-key.pub
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
@@ -132,7 +132,7 @@ jobs:
       - name: Probe reserve node Patroni role
         id: probe
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_HOST: ${{ vars.PATRONI_ZAKUP_HOST || '193.47.42.213' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/zakup-ssh-host-key.pub
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
@@ -181,10 +181,10 @@ jobs:
 
       - name: Run migrations on API primary
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_HOST: ${{ vars.PATRONI_MVN_API_HOST || '185.250.45.54' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/mvn-api-ssh-host-key.pub
-          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          API_NODE_PROJECT_DIR: /opt/air-api
           API_NODE_COMPOSE_SOURCE: deploy/ha/mvn-api/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: host_nginx
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
@@ -211,10 +211,10 @@ jobs:
 
       - name: Run migrations on reserve primary
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_HOST: ${{ vars.PATRONI_ZAKUP_HOST || '193.47.42.213' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/zakup-ssh-host-key.pub
-          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/mvn-reserve' }}
+          API_NODE_PROJECT_DIR: /opt/mvn-reserve
           API_NODE_COMPOSE_SOURCE: deploy/ha/zakup/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: container_nginx
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
@@ -241,10 +241,10 @@ jobs:
 
       - name: Deploy fenced reserve replica
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_HOST: ${{ vars.PATRONI_ZAKUP_HOST || '193.47.42.213' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/zakup-ssh-host-key.pub
-          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/mvn-reserve' }}
+          API_NODE_PROJECT_DIR: /opt/mvn-reserve
           API_NODE_COMPOSE_SOURCE: deploy/ha/zakup/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: container_nginx
           API_EXPECTED_PATRONI_ROLE: standby
@@ -272,10 +272,10 @@ jobs:
 
       - name: Deploy fenced API replica
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_HOST: ${{ vars.PATRONI_MVN_API_HOST || '185.250.45.54' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/mvn-api-ssh-host-key.pub
-          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          API_NODE_PROJECT_DIR: /opt/air-api
           API_NODE_COMPOSE_SOURCE: deploy/ha/mvn-api/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: host_nginx
           API_EXPECTED_PATRONI_ROLE: standby
@@ -304,10 +304,10 @@ jobs:
 
       - name: Blue-green deploy API primary
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || secrets.SSH_HOST_API }}
+          API_NODE_HOST: ${{ vars.PATRONI_MVN_API_HOST || '185.250.45.54' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || secrets.SSH_USER_API || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/mvn-api-ssh-host-key.pub
-          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/air-api' }}
+          API_NODE_PROJECT_DIR: /opt/air-api
           API_NODE_COMPOSE_SOURCE: deploy/ha/mvn-api/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: host_nginx
           API_EXPECTED_PATRONI_ROLE: primary
@@ -336,10 +336,10 @@ jobs:
 
       - name: Blue-green deploy reserve primary
         env:
-          API_NODE_HOST: ${{ vars.API_NODE_HOST || vars.API_STANDBY_HOST }}
+          API_NODE_HOST: ${{ vars.PATRONI_ZAKUP_HOST || '193.47.42.213' }}
           API_NODE_USER: ${{ vars.API_NODE_USER || vars.API_STANDBY_USER || 'root' }}
           API_NODE_SSH_HOST_KEY_SOURCE: deploy/ha/security/zakup-ssh-host-key.pub
-          API_NODE_PROJECT_DIR: ${{ vars.API_NODE_PROJECT_DIR || '/opt/mvn-reserve' }}
+          API_NODE_PROJECT_DIR: /opt/mvn-reserve
           API_NODE_COMPOSE_SOURCE: deploy/ha/zakup/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: container_nginx
           API_EXPECTED_PATRONI_ROLE: primary

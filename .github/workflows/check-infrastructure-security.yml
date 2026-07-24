@@ -22,8 +22,8 @@ jobs:
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
-          API_HOST: ${{ secrets.SSH_HOST_API }}
-          RESERVE_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          API_HOST: ${{ vars.PATRONI_MVN_API_HOST || '185.250.45.54' }}
+          RESERVE_HOST: ${{ vars.PATRONI_ZAKUP_HOST || '193.47.42.213' }}
           WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
         run: |
           set -euo pipefail
@@ -56,9 +56,9 @@ jobs:
       - name: Audit host hardening and private listeners
         env:
           API_DB_HA_MODE: ${{ vars.API_DB_HA_MODE || 'physical' }}
-          API_HOST: ${{ secrets.SSH_HOST_API }}
+          API_HOST: ${{ vars.PATRONI_MVN_API_HOST || '185.250.45.54' }}
           API_USER: ${{ secrets.SSH_USER_API }}
-          RESERVE_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          RESERVE_HOST: ${{ vars.PATRONI_ZAKUP_HOST || '193.47.42.213' }}
           RESERVE_USER: ${{ vars.API_STANDBY_USER || secrets.SSH_USER_API }}
           WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
           WEB_USER: ${{ vars.INFRA_SECURITY_WEB_USER || 'root' }}
@@ -103,8 +103,8 @@ jobs:
 
       - name: Verify sensitive ports are closed publicly
         env:
-          API_HOST: ${{ secrets.SSH_HOST_API }}
-          RESERVE_HOST: ${{ vars.API_STANDBY_HOST || '193.47.42.213' }}
+          API_HOST: ${{ vars.PATRONI_MVN_API_HOST || '185.250.45.54' }}
+          RESERVE_HOST: ${{ vars.PATRONI_ZAKUP_HOST || '193.47.42.213' }}
           WEB_HOST: ${{ secrets.SSH_HOST_WEB }}
         run: |
           set -euo pipefail

@@ -6,6 +6,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-}"
 PITR_OPERATION_ID="${PITR_OPERATION_ID:-}"
 DRILL_ROOT="${DRILL_ROOT:-}"
 CLEANUP_SCRIPT="${RESTORE_DRILL_CLEANUP_SCRIPT:-}"
+EXPECTED_DATABASE_ROLE="${EXPECTED_DATABASE_ROLE:-}"
 
 APP_SERVICE="app"
 DB_SERVICE="db"
@@ -51,6 +52,11 @@ esac
   fail "DRILL_ROOT must be the reviewed root-owned state directory"
 [[ "${CLEANUP_SCRIPT}" == "${EXPECTED_CLEANUP_SCRIPT}" ]] ||
   fail "restore-drill cleanup helper path is not reviewed"
+case "${EXPECTED_DATABASE_ROLE}" in
+  primary) expected_in_recovery="f" ;;
+  standby) expected_in_recovery="t" ;;
+  *) fail "EXPECTED_DATABASE_ROLE must be primary or standby" ;;
+esac
 [[ -x "${CLEANUP_SCRIPT}" && ! -L "${CLEANUP_SCRIPT}" ]] ||
   fail "installed restore-drill cleanup helper is unavailable or unsafe"
 [[ -x "${RUNTIME_CHECK_HELPER}" && ! -L "${RUNTIME_CHECK_HELPER}" ]] ||
@@ -80,7 +86,8 @@ database_state="$(
 )" || fail "could not prove live PostgreSQL role and size"
 [[ "${database_state}" != *$'\n'* ]] || fail "live PostgreSQL state is ambiguous"
 IFS='|' read -r in_recovery live_database_bytes unexpected_database_state <<<"${database_state}"
-[[ "${in_recovery}" == "f" ]] || fail "logical restore drill must run on the writable primary"
+[[ "${in_recovery}" == "${expected_in_recovery}" ]] ||
+  fail "live PostgreSQL role does not match the topology-proven restore target"
 [[ "${live_database_bytes}" =~ ^[1-9][0-9]*$ && -z "${unexpected_database_state}" ]] ||
   fail "live PostgreSQL size attestation is invalid"
 
