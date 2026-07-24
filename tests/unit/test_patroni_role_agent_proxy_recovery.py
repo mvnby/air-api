@@ -22,6 +22,9 @@ def _safe_host_contracts(monkeypatch):
     monkeypatch.setattr(
         patroni_role_agent, "_cancel_pitr_operations", lambda _config: []
     )
+    monkeypatch.setattr(
+        patroni_role_agent, "_wait_scheduler_running", lambda _config: None
+    )
 
 
 def _config(tmp_path: Path) -> AgentConfig:
@@ -174,3 +177,89 @@ def test_standby_recreate_refreshes_proxy_before_committing_fenced_state(
     )
     assert runtime.services == {"app-blue", "api-proxy"}
     assert config.state_file.read_text(encoding="utf-8") == "standby\n"
+
+
+def test_primary_repairs_proxy_slot_drift_and_fences_extra_app(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path)
+    config.active_slot_file.write_text("green\n", encoding="utf-8")
+    config.app_role_env.write_text(
+        patroni_role_agent.role_env("primary", bot_process=False),
+        encoding="utf-8",
+    )
+    config.bot_role_env.write_text(
+        patroni_role_agent.role_env(
+            "primary",
+            bot_process=True,
+            bot_enabled=False,
+        ),
+        encoding="utf-8",
+    )
+    config.state_file.write_text("primary\n", encoding="utf-8")
+    upstream = tmp_path / "api-proxy" / "upstream.conf"
+    upstream.parent.mkdir()
+    upstream.write_text("proxy_pass http://app-blue:8000;\n", encoding="utf-8")
+    runtime = _Runtime("app-blue", "app-green", "api-proxy")
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_require_fresh_primary_or_fence",
+        lambda _config, _boundary: None,
+    )
+
+    def wait_scheduler(_config):
+        assert "app-blue" not in runtime.services
+        assert upstream.read_text(encoding="utf-8") == (
+            "proxy_pass http://app-green:8000;\n"
+        )
+
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_wait_scheduler_running",
+        wait_scheduler,
+    )
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_wait_ready",
+        lambda _config: None,
+    )
+
+    assert reconcile(config, "primary") is True
+    assert ("restart", "api-proxy") in runtime.calls
+    assert ("rm", "--stop", "--force", "app-blue") in runtime.calls
+    assert runtime.services == {"app-green", "api-proxy"}
+
+
+def test_primary_defers_proxy_drift_repair_while_deploy_lock_is_busy(
+    tmp_path, monkeypatch
+):
+    config = _config(tmp_path)
+    config.active_slot_file.write_text("green\n", encoding="utf-8")
+    config.app_role_env.write_text(
+        patroni_role_agent.role_env("primary", bot_process=False),
+        encoding="utf-8",
+    )
+    config.bot_role_env.write_text(
+        patroni_role_agent.role_env(
+            "primary",
+            bot_process=True,
+            bot_enabled=False,
+        ),
+        encoding="utf-8",
+    )
+    config.state_file.write_text("primary\n", encoding="utf-8")
+    upstream = tmp_path / "api-proxy" / "upstream.conf"
+    upstream.parent.mkdir()
+    upstream.write_text("proxy_pass http://app-blue:8000;\n", encoding="utf-8")
+    runtime = _Runtime("app-blue", "app-green", "api-proxy")
+    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
+
+    with config.deploy_lock.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert reconcile(config, "primary") is False
+
+    assert upstream.read_text(encoding="utf-8") == (
+        "proxy_pass http://app-blue:8000;\n"
+    )
+    assert runtime.services == {"app-blue", "app-green", "api-proxy"}

@@ -11,10 +11,13 @@ from __future__ import annotations
 import argparse
 import fcntl
 import importlib.util
+import json
 import os
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -187,6 +190,74 @@ def _refresh_container_proxy_dns(
         return False
     _run_compose(config, "restart", CONTAINER_PROXY_SERVICE)
     return True
+
+
+def _proxy_upstream_path(config: AgentConfig) -> Path:
+    return config.project_dir / "api-proxy" / "upstream.conf"
+
+
+def _expected_proxy_upstream(service: str) -> str:
+    if service not in APP_SERVICE_NAMES:
+        raise ValueError(f"unsupported API app service: {service}")
+    return f"proxy_pass http://{service}:8000;\n"
+
+
+def _container_proxy_upstream_matches(
+    config: AgentConfig,
+    service: str,
+    *,
+    running_services: set[str],
+) -> bool:
+    if CONTAINER_PROXY_SERVICE not in running_services:
+        return True
+    try:
+        current = _proxy_upstream_path(config).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+    return current == _expected_proxy_upstream(service)
+
+
+def _reconcile_container_proxy_upstream(
+    config: AgentConfig,
+    service: str,
+    *,
+    running_services: set[str],
+) -> bool:
+    if _container_proxy_upstream_matches(
+        config,
+        service,
+        running_services=running_services,
+    ):
+        return False
+    _atomic_write(
+        _proxy_upstream_path(config),
+        _expected_proxy_upstream(service),
+        mode=0o644,
+    )
+    return True
+
+
+def _wait_scheduler_running(config: AgentConfig) -> None:
+    for _ in range(config.ready_attempts):
+        try:
+            with urllib.request.urlopen(config.ready_url, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            runtime = payload.get("scheduler_runtime")
+            if (
+                response.status == 200
+                and payload.get("api") == "ready"
+                and payload.get("database_writable") is True
+                and isinstance(runtime, dict)
+                and runtime.get("expected") is True
+                and runtime.get("status") == "running"
+            ):
+                return
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+        time.sleep(2)
+    raise RuntimeError(
+        f"primary scheduler did not acquire runtime ownership: {config.ready_url}"
+    )
 
 
 def _stop_service_verified(config: AgentConfig, service: str) -> None:
@@ -397,6 +468,14 @@ def reconcile(config: AgentConfig, role: str) -> bool:
     service = app_service(config)
     running = _running_services(config)
     app_running = service in running
+    extra_running_apps = sorted(
+        name for name in APP_SERVICE_NAMES if name != service and name in running
+    )
+    proxy_upstream_drift = not _container_proxy_upstream_matches(
+        config,
+        service,
+        running_services=running,
+    )
     bot_running = "bot" in running
     bot_expected = False
     # On demotion, Docker singleton fencing must happen before any fallible or
@@ -417,6 +496,10 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         reasons.append("bot_env")
     if not app_running:
         reasons.append("app_not_running")
+    if role == "primary" and extra_running_apps:
+        reasons.append("extra_app_running")
+    if role == "primary" and proxy_upstream_drift:
+        reasons.append("proxy_upstream_drift")
     if bot_running:
         reasons.append("legacy_bot_running")
     if not systemd_matches:
@@ -479,6 +562,8 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         or bot_env_changed
         or not app_running
         or bot_running != bot_expected
+        or (role == "primary" and bool(extra_running_apps))
+        or (role == "primary" and proxy_upstream_drift)
     )
     if not needs_runtime_reconcile and systemd_matches:
         if actions:
@@ -515,8 +600,12 @@ def reconcile(config: AgentConfig, role: str) -> bool:
 
         # Re-read after acquiring the lock: a concurrent deploy may have changed
         # the concrete containers while fail-safe pre-lock fencing was running.
+        service = app_service(config)
         running = _running_services(config)
         app_running = service in running
+        extra_running_apps = sorted(
+            name for name in APP_SERVICE_NAMES if name != service and name in running
+        )
         bot_running = "bot" in running
 
         if bot_running:
@@ -558,14 +647,40 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                 _require_fresh_primary_or_fence(config, "app_activation")
                 _start_service(config, service, recreate=app_env_changed)
                 actions.append("recreate_app" if app_env_changed else "start_app")
+                running = _running_services(config)
+            proxy_upstream_changed = not _container_proxy_upstream_matches(
+                config,
+                service,
+                running_services=running,
+            )
+            if proxy_upstream_changed:
+                _require_fresh_primary_or_fence(config, "proxy_convergence")
+                _reconcile_container_proxy_upstream(
+                    config,
+                    service,
+                    running_services=running,
+                )
+                actions.append("write_proxy_upstream")
+            if app_needs_start or proxy_upstream_changed:
                 if _refresh_container_proxy_dns(
                     config,
                     running_services=running,
                 ):
                     actions.append("refresh_container_proxy_dns")
-            if app_needs_start:
+            if app_needs_start or proxy_upstream_changed:
                 _wait_ready(config)
                 actions.append("wait_ready")
+            if extra_running_apps:
+                _require_fresh_primary_or_fence(config, "extra_app_fence")
+                for running_app in extra_running_apps:
+                    _stop_service_verified(config, running_app)
+                    actions.append("stop_extra_app")
+            if (
+                service in {"app-blue", "app-green"}
+                and (app_needs_start or proxy_upstream_changed or extra_running_apps)
+            ):
+                _wait_scheduler_running(config)
+                actions.append("wait_scheduler_running")
             if not systemd_matches:
                 if maintenance_transaction is not None:
                     _reconcile_primary_systemd_units(config, "standby")
@@ -591,7 +706,18 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                 _reconcile_primary_systemd_units(config, "standby")
                 actions.append("stop_pitr_units_for_final_maintenance")
             final_running = _running_services(config)
-            if service not in final_running or "bot" in final_running:
+            if (
+                service not in final_running
+                or "bot" in final_running
+                or any(
+                    name in final_running for name in APP_SERVICE_NAMES if name != service
+                )
+                or not _container_proxy_upstream_matches(
+                    config,
+                    service,
+                    running_services=final_running,
+                )
+            ):
                 raise RuntimeError("primary runtime activation postcondition failed")
             expected_pitr_role = (
                 "standby"

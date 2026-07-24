@@ -492,6 +492,30 @@ def _running_services(runner: SshRunner, node: NodeConfig) -> set[str]:
     return set(runner.run(node, command).stdout.split())
 
 
+def _optional_runtime_file(
+    runner: SshRunner,
+    node: NodeConfig,
+    relative_path: str,
+) -> str:
+    path = f"{node.project_dir}/{relative_path}"
+    command = (
+        f"if [ -f {shlex.quote(path)} ]; then cat {shlex.quote(path)}; fi"
+    )
+    return runner.run(node, command).stdout.strip()
+
+
+def _active_api_slot(runner: SshRunner, node: NodeConfig) -> str:
+    return _optional_runtime_file(runner, node, ".active-api-slot").lower()
+
+
+def _proxy_upstream(runner: SshRunner, node: NodeConfig) -> str:
+    return _optional_runtime_file(
+        runner,
+        node,
+        "api-proxy/upstream.conf",
+    )
+
+
 def _role_env(runner: SshRunner, node: NodeConfig, filename: str) -> dict[str, str]:
     path = f"{node.project_dir}/{filename}"
     content = runner.run(node, f"cat {shlex.quote(path)}").stdout
@@ -569,6 +593,34 @@ def _check_runtime(
         app_services = services.intersection({"app", "app-blue", "app-green"})
         if not app_services:
             report.fail(f"{node.label}: no API app service is running")
+        active_slot = _active_api_slot(runner, node)
+        if active_slot:
+            if active_slot not in {"blue", "green"}:
+                report.fail(
+                    f"{node.label}: active API slot is invalid: {active_slot!r}"
+                )
+            else:
+                expected_service = f"app-{active_slot}"
+                if app_services != {expected_service}:
+                    report.fail(
+                        f"{node.label}: active slot={active_slot} requires only "
+                        f"{expected_service}, running={sorted(app_services)}"
+                    )
+                if "api-proxy" in services:
+                    expected_upstream = (
+                        f"proxy_pass http://{expected_service}:8000;"
+                    )
+                    actual_upstream = _proxy_upstream(runner, node)
+                    if actual_upstream != expected_upstream:
+                        report.fail(
+                            f"{node.label}: active slot={active_slot} but proxy "
+                            f"upstream={actual_upstream!r}, expected={expected_upstream!r}"
+                        )
+        elif len(app_services) > 1:
+            report.fail(
+                f"{node.label}: multiple API app services are running without "
+                f"an active slot: {sorted(app_services)}"
+            )
         bot_running = "bot" in services
         if bot_running:
             report.fail(
