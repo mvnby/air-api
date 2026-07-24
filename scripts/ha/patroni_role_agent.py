@@ -164,11 +164,59 @@ def _run_compose(
 
 
 def _running_services(config: AgentConfig) -> set[str]:
-    result = _run_compose(config, "ps", "--status", "running", "--services", check=False)
+    result = _run_compose(
+        config,
+        "ps",
+        "--status",
+        "running",
+        "--format",
+        "json",
+        check=False,
+    )
     if result.returncode != 0:
         error = (result.stderr or result.stdout or "docker compose ps failed").strip()
         raise RuntimeError(error)
-    return set(result.stdout.splitlines())
+    payload = result.stdout.strip()
+    if not payload:
+        return set()
+    try:
+        parsed = json.loads(payload)
+        records = parsed if isinstance(parsed, list) else [parsed]
+    except json.JSONDecodeError:
+        try:
+            records = [json.loads(line) for line in payload.splitlines() if line.strip()]
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("docker compose ps returned invalid JSON") from exc
+
+    services: set[str] = set()
+    for record in records:
+        if not isinstance(record, dict):
+            raise RuntimeError("docker compose ps returned an invalid record")
+        service = record.get("Service")
+        labels = record.get("Labels", "")
+        if not isinstance(service, str) or not service:
+            raise RuntimeError("docker compose ps record is missing its service")
+        if isinstance(labels, dict):
+            oneoff = str(labels.get("com.docker.compose.oneoff", "")).lower()
+        elif isinstance(labels, str):
+            oneoff = next(
+                (
+                    value.lower()
+                    for label in labels.split(",")
+                    if "=" in label
+                    for key, value in [label.split("=", 1)]
+                    if key == "com.docker.compose.oneoff"
+                ),
+                "",
+            )
+        else:
+            raise RuntimeError("docker compose ps record has invalid labels")
+        if oneoff not in {"true", "false"}:
+            raise RuntimeError("docker compose ps record is missing its one-off identity")
+        if oneoff == "true":
+            continue
+        services.add(service)
+    return services
 
 
 def _start_service(config: AgentConfig, service: str, *, recreate: bool) -> None:
