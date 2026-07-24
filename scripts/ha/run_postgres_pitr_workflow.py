@@ -32,6 +32,7 @@ try:
     )
     from scripts.ha.pitr_pinned_ssh import (
         PATRONI_NODES,
+        PatroniNode,
         PinnedSshContext,
         create_context,
         ssh_args,
@@ -40,6 +41,10 @@ try:
     )
     from scripts.ha.pitr_remote_execution import build_host_release_bundle
     from scripts.ha.patroni_maintenance_window import REMOTE_PROBE, detect_window
+    from scripts.ha.calculate_logical_restore_resources import (
+        ResourceSizingError,
+        calculate_resources,
+    )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
     from pitr_cluster_topology import (  # type: ignore[no-redef]
         ClusterTopology,
@@ -47,6 +52,7 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
     )
     from pitr_pinned_ssh import (  # type: ignore[no-redef]
         PATRONI_NODES,
+        PatroniNode,
         PinnedSshContext,
         create_context,
         ssh_args,
@@ -58,6 +64,10 @@ except ModuleNotFoundError:  # Direct execution from scripts/ha.
         REMOTE_PROBE,
         detect_window,
     )
+    from calculate_logical_restore_resources import (  # type: ignore[no-redef]
+        ResourceSizingError,
+        calculate_resources,
+    )
 
 
 Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
@@ -65,6 +75,7 @@ MANUAL_RUNNER = "/usr/local/sbin/mvn-postgres-pitr-manual-runner"
 MAX_IDENTITY_BYTES = 65536
 BACKUP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 TARGET_TIME_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+LOGICAL_RESTORE_PREFERRED_ALIAS = "mvn-api"
 
 
 class WorkflowError(RuntimeError):
@@ -155,7 +166,8 @@ def _validate_target_time(value: str) -> None:
 def _remote_command(
     *,
     phase: str,
-    topology: ClusterTopology,
+    target: PatroniNode,
+    expected_database_role: str,
     operation_id: str,
     expected_release_sha256: str,
     backup_id: str,
@@ -172,9 +184,9 @@ def _remote_command(
         "--phase",
         phase,
         "--project-dir",
-        topology.primary.project_dir,
+        target.project_dir,
         "--compose-file",
-        topology.primary.compose_file,
+        target.compose_file,
         "--operation-id",
         operation_id,
         "--expected-release-sha256",
@@ -188,7 +200,13 @@ def _remote_command(
         if target_time:
             _validate_target_time(target_time)
             command.extend(["--target-time", target_time])
-    elif backup_id or target_time:
+    elif phase == "logical-restore-drill":
+        if expected_database_role not in {"primary", "standby"}:
+            raise WorkflowError("logical restore target has an invalid database role")
+        command.extend(["--expected-database-role", expected_database_role])
+    elif expected_database_role:
+        raise WorkflowError("database role is valid only for logical-restore-drill")
+    if phase != "restore-drill" and (backup_id or target_time):
         raise WorkflowError("backup ID and target time are valid only for restore-drill")
     return "exec " + shlex.join(command)
 
@@ -210,15 +228,109 @@ def _run_checked(
     return result.stdout
 
 
-def _expected_release_sha256(topology: ClusterTopology) -> str:
+def _expected_release_sha256(target: PatroniNode) -> str:
     try:
-        bundle = json.loads(build_host_release_bundle(topology.primary))
+        bundle = json.loads(build_host_release_bundle(target))
     except (TypeError, ValueError) as exc:
         raise WorkflowError("current PITR release bundle is invalid") from exc
     digest = bundle.get("release_sha256") if isinstance(bundle, dict) else None
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise WorkflowError("current PITR release digest is invalid")
     return digest
+
+
+def _logical_restore_capacity(
+    *,
+    node: PatroniNode,
+    context: PinnedSshContext,
+    runner: Runner,
+) -> tuple[int, int]:
+    compose = shlex.join(["docker", "compose", "-f", node.compose_file])
+    database_query = (
+        'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" '
+        '-d "${POSTGRES_DB:-air_conditioners}" -At '
+        '-qc "SELECT pg_database_size(current_database())"'
+    )
+    command = (
+        f"cd {shlex.quote(node.project_dir)} && "
+        f"live_database_bytes=\"$({compose} exec -T db sh -lc "
+        f"{shlex.quote(database_query)})\" && "
+        "host_total_bytes=\"$(docker info --format '{{.MemTotal}}')\" && "
+        "host_available_kib=\"$(awk '$1 == \"MemAvailable:\" {print $2}' "
+        "/proc/meminfo)\" && "
+        "printf '%s\\t%s\\t%s\\n' \"${live_database_bytes}\" "
+        "\"${host_total_bytes}\" \"${host_available_kib}\""
+    )
+    result = runner([*ssh_args(node, context), command], None)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "capacity probe failed").strip()
+        raise WorkflowError(f"{node.alias}: {detail}")
+    fields = result.stdout.strip().split("\t")
+    if len(fields) != 3 or any(not value.isdigit() for value in fields):
+        raise WorkflowError(f"{node.alias}: logical restore capacity probe is invalid")
+    live_database_bytes, host_total_bytes, host_available_kib = map(int, fields)
+    if min(live_database_bytes, host_total_bytes, host_available_kib) <= 0:
+        raise WorkflowError(f"{node.alias}: logical restore capacity probe is invalid")
+    try:
+        resources = calculate_resources(
+            # The final drill recalculates this with the expanded dump size.
+            # Live DB size is the best fail-closed pre-download estimate.
+            sql_bytes=live_database_bytes,
+            live_database_bytes=live_database_bytes,
+            host_total_bytes=host_total_bytes,
+        )
+    except ResourceSizingError as exc:
+        raise WorkflowError(f"{node.alias}: {exc}") from exc
+    return host_available_kib * 1024, resources.required_available_bytes
+
+
+def _select_operation_target(
+    *,
+    phase: str,
+    topology: ClusterTopology,
+    context: PinnedSshContext,
+    runner: Runner,
+) -> tuple[PatroniNode, str]:
+    if phase != "logical-restore-drill":
+        return topology.primary, ""
+
+    nodes_by_alias = {node.alias: node for node in PATRONI_NODES}
+    preferred = nodes_by_alias[LOGICAL_RESTORE_PREFERRED_ALIAS]
+    candidates = [
+        preferred,
+        *(
+            node
+            for node in PATRONI_NODES
+            if node.alias != LOGICAL_RESTORE_PREFERRED_ALIAS
+        ),
+    ]
+
+    failures: list[str] = []
+    for node in candidates:
+        role = "primary" if node.alias == topology.primary.alias else "standby"
+        try:
+            available_bytes, required_bytes = _logical_restore_capacity(
+                node=node,
+                context=context,
+                runner=runner,
+            )
+        except WorkflowError as exc:
+            failures.append(str(exc))
+            continue
+        print(
+            f"[pitr-workflow][capacity] node={node.alias} role={role} "
+            f"available_bytes={available_bytes} required_bytes={required_bytes}"
+        )
+        if available_bytes >= required_bytes:
+            return node, role
+        failures.append(
+            f"{node.alias}: available_bytes={available_bytes} "
+            f"required_bytes={required_bytes}"
+        )
+    raise WorkflowError(
+        "no reviewed Patroni node has enough available memory for the logical "
+        f"restore preflight ({'; '.join(failures)})"
+    )
 
 
 def _same_topology(before: ClusterTopology, after: ClusterTopology) -> bool:
@@ -288,11 +400,18 @@ def execute(
                 "official Patroni maintenance is active; this manual drill was not skipped"
             )
         before = discover_cluster_topology(context=context, runner=actual_runner)
-        operation_id = secrets.token_hex(16)
-        expected_release_sha256 = _expected_release_sha256(before)
-        command = _remote_command(
+        target, expected_database_role = _select_operation_target(
             phase=phase,
             topology=before,
+            context=context,
+            runner=actual_runner,
+        )
+        operation_id = secrets.token_hex(16)
+        expected_release_sha256 = _expected_release_sha256(target)
+        command = _remote_command(
+            phase=phase,
+            target=target,
+            expected_database_role=expected_database_role,
             operation_id=operation_id,
             expected_release_sha256=expected_release_sha256,
             backup_id=backup_id,
@@ -300,12 +419,13 @@ def execute(
         )
         print(
             f"[pitr-workflow][info] selected_primary={before.primary.alias} "
+            f"operation_target={target.alias} "
             f"system_identifier={before.system_identifier} timeline={before.timeline}"
         )
         operation_error: BaseException | None = None
         try:
             _run_checked(
-                [*ssh_args(before.primary, context), command],
+                [*ssh_args(target, context), command],
                 runner=actual_runner,
             )
         except BaseException as exc:

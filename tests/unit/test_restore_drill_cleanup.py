@@ -104,7 +104,8 @@ def test_logical_drill_bounds_download_expansion_and_attests_runtime():
 
     assert '--pitr-env-policy configured' in text
     assert 'SELECT pg_is_in_recovery()' in text
-    assert '[[ "${in_recovery}" == "f" ]]' in text
+    assert 'EXPECTED_DATABASE_ROLE must be primary or standby' in text
+    assert '[[ "${in_recovery}" == "${expected_in_recovery}" ]]' in text
     assert 'MAX_RESTORED_SQL_BYTES="8589934592"' in text
     assert 'os.statvfs' in text
     assert 'total * 2 + reserve > available' in text

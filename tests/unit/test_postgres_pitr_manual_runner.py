@@ -149,6 +149,7 @@ def test_logical_drill_has_installed_allowlist_and_no_runtime_overrides(
         compose_file="docker-compose.patroni.yml",
         operation_id="b" * 32,
         expected_release_sha256="f" * 64,
+        expected_database_role="standby",
     )
 
     assert result == 17
@@ -160,10 +161,26 @@ def test_logical_drill_has_installed_allowlist_and_no_runtime_overrides(
     environment = kwargs["environment"]
     assert environment["DRILL_ROOT"] == str(manual.LOGICAL_STATE_ROOT)
     assert environment["RESTORE_DRILL_CLEANUP_SCRIPT"] == str(manual.LOGICAL_CLEANUP)
+    assert environment["EXPECTED_DATABASE_ROLE"] == "standby"
     assert "POSTGRES_IMAGE" not in environment
     assert "KEEP_DRILL_FILES" not in environment
     assert "APP_SERVICE" not in environment
     assert "BACKUP_ID" not in environment
+
+
+def test_logical_drill_rejects_missing_database_role_before_lock(monkeypatch, tmp_path):
+    project, lock_paths, _, _ = _run_setup(monkeypatch, tmp_path)
+
+    with pytest.raises(RuntimeError, match="requires a reviewed database role"):
+        manual.run_manual(
+            phase="logical-restore-drill",
+            project_dir=str(project),
+            compose_file="docker-compose.patroni.yml",
+            operation_id="b" * 32,
+            expected_release_sha256="f" * 64,
+        )
+
+    assert lock_paths == []
 
 
 def test_nonrestore_phases_reject_restore_selectors_before_lock(monkeypatch, tmp_path):

@@ -45,7 +45,8 @@ def _topology(*, primary_index: int = 0, timeline: int = 9) -> ClusterTopology:
 def test_remote_command_uses_only_the_installed_manual_runner():
     command = workflow_runner._remote_command(
         phase="restore-drill",
-        topology=_topology(primary_index=1),
+        target=_topology(primary_index=1).primary,
+        expected_database_role="",
         operation_id="a" * 32,
         expected_release_sha256="f" * 64,
         backup_id="basebackup-20260714",
@@ -68,7 +69,8 @@ def test_non_restore_phases_reject_historical_restore_overrides():
     with pytest.raises(workflow_runner.WorkflowError, match="valid only"):
         workflow_runner._remote_command(
             phase="verify",
-            topology=_topology(),
+            target=_topology().primary,
+            expected_database_role="",
             operation_id="b" * 32,
             expected_release_sha256="f" * 64,
             backup_id="old-backup",
@@ -156,6 +158,13 @@ def test_execute_fails_if_topology_changes_and_still_cleans_context(
     def runner(args, stdin=None):
         if _is_maintenance_probe(args):
             return subprocess.CompletedProcess(args, 0, ABSENT_MARKER, "")
+        if "MemAvailable:" in args[-1]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                "70368615\t4106088448\t2637000\n",
+                "",
+            )
         return subprocess.CompletedProcess(args, 0, "", "")
 
     with pytest.raises(workflow_runner.WorkflowError, match="topology changed"):
@@ -168,6 +177,68 @@ def test_execute_fails_if_topology_changes_and_still_cleans_context(
         )
 
     assert not list(tmp_path.iterdir())
+
+
+def test_logical_restore_prefers_mvn_api_even_when_it_is_standby(monkeypatch):
+    topology = _topology(primary_index=1)
+    probes = []
+
+    def capacity(*, node, context, runner):
+        del context, runner
+        probes.append(node.alias)
+        return 3 * 1024**3, 2 * 1024**3
+
+    monkeypatch.setattr(workflow_runner, "_logical_restore_capacity", capacity)
+
+    target, role = workflow_runner._select_operation_target(
+        phase="logical-restore-drill",
+        topology=topology,
+        context=None,
+        runner=lambda *_: None,
+    )
+
+    assert target.alias == "mvn-api"
+    assert role == "standby"
+    assert probes == ["mvn-api"]
+
+
+def test_logical_restore_falls_back_to_primary_when_preferred_node_is_busy(
+    monkeypatch,
+):
+    topology = _topology(primary_index=1)
+
+    def capacity(*, node, context, runner):
+        del context, runner
+        if node.alias == "mvn-api":
+            return 1 * 1024**3, 2 * 1024**3
+        return 3 * 1024**3, 2 * 1024**3
+
+    monkeypatch.setattr(workflow_runner, "_logical_restore_capacity", capacity)
+
+    target, role = workflow_runner._select_operation_target(
+        phase="logical-restore-drill",
+        topology=topology,
+        context=None,
+        runner=lambda *_: None,
+    )
+
+    assert target.alias == "zakup"
+    assert role == "primary"
+
+
+def test_logical_restore_command_carries_topology_proven_database_role():
+    command = workflow_runner._remote_command(
+        phase="logical-restore-drill",
+        target=_topology().standby,
+        expected_database_role="standby",
+        operation_id="a" * 32,
+        expected_release_sha256="f" * 64,
+        backup_id="",
+        target_time="",
+    )
+
+    assert "--project-dir /opt/mvn-reserve" in command
+    assert "--expected-database-role standby" in command
 
 
 def test_execute_reproves_topology_after_a_remote_failure(tmp_path, monkeypatch):
