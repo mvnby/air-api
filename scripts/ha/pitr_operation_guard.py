@@ -459,10 +459,10 @@ def finalize_record(record: OperationRecord, *, timeout: float = 5) -> None:
     raise RuntimeError("completed PITR operation left a live process group or unit")
 
 
-def cancel_project_operations(
+def _cancel_project_operations(
     project_dir: str,
     *,
-    preserve_standby_safe: bool = False,
+    preserve_standby_safe: bool,
 ) -> list[str]:
     if project_dir not in ALLOWED_PROJECT_DIRS:
         raise RuntimeError("unreviewed project directory for PITR cancellation")
@@ -473,6 +473,24 @@ def cancel_project_operations(
         terminate_record(record)
         cancelled.append(record.operation_id)
     return cancelled
+
+
+def cancel_project_operations(project_dir: str) -> list[str]:
+    """Fence mutating work while preserving a standby-safe logical drill."""
+
+    return _cancel_project_operations(
+        project_dir,
+        preserve_standby_safe=True,
+    )
+
+
+def cancel_all_project_operations(project_dir: str) -> list[str]:
+    """Cancel every operation for exclusive administrative maintenance."""
+
+    return _cancel_project_operations(
+        project_dir,
+        preserve_standby_safe=False,
+    )
 
 
 def reconcile_project_operations(project_dir: str) -> list[str]:

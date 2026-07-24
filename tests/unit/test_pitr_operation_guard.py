@@ -225,16 +225,13 @@ def test_cancel_project_operations_preserves_only_standby_safe_drill(monkeypatch
         lambda record: terminated.append(record.operation_id),
     )
 
-    cancelled = guard.cancel_project_operations(
-        "/opt/air-api",
-        preserve_standby_safe=True,
-    )
+    cancelled = guard.cancel_project_operations("/opt/air-api")
 
     assert cancelled == [mutating.operation_id]
     assert terminated == [mutating.operation_id]
 
 
-def test_cancel_project_operations_defaults_to_fencing_all_phases(monkeypatch):
+def test_cancel_all_project_operations_fences_every_phase(monkeypatch):
     logical = replace(
         _record(),
         phase="logical-restore-drill",
@@ -248,7 +245,7 @@ def test_cancel_project_operations_defaults_to_fencing_all_phases(monkeypatch):
         lambda record: terminated.append(record.operation_id),
     )
 
-    cancelled = guard.cancel_project_operations("/opt/air-api")
+    cancelled = guard.cancel_all_project_operations("/opt/air-api")
 
     assert cancelled == [logical.operation_id]
     assert terminated == [logical.operation_id]
