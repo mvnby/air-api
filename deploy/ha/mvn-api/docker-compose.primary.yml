@@ -13,6 +13,7 @@ x-api-app: &api-app
     API_READY_ENABLED: "true"
     DB_BOOTSTRAP_ENABLED: "true"
     GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
+    GOOGLE_VISION_CREDENTIALS_FILE: /app/g-vision-ocr.json
   volumes:
     - ./media:/app/media
     - ./model-cache/u2net:/root/.u2net
