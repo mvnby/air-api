@@ -294,6 +294,16 @@ def test_runtime_check_requires_role_aware_scheduler_state(monkeypatch):
     )
     monkeypatch.setattr(
         patroni_check,
+        "_active_api_slot",
+        lambda _runner, _node: "blue",
+    )
+    monkeypatch.setattr(
+        patroni_check,
+        "_proxy_upstream",
+        lambda _runner, _node: "proxy_pass http://app-blue:8000;",
+    )
+    monkeypatch.setattr(
+        patroni_check,
         "_ready_response",
         lambda _runner, node, _url: readiness[node.label],
     )
@@ -309,6 +319,118 @@ def test_runtime_check_requires_role_aware_scheduler_state(monkeypatch):
     report = Report()
     _check_runtime(config, FakeRunner(), api, reserve, report)
     assert any("primary scheduler runtime" in failure for failure in report.failures)
+
+
+def test_runtime_check_reports_active_slot_proxy_drift(monkeypatch):
+    api, reserve = _nodes()
+    config = CheckerConfig(
+        api=api,
+        reserve=reserve,
+        ssh_options=(),
+        max_replay_lag_bytes=1_048_576,
+        role_agent_unit="mvn-patroni-role-agent.service",
+        etcd_check_command="check-etcd",
+        ready_url="http://127.0.0.1:18080/api/ready",
+    )
+
+    class FakeRunner:
+        def run(self, node, command, *, stdin=None, check=True):
+            del stdin, check
+            if command.endswith("/.ha-runtime-role"):
+                role = "primary" if node == api else "standby"
+                return subprocess.CompletedProcess([], 0, f"{role}\n", "")
+            raise AssertionError(command)
+
+    def role_env(_runner, node, filename):
+        primary = node == api
+        role = "primary" if primary else "standby"
+        values = {
+            "APP_ROLE": role,
+            "API_READY_ENABLED": (
+                str(primary).lower() if filename == ".ha-app-role.env" else "false"
+            ),
+            "DB_BOOTSTRAP_ENABLED": "false",
+            "SCHEDULER_ENABLED": (
+                str(primary).lower() if filename == ".ha-app-role.env" else "false"
+            ),
+        }
+        if filename == ".ha-bot-role.env":
+            values["BOT_ENABLED"] = "false"
+        if not primary and filename == ".ha-app-role.env":
+            values.update(
+                {
+                    "MAIL_IMAP_AUTO_IMPORT_ENABLED": "false",
+                    "MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED": "false",
+                    "CLOUDFLARE_PURGE_ENABLED": "false",
+                }
+            )
+        return values
+
+    monkeypatch.setattr(patroni_check, "_unit_enabled", lambda *_args: True)
+    monkeypatch.setattr(
+        patroni_check,
+        "_unit_active",
+        lambda _runner, node, unit: (
+            True if unit == config.role_agent_unit else node == api
+        ),
+    )
+    monkeypatch.setattr(patroni_check, "_role_env", role_env)
+    monkeypatch.setattr(
+        patroni_check,
+        "_running_services",
+        lambda _runner, _node: {"api-proxy", "app-blue", "app-green"},
+    )
+    monkeypatch.setattr(
+        patroni_check,
+        "_active_api_slot",
+        lambda _runner, _node: "green",
+    )
+    monkeypatch.setattr(
+        patroni_check,
+        "_proxy_upstream",
+        lambda _runner, _node: "proxy_pass http://app-blue:8000;",
+    )
+    monkeypatch.setattr(
+        patroni_check,
+        "_ready_response",
+        lambda _runner, node, _url: (
+            (
+                200,
+                {
+                    "api": "ready",
+                    "traffic": "enabled",
+                    "scheduler_runtime": {
+                        "expected": True,
+                        "status": "waiting_lock",
+                    },
+                },
+            )
+            if node == api
+            else (
+                503,
+                {
+                    "api": "not_ready",
+                    "traffic": "disabled",
+                    "scheduler_runtime": {
+                        "expected": False,
+                        "status": "disabled",
+                    },
+                },
+            )
+        ),
+    )
+
+    report = Report()
+    _check_runtime(config, FakeRunner(), api, reserve, report)
+
+    assert any(
+        "active slot=green requires only app-green" in failure
+        for failure in report.failures
+    )
+    assert any(
+        "active slot=green but proxy upstream=" in failure
+        for failure in report.failures
+    )
 
 
 def test_replication_workflow_switches_to_role_aware_patroni_monitoring():
