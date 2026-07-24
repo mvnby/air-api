@@ -3,6 +3,7 @@ import shlex
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -201,6 +202,78 @@ def test_reconcile_project_refuses_active_or_ambiguous_record(monkeypatch):
 
     with pytest.raises(RuntimeError, match="active PITR operation"):
         guard.reconcile_project_operations("/opt/air-api")
+
+
+def test_cancel_project_operations_preserves_only_standby_safe_drill(monkeypatch):
+    mutating = _record()
+    logical = replace(
+        _record(),
+        operation_id="b" * 32,
+        phase="logical-restore-drill",
+        command="/usr/local/sbin/mvn-restore-drill-latest-db",
+        unit="mvn-postgres-pitr-manual-" + "b" * 32 + ".service",
+    )
+    terminated = []
+    monkeypatch.setattr(
+        guard,
+        "list_records",
+        lambda **_kwargs: [mutating, logical],
+    )
+    monkeypatch.setattr(
+        guard,
+        "terminate_record",
+        lambda record: terminated.append(record.operation_id),
+    )
+
+    cancelled = guard.cancel_project_operations("/opt/air-api")
+
+    assert cancelled == [mutating.operation_id]
+    assert terminated == [mutating.operation_id]
+
+
+def test_cancel_all_project_operations_fences_every_phase(monkeypatch):
+    logical = replace(
+        _record(),
+        phase="logical-restore-drill",
+        command="/usr/local/sbin/mvn-restore-drill-latest-db",
+    )
+    terminated = []
+    monkeypatch.setattr(guard, "list_records", lambda **_kwargs: [logical])
+    monkeypatch.setattr(
+        guard,
+        "terminate_record",
+        lambda record: terminated.append(record.operation_id),
+    )
+
+    cancelled = guard.cancel_all_project_operations("/opt/air-api")
+
+    assert cancelled == [logical.operation_id]
+    assert terminated == [logical.operation_id]
+
+
+def test_cancel_project_operations_accepts_explicit_safe_rolling_contract(
+    monkeypatch,
+):
+    logical = replace(
+        _record(),
+        phase="logical-restore-drill",
+        command="/usr/local/sbin/mvn-restore-drill-latest-db",
+    )
+    terminated = []
+    monkeypatch.setattr(guard, "list_records", lambda **_kwargs: [logical])
+    monkeypatch.setattr(
+        guard,
+        "terminate_record",
+        lambda record: terminated.append(record.operation_id),
+    )
+
+    cancelled = guard.cancel_project_operations(
+        "/opt/air-api",
+        preserve_standby_safe=True,
+    )
+
+    assert cancelled == []
+    assert terminated == []
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="PDEATHSIG is Linux-specific")

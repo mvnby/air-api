@@ -338,7 +338,7 @@ def drain_operations(project_dir, transaction_id, guard, *, wait_seconds=10):
     try:
         guard.reconcile_project_operations(project_dir)
     except RuntimeError:
-        guard.cancel_project_operations(project_dir)
+        guard.cancel_all_project_operations(project_dir)
         guard.reconcile_project_operations(project_dir)
     if guard.list_records(project_dir=project_dir):
         raise RuntimeError("PITR operation records remained after bounded cleanup")

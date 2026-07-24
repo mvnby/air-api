@@ -44,6 +44,7 @@ SCHEDULED_UNITS = {
     "mvn-postgres-wal-upload.service",
     "mvn-postgres-basebackup.service",
 }
+STANDBY_SAFE_PHASES = frozenset({"logical-restore-drill"})
 CLEAN_ENV = {
     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "HOME": "/root",
@@ -458,14 +459,42 @@ def finalize_record(record: OperationRecord, *, timeout: float = 5) -> None:
     raise RuntimeError("completed PITR operation left a live process group or unit")
 
 
-def cancel_project_operations(project_dir: str) -> list[str]:
+def _cancel_project_operations(
+    project_dir: str,
+    *,
+    preserve_standby_safe: bool,
+) -> list[str]:
     if project_dir not in ALLOWED_PROJECT_DIRS:
         raise RuntimeError("unreviewed project directory for PITR cancellation")
     cancelled: list[str] = []
     for record in list_records(project_dir=project_dir):
+        if preserve_standby_safe and record.phase in STANDBY_SAFE_PHASES:
+            continue
         terminate_record(record)
         cancelled.append(record.operation_id)
     return cancelled
+
+
+def cancel_project_operations(
+    project_dir: str,
+    *,
+    preserve_standby_safe: bool = True,
+) -> list[str]:
+    """Fence mutating work while preserving a standby-safe logical drill."""
+
+    return _cancel_project_operations(
+        project_dir,
+        preserve_standby_safe=preserve_standby_safe,
+    )
+
+
+def cancel_all_project_operations(project_dir: str) -> list[str]:
+    """Cancel every operation for exclusive administrative maintenance."""
+
+    return _cancel_project_operations(
+        project_dir,
+        preserve_standby_safe=False,
+    )
 
 
 def reconcile_project_operations(project_dir: str) -> list[str]:

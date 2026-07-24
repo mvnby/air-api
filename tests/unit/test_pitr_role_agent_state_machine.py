@@ -24,7 +24,7 @@ def test_role_agent_executor_keeps_quiesce_fenced_and_resume_fail_closed():
     assert 'unit_state("is-active") != "inactive"' in source
     assert 'unit_state("is-enabled") != "disabled"' in source
     assert "role_agent._fence_lost_primary(config)" in source
-    assert "guard.cancel_project_operations(project_dir)" in source
+    assert "guard.cancel_all_project_operations(project_dir)" in source
     assert "execute_attested_module" in source
     assert "sources[OPERATION_GUARD_PATH]" in source
     assert '["/usr/bin/systemctl", "restart", ROLE_AGENT_UNIT]' in source
@@ -93,7 +93,7 @@ def test_record_drain_waits_then_reaps_and_cancels_via_attested_guard():
             if self.records:
                 raise RuntimeError("active")
 
-        def cancel_project_operations(self, _project):
+        def cancel_all_project_operations(self, _project):
             events.append("cancel")
             self.records.clear()
 
@@ -119,7 +119,7 @@ def test_record_drain_never_reaps_or_cancels_a_foreign_transaction():
         def reconcile_project_operations(self, _project):
             events.append("reconcile")
 
-        def cancel_project_operations(self, _project):
+        def cancel_all_project_operations(self, _project):
             events.append("cancel")
 
     with pytest.raises(RuntimeError, match="foreign PITR operation"):
