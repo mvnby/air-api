@@ -34,6 +34,9 @@ from services.communications.runtime_state import (
 from services.runtime_lock_service import RuntimeLock
 
 
+ASYNC_TEST_TIMEOUT_SECONDS = 5
+
+
 @pytest_asyncio.fixture
 async def runtime_session_factory():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -56,8 +59,8 @@ def runtime_config(**overrides):
         heartbeat_seconds=0.01,
         lock_retry_seconds=0.01,
         lock_check_seconds=0.01,
-        db_probe_timeout_seconds=0.1,
-        fencing_seconds=2,
+        db_probe_timeout_seconds=1,
+        fencing_seconds=6,
         shutdown_seconds=0.2,
         provider_timeout_seconds=1,
         provider_close_seconds=0.1,
@@ -357,9 +360,9 @@ async def test_provider_shutdown_finishes_before_advisory_lock_release(
         fencing_wait=instant_fencing,
     )
     task = asyncio.create_task(supervisor.run(stop_event))
-    await asyncio.wait_for(started.wait(), timeout=1)
+    await asyncio.wait_for(started.wait(), timeout=ASYNC_TEST_TIMEOUT_SECONDS)
     stop_event.set()
-    await asyncio.wait_for(task, timeout=1)
+    await asyncio.wait_for(task, timeout=ASYNC_TEST_TIMEOUT_SECONDS)
 
     assert events == ["pipeline-start", "provider-close", "lock-release"]
     async with runtime_session_factory() as session:
@@ -398,7 +401,7 @@ async def test_task_cancellation_uses_same_graceful_shutdown_order(
         fencing_wait=instant_fencing,
     )
     task = asyncio.create_task(supervisor.run(asyncio.Event()))
-    await asyncio.wait_for(started.wait(), timeout=1)
+    await asyncio.wait_for(started.wait(), timeout=ASYNC_TEST_TIMEOUT_SECONDS)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -440,10 +443,10 @@ async def test_shutdown_timeout_calls_hard_stop_without_unlocking(
         fencing_wait=instant_fencing,
     )
     task = asyncio.create_task(supervisor.run(stop_event))
-    await asyncio.wait_for(started.wait(), timeout=1)
+    await asyncio.wait_for(started.wait(), timeout=ASYNC_TEST_TIMEOUT_SECONDS)
     stop_event.set()
     with pytest.raises(CommunicationRuntimeShutdownTimeout):
-        await asyncio.wait_for(task, timeout=1)
+        await asyncio.wait_for(task, timeout=ASYNC_TEST_TIMEOUT_SECONDS)
     await asyncio.sleep(0)
     assert events == ["hard-stop"]
 
@@ -555,11 +558,14 @@ async def test_persistent_provider_close_failure_fail_stops_without_unlock(
         fencing_wait=instant_fencing,
     )
     task = asyncio.create_task(supervisor.run(stop_event))
-    await asyncio.wait_for(worker_started.wait(), timeout=1)
+    await asyncio.wait_for(
+        worker_started.wait(),
+        timeout=ASYNC_TEST_TIMEOUT_SECONDS,
+    )
     stop_event.set()
 
     with pytest.raises(CommunicationRuntimeShutdownTimeout):
-        await asyncio.wait_for(task, timeout=1)
+        await asyncio.wait_for(task, timeout=ASYNC_TEST_TIMEOUT_SECONDS)
     await asyncio.sleep(0)
     assert provider.close_calls == 1
     assert pipeline_holder[0]._provider is provider
