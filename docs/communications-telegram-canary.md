@@ -121,9 +121,13 @@ status terminal.
 
 Direct `canary -> all`, `all -> canary`, and `canary A -> canary B` transitions
 are rejected; every scope change must pass through `off`. There is deliberately
-no CLI `--all` switch. Full website-event delivery additionally requires the
-immutable deployment setting `COMMUNICATIONS_WORKER_ALLOW_ALL_MODE=true`; its
-default is `false`, and canary processing remains available while it is false.
+no CLI `--all` switch. The first production website scope contains only
+`crm.installation_estimate_lead.created` with template
+`telegram.installation_estimate_lead_created`. Enabling that scope additionally
+requires the immutable deployment setting
+`COMMUNICATIONS_WORKER_ALLOW_ALL_MODE=true`; its default is `false`, and canary
+processing remains available while it is false. Public order/contact events and
+the operations canary are not part of this production scope.
 
 The recipient snapshot contains only stable `staff:<id>` keys. The CLI never
 prints Telegram destinations, names, payloads, rendered content, raw provider

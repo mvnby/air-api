@@ -5,12 +5,8 @@ from typing import Literal
 
 from services.communications.canary_run_id import normalize_canary_run_id
 from services.communications.template_registry import (
-    CONTACT_LEAD_TEMPLATE_KEY,
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
     INSTALLATION_ESTIMATE_TEMPLATE_KEY,
-    ORDER_TEMPLATE_KEY,
-    PUBLIC_CONTACT_LEAD_CREATED_EVENT,
-    PUBLIC_ORDER_CREATED_EVENT,
     TELEGRAM_CANARY_REQUESTED_EVENT,
     TELEGRAM_CANARY_TEMPLATE_KEY,
     telegram_canary_event_id,
@@ -24,18 +20,11 @@ from services.communications.staff_task_contracts import (
 ProcessingMode = Literal["canary", "all", "staff_bot"]
 CANARY_EVENT_TYPES = (TELEGRAM_CANARY_REQUESTED_EVENT,)
 CANARY_TEMPLATE_KEYS = (TELEGRAM_CANARY_TEMPLATE_KEY,)
-ALL_EVENT_TYPES = (
-    PUBLIC_ORDER_CREATED_EVENT,
-    PUBLIC_CONTACT_LEAD_CREATED_EVENT,
-    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
-    TELEGRAM_CANARY_REQUESTED_EVENT,
-)
-ALL_TEMPLATE_KEYS = (
-    ORDER_TEMPLATE_KEY,
-    CONTACT_LEAD_TEMPLATE_KEY,
-    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
-    TELEGRAM_CANARY_TEMPLATE_KEY,
-)
+# "all" is the production website rollout scope, not a synonym for every
+# registered communication. Keep it deliberately narrow and expand it only
+# through a separately reviewed rollout.
+ALL_EVENT_TYPES = (INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,)
+ALL_TEMPLATE_KEYS = (INSTALLATION_ESTIMATE_TEMPLATE_KEY,)
 STAFF_BOT_EVENT_TYPES = STAFF_TASK_EVENT_TYPE_VALUES
 STAFF_BOT_TEMPLATE_KEYS = STAFF_TASK_TEMPLATE_KEY_VALUES
 

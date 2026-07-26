@@ -10,7 +10,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import CommunicationDelivery, CommunicationDeliveryAttempt
+from models import (
+    CommunicationDelivery,
+    CommunicationDeliveryAttempt,
+    IntegrationOutboxEvent,
+)
 from services.communications.delivery_service import (
     CommunicationDeliveryLeaseLost,
     CommunicationDeliveryService,
@@ -18,7 +22,9 @@ from services.communications.delivery_service import (
 from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.providers.base import ProviderDeliveryResult
 from services.communications.template_registry import (
-    CONTACT_LEAD_TEMPLATE_KEY,
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+    TELEGRAM_CANARY_REQUESTED_EVENT,
     TELEGRAM_CANARY_TEMPLATE_KEY,
     telegram_canary_event_id,
 )
@@ -44,6 +50,7 @@ async def communication_db_engine():
         connect_args={"server_settings": {"search_path": schema_name}},
     )
     async with engine.begin() as connection:
+        await connection.run_sync(IntegrationOutboxEvent.__table__.create)
         await connection.run_sync(CommunicationDelivery.__table__.create)
         await connection.run_sync(CommunicationDeliveryAttempt.__table__.create)
     try:
@@ -69,6 +76,7 @@ async def _seed_deliveries(
     now = datetime.now(timezone.utc)
     async with factory() as session:
         for sequence in range(1, count + 1):
+            event_id = f"{sequence + 1000:032x}"
             running_values = (
                 {
                     "status": "running",
@@ -87,13 +95,30 @@ async def _seed_deliveries(
                 }
             )
             session.add(
+                IntegrationOutboxEvent(
+                    event_id=event_id,
+                    event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+                    schema_version=1,
+                    aggregate_type="order",
+                    aggregate_id=str(sequence),
+                    deduplication_key=f"delivery-concurrency:{sequence}",
+                    payload={},
+                    status="published",
+                    available_at=now,
+                    occurred_at=now,
+                    published_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add(
                 CommunicationDelivery(
                     delivery_id=f"{sequence:032x}",
-                    event_id=f"{sequence + 1000:032x}",
+                    event_id=event_id,
                     channel="telegram",
                     recipient_key=f"staff:{sequence}",
                     destination=str(100000 + sequence),
-                    template_key="telegram.website_contact_lead_created",
+                    template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
                     template_version=1,
                     render_context={"lead_id": sequence},
                     priority=100,
@@ -343,7 +368,7 @@ async def test_postgres_canary_scope_isolates_claim_and_recovery_mixed_queue(
     queued_website = delivery(
         103,
         event_id="a" * 32,
-        template_key=CONTACT_LEAD_TEMPLATE_KEY,
+        template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
         status="queued",
         priority=-200,
     )
@@ -364,11 +389,40 @@ async def test_postgres_canary_scope_isolates_claim_and_recovery_mixed_queue(
     running_website = delivery(
         113,
         event_id="b" * 32,
-        template_key=CONTACT_LEAD_TEMPLATE_KEY,
+        template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
         status="running",
         priority=-200,
     )
     async with factory() as session:
+        session.add_all(
+            [
+                IntegrationOutboxEvent(
+                    event_id=item.event_id,
+                    event_type=(
+                        TELEGRAM_CANARY_REQUESTED_EVENT
+                        if item.template_key == TELEGRAM_CANARY_TEMPLATE_KEY
+                        else INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT
+                    ),
+                    schema_version=1,
+                    aggregate_type="scope-test",
+                    aggregate_id=item.delivery_id,
+                    deduplication_key=f"delivery-concurrency:{item.delivery_id}",
+                    payload={},
+                    status="published",
+                    available_at=now,
+                    occurred_at=now,
+                    published_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+                for item in (
+                    queued_a,
+                    queued_b,
+                    queued_website,
+                    running_website,
+                )
+            ]
+        )
         session.add_all(
             [
                 queued_a,

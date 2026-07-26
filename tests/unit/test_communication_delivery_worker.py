@@ -9,8 +9,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import CommunicationDelivery, CommunicationDeliveryAttempt, StaffUser
-from services.communications.contracts import PublicContactLeadCreatedPayloadV1
+from models import (
+    CommunicationDelivery,
+    CommunicationDeliveryAttempt,
+    IntegrationOutboxEvent,
+    StaffUser,
+)
+from services.communications.contracts import (
+    InstallationEstimateLeadCreatedPayloadV1,
+)
 from services.communications.delivery_service import (
     CommunicationDeliveryLeaseLost,
     CommunicationDeliveryService,
@@ -18,7 +25,10 @@ from services.communications.delivery_service import (
 from services.communications.delivery_worker import CommunicationDeliveryWorker
 from services.communications.providers.base import ProviderDeliveryResult
 from services.communications.processing_scope import CommunicationProcessingScope
-from services.communications.template_registry import CONTACT_LEAD_TEMPLATE_KEY
+from services.communications.template_registry import (
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+)
 
 ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 
@@ -57,21 +67,41 @@ async def _seed_delivery(
         await session.flush()
         assert owner.id is not None
         delivery_id = f"{sequence:032x}"
+        event_id = f"{sequence + 1000:032x}"
+        session.add(
+            IntegrationOutboxEvent(
+                event_id=event_id,
+                event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+                schema_version=1,
+                aggregate_type="order",
+                aggregate_id=str(sequence),
+                deduplication_key=f"delivery-worker:{sequence}",
+                payload={},
+                status="published",
+                available_at=now,
+                occurred_at=now,
+                published_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+        )
         session.add(
             CommunicationDelivery(
                 delivery_id=delivery_id,
-                event_id=f"{sequence + 1000:032x}",
+                event_id=event_id,
                 channel="telegram",
                 recipient_key=f"staff:{owner.id}",
                 destination=str(telegram_id),
-                template_key=CONTACT_LEAD_TEMPLATE_KEY,
+                template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
                 template_version=1,
-                render_context=PublicContactLeadCreatedPayloadV1(
-                    lead_id=sequence,
-                    status="new",
+                render_context=InstallationEstimateLeadCreatedPayloadV1(
+                    order_id=sequence,
+                    status="new_lead",
                     name=f"Lead {sequence}",
                     phone="+375291112233",
-                    message="Нужна консультация",
+                    description="Нужна консультация",
+                    attachment_count=2,
+                    photo_categories=("Внутренний блок", "Наружный блок"),
                 ).model_dump(mode="json"),
                 status="queued",
                 priority=priority,

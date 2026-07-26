@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,8 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from models import CommunicationDelivery, CommunicationDeliveryAttempt
+from services.communications.contracts import (
+    InstallationEstimateLeadCreatedPayloadV1,
+)
 from services.communications.delivery_service import CommunicationDeliveryService
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.template_registry import (
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+)
 
 ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 
@@ -40,8 +48,36 @@ def _load_migration(name: str, path: Path):
     return module
 
 
+def _insert_published_event(connection, sequence: int) -> str:
+    event_id = f"{sequence + 1000:032x}"
+    connection.execute(
+        text("""
+            INSERT INTO integration_outbox_event (
+                event_id, event_type, schema_version, aggregate_type,
+                aggregate_id, deduplication_key, payload, status, priority,
+                attempts, max_attempts, available_at, occurred_at,
+                published_at, created_at, updated_at
+            ) VALUES (
+                :event_id, :event_type, 1, 'order', :aggregate_id,
+                :deduplication_key, :payload, 'published', 100,
+                1, 8, :now, :now, :now, :now, :now
+            )
+            """),
+        {
+            "event_id": event_id,
+            "event_type": INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+            "aggregate_id": str(sequence),
+            "deduplication_key": f"attempt-migration:{sequence}",
+            "payload": json.dumps({}),
+            "now": NOW,
+        },
+    )
+    return event_id
+
+
 def _insert_queued_delivery(connection, sequence: int) -> str:
     delivery_id = f"{sequence:032x}"
+    event_id = _insert_published_event(connection, sequence)
     connection.execute(
         text("""
             INSERT INTO communication_delivery (
@@ -51,15 +87,27 @@ def _insert_queued_delivery(connection, sequence: int) -> str:
                 created_at, updated_at
             ) VALUES (
                 :delivery_id, :event_id, 'telegram', :recipient_key, :destination,
-                'telegram.website_contact_lead_created', 1, '{}', 'queued',
+                :template_key, 1, :render_context, 'queued',
                 100, 0, 3, :now, :now, :now
             )
             """),
         {
             "delivery_id": delivery_id,
-            "event_id": f"{sequence + 1000:032x}",
+            "event_id": event_id,
             "recipient_key": f"staff:{sequence}",
             "destination": str(100000 + sequence),
+            "template_key": INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+            "render_context": json.dumps(
+                InstallationEstimateLeadCreatedPayloadV1(
+                    order_id=sequence,
+                    status="new_lead",
+                    name=f"Lead {sequence}",
+                    phone="+375291112233",
+                    description="Нужна консультация",
+                    attachment_count=2,
+                    photo_categories=("Внутренний блок", "Наружный блок"),
+                ).model_dump(mode="json")
+            ),
             "now": NOW,
         },
     )
@@ -68,6 +116,7 @@ def _insert_queued_delivery(connection, sequence: int) -> str:
 
 def _insert_running_delivery(connection, sequence: int) -> str:
     delivery_id = f"{sequence:032x}"
+    event_id = _insert_published_event(connection, sequence)
     connection.execute(
         text("""
             INSERT INTO communication_delivery (
@@ -78,7 +127,7 @@ def _insert_running_delivery(connection, sequence: int) -> str:
                 created_at, updated_at
             ) VALUES (
                 :delivery_id, :event_id, 'telegram', :recipient_key, :destination,
-                'telegram.website_contact_lead_created', 1, '{}', 'running',
+                :template_key, 1, :render_context, 'running',
                 100, 1, 3, :now,
                 'migration-worker', :lease_token, :lease_expires_at,
                 :now, :now
@@ -86,9 +135,21 @@ def _insert_running_delivery(connection, sequence: int) -> str:
             """),
         {
             "delivery_id": delivery_id,
-            "event_id": f"{sequence + 1000:032x}",
+            "event_id": event_id,
             "recipient_key": f"staff:{sequence}",
             "destination": str(100000 + sequence),
+            "template_key": INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+            "render_context": json.dumps(
+                InstallationEstimateLeadCreatedPayloadV1(
+                    order_id=sequence,
+                    status="new_lead",
+                    name=f"Lead {sequence}",
+                    phone="+375291112233",
+                    description="Нужна консультация",
+                    attachment_count=2,
+                    photo_categories=("Внутренний блок", "Наружный блок"),
+                ).model_dump(mode="json")
+            ),
             "lease_token": "migration-lease-token".ljust(40, "x"),
             "lease_expires_at": "2026-07-13 12:05:00.000000",
             "now": SQLITE_RUNNING_NOW,

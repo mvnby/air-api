@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
-from models import CommunicationDelivery, CommunicationDeliveryAttempt
+from models import (
+    CommunicationDelivery,
+    CommunicationDeliveryAttempt,
+    IntegrationOutboxEvent,
+)
+from services.communications.contracts import (
+    InstallationEstimateLeadCreatedPayloadV1,
+)
 from services.communications.delivery_attempt_service import (
     CommunicationDeliveryAttemptStateError,
 )
@@ -18,6 +25,10 @@ from services.communications.delivery_service import (
 )
 from services.communications.providers.base import ProviderDeliveryResult
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.template_registry import (
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+)
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
 ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
@@ -27,13 +38,35 @@ ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 async def attempt_session_factory(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'attempt.sqlite3'}")
     async with engine.begin() as connection:
+        await connection.run_sync(IntegrationOutboxEvent.__table__.create)
         await connection.run_sync(CommunicationDelivery.__table__.create)
         await connection.run_sync(CommunicationDeliveryAttempt.__table__.create)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        session.add_all([_event(sequence) for sequence in range(1, 11)])
+        await session.commit()
     try:
         yield factory
     finally:
         await engine.dispose()
+
+
+def _event(sequence: int) -> IntegrationOutboxEvent:
+    return IntegrationOutboxEvent(
+        event_id=f"{sequence + 1000:032x}",
+        event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+        schema_version=1,
+        aggregate_type="order",
+        aggregate_id=str(sequence),
+        deduplication_key=f"attempt-service:{sequence}",
+        payload={},
+        status="published",
+        available_at=NOW,
+        occurred_at=NOW,
+        published_at=NOW,
+        created_at=NOW,
+        updated_at=NOW,
+    )
 
 
 def _delivery(
@@ -51,9 +84,17 @@ def _delivery(
         channel="telegram",
         recipient_key=f"staff:{sequence}",
         destination=str(100000 + sequence),
-        template_key="telegram.website_contact_lead_created",
+        template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
         template_version=1,
-        render_context={},
+        render_context=InstallationEstimateLeadCreatedPayloadV1(
+            order_id=sequence,
+            status="new_lead",
+            name=f"Lead {sequence}",
+            phone="+375291112233",
+            description="Нужна консультация",
+            attachment_count=2,
+            photo_categories=("Внутренний блок", "Наружный блок"),
+        ).model_dump(mode="json"),
         status=status,
         attempts=attempts,
         max_attempts=3,

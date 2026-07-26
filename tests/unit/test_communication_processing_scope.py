@@ -31,7 +31,12 @@ from services.communications.recipient_directory import (
 )
 from services.communications.template_registry import (
     CONTACT_LEAD_TEMPLATE_KEY,
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+    ORDER_TEMPLATE_KEY,
     PUBLIC_CONTACT_LEAD_CREATED_EVENT,
+    PUBLIC_ORDER_CREATED_EVENT,
+    TELEGRAM_CANARY_REQUESTED_EVENT,
     TELEGRAM_CANARY_TEMPLATE_KEY,
     telegram_canary_event_id,
 )
@@ -90,6 +95,31 @@ def _website_event() -> IntegrationOutboxEvent:
     )
 
 
+def _published_event(
+    *,
+    event_id: str,
+    event_type: str,
+    sequence: int,
+) -> IntegrationOutboxEvent:
+    return IntegrationOutboxEvent(
+        event_id=event_id,
+        event_type=event_type,
+        schema_version=1,
+        aggregate_type="scope-test",
+        aggregate_id=str(sequence),
+        deduplication_key=f"scope-delivery:{sequence}",
+        payload={},
+        status="published",
+        priority=100,
+        max_attempts=8,
+        available_at=NOW,
+        occurred_at=NOW,
+        published_at=NOW,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+
 def _delivery(
     sequence: int,
     *,
@@ -143,6 +173,14 @@ def test_processing_scope_factories_are_closed_immutable_allowlists():
     assert canary.exact_event_id == telegram_canary_event_id(RUN_ID_A)
     assert full.outbox_event_types == ALL_EVENT_TYPES
     assert full.delivery_template_keys == ALL_TEMPLATE_KEYS
+    assert ALL_EVENT_TYPES == (INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,)
+    assert ALL_TEMPLATE_KEYS == (INSTALLATION_ESTIMATE_TEMPLATE_KEY,)
+    assert PUBLIC_ORDER_CREATED_EVENT not in ALL_EVENT_TYPES
+    assert PUBLIC_CONTACT_LEAD_CREATED_EVENT not in ALL_EVENT_TYPES
+    assert TELEGRAM_CANARY_REQUESTED_EVENT not in ALL_EVENT_TYPES
+    assert ORDER_TEMPLATE_KEY not in ALL_TEMPLATE_KEYS
+    assert CONTACT_LEAD_TEMPLATE_KEY not in ALL_TEMPLATE_KEYS
+    assert TELEGRAM_CANARY_TEMPLATE_KEY not in ALL_TEMPLATE_KEYS
     assert staff_bot.outbox_event_types == STAFF_BOT_EVENT_TYPES
     assert staff_bot.delivery_template_keys == STAFF_BOT_TEMPLATE_KEYS
     assert not set(STAFF_BOT_EVENT_TYPES).intersection(ALL_EVENT_TYPES)
@@ -298,7 +336,28 @@ async def test_canary_claim_scope_ignores_other_run_and_website_priority(
         priority=-200,
     )
     async with scope_session_factory() as session:
-        session.add_all([delivery_a, delivery_b, website])
+        session.add_all(
+            [
+                _published_event(
+                    event_id=delivery_a.event_id,
+                    event_type=TELEGRAM_CANARY_REQUESTED_EVENT,
+                    sequence=1,
+                ),
+                _published_event(
+                    event_id=delivery_b.event_id,
+                    event_type=TELEGRAM_CANARY_REQUESTED_EVENT,
+                    sequence=2,
+                ),
+                _published_event(
+                    event_id=website.event_id,
+                    event_type=PUBLIC_CONTACT_LEAD_CREATED_EVENT,
+                    sequence=3,
+                ),
+                delivery_a,
+                delivery_b,
+                website,
+            ]
+        )
         await session.commit()
 
         claim = await CommunicationDeliveryService.claim_next(
@@ -347,7 +406,28 @@ async def test_canary_recovery_scope_leaves_other_expired_leases_untouched(
         priority=-200,
     )
     async with scope_session_factory() as session:
-        session.add_all([delivery_a, delivery_b, website])
+        session.add_all(
+            [
+                _published_event(
+                    event_id=delivery_a.event_id,
+                    event_type=TELEGRAM_CANARY_REQUESTED_EVENT,
+                    sequence=11,
+                ),
+                _published_event(
+                    event_id=delivery_b.event_id,
+                    event_type=TELEGRAM_CANARY_REQUESTED_EVENT,
+                    sequence=12,
+                ),
+                _published_event(
+                    event_id=website.event_id,
+                    event_type=PUBLIC_CONTACT_LEAD_CREATED_EVENT,
+                    sequence=13,
+                ),
+                delivery_a,
+                delivery_b,
+                website,
+            ]
+        )
         session.add_all(
             [
                 _running_attempt(delivery_a),

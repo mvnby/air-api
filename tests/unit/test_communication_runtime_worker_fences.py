@@ -9,8 +9,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from core.config import settings
-from models import CommunicationDelivery, CommunicationDeliveryAttempt, StaffUser
-from services.communications.contracts import PublicContactLeadCreatedPayloadV1
+from models import (
+    CommunicationDelivery,
+    CommunicationDeliveryAttempt,
+    IntegrationOutboxEvent,
+    StaffUser,
+)
+from services.communications.contracts import InstallationEstimateLeadCreatedPayloadV1
 from services.communications.delivery_service import CommunicationDeliveryService
 from services.communications.delivery_worker import CommunicationDeliveryWorker
 from services.communications.processing_scope import CommunicationProcessingScope
@@ -20,7 +25,14 @@ from services.communications.runtime_state import (
     CommunicationRuntimeModeBlocked,
     CommunicationRuntimeStateService,
 )
-from services.communications.template_registry import CONTACT_LEAD_TEMPLATE_KEY
+from services.communications.template_registry import (
+    CONTACT_LEAD_TEMPLATE_KEY,
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+    ORDER_TEMPLATE_KEY,
+    PUBLIC_CONTACT_LEAD_CREATED_EVENT,
+    PUBLIC_ORDER_CREATED_EVENT,
+)
 
 ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
@@ -43,6 +55,8 @@ async def seed_delivery(
     *,
     sequence: int,
     telegram_id: int,
+    template_key: str = INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+    render_context: dict | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     async with session_factory() as session:
@@ -57,21 +71,46 @@ async def seed_delivery(
         await session.flush()
         assert owner.id is not None
         delivery_id = f"{sequence:032x}"
+        event_id = f"{sequence + 1000:032x}"
+        event_type = {
+            CONTACT_LEAD_TEMPLATE_KEY: PUBLIC_CONTACT_LEAD_CREATED_EVENT,
+            ORDER_TEMPLATE_KEY: PUBLIC_ORDER_CREATED_EVENT,
+        }.get(template_key, INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT)
+        session.add(
+            IntegrationOutboxEvent(
+                event_id=event_id,
+                event_type=event_type,
+                schema_version=1,
+                aggregate_type="order",
+                aggregate_id=str(sequence),
+                deduplication_key=f"runtime-fence:{sequence}",
+                payload={},
+                status="published",
+                available_at=now,
+                occurred_at=now,
+                published_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+        )
         session.add(
             CommunicationDelivery(
                 delivery_id=delivery_id,
-                event_id=f"{sequence + 1000:032x}",
+                event_id=event_id,
                 channel="telegram",
                 recipient_key=f"staff:{owner.id}",
                 destination=str(telegram_id),
-                template_key=CONTACT_LEAD_TEMPLATE_KEY,
+                template_key=template_key,
                 template_version=1,
-                render_context=PublicContactLeadCreatedPayloadV1(
-                    lead_id=sequence,
-                    status="new",
+                render_context=render_context
+                or InstallationEstimateLeadCreatedPayloadV1(
+                    order_id=sequence,
+                    status="new_lead",
                     name=f"Lead {sequence}",
                     phone="+375291112233",
-                    message="Нужна консультация",
+                    description="Нужна предварительная оценка монтажа",
+                    attachment_count=1,
+                    photo_categories=("Место внутреннего блока",),
                 ).model_dump(mode="json"),
                 status="queued",
                 priority=100,
@@ -84,6 +123,60 @@ async def seed_delivery(
         )
         await session.commit()
         return delivery_id
+
+
+@pytest.mark.asyncio
+async def test_runtime_scope_leaves_contact_and_order_deliveries_untouched(
+    worker_session_factory,
+    monkeypatch,
+):
+    """The production rollout must not consume legacy website delivery types."""
+
+    monkeypatch.setattr(settings, "ADMIN_IDS", "", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
+    installation_delivery_id = await seed_delivery(
+        worker_session_factory,
+        sequence=11,
+        telegram_id=111011,
+    )
+    contact_delivery_id = await seed_delivery(
+        worker_session_factory,
+        sequence=12,
+        telegram_id=111012,
+        template_key=CONTACT_LEAD_TEMPLATE_KEY,
+        render_context={"legacy": "contact"},
+    )
+    order_delivery_id = await seed_delivery(
+        worker_session_factory,
+        sequence=13,
+        telegram_id=111013,
+        template_key=ORDER_TEMPLATE_KEY,
+        render_context={"legacy": "order"},
+    )
+    provider = ImmediateProvider()
+    worker = CommunicationDeliveryWorker(
+        session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
+        provider=provider,
+        worker_id="allowlist-fence-worker",
+        lease_seconds=60,
+    )
+
+    assert (await worker.run_once()).outcome == "sent"
+    assert (await worker.run_once()).outcome == "idle"
+    assert provider.calls == 1
+
+    async with worker_session_factory() as session:
+        installation = await session.get(
+            CommunicationDelivery, installation_delivery_id
+        )
+        contact = await session.get(CommunicationDelivery, contact_delivery_id)
+        order = await session.get(CommunicationDelivery, order_delivery_id)
+        assert installation is not None and installation.status == "sent"
+        assert contact is not None and contact.status == "queued"
+        assert contact.attempts == 0
+        assert order is not None and order.status == "queued"
+        assert order.attempts == 0
 
 
 async def own_runtime_mode(session_factory) -> CommunicationProcessingScope:
