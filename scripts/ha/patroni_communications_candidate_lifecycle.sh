@@ -193,17 +193,18 @@ patroni_communications_fence_candidate() {
   communications_worker_set_release_fence
   if ! docker compose -f "${CANDIDATE_FILE}" --profile bluegreen \
     stop "${COMMUNICATIONS_WORKER_SERVICE}" >/dev/null; then
-    patroni_communications_force_fence_candidate_runtime
-    return
+    patroni_communications_force_fence_candidate_runtime || return 1
+    return 0
   fi
   if [[ "${PREVIOUS_WORKER_SUPPORTED}" != "true" ]]; then
     if ! docker compose -f "${CANDIDATE_FILE}" --profile bluegreen \
       rm -s -f "${COMMUNICATIONS_WORKER_SERVICE}" >/dev/null; then
-      patroni_communications_force_fence_candidate_runtime
-      return
+      patroni_communications_force_fence_candidate_runtime || return 1
+      return 0
     fi
-    patroni_communications_force_fence_candidate_runtime
+    patroni_communications_force_fence_candidate_runtime || return 1
   fi
+  return 0
 }
 
 patroni_communications_fence_canonical() {
