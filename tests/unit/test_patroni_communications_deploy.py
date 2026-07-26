@@ -296,6 +296,10 @@ def test_remote_verify_requires_exact_images_running_and_false_phase2a_gates():
     assert "NRestarts" in verify
     assert ".ha-communications-worker-release-fenced" in verify
     assert "test ! -L ${CANONICAL_REMOTE_COMPOSE_FILE}" in verify
+    assert "patroni_role_agent_once_env.py" in text
+    assert 'role_agent_once_env_code="$(<"${ROLE_AGENT_ONCE_ENV_SOURCE}")"' in verify
+    assert "timeout 120 python3 -I -c" in verify
+    assert 'timeout 120 $(quote "${ROLE_AGENT_TARGET}") --once' not in verify
     assert "API/worker parity confirmed" in verify
     assert "GHCR_PAT" not in verify.split(
         'ssh "${SSH_OPTS[@]}" "${REMOTE}" \\\n'
