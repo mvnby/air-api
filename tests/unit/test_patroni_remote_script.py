@@ -210,14 +210,21 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
         "API_BLUE_GREEN_SAFETY_HELPER=$(quote" in text
     )
     assert "scripts/ha/patroni_role_agent.py" in text
+    assert "scripts/ha/patroni_compose_runtime.py" in text
+    assert "scripts/ha/patroni_role_agent_config.py" in text
     assert "scripts/ha/patroni_local_identity.py" in text
     assert "/usr/local/sbin/mvn-patroni-role-agent" in text
+    assert "/usr/local/sbin/patroni_compose_runtime.py" in text
+    assert "/usr/local/sbin/patroni_role_agent_config.py" in text
     assert "/usr/local/sbin/patroni_local_identity.py" in text
     transaction_runner = TRANSACTION_RUNNER.read_text(encoding="utf-8")
+    role_asset_helper = (
+        REPO_ROOT / "scripts/ha/patroni_role_agent_candidate_assets.sh"
+    ).read_text(encoding="utf-8")
     assert "PATRONI_ROLE_IDENTITY_SOURCE" in transaction_runner
-    assert 'install -m 0644 "${ROLE_IDENTITY_SOURCE}"' in transaction_runner
-    assert "systemctl restart" in transaction_runner
-    assert "systemctl is-active --quiet" in transaction_runner
+    assert "patroni_role_assets_install" in transaction_runner
+    assert "systemctl restart" in role_asset_helper
+    assert "systemctl is-active --quiet" in role_asset_helper
     assert 'API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}"' in transaction_runner
     assert "API_DEPLOY_LOCK_ALREADY_HELD=true" not in transaction_runner
     assert 'transaction cleanup' in transaction_runner
@@ -243,8 +250,12 @@ def test_remote_orchestrator_passes_token_over_stdin_not_command_line():
 def test_installed_role_agent_loads_its_pinned_sibling_module(tmp_path):
     target = tmp_path / "mvn-patroni-role-agent"
     identity = tmp_path / "patroni_local_identity.py"
+    config = tmp_path / "patroni_role_agent_config.py"
+    compose_runtime = tmp_path / "patroni_compose_runtime.py"
     shutil.copy2(REPO_ROOT / "scripts/ha/patroni_role_agent.py", target)
     shutil.copy2(REPO_ROOT / "scripts/ha/patroni_local_identity.py", identity)
+    shutil.copy2(REPO_ROOT / "scripts/ha/patroni_role_agent_config.py", config)
+    shutil.copy2(REPO_ROOT / "scripts/ha/patroni_compose_runtime.py", compose_runtime)
 
     result = subprocess.run(
         [sys.executable, "-E", str(target), "--help"],

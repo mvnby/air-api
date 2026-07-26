@@ -10,6 +10,8 @@ import types
 
 ROLE_AGENT_UNIT = "mvn-patroni-role-agent.service"
 ROLE_AGENT_PATH = "/usr/local/sbin/mvn-patroni-role-agent"
+ROLE_COMPOSE_RUNTIME_PATH = "/usr/local/sbin/patroni_compose_runtime.py"
+ROLE_AGENT_CONFIG_PATH = "/usr/local/sbin/patroni_role_agent_config.py"
 ROLE_IDENTITY_PATH = "/usr/local/sbin/patroni_local_identity.py"
 ROLE_UNIT_PATH = "/etc/systemd/system/mvn-patroni-role-agent.service"
 ROLE_ENV_PATH = "/etc/default/mvn-patroni-role-agent"
@@ -20,6 +22,8 @@ RELEASE_MANIFEST = "/var/lib/mvn-postgres-pitr/release-manifest.json"
 GLOBAL_LOCK = "/run/lock/mvn-postgres-pitr-prerequisites.lock"
 ROLE_ASSET_MODES = {
     ROLE_AGENT_PATH: 0o755,
+    ROLE_COMPOSE_RUNTIME_PATH: 0o644,
+    ROLE_AGENT_CONFIG_PATH: 0o644,
     ROLE_IDENTITY_PATH: 0o644,
     ROLE_UNIT_PATH: 0o644,
     OPERATION_GUARD_PATH: 0o755,
@@ -296,6 +300,18 @@ def load_attested_modules(sources, expected_environment):
         sources[ROLE_IDENTITY_PATH],
     )
     sys.modules["patroni_local_identity"] = identity
+    role_config = execute_attested_module(
+        "scripts.ha.patroni_role_agent_config",
+        ROLE_AGENT_CONFIG_PATH,
+        sources[ROLE_AGENT_CONFIG_PATH],
+    )
+    sys.modules["patroni_role_agent_config"] = role_config
+    compose_runtime = execute_attested_module(
+        "scripts.ha.patroni_compose_runtime",
+        ROLE_COMPOSE_RUNTIME_PATH,
+        sources[ROLE_COMPOSE_RUNTIME_PATH],
+    )
+    sys.modules["patroni_compose_runtime"] = compose_runtime
     role_agent = execute_attested_module(
         "mvn_pinned_patroni_role_agent",
         ROLE_AGENT_PATH,

@@ -40,6 +40,8 @@ REVIEWED_ASSETS = (
     "scripts/ha/pitr_cluster_topology.py",
     "scripts/ha/pitr_pinned_ssh.py",
     "scripts/ha/patroni_role_agent.py",
+    "scripts/ha/patroni_compose_runtime.py",
+    "scripts/ha/patroni_role_agent_config.py",
     "scripts/ha/patroni_local_identity.py",
     "deploy/ha/patroni/mvn-patroni-role-agent.service",
     "deploy/ha/security/mvn-api-ssh-host-key.pub",

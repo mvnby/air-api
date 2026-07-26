@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # globals are consumed by sourced lifecycle modules
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,11 +13,20 @@ MIGRATION_SCRIPT="${PATRONI_MIGRATION_SCRIPT:-/tmp/run_patroni_migrations.sh}"
 DEPLOY_SCRIPT="${PATRONI_DEPLOY_SCRIPT:-/tmp/deploy_patroni_api_node.sh}"
 ROLE_AGENT_SOURCE="${PATRONI_ROLE_AGENT_SOURCE:-}"
 ROLE_AGENT_TARGET="${PATRONI_ROLE_AGENT_TARGET:-/usr/local/sbin/mvn-patroni-role-agent}"
+ROLE_COMPOSE_RUNTIME_SOURCE="${PATRONI_ROLE_COMPOSE_RUNTIME_SOURCE:-}"
+ROLE_COMPOSE_RUNTIME_TARGET="${PATRONI_ROLE_COMPOSE_RUNTIME_TARGET:-/usr/local/sbin/patroni_compose_runtime.py}"
+ROLE_AGENT_CONFIG_SOURCE="${PATRONI_ROLE_AGENT_CONFIG_SOURCE:-}"
+ROLE_AGENT_CONFIG_TARGET="${PATRONI_ROLE_AGENT_CONFIG_TARGET:-/usr/local/sbin/patroni_role_agent_config.py}"
 ROLE_IDENTITY_SOURCE="${PATRONI_ROLE_IDENTITY_SOURCE:-}"
 ROLE_IDENTITY_TARGET="${PATRONI_ROLE_IDENTITY_TARGET:-/usr/local/sbin/patroni_local_identity.py}"
+ROLE_UNIT_SOURCE="${PATRONI_ROLE_UNIT_SOURCE:-}"
+ROLE_UNIT_TARGET="${PATRONI_ROLE_UNIT_TARGET:-/etc/systemd/system/mvn-patroni-role-agent.service}"
 DB_CONTRACT_HELPER="${PATRONI_DB_CONTRACT_HELPER:-/tmp/patroni_compose_db_contract.py}"
 ROLE_AGENT_UNIT="${PATRONI_ROLE_AGENT_UNIT:-mvn-patroni-role-agent.service}"
 RECONCILE_SCRIPT="${API_RECONCILE_SCRIPT:-/tmp/reconcile_backend_compose_runtime.sh}"
+COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER:-${SCRIPT_DIR}/communications_worker_release_contract.sh}"
+PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE="${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE:-${SCRIPT_DIR}/patroni_communications_candidate_lifecycle.sh}"
+PATRONI_ROLE_AGENT_CANDIDATE_ASSETS="${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS:-${SCRIPT_DIR}/patroni_role_agent_candidate_assets.sh}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
@@ -25,11 +35,7 @@ PATRONI_CUTOVER_MARKER="${PATRONI_CUTOVER_MARKER:-${PROJECT_DIR}/.patroni-cutove
 PITR_MAINTENANCE_MARKER="${API_PITR_MAINTENANCE_MARKER:-/run/mvn-postgres-pitr-maintenance}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_BACKEND_IMAGE="${API_PREVIOUS_BACKEND_IMAGE:-}"
-ROLE_AGENT_BACKUP=""
-ROLE_AGENT_PREEXISTED=false
-ROLE_IDENTITY_BACKUP=""
-ROLE_IDENTITY_PREEXISTED=false
-ROLE_AGENT_CHANGED=false
+BACKEND_IMAGE="${BACKEND_IMAGE:-}"
 CANDIDATE_CHECKSUM=""
 CANDIDATE_OWNED=false
 PATRONI_URL="${API_PATRONI_URL:-http://127.0.0.1:8008/patroni}"
@@ -47,6 +53,22 @@ PROXY_UPSTREAM_CREATED=false
 PROXY_FILES_CHANGED=false
 PROXY_DIR_CREATED=false
 PROXY_RUNTIME_STATE=not-applicable
+
+[[ -f "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" \
+  && ! -L "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" ]] \
+  || { echo "communications worker release helper is missing or unsafe" >&2; exit 1; }
+[[ -f "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE}" \
+  && ! -L "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE}" ]] \
+  || { echo "Patroni communications candidate lifecycle is missing or unsafe" >&2; exit 1; }
+[[ -f "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS}" \
+  && ! -L "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS}" ]] \
+  || { echo "Patroni role-agent candidate assets helper is missing or unsafe" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "${COMMUNICATIONS_WORKER_RELEASE_HELPER}"
+# shellcheck disable=SC1090
+source "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE}"
+# shellcheck disable=SC1090
+source "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS}"
 
 [[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
   echo "safe deployment lock helper digest is missing" >&2; exit 1;
@@ -135,7 +157,6 @@ stage_candidate_compose() {
     return 1
   fi
 }
-
 cleanup_migration_candidate() {
   local status=$?
   trap - EXIT
@@ -143,7 +164,6 @@ cleanup_migration_candidate() {
   [[ "${CANDIDATE_OWNED}" == "true" ]] && transaction cleanup
   exit "${status}"
 }
-
 cleanup_candidate_only() {
   local status=$?
   trap - EXIT
@@ -151,13 +171,11 @@ cleanup_candidate_only() {
   [[ "${CANDIDATE_OWNED}" == "true" ]] && transaction cleanup
   exit "${status}"
 }
-
 resolve_previous_backend_image() {
   local active_service="app"
   local active_slot=""
   local container_ids=""
   local runtime_image=""
-
   if [[ -n "${PREVIOUS_BACKEND_IMAGE}" ]]; then
     [[ "${PREVIOUS_BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]] || {
       echo "API_PREVIOUS_BACKEND_IMAGE must be immutable" >&2
@@ -185,80 +203,18 @@ resolve_previous_backend_image() {
   PREVIOUS_BACKEND_IMAGE="${runtime_image}"
 }
 
-backup_role_agent() {
-  if [[ -e "${ROLE_AGENT_TARGET}" || -L "${ROLE_AGENT_TARGET}" ]]; then
-    [[ -f "${ROLE_AGENT_TARGET}" && ! -L "${ROLE_AGENT_TARGET}" ]] || {
-      echo "existing Patroni role agent target is unsafe" >&2
-      return 1
-    }
-  fi
-  if [[ -e "${ROLE_IDENTITY_TARGET}" || -L "${ROLE_IDENTITY_TARGET}" ]]; then
-    [[ -f "${ROLE_IDENTITY_TARGET}" && ! -L "${ROLE_IDENTITY_TARGET}" ]] || {
-      echo "existing Patroni identity helper target is unsafe" >&2
-      return 1
-    }
-  fi
-  if [[ -f "${ROLE_AGENT_TARGET}" ]]; then
-    systemctl is-active --quiet "${ROLE_AGENT_UNIT}" || {
-      echo "existing Patroni role agent unit is not active" >&2
-      return 1
-    }
-    ROLE_AGENT_BACKUP="$(mktemp "${PROJECT_DIR}/.patroni-role-agent.backup.XXXXXX")"
-    if ! cp -p -- "${ROLE_AGENT_TARGET}" "${ROLE_AGENT_BACKUP}"; then
-      rm -f -- "${ROLE_AGENT_BACKUP}"
-      ROLE_AGENT_BACKUP=""
-      return 1
-    fi
-    ROLE_AGENT_PREEXISTED=true
-  fi
-  if [[ -f "${ROLE_IDENTITY_TARGET}" ]]; then
-    ROLE_IDENTITY_BACKUP="$(mktemp "${PROJECT_DIR}/.patroni-role-identity.backup.XXXXXX")"
-    if ! cp -p -- "${ROLE_IDENTITY_TARGET}" "${ROLE_IDENTITY_BACKUP}"; then
-      rm -f -- "${ROLE_AGENT_BACKUP}" "${ROLE_IDENTITY_BACKUP}"
-      ROLE_AGENT_BACKUP=""
-      ROLE_AGENT_PREEXISTED=false
-      ROLE_IDENTITY_BACKUP=""
-      return 1
-    fi
-    ROLE_IDENTITY_PREEXISTED=true
-  fi
-}
-
-restore_role_agent() {
-  [[ "${ROLE_AGENT_CHANGED}" == "true" ]] || return 0
-  local failed=false
-  if [[ "${ROLE_IDENTITY_PREEXISTED}" == "true" ]]; then
-    cp -p -- "${ROLE_IDENTITY_BACKUP}" "${ROLE_IDENTITY_TARGET}" || failed=true
-  else
-    rm -f -- "${ROLE_IDENTITY_TARGET}" || failed=true
-  fi
-  if [[ "${ROLE_AGENT_PREEXISTED}" == "true" ]]; then
-    cp -p -- "${ROLE_AGENT_BACKUP}" "${ROLE_AGENT_TARGET}" || failed=true
-    systemctl restart "${ROLE_AGENT_UNIT}" || failed=true
-    systemctl is-active --quiet "${ROLE_AGENT_UNIT}" || failed=true
-  else
-    systemctl stop "${ROLE_AGENT_UNIT}" >/dev/null 2>&1 || failed=true
-    if systemctl is-active --quiet "${ROLE_AGENT_UNIT}"; then
-      echo "new Patroni role agent unit remained active after stop" >&2
-      failed=true
-    fi
-    rm -f -- "${ROLE_AGENT_TARGET}" || failed=true
-  fi
-  [[ "${failed}" == "false" ]]
-}
-
 atomic_install_file() {
   local source="$1"
   local target="$2"
+  local mode="${3:-0644}"
   local temporary=""
   temporary="$(mktemp "${target}.tmp.XXXXXX")"
-  if ! install -m 0644 -- "${source}" "${temporary}"; then
+  if ! install -m "${mode}" -- "${source}" "${temporary}"; then
     rm -f -- "${temporary}"
     return 1
   fi
   mv -f -- "${temporary}" "${target}"
 }
-
 atomic_restore_file() {
   local source="$1"
   local target="$2"
@@ -270,7 +226,6 @@ atomic_restore_file() {
   fi
   mv -f -- "${temporary}" "${target}"
 }
-
 require_safe_proxy_target() {
   python3 - "$1" <<'PY'
 import os, stat, sys
@@ -281,7 +236,6 @@ if (not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)
     raise SystemExit("container proxy target metadata is unsafe: " + sys.argv[1])
 PY
 }
-
 capture_proxy_runtime_state() {
   local container_ids=""
   local running=""
@@ -303,7 +257,6 @@ capture_proxy_runtime_state() {
     *) echo "container proxy runtime state is invalid" >&2; return 1 ;;
   esac
 }
-
 stage_proxy_files() {
   local proxy_dir=""
   [[ "${PROXY_MODE}" == "container_nginx" ]] || return 0
@@ -468,8 +421,13 @@ require_unchanged_db_contract() {
 }
 
 fence_runtime_for_role_drift() {
+  local services=(app app-blue app-green bot)
+  local failed=false
+  communications_worker_set_release_fence || failed=true
   docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
-    stop app app-blue app-green bot >/dev/null 2>&1
+    stop "${services[@]}" >/dev/null 2>&1 || failed=true
+  patroni_communications_force_fence_candidate_runtime || failed=true
+  [[ "${failed}" == "false" ]]
 }
 
 reconcile_failed_deploy() {
@@ -477,21 +435,30 @@ reconcile_failed_deploy() {
   local restoration_failed=false
   local role_agent_restore_failed=false
   local recovery_role=""
+  local recovery_services="app"
   trap - EXIT
   set +e
   if promotion_committed; then
-    echo "Patroni candidate compose promotion committed; preserving the consistent new runtime" >&2
-    [[ -z "${ROLE_AGENT_BACKUP}" ]] || rm -f -- "${ROLE_AGENT_BACKUP}"
-    [[ -z "${ROLE_IDENTITY_BACKUP}" ]] || rm -f -- "${ROLE_IDENTITY_BACKUP}"
+    if ! patroni_communications_fence_canonical; then
+      echo "CRITICAL: promoted communications worker could not be fenced" >&2
+      exit 90
+    fi
+    echo "Patroni candidate compose promotion committed; fenced the dormant worker for inspection" >&2
+    patroni_role_assets_cleanup_backups \
+      || echo "warning: stale Patroni role asset backup remains" >&2
     [[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}"
     exit "${status}"
+  fi
+  if ! patroni_communications_fence_candidate; then
+    echo "failed to fence candidate communications worker before rollback" >&2
+    restoration_failed=true
   fi
   transaction cleanup || restoration_failed=true
   if ! restore_proxy_state; then
     echo "failed to restore the previous container proxy files and runtime state" >&2
     restoration_failed=true
   fi
-  if ! restore_role_agent; then
+  if ! patroni_role_assets_restore; then
     echo "failed to restore the previous Patroni role agent" >&2
     role_agent_restore_failed=true
     restoration_failed=true
@@ -505,7 +472,10 @@ reconcile_failed_deploy() {
     fence_runtime_for_role_drift || restoration_failed=true
     restoration_failed=true
   elif [[ "${recovery_role}" == "primary" ]]; then
-    if ! API_DEPLOY_SERVICES="app" \
+    if [[ "${PREVIOUS_WORKER_RUNNING}" == "true" ]]; then
+      recovery_services+=" ${COMMUNICATIONS_WORKER_SERVICE}"
+    fi
+    if ! API_DEPLOY_SERVICES="${recovery_services}" \
       API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
       API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
       API_READY_URL="${API_HEALTH_URL:-http://127.0.0.1:18080/api/health}" \
@@ -513,7 +483,11 @@ reconcile_failed_deploy() {
       restoration_failed=true
     fi
   else
-    if ! API_DEPLOY_SERVICES="app" \
+    recovery_services="app"
+    if [[ "${PREVIOUS_WORKER_RUNNING}" == "true" ]]; then
+      recovery_services+=" ${COMMUNICATIONS_WORKER_SERVICE}"
+    fi
+    if ! API_DEPLOY_SERVICES="${recovery_services}" \
       API_STOP_SERVICES_AFTER_DEPLOY="bot" \
       API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
       API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
@@ -522,16 +496,24 @@ reconcile_failed_deploy() {
       restoration_failed=true
     fi
   fi
-  [[ -z "${ROLE_AGENT_SOURCE}" ]] || rm -f -- "${ROLE_AGENT_SOURCE}"
-  [[ -z "${ROLE_IDENTITY_SOURCE}" ]] || rm -f -- "${ROLE_IDENTITY_SOURCE}"
-  if [[ -n "${ROLE_AGENT_BACKUP}" || -n "${ROLE_IDENTITY_BACKUP}" ]]; then
+  patroni_role_assets_cleanup_sources || restoration_failed=true
+  if [[ "${restoration_failed}" == "true" ]]; then
+    communications_worker_set_release_fence || true
+  elif ! patroni_communications_restore_release_fence; then
+    echo "failed to restore the previous communications worker release fence" >&2
+    communications_worker_set_release_fence || true
+    restoration_failed=true
+  fi
+  if ! patroni_communications_require_previous_fence_restored; then
+    echo "failed to prove the previous communications worker fence" >&2
+    communications_worker_set_release_fence || true
+    restoration_failed=true
+  fi
+  if patroni_role_assets_backups_present; then
     if [[ "${role_agent_restore_failed}" == "true" ]]; then
       echo "CRITICAL: previous Patroni role asset backups retained" >&2
     else
-      [[ -z "${ROLE_AGENT_BACKUP}" ]] \
-        || rm -f -- "${ROLE_AGENT_BACKUP}" || restoration_failed=true
-      [[ -z "${ROLE_IDENTITY_BACKUP}" ]] \
-        || rm -f -- "${ROLE_IDENTITY_BACKUP}" || restoration_failed=true
+      patroni_role_assets_cleanup_backups || restoration_failed=true
     fi
   fi
   if [[ "${restoration_failed}" == "true" ]]; then
@@ -556,6 +538,10 @@ promotion_committed() {
 if [[ "${OPERATION}" == "deploy" ]]; then
   [[ "${EXPECTED_ROLE}" == "primary" || "${EXPECTED_ROLE}" == "standby" ]] || {
     echo "API_EXPECTED_PATRONI_ROLE must be primary or standby" >&2
+    exit 2
+  }
+  [[ "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]] || {
+    echo "BACKEND_IMAGE must identify an immutable candidate release" >&2
     exit 2
   }
 fi
@@ -587,21 +573,14 @@ fi
 }
 require_unchanged_db_contract
 resolve_previous_backend_image
-backup_role_agent
+patroni_communications_capture_release_fence
+patroni_communications_capture_previous
+patroni_role_assets_backup
 trap reconcile_failed_deploy EXIT
 transaction stage
+patroni_communications_detect_candidate_support
 
-[[ -f "${ROLE_AGENT_SOURCE}" && ! -L "${ROLE_AGENT_SOURCE}" \
-  && -f "${ROLE_IDENTITY_SOURCE}" && ! -L "${ROLE_IDENTITY_SOURCE}" ]] || {
-  echo "Patroni role agent source bundle is incomplete" >&2
-  exit 1
-}
-ROLE_AGENT_CHANGED=true
-install -m 0644 "${ROLE_IDENTITY_SOURCE}" "${ROLE_IDENTITY_TARGET}"
-install -m 0755 "${ROLE_AGENT_SOURCE}" "${ROLE_AGENT_TARGET}"
-rm -f -- "${ROLE_AGENT_SOURCE}" "${ROLE_IDENTITY_SOURCE}"
-systemctl restart "${ROLE_AGENT_UNIT}"
-systemctl is-active --quiet "${ROLE_AGENT_UNIT}"
+patroni_role_assets_install
 capture_proxy_runtime_state
 stage_proxy_files
 
@@ -610,11 +589,15 @@ API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
 bash "${DEPLOY_SCRIPT}"
 require_no_patroni_cutover
 require_unchanged_db_contract
+if [[ "${CANDIDATE_WORKER_SUPPORTED}" == "true" ]]; then
+  patroni_communications_require_runtime "${CANDIDATE_FILE}" "${BACKEND_IMAGE}"
+fi
 transaction promote
+if [[ "${CANDIDATE_WORKER_SUPPORTED}" == "true" ]]; then
+  patroni_communications_require_runtime "${CANONICAL_FILE}" "${BACKEND_IMAGE}"
+fi
 trap - EXIT
-[[ -z "${ROLE_AGENT_BACKUP}" ]] || rm -f -- "${ROLE_AGENT_BACKUP}" \
-  || echo "warning: stale Patroni role agent backup remains at ${ROLE_AGENT_BACKUP}" >&2
-[[ -z "${ROLE_IDENTITY_BACKUP}" ]] || rm -f -- "${ROLE_IDENTITY_BACKUP}" \
-  || echo "warning: stale Patroni identity backup remains at ${ROLE_IDENTITY_BACKUP}" >&2
+patroni_role_assets_cleanup_backups \
+  || echo "warning: stale Patroni role asset backup remains" >&2
 [[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}" \
   || echo "warning: stale Patroni proxy config backup remains at ${PROXY_CONFIG_BACKUP}" >&2

@@ -355,6 +355,8 @@ def test_role_agent_remote_command_is_pinned_and_attests_exact_assets(tmp_path):
     manifest = json.loads(command[7])
     assert set(manifest) == {
         "/usr/local/sbin/mvn-patroni-role-agent",
+        "/usr/local/sbin/patroni_compose_runtime.py",
+        "/usr/local/sbin/patroni_role_agent_config.py",
         "/usr/local/sbin/patroni_local_identity.py",
         "/etc/systemd/system/mvn-patroni-role-agent.service",
         "/usr/local/sbin/mvn_postgres_pitr_operation_guard.py",

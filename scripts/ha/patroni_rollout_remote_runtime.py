@@ -49,6 +49,8 @@ def process_start_ns(pid):
 def validate_role_process_generation(pid, expected):
     assets = (
         "/usr/local/sbin/mvn-patroni-role-agent",
+        "/usr/local/sbin/patroni_compose_runtime.py",
+        "/usr/local/sbin/patroni_role_agent_config.py",
         "/usr/local/sbin/patroni_local_identity.py",
         "/etc/systemd/system/mvn-patroni-role-agent.service",
         "/etc/default/mvn-patroni-role-agent",

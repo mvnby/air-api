@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TRANSACTION = REPO_ROOT / "scripts/compose_candidate_transaction.sh"
 PATRONI_RUNNER = REPO_ROOT / "scripts/ha/run_patroni_candidate_transaction.sh"
 PREVIOUS_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "1" * 40
+CANDIDATE_IMAGE = "ghcr.io/mvnby/air-api/backend@sha256:" + "2" * 64
 DB_CONTRACT_HELPER = REPO_ROOT / "scripts/ha/patroni_compose_db_contract.py"
 DEPLOY_LOCK_HELPER = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
 
@@ -94,7 +95,19 @@ def _patroni_runner_env(
         """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$PATRONI_COMMAND_LOG"
-if [[ "$1" == "compose" && "$*" == *" config --no-env-resolution --no-interpolate --format json" ]]; then
+if [[ "$1" == "compose" && "$*" == *" config --services" ]]; then
+  printf 'app\n'
+  if [[ "$*" == *"compose.yml.candidate"* \
+    && "${FAKE_CANDIDATE_WORKER_SUPPORTED:-false}" == "true" ]]; then
+    printf 'communications-worker\n'
+  elif [[ "$*" != *"compose.yml.candidate"* \
+    && "${FAKE_CANONICAL_WORKER_SUPPORTED:-false}" == "true" ]]; then
+    printf 'communications-worker\n'
+  fi
+elif [[ "$1" == "compose" && "$*" == *" config --format json" ]]; then
+  printf '{"name":"air-api","services":{"communications-worker":{"image":"%s","environment":{"COMMUNICATIONS_WORKER_ENABLED":"false","COMMUNICATIONS_WORKER_ALLOW_ALL_MODE":"false"}}}}\n' \
+    "${BACKEND_IMAGE:-$EXPECTED_PREVIOUS_IMAGE}"
+elif [[ "$1" == "compose" && "$*" == *" config --no-env-resolution --no-interpolate --format json" ]]; then
   if [[ "$*" == *"compose.yml.candidate"* ]]; then
     config_path="$CANDIDATE_DB_CONTRACT"
     if [[ -e "$DEPLOY_CHILD_RAN" && -n "${CANDIDATE_DB_CONTRACT_AFTER_DEPLOY:-}" ]]; then
@@ -108,6 +121,12 @@ elif [[ "$1" == "compose" && "$*" == *" ps -q app-green" ]]; then
   printf 'active-green-container\n'
 elif [[ "$1" == "inspect" && "$*" == *" active-green-container" ]]; then
   printf '%s\n' "$EXPECTED_PREVIOUS_IMAGE"
+elif [[ "$1" == "compose" && "$*" == *" ps --status running -q communications-worker" ]]; then
+  [[ ! -f "${WORKER_RUNTIME_STATE:-}" ]] || printf '%064d\n' 0
+elif [[ "$1" == "compose" && "$*" == *" ps -q communications-worker" ]]; then
+  [[ ! -f "${WORKER_RUNTIME_STATE:-}" ]] || printf '%064d\n' 0
+elif [[ "$1" == "inspect" && "$*" == *"$(printf '%064d' 0)"* ]]; then
+  printf '%s|true\n' "$EXPECTED_PREVIOUS_IMAGE"
 elif [[ "$1" == "compose" && "$*" == *" stop app app-blue app-green bot" ]]; then
   exit 0
 elif [[ "$1" == "compose" && "$*" == *" ps -a -q api-proxy" ]]; then
@@ -116,6 +135,19 @@ elif [[ "$1" == "compose" && "$*" == *" ps -a -q api-proxy" ]]; then
   fi
 elif [[ "$1" == "inspect" && "$*" == *"proxy-container"* && "$*" == *"State.Running"* ]]; then
   [[ "${PROXY_PREVIOUS_RUNTIME_STATE:-absent}" == "running" ]] && printf 'true\n' || printf 'false\n'
+elif [[ "$1" == "compose" && "$*" == *"compose.yml.candidate"* \
+  && "$*" == *" stop communications-worker" ]]; then
+  if [[ "${FAIL_CANDIDATE_WORKER_STOP:-false}" == "true" ]]; then exit 1; fi
+  rm -f -- "${WORKER_RUNTIME_STATE:-}"
+elif [[ "$1" == "compose" && "$*" == *" stop communications-worker" ]]; then
+  rm -f -- "${WORKER_RUNTIME_STATE:-}"
+elif [[ "$1" == "docker-never" ]]; then
+  exit 91
+elif [[ "$1" == "ps" && "$*" == *"label=com.docker.compose.project=air-api"* \
+  && "$*" == *"label=com.docker.compose.service=communications-worker"* ]]; then
+  [[ ! -f "${WORKER_RUNTIME_STATE:-}" ]] || printf '%064d\n' 0
+elif [[ "$1" == "rm" && "$*" == *"$(printf '%064d' 0)"* ]]; then
+  rm -f -- "$WORKER_RUNTIME_STATE"
 elif [[ "$1" == "compose" && "$*" == *" up -d --no-deps --force-recreate --wait --wait-timeout 60 api-proxy" ]]; then
   if [[ -n "${PROXY_RUNTIME_CONFIG:-}" ]]; then
     cp "$API_PROXY_CONFIG_FILE" "$PROXY_RUNTIME_CONFIG"
@@ -134,6 +166,31 @@ elif [[ "$1" == "compose" && "$*" == *" ps --status running -q api-proxy" ]]; th
 else
   exit 91
 fi
+""",
+    )
+    _executable(
+        fake_bin / "install",
+        """#!/usr/bin/env bash
+set -euo pipefail
+count=0
+if [[ -f "$INSTALL_COUNT" ]]; then count="$(cat "$INSTALL_COUNT")"; fi
+count=$((count + 1))
+printf '%s\n' "$count" > "$INSTALL_COUNT"
+printf '%s\n' "${!#}" >> "$INSTALL_LOG"
+if [[ "$count" -eq "${FAIL_INSTALL_NUMBER:-0}" ]]; then exit 48; fi
+exec /usr/bin/install "$@"
+""",
+    )
+    _executable(
+        fake_bin / "cp",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s|%s\n' "${@: -2:1}" "${@: -1}" >> "$CP_LOG"
+if [[ -n "${FAIL_RESTORE_LABEL:-}" \
+  && "${@: -2:1}" == *".patroni-${FAIL_RESTORE_LABEL}.backup."* ]]; then
+  exit 49
+fi
+exec /bin/cp "$@"
 """,
     )
     _executable(
@@ -183,17 +240,33 @@ exit {child_exit}
     )
     role_agent = tmp_path / "role-agent.py"
     role_agent.write_text("#!/usr/bin/env python3\n# new role agent\n", encoding="utf-8")
+    role_compose_runtime = tmp_path / "patroni-compose-runtime.py"
+    role_compose_runtime.write_text("# new compose runtime\n", encoding="utf-8")
+    role_agent_config = tmp_path / "patroni-role-agent-config.py"
+    role_agent_config.write_text("# new role agent config\n", encoding="utf-8")
     role_identity = tmp_path / "patroni-local-identity.py"
     role_identity.write_text("# new identity helper\n", encoding="utf-8")
+    role_unit = tmp_path / "mvn-patroni-role-agent.service"
+    role_unit.write_text("[Service]\nExecStart=/new-role-agent\n", encoding="utf-8")
     reconcile = tmp_path / "reconcile.sh"
     _executable(
         reconcile,
         """#!/usr/bin/env bash
 set -euo pipefail
-grep -Fq '/app/token.json' "$API_PROJECT_DIR/$API_COMPOSE_FILE"
+if [[ "${API_RECONCILE_OPERATION:-reconcile}" != "verify" ]]; then
+  grep -Fq '/app/token.json' "$API_PROJECT_DIR/$API_COMPOSE_FILE"
+fi
 printf '%s|%s\n' "$API_COMPOSE_FILE" "$API_DEPLOY_SERVICES" > "$RECONCILE_LOG"
 printf 'reconcile:%s\n' "$API_COMPOSE_FILE" >> "$PATRONI_COMMAND_LOG"
-test "$API_RECONCILE_BACKEND_IMAGE" = "$EXPECTED_PREVIOUS_IMAGE"
+if [[ "${API_RECONCILE_OPERATION:-reconcile}" == "verify" ]]; then
+  test "$API_RECONCILE_BACKEND_IMAGE" = "$EXPECTED_CANDIDATE_IMAGE"
+else
+  test "$API_RECONCILE_BACKEND_IMAGE" = "$EXPECTED_PREVIOUS_IMAGE"
+fi
+if [[ "${API_RECONCILE_OPERATION:-reconcile}" != "verify" \
+  && " $API_DEPLOY_SERVICES " == *" communications-worker "* ]]; then
+  : > "$WORKER_RUNTIME_STATE"
+fi
 exit 0
 """,
     )
@@ -211,8 +284,18 @@ exit 0
         "API_CURRENT_PATRONI_ROLE": current_role,
         "PATRONI_ROLE_AGENT_SOURCE": str(role_agent),
         "PATRONI_ROLE_AGENT_TARGET": str(tmp_path / "installed-role-agent"),
+        "PATRONI_ROLE_COMPOSE_RUNTIME_SOURCE": str(role_compose_runtime),
+        "PATRONI_ROLE_COMPOSE_RUNTIME_TARGET": str(
+            tmp_path / "installed-patroni-compose-runtime.py"
+        ),
+        "PATRONI_ROLE_AGENT_CONFIG_SOURCE": str(role_agent_config),
+        "PATRONI_ROLE_AGENT_CONFIG_TARGET": str(
+            tmp_path / "installed-patroni-role-agent-config.py"
+        ),
         "PATRONI_ROLE_IDENTITY_SOURCE": str(role_identity),
         "PATRONI_ROLE_IDENTITY_TARGET": str(tmp_path / "installed-role-identity.py"),
+        "PATRONI_ROLE_UNIT_SOURCE": str(role_unit),
+        "PATRONI_ROLE_UNIT_TARGET": str(tmp_path / "installed-role-agent.service"),
         "PATRONI_DB_CONTRACT_HELPER": str(DB_CONTRACT_HELPER),
         "PATRONI_ROLE_AGENT_UNIT": "test.service",
         "CHILD_LOG": str(tmp_path / "child.log"),
@@ -221,11 +304,17 @@ exit 0
         "SYSTEMCTL_LOG": str(systemctl_log),
         "SYSTEMCTL_STATE": str(systemctl_state),
         "SYSTEMCTL_RESTART_COUNT": str(tmp_path / "systemctl-restart-count"),
+        "INSTALL_COUNT": str(tmp_path / "install-count"),
+        "INSTALL_LOG": str(tmp_path / "install.log"),
+        "CP_LOG": str(tmp_path / "cp.log"),
+        "WORKER_RUNTIME_STATE": str(tmp_path / "worker-runtime-state"),
         "CANONICAL_DB_CONTRACT": str(canonical_contract),
         "CANDIDATE_DB_CONTRACT": str(candidate_contract),
         "DEPLOY_CHILD_RAN": str(tmp_path / "deploy-child-ran"),
         "API_PREVIOUS_BACKEND_IMAGE": "" if discover_previous else PREVIOUS_IMAGE,
         "EXPECTED_PREVIOUS_IMAGE": PREVIOUS_IMAGE,
+        "BACKEND_IMAGE": CANDIDATE_IMAGE,
+        "EXPECTED_CANDIDATE_IMAGE": CANDIDATE_IMAGE,
         "API_DEPLOY_LOCK_HELPER": str(DEPLOY_LOCK_HELPER),
         "API_DEPLOY_LOCK_HELPER_SHA256": __import__("hashlib").sha256(
             DEPLOY_LOCK_HELPER.read_bytes()
@@ -386,26 +475,6 @@ def test_patroni_candidate_rechecks_db_contract_immediately_before_promotion(tmp
     )
 
 
-def test_patroni_candidate_rejects_symlinked_identity_helper_target(tmp_path):
-    env, project = _patroni_runner_env(tmp_path, child_exit=0)
-    victim = tmp_path / "victim"
-    victim.write_text("do-not-overwrite\n", encoding="utf-8")
-    Path(env["PATRONI_ROLE_IDENTITY_TARGET"]).symlink_to(victim)
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode != 0
-    assert "identity helper target is unsafe" in result.stderr
-    assert victim.read_text(encoding="utf-8") == "do-not-overwrite\n"
-    assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
-
-
 def test_patroni_discovers_previous_runtime_image_from_active_slot_before_reconcile(
     tmp_path,
 ):
@@ -488,90 +557,6 @@ def test_patroni_unknown_live_role_fences_runtime_instead_of_assuming_standby(tm
     assert not (tmp_path / "reconcile.log").exists()
     commands = (tmp_path / "patroni-commands.log").read_text(encoding="utf-8")
     assert " stop app app-blue app-green bot" in commands
-
-
-@pytest.mark.parametrize(
-    ("failure_source", "child_exit", "restart_failure", "expected_exit"),
-    [
-        ("child", 42, "0", 42),
-        ("systemctl", 0, "1", 47),
-    ],
-)
-def test_patroni_failure_restores_preexisting_role_agent(
-    tmp_path,
-    failure_source,
-    child_exit,
-    restart_failure,
-    expected_exit,
-):
-    env, project = _patroni_runner_env(tmp_path, child_exit=child_exit)
-    target = Path(env["PATRONI_ROLE_AGENT_TARGET"])
-    identity_target = Path(env["PATRONI_ROLE_IDENTITY_TARGET"])
-    old_content = "#!/usr/bin/env python3\n# previous role agent\n"
-    old_identity = "# previous identity helper\n"
-    target.write_text(old_content, encoding="utf-8")
-    target.chmod(0o755)
-    identity_target.write_text(old_identity, encoding="utf-8")
-    env["SYSTEMCTL_FAIL_RESTART_NUMBER"] = restart_failure
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == expected_exit, (
-        failure_source,
-        result.stdout,
-        result.stderr,
-    )
-    assert target.read_text(encoding="utf-8") == old_content
-    assert identity_target.read_text(encoding="utf-8") == old_identity
-    assert not Path(env["PATRONI_ROLE_AGENT_SOURCE"]).exists()
-    assert not Path(env["PATRONI_ROLE_IDENTITY_SOURCE"]).exists()
-    assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
-    assert not (project / "compose.yml.candidate").exists()
-    restarts = [
-        line
-        for line in (tmp_path / "systemctl.log").read_text(encoding="utf-8").splitlines()
-        if line.startswith("restart ")
-    ]
-    assert len(restarts) == 2
-    assert (tmp_path / "reconcile.log").exists()
-
-
-def test_patroni_retains_role_agent_backup_when_restore_restart_fails(tmp_path):
-    env, project = _patroni_runner_env(tmp_path, child_exit=42)
-    target = Path(env["PATRONI_ROLE_AGENT_TARGET"])
-    identity_target = Path(env["PATRONI_ROLE_IDENTITY_TARGET"])
-    old_content = "#!/usr/bin/env python3\n# previous role agent\n"
-    old_identity = "# previous identity helper\n"
-    target.write_text(old_content, encoding="utf-8")
-    target.chmod(0o755)
-    identity_target.write_text(old_identity, encoding="utf-8")
-    env["SYSTEMCTL_FAIL_RESTART_NUMBER"] = "2"
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 90
-    assert "role asset backups retained" in result.stderr
-    backups = list(project.glob(".patroni-role-agent.backup.*"))
-    identity_backups = list(project.glob(".patroni-role-identity.backup.*"))
-    assert len(backups) == 1
-    assert len(identity_backups) == 1
-    assert backups[0].read_text(encoding="utf-8") == old_content
-    assert identity_backups[0].read_text(encoding="utf-8") == old_identity
-    assert target.read_text(encoding="utf-8") == old_content
-    assert identity_target.read_text(encoding="utf-8") == old_identity
-    assert not (project / "compose.yml.candidate").exists()
 
 
 @pytest.mark.parametrize("migration_exit", [0, 48])

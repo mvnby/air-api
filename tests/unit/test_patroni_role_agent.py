@@ -21,6 +21,15 @@ def _no_host_maintenance_marker(monkeypatch):
     monkeypatch.setattr(
         patroni_role_agent, "read_maintenance_transaction_id", lambda: None
     )
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_run_docker",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
 
 
 def _config(tmp_path: Path, *, app_service_override: str = "") -> AgentConfig:
@@ -424,7 +433,7 @@ def test_busy_deploy_lock_keeps_fencing_state_until_raced_app_is_recreated(
     monkeypatch.setattr(patroni_role_agent, "_cancel_pitr_operations", lambda _config: [])
     monkeypatch.setattr(patroni_role_agent.fcntl, "flock", flock)
 
-    assert reconcile(config, "standby") is False
+    assert reconcile(config, "standby") is None
     assert config.state_file.read_text() == "fencing\n"
     assert runtime.services == {"app"}
 
@@ -696,7 +705,7 @@ def test_network_error_is_treated_as_standby(tmp_path, monkeypatch):
     monkeypatch.setattr(
         patroni_role_agent,
         "reconcile",
-        lambda _config, role: roles.append(role),
+        lambda _config, role: roles.append(role) or False,
     )
 
     assert patroni_role_agent.run(config, once=True) == 0

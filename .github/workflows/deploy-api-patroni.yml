@@ -252,7 +252,7 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
-        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
 
   deploy-replica-api:
     if: ${{ needs.validate-topology.outputs.primary_node == 'reserve' }}
@@ -283,7 +283,7 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
-        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
 
   deploy-primary-api:
     if: ${{ needs.validate-topology.outputs.primary_node == 'api' }}
@@ -315,7 +315,7 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
-        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
 
   deploy-primary-reserve:
     if: ${{ needs.validate-topology.outputs.primary_node == 'reserve' }}
@@ -347,7 +347,7 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
-        run: bash scripts/ha/run_patroni_node_remote.sh deploy
+        run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
 
   deployment-complete:
     if: ${{ always() }}
@@ -372,4 +372,4 @@ jobs:
             echo "::error::No validated Patroni primary branch completed"
             exit 1
           fi
-          echo "Patroni-aware API release completed through ${PRIMARY_NODE}"
+          echo "Patroni-aware API and dormant worker release verified on both nodes through ${PRIMARY_NODE}"

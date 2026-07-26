@@ -1,5 +1,7 @@
 import json
+import os
 import subprocess
+import sys
 import time
 import urllib.error
 from types import SimpleNamespace
@@ -7,6 +9,67 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.ha import patroni_local_identity
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        (
+            {
+                "APP_ROLE": "primary",
+                "COMMUNICATIONS_WORKER_ENABLED": "false",
+                "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
+            },
+            True,
+        ),
+        (
+            {
+                "APP_ROLE": "standby",
+                "COMMUNICATIONS_WORKER_ENABLED": "false",
+                "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
+            },
+            False,
+        ),
+        (
+            {
+                "APP_ROLE": "primary",
+                "COMMUNICATIONS_WORKER_ENABLED": "true",
+                "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
+            },
+            False,
+        ),
+        (
+            {
+                "APP_ROLE": "primary",
+                "COMMUNICATIONS_WORKER_ENABLED": "false",
+                "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "true",
+            },
+            False,
+        ),
+    ],
+)
+def test_communications_worker_probe_requires_all_no_delivery_gates(
+    environment, expected
+):
+    outputs = []
+
+    def compose_runner(_config, *args, **kwargs):
+        result = subprocess.run(
+            [sys.executable, "-c", args[5], args[6]],
+            env={**os.environ, **environment},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        outputs.append((result.stdout, result.stderr, kwargs))
+        return result
+
+    assert patroni_local_identity.communications_worker_role_matches(
+        SimpleNamespace(),
+        "primary",
+        compose_runner=compose_runner,
+    ) is expected
+    assert outputs == [("", "", {"check": False, "timeout": 10})]
 
 
 @pytest.mark.parametrize(
