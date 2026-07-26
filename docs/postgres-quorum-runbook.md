@@ -39,8 +39,10 @@ networking so it can bind directly to each node's WireGuard address.
 - `scripts/ha/rehearse_patroni_failover.sh`: disposable failover/rejoin drill
   that can either build source locally or fail closed around one exact published
   `linux/amd64` digest and prove both running image IDs plus archive behavior;
-- `scripts/ha/patroni_role_agent.py` + `scripts/ha/patroni_local_identity.py`:
-  local API/scheduler/bot role reconciler with strict local DCS leader-lock proof.
+- `scripts/ha/patroni_role_agent.py` with its
+  `patroni_local_identity.py`, `patroni_role_agent_config.py`, and
+  `patroni_compose_runtime.py` siblings: local API/scheduler/bot role reconciler
+  with strict local DCS leader-lock proof.
 - `.github/workflows/patroni-failover-rehearsal.yml`: weekly source-only drill
   (`release_evidence=false`) plus manual exact-digest rehearsal and retained log.
 - `.github/workflows/publish-patroni-image.yml`: manual, CI-gated publication of
@@ -265,10 +267,14 @@ on the former primary.
 Install the agent only during the Patroni migration window:
 
 ```bash
-install -m 0755 scripts/ha/patroni_role_agent.py \
-  /usr/local/sbin/mvn-patroni-role-agent
 install -m 0644 scripts/ha/patroni_local_identity.py \
   /usr/local/sbin/patroni_local_identity.py
+install -m 0644 scripts/ha/patroni_role_agent_config.py \
+  /usr/local/sbin/patroni_role_agent_config.py
+install -m 0644 scripts/ha/patroni_compose_runtime.py \
+  /usr/local/sbin/patroni_compose_runtime.py
+install -m 0755 scripts/ha/patroni_role_agent.py \
+  /usr/local/sbin/mvn-patroni-role-agent
 install -m 0644 deploy/ha/patroni/mvn-patroni-role-agent.service \
   /etc/systemd/system/mvn-patroni-role-agent.service
 install -m 0600 deploy/ha/patroni/role-agent.env.example \
@@ -283,6 +289,38 @@ During a PITR host transaction, the installer owns the root-only regular file
 agent continues reconciling primary app/bot traffic while this marker is valid,
 but keeps all PITR timers and their services fenced. Unsafe marker metadata or
 content causes a full standby fence.
+
+### Communications Worker Phase 2A
+
+Both Patroni API nodes define `communications-worker` from the exact immutable
+`BACKEND_IMAGE` used by the API. It uses that node's local PostgreSQL service
+and the same role-resolved `.ha-app-role.env`; deploy and verification reject
+any image or `APP_ROLE` mismatch. During Phase 2A both delivery gates,
+`COMMUNICATIONS_WORKER_ENABLED` and `COMMUNICATIONS_WORKER_ALLOW_ALL_MODE`,
+must remain exactly `false`.
+
+The root-owned project marker
+`.ha-communications-worker-release-fenced` is a durable fail-closed latch.
+While it exists, including as a broken symlink, the role agent keeps the worker
+stopped. A release sets the latch before stopping or replacing the worker,
+clears it only under the deployment lock immediately before a controlled
+start, and latches it again on any failed start or verification. Rollback
+restores both the previous marker state and the previous worker running state;
+it never starts a worker that was already fenced.
+
+After each node deploy, the verifier proves the canonical Compose file is a
+regular non-symlink, API/worker image parity, false delivery gates, the expected
+runtime role, a stable active role-agent unit, and an absent release latch. It
+then runs `/usr/local/sbin/mvn-patroni-role-agent --once`. A successful no-op
+or reconciliation must end with exactly:
+
+```text
+patroni_role_agent_once_status=verified role=<primary|standby>
+```
+
+Do not enable either delivery gate manually during Phase 2A. Delivery
+activation, token ownership, retry/ack canaries, and accumulated-event policy
+belong to the separately approved Phase 2B transaction.
 
 ## Production Cutover
 

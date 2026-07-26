@@ -15,6 +15,8 @@ REMOTE_EXECUTOR = REMOTE_PRELUDE + REMOTE_CONTRACT + REMOTE_RUNTIME_PROOF + r'''
 
 def validate_role_assets(payload):
     assets = (("/usr/local/sbin/mvn-patroni-role-agent", 0o755, payload["role_agent_sha256"]),
+        ("/usr/local/sbin/patroni_compose_runtime.py", 0o644, payload["role_compose_runtime_sha256"]),
+        ("/usr/local/sbin/patroni_role_agent_config.py", 0o644, payload["role_agent_config_sha256"]),
         ("/usr/local/sbin/patroni_local_identity.py", 0o644, payload["role_identity_sha256"]),
         ("/etc/systemd/system/mvn-patroni-role-agent.service", 0o644,
          payload["role_unit_sha256"]))
@@ -502,6 +504,8 @@ def main():
                     "publish_run_attempt": payload["publish_run_attempt"],
                     "publish_run_id": payload["publish_run_id"],
                     "role_agent_sha256": payload["role_agent_sha256"],
+                    "role_agent_config_sha256": payload["role_agent_config_sha256"],
+                    "role_compose_runtime_sha256": payload["role_compose_runtime_sha256"],
                     "role_identity_sha256": payload["role_identity_sha256"],
                     "role_unit_sha256": payload["role_unit_sha256"],
                     "node": node, "operation": "idle", "target_image": payload["target_image"],

@@ -47,6 +47,8 @@ def test_remote_executor_compiles_and_contains_required_fail_closed_contracts():
     assert "pg_is_in_recovery" in REMOTE_EXECUTOR
     assert "dcs_baseline_sha256" in REMOTE_EXECUTOR
     assert "role_unit_sha256" in REMOTE_EXECUTOR
+    assert "role_compose_runtime_sha256" in REMOTE_EXECUTOR
+    assert "role_agent_config_sha256" in REMOTE_EXECUTOR
     assert "exact_role_env" in REMOTE_EXECUTOR
     assert "attest_container_role_environment" in REMOTE_EXECUTOR
     assert '"CLOUDFLARE_PURGE_DRY_RUN": "true"' in REMOTE_EXECUTOR
@@ -102,6 +104,8 @@ def test_rollout_modules_stay_small_and_all_composed_sources_are_reviewed():
         "scripts/ha/patroni_rollout_remote_executor.py",
         "scripts/ha/patroni_rollout_remote_prelude.py",
         "scripts/ha/patroni_rollout_remote_runtime.py",
+        "scripts/ha/patroni_compose_runtime.py",
+        "scripts/ha/patroni_role_agent_config.py",
         "deploy/ha/patroni/mvn-patroni-role-agent.service",
     ):
         assert required in REVIEWED_ASSETS

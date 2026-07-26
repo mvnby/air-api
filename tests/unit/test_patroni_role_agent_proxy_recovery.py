@@ -26,6 +26,15 @@ def _safe_host_contracts(monkeypatch):
     monkeypatch.setattr(
         patroni_role_agent, "_wait_scheduler_running", lambda _config: None
     )
+    monkeypatch.setattr(
+        patroni_role_agent,
+        "_run_docker",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
 
 
 def _config(tmp_path: Path) -> AgentConfig:
@@ -267,7 +276,7 @@ def test_primary_defers_proxy_drift_repair_while_deploy_lock_is_busy(
 
     with config.deploy_lock.open("a+", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        assert reconcile(config, "primary") is False
+        assert reconcile(config, "primary") is None
 
     assert upstream.read_text(encoding="utf-8") == (
         "proxy_pass http://app-blue:8000;\n"

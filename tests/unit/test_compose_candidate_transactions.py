@@ -9,6 +9,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRANSACTION = REPO_ROOT / "scripts/compose_candidate_transaction.sh"
 BACKEND_RUNNER = REPO_ROOT / "scripts/deploy_backend_candidate_transaction.sh"
+RECONCILE_RUNTIME = REPO_ROOT / "scripts/reconcile_backend_compose_runtime.sh"
 LOCK_HELPER = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
 LOCK_HELPER_SHA256 = hashlib.sha256(LOCK_HELPER.read_bytes()).hexdigest()
 PREVIOUS_IMAGE = "ghcr.io/mvnby/air-api/backend:" + "1" * 40
@@ -92,6 +93,7 @@ def _backend_runner(
     promote_after_move_exit: int = 0,
     reconcile_exit: int = 0,
     discover_previous: bool = False,
+    use_real_reconcile: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
     project = _compose_pair(tmp_path)
     if discover_previous:
@@ -108,10 +110,16 @@ if [[ "$1" == "compose" && "$*" == *" ps -q app-green" ]]; then
   printf 'active-green-container\n'
 elif [[ "$1" == "inspect" && "$*" == *" active-green-container" ]]; then
   printf '%s\n' "$EXPECTED_PREVIOUS_IMAGE"
+elif [[ "$1" == "compose" && "$*" == *" up -d --no-deps --force-recreate app" ]]; then
+  exit 0
 else
   exit 91
 fi
 """,
+    )
+    _executable(
+        fake_bin / "curl",
+        "#!/usr/bin/env bash\nprintf '{\"status\":\"ok\"}\\n'\n",
     )
     child = tmp_path / "deploy-child.sh"
     _executable(
@@ -135,17 +143,18 @@ printf 'smoke:%s\n' "$COMPOSE_FILE" >> "$ORDER_LOG"
 exit {smoke_exit}
 """,
     )
-    reconcile = tmp_path / "reconcile.sh"
-    _executable(
-        reconcile,
-        f"""#!/usr/bin/env bash
+    reconcile = RECONCILE_RUNTIME if use_real_reconcile else tmp_path / "reconcile.sh"
+    if not use_real_reconcile:
+        _executable(
+            reconcile,
+            f"""#!/usr/bin/env bash
 set -euo pipefail
 grep -Fq '/app/token.json' "$API_PROJECT_DIR/$API_COMPOSE_FILE"
 printf 'reconcile:%s\n' "$API_COMPOSE_FILE" >> "$ORDER_LOG"
 test "$API_RECONCILE_BACKEND_IMAGE" = "$EXPECTED_PREVIOUS_IMAGE"
 exit {reconcile_exit}
 """,
-    )
+        )
     transaction_driver = tmp_path / "transaction.sh"
     _executable(
         transaction_driver,
@@ -179,6 +188,9 @@ exec bash "$REAL_TRANSACTION" "$@"
             "EXPECTED_PREVIOUS_IMAGE": PREVIOUS_IMAGE,
             "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
             "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
+            "COMMUNICATIONS_WORKER_RELEASE_HELPER": str(
+                tmp_path / "intentionally-absent-worker-helper.sh"
+            ),
         },
         text=True,
         capture_output=True,
@@ -205,6 +217,22 @@ def test_backend_failure_cleans_candidate_and_force_reconciles_canonical(
         "child:compose.yml.candidate:fd=9",
         "reconcile:compose.yml",
     ]
+
+
+def test_legacy_app_only_failure_rollback_does_not_require_worker_helper(tmp_path):
+    result, project, order_log = _backend_runner(
+        tmp_path,
+        child_exit=42,
+        use_real_reconcile=True,
+    )
+
+    assert result.returncode == 42, result.stderr
+    assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
+    assert not (project / "compose.yml.candidate").exists()
+    commands = order_log.read_text(encoding="utf-8")
+    assert "child:compose.yml.candidate:fd=9" in commands
+    assert "up -d --no-deps --force-recreate app" in commands
+    assert "communications-worker" not in commands
 
 
 @pytest.mark.parametrize("strategy", ["in_place", "blue_green"])

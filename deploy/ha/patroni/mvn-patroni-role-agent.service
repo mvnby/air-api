@@ -4,6 +4,8 @@ Wants=network-online.target mvn-etcd-quorum.service
 After=network-online.target docker.service mvn-etcd-quorum.service
 Requires=docker.service
 ConditionPathExists=/usr/local/sbin/mvn-patroni-role-agent
+ConditionPathExists=/usr/local/sbin/patroni_compose_runtime.py
+ConditionPathExists=/usr/local/sbin/patroni_role_agent_config.py
 ConditionPathExists=/usr/local/sbin/patroni_local_identity.py
 ConditionPathExists=/etc/default/mvn-patroni-role-agent
 

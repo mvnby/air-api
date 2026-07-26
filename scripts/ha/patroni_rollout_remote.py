@@ -40,6 +40,8 @@ HELPER_SOURCE = REPO_ROOT / "deploy/ha/patroni/archive_wal.py"
 CONTRACT_SOURCE = REPO_ROOT / "scripts/ha/patroni_compose_db_contract.py"
 ETCD_CHECK_SOURCE = REPO_ROOT / "scripts/ha/check_etcd_quorum.sh"
 ROLE_AGENT_SOURCE = REPO_ROOT / "scripts/ha/patroni_role_agent.py"
+ROLE_COMPOSE_RUNTIME_SOURCE = REPO_ROOT / "scripts/ha/patroni_compose_runtime.py"
+ROLE_AGENT_CONFIG_SOURCE = REPO_ROOT / "scripts/ha/patroni_role_agent_config.py"
 ROLE_IDENTITY_SOURCE = REPO_ROOT / "scripts/ha/patroni_local_identity.py"
 ROLE_UNIT_SOURCE = REPO_ROOT / "deploy/ha/patroni/mvn-patroni-role-agent.service"
 ACTIONS = {
@@ -134,6 +136,8 @@ def build_payload(
     contract_source = _read_local_asset(CONTRACT_SOURCE)
     etcd_source = _read_local_asset(ETCD_CHECK_SOURCE)
     role_agent_source = _read_local_asset(ROLE_AGENT_SOURCE)
+    role_compose_runtime_source = _read_local_asset(ROLE_COMPOSE_RUNTIME_SOURCE)
+    role_agent_config_source = _read_local_asset(ROLE_AGENT_CONFIG_SOURCE)
     role_identity_source = _read_local_asset(ROLE_IDENTITY_SOURCE)
     role_unit_source = _read_local_asset(ROLE_UNIT_SOURCE)
     payload: dict[str, object] = {
@@ -152,6 +156,12 @@ def build_payload(
         "maintenance_transaction_id": inputs.maintenance_transaction_id,
         "resume": inputs.resume,
         "role_agent_sha256": hashlib.sha256(role_agent_source).hexdigest(),
+        "role_compose_runtime_sha256": hashlib.sha256(
+            role_compose_runtime_source
+        ).hexdigest(),
+        "role_agent_config_sha256": hashlib.sha256(
+            role_agent_config_source
+        ).hexdigest(),
         "role_identity_sha256": hashlib.sha256(role_identity_source).hexdigest(),
         "role_unit_sha256": hashlib.sha256(role_unit_source).hexdigest(),
         "target_image": inputs.target_image,

@@ -10,35 +10,48 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import importlib.util
-import json
-import os
-import subprocess
-import sys
 import time
-import urllib.error
-import urllib.request
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 try:
+    from scripts.ha.patroni_compose_runtime import (
+        ComposeRuntime,
+        cancel_pitr_operations,
+        run_compose,
+        run_docker,
+        wait_scheduler_running,
+    )
     from scripts.ha.patroni_local_identity import (
+        COMMUNICATIONS_WORKER_SERVICE,
         atomic_write as _atomic_write,
-        fetch_patroni_role,
-        integer_env as _integer,
+        compose_service_is_defined as _compose_service_is_defined,
+        communications_worker_role_matches as _communications_worker_role_matches,
         read_maintenance_transaction_id,
         reconcile_primary_systemd_units as _reconcile_systemd_units,
         render_role_env as role_env,
         resolve_app_service as app_service,
         systemd_units_match as _identity_systemd_units_match,
         wait_primary_ready as _wait_ready,
+    )
+    from scripts.ha.patroni_role_agent_config import (
+        APP_SERVICE_NAMES,
+        AgentConfig,
+        fetch_configured_patroni_role as _fetch_configured_patroni_role,
+        load_config,
     )
 except ModuleNotFoundError:
+    from patroni_compose_runtime import (
+        ComposeRuntime,
+        cancel_pitr_operations,
+        run_compose,
+        run_docker,
+        wait_scheduler_running,
+    )
     from patroni_local_identity import (
+        COMMUNICATIONS_WORKER_SERVICE,
         atomic_write as _atomic_write,
-        fetch_patroni_role,
-        integer_env as _integer,
+        compose_service_is_defined as _compose_service_is_defined,
+        communications_worker_role_matches as _communications_worker_role_matches,
         read_maintenance_transaction_id,
         reconcile_primary_systemd_units as _reconcile_systemd_units,
         render_role_env as role_env,
@@ -46,326 +59,31 @@ except ModuleNotFoundError:
         systemd_units_match as _identity_systemd_units_match,
         wait_primary_ready as _wait_ready,
     )
-
-
-OPERATION_GUARD_PATH = Path("/usr/local/sbin/mvn_postgres_pitr_operation_guard.py")
-COMMAND_TIMEOUT_SECONDS = 60
-EXPECTED_LOCAL_PATRONI_URL = "http://127.0.0.1:8008/patroni"
-EXPECTED_PATRONI_SCOPE = "mvn-postgres"
-DEFAULT_MAX_DCS_AGE_SECONDS = 20
-MAX_CONFIGURED_DCS_AGE_SECONDS = 20
-PRODUCTION_NODE_NAMES = {Path("/opt/air-api"): "mvn-api", Path("/opt/mvn-reserve"): "zakup"}
-REVIEWED_PRIMARY_SYSTEMD_UNITS = (
-    "mvn-postgres-wal-upload.timer",
-    "mvn-postgres-basebackup.timer",
-)
-APP_SERVICE_NAMES = ("app", "app-blue", "app-green")
-CONTAINER_PROXY_SERVICE = "api-proxy"
-
-
-@dataclass(frozen=True)
-class AgentConfig:
-    project_dir: Path
-    compose_file: str
-    patroni_url: str
-    patroni_scope: str
-    patroni_name: str
-    max_dcs_age_seconds: int
-    ready_url: str
-    app_role_env: Path
-    bot_role_env: Path
-    state_file: Path
-    deploy_lock: Path
-    active_slot_file: Path
-    app_service: str
-    primary_systemd_units: tuple[str, ...]
-    poll_seconds: int
-    promotion_delay_seconds: int
-    ready_attempts: int
-
-
-def load_config() -> AgentConfig:
-    project_dir = Path(os.getenv("HA_PROJECT_DIR", "/opt/air-api")).resolve()
-    compose_file = os.getenv("HA_COMPOSE_FILE", "docker-compose.prod.yml").strip()
-    patroni_url = os.getenv("HA_PATRONI_URL", EXPECTED_LOCAL_PATRONI_URL).rstrip("/")
-    if patroni_url != EXPECTED_LOCAL_PATRONI_URL:
-        raise ValueError(f"HA_PATRONI_URL must be {EXPECTED_LOCAL_PATRONI_URL}")
-    patroni_scope = os.getenv("HA_PATRONI_SCOPE", EXPECTED_PATRONI_SCOPE).strip()
-    if patroni_scope != EXPECTED_PATRONI_SCOPE:
-        raise ValueError(f"HA_PATRONI_SCOPE must be {EXPECTED_PATRONI_SCOPE}")
-    inferred_patroni_name = PRODUCTION_NODE_NAMES.get(project_dir, "")
-    patroni_name = os.getenv("HA_PATRONI_NAME", inferred_patroni_name).strip()
-    if not inferred_patroni_name:
-        raise ValueError(f"HA_PROJECT_DIR is not a reviewed Patroni node path: {project_dir}")
-    if patroni_name != inferred_patroni_name:
-        raise ValueError(
-            f"HA_PATRONI_NAME must be {inferred_patroni_name} for {project_dir}"
-        )
-    max_dcs_age_seconds = _integer(
-        "HA_PATRONI_MAX_DCS_AGE_SECONDS", DEFAULT_MAX_DCS_AGE_SECONDS
-    )
-    if max_dcs_age_seconds > MAX_CONFIGURED_DCS_AGE_SECONDS:
-        raise ValueError(
-            "HA_PATRONI_MAX_DCS_AGE_SECONDS must not exceed the reviewed 20s bound"
-        )
-    raw_units = os.getenv(
-        "HA_PRIMARY_SYSTEMD_UNITS", " ".join(REVIEWED_PRIMARY_SYSTEMD_UNITS)
-    )
-    primary_systemd_units = tuple(raw_units.split())
-    if primary_systemd_units != REVIEWED_PRIMARY_SYSTEMD_UNITS:
-        raise ValueError(
-            "HA_PRIMARY_SYSTEMD_UNITS must contain the exact reviewed PITR timers"
-        )
-    return AgentConfig(
-        project_dir=project_dir,
-        compose_file=compose_file,
-        patroni_url=patroni_url,
-        patroni_scope=patroni_scope,
-        patroni_name=patroni_name,
-        max_dcs_age_seconds=max_dcs_age_seconds,
-        ready_url=os.getenv("HA_READY_URL", "http://127.0.0.1:18080/api/ready"),
-        app_role_env=project_dir / ".ha-app-role.env",
-        bot_role_env=project_dir / ".ha-bot-role.env",
-        state_file=project_dir / ".ha-runtime-role",
-        deploy_lock=project_dir / ".deploy.lock",
-        active_slot_file=project_dir / ".active-api-slot",
-        app_service=os.getenv("HA_APP_SERVICE", "").strip(),
-        primary_systemd_units=primary_systemd_units,
-        poll_seconds=_integer("HA_ROLE_POLL_SECONDS", 3),
-        promotion_delay_seconds=_integer("HA_PROMOTION_DELAY_SECONDS", 8, minimum=0),
-        ready_attempts=_integer("HA_READY_ATTEMPTS", 30),
+    from patroni_role_agent_config import (
+        APP_SERVICE_NAMES,
+        AgentConfig,
+        fetch_configured_patroni_role as _fetch_configured_patroni_role,
+        load_config,
     )
 
 
-def _fetch_configured_patroni_role(config: AgentConfig) -> str:
-    return fetch_patroni_role(
-        config.patroni_url,
-        expected_name=config.patroni_name,
-        expected_scope=config.patroni_scope,
-        max_dcs_age_seconds=config.max_dcs_age_seconds,
-    )
+_run_compose = run_compose
+_run_docker = run_docker
+_wait_scheduler_running = wait_scheduler_running
+_cancel_pitr_operations = cancel_pitr_operations
 
 
-def _run_compose(
-    config: AgentConfig,
-    *args: str,
-    check: bool = True,
-    timeout: int = COMMAND_TIMEOUT_SECONDS,
-) -> subprocess.CompletedProcess[str]:
-    command = ["docker", "compose", "--profile", "bluegreen", "-f", config.compose_file, *args]
-    return subprocess.run(
-        command,
-        cwd=config.project_dir,
-        check=check,
-        text=True,
-        capture_output=True,
-        timeout=timeout,
+def _compose_runtime(config: AgentConfig) -> ComposeRuntime:
+    return ComposeRuntime(
+        config,
+        compose_runner=_run_compose,
+        docker_runner=_run_docker,
+        atomic_writer=_atomic_write,
     )
 
 
 def _running_services(config: AgentConfig) -> set[str]:
-    result = _run_compose(
-        config,
-        "ps",
-        "--status",
-        "running",
-        "--format",
-        "json",
-        check=False,
-    )
-    if result.returncode != 0:
-        error = (result.stderr or result.stdout or "docker compose ps failed").strip()
-        raise RuntimeError(error)
-    payload = result.stdout.strip()
-    if not payload:
-        return set()
-    try:
-        parsed = json.loads(payload)
-        records = parsed if isinstance(parsed, list) else [parsed]
-    except json.JSONDecodeError:
-        try:
-            records = [json.loads(line) for line in payload.splitlines() if line.strip()]
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("docker compose ps returned invalid JSON") from exc
-
-    services: set[str] = set()
-    for record in records:
-        if not isinstance(record, dict):
-            raise RuntimeError("docker compose ps returned an invalid record")
-        service = record.get("Service")
-        labels = record.get("Labels", "")
-        if not isinstance(service, str) or not service:
-            raise RuntimeError("docker compose ps record is missing its service")
-        if isinstance(labels, dict):
-            oneoff = str(labels.get("com.docker.compose.oneoff", "")).lower()
-        elif isinstance(labels, str):
-            oneoff = next(
-                (
-                    value.lower()
-                    for label in labels.split(",")
-                    if "=" in label
-                    for key, value in [label.split("=", 1)]
-                    if key == "com.docker.compose.oneoff"
-                ),
-                "",
-            )
-        else:
-            raise RuntimeError("docker compose ps record has invalid labels")
-        if oneoff not in {"true", "false"}:
-            raise RuntimeError("docker compose ps record is missing its one-off identity")
-        if oneoff == "true":
-            continue
-        services.add(service)
-    return services
-
-
-def _start_service(config: AgentConfig, service: str, *, recreate: bool) -> None:
-    args = ["up", "-d", "--no-deps"]
-    if recreate:
-        args.append("--force-recreate")
-    args.append(service)
-    _run_compose(config, *args)
-
-
-def _refresh_container_proxy_dns(
-    config: AgentConfig,
-    *,
-    running_services: set[str],
-) -> bool:
-    """Refresh nginx's startup-time Docker DNS after an app container changes."""
-
-    if CONTAINER_PROXY_SERVICE not in running_services:
-        return False
-    _run_compose(config, "restart", CONTAINER_PROXY_SERVICE)
-    return True
-
-
-def _proxy_upstream_path(config: AgentConfig) -> Path:
-    return config.project_dir / "api-proxy" / "upstream.conf"
-
-
-def _expected_proxy_upstream(service: str) -> str:
-    if service not in APP_SERVICE_NAMES:
-        raise ValueError(f"unsupported API app service: {service}")
-    return f"proxy_pass http://{service}:8000;\n"
-
-
-def _container_proxy_upstream_matches(
-    config: AgentConfig,
-    service: str,
-    *,
-    running_services: set[str],
-) -> bool:
-    if CONTAINER_PROXY_SERVICE not in running_services:
-        return True
-    try:
-        current = _proxy_upstream_path(config).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return False
-    return current == _expected_proxy_upstream(service)
-
-
-def _reconcile_container_proxy_upstream(
-    config: AgentConfig,
-    service: str,
-    *,
-    running_services: set[str],
-) -> bool:
-    if _container_proxy_upstream_matches(
-        config,
-        service,
-        running_services=running_services,
-    ):
-        return False
-    _atomic_write(
-        _proxy_upstream_path(config),
-        _expected_proxy_upstream(service),
-        mode=0o644,
-    )
-    return True
-
-
-def _wait_scheduler_running(config: AgentConfig) -> None:
-    for _ in range(config.ready_attempts):
-        try:
-            with urllib.request.urlopen(config.ready_url, timeout=5) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            runtime = payload.get("scheduler_runtime")
-            if (
-                response.status == 200
-                and payload.get("api") == "ready"
-                and payload.get("database_writable") is True
-                and isinstance(runtime, dict)
-                and runtime.get("expected") is True
-                and runtime.get("status") == "running"
-            ):
-                return
-        except (OSError, ValueError, urllib.error.URLError):
-            pass
-        time.sleep(2)
-    raise RuntimeError(
-        f"primary scheduler did not acquire runtime ownership: {config.ready_url}"
-    )
-
-
-def _stop_service_verified(config: AgentConfig, service: str) -> None:
-    error = ""
-    try:
-        removed = _run_compose(
-            config, "rm", "--stop", "--force", service, check=False, timeout=20
-        )
-        error = (removed.stderr or removed.stdout).strip()
-    except subprocess.TimeoutExpired:
-        error = "container removal timed out"
-    try:
-        remaining = _run_compose(
-            config, "ps", "--all", "--quiet", service, check=False, timeout=10
-        )
-    except subprocess.TimeoutExpired:
-        remaining = subprocess.CompletedProcess([], 1, "", "container inventory timed out")
-    if remaining.returncode == 0 and not remaining.stdout.strip():
-        return
-    try:
-        _run_compose(
-            config, "kill", "--signal", "SIGKILL", service, check=False, timeout=10
-        )
-    except subprocess.TimeoutExpired:
-        pass
-    try:
-        forced = _run_compose(
-            config, "rm", "--force", service, check=False, timeout=20
-        )
-        error = (forced.stderr or forced.stdout or error).strip()
-    except subprocess.TimeoutExpired:
-        error = "forced container removal timed out"
-    final = _run_compose(
-        config, "ps", "--all", "--quiet", service, check=False, timeout=10
-    )
-    if final.returncode != 0 or final.stdout.strip():
-        raise RuntimeError(
-            f"could not fence Compose service {service}: {error or 'container remains'}"
-        )
-
-
-def _cancel_pitr_operations(config: AgentConfig) -> list[str]:
-    if not Path("/run/mvn-postgres-pitr-operations").exists():
-        return []
-    try:
-        from scripts.ha.pitr_operation_guard import cancel_project_operations
-    except ModuleNotFoundError:
-        specification = importlib.util.spec_from_file_location(
-            "mvn_postgres_pitr_operation_guard",
-            OPERATION_GUARD_PATH,
-        )
-        if specification is None or specification.loader is None:
-            if Path("/run/mvn-postgres-pitr-operations").exists():
-                raise RuntimeError("PITR operation guard is unavailable")
-            return []
-        module = importlib.util.module_from_spec(specification)
-        sys.modules[specification.name] = module
-        specification.loader.exec_module(module)
-        cancel_project_operations = module.cancel_project_operations
-    return cancel_project_operations(str(config.project_dir))
+    return _compose_runtime(config).running_services()
 
 
 def _systemd_units_match(config: AgentConfig, role: str) -> bool:
@@ -389,6 +107,7 @@ def _reconcile_primary_systemd_units(
 def _fence_lost_primary(config: AgentConfig) -> None:
     """Best-effort immediate fence that does not wait for the deploy lock."""
 
+    compose = _compose_runtime(config)
     failures: list[str] = []
     fencing_state_persisted = False
     try:
@@ -399,6 +118,15 @@ def _fence_lost_primary(config: AgentConfig) -> None:
         fencing_state_persisted = True
     except Exception as exc:
         failures.append(f"state_fencing:{exc}")
+
+    try:
+        # This inventory bypasses rendered Compose entirely. During the first
+        # modular rollout the new service may be absent from the installed
+        # Compose file while an old-primary container still exists.
+        compose.fence_labeled_service_containers(COMMUNICATIONS_WORKER_SERVICE)
+    except Exception as exc:
+        failures.append(f"{COMMUNICATIONS_WORKER_SERVICE}:{exc}")
+
     standby_app = role_env("standby", bot_process=False)
     standby_bot = role_env("standby", bot_process=True)
     if fencing_state_persisted:
@@ -415,7 +143,7 @@ def _fence_lost_primary(config: AgentConfig) -> None:
     # started a side-effect owner between the failed identity check and fence.
     for service in ("bot", *APP_SERVICE_NAMES):
         try:
-            _stop_service_verified(config, service)
+            compose.stop_service_verified(service)
         except Exception as exc:
             failures.append(f"{service}:{exc}")
 
@@ -423,6 +151,12 @@ def _fence_lost_primary(config: AgentConfig) -> None:
         _cancel_pitr_operations(config)
     except Exception as exc:
         failures.append(f"pitr:{exc}")
+    try:
+        # Close the race with a concurrent candidate deployment immediately
+        # before touching primary-only systemd ownership.
+        compose.fence_labeled_service_containers(COMMUNICATIONS_WORKER_SERVICE)
+    except Exception as exc:
+        failures.append(f"{COMMUNICATIONS_WORKER_SERVICE}_postcondition:{exc}")
     try:
         _reconcile_primary_systemd_units(config, "standby")
     except Exception as exc:
@@ -486,7 +220,9 @@ def _guard_pitr_activation(config: AgentConfig, unit: str) -> None:
         )
 
 
-def reconcile(config: AgentConfig, role: str) -> bool:
+def reconcile(config: AgentConfig, role: str) -> bool | None:
+    compose = _compose_runtime(config)
+    release_fenced = compose.enforce_worker_release_fence(COMMUNICATIONS_WORKER_SERVICE)
     maintenance_transaction = _maintenance_transaction_or_fence(config)
     pitr_role = "standby" if maintenance_transaction is not None else role
     desired_app = role_env(role, bot_process=False)
@@ -514,13 +250,39 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         _fence_lost_primary(config)
         fast_fenced = True
     service = app_service(config)
-    running = _running_services(config)
+    running = compose.running_services()
+    release_fenced = compose.enforce_worker_release_fence(
+        COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
+    )
+    worker_state = compose.worker_runtime_state(
+        service=COMMUNICATIONS_WORKER_SERVICE,
+        role=role,
+        running_services=running,
+        definition_probe=_compose_service_is_defined,
+        role_probe=_communications_worker_role_matches,
+        release_fenced=release_fenced,
+    )
+    worker_defined = worker_state.defined
+    worker_running = worker_state.running
+    worker_role_matches = worker_state.role_matches
+    worker_role_drift = worker_state.unsafe_mismatch
+    if not worker_running:
+        running.discard(COMMUNICATIONS_WORKER_SERVICE)
+    if role == "standby" and worker_role_drift:
+        # A living worker with the old primary role is equivalent to a lost
+        # primary identity. Fence every local side-effect owner before the
+        # later systemd probes or deploy-lock acquisition.
+        _fence_lost_primary(config)
+        fast_fenced = True
+        running.difference_update(
+            {"bot", COMMUNICATIONS_WORKER_SERVICE, *APP_SERVICE_NAMES}
+        )
+        worker_running = False
     app_running = service in running
     extra_running_apps = sorted(
         name for name in APP_SERVICE_NAMES if name != service and name in running
     )
-    proxy_upstream_drift = not _container_proxy_upstream_matches(
-        config,
+    proxy_upstream_drift = not compose.container_proxy_upstream_matches(
         service,
         running_services=running,
     )
@@ -550,19 +312,27 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         reasons.append("proxy_upstream_drift")
     if bot_running:
         reasons.append("legacy_bot_running")
+    if worker_defined and not worker_running:
+        reasons.append("communications_worker_not_running")
+    if worker_role_drift:
+        reasons.append("communications_worker_role_drift")
     if not systemd_matches:
         reasons.append("systemd_units")
     if maintenance_transaction is not None:
         reasons.append("pitr_maintenance")
+    if release_fenced:
+        reasons.append("communications_worker_release_fenced")
 
     actions: list[str] = []
+    if release_fenced:
+        actions.append("fence_communications_worker_release")
     if fast_fenced:
         actions.append("demotion_fast_fence")
     if bot_running:
         # The polling process is owned by mvn-telegram-bot now. Fence the old
         # Compose service before the deployment lock so a concurrent API
         # release cannot prolong duplicate Telegram polling.
-        _stop_service_verified(config, "bot")
+        compose.stop_service_verified("bot")
         bot_running = False
         actions.append("stop_legacy_bot_prelock")
     if role == "standby":
@@ -583,7 +353,7 @@ def reconcile(config: AgentConfig, role: str) -> bool:
             or any(name != service for name in running_apps)
         ):
             for running_app in running_apps:
-                _stop_service_verified(config, running_app)
+                compose.stop_service_verified(running_app)
             app_running = False
             if running_apps:
                 actions.append("stop_apps_prelock")
@@ -610,6 +380,7 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         or bot_env_changed
         or not app_running
         or bot_running != bot_expected
+        or (worker_defined and (not worker_running or worker_role_drift))
         or (role == "primary" and bool(extra_running_apps))
         or (role == "primary" and proxy_upstream_drift)
     )
@@ -630,7 +401,7 @@ def reconcile(config: AgentConfig, role: str) -> bool:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("patroni_role_agent_status=deferred reason=deployment_lock_busy", flush=True)
-            return False
+            return None
 
         if role == "primary" and role_changed and config.promotion_delay_seconds:
             time.sleep(config.promotion_delay_seconds)
@@ -649,7 +420,23 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         # Re-read after acquiring the lock: a concurrent deploy may have changed
         # the concrete containers while fail-safe pre-lock fencing was running.
         service = app_service(config)
-        running = _running_services(config)
+        running = compose.running_services()
+        release_fenced = compose.enforce_worker_release_fence(
+            COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
+        )
+        worker_state = compose.worker_runtime_state(
+            service=COMMUNICATIONS_WORKER_SERVICE,
+            role=role,
+            running_services=running,
+            definition_probe=_compose_service_is_defined,
+            role_probe=_communications_worker_role_matches,
+            release_fenced=release_fenced,
+        )
+        worker_defined = worker_state.defined
+        worker_running = worker_state.running
+        worker_role_matches = worker_state.role_matches
+        if not worker_running:
+            running.discard(COMMUNICATIONS_WORKER_SERVICE)
         app_running = service in running
         extra_running_apps = sorted(
             name for name in APP_SERVICE_NAMES if name != service and name in running
@@ -657,7 +444,7 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         bot_running = "bot" in running
 
         if bot_running:
-            _stop_service_verified(config, "bot")
+            compose.stop_service_verified("bot")
             bot_running = False
             actions.append("stop_legacy_bot")
 
@@ -668,20 +455,57 @@ def reconcile(config: AgentConfig, role: str) -> bool:
                 actions.append("stop_primary_units")
             for running_app in APP_SERVICE_NAMES:
                 if running_app != service and running_app in running:
-                    _stop_service_verified(config, running_app)
+                    compose.stop_service_verified(running_app)
                     actions.append("stop_extra_app")
             if app_needs_start:
                 recreate_app = fast_fenced or app_env_changed or role_changed
-                _start_service(config, service, recreate=recreate_app)
+                compose.start_service(service, recreate=recreate_app)
                 actions.append(
                     "recreate_app" if recreate_app else "start_app"
                 )
-                if _refresh_container_proxy_dns(
-                    config,
-                    running_services=running,
-                ):
+                if compose.refresh_container_proxy_dns(running_services=running):
                     actions.append("refresh_container_proxy_dns")
-            final_running = _running_services(config)
+            if worker_defined and (
+                fast_fenced
+                or app_env_changed
+                or role_changed
+                or not worker_running
+                or not worker_role_matches
+            ):
+                recreate_worker = (
+                    fast_fenced
+                    or app_env_changed
+                    or role_changed
+                    or not worker_role_matches
+                )
+                compose.start_service(
+                    COMMUNICATIONS_WORKER_SERVICE,
+                    recreate=recreate_worker,
+                )
+                actions.append(
+                    "recreate_communications_worker"
+                    if recreate_worker
+                    else "start_communications_worker"
+                )
+            final_running = compose.running_services()
+            release_fenced = compose.enforce_worker_release_fence(
+                COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
+            )
+            final_worker_state = compose.worker_runtime_state(
+                service=COMMUNICATIONS_WORKER_SERVICE,
+                role=role,
+                running_services=final_running,
+                definition_probe=_compose_service_is_defined,
+                role_probe=_communications_worker_role_matches,
+                release_fenced=release_fenced,
+            )
+            if final_worker_state.unsafe_mismatch or (
+                worker_defined and not final_worker_state.running
+            ):
+                _fence_lost_primary(config)
+                raise RuntimeError(
+                    "standby communications worker role postcondition failed"
+                )
             if (
                 service not in final_running
                 or "bot" in final_running
@@ -693,35 +517,58 @@ def reconcile(config: AgentConfig, role: str) -> bool:
         else:
             if app_needs_start:
                 _require_fresh_primary_or_fence(config, "app_activation")
-                _start_service(config, service, recreate=app_env_changed)
+                compose.start_service(service, recreate=app_env_changed)
                 actions.append("recreate_app" if app_env_changed else "start_app")
-                running = _running_services(config)
-            proxy_upstream_changed = not _container_proxy_upstream_matches(
-                config,
+                running = compose.running_services()
+            proxy_upstream_changed = not compose.container_proxy_upstream_matches(
                 service,
                 running_services=running,
             )
             if proxy_upstream_changed:
                 _require_fresh_primary_or_fence(config, "proxy_convergence")
-                _reconcile_container_proxy_upstream(
-                    config,
+                compose.reconcile_container_proxy_upstream(
                     service,
                     running_services=running,
                 )
                 actions.append("write_proxy_upstream")
             if app_needs_start or proxy_upstream_changed:
-                if _refresh_container_proxy_dns(
-                    config,
-                    running_services=running,
-                ):
+                if compose.refresh_container_proxy_dns(running_services=running):
                     actions.append("refresh_container_proxy_dns")
             if app_needs_start or proxy_upstream_changed:
                 _wait_ready(config)
                 actions.append("wait_ready")
+            worker_needs_start = worker_defined and (
+                app_env_changed
+                or role_changed
+                or not worker_running
+                or not worker_role_matches
+                or worker_role_drift
+            )
+            if worker_needs_start:
+                # Delivery activation is downstream of both the fresh
+                # Patroni/DCS proof and the writable/ready API proof.
+                if not (app_needs_start or proxy_upstream_changed):
+                    _wait_ready(config)
+                    actions.append("wait_ready_for_communications_worker")
+                _require_fresh_primary_or_fence(
+                    config,
+                    "communications_worker_activation",
+                )
+                recreate_worker = worker_role_drift or not worker_role_matches
+                recreate_worker = recreate_worker or role_changed or app_env_changed
+                compose.start_service(
+                    COMMUNICATIONS_WORKER_SERVICE,
+                    recreate=recreate_worker,
+                )
+                actions.append(
+                    "recreate_communications_worker"
+                    if recreate_worker
+                    else "start_communications_worker"
+                )
             if extra_running_apps:
                 _require_fresh_primary_or_fence(config, "extra_app_fence")
                 for running_app in extra_running_apps:
-                    _stop_service_verified(config, running_app)
+                    compose.stop_service_verified(running_app)
                     actions.append("stop_extra_app")
             if (
                 service in {"app-blue", "app-green"}
@@ -753,15 +600,33 @@ def reconcile(config: AgentConfig, role: str) -> bool:
             ):
                 _reconcile_primary_systemd_units(config, "standby")
                 actions.append("stop_pitr_units_for_final_maintenance")
-            final_running = _running_services(config)
+            final_running = compose.running_services()
+            release_fenced = compose.enforce_worker_release_fence(
+                COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
+            )
+            final_worker_state = compose.worker_runtime_state(
+                service=COMMUNICATIONS_WORKER_SERVICE,
+                role=role,
+                running_services=final_running,
+                definition_probe=_compose_service_is_defined,
+                role_probe=_communications_worker_role_matches,
+                release_fenced=release_fenced,
+            )
+            if final_worker_state.unsafe_mismatch or (
+                worker_defined and not final_worker_state.running
+            ):
+                if COMMUNICATIONS_WORKER_SERVICE in final_running:
+                    compose.stop_service_verified(COMMUNICATIONS_WORKER_SERVICE)
+                raise RuntimeError(
+                    "primary communications worker role postcondition failed"
+                )
             if (
                 service not in final_running
                 or "bot" in final_running
                 or any(
                     name in final_running for name in APP_SERVICE_NAMES if name != service
                 )
-                or not _container_proxy_upstream_matches(
-                    config,
+                or not compose.container_proxy_upstream_matches(
                     service,
                     running_services=final_running,
                 )
@@ -803,12 +668,15 @@ def run(config: AgentConfig, *, once: bool) -> int:
             role = "standby"
             print(f"patroni_role_agent_status=warning patroni_unavailable={exc}", flush=True)
         try:
-            reconcile(config, role)
+            changed = reconcile(config, role)
         except Exception as exc:
             print(f"patroni_role_agent_status=failed role={role} error={exc}", flush=True)
             if once:
                 return 1
         if once:
+            if changed is None:
+                return 75
+            print(f"patroni_role_agent_once_status=verified role={role}", flush=True)
             return 0
         time.sleep(config.poll_seconds)
 

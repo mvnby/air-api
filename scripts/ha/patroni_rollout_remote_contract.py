@@ -6,7 +6,8 @@ def validate_payload(payload):
                 "controller_sha256", "current_image", "deploy_sha", "helper_sha256",
                 "etcd_check_b64", "etcd_check_sha256", "legacy_command_sha256",
                 "maintenance_transaction_id", "publish_run_attempt", "publish_run_id",
-                "resume", "role_agent_sha256",
+                "resume", "role_agent_sha256", "role_agent_config_sha256",
+                "role_compose_runtime_sha256",
                 "role_identity_sha256", "role_unit_sha256", "target_image"}
     if not isinstance(payload, dict) or not required.issubset(payload):
         die("invalid rollout payload")
@@ -20,7 +21,9 @@ def validate_payload(payload):
         die("legacy archive command is not the compiled reviewed generation")
     for key in ("compose_contract_sha256", "contract_helper_sha256", "controller_sha256",
                 "etcd_check_sha256", "helper_sha256", "legacy_command_sha256",
-                "role_agent_sha256", "role_identity_sha256", "role_unit_sha256"):
+                "role_agent_sha256", "role_agent_config_sha256",
+                "role_compose_runtime_sha256", "role_identity_sha256",
+                "role_unit_sha256"):
         if not isinstance(payload[key], str) or not DIGEST_RE.fullmatch(payload[key]):
             die("invalid rollout digest: " + key)
     if not isinstance(payload["deploy_sha"], str) or not re.fullmatch(r"[0-9a-f]{40}", payload["deploy_sha"]):
@@ -52,7 +55,8 @@ def validate_action(action, payload):
         "controller_sha256", "current_image", "deploy_sha", "etcd_check_b64",
         "etcd_check_sha256", "helper_sha256", "legacy_command_sha256", "resume",
         "maintenance_transaction_id", "publish_run_attempt", "publish_run_id",
-        "role_agent_sha256", "role_identity_sha256",
+        "role_agent_sha256", "role_agent_config_sha256",
+        "role_compose_runtime_sha256", "role_identity_sha256",
         "role_unit_sha256", "target_image"}
     extras = {
         "prepare": {"baseline_primary", "baseline_system_identifier", "baseline_timeline"},
@@ -136,6 +140,8 @@ def load_journal(path, node, txid, payload):
         "publish_run_attempt": payload["publish_run_attempt"],
         "publish_run_id": payload["publish_run_id"],
         "role_agent_sha256": payload["role_agent_sha256"],
+        "role_agent_config_sha256": payload["role_agent_config_sha256"],
+        "role_compose_runtime_sha256": payload["role_compose_runtime_sha256"],
         "role_identity_sha256": payload["role_identity_sha256"],
         "role_unit_sha256": payload["role_unit_sha256"],
     }

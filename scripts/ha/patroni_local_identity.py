@@ -20,6 +20,7 @@ from typing import Any, Callable
 
 PRIMARY_ROLES = {"leader", "master", "primary"}
 REPLICA_ROLES = {"replica", "standby"}
+COMMUNICATIONS_WORKER_SERVICE = "communications-worker"
 EXPECTED_CLUSTER_NAMES = frozenset({"mvn-api", "zakup"})
 MAINTENANCE_MARKER_PATH = Path("/run/mvn-postgres-pitr-maintenance")
 MAINTENANCE_TRANSACTION_RE = re.compile(rb"[0-9a-f]{32}\n\Z")
@@ -90,6 +91,70 @@ def resolve_app_service(config: Any) -> str:
     except FileNotFoundError:
         slot = ""
     return f"app-{slot}" if slot in {"blue", "green"} else "app"
+
+
+def compose_service_is_defined(
+    config: Any,
+    service: str,
+    *,
+    compose_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> bool:
+    """Probe the rendered Compose model for one exact service name.
+
+    This deliberately uses ``config --services`` instead of runtime inventory:
+    a stopped service is still part of the deployed topology. An absent service
+    is valid during a rolling role-agent-before-Compose upgrade.
+    """
+
+    result = compose_runner(config, "config", "--services", check=False, timeout=20)
+    if result.returncode != 0:
+        detail = (
+            result.stderr or result.stdout or "docker compose config failed"
+        ).strip()
+        raise RuntimeError(detail)
+    services = {
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    }
+    if any(
+        "\x00" in name or any(character.isspace() for character in name)
+        for name in services
+    ):
+        raise RuntimeError("docker compose config returned an invalid service name")
+    return service in services
+
+
+def communications_worker_role_matches(
+    config: Any,
+    role: str,
+    *,
+    compose_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> bool:
+    """Check the worker's effective APP_ROLE without reading or logging its env."""
+
+    if role not in {"primary", "standby"}:
+        raise ValueError(f"unsupported communications worker role: {role}")
+    probe = (
+        "import os,sys;"
+        "ok=os.environ.get('APP_ROLE')==sys.argv[1]"
+        " and os.environ.get('COMMUNICATIONS_WORKER_ENABLED')=='false'"
+        " and os.environ.get('COMMUNICATIONS_WORKER_ALLOW_ALL_MODE')=='false';"
+        "raise SystemExit(0 if ok else 1)"
+    )
+    result = compose_runner(
+        config,
+        "exec",
+        "-T",
+        COMMUNICATIONS_WORKER_SERVICE,
+        "python3",
+        "-c",
+        probe,
+        role,
+        check=False,
+        timeout=10,
+    )
+    return result.returncode == 0
 
 
 def wait_primary_ready(config: Any) -> None:

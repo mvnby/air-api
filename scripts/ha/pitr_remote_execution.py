@@ -259,6 +259,16 @@ ROLE_AGENT_ASSETS = (
         0o755,
     ),
     PitrHostAsset(
+        REPO_ROOT / "scripts/ha/patroni_compose_runtime.py",
+        "/usr/local/sbin/patroni_compose_runtime.py",
+        0o644,
+    ),
+    PitrHostAsset(
+        REPO_ROOT / "scripts/ha/patroni_role_agent_config.py",
+        "/usr/local/sbin/patroni_role_agent_config.py",
+        0o644,
+    ),
+    PitrHostAsset(
         REPO_ROOT / "scripts/ha/patroni_local_identity.py",
         "/usr/local/sbin/patroni_local_identity.py",
         0o644,

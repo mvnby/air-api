@@ -24,15 +24,26 @@ PREVIOUS_IMAGE_FILE="${PROJECT_DIR}/.previous-backend-image"
 ENV_FILE="${PROJECT_DIR}/.env"
 HEALTH_ATTEMPTS="${API_HEALTH_ATTEMPTS:-30}"
 GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/../prepare_google_oauth_token_dir.sh}"
+COMMUNICATIONS_WORKER_SERVICE="${API_COMMUNICATIONS_WORKER_SERVICE:-communications-worker}"
+COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER:-${SCRIPT_DIR}/communications_worker_release_contract.sh}"
 
 previous_image=""
 active_service="app"
 env_updated=false
 TMP_DIR=""
+worker_supported=false
 
 log() {
   printf '[patroni-node-deploy][%s] %s\n' "$1" "$2"
 }
+
+[[ -f "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" \
+  && ! -L "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" ]] || {
+  log error "communications worker release helper is missing or unsafe"
+  exit 1
+}
+# shellcheck disable=SC1090
+source "${COMMUNICATIONS_WORKER_RELEASE_HELPER}"
 
 if [[ "${API_DEPLOY_LOCK_ALREADY_HELD:-false}" == "true" && -z "${DEPLOY_LOCK_FD}" ]]; then
   log error "legacy deploy-lock boolean cannot replace an inherited descriptor"
@@ -93,6 +104,20 @@ write_backend_image() {
   mv "${temporary}" "${ENV_FILE}"
 }
 
+fence_communications_worker() {
+  [[ "${worker_supported}" == "true" ]] || return 0
+  communications_worker_set_release_fence
+  "${COMPOSE[@]}" stop "${COMMUNICATIONS_WORKER_SERVICE}" >/dev/null
+}
+
+deploy_communications_worker() {
+  communications_worker_require_contract
+  fence_communications_worker
+  "${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
+  require_deploy_capacity
+  communications_worker_start_controlled "${EXPECTED_ROLE}"
+}
+
 wait_fenced_standby() {
   local health_file="${TMP_DIR}/health.json"
   local ready_file="${TMP_DIR}/ready.json"
@@ -142,11 +167,19 @@ rollback_standby() {
   local exit_code=$?
   trap - ERR
   set +e
-  if [[ "${env_updated}" == "true" && "${previous_image}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]]; then
-    log rollback "restoring ${previous_image} on ${active_service}"
+  if [[ "${previous_image}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]]; then
+    fence_communications_worker
     export BACKEND_IMAGE="${previous_image}"
-    write_backend_image "${previous_image}"
-    "${COMPOSE[@]}" up -d --no-deps --force-recreate "${active_service}"
+    if [[ "${env_updated}" == "true" ]]; then
+      log rollback "restoring previous release on ${active_service}"
+      write_backend_image "${previous_image}"
+      "${COMPOSE[@]}" up -d --no-deps --force-recreate "${active_service}"
+    fi
+    if [[ "${worker_supported}" == "true" ]]; then
+      if require_expected_role; then
+        communications_worker_start_controlled "${EXPECTED_ROLE}" || true
+      fi
+    fi
   fi
   "${COMPOSE[@]}" stop bot >/dev/null 2>&1 || true
   exit "${exit_code}"
@@ -243,7 +276,13 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
     API_RUN_DEFAULTS=false \
     bash "${BLUE_GREEN_SCRIPT}"
   require_expected_role
-  log "done" "primary blue-green deployment completed"
+  TMP_DIR="$(mktemp -d)"
+  trap 'rm -rf "${TMP_DIR}"' EXIT
+  COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
+  worker_supported=true
+  deploy_communications_worker
+  require_expected_role
+  log "done" "primary API and dormant communications worker deployment completed"
   exit 0
 fi
 
@@ -258,22 +297,28 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
 export BACKEND_IMAGE
+worker_supported=true
 if [[ -n "${GHCR_PAT:-}" ]]; then
   printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GITHUB_ACTOR:-github-actions}" --password-stdin
 fi
 
 trap rollback_standby ERR
 reconcile_standby_proxy
+communications_worker_require_contract
 log standby "updating fenced service ${active_service}"
 "${COMPOSE[@]}" pull "${active_service}"
+"${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
 require_deploy_capacity
+fence_communications_worker
 write_backend_image "${BACKEND_IMAGE}"
 env_updated=true
 "${COMPOSE[@]}" stop bot >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up -d --no-deps --force-recreate "${active_service}"
 require_expected_role
 wait_fenced_standby
+communications_worker_start_controlled "${EXPECTED_ROLE}"
+require_expected_role
 printf '%s\n' "${previous_image}" > "${PREVIOUS_IMAGE_FILE}"
 chmod 600 "${PREVIOUS_IMAGE_FILE}"
 trap - ERR
-log "done" "standby image updated without enabling traffic or singleton processes"
+log "done" "standby image updated without enabling traffic; dormant communications worker aligned"
