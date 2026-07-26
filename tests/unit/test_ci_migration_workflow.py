@@ -16,13 +16,12 @@ def test_ci_verifies_empty_database_migration_and_single_head():
     assert "SELECT count(*) FROM alembic_version" in workflow
 
 
-def test_ci_runs_storefront_theme_and_behavior_checks():
+def test_ci_leaves_storefront_checks_to_the_standalone_service():
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
-    assert "Check Storefront" in workflow
-    assert "npm run audit:theme" in workflow
-    assert "npm run test:catalog" in workflow
-    assert "npm run test:seo" in workflow
+    assert "Build Manager Frontend" in workflow
+    assert "working-directory: ./web" not in workflow
+    assert "Check Storefront" not in workflow
 
 
 def test_ci_timeout_covers_the_full_immutable_image_suite():

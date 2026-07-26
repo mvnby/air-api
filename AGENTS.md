@@ -5,7 +5,7 @@ This file defines practical workflows and commands for contributors and coding a
 ## Project Layout
 
 - Backend API: FastAPI + SQLModel (`main.py`, `routers/`, `services/`, `crud/`)
-- Frontend storefront: Astro + Vue (`web/`)
+- Public storefront: separate Astro + Vue service in `mvnby/mvn-web` (not part of this repository)
 - Legacy admin: removed SQLAdmin surface; use the manager app (`manager_frontend/`) for admin workflows.
 - Manager app (future primary admin UI on Vue + FastAPI): `manager_frontend/`
 - Tests: `tests/unit/`, `tests/integration/`
@@ -22,11 +22,9 @@ This file defines practical workflows and commands for contributors and coding a
 - Manager-first policy:
   - New product functionality must be implemented in `manager_frontend/` + `routers/manager_*`.
   - Legacy SQLAdmin is removed. Do not reintroduce SQLAdmin or add new workflows under a legacy `/admin` UI.
-- Frontend theme consistency (mandatory):
-  - For glass/panel/filter surfaces use global tokens from `web/src/assets/index.css` (`--panel-*` family).
-  - Do not hardcode light-only panel colors (`rgba(255,255,255,...)`, `#fff`) inside page/component styles.
-  - Before frontend PR handoff run `bash scripts/audit_theme_hardcodes.sh` and fix new violations in touched files.
-  - Keep detailed style rules in `docs/ui.md` and update it when adding new global design tokens.
+- Storefront ownership:
+  - Do not add Astro/Vue storefront code, web deployment workflows, or web-only assets back into this repository.
+  - Public pages consume this API only over HTTP. Storefront UI, theme rules, static content, and deployment tooling belong in `mvnby/mvn-web`.
 
 ## Commands
 
@@ -34,11 +32,10 @@ Run from repo root unless noted.
 
 ### Environment and App
 
-- Start stack (API + DB + web): `docker compose up -d`
+- Start stack (API + DB): `docker compose up -d`
 - Stop stack: `docker compose down`
 - API logs: `docker compose logs -f app`
 - Open API locally: [http://localhost:8000/docs](http://localhost:8000/docs)
-- Open web locally: [http://localhost:4321](http://localhost:4321)
 - **Dev server is on port 8000.**
 
 ### Backend Tests
@@ -46,17 +43,6 @@ Run from repo root unless noted.
 - Run all tests (local venv): `pytest`
 - Run unit tests only: `pytest tests/unit -q`
 - Run integration tests only: `pytest tests/integration -q`
-
-### Frontend (Astro)
-
-Run from `web/`:
-
-- Install deps: `npm install`
-- Dev server: `npm run dev`
-- Theme hardcode audit: `npm run audit:theme`
-- Build (includes API pre-check): `npm run build`
-- Preview build: `npm run preview`
-- API readiness check only: `npm run check-api`
 
 ### Manager Frontend (Vue)
 
@@ -99,10 +85,7 @@ Use this after large catalog imports or when unknown spec keys appear.
 3. If specs/import were changed, run:
    - `python3 scripts/analyze_spec_keys.py`
    - `python3 scripts/normalize_legacy.py` (or Docker equivalent)
-4. For frontend changes in `web/`, run `npm run build` in `web/`.
-5. Confirm no obvious regressions in:
-   - product list and product page spec rendering,
-   - import path behavior (no duplicate/product corruption).
+4. Confirm no obvious regressions in import and public API behavior (no duplicate/product corruption).
 
 ### 4) Manager App Workflow (Current + Future)
 

@@ -2,68 +2,13 @@
 
 ## Server Configuration
 
-### Legacy Web Server / Fallback
-- **Host alias:** `mvn-web`
-- **User:** `user2154318`
-- **IP:** `178.159.240.174`
-- **Production path:** `/var/www/user2154318/data/www/mvn.by`
-- **Dev path:** `/var/www/user2154318/data/www/dev.mvn.by`
-- **SSH Key:** `~/.ssh/id_ed25519`
-- **Role:** fallback static storefront target. Keep it available for rollback while the new VPS is monitored.
+### Storefront service
 
-### Current Web VPS
-- **Host alias:** `mvn`
-- **User:** `deploy` for static deploys, `root` for server administration only
-- **IP:** `153.80.244.78`
-- **Hostname:** `www.mvn.by`
-- **Production path:** `/var/www/mvn.by/live` (atomic symlink)
-- **Nginx site:** `/etc/nginx/sites-available/mvn.by`
-- **Role:** Astro storefront origin and independent fallback for Cloudflare Pages.
-
-Prepared server baseline:
-- Ubuntu 24.04 LTS
-- nginx serving `/var/www/mvn.by/live`, initially linked to the legacy
-  `/var/www/mvn.by/current` tree
-- UFW active with inbound `22/tcp`, `80/tcp`, and `443/tcp` allowed; other inbound traffic denied
-- `deploy` user with SSH key auth and write access to the static root
-- SSH password authentication disabled after root and deploy key login were verified
-- fail2ban enabled for sshd
-- unattended upgrades enabled
-- Let's Encrypt certificate for `mvn.by` and `www.mvn.by` issued via Cloudflare DNS-01
-- certbot renewal hook reloads nginx after certificate renewal
-
-The production storefront is static and served by Cloudflare Pages. The web
-VPS retains the same immutable artifacts as an independent origin rollback.
-The hybrid runtime/cache/freshness design for the new VPS is documented in
-[`web-runtime-freshness-runbook.md`](web-runtime-freshness-runbook.md). Do not
-switch public `mvn.by` to Astro runtime without following that runbook's
-staging, shadow, cutover, and rollback gates.
-
-The production shadow runtime workflow for issue #477 is documented in
-[`web-public-shadow-runtime-runbook.md`](web-public-shadow-runtime-runbook.md).
-It binds the Astro runtime to `127.0.0.1:4322`, uses a protected/noindex
-shadow host route, and keeps the public static root untouched.
-
-Origin checks from a local machine:
-
-```bash
-ssh mvn true
-ssh deploy@153.80.244.78 true
-curl -fsS -H 'Host: mvn.by' http://153.80.244.78/healthz
-curl -I -H 'Host: mvn.by' http://153.80.244.78/
-curl -I --resolve mvn.by:443:153.80.244.78 https://mvn.by/
-```
-
-Current Cloudflare DNS state after the Pages custom-domain cutover:
-
-```text
-mvn.by      CNAME mvn-by.pages.dev proxied
-www.mvn.by  CNAME mvn-by.pages.dev proxied
-```
-
-The current VPS remains the primary Pages rollback origin. Restore the Cloudflare
-A records to `153.80.244.78` and verify the retained atomic release before using
-the older `mvn-web` host at `178.159.240.174` as the last-resort fallback.
+The public storefront is a separate service owned by
+[`mvnby/mvn-web`](https://github.com/mvnby/mvn-web). Its SSR runtime, DNS,
+Cloudflare, web-VPS access, rollback tooling and public smoke checks are not
+managed from this API repository. The API interacts with it only through the
+public HTTP contract and the signed catalog-rebuild callback.
 
 ### API Server
 - **Host alias:** `mvn-api` for the original API VPS; `zakup` for the emergency API primary.
@@ -278,28 +223,6 @@ docker compose -f docker-compose.prod.yml up -d --force-recreate db app bot
 curl -fsS http://127.0.0.1:8000/api/health
 ```
 
-## Local Deployment (Legacy)
-
-Use the deployment script for local builds:
-
-```bash
-# Production deployment
-./deploy_web.sh prod
-
-# Dev deployment  
-./deploy_web.sh dev
-```
-
-Local API/data scripts default to `root@185.250.45.54`. Override with `REMOTE_HOST=...` or `API_HOST=...` if you need a local SSH alias.
-
-**What the script does:**
-1. Builds frontend with production API data (`INTERNAL_API_URL` + `PUBLIC_API_URL`)
-2. Syncs media from API server
-3. Uploads `dist/` to web server via rsync
-4. Configures robots.txt based on environment
-
-**Critical:** Script uses `INTERNAL_API_URL=https://api.mvn.by/api/v1` during Astro static generation to fetch product data and generate all 102 static pages.
-
 ## GitHub Actions Deployment
 
 ### Release Trigger
@@ -313,28 +236,10 @@ For a manual replay:
 1. Open https://github.com/mvnby/air-api/actions/workflows/deploy.yml.
 2. Click **Run workflow**.
 3. Select `main` only.
-4. Choose whether to rebuild the storefront and run the workflow.
+4. Run the API workflow.
 
 The release gate rejects a manual commit unless that exact SHA already has a
 successful CI run.
-
-### Environment Variables
-
-The workflow requires these env vars in the build step:
-
-```yaml
-- name: Build Astro Site
-  env:
-    # Static generation: stable private API listener through an SSH tunnel
-    INTERNAL_API_URL: http://127.0.0.1:18000/api/v1
-    # Client-side: Production API
-    PUBLIC_API_URL: https://api.mvn.by/api/v1
-    # Google Tag Manager
-    PUBLIC_GTM_ID: GTM-5CR6WBBC
-```
-
-**Without `INTERNAL_API_URL`:** Build generates only 16 pages (all API calls fail during static generation).
-**With `INTERNAL_API_URL`:** Build generates 102+ pages (all products pre-rendered)
 
 ### Deployment Steps
 
@@ -414,161 +319,14 @@ image automatically if the post-activation Google durability probe fails.
 The old `deploy_api.sh` source-bind path is intentionally retired. Production
 changes must use the CI-tested immutable-image workflow.
 
-### Legacy Web Release Safety
+### Storefront boundary
 
-The monolith publisher is retired: `.github/workflows/deploy.yml` has no
-storefront job and `.github/workflows/rebuild-web.yml` fails closed. The old
-`.github/workflows/deploy-web.yml` and atomic release scripts are retained only
-for audited rollback history while the standalone SSR cutover is observed.
-
-Active storefront deployment and catalog revision verification live in the
-private `mvnby/mvn-web` repository. The API dispatch target is controlled by
+The API publisher and the embedded storefront source were removed after the
+standalone `mvn-web` CI and production deployment had been proven. Active
+storefront deployment, rollback and catalog revision verification live only in
+`mvnby/mvn-web`. The API dispatch target is controlled by
 `WEB_REBUILD_GITHUB_OWNER`, `WEB_REBUILD_GITHUB_REPO`, and
 `WEB_REBUILD_GITHUB_REF`.
-
-The final Cloudflare routing change is owned by
-`.github/workflows/cutover-web-origin.yml`. Its default `audit` mode is
-read-only. `cutover` first proves DNS write permission with a temporary TXT
-record, verifies the direct SSR origin, detaches only `mvn.by` and `www.mvn.by`
-from the `mvn-by` Pages project, and creates proxied A records for
-`153.80.244.78`. `rollback` removes only those exact origin records and restores
-the Pages custom domains. Both mutating modes require the explicit target value
-shown by the workflow input.
-
-Required GitHub secrets:
-
-```text
-SSH_HOST_WEB=153.80.244.78
-SSH_USER_WEB=deploy
-CLOUDFLARE_API_TOKEN_PAGES=<Cloudflare Pages Edit token>
-```
-
-Required GitHub variables:
-
-```text
-CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
-CLOUDFLARE_PAGES_PROJECT=mvn-by
-WEB_ROOT=/var/www/mvn.by
-```
-
-`CLOUDFLARE_PAGES_PROJECT` and `WEB_ROOT` have the values above as safe
-defaults. The workflow never writes into the live document root. It uploads to
-`/var/www/mvn.by/releases/.<sha>.incoming`, validates the candidate, moves it to
-the immutable release directory, and atomically replaces the `live` symlink.
-The previous release remains present for rollback, and the newest five releases
-are retained.
-
-The VPS nginx site must use `/var/www/mvn.by/live` as its root. One-time setup:
-
-```bash
-scp scripts/bootstrap_web_atomic_nginx.sh mvn:/tmp/
-ssh mvn 'chmod +x /tmp/bootstrap_web_atomic_nginx.sh && \
-  CONFIRM_WEB_NGINX_BOOTSTRAP=true bash /tmp/bootstrap_web_atomic_nginx.sh'
-```
-
-The bootstrap backs up the nginx site, validates nginx before reload, preserves
-the currently served files, and restores the previous config on error.
-
-Release verification:
-
-1. Confirm the workflow summary contains successful Pages canary, VPS, and Pages
-   production steps for the same full Git SHA.
-2. Verify the Pages production marker:
-
-   ```bash
-   curl -fsS https://mvn-by.pages.dev/release.json
-   ```
-
-3. Verify the VPS origin while bypassing public DNS:
-
-   ```bash
-   curl -fsS --resolve mvn.by:443:153.80.244.78 https://mvn.by/
-   curl -fsS --resolve mvn.by:443:153.80.244.78 https://mvn.by/catalog/
-   ```
-
-4. Verify public Cloudflare paths:
-
-   ```bash
-   curl -I https://mvn.by/
-   curl -I https://mvn.by/catalog/
-   curl -I https://www.mvn.by/
-   ```
-
-Manual VPS rollback does not rebuild anything. Point `live` at a retained
-release and verify the origin:
-
-```bash
-ssh mvn
-cd /var/www/mvn.by
-ls -1t releases
-ln -s /var/www/mvn.by/releases/<previous-sha> live.next
-python3 - <<'PY'
-import os
-os.replace('live.next', 'live')
-PY
-curl -fsS --resolve mvn.by:443:127.0.0.1 https://mvn.by/ >/dev/null
-```
-
-### Cloudflare Pages Cutover
-
-The cutover is complete. Both custom domains are associated with `mvn-by`, have
-active Pages certificates, and point to `mvn-by.pages.dev`. For a future zone or
-project migration, preserve this order:
-
-1. Produce a green Pages production release and matching atomic VPS release.
-2. Associate the custom domain with Pages before changing its DNS record.
-3. Change one hostname at a time, wait for `active`, and require exact-SHA smoke.
-4. Keep the VPS, DNS backup, atomic releases, and direct-origin checks as the
-   independent rollback path.
-
-For an apex domain in a Cloudflare-managed zone, use the Pages custom-domain
-flow and let Cloudflare create the required DNS record. Creating only a manual
-CNAME without associating the domain with Pages can route traffic to an
-unconfigured Pages origin.
-
-### Storefront Media Proxy
-
-Backend-managed public media lives on the API host under `/media/...`, but
-storefront content should prefer same-origin references such as
-`/media/library/crop/example.webp`. The web VPS proxies those paths to the API
-origin with the nginx snippet in
-`deployment/nginx/mvn-media-proxy-location.conf`.
-
-Install or refresh the snippet on the web VPS:
-
-```bash
-scp deployment/nginx/mvn-media-proxy-location.conf mvn:/etc/nginx/snippets/mvn-media-proxy-location.conf
-ssh mvn
-cp /etc/nginx/sites-available/mvn.by /etc/nginx/sites-available/mvn.by.bak-media-$(date +%Y%m%d%H%M%S)
-# Include the snippet inside both mvn.by server blocks before the generic
-# static asset regex location.
-nginx -t
-systemctl reload nginx
-```
-
-Origin smoke, bypassing Cloudflare:
-
-```bash
-curl -I -H 'Host: mvn.by' http://153.80.244.78/media/library/crop/<file>.webp
-curl -I --resolve mvn.by:443:153.80.244.78 https://mvn.by/media/library/crop/<file>.webp
-```
-
-After enabling a new `/media/...` URL that previously returned 404 through
-Cloudflare, purge that URL from Cloudflare cache or wait for the cached 404 to
-expire. The Cloudflare token used for certbot DNS challenges may not have cache
-purge permissions, so use a token with `Zone.Cache Purge` when clearing this
-manually. Public smoke:
-
-```bash
-curl -I https://mvn.by/media/library/crop/<file>.webp
-```
-
-### Web SSH Reliability
-
-The VPS is now a fallback target rather than the only copy of the storefront.
-Remote preparation and upload use bounded retries, but a failed VPS promotion
-stops the release before Pages production is changed. The existing **Web SSH
-Connectivity Check** workflow remains the direct network diagnostic.
 
 ## Manager Frontend Env Model
 
@@ -588,29 +346,6 @@ Important details:
 - If you need a local override without touching `.env`, copy `.env.development.local.example` to `.env.development.local`.
 
 For production manager builds, set `WEBSITE_URL` explicitly in the workflow step that runs `npm run build`.
-
-## Safety Checks 🛡️
-
-To prevent deploying an empty site (when API is down or config is wrong), we added a pre-build check:
-
-**Script:** `web/scripts/check-api.js`
-
-**Logic:**
-1. Checks config endpoint (`/config`)
-2. Checks catalog endpoint (`/catalog?limit=1`)
-3. **Fails build if:** 
-   - API is unreachable
-   - Product count is 0
-
-**Integration:**
-Configured in `web/package.json`:
-```json
-"scripts": {
-  "check-api": "node scripts/check-api.js",
-  "build": "npm run check-api && astro build"
-}
-```
-If `check-api` fails, `astro build` will NOT run, protecting the production site.
 
 ## Post-Deploy Data Ops (Brands/Categories)
 
@@ -680,36 +415,8 @@ manual migration commands, secrets checklist, and rollback notes.
 
 ## Common Issues
 
-### Issue: Catalog shows "Товары не найдены"
-
-**Symptoms:**
-- Only 16 pages in build logs
-- API fetch errors during build: `[API] Fetch error for http://app:8000/api/v1/...`
-
-**Root cause:** Missing `INTERNAL_API_URL` in build environment
-
-**Fix:** Ensure `INTERNAL_API_URL=https://api.mvn.by/api/v1` is set before `npm run build`
-
-### Issue: Browser cache showing old version
-
-**Fix:** Hard refresh
-- **Mac:** `Cmd + Shift + R`
-- **Windows:** `Ctrl + Shift + R`
-
-### Issue: web SSH or rsync timeout
-
-**Symptoms:** `ssh: connect to host ... port 22: Connection timed out`, `rsync error: unexplained error (code 255)`, or deploy summary `failure_kind: web_ssh_connectivity`.
-
-**Checks:** Confirm whether backend deploy and smoke-check were green, then run the manual **Web SSH Connectivity Check** workflow. A flaky probe means the web SSH path is unstable before file transfer starts.
-
-**Fix direction:** Do not keep increasing retries. Pick a more reliable deploy architecture: managed static hosting/CDN, web hosting with stable SSH from GitHub Actions, or pull-based artifact deployment from the web host.
-
 ## Verification
 
-After deployment, check:
-
-1. **Build logs:** Should show `102 page(s) built` (not 16)
-2. **Catalog:** https://mvn.by/catalog/ should display products
-3. **Product pages:** https://mvn.by/product/[slug]/ should work
-4. **Console:** No GTM errors (`gtm.js?id=undefined`)
-5. **API calls:** Should go to `https://api.mvn.by/api/v1/...` (not `https://mvn.by/api/v1/...`)
+After an API deployment, verify `/api/health`, `/api/ready`,
+`/api/v1/products?limit=5`, and `/api/v1/filters/config`. Storefront release
+and public-page verification belong to the `mvn-web` deployment workflow.

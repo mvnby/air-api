@@ -50,11 +50,11 @@
    ./scripts/sync_manager_api_client.sh
    
    pytest -q
-   cd web && npm run build
-   cd ../manager_frontend && npm run build
+   cd manager_frontend && npm run build
    ```
 
-   Запускайте только релевантные проверки, но перед merge в `main` CI должен быть зеленым.
+   Проверки storefront запускаются в отдельном `mvnby/mvn-web` PR. Запускайте
+   только релевантные проверки, но перед merge в `main` CI должен быть зеленым.
 4. Закоммитить:
 
    ```bash

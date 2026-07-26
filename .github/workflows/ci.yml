@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     # The immutable-image pytest suite can exceed 30 minutes on a throttled
     # hosted runner while still making steady progress. The full job also
-    # includes frontend builds and migration checks, so keep enough headroom
+    # includes manager builds and migration checks, so keep enough headroom
     # around the observed 45-minute end-to-end runtime while retaining a hard
     # bound for genuinely hung suites.
     timeout-minutes: 60
@@ -61,17 +61,6 @@ jobs:
         run: |
           npm ci
           npm run build
-
-      - name: Check Storefront
-        working-directory: ./web
-        run: |
-          npm ci
-          npm run audit:boundary
-          npm run audit:theme
-          npm run test:brands
-          npm run test:homepage
-          npm run test:catalog
-          npm run test:seo
 
       - name: Start Services
         run: docker compose up -d --build
