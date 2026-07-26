@@ -25,6 +25,7 @@ ROLE_AGENT_CONFIG_SOURCE="scripts/ha/patroni_role_agent_config.py"
 ROLE_AGENT_CONFIG_TARGET="/usr/local/sbin/patroni_role_agent_config.py"
 ROLE_IDENTITY_SOURCE="scripts/ha/patroni_local_identity.py"
 ROLE_IDENTITY_TARGET="/usr/local/sbin/patroni_local_identity.py"
+ROLE_AGENT_ONCE_ENV_SOURCE="scripts/ha/patroni_role_agent_once_env.py"
 ROLE_UNIT_SOURCE="deploy/ha/patroni/mvn-patroni-role-agent.service"
 ROLE_UNIT_TARGET="/etc/systemd/system/mvn-patroni-role-agent.service"
 ROLE_AGENT_UNIT="mvn-patroni-role-agent.service"
@@ -34,6 +35,7 @@ DEPLOY_CAPACITY_HELPER_SOURCE="scripts/ha/require_deploy_capacity.sh"
 COMMUNICATIONS_WORKER_RELEASE_HELPER_SOURCE="scripts/ha/communications_worker_release_contract.sh"
 PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE_SOURCE="scripts/ha/patroni_communications_candidate_lifecycle.sh"
 PATRONI_ROLE_AGENT_CANDIDATE_ASSETS_SOURCE="scripts/ha/patroni_role_agent_candidate_assets.sh"
+ROLE_AGENT_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${ROLE_AGENT_SOURCE}")"
 DEPLOY_LOCK_HELPER_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${DEPLOY_LOCK_HELPER_SOURCE}")"
 DB_CONTRACT_HELPER_SOURCE="scripts/ha/patroni_compose_db_contract.py"
 TRANSACTION_SOURCE="scripts/compose_candidate_transaction.sh"
@@ -116,6 +118,11 @@ fi
 if [[ "${OPERATION}" == "verify" ]]; then
   [[ -n "${PROJECT_DIR}" ]] || {
     log error "API_NODE_PROJECT_DIR is required for runtime verification"
+    exit 1
+  }
+  [[ -f "${ROLE_AGENT_ONCE_ENV_SOURCE}" \
+    && ! -L "${ROLE_AGENT_ONCE_ENV_SOURCE}" ]] || {
+    log error "role-agent one-shot environment helper is missing or unsafe"
     exit 1
   }
   [[ "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]] || {
@@ -230,6 +237,7 @@ if [[ "${OPERATION}" == "probe" ]]; then
 fi
 
 if [[ "${OPERATION}" == "verify" ]]; then
+  role_agent_once_env_code="$(<"${ROLE_AGENT_ONCE_ENV_SOURCE}")"
   verify_config_code='
 import json
 import sys
@@ -383,7 +391,8 @@ print(normalized)
       for canary_attempt in 1 2 3; do
         role_agent_canary_rc=0
         role_agent_canary_output=\$(
-          timeout 120 $(quote "${ROLE_AGENT_TARGET}") --once 2>/dev/null
+          timeout 120 python3 -I -c $(quote "${role_agent_once_env_code}") \
+            $(quote "${PROJECT_DIR}") $(quote "${ROLE_AGENT_SHA256}") 2>/dev/null
         ) || role_agent_canary_rc=\$?
         if test \"\${role_agent_canary_rc}\" -eq 0 \
           && printf '%s' \"\${role_agent_canary_output}\" \
@@ -398,6 +407,7 @@ print(normalized)
           sleep 1
           continue
         fi
+        echo \"role-agent one-shot attestation failed: rc=\${role_agent_canary_rc}\" >&2
         exit 1
       done
       test \"\${role_agent_canary_passed}\" = true
