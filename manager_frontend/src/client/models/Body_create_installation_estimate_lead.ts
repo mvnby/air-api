@@ -16,4 +16,3 @@ export type Body_create_installation_estimate_lead = {
     description?: (string | null);
     object_type?: (string | null);
 };
-
