@@ -176,6 +176,13 @@ const hasLongComment = computed(() => (props.item.comment || '').length > 140);
       <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">
         {{ formatDate(displayDate) }}
       </span>
+      <span
+        v-if="item.attachment_count"
+        class="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300"
+      >
+        <span class="material-icons-round text-[14px]">photo_library</span>
+        {{ item.attachment_count }}
+      </span>
     </div>
 
     <!-- Comment (the core decision-making field) -->

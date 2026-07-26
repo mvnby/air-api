@@ -23,6 +23,10 @@ from schemas_public_checkout import (
     PublicOrderPricingErrorResponse,
 )
 from schemas_features import ManagerProductFeatureWorkspaceResponse, PublicFeatureResponse
+from schemas_installation_estimate import (
+    InstallationEstimateLeadPayload,
+    InstallationEstimateLeadResponse,
+)
 
 # --- SHARED ---
 
@@ -3641,6 +3645,7 @@ class LeadsInboxItemResponse(BaseModel):
     service_type: Optional[str] = None
     equipment_class: Optional[str] = None
     marketing_source: Optional[str] = None
+    attachment_count: int = 0
 
 
 class LeadsInboxListResponse(BaseModel):

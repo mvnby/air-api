@@ -2490,6 +2490,68 @@
         }
       }
     },
+    "/api/v1/leads/installation-estimate": {
+      "post": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Create Installation Estimate Lead",
+        "operationId": "create_installation_estimate_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_installation_estimate_lead"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationEstimateLeadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid image or upload limits exceeded"
+          },
+          "409": {
+            "description": "Idempotency key reused with different content"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/leads/product-availability": {
       "post": {
         "tags": [
@@ -21932,6 +21994,156 @@
         ],
         "title": "Body_complete_media_worker_job"
       },
+      "Body_create_installation_estimate_lead": {
+        "properties": {
+          "indoor_unit": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Unit"
+          },
+          "outdoor_unit": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outdoor Unit"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "facade": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facade"
+          },
+          "power_supply": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Supply"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 7,
+            "title": "Phone"
+          },
+          "consent": {
+            "type": "boolean",
+            "title": "Consent"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(apartment|house|office|commercial|other)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "phone",
+          "consent"
+        ],
+        "title": "Body_create_installation_estimate_lead"
+      },
       "Body_create_repair_diagnostic_lead": {
         "properties": {
           "payload": {
@@ -27468,6 +27680,51 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "InstallationEstimateLeadResponse": {
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "title": "Lead Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "attachment_count": {
+            "type": "integer",
+            "title": "Attachment Count"
+          },
+          "preliminary_estimate_status": {
+            "type": "string",
+            "const": "pending_review",
+            "title": "Preliminary Estimate Status",
+            "default": "pending_review"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "lead_id",
+          "order_id",
+          "status",
+          "created_at",
+          "attachment_count"
+        ],
+        "title": "InstallationEstimateLeadResponse"
+      },
       "InstallationMetaPayload": {
         "properties": {
           "source": {
@@ -28410,6 +28667,11 @@
               }
             ],
             "title": "Marketing Source"
+          },
+          "attachment_count": {
+            "type": "integer",
+            "title": "Attachment Count",
+            "default": 0
           }
         },
         "type": "object",

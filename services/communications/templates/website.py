@@ -5,6 +5,7 @@ from html import escape
 from typing import Any, Mapping
 
 from services.communications.contracts import (
+    InstallationEstimateLeadCreatedPayloadV1,
     PublicContactLeadCreatedPayloadV1,
     PublicOrderCreatedPayloadV1,
 )
@@ -129,4 +130,37 @@ def render_website_contact_lead_v1(
         lines.extend(
             ["", f"💬 {_escape_bounded(payload.message, max_length=800)}"]
         )
+    return _ensure_telegram_length("\n".join(lines))
+
+
+def render_installation_estimate_lead_v1(
+    context: InstallationEstimateLeadCreatedPayloadV1 | Mapping[str, Any],
+) -> str:
+    payload = (
+        context
+        if isinstance(context, InstallationEstimateLeadCreatedPayloadV1)
+        else InstallationEstimateLeadCreatedPayloadV1.model_validate(context)
+    )
+    lines = [
+        f"📷 <b>МОНТАЖ ПО ФОТО #{payload.order_id}</b>",
+        f"👤 {_escape_bounded(payload.name, max_length=160)}",
+        f"📱 {_escape_bounded(payload.phone, max_length=80)}",
+    ]
+    if payload.email:
+        lines.append(f"📧 {_escape_bounded(payload.email, max_length=254)}")
+    if payload.address:
+        lines.append(f"📍 {_escape_bounded(payload.address, max_length=250)}")
+    if payload.description:
+        lines.extend(
+            ["", f"💬 {_escape_bounded(payload.description, max_length=800)}"]
+        )
+    categories = ", ".join(payload.photo_categories)
+    lines.extend(
+        [
+            "",
+            f"🖼 Фото: {payload.attachment_count}",
+            f"Категории: {_escape_bounded(categories, max_length=300)}",
+            "Статус: ожидает предварительной оценки",
+        ]
+    )
     return _ensure_telegram_length("\n".join(lines))

@@ -986,6 +986,7 @@ class OrderService:
         customer_bank_name: Optional[str] = None,
         customer_id: Optional[int] = None,
         order_technical_meta: Optional[Dict[str, Any]] = None,
+        commit: bool = True,
     ) -> Order:
         """
         Create order from website checkout.
@@ -1449,8 +1450,11 @@ class OrderService:
         await session.flush()
         await OrderService._refresh_order_financials(session, order)
         session.add(order)
-        await session.commit()
-        await session.refresh(order)
+        if commit:
+            await session.commit()
+            await session.refresh(order)
+        else:
+            await session.flush()
         
         # Log
         logger.info(
@@ -3331,6 +3335,12 @@ class OrderService:
         stmt = stmt.offset((page - 1) * limit).limit(limit)
         result = await session.execute(stmt)
         orders: list[Order] = list(result.scalars().all())
+        from services.service_attachment_service import ServiceAttachmentService
+
+        attachment_counts = await ServiceAttachmentService.order_attachment_counts(
+            session,
+            order_ids=[int(order.id or 0) for order in orders],
+        )
 
         items = [
             LeadsInboxItemResponse(
@@ -3363,6 +3373,7 @@ class OrderService:
                 service_type=OrderService._lead_inbox_meta_text(order, "service_type"),
                 equipment_class=OrderService._lead_inbox_meta_text(order, "equipment_class"),
                 marketing_source=OrderService._lead_inbox_meta_text(order, "marketing_source"),
+                attachment_count=attachment_counts.get(int(order.id or 0), 0),
             )
             for order in orders
         ]
