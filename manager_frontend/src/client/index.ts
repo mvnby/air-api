@@ -27,6 +27,7 @@ export type { Body_attach_internal_bot_order_file_v1 } from './models/Body_attac
 export type { Body_attach_manager_doc_file } from './models/Body_attach_manager_doc_file';
 export type { Body_bulk_upload_local_images } from './models/Body_bulk_upload_local_images';
 export type { Body_complete_media_worker_job } from './models/Body_complete_media_worker_job';
+export type { Body_create_installation_estimate_lead } from './models/Body_create_installation_estimate_lead';
 export type { Body_create_repair_diagnostic_lead } from './models/Body_create_repair_diagnostic_lead';
 export type { Body_import_manager_bank_statement } from './models/Body_import_manager_bank_statement';
 export type { Body_login_access_token } from './models/Body_login_access_token';
@@ -144,6 +145,7 @@ export type { FiltersConfigResponse } from './models/FiltersConfigResponse';
 export type { FilterTagOption } from './models/FilterTagOption';
 export type { FxRateResponse } from './models/FxRateResponse';
 export type { HTTPValidationError } from './models/HTTPValidationError';
+export type { InstallationEstimateLeadResponse } from './models/InstallationEstimateLeadResponse';
 export type { InstallationMetaPayload } from './models/InstallationMetaPayload';
 export type { LeadCreatePayload } from './models/LeadCreatePayload';
 export type { LeadListResponse } from './models/LeadListResponse';

@@ -385,6 +385,16 @@ class OrderWorkStage(SQLModel, table=True):
 
 
 class Order(SQLModel, table=True):
+    __table_args__ = (
+        Index(
+            "uq_order_source_fingerprint",
+            "source_fingerprint",
+            unique=True,
+            postgresql_where=text("source_fingerprint IS NOT NULL"),
+            sqlite_where=text("source_fingerprint IS NOT NULL"),
+        ),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
 
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
@@ -409,6 +419,10 @@ class Order(SQLModel, table=True):
     title: Optional[str] = Field(default=None)
     comment: Optional[str] = Field(default=None)
     workflow_type: str = Field(default="sales_installation", index=True)
+    source_fingerprint: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
 
     technical_meta: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
 

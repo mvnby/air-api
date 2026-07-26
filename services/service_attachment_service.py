@@ -10,6 +10,7 @@ from hashlib import sha256
 from typing import Any
 from urllib.parse import quote
 
+from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
 
@@ -41,6 +42,11 @@ class ServiceAttachmentService:
         "before_work",
         "after_work",
         "installation_result",
+        "installation_indoor",
+        "installation_outdoor",
+        "installation_route",
+        "installation_facade",
+        "installation_power",
         "defect",
         "service",
         "document",
@@ -109,7 +115,9 @@ class ServiceAttachmentService:
         transcript: str | None = None,
         captured_at: datetime | None = None,
         telegram_meta: dict[str, Any] | None = None,
+        source_meta: dict[str, Any] | None = None,
         storage: PrivateAttachmentStorage | None = None,
+        created_storage_keys: set[str] | None = None,
         commit: bool = True,
     ) -> dict[str, Any]:
         if not content:
@@ -228,6 +236,8 @@ class ServiceAttachmentService:
             )
             storage_provider = original.provider
             storage_key = original.storage_key
+            if created_storage_keys is not None:
+                created_storage_keys.add(original.storage_key)
         else:
             storage_provider = reusable_binary.storage_provider
             storage_key = reusable_binary.storage_key
@@ -244,6 +254,8 @@ class ServiceAttachmentService:
                     variant="preview",
                 )
                 preview_key = stored_preview.storage_key
+                if created_storage_keys is not None:
+                    created_storage_keys.add(stored_preview.storage_key)
 
         attachment = ServiceAttachment(
             file_kind=attachment_file_kind(normalized_mime),
@@ -258,7 +270,10 @@ class ServiceAttachmentService:
             source=source,
             processing_status="ready",
             transcript=cls._clean_text(transcript),
-            source_meta=dict(telegram_meta.get("source_meta") or {}),
+            source_meta={
+                **dict(telegram_meta.get("source_meta") or {}),
+                **dict(source_meta or {}),
+            },
             telegram_file_id=telegram_file_id,
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
@@ -303,6 +318,58 @@ class ServiceAttachmentService:
             component_id=component_id,
             service_history_id=service_history_id,
         )
+
+    @staticmethod
+    async def delete_unreferenced_storage_keys(
+        session: AsyncSession,
+        *,
+        storage: PrivateAttachmentStorage,
+        storage_keys: set[str],
+    ) -> None:
+        """Compensate failed attachment transactions without deleting shared binaries."""
+
+        for storage_key in sorted(storage_keys):
+            referenced = await session.scalar(
+                select(ServiceAttachment.id)
+                .where(
+                    ServiceAttachment.storage_provider == storage.provider_name,
+                    or_(
+                        ServiceAttachment.storage_key == storage_key,
+                        ServiceAttachment.preview_storage_key == storage_key,
+                    ),
+                )
+                .limit(1)
+            )
+            if referenced is None:
+                await storage.delete(storage_key)
+
+    @staticmethod
+    async def order_attachment_counts(
+        session: AsyncSession,
+        *,
+        order_ids: list[int],
+    ) -> dict[int, int]:
+        normalized_ids = sorted(
+            {int(order_id) for order_id in order_ids if int(order_id) > 0}
+        )
+        if not normalized_ids:
+            return {}
+        rows = (
+            await session.execute(
+                select(OrderAttachmentLink.order_id, func.count(OrderAttachmentLink.id))
+                .join(
+                    ServiceAttachment,
+                    ServiceAttachment.id == OrderAttachmentLink.attachment_id,
+                )
+                .where(
+                    OrderAttachmentLink.order_id.in_(normalized_ids),
+                    OrderAttachmentLink.archived_at.is_(None),
+                    ServiceAttachment.archived_at.is_(None),
+                )
+                .group_by(OrderAttachmentLink.order_id)
+            )
+        ).all()
+        return {int(order_id): int(count) for order_id, count in rows}
 
     @classmethod
     async def list_order_attachments(cls, session: AsyncSession, *, order_id: int) -> dict[str, Any] | None:

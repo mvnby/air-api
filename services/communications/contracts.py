@@ -99,6 +99,18 @@ class PublicContactLeadCreatedPayloadV1(_ContractV1):
     message: str | None = Field(default=None, max_length=2000)
 
 
+class InstallationEstimateLeadCreatedPayloadV1(_ContractV1):
+    order_id: int = Field(gt=0)
+    status: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=1, max_length=160)
+    phone: str = Field(min_length=1, max_length=80)
+    email: str | None = Field(default=None, max_length=254)
+    address: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=2000)
+    attachment_count: int = Field(ge=1, le=15)
+    photo_categories: tuple[str, ...] = Field(min_length=1, max_length=5)
+
+
 CanaryRecipientKeyV1 = Annotated[
     str,
     Field(

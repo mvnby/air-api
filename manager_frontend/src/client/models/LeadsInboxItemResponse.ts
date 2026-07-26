@@ -23,5 +23,6 @@ export type LeadsInboxItemResponse = {
     service_type?: (string | null);
     equipment_class?: (string | null);
     marketing_source?: (string | null);
+    attachment_count?: number;
 };
 

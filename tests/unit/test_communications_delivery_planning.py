@@ -14,6 +14,7 @@ from core.config import settings
 from models import CommunicationDelivery, IntegrationOutboxEvent, StaffUser
 from services.communications.contracts import (
     CommunicationRecipientV1,
+    InstallationEstimateLeadCreatedPayloadV1,
     PublicContactLeadCreatedPayloadV1,
     PublicOrderCreatedPayloadV1,
     PublicOrderCustomerSnapshotV1,
@@ -27,6 +28,7 @@ from services.communications.delivery_materializer import (
 from services.communications.recipient_directory import ManagementRecipientDirectory
 from services.communications.template_registry import (
     CONTACT_LEAD_TEMPLATE_KEY,
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
     InvalidCommunicationEventPayload,
     WebsiteTemplateRegistry,
 )
@@ -251,6 +253,31 @@ def test_v1_templates_have_stable_golden_output():
         "   └ 🔧 Монтаж: 20 BYN\n"
         "🔧 Доставка x1 — 5.5 BYN\n\n"
         "💰 <b>Итого: 125.5 BYN</b>"
+    )
+
+    estimate = _event(
+        3,
+        event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+        payload=InstallationEstimateLeadCreatedPayloadV1(
+            order_id=3,
+            status="new_lead",
+            name="Анна & Иван",
+            phone="+375291112233",
+            address="Минск <центр>",
+            description="Нужна предварительная оценка",
+            attachment_count=2,
+            photo_categories=("Место внутреннего блока", "Трасса"),
+        ).model_dump(mode="json"),
+    )
+    assert WebsiteTemplateRegistry.render(WebsiteTemplateRegistry.plan(estimate)) == (
+        "📷 <b>МОНТАЖ ПО ФОТО #3</b>\n"
+        "👤 Анна &amp; Иван\n"
+        "📱 +375291112233\n"
+        "📍 Минск &lt;центр&gt;\n\n"
+        "💬 Нужна предварительная оценка\n\n"
+        "🖼 Фото: 2\n"
+        "Категории: Место внутреннего блока, Трасса\n"
+        "Статус: ожидает предварительной оценки"
     )
 
 

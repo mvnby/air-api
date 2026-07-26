@@ -4,10 +4,12 @@
 /* eslint-disable */
 import type { AddressSuggestResponse } from '../models/AddressSuggestResponse';
 import type { ArticleResponse } from '../models/ArticleResponse';
+import type { Body_create_installation_estimate_lead } from '../models/Body_create_installation_estimate_lead';
 import type { Body_create_repair_diagnostic_lead } from '../models/Body_create_repair_diagnostic_lead';
 import type { CatalogResponse } from '../models/CatalogResponse';
 import type { CatalogRevisionResponse } from '../models/CatalogRevisionResponse';
 import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
+import type { InstallationEstimateLeadResponse } from '../models/InstallationEstimateLeadResponse';
 import type { OrderPayload } from '../models/OrderPayload';
 import type { OrderResponse } from '../models/OrderResponse';
 import type { ProductAvailabilityLeadPayload } from '../models/ProductAvailabilityLeadPayload';
@@ -304,6 +306,32 @@ export class ApiService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Installation Estimate Lead
+     * @param idempotencyKey
+     * @param formData
+     * @returns InstallationEstimateLeadResponse Successful Response
+     * @throws ApiError
+     */
+    public static createInstallationEstimateLead(
+        idempotencyKey: string,
+        formData: Body_create_installation_estimate_lead,
+    ): CancelablePromise<InstallationEstimateLeadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/leads/installation-estimate',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                400: `Invalid image or upload limits exceeded`,
+                409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
             },
         });

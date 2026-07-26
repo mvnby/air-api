@@ -6,6 +6,7 @@ import type { ManagerCustomerBranchItemResponse, ManagerOrderUpdatePayload } fro
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../../composables/useB2BLookup';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
+import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import { notify } from '../../services/ui-feedback';
 
 const props = defineProps<{
@@ -411,6 +412,16 @@ const submitQualify = async () => {
             {{ lead.comment }}
           </p>
         </section>
+
+        <OrderAttachmentsPanel
+          v-if="lead.attachment_count"
+          :key="`lead-attachments-${lead.id}`"
+          :order-id="lead.id"
+          :initial-count="lead.attachment_count"
+          :default-expanded="true"
+          :readonly="true"
+          @error="notify($event, 'error')"
+        />
 
         <section class="space-y-4">
           <div>
