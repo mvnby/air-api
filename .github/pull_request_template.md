@@ -6,7 +6,6 @@
 ## Scope
 
 - [ ] Backend
-- [ ] Storefront (`web/`)
 - [ ] Manager frontend (`manager_frontend/`)
 - [ ] Infra/CI/CD
 - [ ] DB migration
@@ -15,7 +14,6 @@
 
 - Local checks run:
   - [ ] `pytest -q` (or targeted tests)
-  - [ ] `cd web && npm run build` (if touched)
   - [ ] `cd manager_frontend && npm run build` (if touched)
 - Manual checks:
   - [ ] Main user flow verified

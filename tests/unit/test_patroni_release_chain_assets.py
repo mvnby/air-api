@@ -9,7 +9,6 @@ WORKFLOWS = [
     ROOT / ".github/workflows/deploy.yml",
     ROOT / ".github/workflows/deploy-api-patroni.yml",
     ROOT / ".github/workflows/deploy-api-standby.yml",
-    ROOT / ".github/workflows/deploy-web.yml",
     ROOT / ".github/workflows/publish-patroni-image.yml",
     ROOT / ".github/workflows/patroni-failover-rehearsal.yml",
     ROOT / ".github/workflows/rollout-patroni-image.yml",

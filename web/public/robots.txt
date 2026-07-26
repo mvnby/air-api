@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /cart
-Disallow: /checkout
-Disallow: /admin
-Disallow: /api
-
-Sitemap: https://mvn.by/sitemap-index.xml

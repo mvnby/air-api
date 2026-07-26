@@ -25,15 +25,11 @@ The future multi-tenant storefront platform is documented in
 catalog, public checkout, CRM, pricing, domains, and access control must not
 introduce per-client forks or bypass the planned server-side tenant boundary.
 
-## Static Content Image Workflow
+## Storefront content images
 
-Use `docs/content-image-assets.md` for static storefront images committed under
-`web/public/img`:
-
-- optimize new blog/service/hero/brand images with `cd web && npm run image:content`;
-- audit existing committed rasters with `cd web && npm run image:audit`;
-- keep catalog product uploads and product gallery variants in the backend
-  media/R2 pipeline, not this static content workflow.
+Static public-site images, their optimization and theme rules belong to the
+separate [`mvnby/mvn-web`](https://github.com/mvnby/mvn-web) repository. Keep
+catalog product uploads and gallery variants in the backend media/R2 pipeline.
 
 ## Manager API Client Sync Policy
 
