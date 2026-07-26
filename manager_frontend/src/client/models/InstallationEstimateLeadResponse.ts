@@ -11,3 +11,4 @@ export type InstallationEstimateLeadResponse = {
     preliminary_estimate_status?: string;
     replayed?: boolean;
 };
+
