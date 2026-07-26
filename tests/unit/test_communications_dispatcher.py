@@ -17,14 +17,17 @@ from models import (
 from services.communications.contracts import (
     CommunicationRecipientV1,
     CommunicationTemplatePlanV1,
-    PublicContactLeadCreatedPayloadV1,
+    InstallationEstimateLeadCreatedPayloadV1,
 )
 from services.communications.delivery_materializer import CommunicationDeliveryMaterializer
 from services.communications.dispatcher import CommunicationOutboxDispatcher
 from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.template_registry import (
     CONSUMER_NAME,
-    CONTACT_LEAD_TEMPLATE_KEY,
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+    PUBLIC_CONTACT_LEAD_CREATED_EVENT,
+    PUBLIC_ORDER_CREATED_EVENT,
     WebsiteTemplateRegistry,
 )
 
@@ -45,21 +48,28 @@ async def communications_session_factory(tmp_path):
         await engine.dispose()
 
 
-def _lead_payload(*, lead_id: int = 12, message: str = "Нужна консультация"):
-    return PublicContactLeadCreatedPayloadV1(
-        lead_id=lead_id,
-        status="new",
+def _installation_estimate_payload(
+    *,
+    order_id: int = 12,
+    description: str = "Нужна консультация",
+):
+    return InstallationEstimateLeadCreatedPayloadV1(
+        order_id=order_id,
+        status="new_lead",
         name="Иван <b>не HTML</b>",
         phone="+375291112233",
         email="ivan@example.com",
-        message=message,
+        address="Минск",
+        description=description,
+        attachment_count=2,
+        photo_categories=("Внутренний блок", "Наружный блок"),
     ).model_dump(mode="json")
 
 
 def _event(
     sequence: int,
     *,
-    event_type: str = "crm.public_contact_lead.created",
+    event_type: str = INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
     payload: dict | None = None,
     now: datetime | None = None,
     priority: int = 100,
@@ -70,11 +80,15 @@ def _event(
         event_id=f"{sequence:032x}",
         event_type=event_type,
         schema_version=1,
-        aggregate_type="lead",
+        aggregate_type="order",
         aggregate_id=str(sequence),
         aggregate_version=1,
         deduplication_key=f"test:{sequence}",
-        payload=payload if payload is not None else _lead_payload(lead_id=sequence),
+        payload=(
+            payload
+            if payload is not None
+            else _installation_estimate_payload(order_id=sequence)
+        ),
         priority=priority,
         max_attempts=max_attempts,
         available_at=occurred_at,
@@ -151,7 +165,7 @@ async def test_dispatch_materializes_deliveries_inbox_and_published_atomically(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_ignores_unsupported_events_and_respects_priority(
+async def test_dispatch_ignores_out_of_scope_events_and_respects_priority(
     communications_session_factory,
     monkeypatch,
 ):
@@ -159,10 +173,35 @@ async def test_dispatch_ignores_unsupported_events_and_respects_priority(
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
     now = datetime(2026, 7, 12, 3, 0, tzinfo=timezone.utc)
     async with communications_session_factory() as session:
-        unsupported = _event(30, event_type="catalog.product.changed", now=now)
-        low_priority = _event(31, now=now - timedelta(minutes=1), priority=100)
-        high_priority = _event(32, now=now, priority=10)
-        session.add_all([unsupported, low_priority, high_priority])
+        unsupported = _event(
+            30,
+            event_type="catalog.product.changed",
+            now=now,
+            priority=-300,
+        )
+        public_contact = _event(
+            31,
+            event_type=PUBLIC_CONTACT_LEAD_CREATED_EVENT,
+            now=now,
+            priority=-200,
+        )
+        public_order = _event(
+            32,
+            event_type=PUBLIC_ORDER_CREATED_EVENT,
+            now=now,
+            priority=-100,
+        )
+        low_priority = _event(33, now=now - timedelta(minutes=1), priority=100)
+        high_priority = _event(34, now=now, priority=10)
+        session.add_all(
+            [
+                unsupported,
+                public_contact,
+                public_order,
+                low_priority,
+                high_priority,
+            ]
+        )
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
@@ -174,6 +213,10 @@ async def test_dispatch_ignores_unsupported_events_and_respects_priority(
         assert outcome.event_id == high_priority.event_id
         assert unsupported.status == "pending"
         assert unsupported.attempts == 0
+        assert public_contact.status == "pending"
+        assert public_contact.attempts == 0
+        assert public_order.status == "pending"
+        assert public_order.attempts == 0
         assert low_priority.status == "pending"
 
 
@@ -450,7 +493,7 @@ async def test_dispatch_recovers_existing_inbox_without_duplicate_delivery(
     async with communications_session_factory() as session:
         event = _event(61, now=now)
         plan = CommunicationTemplatePlanV1(
-            template_key=CONTACT_LEAD_TEMPLATE_KEY,
+            template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
             render_context=event.payload,
         )
         recipient = CommunicationRecipientV1(

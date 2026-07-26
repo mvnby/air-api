@@ -16,7 +16,10 @@ from models import (
     StaffUser,
 )
 from services.communications.canary import CommunicationsTelegramCanary
-from services.communications.contracts import CommunicationRecipientV1
+from services.communications.contracts import (
+    CommunicationRecipientV1,
+    InstallationEstimateLeadCreatedPayloadV1,
+)
 from services.communications.delivery_materializer import (
     CommunicationDeliveryMaterializer,
 )
@@ -25,7 +28,10 @@ from services.communications.processing_scope import CommunicationProcessingScop
 from services.communications.recipient_directory import (
     OperationsCanaryRecipientDirectory,
 )
-from services.communications.template_registry import WebsiteTemplateRegistry
+from services.communications.template_registry import (
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    WebsiteTemplateRegistry,
+)
 
 ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
@@ -35,21 +41,23 @@ RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 def _event(sequence: int, *, now: datetime) -> IntegrationOutboxEvent:
     return IntegrationOutboxEvent(
         event_id=f"{sequence:032x}",
-        event_type="crm.public_contact_lead.created",
+        event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
         schema_version=1,
-        aggregate_type="lead",
+        aggregate_type="order",
         aggregate_id=str(sequence),
         aggregate_version=1,
         deduplication_key=f"dispatcher-concurrency:{sequence}",
-        payload={
-            "lead_id": sequence,
-            "status": "new",
-            "name": f"Клиент {sequence}",
-            "phone": "+375291112233",
-            "email": None,
-            "address": None,
-            "message": "Нужна консультация",
-        },
+        payload=InstallationEstimateLeadCreatedPayloadV1(
+            order_id=sequence,
+            status="new_lead",
+            name=f"Клиент {sequence}",
+            phone="+375291112233",
+            email=None,
+            address=None,
+            description="Нужна консультация",
+            attachment_count=1,
+            photo_categories=("Место внутреннего блока",),
+        ).model_dump(mode="json"),
         available_at=now,
         occurred_at=now,
         created_at=now,

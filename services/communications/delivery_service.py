@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import CommunicationDelivery
+from models import CommunicationDelivery, IntegrationOutboxEvent
 from services.communications.delivery_attempt_service import (
     CommunicationDeliveryAttemptService,
 )
@@ -123,6 +123,10 @@ class CommunicationDeliveryService:
 
         statement = (
             select(CommunicationDelivery)
+            .join(
+                IntegrationOutboxEvent,
+                IntegrationOutboxEvent.event_id == CommunicationDelivery.event_id,
+            )
             .where(
                 CommunicationDelivery.channel == normalized_channel,
                 CommunicationDelivery.status.in_(
@@ -133,6 +137,8 @@ class CommunicationDeliveryService:
                 CommunicationDelivery.template_key.in_(
                     scope.delivery_template_keys
                 ),
+                IntegrationOutboxEvent.event_type.in_(scope.outbox_event_types),
+                IntegrationOutboxEvent.status == "published",
             )
             .order_by(
                 CommunicationDelivery.priority.asc(),
@@ -147,7 +153,10 @@ class CommunicationDeliveryService:
                 CommunicationDelivery.event_id == scope.exact_event_id
             )
         if session.get_bind().dialect.name == "postgresql":
-            statement = statement.with_for_update(skip_locked=True)
+            statement = statement.with_for_update(
+                of=CommunicationDelivery,
+                skip_locked=True,
+            )
 
         delivery = (await session.execute(statement)).scalar_one_or_none()
         if delivery is None:
@@ -206,6 +215,10 @@ class CommunicationDeliveryService:
         safe_limit = max(1, min(cls.MAX_RECOVERY_LIMIT, int(limit)))
         statement = (
             select(CommunicationDelivery)
+            .join(
+                IntegrationOutboxEvent,
+                IntegrationOutboxEvent.event_id == CommunicationDelivery.event_id,
+            )
             .where(
                 CommunicationDelivery.channel == normalized_channel,
                 CommunicationDelivery.status == DELIVERY_STATUS_RUNNING,
@@ -214,6 +227,8 @@ class CommunicationDeliveryService:
                 CommunicationDelivery.template_key.in_(
                     scope.delivery_template_keys
                 ),
+                IntegrationOutboxEvent.event_type.in_(scope.outbox_event_types),
+                IntegrationOutboxEvent.status == "published",
             )
             .order_by(
                 CommunicationDelivery.lease_expires_at.asc(),
@@ -227,7 +242,10 @@ class CommunicationDeliveryService:
                 CommunicationDelivery.event_id == scope.exact_event_id
             )
         if session.get_bind().dialect.name == "postgresql":
-            statement = statement.with_for_update(skip_locked=True)
+            statement = statement.with_for_update(
+                of=CommunicationDelivery,
+                skip_locked=True,
+            )
 
         deliveries = list((await session.execute(statement)).scalars().all())
         retry_count = 0

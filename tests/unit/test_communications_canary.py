@@ -359,6 +359,19 @@ async def test_canary_worker_cancels_without_provider_call_after_owner_snapshot_
         replacement = _staff("Manager", 303, role="manager")
         session.add_all([owner_one, owner_two, replacement])
         await session.flush()
+        event = _canary_event(
+            {
+                "run_id": RUN_ID_A,
+                "recipient_keys": [
+                    f"staff:{owner_one.id}",
+                    f"staff:{owner_two.id}",
+                ],
+            }
+        )
+        event.status = "published"
+        event.attempts = 1
+        event.published_at = now
+        session.add(event)
         session.add(
             CommunicationDelivery(
                 delivery_id="c" * 32,
@@ -419,6 +432,16 @@ async def test_canary_worker_cancels_injected_render_context_without_provider_ca
     async with canary_session_factory() as session:
         session.add_all([_staff("Owner One", 101), _staff("Owner Two", 202)])
         await session.flush()
+        event = _canary_event(
+            {
+                "run_id": RUN_ID_A,
+                "recipient_keys": ["staff:1", "staff:2"],
+            }
+        )
+        event.status = "published"
+        event.attempts = 1
+        event.published_at = now
+        session.add(event)
         session.add(
             CommunicationDelivery(
                 delivery_id="d" * 32,

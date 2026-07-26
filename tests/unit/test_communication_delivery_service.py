@@ -9,13 +9,26 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
-from models import CommunicationDelivery, CommunicationDeliveryAttempt
+from models import (
+    CommunicationDelivery,
+    CommunicationDeliveryAttempt,
+    IntegrationOutboxEvent,
+)
+from services.communications.contracts import (
+    InstallationEstimateLeadCreatedPayloadV1,
+)
 from services.communications.delivery_service import (
     CommunicationDeliveryLeaseLost,
     CommunicationDeliveryService,
 )
 from services.communications.providers.base import ProviderDeliveryResult
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.template_registry import (
+    CONTACT_LEAD_TEMPLATE_KEY,
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+    ORDER_TEMPLATE_KEY,
+)
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
 ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
@@ -25,13 +38,37 @@ ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
 async def delivery_session_factory(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'delivery.sqlite3'}")
     async with engine.begin() as connection:
+        await connection.run_sync(IntegrationOutboxEvent.__table__.create)
         await connection.run_sync(CommunicationDelivery.__table__.create)
         await connection.run_sync(CommunicationDeliveryAttempt.__table__.create)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        session.add_all([_event(sequence) for sequence in range(1, 201)])
+        await session.commit()
     try:
         yield factory
     finally:
         await engine.dispose()
+
+
+def _event(
+    sequence: int,
+) -> IntegrationOutboxEvent:
+    return IntegrationOutboxEvent(
+        event_id=f"{sequence + 1000:032x}",
+        event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+        schema_version=1,
+        aggregate_type="order",
+        aggregate_id=str(sequence),
+        deduplication_key=f"delivery-service:{sequence}",
+        payload={},
+        status="published",
+        available_at=NOW,
+        occurred_at=NOW,
+        published_at=NOW,
+        created_at=NOW,
+        updated_at=NOW,
+    )
 
 
 def _delivery(
@@ -47,6 +84,7 @@ def _delivery(
     worker_id: str | None = None,
     lease_token: str | None = None,
     provider_message_id: str | None = None,
+    template_key: str = INSTALLATION_ESTIMATE_TEMPLATE_KEY,
 ) -> CommunicationDelivery:
     return CommunicationDelivery(
         delivery_id=f"{sequence:032x}",
@@ -54,13 +92,17 @@ def _delivery(
         channel=channel,
         recipient_key=f"staff:{sequence}",
         destination=str(100000 + sequence),
-        template_key="telegram.website_contact_lead_created",
+        template_key=template_key,
         template_version=1,
-        render_context={
-            "lead_id": sequence,
-            "customer": {"phone": "+375291112233"},
-            "items": [{"name": "private item"}],
-        },
+        render_context=InstallationEstimateLeadCreatedPayloadV1(
+            order_id=sequence,
+            status="new_lead",
+            name=f"Lead {sequence}",
+            phone="+375291112233",
+            description="Нужна консультация",
+            attachment_count=2,
+            photo_categories=("Внутренний блок", "Наружный блок"),
+        ).model_dump(mode="json"),
         status=status,
         priority=priority,
         attempts=attempts,
@@ -90,7 +132,7 @@ def _running_attempt(
 
 
 @pytest.mark.asyncio
-async def test_claim_next_is_due_channel_scoped_ordered_and_caller_owned(
+async def test_claim_next_is_due_channel_and_template_scoped_ordered_and_caller_owned(
     delivery_session_factory,
 ):
     async with delivery_session_factory() as session:
@@ -100,6 +142,16 @@ async def test_claim_next_is_due_channel_scoped_ordered_and_caller_owned(
                 _delivery(2, priority=10),
                 _delivery(3, priority=1, available_at=NOW + timedelta(minutes=1)),
                 _delivery(4, channel="email", priority=1),
+                _delivery(
+                    5,
+                    priority=-20,
+                    template_key=CONTACT_LEAD_TEMPLATE_KEY,
+                ),
+                _delivery(
+                    6,
+                    priority=-10,
+                    template_key=ORDER_TEMPLATE_KEY,
+                ),
             ]
         )
         await session.commit()
@@ -128,6 +180,14 @@ async def test_claim_next_is_due_channel_scoped_ordered_and_caller_owned(
         assert attempt is not None
         assert attempt.outcome == "running"
         assert attempt.finished_at is None
+        for excluded_sequence in (5, 6):
+            excluded = await session.get(
+                CommunicationDelivery,
+                f"{excluded_sequence:032x}",
+            )
+            assert excluded is not None
+            assert excluded.status == "queued"
+            assert excluded.attempts == 0
         await session.rollback()
 
     async with delivery_session_factory() as session:
@@ -169,11 +229,9 @@ async def test_claim_snapshot_is_frozen_and_redacts_lease_token(
         with pytest.raises(FrozenInstanceError):
             claim.attempts = 99  # type: ignore[misc]
         with pytest.raises(TypeError):
-            claim.render_context["lead_id"] = 99  # type: ignore[index]
+            claim.render_context["order_id"] = 99  # type: ignore[index]
         with pytest.raises(TypeError):
-            claim.render_context["customer"]["phone"] = "changed"  # type: ignore[index]
-        with pytest.raises(TypeError):
-            claim.render_context["items"][0]["name"] = "changed"  # type: ignore[index]
+            claim.render_context["photo_categories"][0] = "changed"  # type: ignore[index]
 
 
 @pytest.mark.asyncio
