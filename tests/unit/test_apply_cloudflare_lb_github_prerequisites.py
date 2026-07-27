@@ -69,7 +69,9 @@ def test_load_env_file_sets_missing_values_without_overriding(tmp_path, monkeypa
         ),
         encoding="utf-8",
     )
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN_LB_AUDIT", raising=False)
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "existing-account")
+    monkeypatch.delenv("CLOUDFLARE_ZONE_ID", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
 
     module.load_env_file(
