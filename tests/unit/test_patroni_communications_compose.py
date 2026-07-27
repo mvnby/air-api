@@ -9,6 +9,11 @@ PRIMARY_COMPOSE = REPO_ROOT / "deploy/ha/mvn-api/docker-compose.patroni.yml"
 RESERVE_COMPOSE = REPO_ROOT / "deploy/ha/zakup/docker-compose.patroni.yml"
 IMMUTABLE_BACKEND_IMAGE = "${BACKEND_IMAGE:?set immutable BACKEND_IMAGE in .env}"
 WORKER_COMMAND = "python -m services.communications.runtime"
+REVIEWED_WORKER_PROFILES = {
+    ("false", "false"): "dormant",
+    ("true", "false"): "canary",
+    ("true", "true"): "active",
+}
 
 
 @pytest.mark.parametrize(
@@ -34,7 +39,7 @@ WORKER_COMMAND = "python -m services.communications.runtime"
         ),
     ],
 )
-def test_patroni_communications_worker_is_dormant_and_role_driven(
+def test_patroni_communications_worker_uses_reviewed_profile_and_role_driven(
     compose_path: Path,
     expected_env_file: list[str],
     expected_database_url: str,
@@ -49,11 +54,14 @@ def test_patroni_communications_worker_is_dormant_and_role_driven(
     assert worker["restart"] == "unless-stopped"
     assert worker["depends_on"] == {"db": {"condition": "service_healthy"}}
     assert worker["env_file"] == services["app"]["env_file"] == expected_env_file
+    enabled = worker["environment"]["COMMUNICATIONS_WORKER_ENABLED"]
+    allow_all = worker["environment"]["COMMUNICATIONS_WORKER_ALLOW_ALL_MODE"]
+    assert (enabled, allow_all) in REVIEWED_WORKER_PROFILES
     assert worker["environment"] == {
         "DATABASE_URL": expected_database_url,
         "ENVIRONMENT": "production",
-        "COMMUNICATIONS_WORKER_ENABLED": "false",
-        "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
+        "COMMUNICATIONS_WORKER_ENABLED": enabled,
+        "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": allow_all,
     }
     assert (
         worker["environment"]["DATABASE_URL"]

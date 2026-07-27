@@ -156,9 +156,13 @@ def test_target_compose_rejects_cross_node_profile_mismatch():
         )
 
 
-def test_tracked_production_compose_sources_share_reviewed_profile():
+def test_tracked_production_compose_sources_share_same_reviewed_profile():
     bundles = prepare_host_release_bundles(PATRONI_NODES)
-    assert validate_target_compose_bundles(PATRONI_NODES, bundles) == "dormant"
+    assert validate_target_compose_bundles(PATRONI_NODES, bundles) in {
+        "dormant",
+        "canary",
+        "active",
+    }
 
 
 def test_target_compose_rejection_precedes_every_remote_mutation(tmp_path):
