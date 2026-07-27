@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 try:
+    from scripts.ha.pitr_communications_cutover import (
+        run_remote_communications_cutover_preflight,
+    )
+    from scripts.ha.pitr_target_compose import validate_target_compose_bundles
     from scripts.ha.pitr_cluster_topology import (
         ClusterTopology,
         discover_cluster_topology,
@@ -27,6 +31,12 @@ try:
         run_remote_secret_phase,
     )
 except ModuleNotFoundError:  # Direct execution from scripts/ha.
+    from pitr_communications_cutover import (  # type: ignore[no-redef]
+        run_remote_communications_cutover_preflight,
+    )
+    from pitr_target_compose import (  # type: ignore[no-redef]
+        validate_target_compose_bundles,
+    )
     from pitr_cluster_topology import (  # type: ignore[no-redef]
         ClusterTopology,
         discover_cluster_topology,
@@ -54,9 +64,23 @@ SecretPhase = Callable[..., None]
 MaintenancePhase = Callable[..., None]
 FencedProvisionPhase = Callable[..., None]
 RoleAgentPhase = Callable[..., None]
+CommunicationsCutover = Callable[..., None]
+TargetComposeValidator = Callable[..., str]
 
 TRANSACTION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 DEFAULT_BOOTSTRAP_HELPER = "/usr/local/sbin/mvn-postgres-pitr-bootstrap"
+RELEASE_COMPATIBILITY_STATES = {
+    "fresh",
+    "matching-active",
+    "matching-finalized",
+    "matching-rolled-back",
+    "preflight-fenced",
+}
+ROLLBACK_RECOVERY_STATES = {
+    "matching-active",
+    "matching-rolled-back",
+    "preflight-fenced",
+}
 
 
 @dataclass(frozen=True)
@@ -77,6 +101,10 @@ class MigrationDependencies:
     maintenance: MaintenancePhase = run_remote_maintenance_phase
     fenced_provision: FencedProvisionPhase = run_remote_fenced_provision_phase
     role_agent: RoleAgentPhase = run_remote_role_agent_phase
+    communications_cutover: CommunicationsCutover = (
+        run_remote_communications_cutover_preflight
+    )
+    target_compose: TargetComposeValidator = validate_target_compose_bundles
 
 
 def validate_transaction_id(transaction_id: str) -> str:
@@ -237,6 +265,14 @@ class _MigrationOrchestrator:
             runner=self.runner,
         )
 
+    def _communications_cutover(self, node: PatroniNode) -> None:
+        self.dependencies.communications_cutover(
+            node=node,
+            context=self.context,
+            transaction_id=self.transaction_id,
+            runner=self.runner,
+        )
+
     def _run_with_standby_agent_quiesced(
         self,
         *,
@@ -275,6 +311,44 @@ class _MigrationOrchestrator:
                 f"cluster migration failed before configuration: {original_error}; "
                 "bundle rollback was incomplete: " + "; ".join(failures)
             ) from original_error
+
+    def _recover_durable_rollback(
+        self,
+        ordered_nodes: Sequence[PatroniNode],
+        compatibility: dict[str, str],
+    ) -> None:
+        states = set(compatibility.values())
+        unexpected = states - RELEASE_COMPATIBILITY_STATES
+        if unexpected:
+            raise RuntimeError(
+                "release compatibility returned an unsupported state: "
+                + ", ".join(sorted(unexpected))
+            )
+        if "matching-rolled-back" not in states:
+            return
+        if "matching-finalized" in states:
+            raise RuntimeError(
+                "durable rollback conflicts with a finalized peer; automatic "
+                "cleanup was not attempted"
+            )
+        try:
+            for node in reversed(ordered_nodes):
+                if compatibility[node.alias] not in ROLLBACK_RECOVERY_STATES:
+                    continue
+                self._mutate(
+                    stage=f"durable rollback recovery {node.alias}",
+                    action=lambda node=node: self._release("rollback", node),
+                )
+        except BaseException as exc:
+            raise RuntimeError(
+                "durable rollback recovery is incomplete; retry with the same "
+                f"transaction ID {self.transaction_id}: {exc}"
+            ) from exc
+        raise RuntimeError(
+            f"release transaction {self.transaction_id} was durably rolled back "
+            "and recovery cleanup completed; start the next migration with a "
+            "new transaction ID"
+        )
 
     def _resume_role_agents_after_failure(
         self,
@@ -349,6 +423,7 @@ class _MigrationOrchestrator:
         self.release_bundles = self.dependencies.bundles(ordered_nodes)
         if set(self.release_bundles) != {node.project_dir for node in ordered_nodes}:
             raise RuntimeError("pinned release bundle set does not match cluster nodes")
+        self.dependencies.target_compose(ordered_nodes, self.release_bundles)
         compatibility: dict[str, str] = {}
         for node in ordered_nodes:
             self._mutate(
@@ -357,8 +432,23 @@ class _MigrationOrchestrator:
                     node.alias, self._release("inspect", node)
                 ),
             )
+        self._recover_durable_rollback(ordered_nodes, compatibility)
         if any(state != "fresh" for state in compatibility.values()):
             self.roll_forward = True
+        try:
+            self._mutate(
+                stage=f"communications cutover preflight {baseline.primary.alias}",
+                action=lambda: self._communications_cutover(baseline.primary),
+            )
+        except BaseException as exc:
+            # A lost SSH response may have durably written both fences and its
+            # receipt. The exact transaction is the only safe retry identity.
+            self.roll_forward = True
+            raise RuntimeError(
+                "communications cutover preflight may have changed durable "
+                "state; resume with the same transaction ID "
+                f"{self.transaction_id}: {exc}"
+            ) from exc
         release_nodes = tuple(
             sorted(
                 ordered_nodes,

@@ -67,6 +67,23 @@ class _Runtime:
                 stdout=f"app\n{COMMUNICATIONS_WORKER_SERVICE}\n",
                 stderr="",
             )
+        if args == ("config", "--format", "json"):
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "services": {
+                            COMMUNICATIONS_WORKER_SERVICE: {
+                                "environment": {
+                                    "COMMUNICATIONS_WORKER_ENABLED": "false",
+                                    "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
+                                }
+                            }
+                        }
+                    }
+                ),
+                stderr="",
+            )
         if args[:3] == ("ps", "--status", "running"):
             payload = "\n".join(
                 json.dumps(

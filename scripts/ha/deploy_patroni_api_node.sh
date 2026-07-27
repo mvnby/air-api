@@ -26,12 +26,15 @@ HEALTH_ATTEMPTS="${API_HEALTH_ATTEMPTS:-30}"
 GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/../prepare_google_oauth_token_dir.sh}"
 COMMUNICATIONS_WORKER_SERVICE="${API_COMMUNICATIONS_WORKER_SERVICE:-communications-worker}"
 COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER:-${SCRIPT_DIR}/communications_worker_release_contract.sh}"
+EXPECTED_COMMUNICATIONS_WORKER_PROFILE="${API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE:-}"
+ROLLBACK_COMMUNICATIONS_WORKER_PROFILE="${API_COMMUNICATIONS_WORKER_ROLLBACK_PROFILE:-}"
 
 previous_image=""
 active_service="app"
 env_updated=false
 TMP_DIR=""
 worker_supported=false
+worker_gate_profile=""
 
 log() {
   printf '[patroni-node-deploy][%s] %s\n' "$1" "$2"
@@ -111,11 +114,12 @@ fence_communications_worker() {
 }
 
 deploy_communications_worker() {
-  communications_worker_require_contract
+  communications_worker_require_contract "${EXPECTED_COMMUNICATIONS_WORKER_PROFILE}"
+  worker_gate_profile="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
   fence_communications_worker
   "${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
   require_deploy_capacity
-  communications_worker_start_controlled "${EXPECTED_ROLE}"
+  communications_worker_start_controlled "${EXPECTED_ROLE}" "${worker_gate_profile}"
 }
 
 wait_fenced_standby() {
@@ -177,7 +181,8 @@ rollback_standby() {
     fi
     if [[ "${worker_supported}" == "true" ]]; then
       if require_expected_role; then
-        communications_worker_start_controlled "${EXPECTED_ROLE}" || true
+        communications_worker_start_controlled \
+          "${EXPECTED_ROLE}" "${ROLLBACK_COMMUNICATIONS_WORKER_PROFILE}" || true
       fi
     fi
   fi
@@ -282,7 +287,7 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
   worker_supported=true
   deploy_communications_worker
   require_expected_role
-  log "done" "primary API and dormant communications worker deployment completed"
+  log "done" "primary API and communications worker deployment completed"
   exit 0
 fi
 
@@ -304,7 +309,8 @@ fi
 
 trap rollback_standby ERR
 reconcile_standby_proxy
-communications_worker_require_contract
+communications_worker_require_contract "${EXPECTED_COMMUNICATIONS_WORKER_PROFILE}"
+worker_gate_profile="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
 log standby "updating fenced service ${active_service}"
 "${COMPOSE[@]}" pull "${active_service}"
 "${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
@@ -316,9 +322,9 @@ env_updated=true
 "${COMPOSE[@]}" up -d --no-deps --force-recreate "${active_service}"
 require_expected_role
 wait_fenced_standby
-communications_worker_start_controlled "${EXPECTED_ROLE}"
+communications_worker_start_controlled "${EXPECTED_ROLE}" "${worker_gate_profile}"
 require_expected_role
 printf '%s\n' "${previous_image}" > "${PREVIOUS_IMAGE_FILE}"
 chmod 600 "${PREVIOUS_IMAGE_FILE}"
 trap - ERR
-log "done" "standby image updated without enabling traffic; dormant communications worker aligned"
+log "done" "standby image updated without enabling traffic; communications worker aligned"

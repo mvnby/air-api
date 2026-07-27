@@ -370,8 +370,9 @@ export HA_SSH_IDENTITY_FILE="$HOME/.ssh/id_ed25519"
 python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py --probe-only
 
 # Generate one cluster transaction ID and record it in the operator log. Reuse
-# this exact value after any interrupted migration; never start a second
-# transaction to work around an ambiguous result.
+# this exact value after an ambiguous interruption. If the controller proves
+# that rollback is durable, let that same transaction finish recovery cleanup;
+# its terminal error then explicitly requires a newly generated transaction ID.
 export PITR_TRANSACTION_ID="$(openssl rand -hex 16)"
 
 # First verify the local input shape without touching either node.
@@ -383,6 +384,21 @@ python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
   --no-prompt
 
 # Run the complete two-node transaction. It attests and installs the exact
+# helper bundle only after a pinned communications cutover preflight on the
+# sole primary has atomically proved database mode off, zero running
+# installation deliveries, a completed drain, and a stopped release-fenced
+# worker. The preflight owns a root-only receipt plus the PITR marker under the
+# same global/deploy locks. A same-transaction retry verifies those artifacts;
+# another transaction cannot consume them. Deploy the dormant compatibility
+# release containing this preflight before using this command for a profile
+# change.
+#
+# For a communications profile change, run this command from an otherwise
+# Compose-only, fully CI-green PR head while production deployment is frozen.
+# Immediately after success, merge that unchanged head and deploy it. Do not
+# mix not-yet-installed role-agent/PITR code into the profile PR.
+#
+# The transaction attests and installs the exact
 # helper bundle standby-first, validates the private destination from both
 # nodes, then runs a separate quiesce/provision/resume window for the standby and
 # a fail-closed-fence/provision/resume window for the primary. The first
@@ -406,10 +422,21 @@ python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
 # asset bundles back. From that first stop attempt onward the command
 # deliberately enters roll-forward, including an ambiguous timeout or lost SSH
 # response: repair the reported cause and rerun the same command with the same
-# transaction ID. If the interrupted per-node window cannot prove both fences
-# and a fresh unchanged topology, it deliberately leaves the runtime fenced and
-# names the exact failed proof. Do not manually roll back files, config,
-# archive state, agents, fences, or timers in that state.
+# transaction ID. A retry that finds any exact durable rollback receipt cannot
+# resume the migration: it rejects a finalized peer, otherwise rolls back or
+# cleans every active/rolled-back/preflight-fenced peer, skips fresh peers, and
+# stops only after instructing the operator to generate a new transaction ID.
+# If that cleanup is interrupted, retry it with the old ID. If the interrupted
+# per-node window cannot prove both fences and a fresh unchanged topology, it
+# deliberately leaves the runtime fenced and names the exact failed proof. Do
+# not manually roll back files, config, archive state, agents, fences, or timers.
+#
+# A failure after a finalized profile migration is not repaired with an app
+# rollback: ordinary deploys accept only byte-identical PITR-attested Compose.
+# Roll forward the same head, or prepare a CI-green Compose-only rollback head
+# and apply it with a new official atomic PITR transaction. Keep the deployment
+# freeze through immediate deploy, both-node verification, strict HA/PITR
+# checks, and a 30-minute alert window.
 
 # PostgreSQL archive parameters are Patroni DCS configuration for an existing
 # cluster. The migration requires the reviewed archive settings to be active on

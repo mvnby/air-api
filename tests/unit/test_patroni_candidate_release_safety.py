@@ -69,9 +69,7 @@ def test_patroni_candidate_refuses_pitr_maintenance_before_runtime_mutation(
     assert result.returncode != 0
     assert "PITR release maintenance is active" in result.stderr
     assert (project / "compose.yml").read_text(encoding="utf-8") == old
-    assert "/app/google-oauth" in (project / "compose.yml.candidate").read_text(
-        encoding="utf-8"
-    )
+    assert (project / "compose.yml.candidate").read_text(encoding="utf-8") == old
     assert not (tmp_path / "child.log").exists()
     assert not (tmp_path / "reconcile.log").exists()
     assert not (tmp_path / "systemctl.log").read_text(encoding="utf-8")

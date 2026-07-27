@@ -8,7 +8,9 @@
 COMMUNICATIONS_WORKER_SERVICE="${API_COMMUNICATIONS_WORKER_SERVICE:-communications-worker}"
 PREVIOUS_WORKER_SUPPORTED=false
 PREVIOUS_WORKER_RUNNING=false
+PREVIOUS_WORKER_GATE_PROFILE=""
 CANDIDATE_WORKER_SUPPORTED=false
+CANDIDATE_WORKER_GATE_PROFILE=""
 CANONICAL_WORKER_PROJECT=""
 CANDIDATE_WORKER_PROJECT=""
 PREVIOUS_WORKER_FENCE_MARKER_PRESENT=false
@@ -85,12 +87,14 @@ patroni_communications_compose_has_worker() {
 patroni_communications_require_runtime() {
   local compose_file="$1"
   local expected_image="$2"
+  local expected_profile="$3"
 
   API_RECONCILE_OPERATION=verify \
     API_DEPLOY_SERVICES="${COMMUNICATIONS_WORKER_SERVICE}" \
     API_COMPOSE_FILE="$(basename "${compose_file}")" \
     API_RECONCILE_BACKEND_IMAGE="${expected_image}" \
     API_EXPECTED_PATRONI_ROLE="${EXPECTED_ROLE}" \
+    API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE="${expected_profile}" \
     bash "${RECONCILE_SCRIPT}"
 }
 
@@ -113,6 +117,7 @@ patroni_communications_capture_previous() {
   )
   export BACKEND_IMAGE
   communications_worker_require_contract
+  PREVIOUS_WORKER_GATE_PROFILE="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
 
   if [[ "${PREVIOUS_WORKER_FENCE_MARKER_PRESENT}" == "true" ]]; then
     container_ids="$(docker compose -f "${CANONICAL_FILE}" --profile bluegreen \
@@ -140,6 +145,7 @@ patroni_communications_capture_previous() {
 }
 
 patroni_communications_detect_candidate_support() {
+  local candidate_image="${BACKEND_IMAGE}"
   CANDIDATE_WORKER_PROJECT="$(
     patroni_communications_compose_project "${CANDIDATE_FILE}"
   )" || {
@@ -148,6 +154,14 @@ patroni_communications_detect_candidate_support() {
   }
   if patroni_communications_compose_has_worker "${CANDIDATE_FILE}"; then
     CANDIDATE_WORKER_SUPPORTED=true
+    local BACKEND_IMAGE="${candidate_image}"
+    # shellcheck disable=SC2034  # consumed by the release-contract helper
+    local -a COMPOSE=(
+      docker compose -f "${CANDIDATE_FILE}" --profile bluegreen
+    )
+    export BACKEND_IMAGE
+    communications_worker_require_contract
+    CANDIDATE_WORKER_GATE_PROFILE="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
   fi
 }
 

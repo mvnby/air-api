@@ -290,14 +290,34 @@ agent continues reconciling primary app/bot traffic while this marker is valid,
 but keeps all PITR timers and their services fenced. Unsafe marker metadata or
 content causes a full standby fence.
 
-### Communications Worker Phase 2A
+### Communications Worker Release Profiles
 
 Both Patroni API nodes define `communications-worker` from the exact immutable
 `BACKEND_IMAGE` used by the API. It uses that node's local PostgreSQL service
 and the same role-resolved `.ha-app-role.env`; deploy and verification reject
-any image or `APP_ROLE` mismatch. During Phase 2A both delivery gates,
-`COMMUNICATIONS_WORKER_ENABLED` and `COMMUNICATIONS_WORKER_ALLOW_ALL_MODE`,
-must remain exactly `false`.
+any image, API/worker parity, or `APP_ROLE` mismatch. The production Compose
+files remain in the Phase 2A `dormant` profile, with both
+`COMMUNICATIONS_WORKER_ENABLED` and
+`COMMUNICATIONS_WORKER_ALLOW_ALL_MODE` exactly `false`.
+
+Release tooling recognizes only this closed profile set:
+
+- `dormant`: `false/false`;
+- `canary`: `true/false`, which starts the worker but keeps `all` delivery
+  blocked while the database-owned canary scope is exercised;
+- `active`: `true/true`.
+
+`false/true`, uppercase spellings, and every other non-literal combination are
+invalid and fenced. The ordinary image transaction accepts a staged Patroni
+Compose only when it is byte-identical to the current PITR-attested canonical
+file and both are root-owned regular non-symlinks in exact mode `0644`. It also
+reconstructs the finalized root-only
+`/var/lib/mvn-postgres-pitr/release-manifest.json` from every currently
+installed manifest asset, verifies its canonical schema and release digest,
+and requires the canonical Compose mode and digest to match its exact entry.
+Therefore an image rollout may retain `dormant`, `canary`, or `active`, but it
+cannot change profile or any other Compose byte. Every Compose change first
+uses the official atomic PITR cluster migration.
 
 The root-owned project marker
 `.ha-communications-worker-release-fenced` is a durable fail-closed latch.
@@ -309,18 +329,67 @@ restores both the previous marker state and the previous worker running state;
 it never starts a worker that was already fenced.
 
 After each node deploy, the verifier proves the canonical Compose file is a
-regular non-symlink, API/worker image parity, false delivery gates, the expected
-runtime role, a stable active role-agent unit, and an absent release latch. It
-then runs `/usr/local/sbin/mvn-patroni-role-agent --once`. A successful no-op
-or reconciliation must end with exactly:
+regular non-symlink, API/worker image parity, one reviewed gate profile with an
+exactly matching runtime profile, the expected runtime role, a stable active
+role-agent unit, and an absent release latch. The role agent accepts any
+reviewed runtime profile independently of the still-canonical Compose profile:
+this prevents the newly installed agent from stopping a valid candidate before
+atomic promotion. It still fences an invalid profile before waiting for the
+deploy lock. The verifier then runs
+`/usr/local/sbin/mvn-patroni-role-agent --once`. A successful no-op or
+reconciliation must end with exactly:
 
 ```text
 patroni_role_agent_once_status=verified role=<primary|standby>
 ```
 
-Do not enable either delivery gate manually during Phase 2A. Delivery
-activation, token ownership, retry/ack canaries, and accumulated-event policy
-belong to the separately approved Phase 2B transaction.
+Do not edit either delivery gate manually.
+
+#### Reviewed profile cutover sequence
+
+1. Merge and deploy the compatibility release while both production Compose
+   files remain byte-identical and `dormant`. It must install the typed
+   installation-notification operator, the pinned PITR communications
+   preflight, and the profile-aware role agent on both nodes. Complete the
+   usual strict readiness/PITR/replication checks first.
+2. Open a separate Compose-only PR for the next profile (`canary`, then later
+   `active`). It must contain no role-agent, PITR-controller, application, or
+   migration changes. Wait for every CI check to pass. Do not merge it yet.
+3. Freeze production deployments and unrelated PITR operations. From that
+   exact CI-green PR head, run the official atomic PITR cluster migration with
+   one recorded transaction ID. Before its first remote mutation, the
+   controller validates the exact Compose bytes already pinned into both
+   release bundles: all API services and the worker must share one image, both
+   nodes must use the same reviewed exact-lowercase profile, and YAML booleans
+   or any structural drift are rejected. The controller then invokes the already
+   deployed typed operator on the sole primary, requires database mode `off`,
+   zero running installation deliveries, and a completed drain, then latches
+   the communications release fence and the transaction-owned PITR marker
+   under the host/deploy locks. Only then may it replace either canonical
+   Compose file.
+4. If the migration succeeds, immediately merge the unchanged PR and deploy
+   that exact head. The image transaction now sees byte-identical attested
+   Compose, proves the exact lowercase profile, and clears the communications
+   release fence only for its controlled start. Database mode remains `off`;
+   enable it later only through the typed canary/activation command.
+5. Keep the deployment freeze through both-node verification, strict HA/PITR
+   checks, and a 30-minute alert window. For `canary`, execute and replay the
+   bounded canary during this window. For `active`, require a clean operator
+   status before the synthetic website request.
+
+An interrupted preflight or migration is fail-closed. Re-run an ambiguous
+attempt with the same transaction ID; do not delete its receipt, maintenance
+marker, or communications fence. Before the role-agent/configuration
+roll-forward boundary, the controller may restore its recorded release
+bundles. If any node proves that rollback is durable, the old transaction can
+only finish rollback/preflight cleanup across both nodes; after that cleanup it
+stops and explicitly requires a new transaction ID. Retry the old ID only when
+that cleanup itself is interrupted. The communications fence remains latched
+until a reviewed deploy. After the roll-forward boundary, repair and roll
+forward with the same transaction. If a finalized profile must be reverted,
+prepare a separate CI-green Compose-only rollback head and run a new official
+PITR transaction from that head; an ordinary app rollback is rejected because
+it would replace the attested Compose.
 
 ## Production Cutover
 

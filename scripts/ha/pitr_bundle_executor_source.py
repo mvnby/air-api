@@ -2,16 +2,24 @@
 from __future__ import annotations
 
 try:
+    from scripts.ha.pitr_communications_cutover import REMOTE_COMMUNICATIONS_CUTOVER_RECEIPT_SUPPORT
     from scripts.ha.pitr_bundle_executor_prelude import (
         REMOTE_RELEASE_BUNDLE_PRELUDE,
     )
+    from scripts.ha.pitr_rollback_recovery_source import (
+        REMOTE_ROLLBACK_RECOVERY_SUPPORT,
+    )
 except ModuleNotFoundError:  # pragma: no cover - direct script import fallback
+    from pitr_communications_cutover import REMOTE_COMMUNICATIONS_CUTOVER_RECEIPT_SUPPORT  # type: ignore[no-redef]
     from pitr_bundle_executor_prelude import (  # type: ignore[no-redef]
         REMOTE_RELEASE_BUNDLE_PRELUDE,
     )
+    from pitr_rollback_recovery_source import (  # type: ignore[no-redef]
+        REMOTE_ROLLBACK_RECOVERY_SUPPORT,
+    )
 
 
-REMOTE_RELEASE_BUNDLE_EXECUTOR = REMOTE_RELEASE_BUNDLE_PRELUDE + r'''def canonical(value):
+REMOTE_RELEASE_BUNDLE_EXECUTOR = REMOTE_RELEASE_BUNDLE_PRELUDE + REMOTE_COMMUNICATIONS_CUTOVER_RECEIPT_SUPPORT + r'''def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("ascii")
 def expected_modes(project_dir, compose_file):
     compose = PROJECT_COMPOSE.get(project_dir)
@@ -412,79 +420,7 @@ def release_manifest(journal):
     files = [{key: entry[key] for key in ("mode", "path", "sha256")} for entry in journal["entries"]]
     return {"files": files, "project_dir": journal["project_dir"],
             "release_sha256": journal["release_sha256"], "txid": journal["txid"], "version": 1}
-def rollback_receipt(journal):
-    generations = []
-    for entry in journal["entries"]:
-        old = entry["old"]
-        generations.append({"mode": entry["mode"], "path": entry["path"],
-                            "present": old["present"], "sha256": old.get("sha256")})
-    return {"old_generations": generations, "project_dir": journal["project_dir"],
-            "release_sha256": journal["release_sha256"], "txid": journal["txid"], "version": 1}
-def validate_rollback_receipt(receipt, txid, project_dir, modes):
-    release_digest = receipt.get("release_sha256") if isinstance(receipt, dict) else None
-    if (not isinstance(receipt, dict)
-            or set(receipt) != {"old_generations", "project_dir", "release_sha256", "txid", "version"}
-            or type(receipt["version"]) is not int or receipt["version"] != 1
-            or receipt["txid"] != txid
-            or receipt["project_dir"] != project_dir
-            or not isinstance(release_digest, str)
-            or not re.fullmatch(r"[0-9a-f]{64}", release_digest)
-            or not isinstance(receipt["old_generations"], list)):
-        raise RuntimeError("rollback receipt contract is invalid")
-    paths = []
-    for generation in receipt["old_generations"]:
-        path = generation.get("path") if isinstance(generation, dict) else None
-        if (not isinstance(generation, dict)
-                or set(generation) != {"mode", "path", "present", "sha256"}
-                or not isinstance(path, str) or path not in modes or path in paths
-                or generation["mode"] != modes[path]
-                or type(generation["present"]) is not bool):
-            raise RuntimeError("rollback receipt generation is invalid")
-        if generation["present"]:
-            if (not isinstance(generation["sha256"], str)
-                    or not re.fullmatch(r"[0-9a-f]{64}", generation["sha256"])):
-                raise RuntimeError("rollback receipt generation digest is invalid")
-        elif generation["sha256"] is not None:
-            raise RuntimeError("absent rollback generation has a digest")
-        paths.append(path)
-    if paths != sorted(modes):
-        raise RuntimeError("rollback receipt path set is incomplete")
-def rollback_receipt_path(txid):
-    return os.path.join(ROLLBACK_RECEIPT_ROOT, txid + ".json")
-def read_rollback_receipt(txid, project_dir, modes):
-    content, _ = read_regular(rollback_receipt_path(txid), exact_mode=0o600, max_bytes=MAX_BUNDLE)
-    try:
-        receipt = json.loads(content)
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise RuntimeError("rollback receipt is invalid") from exc
-    if content != canonical(receipt) + b"\n":
-        raise RuntimeError("rollback receipt is not canonical")
-    validate_rollback_receipt(receipt, txid, project_dir, modes)
-    return receipt
-def write_rollback_receipt(receipt, modes):
-    validate_rollback_receipt(receipt, receipt["txid"], receipt["project_dir"], modes)
-    path = rollback_receipt_path(receipt["txid"])
-    expected = canonical(receipt) + b"\n"
-    try:
-        existing, _ = read_regular(path, exact_mode=0o600, max_bytes=MAX_BUNDLE)
-    except FileNotFoundError:
-        atomic_write(path, expected, 0o600)
-    else:
-        if existing != expected:
-            raise RuntimeError("rollback receipt conflicts with this transaction")
-    return read_rollback_receipt(receipt["txid"], receipt["project_dir"], modes)
-def verify_rollback_generations(receipt):
-    for generation in receipt["old_generations"]:
-        try:
-            content, _ = read_regular(generation["path"], exact_mode=generation["mode"])
-        except FileNotFoundError:
-            if generation["present"]:
-                raise RuntimeError("recorded rollback generation is missing: " + generation["path"])
-            continue
-        if (not generation["present"]
-                or hashlib.sha256(content).hexdigest() != generation["sha256"]):
-            raise RuntimeError("recorded rollback generation does not match: " + generation["path"])
-def read_release_manifest(modes, project_dir, allow_previous=False, target_files=()):
+''' + REMOTE_ROLLBACK_RECOVERY_SUPPORT + r'''def read_release_manifest(modes, project_dir, allow_previous=False, target_files=()):
     try:
         content, _ = read_regular(RELEASE_MANIFEST, exact_mode=0o600, max_bytes=MAX_BUNDLE)
     except FileNotFoundError:
@@ -530,24 +466,35 @@ def read_release_manifest(modes, project_dir, allow_previous=False, target_files
         if digest != item["sha256"] and (not target or target["mode"] != item["mode"] or digest != target["sha256"]):
             raise RuntimeError("current file does not match the release manifest: " + item["path"])
     return manifest
-def clear_completed_marker(txid):
+def clear_completed_marker(txid, project_dir):
     marker = marker_value()
-    if marker is None:
-        return
-    if marker != txid:
-        raise RuntimeError("another release transaction owns the maintenance marker")
-    remove_marker(txid)
-def inspect_release(txid, project_dir, modes, release, descriptors):
+    if marker is not None:
+        if marker != txid:
+            raise RuntimeError("another release transaction owns the maintenance marker")
+        remove_marker(txid)
+    remove_communications_cutover_receipt(project_dir, txid)
+def inspect_release(
+        txid, project_dir, modes, release, descriptors, preflight_fenced):
     txdir = os.path.join(TRANSACTION_ROOT, txid)
     has_tx = transaction_exists(txdir)
     marker = marker_value()
     expected = [{key: item[key] for key in ("mode", "path", "sha256")} for item in descriptors]
     try:
-        read_rollback_receipt(txid, project_dir, modes)
+        receipt = read_rollback_receipt(txid, project_dir, modes, release)
     except FileNotFoundError:
         pass
     else:
-        raise RuntimeError("release transaction id already has a rollback receipt")
+        verify_rollback_generations(receipt)
+        completed = read_release_manifest(
+            modes, project_dir, allow_previous=True, target_files=descriptors
+        )
+        if completed is not None and completed["txid"] == txid:
+            raise RuntimeError(
+                "release transaction cannot be both finalized and rolled back"
+            )
+        if marker not in {None, txid}:
+            raise RuntimeError("another release transaction owns the maintenance marker")
+        return "matching-rolled-back"
     if has_tx:
         if marker != txid:
             raise RuntimeError("active release transaction is missing its exact marker")
@@ -564,6 +511,10 @@ def inspect_release(txid, project_dir, modes, release, descriptors):
         if marker not in {None, txid}:
             raise RuntimeError("another release transaction owns the maintenance marker")
         return "matching-finalized"
+    if preflight_fenced:
+        if marker not in {None, txid}:
+            raise RuntimeError("another release transaction owns the maintenance marker")
+        return "preflight-fenced"
     if marker is not None:
         raise RuntimeError("maintenance marker has no compatible release transaction")
     return "fresh"
@@ -579,19 +530,47 @@ def execute(action, txid, project_dir, compose_file, payload):
     deploy_fd = None
     try:
         deploy_fd = open_lock(os.path.join(project_dir, ".deploy.lock"))
+        preflight_fenced = communications_cutover_receipt_valid(
+            project_dir, txid
+        )
         if action == "inspect":
             reject_operation_records()
-            return inspect_release(txid, project_dir, modes, release, descriptors)
-        ensure_roots()
+            return inspect_release(
+                txid, project_dir, modes, release, descriptors,
+                preflight_fenced
+            )
         reject_operation_records()
         txdir = os.path.join(TRANSACTION_ROOT, txid)
         has_tx = transaction_exists(txdir)
+        try:
+            rollback_state = read_rollback_receipt(
+                txid, project_dir, modes,
+                release if action == "apply" else None
+            )
+        except FileNotFoundError:
+            rollback_state = None
+        if rollback_state is not None and action != "rollback":
+            raise RuntimeError(
+                "release transaction id already has a rollback receipt"
+            )
         completed = None if has_tx else read_release_manifest(
-            modes, project_dir, allow_previous=action == "apply", target_files=descriptors
+            modes, project_dir, allow_previous=action in {"apply", "rollback"},
+            target_files=descriptors
         )
+        marker = marker_value()
+        if has_tx and marker != txid:
+            if marker is not None:
+                raise RuntimeError(
+                    "another release transaction owns the maintenance marker"
+                )
+            raise RuntimeError(
+                "active release transaction is missing its exact marker"
+            )
         if completed is not None and completed["txid"] == txid:
             if has_tx:
                 raise RuntimeError("completed release still has a transaction directory")
+            if marker not in {None, txid}:
+                raise RuntimeError("another release transaction owns the maintenance marker")
             if action == "rollback":
                 raise RuntimeError("cannot roll back a finalized release transaction")
             if action == "apply":
@@ -602,32 +581,38 @@ def execute(action, txid, project_dir, compose_file, payload):
                 # Re-open the fence for idempotent controller replay after a crash.
                 ensure_marker(txid)
                 return "reopened"
-            clear_completed_marker(txid)
+            clear_completed_marker(txid, project_dir)
             return "already-finalized"
+        if marker is not None and marker != txid:
+            raise RuntimeError("another release transaction owns the maintenance marker")
         if action == "apply":
-            try:
-                read_rollback_receipt(txid, project_dir, modes)
-            except FileNotFoundError:
-                pass
-            else:
-                raise RuntimeError("release transaction id already has a rollback receipt")
+            if not has_tx and marker == txid and not preflight_fenced:
+                raise RuntimeError(
+                    "maintenance marker has no compatible release transaction"
+                )
         if action == "rollback":
-            try:
-                receipt = read_rollback_receipt(txid, project_dir, modes)
-            except FileNotFoundError:
+            if rollback_state is None:
                 if not has_tx:
-                    raise
+                    if not preflight_fenced:
+                        raise FileNotFoundError(rollback_receipt_path(txid))
+                    if marker not in {None, txid}:
+                        raise RuntimeError("another release transaction owns the maintenance marker")
+                    if marker is not None:
+                        remove_marker(txid)
+                    remove_communications_cutover_receipt(project_dir, txid)
+                    return "preflight-rolled-back"
             else:
-                verify_rollback_generations(receipt)
+                verify_rollback_generations(rollback_state)
                 if has_tx:
                     safe_remove_transaction(txdir)
-                verify_rollback_generations(receipt)
-                marker = marker_value()
+                verify_rollback_generations(rollback_state)
                 if marker is not None:
-                    if marker != txid:
-                        raise RuntimeError("another release transaction owns the maintenance marker")
                     remove_marker(txid)
+                remove_communications_cutover_receipt(project_dir, txid)
                 return "already-rolled-back"
+        if action == "finalize" and not has_tx:
+            raise RuntimeError("release transaction does not exist")
+        ensure_roots()
         created_marker = ensure_marker(txid)
         try:
             if action == "apply":
@@ -653,6 +638,7 @@ def execute(action, txid, project_dir, compose_file, payload):
                 safe_remove_transaction(txdir)
                 verify_rollback_generations(receipt)
                 remove_marker(txid)
+                remove_communications_cutover_receipt(project_dir, txid)
                 return "rolled-back"
             for entry in journal["entries"]:
                 if file_generation(entry["path"], entry["old"], entry["sha256"], entry["mode"]) not in {"new", "both"}:
@@ -661,6 +647,7 @@ def execute(action, txid, project_dir, compose_file, payload):
             atomic_write(RELEASE_MANIFEST, canonical(release_manifest(journal)) + b"\n", 0o600)
             safe_remove_transaction(txdir)
             remove_marker(txid)
+            remove_communications_cutover_receipt(project_dir, txid)
             return "finalized"
         except BaseException:
             if action != "rollback" and created_marker and not transaction_exists(txdir):

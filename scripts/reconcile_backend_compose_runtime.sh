@@ -14,6 +14,7 @@ RECONCILE_BACKEND_IMAGE="${API_RECONCILE_BACKEND_IMAGE:-}"
 COMMUNICATIONS_WORKER_SERVICE="${API_COMMUNICATIONS_WORKER_SERVICE:-communications-worker}"
 RECONCILE_OPERATION="${API_RECONCILE_OPERATION:-reconcile}"
 EXPECTED_ROLE="${API_EXPECTED_PATRONI_ROLE:-}"
+EXPECTED_COMMUNICATIONS_WORKER_PROFILE="${API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE:-}"
 COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER:-${SCRIPT_DIR}/ha/communications_worker_release_contract.sh}"
 
 write_backend_image() {
@@ -92,14 +93,16 @@ reconcile_failure() {
 }
 trap reconcile_failure ERR
 if [[ "${requested_communications_worker}" == "true" ]]; then
-  communications_worker_require_contract
+  communications_worker_require_contract "${EXPECTED_COMMUNICATIONS_WORKER_PROFILE}"
+  EXPECTED_COMMUNICATIONS_WORKER_PROFILE="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
 fi
 if [[ "${RECONCILE_OPERATION}" == "verify" ]]; then
   [[ "${requested_communications_worker}" == "true" ]] || {
     echo "verify operation requires ${COMMUNICATIONS_WORKER_SERVICE}" >&2
     exit 2
   }
-  communications_worker_require_runtime "${EXPECTED_ROLE}"
+  communications_worker_require_runtime \
+    "${EXPECTED_ROLE}" "${EXPECTED_COMMUNICATIONS_WORKER_PROFILE}"
   echo "canonical communications worker runtime verified"
   exit 0
 fi
@@ -121,7 +124,8 @@ if [[ "${#app_services[@]}" -gt 0 ]]; then
   "${COMPOSE[@]}" up -d --no-deps --force-recreate "${app_services[@]}"
 fi
 if [[ "${requested_communications_worker}" == "true" ]]; then
-  communications_worker_start_controlled "${EXPECTED_ROLE}"
+  communications_worker_start_controlled \
+    "${EXPECTED_ROLE}" "${EXPECTED_COMMUNICATIONS_WORKER_PROFILE}"
 fi
 if [[ -n "${STOP_SERVICES}" ]]; then
   read -r -a stop_services <<<"${STOP_SERVICES}"

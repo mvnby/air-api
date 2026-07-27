@@ -1,7 +1,11 @@
+import base64
 import copy
+import hashlib
 import json
 import os
+import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -24,15 +28,87 @@ def _executable(path: Path, content: str) -> None:
 def _compose_pair(tmp_path: Path) -> Path:
     project = tmp_path / "project"
     project.mkdir()
-    (project / "compose.yml").write_text(
-        "services:\n  app:\n    volumes:\n      - ./token.json:/app/token.json\n",
-        encoding="utf-8",
-    )
-    (project / "compose.yml.candidate").write_text(
-        "services:\n  app:\n    volumes:\n      - ./google-oauth:/app/google-oauth\n",
-        encoding="utf-8",
-    )
+    compose = "services:\n  app:\n    volumes:\n      - ./token.json:/app/token.json\n"
+    (project / "compose.yml").write_text(compose, encoding="utf-8")
+    (project / "compose.yml.candidate").write_text(compose, encoding="utf-8")
     return project
+
+
+def _write_release_manifest(tmp_path: Path, project: Path) -> Path:
+    compose = project / "compose.yml"
+    release_tool = tmp_path / "release-tool"
+    release_tool.write_bytes(b"reviewed release tool\n")
+    release_tool.chmod(0o755)
+    sources = {
+        str(compose): (0o644, compose.read_bytes()),
+        str(release_tool): (0o755, release_tool.read_bytes()),
+    }
+    files = [
+        {
+            "mode": mode,
+            "path": path,
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+        for path, (mode, content) in sorted(sources.items())
+    ]
+    release_files = [
+        {
+            **item,
+            "content": base64.b64encode(sources[item["path"]][1]).decode("ascii"),
+        }
+        for item in files
+    ]
+    release_body = {
+        "files": release_files,
+        "project_dir": str(project),
+        "version": 1,
+    }
+    manifest = {
+        "files": files,
+        "project_dir": str(project),
+        "release_sha256": hashlib.sha256(
+            json.dumps(
+                release_body,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("ascii")
+        ).hexdigest(),
+        "txid": "1" * 32,
+        "version": 1,
+    }
+    path = tmp_path / "release-manifest.json"
+    path.write_text(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="ascii",
+    )
+    path.chmod(0o600)
+    return path
+
+
+def _voice_sync_env(tmp_path: Path) -> dict[str, str]:
+    helper = tmp_path / "sync-voice-env.py"
+    helper.write_text(
+        """import os
+import pathlib
+import sys
+
+assert "BOT_VOICE_TRANSCRIPTION_API_KEY" not in os.environ
+assert "VOICE_SECRET" not in os.environ
+assert sys.stdin.read() == "test-voice-secret"
+pathlib.Path(os.environ["VOICE_SYNC_LOG"]).write_text("synced\\n")
+print("voice transcription settings synchronized")
+""",
+        encoding="utf-8",
+    )
+    env_file = tmp_path / "voice.env"
+    env_file.write_text("ENVIRONMENT=test\n", encoding="utf-8")
+    env_file.chmod(0o600)
+    return {
+        "PATRONI_VOICE_ENV_SYNC": str(helper),
+        "PATRONI_VOICE_ENV_FILE": str(env_file),
+        "BOT_VOICE_TRANSCRIPTION_API_KEY": "test-voice-secret",
+        "VOICE_SYNC_LOG": str(tmp_path / "voice-sync.log"),
+    }
 
 
 def _db_compose_config() -> dict:
@@ -75,10 +151,20 @@ def _patroni_runner_env(
     discover_previous: bool = False,
 ) -> tuple[dict[str, str], Path]:
     project = _compose_pair(tmp_path)
+    release_manifest = _write_release_manifest(tmp_path, project)
     if discover_previous:
         (project / ".active-api-slot").write_text("green\n", encoding="utf-8")
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    _executable(
+        fake_bin / "python3",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+test -z "${{BOT_VOICE_TRANSCRIPTION_API_KEY+x}}"
+test -z "${{VOICE_SECRET+x}}"
+exec {shlex.quote(sys.executable)} "$@"
+""",
+    )
     _executable(fake_bin / "flock", "#!/usr/bin/env bash\nexit 0\n")
     command_log = tmp_path / "patroni-commands.log"
     command_log.touch()
@@ -105,8 +191,16 @@ if [[ "$1" == "compose" && "$*" == *" config --services" ]]; then
     printf 'communications-worker\n'
   fi
 elif [[ "$1" == "compose" && "$*" == *" config --format json" ]]; then
-  printf '{"name":"air-api","services":{"communications-worker":{"image":"%s","environment":{"COMMUNICATIONS_WORKER_ENABLED":"false","COMMUNICATIONS_WORKER_ALLOW_ALL_MODE":"false"}}}}\n' \
-    "${BACKEND_IMAGE:-$EXPECTED_PREVIOUS_IMAGE}"
+  worker_enabled="${FAKE_CANONICAL_WORKER_ENABLED:-false}"
+  worker_allow_all="${FAKE_CANONICAL_WORKER_ALLOW_ALL:-false}"
+  if [[ "$*" == *"compose.yml.candidate"* ]] \
+    || grep -Fq '/app/google-oauth' "$API_PROJECT_DIR/compose.yml"; then
+    worker_enabled="${FAKE_CANDIDATE_WORKER_ENABLED:-false}"
+    worker_allow_all="${FAKE_CANDIDATE_WORKER_ALLOW_ALL:-false}"
+  fi
+  printf '{"name":"air-api","services":{"communications-worker":{"image":"%s","environment":{"COMMUNICATIONS_WORKER_ENABLED":"%s","COMMUNICATIONS_WORKER_ALLOW_ALL_MODE":"%s"}}}}\n' \
+    "${BACKEND_IMAGE:-$EXPECTED_PREVIOUS_IMAGE}" \
+    "$worker_enabled" "$worker_allow_all"
 elif [[ "$1" == "compose" && "$*" == *" config --no-env-resolution --no-interpolate --format json" ]]; then
   if [[ "$*" == *"compose.yml.candidate"* ]]; then
     config_path="$CANDIDATE_DB_CONTRACT"
@@ -231,9 +325,14 @@ esac
 set -euo pipefail
 grep -Fq '/app/token.json' "$API_PROJECT_DIR/compose.yml"
 printf "%s|%s\n" "$API_COMPOSE_FILE" "${{API_DEPLOY_LOCK_FD:-}}" > "$CHILD_LOG"
+printf "%s|%s\n" \
+  "${{API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE:-}}" \
+  "${{API_COMMUNICATIONS_WORKER_ROLLBACK_PROFILE:-}}" > "$CHILD_PROFILE_LOG"
 if [[ -n "${{PROXY_RUNTIME_CONFIG:-}}" ]]; then
   cp "$API_PROXY_CONFIG_FILE" "$PROXY_RUNTIME_CONFIG"
 fi
+test -z "${{BOT_VOICE_TRANSCRIPTION_API_KEY+x}}"
+test -f "$VOICE_SYNC_LOG"
 : > "$DEPLOY_CHILD_RAN"
 exit {child_exit}
 ''',
@@ -257,6 +356,9 @@ if [[ "${API_RECONCILE_OPERATION:-reconcile}" != "verify" ]]; then
   grep -Fq '/app/token.json' "$API_PROJECT_DIR/$API_COMPOSE_FILE"
 fi
 printf '%s|%s\n' "$API_COMPOSE_FILE" "$API_DEPLOY_SERVICES" > "$RECONCILE_LOG"
+printf '%s|%s|%s\n' \
+  "$API_COMPOSE_FILE" "$API_DEPLOY_SERVICES" \
+  "${API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE:-}" >> "$RECONCILE_PROFILE_LOG"
 printf 'reconcile:%s\n' "$API_COMPOSE_FILE" >> "$PATRONI_COMMAND_LOG"
 if [[ "${API_RECONCILE_OPERATION:-reconcile}" == "verify" ]]; then
   test "$API_RECONCILE_BACKEND_IMAGE" = "$EXPECTED_CANDIDATE_IMAGE"
@@ -272,11 +374,13 @@ exit 0
     )
     env = {
         **os.environ,
+        **_voice_sync_env(tmp_path),
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "PATRONI_CANDIDATE_OPERATION": "deploy",
         "API_PROJECT_DIR": str(project),
         "PATRONI_CANONICAL_COMPOSE_FILE": str(project / "compose.yml"),
         "PATRONI_CANDIDATE_COMPOSE_FILE": str(project / "compose.yml.candidate"),
+        "PATRONI_FINALIZED_RELEASE_MANIFEST": str(release_manifest),
         "COMPOSE_CANDIDATE_TRANSACTION_SCRIPT": str(TRANSACTION),
         "PATRONI_DEPLOY_SCRIPT": str(child),
         "API_RECONCILE_SCRIPT": str(reconcile),
@@ -299,7 +403,9 @@ exit 0
         "PATRONI_DB_CONTRACT_HELPER": str(DB_CONTRACT_HELPER),
         "PATRONI_ROLE_AGENT_UNIT": "test.service",
         "CHILD_LOG": str(tmp_path / "child.log"),
+        "CHILD_PROFILE_LOG": str(tmp_path / "child-profile.log"),
         "RECONCILE_LOG": str(tmp_path / "reconcile.log"),
+        "RECONCILE_PROFILE_LOG": str(tmp_path / "reconcile-profile.log"),
         "PATRONI_COMMAND_LOG": str(command_log),
         "SYSTEMCTL_LOG": str(systemctl_log),
         "SYSTEMCTL_STATE": str(systemctl_state),
@@ -340,8 +446,6 @@ def test_patroni_candidate_failure_leaves_canonical_old(tmp_path):
     assert not (project / "compose.yml.candidate").exists()
     assert (tmp_path / "child.log").read_text(encoding="utf-8").strip() == "compose.yml.candidate|9"
     assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == "compose.yml|app"
-
-
 
 
 def test_patroni_candidate_rejects_db_service_drift_before_host_mutation(tmp_path):
@@ -505,179 +609,3 @@ def test_patroni_discovers_previous_runtime_image_from_active_slot_before_reconc
     assert (tmp_path / "reconcile.log").read_text(encoding="utf-8").strip() == (
         "compose.yml|app"
     )
-
-
-def test_patroni_role_drift_fences_all_api_slots_and_bot_without_reconcile(tmp_path):
-    env, project = _patroni_runner_env(
-        tmp_path,
-        child_exit=42,
-        expected_role="primary",
-        current_role="standby",
-    )
-    old = (project / "compose.yml").read_text(encoding="utf-8")
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 90
-    assert "Patroni role changed during deployment" in result.stderr
-    assert (project / "compose.yml").read_text(encoding="utf-8") == old
-    assert not (project / "compose.yml.candidate").exists()
-    assert not (tmp_path / "reconcile.log").exists()
-    commands = (tmp_path / "patroni-commands.log").read_text(encoding="utf-8").splitlines()
-    assert any(
-        " stop app app-blue app-green bot" in command for command in commands
-    )
-
-
-def test_patroni_unknown_live_role_fences_runtime_instead_of_assuming_standby(tmp_path):
-    env, project = _patroni_runner_env(tmp_path, child_exit=42)
-    env.pop("API_CURRENT_PATRONI_ROLE")
-    _executable(
-        tmp_path / "bin/curl",
-        "#!/usr/bin/env bash\nprintf '%s\n' '{\"state\":\"running\",\"role\":\"mystery\"}'\n",
-    )
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 90
-    assert "could not establish live Patroni role" in result.stderr
-    assert not (project / "compose.yml.candidate").exists()
-    assert not (tmp_path / "reconcile.log").exists()
-    commands = (tmp_path / "patroni-commands.log").read_text(encoding="utf-8")
-    assert " stop app app-blue app-green bot" in commands
-
-
-@pytest.mark.parametrize("migration_exit", [0, 48])
-def test_patroni_migration_always_cleans_candidate_without_promoting(
-    tmp_path,
-    migration_exit,
-):
-    project = _compose_pair(tmp_path)
-    old = (project / "compose.yml").read_text(encoding="utf-8")
-    migration_log = tmp_path / "migration.log"
-    migration = tmp_path / "migration.sh"
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    _executable(fake_bin / "flock", "#!/usr/bin/env bash\nexit 0\n")
-    _executable(
-        migration,
-        f"""#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$API_COMPOSE_FILE" > "$MIGRATION_LOG"
-exit {migration_exit}
-""",
-    )
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env={
-            **os.environ,
-            "PATH": f"{fake_bin}:{os.environ['PATH']}",
-            "PATRONI_CANDIDATE_OPERATION": "migrate",
-            "API_PROJECT_DIR": str(project),
-            "PATRONI_CANONICAL_COMPOSE_FILE": str(project / "compose.yml"),
-            "PATRONI_CANDIDATE_COMPOSE_FILE": str(project / "compose.yml.candidate"),
-            "COMPOSE_CANDIDATE_TRANSACTION_SCRIPT": str(TRANSACTION),
-            "PATRONI_MIGRATION_SCRIPT": str(migration),
-                "MIGRATION_LOG": str(migration_log),
-                "API_DEPLOY_LOCK_HELPER": str(DEPLOY_LOCK_HELPER),
-                "API_DEPLOY_LOCK_HELPER_SHA256": __import__("hashlib").sha256(
-                    DEPLOY_LOCK_HELPER.read_bytes()
-                ).hexdigest(),
-        },
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == migration_exit, result.stderr
-    assert migration_log.read_text(encoding="utf-8").strip() == "compose.yml.candidate"
-    assert (project / "compose.yml").read_text(encoding="utf-8") == old
-    assert not (project / "compose.yml.candidate").exists()
-
-
-def test_patroni_post_rename_promotion_error_preserves_new_canonical(tmp_path):
-    env, project = _patroni_runner_env(tmp_path, child_exit=0)
-    new = (project / "compose.yml.candidate").read_text(encoding="utf-8")
-    transaction_driver = tmp_path / "patroni-transaction.sh"
-    _executable(
-        transaction_driver,
-        """#!/usr/bin/env bash
-set -euo pipefail
-if [[ "$1" == "promote" ]]; then
-  bash "$REAL_TRANSACTION" "$1"
-  exit 46
-fi
-exec bash "$REAL_TRANSACTION" "$@"
-""",
-    )
-    env.update(
-        {
-            "COMPOSE_CANDIDATE_TRANSACTION_SCRIPT": str(transaction_driver),
-            "REAL_TRANSACTION": str(TRANSACTION),
-        }
-    )
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 46
-    assert "promotion committed" in result.stderr
-    assert (project / "compose.yml").read_text(encoding="utf-8") == new
-    assert not (project / "compose.yml.candidate").exists()
-    assert not (tmp_path / "reconcile.log").exists()
-
-
-def test_legacy_source_bind_deploy_is_retired():
-    result = subprocess.run(
-        ["bash", str(REPO_ROOT / "deploy_api.sh")],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode != 0
-    assert "retired" in result.stderr
-    assert "GitHub Actions image workflow" in result.stderr
-
-
-@pytest.mark.parametrize("operation", ["deploy", "migrate"])
-def test_patroni_candidate_rejects_database_rollout_marker_before_mutation(
-    tmp_path, operation
-):
-    env, project = _patroni_runner_env(tmp_path, child_exit=0)
-    marker = project / ".patroni-cutover-in-progress"
-    marker.write_text("0" * 32 + "\n", encoding="ascii")
-    env["PATRONI_CANDIDATE_OPERATION"] = operation
-    if operation == "migrate":
-        env["PATRONI_MIGRATION_SCRIPT"] = env["PATRONI_DEPLOY_SCRIPT"]
-
-    result = subprocess.run(
-        ["bash", str(PATRONI_RUNNER)],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode != 0
-    assert "Patroni database rollout is in progress" in result.stderr
-    assert not (tmp_path / "child.log").exists()
-    assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
