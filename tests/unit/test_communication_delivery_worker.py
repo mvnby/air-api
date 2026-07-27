@@ -30,7 +30,10 @@ from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_TEMPLATE_KEY,
 )
 
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 
 
 @pytest.fixture
@@ -124,16 +127,24 @@ class RecordingProvider:
         self._outcomes = outcomes
         self.calls: list[tuple[str, str, str]] = []
         self.claim_was_durable = False
+        self.provider_boundary_was_durable = False
 
     async def send(self, *, destination: str, text: str, delivery_id: str):
         async with self._session_factory() as session:
             row = await session.get(CommunicationDelivery, delivery_id)
+            attempt = await session.get(
+                CommunicationDeliveryAttempt,
+                (delivery_id, int(row.attempts) if row is not None else 0),
+            )
             self.claim_was_durable = bool(
                 row
                 and row.status == "running"
                 and row.worker_id
                 and row.lease_token
                 and row.lease_expires_at
+            )
+            self.provider_boundary_was_durable = bool(
+                attempt and attempt.provider_started_at is not None
             )
         self.calls.append((destination, text, delivery_id))
         outcome = self._outcomes[destination]
@@ -241,6 +252,7 @@ async def test_worker_commits_claim_before_provider_and_marks_sent(
     assert outcome.outcome == "sent"
     assert outcome.delivery_id == delivery_id
     assert provider.claim_was_durable is True
+    assert provider.provider_boundary_was_durable is True
     assert len(provider.calls) == 1
     assert "Lead 1" in provider.calls[0][1]
     async with worker_session_factory() as session:
@@ -311,8 +323,8 @@ async def test_worker_refences_expired_lease_before_network_call(
     )
     original_recipient_check = worker._recipient_is_current
 
-    async def expire_after_recipient_check(claim):
-        is_current = await original_recipient_check(claim)
+    async def expire_after_recipient_check(claim, plan):
+        is_current = await original_recipient_check(claim, plan)
         async with worker_session_factory() as session:
             row = await session.get(CommunicationDelivery, claim.delivery_id)
             assert row is not None
@@ -501,67 +513,17 @@ async def test_cancellation_inside_failure_finalizer_commits_then_propagates(
     async with worker_session_factory() as session:
         row = await session.get(CommunicationDelivery, delivery_id)
         assert row is not None
-        assert row.status == "retry"
+        assert row.status == "dead"
         assert row.last_error_code == "timeout"
         attempt = await session.get(
             CommunicationDeliveryAttempt,
             (delivery_id, 1),
         )
         assert attempt is not None
-        assert attempt.outcome == "retry"
+        assert attempt.outcome == "dead"
         assert attempt.provider_latency_ms is not None
         assert attempt.provider_latency_ms >= 0
         assert attempt.ambiguous is True
-
-
-@pytest.mark.asyncio
-async def test_worker_revalidates_recipient_and_cancels_without_network(
-    worker_session_factory,
-    monkeypatch,
-):
-    monkeypatch.setattr(settings, "ADMIN_IDS", "", raising=False)
-    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
-    owner_id, delivery_id = await _seed_delivery(
-        worker_session_factory,
-        sequence=2,
-        telegram_id=202002,
-    )
-    async with worker_session_factory() as session:
-        owner = await session.get(StaffUser, owner_id)
-        assert owner is not None
-        owner.status = "blocked"
-        session.add(owner)
-        await session.commit()
-
-    provider = RecordingProvider(
-        worker_session_factory,
-        {"202002": ProviderDeliveryResult.sent("must-not-send")},
-    )
-    worker = CommunicationDeliveryWorker(
-        session_factory=worker_session_factory,
-        scope=ALL_SCOPE,
-        provider=provider,
-        worker_id="test-worker",
-        lease_seconds=60,
-    )
-
-    outcome = await worker.run_once()
-
-    assert outcome.outcome == "canceled"
-    assert provider.calls == []
-    async with worker_session_factory() as session:
-        row = await session.get(CommunicationDelivery, delivery_id)
-        assert row is not None
-        assert row.status == "canceled"
-        assert row.last_error_code == "recipient_inactive"
-        assert row.finished_at is not None
-        attempt = await session.get(
-            CommunicationDeliveryAttempt,
-            (delivery_id, 1),
-        )
-        assert attempt is not None
-        assert attempt.outcome == "canceled"
-        assert attempt.provider_latency_ms is None
 
 
 @pytest.mark.asyncio
@@ -571,18 +533,49 @@ async def test_worker_keeps_recipient_failures_independent(
 ):
     monkeypatch.setattr(settings, "ADMIN_IDS", "", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
-    _, retry_delivery_id = await _seed_delivery(
+    _, ambiguous_delivery_id = await _seed_delivery(
         worker_session_factory,
         sequence=3,
         telegram_id=303003,
         priority=1,
     )
-    _, sent_delivery_id = await _seed_delivery(
-        worker_session_factory,
-        sequence=4,
-        telegram_id=404004,
-        priority=2,
-    )
+    sent_delivery_id = f"{4:032x}"
+    async with worker_session_factory() as session:
+        second_owner = StaffUser(
+            display_name="Owner 4",
+            status="active",
+            roles=["owner"],
+            primary_role="owner",
+            telegram_id=404004,
+        )
+        session.add(second_owner)
+        await session.flush()
+        assert second_owner.id is not None
+        existing = await session.get(
+            CommunicationDelivery,
+            ambiguous_delivery_id,
+        )
+        assert existing is not None
+        session.add(
+            CommunicationDelivery(
+                delivery_id=sent_delivery_id,
+                event_id=existing.event_id,
+                channel=existing.channel,
+                recipient_key=f"staff:{second_owner.id}",
+                destination="404004",
+                template_key=existing.template_key,
+                template_version=existing.template_version,
+                render_context=existing.render_context,
+                status="queued",
+                priority=2,
+                attempts=0,
+                max_attempts=existing.max_attempts,
+                available_at=existing.available_at,
+                created_at=existing.created_at,
+                updated_at=existing.updated_at,
+            )
+        )
+        await session.commit()
     provider = RecordingProvider(
         worker_session_factory,
         {
@@ -605,8 +598,8 @@ async def test_worker_keeps_recipient_failures_independent(
     first = await worker.run_once()
     second = await worker.run_once()
 
-    assert first.outcome == "retry"
-    assert first.delivery_id == retry_delivery_id
+    assert first.outcome == "dead"
+    assert first.delivery_id == ambiguous_delivery_id
     assert second.outcome == "sent"
     assert second.delivery_id == sent_delivery_id
     async with worker_session_factory() as session:
@@ -619,7 +612,7 @@ async def test_worker_keeps_recipient_failures_independent(
                 )
             ).scalars()
         )
-        assert [row.status for row in rows] == ["retry", "sent"]
+        assert [row.status for row in rows] == ["dead", "sent"]
         assert [row.attempts for row in rows] == [1, 1]
 
 

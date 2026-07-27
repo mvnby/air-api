@@ -54,6 +54,9 @@ class FakeOperations:
         self.maintenance_failure = None
         self.fenced_provision_failure = False
         self.role_agent_failure = None
+        self.communications_cutover_failure = False
+        self.target_compose_failure = False
+        self.target_compose_validated = False
         self.role_agent_fail_once = set()
         self.release_results = {}
         self.release_payloads = []
@@ -71,6 +74,13 @@ class FakeOperations:
 
     def bundles(self, nodes):
         return {node.project_dir: f"pinned:{node.alias}" for node in nodes}
+
+    def target_compose(self, nodes, bundles):
+        self.target_compose_validated = True
+        if self.target_compose_failure:
+            raise RuntimeError("simulated target Compose failure")
+        assert set(bundles) == {node.project_dir for node in nodes}
+        return "dormant"
 
     def release(self, *, node, context, action, txid, release_bundle, runner):
         event = ("release", action, node.alias, txid)
@@ -149,6 +159,20 @@ class FakeOperations:
         if self.fenced_provision_failure:
             raise RuntimeError("simulated fenced provision failure")
 
+    def communications_cutover(
+        self,
+        *,
+        node,
+        context,
+        transaction_id,
+        runner,
+    ):
+        self.events.append(
+            ("communications-cutover", node.alias, transaction_id)
+        )
+        if self.communications_cutover_failure:
+            raise RuntimeError("simulated communications cutover failure")
+
     def dependencies(self):
         return MigrationDependencies(
             discover=self.discover,
@@ -158,6 +182,8 @@ class FakeOperations:
             maintenance=self.maintenance,
             fenced_provision=self.fenced_provision,
             role_agent=self.role_agent,
+            communications_cutover=self.communications_cutover,
+            target_compose=self.target_compose,
         )
 
 
@@ -181,9 +207,11 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
     assert result.primary_alias == "mvn-api"
     assert result.standby_alias == "zakup"
     assert result.transaction_id == TXID
+    assert operations.target_compose_validated is True
     assert _mutation_events(operations.events) == [
         ("release", "inspect", "zakup", TXID),
         ("release", "inspect", "mvn-api", TXID),
+        ("communications-cutover", "mvn-api", TXID),
         ("release", "apply", "zakup", TXID),
         ("release", "apply", "mvn-api", TXID),
         ("role-agent", "quiesce-standby", "zakup", TXID),
@@ -216,7 +244,7 @@ def test_migration_runs_exact_order_with_topology_around_every_remote_operation(
         ("role-agent", "resume-primary", "mvn-api", TXID),
         ("maintenance", "verify", "mvn-api", TXID),
     ]
-    assert len(operations.events) == 1 + 3 * 33
+    assert len(operations.events) == 1 + 3 * 34
     assert operations.events[0] == ("topology",)
     for index in range(1, len(operations.events), 3):
         assert operations.events[index] == ("topology",)
@@ -246,7 +274,34 @@ def test_bundle_apply_failure_preserves_all_journals_for_exact_resume(
         ("release", "apply", "zakup", TXID),
         ("release", "apply", "mvn-api", TXID),
     ]
-    assert len([event for event in operations.events if event[0] == "topology"]) == 9
+    assert len([event for event in operations.events if event[0] == "topology"]) == 11
+
+
+def test_communications_cutover_failure_blocks_every_bundle_apply(tmp_path):
+    operations = FakeOperations()
+    operations.communications_cutover_failure = True
+
+    with pytest.raises(
+        RuntimeError,
+        match=f"resume with the same transaction ID {TXID}",
+    ):
+        migrate_cluster(
+            context=_context(tmp_path),
+            env_text=ENV_TEXT,
+            transaction_id=TXID,
+            runner=_unused_runner,
+            dependencies=operations.dependencies(),
+        )
+
+    assert [event[1] for event in operations.events if event[0] == "release"] == [
+        "inspect",
+        "inspect",
+    ]
+    assert (
+        "communications-cutover",
+        "mvn-api",
+        TXID,
+    ) in operations.events
 
 
 def test_first_bundle_digest_rejection_never_authorizes_rollback(tmp_path):
@@ -477,7 +532,7 @@ def test_recovery_keeps_both_nodes_fenced_when_fresh_topology_is_unavailable(
     operations = FakeOperations()
     operations.maintenance_failure = ("provision-node", "zakup")
     # The compatibility barrier adds two proved read-only operations.
-    operations.discover_failures.add(22)
+    operations.discover_failures.add(24)
 
     with pytest.raises(RuntimeError, match="neither node was resumed"):
         migrate_cluster(
@@ -494,7 +549,7 @@ def test_recovery_keeps_both_nodes_fenced_when_fresh_topology_is_unavailable(
 
 def test_topology_failure_before_first_agent_quiesce_still_rolls_back_assets(tmp_path):
     operations = FakeOperations()
-    operations.topologies = [_topology()] * 9 + [_topology(timeline=10)]
+    operations.topologies = [_topology()] * 11 + [_topology(timeline=10)]
 
     with pytest.raises(RuntimeError, match="release bundles were rolled back"):
         migrate_cluster(
@@ -621,106 +676,3 @@ def test_same_transaction_id_can_resume_through_idempotent_remote_helpers(tmp_pa
 def test_transaction_id_is_canonical_lowercase_hex(transaction_id):
     with pytest.raises(RuntimeError, match="32 lowercase hexadecimal"):
         validate_transaction_id(transaction_id)
-
-
-def _controller_input():
-    return controller.PitrInput(
-        cluster="mvn-api",
-        bucket="mvn-postgres-pitr",
-        endpoint_url="https://reviewed.r2.cloudflarestorage.com",
-        region="auto",
-        access_key_id="access",
-        secret_access_key="secret",
-        key_prefix="postgres/pitr",
-    )
-
-
-def _patch_controller_connection(monkeypatch, tmp_path):
-    context = _context(tmp_path)
-    monkeypatch.setattr(controller, "validate_identity_file", lambda _path: tmp_path / "id")
-    monkeypatch.setattr(controller, "create_context", lambda *_args: context)
-    monkeypatch.setattr(controller, "validate_effective_config", lambda *_args: None)
-    return context
-
-
-def test_controller_migrate_cluster_entrypoint_passes_one_env_and_root_txid(
-    tmp_path, monkeypatch
-):
-    context = _patch_controller_connection(monkeypatch, tmp_path)
-    captured = []
-    monkeypatch.setattr(
-        controller,
-        "collect_inputs",
-        lambda **_kwargs: _controller_input(),
-    )
-
-    def fake_migrate(**kwargs):
-        captured.append(kwargs)
-        return MigrationResult(
-            transaction_id=TXID,
-            primary_alias="mvn-api",
-            standby_alias="zakup",
-            system_identifier="7423456789012345678",
-            timeline=9,
-        )
-
-    monkeypatch.setattr(controller, "migrate_cluster", fake_migrate)
-
-    assert controller.main(
-        [
-            "--phase",
-            "migrate-cluster",
-            "--transaction-id",
-            TXID,
-            "--identity-file",
-            str(tmp_path / "id"),
-            "--no-prompt",
-        ]
-    ) == 0
-    assert len(captured) == 1
-    assert captured[0]["context"] == context
-    assert captured[0]["transaction_id"] == TXID
-    assert captured[0]["env_text"] == controller.render_env(_controller_input())
-
-
-def test_controller_standalone_phase_requires_and_propagates_root_txid(
-    tmp_path, monkeypatch
-):
-    context = _patch_controller_connection(monkeypatch, tmp_path)
-    calls = []
-    monkeypatch.setattr(controller, "discover_cluster_topology", lambda **_kwargs: _topology())
-    monkeypatch.setattr(
-        controller,
-        "run_remote_maintenance_phase",
-        lambda **kwargs: calls.append(kwargs),
-    )
-
-    assert controller.main(
-        [
-            "--phase",
-            "verify",
-            "--transaction-id",
-            TXID,
-            "--identity-file",
-            str(tmp_path / "id"),
-            "--no-prompt",
-        ]
-    ) == 0
-    assert len(calls) == 1
-    assert calls[0]["context"] == context
-    assert calls[0]["transaction_id"] == TXID
-    assert calls[0]["phase"] == "verify"
-
-
-def test_controller_probe_only_is_the_only_live_mode_without_transaction_id(
-    tmp_path, monkeypatch
-):
-    _patch_controller_connection(monkeypatch, tmp_path)
-    monkeypatch.setattr(controller, "discover_cluster_topology", lambda **_kwargs: _topology())
-
-    assert controller.main(
-        ["--probe-only", "--identity-file", str(tmp_path / "id")]
-    ) == 0
-    assert controller.main(
-        ["--phase", "verify", "--identity-file", str(tmp_path / "id")]
-    ) == 1

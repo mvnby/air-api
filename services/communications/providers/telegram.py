@@ -115,22 +115,24 @@ class TelegramDeliveryProvider:
                 message="Telegram rejected the delivery request",
             )
         except (TelegramUnauthorizedError, TelegramConflictError):
-            return ProviderDeliveryResult.provider_unavailable(
+            return ProviderDeliveryResult.permanent_failure(
+                category="provider",
                 code="telegram_provider_auth_or_conflict",
                 message="Telegram provider authentication or ownership is unavailable",
-                retry_after_seconds=300,
             )
         except (TelegramNetworkError, TelegramServerError, TimeoutError):
-            return ProviderDeliveryResult.transient_failure(
+            return ProviderDeliveryResult.ambiguous_failure(
                 category="network",
                 code="telegram_network_error",
-                message="Telegram network request failed",
+                message=(
+                    "Telegram network outcome requires manual reconciliation"
+                ),
             )
         except TelegramAPIError:
-            return ProviderDeliveryResult.transient_failure(
+            return ProviderDeliveryResult.ambiguous_failure(
                 category="provider",
                 code="telegram_api_error",
-                message="Telegram API returned an unexpected error",
+                message="Telegram API outcome requires manual reconciliation",
             )
         except asyncio.CancelledError:
             raise
@@ -141,8 +143,8 @@ class TelegramDeliveryProvider:
                 normalized_delivery_id,
                 type(exc).__name__,
             )
-            return ProviderDeliveryResult.transient_failure(
+            return ProviderDeliveryResult.ambiguous_failure(
                 category="provider",
                 code="telegram_unexpected_error",
-                message="Telegram provider failed unexpectedly",
+                message="Telegram provider outcome requires manual reconciliation",
             )

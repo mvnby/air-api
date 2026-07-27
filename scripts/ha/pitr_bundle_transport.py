@@ -227,8 +227,18 @@ def run_remote_release_action(
         raise RuntimeError(detail)
     expected = {
         "apply": {"applied\n", "resumed\n", "reopened\n"},
-        "inspect": {"fresh\n", "matching-active\n", "matching-finalized\n"},
-        "rollback": {"rolled-back\n", "already-rolled-back\n"},
+        "inspect": {
+            "fresh\n",
+            "matching-active\n",
+            "matching-finalized\n",
+            "matching-rolled-back\n",
+            "preflight-fenced\n",
+        },
+        "rollback": {
+            "rolled-back\n",
+            "already-rolled-back\n",
+            "preflight-rolled-back\n",
+        },
         "finalize": {"finalized\n", "already-finalized\n"},
     }[action]
     if result.stdout not in expected or result.stderr:

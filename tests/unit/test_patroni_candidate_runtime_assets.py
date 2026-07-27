@@ -497,7 +497,7 @@ exec bash "$REAL_TRANSACTION" "$@"
 
     assert result.returncode == 46, result.stderr
     assert not (project / "compose.yml.candidate").exists()
-    assert "/app/google-oauth" in (project / "compose.yml").read_text(encoding="utf-8")
+    assert "/app/token.json" in (project / "compose.yml").read_text(encoding="utf-8")
     marker = project / ".ha-communications-worker-release-fenced"
     assert marker.read_text(encoding="utf-8") == "fenced\n"
     assert marker.stat().st_mode & 0o777 == 0o600

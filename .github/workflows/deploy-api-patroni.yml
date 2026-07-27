@@ -372,4 +372,4 @@ jobs:
             echo "::error::No validated Patroni primary branch completed"
             exit 1
           fi
-          echo "Patroni-aware API and dormant worker release verified on both nodes through ${PRIMARY_NODE}"
+          echo "Patroni-aware API and communications worker release verified on both nodes through ${PRIMARY_NODE}"

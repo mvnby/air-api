@@ -17,6 +17,10 @@ from sqlmodel import select
 
 from models import IntegrationOutboxEvent
 from services.communications.contracts import IntegrationEventEnvelopeV1
+from services.communications.installation_activation_fence import (
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    acquire_installation_enqueue_fence,
+)
 
 
 class OutboxEventConflictError(ValueError):
@@ -157,6 +161,14 @@ class IntegrationOutboxService:
 
         normalized_payload = cls._normalize_payload(payload)
         normalized_event_type = str(event_type).strip()
+        authoritative_created_at: datetime | None = None
+        if normalized_event_type == INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT:
+            # Acquire before constructing the model: its ``created_at`` default
+            # must be a DB timestamp ordered after any committed activation
+            # watermark that won the exclusive side of this fence.
+            authoritative_created_at = (
+                await acquire_installation_enqueue_fence(session)
+            )
         normalized_aggregate_type = str(aggregate_type).strip()
         normalized_aggregate_id = str(aggregate_id).strip()
         normalized_idempotency_key = (
@@ -173,6 +185,11 @@ class IntegrationOutboxService:
             idempotency_key=normalized_idempotency_key,
         )
         event_id = cls.build_event_id(deduplication_key)
+        normalized_occurred_at = (
+            occurred_at
+            or authoritative_created_at
+            or datetime.now(timezone.utc)
+        )
         envelope = IntegrationEventEnvelopeV1(
             event_id=event_id,
             event_type=normalized_event_type,
@@ -180,7 +197,7 @@ class IntegrationOutboxService:
             aggregate_type=normalized_aggregate_type,
             aggregate_id=normalized_aggregate_id,
             aggregate_version=aggregate_version,
-            occurred_at=occurred_at or datetime.now(timezone.utc),
+            occurred_at=normalized_occurred_at,
             actor_id=actor_id,
             correlation_id=correlation_id,
             causation_id=causation_id,
@@ -214,6 +231,14 @@ class IntegrationOutboxService:
             max_attempts=max(1, int(max_attempts)),
             occurred_at=envelope.occurred_at,
             available_at=envelope.occurred_at,
+            **(
+                {
+                    "created_at": authoritative_created_at,
+                    "updated_at": authoritative_created_at,
+                }
+                if authoritative_created_at is not None
+                else {}
+            ),
         )
         dialect_name = session.get_bind().dialect.name
         event_values = event.model_dump()

@@ -9,6 +9,7 @@ class ProviderDeliveryDisposition(str, Enum):
     SENT = "sent"
     TRANSIENT_FAILURE = "transient_failure"
     PERMANENT_FAILURE = "permanent_failure"
+    AMBIGUOUS_FAILURE = "ambiguous_failure"
     PROVIDER_UNAVAILABLE = "provider_unavailable"
 
 
@@ -58,6 +59,23 @@ class ProviderDeliveryResult:
     ) -> "ProviderDeliveryResult":
         return cls(
             disposition=ProviderDeliveryDisposition.PERMANENT_FAILURE,
+            error_category=category,
+            error_code=code,
+            error_message=message,
+        )
+
+    @classmethod
+    def ambiguous_failure(
+        cls,
+        *,
+        category: str,
+        code: str,
+        message: str,
+    ) -> "ProviderDeliveryResult":
+        """Record an outcome that may have crossed the provider boundary."""
+
+        return cls(
+            disposition=ProviderDeliveryDisposition.AMBIGUOUS_FAILURE,
             error_category=category,
             error_code=code,
             error_message=message,

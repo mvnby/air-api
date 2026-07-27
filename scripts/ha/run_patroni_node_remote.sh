@@ -35,6 +35,7 @@ DEPLOY_CAPACITY_HELPER_SOURCE="scripts/ha/require_deploy_capacity.sh"
 COMMUNICATIONS_WORKER_RELEASE_HELPER_SOURCE="scripts/ha/communications_worker_release_contract.sh"
 PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE_SOURCE="scripts/ha/patroni_communications_candidate_lifecycle.sh"
 PATRONI_ROLE_AGENT_CANDIDATE_ASSETS_SOURCE="scripts/ha/patroni_role_agent_candidate_assets.sh"
+PATRONI_ATTESTED_COMPOSE_GUARD_SOURCE="scripts/ha/patroni_attested_compose_guard.sh"
 ROLE_AGENT_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${ROLE_AGENT_SOURCE}")"
 DEPLOY_LOCK_HELPER_SHA256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${DEPLOY_LOCK_HELPER_SOURCE}")"
 DB_CONTRACT_HELPER_SOURCE="scripts/ha/patroni_compose_db_contract.py"
@@ -151,6 +152,8 @@ if [[ "${OPERATION}" == "migrate" || "${OPERATION}" == "deploy" ]]; then
     && ! -L "${COMMUNICATIONS_WORKER_RELEASE_HELPER_SOURCE}" \
     && -f "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE_SOURCE}" \
     && ! -L "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE_SOURCE}" \
+    && -f "${PATRONI_ATTESTED_COMPOSE_GUARD_SOURCE}" \
+    && ! -L "${PATRONI_ATTESTED_COMPOSE_GUARD_SOURCE}" \
     && -f "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS_SOURCE}" \
     && ! -L "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS_SOURCE}" \
     && -f "${DEPLOY_LOCK_HELPER_SOURCE}" && -f "${BUNDLE_VERIFIER_SOURCE}" \
@@ -254,22 +257,39 @@ if worker.get("image") != expected_image or app.get("image") != expected_image:
 environment = worker.get("environment") or {}
 if not isinstance(environment, dict):
     raise SystemExit(1)
-for key in (
-    "COMMUNICATIONS_WORKER_ENABLED",
-    "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE",
-):
-    if str(environment.get(key, "")).lower() != "false":
-        raise SystemExit(1)
+gates = (
+    environment.get("COMMUNICATIONS_WORKER_ENABLED"),
+    environment.get("COMMUNICATIONS_WORKER_ALLOW_ALL_MODE"),
+)
+profiles = {
+    ("false", "false"): "dormant",
+    ("true", "false"): "canary",
+    ("true", "true"): "active",
+}
+profile = profiles.get(gates)
+if profile is None:
+    raise SystemExit(1)
+print(profile)
 '
   verify_worker_runtime_code='
 import os
 import sys
 
-expected_role = sys.argv[1]
+expected_role, expected_profile = sys.argv[1:]
+profiles = {
+    "dormant": ("false", "false"),
+    "canary": ("true", "false"),
+    "active": ("true", "true"),
+}
+expected_gates = profiles.get(expected_profile)
 valid = (
-    os.environ.get("APP_ROLE") == expected_role
-    and os.environ.get("COMMUNICATIONS_WORKER_ENABLED", "").lower() == "false"
-    and os.environ.get("COMMUNICATIONS_WORKER_ALLOW_ALL_MODE", "").lower() == "false"
+    expected_gates is not None
+    and os.environ.get("APP_ROLE") == expected_role
+    and (
+        os.environ.get("COMMUNICATIONS_WORKER_ENABLED"),
+        os.environ.get("COMMUNICATIONS_WORKER_ALLOW_ALL_MODE"),
+    )
+    == expected_gates
 )
 raise SystemExit(0 if valid else 1)
 '
@@ -337,10 +357,16 @@ print(normalized)
       fi
       export BACKEND_IMAGE=$(quote "${BACKEND_IMAGE}")
       docker_command=docker
-      \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} --profile bluegreen \
-        config --format json \
-        | python3 -c $(quote "${verify_config_code}") \
-          communications-worker \"\${active_service}\" $(quote "${BACKEND_IMAGE}")
+      worker_profile=\$(
+        \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} --profile bluegreen \
+          config --format json \
+          | python3 -c $(quote "${verify_config_code}") \
+            communications-worker \"\${active_service}\" $(quote "${BACKEND_IMAGE}")
+      )
+      case \"\${worker_profile}\" in
+        dormant|canary|active) ;;
+        *) exit 1 ;;
+      esac
       set -- \$(\"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen ps -q \"\${active_service}\")
       test \"\$#\" -eq 1
@@ -359,7 +385,8 @@ print(normalized)
       fi
       if ! \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen exec -T communications-worker \
-        python3 -c $(quote "${verify_worker_runtime_code}") \"\${role}\" >/dev/null; then
+        python3 -c $(quote "${verify_worker_runtime_code}") \
+          \"\${role}\" \"\${worker_profile}\" >/dev/null; then
         exit 1
       fi
       if ! systemctl is-active --quiet mvn-patroni-role-agent.service; then
@@ -421,6 +448,13 @@ print(normalized)
         || test -L .ha-communications-worker-release-fenced; then
         exit 1
       fi
+      final_worker_profile=\$(
+        \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} --profile bluegreen \
+          config --format json \
+          | python3 -c $(quote "${verify_config_code}") \
+            communications-worker \"\${active_service}\" $(quote "${BACKEND_IMAGE}")
+      )
+      test \"\${final_worker_profile}\" = \"\${worker_profile}\"
       set -- \$(\"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen ps -q communications-worker)
       test \"\$#\" -eq 1
@@ -429,7 +463,8 @@ print(normalized)
         = $(quote "${BACKEND_IMAGE}|true")
       if ! \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen exec -T communications-worker \
-        python3 -c $(quote "${verify_worker_runtime_code}") \"\${final_role}\" >/dev/null; then
+        python3 -c $(quote "${verify_worker_runtime_code}") \
+          \"\${final_role}\" \"\${worker_profile}\" >/dev/null; then
         exit 1
       fi
       if ! systemctl is-active --quiet mvn-patroni-role-agent.service; then
@@ -478,6 +513,7 @@ BUNDLE_SOURCES=(
   "${COMMUNICATIONS_WORKER_RELEASE_HELPER_SOURCE}"
   "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE_SOURCE}"
   "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS_SOURCE}"
+  "${PATRONI_ATTESTED_COMPOSE_GUARD_SOURCE}"
   "${TRANSACTION_SOURCE}"
   "${VOICE_ENV_SYNC_SOURCE}"
 )
@@ -509,6 +545,7 @@ VOICE_ENV_SYNC_REMOTE="${REMOTE_BUNDLE_DIR}/sync_bot_voice_env.py"
 COMMUNICATIONS_WORKER_RELEASE_HELPER_REMOTE="${REMOTE_BUNDLE_DIR}/communications_worker_release_contract.sh"
 PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_communications_candidate_lifecycle.sh"
 PATRONI_ROLE_AGENT_CANDIDATE_ASSETS_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_role_agent_candidate_assets.sh"
+PATRONI_ATTESTED_COMPOSE_GUARD_REMOTE="${REMOTE_BUNDLE_DIR}/patroni_attested_compose_guard.sh"
 REMOTE_COMPOSE_SOURCE="${REMOTE_BUNDLE_DIR}/$(basename "${COMPOSE_SOURCE}")"
 scp "${SSH_OPTS[@]}" "${BUNDLE_SOURCES[@]}" "${REMOTE}:${REMOTE_BUNDLE_DIR}/"
 
@@ -525,15 +562,13 @@ printf '%s\n%s\n' "${GHCR_PAT:-}" "${BOT_VOICE_TRANSCRIPTION_API_KEY}" | ssh "${
   IFS= read -r GHCR_PAT
   IFS= read -r BOT_VOICE_TRANSCRIPTION_API_KEY
   export GHCR_PAT
-  trap $(quote "rm -rf -- ${REMOTE_BUNDLE_DIR}") EXIT
+  trap $(quote "unset BOT_VOICE_TRANSCRIPTION_API_KEY; rm -rf -- ${REMOTE_BUNDLE_DIR}") EXIT
   python3 -I -c $(quote "${BUNDLE_VERIFIER_CODE}") verify \
     $(quote "${REMOTE_BUNDLE_DIR}") $(quote "${BUNDLE_MANIFEST_B64}")
   chmod 0755 $(quote "${REMOTE_BUNDLE_DIR}")/*.sh \
     $(quote "${REMOTE_BUNDLE_DIR}/safe_deploy_lock.py")
-  printf '%s' \"\${BOT_VOICE_TRANSCRIPTION_API_KEY}\" | \
-    python3 -I $(quote "${VOICE_ENV_SYNC_REMOTE}") \
-      --env-file $(quote "${PROJECT_DIR}/.env")
-  unset BOT_VOICE_TRANSCRIPTION_API_KEY
+  export BOT_VOICE_TRANSCRIPTION_API_KEY
+  candidate_status=0
   API_PROJECT_DIR=$(quote "${PROJECT_DIR}") \
   API_EXPECTED_PATRONI_ROLE=$(quote "${EXPECTED_ROLE}") \
   API_READY_URL=http://127.0.0.1:18080/api/ready \
@@ -573,9 +608,15 @@ printf '%s\n%s\n' "${GHCR_PAT:-}" "${BOT_VOICE_TRANSCRIPTION_API_KEY}" | ssh "${
   COMMUNICATIONS_WORKER_RELEASE_HELPER=$(quote "${COMMUNICATIONS_WORKER_RELEASE_HELPER_REMOTE}") \
   PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE=$(quote "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE_REMOTE}") \
   PATRONI_ROLE_AGENT_CANDIDATE_ASSETS=$(quote "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS_REMOTE}") \
+  PATRONI_ATTESTED_COMPOSE_GUARD=$(quote "${PATRONI_ATTESTED_COMPOSE_GUARD_REMOTE}") \
+  PATRONI_VOICE_ENV_SYNC=$(quote "${VOICE_ENV_SYNC_REMOTE}") \
+  PATRONI_VOICE_ENV_FILE=$(quote "${PROJECT_DIR}/.env") \
   API_DEPLOY_LOCK_HELPER_SHA256=$(quote "${DEPLOY_LOCK_HELPER_SHA256}") \
   ${proxy_env} \
-  bash $(quote "${REMOTE_BUNDLE_DIR}/run_patroni_candidate_transaction.sh")
+  bash $(quote "${REMOTE_BUNDLE_DIR}/run_patroni_candidate_transaction.sh") \
+    || candidate_status=\$?
+  unset BOT_VOICE_TRANSCRIPTION_API_KEY
+  exit \"\${candidate_status}\"
 "
 REMOTE_BUNDLE_DIR=""
 log "done" "${OPERATION} completed on ${NODE_HOST}"

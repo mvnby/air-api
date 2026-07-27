@@ -33,7 +33,10 @@ from services.communications.template_registry import (
     WebsiteTemplateRegistry,
 )
 
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
 RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 

@@ -111,6 +111,7 @@ def test_candidate_rejects_writable_lock_helper_before_execution(tmp_path):
             "API_PROJECT_DIR": str(project),
             "API_DEPLOY_LOCK_HELPER": str(helper),
             "API_DEPLOY_LOCK_HELPER_SHA256": hashlib.sha256(helper.read_bytes()).hexdigest(),
+            "PATRONI_VOICE_ENV_SYNC": str(HELPER),
         },
         text=True,
         capture_output=True,

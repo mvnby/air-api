@@ -36,7 +36,15 @@ from scripts.ha import patroni_local_identity
                 "COMMUNICATIONS_WORKER_ENABLED": "true",
                 "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
             },
-            False,
+            True,
+        ),
+        (
+            {
+                "APP_ROLE": "primary",
+                "COMMUNICATIONS_WORKER_ENABLED": "true",
+                "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "true",
+            },
+            True,
         ),
         (
             {
@@ -46,9 +54,17 @@ from scripts.ha import patroni_local_identity
             },
             False,
         ),
+        (
+            {
+                "APP_ROLE": "primary",
+                "COMMUNICATIONS_WORKER_ENABLED": "TRUE",
+                "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
+            },
+            False,
+        ),
     ],
 )
-def test_communications_worker_probe_requires_all_no_delivery_gates(
+def test_communications_worker_probe_requires_role_and_closed_gate_profile(
     environment, expected
 ):
     outputs = []
@@ -70,6 +86,43 @@ def test_communications_worker_probe_requires_all_no_delivery_gates(
         compose_runner=compose_runner,
     ) is expected
     assert outputs == [("", "", {"check": False, "timeout": 10})]
+
+
+@pytest.mark.parametrize(
+    ("enabled", "allow_all"),
+    [
+        ("false", "true"),
+        ("TRUE", "false"),
+        ("false", "FALSE"),
+    ],
+)
+def test_compose_profile_rejects_noncanonical_gates_without_echoing_environment(
+    enabled, allow_all
+):
+    rendered = {
+        "services": {
+            "communications-worker": {
+                "environment": {
+                    "COMMUNICATIONS_WORKER_ENABLED": enabled,
+                    "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": allow_all,
+                    "SECRET_TOKEN": "must-not-appear",
+                }
+            }
+        }
+    }
+
+    def compose_runner(_config, *args, **_kwargs):
+        assert args == ("config", "--format", "json")
+        return subprocess.CompletedProcess(args, 0, json.dumps(rendered), "")
+
+    with pytest.raises(RuntimeError) as error:
+        patroni_local_identity.communications_worker_compose_profile(
+            SimpleNamespace(),
+            compose_runner=compose_runner,
+        )
+
+    assert "profile is not reviewed" in str(error.value)
+    assert "must-not-appear" not in str(error.value)
 
 
 @pytest.mark.parametrize(

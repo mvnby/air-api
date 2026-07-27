@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,7 +111,7 @@ class BotStaffNotificationApiService:
         worker_id: str,
         visibility_timeout_seconds: int,
     ) -> dict | None:
-        claim_time = datetime.now(timezone.utc)
+        claim_time = await CommunicationDeliveryService.database_now(session)
         await cls._materialize_pending(
             session,
             worker_id=worker_id,
@@ -159,6 +159,18 @@ class BotStaffNotificationApiService:
                 )
                 await session.commit()
                 continue
+            # Returning the payload to another process is the provider
+            # ambiguity boundary: the remote bot may send successfully and
+            # disappear before it can acknowledge this lease.
+            lease_expires_at = (
+                await CommunicationDeliveryService.mark_provider_started(
+                    session,
+                    delivery_id=claim.delivery_id,
+                    worker_id=worker_id,
+                    lease_token=claim.lease_token,
+                    lease_seconds=visibility_timeout_seconds,
+                )
+            )
             await session.commit()
             return {
                 "delivery_id": claim.delivery_id,
@@ -168,7 +180,7 @@ class BotStaffNotificationApiService:
                 "attempt": claim.attempts,
                 "max_attempts": claim.max_attempts,
                 "lease_token": claim.lease_token,
-                "lease_expires_at": claim.lease_expires_at,
+                "lease_expires_at": lease_expires_at,
             }
         return None
 
@@ -197,7 +209,6 @@ class BotStaffNotificationApiService:
                 worker_id=worker_id,
                 lease_token=lease_token,
                 lease_seconds=visibility_timeout_seconds,
-                now=datetime.now(timezone.utc),
             )
             await session.commit()
         except (CommunicationDeliveryNotFound, CommunicationDeliveryLeaseLost) as exc:
@@ -228,7 +239,6 @@ class BotStaffNotificationApiService:
                 lease_token=lease_token,
                 provider_message_id=f"telegram:{telegram_message_id}",
                 provider_latency_ms=provider_latency_ms,
-                now=datetime.now(timezone.utc),
             )
             await session.commit()
         except (CommunicationDeliveryNotFound, CommunicationDeliveryLeaseLost) as exc:
@@ -257,12 +267,22 @@ class BotStaffNotificationApiService:
                 code=error_code,
                 message="Telegram delivery failed permanently",
             )
-        else:
+        elif (
+            error_code == "telegram_retry_after"
+            and retry_after_seconds is not None
+            and int(retry_after_seconds) > 0
+        ):
             provider_result = ProviderDeliveryResult.transient_failure(
-                category="telegram",
+                category="rate_limit",
                 code=error_code,
-                message="Telegram delivery failed transiently",
+                message="Telegram rejected the request before acceptance",
                 retry_after_seconds=retry_after_seconds,
+            )
+        else:
+            provider_result = ProviderDeliveryResult.ambiguous_failure(
+                category="provider",
+                code=error_code,
+                message="Telegram delivery outcome requires manual reconciliation",
             )
         try:
             outcome = await CommunicationDeliveryService.mark_failed(
@@ -271,7 +291,6 @@ class BotStaffNotificationApiService:
                 worker_id=worker_id,
                 lease_token=lease_token,
                 result=provider_result,
-                now=datetime.now(timezone.utc),
             )
             await session.commit()
         except (CommunicationDeliveryNotFound, CommunicationDeliveryLeaseLost) as exc:

@@ -32,6 +32,11 @@ from services.communications.runtime_state import (
     CommunicationRuntimeStatus,
 )
 from services.runtime_lock_service import RuntimeLock
+from tests.unit.communications_runtime_test_support import (
+    allow_safety,
+    instant_fencing,
+    set_runtime_mode_for_test,
+)
 
 
 ASYNC_TEST_TIMEOUT_SECONDS = 5
@@ -138,14 +143,6 @@ def test_runtime_rejects_invalid_or_non_finite_lease(invalid_lease):
         runtime_config(lease_seconds=invalid_lease)
 
 
-async def allow_safety(_scope: CommunicationProcessingScope) -> None:
-    return None
-
-
-async def instant_fencing(stop_event: asyncio.Event, _seconds: float) -> bool:
-    return stop_event.is_set()
-
-
 async def own_mode(
     session_factory,
     mode: CommunicationRuntimeMode,
@@ -153,7 +150,7 @@ async def own_mode(
     canary_run_id: str | None = None,
 ):
     async with session_factory() as session:
-        control = await CommunicationRuntimeStateService.set_mode(
+        control = await set_runtime_mode_for_test(
             session,
             channel="telegram",
             mode=mode,

@@ -24,7 +24,10 @@ from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_TEMPLATE_KEY,
 )
 
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 
 FOUNDATION_PATH = Path(
     "alembic/versions/3f7a9c1d2e04_add_communications_outbox_foundation.py"
@@ -35,6 +38,10 @@ LEASE_PATH = Path(
 ATTEMPT_REVISION = "5b9c2d3e4f06"
 ATTEMPT_PATH = Path(
     "alembic/versions/5b9c2d3e4f06_add_communication_delivery_attempt_journal.py"
+)
+PROVIDER_BOUNDARY_REVISION = "e9a1b2c3d4e5"
+PROVIDER_BOUNDARY_PATH = Path(
+    "alembic/versions/e9a1b2c3d4e5_add_delivery_provider_boundary.py"
 )
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc).isoformat()
 SQLITE_RUNNING_NOW = "2026-07-13 12:00:00.000000"
@@ -201,6 +208,9 @@ def _insert_attempt(
 def test_attempt_journal_stays_in_single_alembic_chain_after_lease_hardening():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(ATTEMPT_REVISION)
+    provider_boundary_revision = script.get_revision(
+        PROVIDER_BOUNDARY_REVISION
+    )
     heads = script.get_heads()
     assert len(heads) == 1
     revision_ids = {
@@ -211,12 +221,18 @@ def test_attempt_journal_stays_in_single_alembic_chain_after_lease_hardening():
     assert "6c0d3e5f7a21" in revision_ids
     assert revision is not None
     assert revision.down_revision == "4a8b1c2d3e05"
+    assert provider_boundary_revision is not None
+    assert provider_boundary_revision.down_revision == "d8e7f6a5b4c3"
 
 
 def test_attempt_journal_migration_replays_and_downgrades_on_sqlite():
     foundation = _load_migration("foundation_for_attempt", FOUNDATION_PATH)
     lease = _load_migration("lease_for_attempt", LEASE_PATH)
     attempt = _load_migration("attempt_journal_migration", ATTEMPT_PATH)
+    provider_boundary = _load_migration(
+        "provider_boundary_migration",
+        PROVIDER_BOUNDARY_PATH,
+    )
     engine = create_engine("sqlite:///:memory:")
 
     with engine.begin() as connection:
@@ -224,14 +240,22 @@ def test_attempt_journal_migration_replays_and_downgrades_on_sqlite():
         foundation.op = operations
         lease.op = operations
         attempt.op = operations
+        provider_boundary.op = operations
         foundation.upgrade()
         delivery_id = _insert_queued_delivery(connection, 1)
         running_delivery_id = _insert_running_delivery(connection, 2)
         lease.upgrade()
         attempt.upgrade()
+        provider_boundary.upgrade()
 
         inspector = inspect(connection)
         assert "communication_delivery_attempt" in inspector.get_table_names()
+        assert "provider_started_at" in {
+            column["name"]
+            for column in inspector.get_columns(
+                "communication_delivery_attempt"
+            )
+        }
         assert connection.execute(
             text(
                 "SELECT status, attempts FROM communication_delivery "
@@ -279,7 +303,17 @@ def test_attempt_journal_migration_replays_and_downgrades_on_sqlite():
             "ck_delivery_attempt_outcome_valid",
             "ck_delivery_attempt_retry_after_positive",
             "ck_delivery_attempt_retry_after_state",
+            "ck_delivery_attempt_provider_after_started",
+            "ck_delivery_attempt_provider_before_finished",
         }.issubset(constraint_names)
+        assert connection.execute(
+            text(
+                "SELECT provider_started_at "
+                "FROM communication_delivery_attempt "
+                "WHERE delivery_id = :delivery_id"
+            ),
+            {"delivery_id": running_delivery_id},
+        ).scalar_one() == SQLITE_RUNNING_NOW
         assert {
             "ix_delivery_attempt_ambiguous_finished",
             "ix_delivery_attempt_error_finished",
@@ -350,6 +384,13 @@ def test_attempt_journal_migration_replays_and_downgrades_on_sqlite():
                         **values,
                     )
 
+        provider_boundary.downgrade()
+        assert "provider_started_at" not in {
+            column["name"]
+            for column in inspect(connection).get_columns(
+                "communication_delivery_attempt"
+            )
+        }
         attempt.downgrade()
         downgraded = inspect(connection)
         assert "communication_delivery_attempt" not in downgraded.get_table_names()
@@ -380,6 +421,10 @@ async def test_attempt_journal_backfills_running_row_for_lease_recovery(tmp_path
     foundation = _load_migration("foundation_for_recovery", FOUNDATION_PATH)
     lease = _load_migration("lease_for_recovery", LEASE_PATH)
     attempt = _load_migration("attempt_journal_for_recovery", ATTEMPT_PATH)
+    provider_boundary = _load_migration(
+        "provider_boundary_for_recovery",
+        PROVIDER_BOUNDARY_PATH,
+    )
     database_path = tmp_path / "attempt-migration-recovery.sqlite3"
     engine = create_engine(f"sqlite:///{database_path}")
 
@@ -388,10 +433,12 @@ async def test_attempt_journal_backfills_running_row_for_lease_recovery(tmp_path
         foundation.op = operations
         lease.op = operations
         attempt.op = operations
+        provider_boundary.op = operations
         foundation.upgrade()
         delivery_id = _insert_running_delivery(connection, 9)
         lease.upgrade()
         attempt.upgrade()
+        provider_boundary.upgrade()
     engine.dispose()
 
     async_engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}")
@@ -408,8 +455,8 @@ async def test_attempt_journal_backfills_running_row_for_lease_recovery(tmp_path
                 now=datetime(2026, 7, 13, 12, 6, tzinfo=timezone.utc),
             )
             await session.commit()
-            assert recovery.retry_count == 1
-            assert recovery.dead_count == 0
+            assert recovery.retry_count == 0
+            assert recovery.dead_count == 1
 
         async with factory() as session:
             delivery = await session.get(CommunicationDelivery, delivery_id)
@@ -417,11 +464,12 @@ async def test_attempt_journal_backfills_running_row_for_lease_recovery(tmp_path
                 CommunicationDeliveryAttempt,
                 (delivery_id, 1),
             )
-            assert delivery is not None and delivery.status == "retry"
-            assert journal is not None and journal.outcome == "retry"
+            assert delivery is not None and delivery.status == "dead"
+            assert journal is not None and journal.outcome == "dead"
             assert journal.error_category == "lease"
-            assert journal.error_code == "lease_expired"
+            assert journal.error_code == "lease_expired_after_provider"
             assert journal.ambiguous is True
+            assert journal.provider_started_at is not None
             assert journal.finished_at is not None
     finally:
         await async_engine.dispose()

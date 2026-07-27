@@ -29,7 +29,10 @@ from services.communications.template_registry import (
     telegram_canary_event_id,
 )
 
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
 RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 
@@ -278,7 +281,9 @@ async def test_postgres_concurrent_recovery_skips_locked_expired_delivery(
             timeout=3,
         )
         assert recovery_a.retry_count == 1
+        assert recovery_a.dead_count == 0
         assert recovery_b.retry_count == 1
+        assert recovery_b.dead_count == 0
         await session_b.commit()
         await session_a.commit()
 
@@ -299,8 +304,8 @@ async def test_postgres_concurrent_recovery_skips_locked_expired_delivery(
         assert all(
             attempt is not None
             and attempt.outcome == "retry"
-            and attempt.error_code == "lease_expired"
-            and attempt.ambiguous is True
+            and attempt.error_code == "lease_expired_before_provider"
+            and attempt.ambiguous is False
             for attempt in attempts
         )
 
@@ -476,7 +481,7 @@ async def test_postgres_canary_scope_isolates_claim_and_recovery_mixed_queue(
 
 
 @pytest.mark.asyncio
-async def test_postgres_recovery_rotates_token_and_fences_stale_attempt(
+async def test_postgres_pre_provider_recovery_fences_stale_lease_and_retries(
     communication_db_engine,
 ):
     assert communication_db_engine.dialect.name == "postgresql"
@@ -492,10 +497,12 @@ async def test_postgres_recovery_rotates_token_and_fences_stale_attempt(
     async with factory() as session:
         recovery = await CommunicationDeliveryService.recover_expired_leases(session, scope=ALL_SCOPE)
         assert recovery.retry_count == 1
+        assert recovery.dead_count == 0
         await session.commit()
         recovered = await session.get(CommunicationDelivery, f"{1:032x}")
         assert recovered is not None
-        retry_at = recovered.available_at
+        assert recovered.status == "retry"
+        due_at = recovered.available_at
 
     async with factory() as session:
         claim = await CommunicationDeliveryService.claim_next(
@@ -503,47 +510,32 @@ async def test_postgres_recovery_rotates_token_and_fences_stale_attempt(
             scope=ALL_SCOPE,
             worker_id=stale_worker,
             lease_seconds=60,
-            now=retry_at,
+            now=due_at + timedelta(seconds=1),
         )
         assert claim is not None
-        assert claim.lease_token != stale_token
         assert claim.attempts == 2
-        await session.commit()
+        await session.rollback()
 
     async with factory() as session:
         with pytest.raises(CommunicationDeliveryLeaseLost):
             await CommunicationDeliveryService.mark_sent(
                 session,
-                delivery_id=claim.delivery_id,
+                delivery_id=f"{1:032x}",
                 worker_id=stale_worker,
                 lease_token=stale_token,
                 provider_message_id="stale-message",
-                now=retry_at + timedelta(seconds=1),
             )
         await session.rollback()
 
     async with factory() as session:
-        await CommunicationDeliveryService.mark_sent(
-            session,
-            delivery_id=claim.delivery_id,
-            worker_id=stale_worker,
-            lease_token=claim.lease_token,
-            provider_message_id="current-message",
-            now=retry_at + timedelta(seconds=1),
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (f"{1:032x}", 1),
         )
-        await session.commit()
-        attempts = [
-            await session.get(
-                CommunicationDeliveryAttempt,
-                (claim.delivery_id, attempt_no),
-            )
-            for attempt_no in (1, 2)
-        ]
-        assert [attempt.outcome for attempt in attempts if attempt is not None] == [
-            "retry",
-            "sent",
-        ]
-        assert attempts[0] is not None and attempts[0].ambiguous is True
+        assert attempt is not None
+        assert attempt.outcome == "retry"
+        assert attempt.error_code == "lease_expired_before_provider"
+        assert attempt.ambiguous is False
 
 
 @pytest.mark.asyncio

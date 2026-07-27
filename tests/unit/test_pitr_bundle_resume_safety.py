@@ -112,7 +112,7 @@ def test_inspect_barrier_classifies_without_mutating_release_state(tmp_path):
     assert not Path(namespace["MAINTENANCE_MARKER"]).exists()
 
 
-def test_inspect_rejects_receipt_even_when_transaction_directory_remains(tmp_path):
+def test_inspect_recovers_durable_receipt_when_transaction_directory_remains(tmp_path):
     namespace, project, compose, tool = _remote_namespace(tmp_path)
     _write(compose, b"old-compose", 0o644)
     _write(tool, b"old-tool", 0o755)
@@ -128,12 +128,16 @@ def test_inspect_rejects_receipt_even_when_transaction_directory_remains(tmp_pat
         )
     namespace["safe_remove_transaction"] = remove_transaction
 
-    assert (Path(namespace["TRANSACTION_ROOT"]) / TXID).exists()
+    txdir = Path(namespace["TRANSACTION_ROOT"]) / TXID
+    assert txdir.exists()
     assert (Path(namespace["ROLLBACK_RECEIPT_ROOT"]) / f"{TXID}.json").exists()
-    with pytest.raises(RuntimeError, match="already has a rollback receipt"):
-        namespace["execute"](
-            "inspect", TXID, str(project), compose.name, payload
-        )
+    assert namespace["execute"](
+        "inspect", TXID, str(project), compose.name, payload
+    ) == "matching-rolled-back"
+    assert namespace["execute"](
+        "rollback", TXID, str(project), compose.name, b""
+    ) == "already-rolled-back"
+    assert not txdir.exists()
 
 
 def test_pinned_bundle_bytes_survive_source_changes_between_inspect_and_apply(

@@ -405,7 +405,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default=os.environ.get("PITR_TRANSACTION_ID") or "",
         help=(
             "Required 32-character lowercase hexadecimal cluster transaction ID "
-            "for every live or dry-run mutation phase. Reuse it to resume."
+            "for every live or dry-run mutation phase. Reuse it for ambiguous "
+            "resume or cleanup; use a new ID after durable rollback completes."
         ),
     )
     execution_mode = parser.add_mutually_exclusive_group()
@@ -479,6 +480,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "dry-run",
                 f"would run {DEFAULT_BOOTSTRAP_HELPER} {args.phase} on the sole primary",
             )
+            if args.phase == "migrate-cluster":
+                log(
+                    "dry-run",
+                    "would first prove communications runtime off and drained, "
+                    "then latch its release fence under the PITR transaction",
+                )
             return 0
 
         identity_file = validate_identity_file(args.identity_file)

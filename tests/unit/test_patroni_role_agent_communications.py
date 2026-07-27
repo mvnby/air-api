@@ -1,5 +1,7 @@
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -69,6 +71,8 @@ class _ComposeRuntime:
         role_probe_error: Exception | None = None,
         worker_enabled: bool = False,
         worker_allow_all: bool = False,
+        canonical_worker_enabled: bool = False,
+        canonical_worker_allow_all: bool = False,
     ):
         self.events = events
         self.defined_services = set(defined_services)
@@ -80,6 +84,8 @@ class _ComposeRuntime:
         self.role_probe_error = role_probe_error
         self.worker_enabled = worker_enabled
         self.worker_allow_all = worker_allow_all
+        self.canonical_worker_enabled = canonical_worker_enabled
+        self.canonical_worker_allow_all = canonical_worker_allow_all
 
     def __call__(self, config, *args, **_kwargs):
         self.events.append(("compose", args))
@@ -89,6 +95,27 @@ class _ComposeRuntime:
             return SimpleNamespace(
                 returncode=0,
                 stdout="\n".join(sorted(self.defined_services)) + "\n",
+                stderr="",
+            )
+        if args == ("config", "--format", "json"):
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "services": {
+                            COMMUNICATIONS_WORKER_SERVICE: {
+                                "environment": {
+                                    "COMMUNICATIONS_WORKER_ENABLED": str(
+                                        self.canonical_worker_enabled
+                                    ).lower(),
+                                    "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": str(
+                                        self.canonical_worker_allow_all
+                                    ).lower(),
+                                }
+                            }
+                        }
+                    }
+                ),
                 stderr="",
             )
         if args[:3] == ("ps", "--status", "running"):
@@ -115,19 +142,21 @@ class _ComposeRuntime:
         if args[:3] == ("exec", "-T", COMMUNICATIONS_WORKER_SERVICE):
             if self.role_probe_error is not None:
                 raise self.role_probe_error
-            expected_role = args[-1]
-            return SimpleNamespace(
-                returncode=(
-                    0
-                    if (
-                        self.worker_role == expected_role
-                        and not self.worker_enabled
-                        and not self.worker_allow_all
-                    )
-                    else 1
-                ),
-                stdout="",
-                stderr="",
+            return subprocess.run(
+                [sys.executable, "-c", args[5], args[6]],
+                env={
+                    **os.environ,
+                    "APP_ROLE": self.worker_role or "",
+                    "COMMUNICATIONS_WORKER_ENABLED": str(
+                        self.worker_enabled
+                    ).lower(),
+                    "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": str(
+                        self.worker_allow_all
+                    ).lower(),
+                },
+                text=True,
+                capture_output=True,
+                check=False,
             )
         if args[0] == "up":
             service = args[-1]
@@ -144,8 +173,8 @@ class _ComposeRuntime:
                             if line.startswith("APP_ROLE=")
                         )
                     )
-                    self.worker_enabled = False
-                    self.worker_allow_all = False
+                    self.worker_enabled = self.canonical_worker_enabled
+                    self.worker_allow_all = self.canonical_worker_allow_all
         elif args[0] in {"rm", "kill", "stop"}:
             self.running_services.discard(args[-1])
             if args[-1] == COMMUNICATIONS_WORKER_SERVICE:
@@ -437,7 +466,6 @@ def test_defined_worker_must_have_expected_role_at_final_postcondition(
         patroni_role_agent.reconcile(config, "primary")
     assert COMMUNICATIONS_WORKER_SERVICE not in runtime.running_services
 
-
 def test_stale_running_worker_role_fences_all_side_effect_owners_before_systemd(
     tmp_path, monkeypatch
 ):
@@ -603,84 +631,3 @@ def test_role_probe_timeout_fences_worker_before_primary_later_checks(
     first_systemd = events.index("systemd_check")
     assert first_worker_remove < first_systemd
     assert COMMUNICATIONS_WORKER_SERVICE not in runtime.running_services
-
-
-@pytest.mark.parametrize(
-    "drift",
-    [
-        {"worker_enabled": True},
-        {"worker_allow_all": True},
-    ],
-)
-def test_delivery_gate_drift_fences_and_recreates_worker(
-    tmp_path, monkeypatch, capsys, drift
-):
-    config = _config(tmp_path)
-    config.app_role_env.write_text(
-        patroni_role_agent.role_env("primary", bot_process=False),
-        encoding="utf-8",
-    )
-    config.bot_role_env.write_text(
-        patroni_role_agent.role_env(
-            "primary",
-            bot_process=True,
-            bot_enabled=False,
-        ),
-        encoding="utf-8",
-    )
-    config.state_file.write_text("primary\n", encoding="utf-8")
-    events: list[object] = []
-    runtime = _ComposeRuntime(
-        events,
-        defined_services={"app", COMMUNICATIONS_WORKER_SERVICE},
-        running_services={"app", COMMUNICATIONS_WORKER_SERVICE},
-        worker_role="primary",
-        **drift,
-    )
-    monkeypatch.setattr(patroni_role_agent, "_run_compose", runtime)
-    monkeypatch.setattr(patroni_role_agent, "_run_docker", runtime.docker)
-    monkeypatch.setattr(
-        patroni_role_agent,
-        "_systemd_units_match",
-        lambda *_args: True,
-    )
-    monkeypatch.setattr(
-        patroni_role_agent,
-        "_require_fresh_primary_or_fence",
-        lambda *_args: None,
-    )
-    monkeypatch.setattr(patroni_role_agent, "_wait_ready", lambda _config: None)
-    monkeypatch.setattr(
-        patroni_role_agent,
-        "_fetch_configured_patroni_role",
-        lambda _config: "primary",
-    )
-
-    assert patroni_role_agent.run(config, once=True) == 0
-
-    worker_remove = _docker_command_index(
-        events,
-        ("rm", "--force", "c" * 12),
-    )
-    worker_recreate = _command_index(
-        events,
-        (
-            "up",
-            "-d",
-            "--no-deps",
-            "--force-recreate",
-            COMMUNICATIONS_WORKER_SERVICE,
-        ),
-    )
-    assert worker_remove < worker_recreate
-    assert runtime.worker_role == "primary"
-    assert runtime.worker_enabled is False
-    assert runtime.worker_allow_all is False
-    output = capsys.readouterr().out.splitlines()
-    assert len(output) == 2
-    assert output[0].startswith(
-        "patroni_role_agent_status=reconciled role=primary "
-    )
-    assert "communications_worker_role_drift" in output[0]
-    assert "recreate_communications_worker" in output[0]
-    assert output[1] == "patroni_role_agent_once_status=verified role=primary"

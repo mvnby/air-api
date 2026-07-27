@@ -476,5 +476,5 @@ async def test_canary_worker_cancels_injected_render_context_without_provider_ca
     )
     outcome = await worker.run_once()
 
-    assert outcome.outcome == "canceled"
+    assert outcome.outcome == "dead"
     assert provider.calls == 0

@@ -34,7 +34,10 @@ from services.communications.template_registry import (
     PUBLIC_ORDER_CREATED_EVENT,
 )
 
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
 
 
@@ -60,11 +63,16 @@ async def seed_delivery(
 ) -> str:
     now = datetime.now(timezone.utc)
     async with session_factory() as session:
+        recipient_role = (
+            "owner"
+            if template_key == INSTALLATION_ESTIMATE_TEMPLATE_KEY
+            else "manager"
+        )
         owner = StaffUser(
             display_name=f"Owner {sequence}",
             status="active",
-            roles=["owner"],
-            primary_role="owner",
+            roles=[recipient_role],
+            primary_role=recipient_role,
             telegram_id=telegram_id,
         )
         session.add(owner)
@@ -181,11 +189,20 @@ async def test_runtime_scope_leaves_contact_and_order_deliveries_untouched(
 
 async def own_runtime_mode(session_factory) -> CommunicationProcessingScope:
     async with session_factory() as session:
-        control = await CommunicationRuntimeStateService.set_mode(
+        state = await CommunicationRuntimeStateService.ensure_state(
             session,
             channel="telegram",
-            mode=CommunicationRuntimeMode.ALL,
         )
+        state.mode = CommunicationRuntimeMode.ALL.value
+        state.canary_run_id = None
+        state.control_revision = int(state.control_revision) + 1
+        state.installation_estimate_watermark_at = (
+            state.installation_estimate_watermark_at
+            or datetime(2000, 1, 1, tzinfo=timezone.utc)
+        )
+        session.add(state)
+        await session.flush()
+        control = CommunicationRuntimeStateService._to_control(state)
         await CommunicationRuntimeStateService.take_ownership(
             session,
             channel="telegram",
@@ -193,7 +210,10 @@ async def own_runtime_mode(session_factory) -> CommunicationProcessingScope:
         )
         await session.commit()
         return CommunicationProcessingScope.all(
-            control_revision=control.control_revision
+            control_revision=control.control_revision,
+            event_created_at_watermark=(
+                control.installation_estimate_watermark_at
+            ),
         )
 
 
@@ -256,7 +276,7 @@ class ImmediateProvider:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("blocked_call", "expected_status", "expected_attempts"),
-    [(2, "queued", 0), (3, "running", 1)],
+    [(2, "queued", 0), (3, "retry", 1)],
 )
 async def test_runtime_safety_check_fences_claim_and_provider_send(
     worker_session_factory,
@@ -352,7 +372,7 @@ async def test_db_mode_flip_before_claim_leaves_delivery_queued(
     "blocked_mode",
     [CommunicationRuntimeMode.OFF, CommunicationRuntimeMode.CANARY],
 )
-async def test_db_mode_flip_before_provider_send_leaves_durable_claim(
+async def test_db_mode_flip_before_provider_send_releases_pre_provider_claim(
     worker_session_factory,
     monkeypatch,
     blocked_mode,
@@ -374,13 +394,18 @@ async def test_db_mode_flip_before_provider_send_leaves_durable_claim(
         lease_seconds=60,
         safety_check=active_mode_safety_check(worker_session_factory, scope),
     )
-    original_renewal = worker._renew_before_send
+    original_recipient_check = worker._recipient_is_current
 
-    async def renew_then_flip_mode(claim):
-        await original_renewal(claim)
+    async def check_then_flip_mode(claim, plan):
+        is_current = await original_recipient_check(claim, plan)
         await set_runtime_mode(worker_session_factory, blocked_mode)
+        return is_current
 
-    monkeypatch.setattr(worker, "_renew_before_send", renew_then_flip_mode)
+    monkeypatch.setattr(
+        worker,
+        "_recipient_is_current",
+        check_then_flip_mode,
+    )
 
     with pytest.raises(CommunicationRuntimeModeBlocked) as blocked:
         await worker.run_once()
@@ -388,9 +413,21 @@ async def test_db_mode_flip_before_provider_send_leaves_durable_claim(
     assert provider.calls == 0
     async with worker_session_factory() as session:
         row = await session.get(CommunicationDelivery, delivery_id)
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (delivery_id, 1),
+        )
         assert row is not None
-        assert row.status == "running"
+        assert row.status == "retry"
         assert row.attempts == 1
+        assert row.worker_id is None
+        assert row.lease_token is None
+        assert row.lease_expires_at is None
+        assert attempt is not None
+        assert attempt.outcome == "retry"
+        assert attempt.provider_started_at is None
+        assert attempt.ambiguous is False
+        assert attempt.error_code == "runtime_control_fenced_before_provider"
 
 
 @pytest.mark.asyncio
@@ -488,14 +525,15 @@ async def test_terminal_db_timeout_is_recovered_as_ambiguous_attempt(
             now=recovery_time,
         )
         await session.commit()
-        assert recovered.retry_count == 1
+        assert recovered.retry_count == 0
+        assert recovered.dead_count == 1
 
     async with worker_session_factory() as session:
         row = await session.get(CommunicationDelivery, delivery_id)
         attempt = await session.get(CommunicationDeliveryAttempt, (delivery_id, 1))
         assert row is not None
-        assert row.status == "retry"
+        assert row.status == "dead"
         assert attempt is not None
-        assert attempt.outcome == "retry"
+        assert attempt.outcome == "dead"
         assert attempt.ambiguous is True
-        assert attempt.error_code == "lease_expired"
+        assert attempt.error_code == "lease_expired_after_provider"

@@ -238,13 +238,37 @@ def test_remote_orchestrator_has_strict_operations_and_never_manages_database():
 
 def test_remote_orchestrator_passes_token_over_stdin_not_command_line():
     text = SCRIPT.read_text(encoding="utf-8")
+    transaction = TRANSACTION_RUNNER.read_text(encoding="utf-8")
 
     assert "IFS= read -r GHCR_PAT" in text
     assert "IFS= read -r BOT_VOICE_TRANSCRIPTION_API_KEY" in text
     assert "export GHCR_PAT" in text
+    assert "export BOT_VOICE_TRANSCRIPTION_API_KEY" in text
     assert "GHCR_PAT='" not in text
     assert "BOT_VOICE_TRANSCRIPTION_API_KEY='" not in text
     assert "sync_bot_voice_env.py" in text
+    assert "PATRONI_VOICE_ENV_SYNC=" in text
+    assert text.index("export BOT_VOICE_TRANSCRIPTION_API_KEY") < text.rindex(
+        "run_patroni_candidate_transaction.sh"
+    )
+    assert text.rindex("run_patroni_candidate_transaction.sh") < text.rindex(
+        "unset BOT_VOICE_TRANSCRIPTION_API_KEY"
+    )
+    assert transaction.index("require_pitr_attested_candidate") < transaction.rindex(
+        "\nsync_bot_voice_env_locked\n"
+    )
+    locked_sync = transaction.split("sync_bot_voice_env_locked() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    assert transaction.index(
+        'VOICE_SECRET="${BOT_VOICE_TRANSCRIPTION_API_KEY:-}"'
+    ) < transaction.index("SCRIPT_DIR=")
+    assert transaction.index("unset BOT_VOICE_TRANSCRIPTION_API_KEY") < (
+        transaction.index("SCRIPT_DIR=")
+    )
+    assert locked_sync.index("unset VOICE_SECRET") < (
+        locked_sync.index('python3 -I "${VOICE_ENV_SYNC}"')
+    )
 
 
 def test_installed_role_agent_loads_its_pinned_sibling_module(tmp_path):

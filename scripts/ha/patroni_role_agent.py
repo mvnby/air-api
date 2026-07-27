@@ -24,8 +24,7 @@ try:
     from scripts.ha.patroni_local_identity import (
         COMMUNICATIONS_WORKER_SERVICE,
         atomic_write as _atomic_write,
-        compose_service_is_defined as _compose_service_is_defined,
-        communications_worker_role_matches as _communications_worker_role_matches,
+        communications_worker_contract_state as _communications_worker_contract_state,
         read_maintenance_transaction_id,
         reconcile_primary_systemd_units as _reconcile_systemd_units,
         render_role_env as role_env,
@@ -50,8 +49,7 @@ except ModuleNotFoundError:
     from patroni_local_identity import (
         COMMUNICATIONS_WORKER_SERVICE,
         atomic_write as _atomic_write,
-        compose_service_is_defined as _compose_service_is_defined,
-        communications_worker_role_matches as _communications_worker_role_matches,
+        communications_worker_contract_state as _communications_worker_contract_state,
         read_maintenance_transaction_id,
         reconcile_primary_systemd_units as _reconcile_systemd_units,
         render_role_env as role_env,
@@ -245,8 +243,7 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
     bot_env_changed = not bot_matches
     fast_fenced = False
     if role == "standby" and (role_changed or app_env_changed or bot_env_changed):
-        # Losing primary ownership is an emergency path: fence by exact service
-        # name before trusting Docker inventory, which can itself fail or hang.
+        # Demotion fast-fences exact side-effect owners before fallible inventory.
         _fence_lost_primary(config)
         fast_fenced = True
     service = app_service(config)
@@ -254,18 +251,18 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
     release_fenced = compose.enforce_worker_release_fence(
         COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
     )
-    worker_state = compose.worker_runtime_state(
-        service=COMMUNICATIONS_WORKER_SERVICE,
-        role=role,
+    worker_state = _communications_worker_contract_state(
+        config,
+        role,
+        compose=compose,
         running_services=running,
-        definition_probe=_compose_service_is_defined,
-        role_probe=_communications_worker_role_matches,
         release_fenced=release_fenced,
     )
     worker_defined = worker_state.defined
     worker_running = worker_state.running
     worker_role_matches = worker_state.role_matches
     worker_role_drift = worker_state.unsafe_mismatch
+    worker_profile_drift = not worker_state.canonical_profile_matches
     if not worker_running:
         running.discard(COMMUNICATIONS_WORKER_SERVICE)
     if role == "standby" and worker_role_drift:
@@ -287,16 +284,11 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
         running_services=running,
     )
     bot_running = "bot" in running
-    bot_expected = False
-    # On demotion, Docker singleton fencing must happen before any fallible or
-    # slow systemd D-Bus inspection.  A ten-second query timeout is already too
-    # long to leave old-primary workers live beside a new primary.
     systemd_matches = (
         False
         if role == "standby"
         else _systemd_units_match(config, pitr_role)
     )
-
     reasons: list[str] = []
     if role_changed:
         reasons.append("role_state")
@@ -316,6 +308,8 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
         reasons.append("communications_worker_not_running")
     if worker_role_drift:
         reasons.append("communications_worker_role_drift")
+    if worker_profile_drift:
+        reasons.append("communications_worker_profile_drift")
     if not systemd_matches:
         reasons.append("systemd_units")
     if maintenance_transaction is not None:
@@ -336,9 +330,7 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
         bot_running = False
         actions.append("stop_legacy_bot_prelock")
     if role == "standby":
-        # Demotion fencing has priority over deploys and long-running PITR jobs.
-        # Persist the fenced environment first, then stop every local side-effect
-        # owner before attempting the shared deploy lock.
+        # Persist and fence standby ownership before waiting for the deploy lock.
         if app_env_changed:
             _atomic_write(config.app_role_env, desired_app)
             actions.append("write_app_env_prelock")
@@ -379,8 +371,11 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
         or app_env_changed
         or bot_env_changed
         or not app_running
-        or bot_running != bot_expected
-        or (worker_defined and (not worker_running or worker_role_drift))
+        or bot_running
+        or (
+            worker_defined
+            and (not worker_running or worker_role_drift or worker_profile_drift)
+        )
         or (role == "primary" and bool(extra_running_apps))
         or (role == "primary" and proxy_upstream_drift)
     )
@@ -417,24 +412,23 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
                 _atomic_write(config.bot_role_env, desired_bot)
                 actions.append("write_bot_env")
 
-        # Re-read after acquiring the lock: a concurrent deploy may have changed
-        # the concrete containers while fail-safe pre-lock fencing was running.
+        # Re-read after the lock because a candidate may have promoted meanwhile.
         service = app_service(config)
         running = compose.running_services()
         release_fenced = compose.enforce_worker_release_fence(
             COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
         )
-        worker_state = compose.worker_runtime_state(
-            service=COMMUNICATIONS_WORKER_SERVICE,
-            role=role,
+        worker_state = _communications_worker_contract_state(
+            config,
+            role,
+            compose=compose,
             running_services=running,
-            definition_probe=_compose_service_is_defined,
-            role_probe=_communications_worker_role_matches,
             release_fenced=release_fenced,
         )
         worker_defined = worker_state.defined
         worker_running = worker_state.running
         worker_role_matches = worker_state.role_matches
+        worker_profile_drift = not worker_state.canonical_profile_matches
         if not worker_running:
             running.discard(COMMUNICATIONS_WORKER_SERVICE)
         app_running = service in running
@@ -471,12 +465,14 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
                 or role_changed
                 or not worker_running
                 or not worker_role_matches
+                or worker_profile_drift
             ):
                 recreate_worker = (
                     fast_fenced
                     or app_env_changed
                     or role_changed
                     or not worker_role_matches
+                    or worker_profile_drift
                 )
                 compose.start_service(
                     COMMUNICATIONS_WORKER_SERVICE,
@@ -491,16 +487,17 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
             release_fenced = compose.enforce_worker_release_fence(
                 COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
             )
-            final_worker_state = compose.worker_runtime_state(
-                service=COMMUNICATIONS_WORKER_SERVICE,
-                role=role,
+            final_worker_state = _communications_worker_contract_state(
+                config,
+                role,
+                compose=compose,
                 running_services=final_running,
-                definition_probe=_compose_service_is_defined,
-                role_probe=_communications_worker_role_matches,
                 release_fenced=release_fenced,
             )
-            if final_worker_state.unsafe_mismatch or (
-                worker_defined and not final_worker_state.running
+            if (
+                final_worker_state.unsafe_mismatch
+                or not final_worker_state.canonical_profile_matches
+                or (worker_defined and not final_worker_state.running)
             ):
                 _fence_lost_primary(config)
                 raise RuntimeError(
@@ -543,10 +540,10 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
                 or not worker_running
                 or not worker_role_matches
                 or worker_role_drift
+                or worker_profile_drift
             )
             if worker_needs_start:
-                # Delivery activation is downstream of both the fresh
-                # Patroni/DCS proof and the writable/ready API proof.
+                # Activation follows both writable API readiness and fresh DCS proof.
                 if not (app_needs_start or proxy_upstream_changed):
                     _wait_ready(config)
                     actions.append("wait_ready_for_communications_worker")
@@ -554,7 +551,11 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
                     config,
                     "communications_worker_activation",
                 )
-                recreate_worker = worker_role_drift or not worker_role_matches
+                recreate_worker = (
+                    worker_role_drift
+                    or worker_profile_drift
+                    or not worker_role_matches
+                )
                 recreate_worker = recreate_worker or role_changed or app_env_changed
                 compose.start_service(
                     COMMUNICATIONS_WORKER_SERVICE,
@@ -604,16 +605,17 @@ def reconcile(config: AgentConfig, role: str) -> bool | None:
             release_fenced = compose.enforce_worker_release_fence(
                 COMMUNICATIONS_WORKER_SERVICE, latched=release_fenced
             )
-            final_worker_state = compose.worker_runtime_state(
-                service=COMMUNICATIONS_WORKER_SERVICE,
-                role=role,
+            final_worker_state = _communications_worker_contract_state(
+                config,
+                role,
+                compose=compose,
                 running_services=final_running,
-                definition_probe=_compose_service_is_defined,
-                role_probe=_communications_worker_role_matches,
                 release_fenced=release_fenced,
             )
-            if final_worker_state.unsafe_mismatch or (
-                worker_defined and not final_worker_state.running
+            if (
+                final_worker_state.unsafe_mismatch
+                or not final_worker_state.canonical_profile_matches
+                or (worker_defined and not final_worker_state.running)
             ):
                 if COMMUNICATIONS_WORKER_SERVICE in final_running:
                     compose.stop_service_verified(COMMUNICATIONS_WORKER_SERVICE)

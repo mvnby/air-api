@@ -104,7 +104,7 @@ async def test_telegram_provider_preserves_retry_after():
         ),
         (
             TelegramUnauthorizedError,
-            ProviderDeliveryDisposition.PROVIDER_UNAVAILABLE,
+            ProviderDeliveryDisposition.PERMANENT_FAILURE,
             "telegram_provider_auth_or_conflict",
         ),
     ],
@@ -159,27 +159,27 @@ async def test_telegram_provider_classifies_recipient_and_provider_failures(
         ),
         (
             lambda method: TelegramConflictError(method=method, message="conflict"),
-            ProviderDeliveryDisposition.PROVIDER_UNAVAILABLE,
+            ProviderDeliveryDisposition.PERMANENT_FAILURE,
             "telegram_provider_auth_or_conflict",
         ),
         (
             lambda method: TelegramNetworkError(method=method, message="network"),
-            ProviderDeliveryDisposition.TRANSIENT_FAILURE,
+            ProviderDeliveryDisposition.AMBIGUOUS_FAILURE,
             "telegram_network_error",
         ),
         (
             lambda method: TelegramServerError(method=method, message="server"),
-            ProviderDeliveryDisposition.TRANSIENT_FAILURE,
+            ProviderDeliveryDisposition.AMBIGUOUS_FAILURE,
             "telegram_network_error",
         ),
         (
             lambda _method: TimeoutError("timeout"),
-            ProviderDeliveryDisposition.TRANSIENT_FAILURE,
+            ProviderDeliveryDisposition.AMBIGUOUS_FAILURE,
             "telegram_network_error",
         ),
         (
             lambda method: TelegramAPIError(method=method, message="generic API"),
-            ProviderDeliveryDisposition.TRANSIENT_FAILURE,
+            ProviderDeliveryDisposition.AMBIGUOUS_FAILURE,
             "telegram_api_error",
         ),
     ],
@@ -251,6 +251,9 @@ async def test_telegram_provider_does_not_expose_unknown_exception_message(caplo
         delivery_id="6" * 32,
     )
 
-    assert result.disposition == ProviderDeliveryDisposition.TRANSIENT_FAILURE
-    assert result.error_message == "Telegram provider failed unexpectedly"
+    assert result.disposition == ProviderDeliveryDisposition.AMBIGUOUS_FAILURE
+    assert (
+        result.error_message
+        == "Telegram provider outcome requires manual reconciliation"
+    )
     assert "secret-token" not in caplog.text

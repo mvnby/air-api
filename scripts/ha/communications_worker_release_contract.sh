@@ -4,6 +4,30 @@
 # COMMUNICATIONS_WORKER_SERVICE.
 
 COMMUNICATIONS_WORKER_FENCE_MARKER="${COMMUNICATIONS_WORKER_FENCE_MARKER:-${PROJECT_DIR}/.ha-communications-worker-release-fenced}"
+COMMUNICATIONS_WORKER_CONTRACT_PROFILE=""
+COMMUNICATIONS_WORKER_PROFILE_ENABLED=""
+COMMUNICATIONS_WORKER_PROFILE_ALLOW_ALL=""
+
+communications_worker_set_profile_gates() {
+  case "$1" in
+    dormant)
+      COMMUNICATIONS_WORKER_PROFILE_ENABLED=false
+      COMMUNICATIONS_WORKER_PROFILE_ALLOW_ALL=false
+      ;;
+    canary)
+      COMMUNICATIONS_WORKER_PROFILE_ENABLED=true
+      COMMUNICATIONS_WORKER_PROFILE_ALLOW_ALL=false
+      ;;
+    active)
+      COMMUNICATIONS_WORKER_PROFILE_ENABLED=true
+      COMMUNICATIONS_WORKER_PROFILE_ALLOW_ALL=true
+      ;;
+    *)
+      echo "communications worker gate profile is not reviewed" >&2
+      return 1
+      ;;
+  esac
+}
 
 communications_worker_require_safe_fence_marker() {
   [[ ! -e "${COMMUNICATIONS_WORKER_FENCE_MARKER}" \
@@ -65,7 +89,12 @@ communications_worker_has_service() {
 }
 
 communications_worker_require_contract() {
+  local expected_profile="${1:-}"
+  local actual_profile=""
   local service_status=0
+  if [[ -n "${expected_profile}" ]]; then
+    communications_worker_set_profile_gates "${expected_profile}"
+  fi
   communications_worker_has_service || service_status=$?
   [[ "${service_status}" -eq 0 ]] || {
     if [[ "${service_status}" -eq 3 ]]; then
@@ -73,7 +102,7 @@ communications_worker_require_contract() {
     fi
     return "${service_status}"
   }
-  "${COMPOSE[@]}" config --format json \
+  actual_profile="$("${COMPOSE[@]}" config --format json \
     | python3 -c '
 import json
 import sys
@@ -88,17 +117,33 @@ if service.get("image") != expected_image:
 environment = service.get("environment") or {}
 if not isinstance(environment, dict):
     raise SystemExit("communications worker environment is not a mapping")
-for key in (
-    "COMMUNICATIONS_WORKER_ENABLED",
-    "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE",
-):
-    if str(environment.get(key, "")).lower() != "false":
-        raise SystemExit(f"{key} must remain false during Phase 2A")
-' "${COMMUNICATIONS_WORKER_SERVICE}" "${BACKEND_IMAGE}"
+gates = (
+    environment.get("COMMUNICATIONS_WORKER_ENABLED"),
+    environment.get("COMMUNICATIONS_WORKER_ALLOW_ALL_MODE"),
+)
+profiles = {
+    ("false", "false"): "dormant",
+    ("true", "false"): "canary",
+    ("true", "true"): "active",
+}
+profile = profiles.get(gates)
+if profile is None:
+    raise SystemExit("communications worker gate profile is not reviewed")
+print(profile)
+' "${COMMUNICATIONS_WORKER_SERVICE}" "${BACKEND_IMAGE}")" || return 1
+  communications_worker_set_profile_gates "${actual_profile}"
+  if [[ -n "${expected_profile}" && "${actual_profile}" != "${expected_profile}" ]]; then
+    echo "communications worker gate profile differs from the expected release" >&2
+    return 1
+  fi
+  COMMUNICATIONS_WORKER_CONTRACT_PROFILE="${actual_profile}"
 }
 
 communications_worker_require_runtime() {
   local expected_role="${1:-${EXPECTED_ROLE:-}}"
+  local expected_profile="${2:-}"
+  local expected_enabled=""
+  local expected_allow_all=""
   local container_ids=""
   local runtime=""
   communications_worker_require_release_unfenced
@@ -106,6 +151,11 @@ communications_worker_require_runtime() {
     echo "communications worker runtime role expectation is invalid" >&2
     return 1
   }
+  communications_worker_require_contract "${expected_profile}"
+  expected_profile="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
+  communications_worker_set_profile_gates "${expected_profile}"
+  expected_enabled="${COMMUNICATIONS_WORKER_PROFILE_ENABLED}"
+  expected_allow_all="${COMMUNICATIONS_WORKER_PROFILE_ALLOW_ALL}"
   container_ids="$("${COMPOSE[@]}" ps -q "${COMMUNICATIONS_WORKER_SERVICE}")"
   [[ -n "${container_ids}" && "${container_ids}" != *$'\n'* ]] || {
     echo "expected exactly one running communications worker container" >&2
@@ -122,25 +172,32 @@ communications_worker_require_runtime() {
 import os
 import sys
 
-expected_role = sys.argv[1]
+expected_role, expected_enabled, expected_allow_all = sys.argv[1:]
 valid = (
     os.environ.get("APP_ROLE") == expected_role
-    and os.environ.get("COMMUNICATIONS_WORKER_ENABLED", "").lower() == "false"
-    and os.environ.get("COMMUNICATIONS_WORKER_ALLOW_ALL_MODE", "").lower() == "false"
+    and os.environ.get("COMMUNICATIONS_WORKER_ENABLED") == expected_enabled
+    and os.environ.get("COMMUNICATIONS_WORKER_ALLOW_ALL_MODE")
+    == expected_allow_all
 )
 raise SystemExit(0 if valid else 1)
-' "${expected_role}" >/dev/null; then
-    echo "communications worker runtime role or Phase 2A gates drifted" >&2
+' "${expected_role}" "${expected_enabled}" "${expected_allow_all}" >/dev/null; then
+    echo "communications worker runtime role or gate profile drifted" >&2
     return 1
   fi
 }
 
 communications_worker_start_controlled() {
   local expected_role="$1"
+  local expected_profile="${2:-}"
+  if ! communications_worker_require_contract "${expected_profile}"; then
+    communications_worker_set_release_fence || true
+    return 1
+  fi
+  expected_profile="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
   communications_worker_clear_release_fence
   if ! "${COMPOSE[@]}" up -d --no-deps --force-recreate \
     "${COMMUNICATIONS_WORKER_SERVICE}" \
-    || ! communications_worker_require_runtime "${expected_role}"; then
+    || ! communications_worker_require_runtime "${expected_role}" "${expected_profile}"; then
     communications_worker_set_release_fence || true
     "${COMPOSE[@]}" stop "${COMMUNICATIONS_WORKER_SERVICE}" >/dev/null 2>&1 || true
     return 1

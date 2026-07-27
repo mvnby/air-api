@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -21,6 +22,11 @@ from typing import Any, Callable
 PRIMARY_ROLES = {"leader", "master", "primary"}
 REPLICA_ROLES = {"replica", "standby"}
 COMMUNICATIONS_WORKER_SERVICE = "communications-worker"
+COMMUNICATIONS_WORKER_GATE_PROFILES = {
+    ("false", "false"): "dormant",
+    ("true", "false"): "canary",
+    ("true", "true"): "active",
+}
 EXPECTED_CLUSTER_NAMES = frozenset({"mvn-api", "zakup"})
 MAINTENANCE_MARKER_PATH = Path("/run/mvn-postgres-pitr-maintenance")
 MAINTENANCE_TRANSACTION_RE = re.compile(rb"[0-9a-f]{32}\n\Z")
@@ -125,21 +131,85 @@ def compose_service_is_defined(
     return service in services
 
 
+def communications_worker_gate_profile(
+    enabled: object,
+    allow_all: object,
+) -> str | None:
+    if not isinstance(enabled, str) or not isinstance(allow_all, str):
+        return None
+    return COMMUNICATIONS_WORKER_GATE_PROFILES.get(
+        (enabled, allow_all)
+    )
+
+
+def communications_worker_compose_profile(
+    config: Any,
+    *,
+    compose_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> str:
+    """Return only the reviewed profile name; never log the rendered env."""
+
+    result = compose_runner(
+        config,
+        "config",
+        "--format",
+        "json",
+        check=False,
+        timeout=20,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("communications worker Compose profile is unavailable")
+    try:
+        payload = json.loads(result.stdout)
+        worker = (payload.get("services") or {}).get(
+            COMMUNICATIONS_WORKER_SERVICE
+        )
+        environment = worker.get("environment") if isinstance(worker, dict) else None
+    except (AttributeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            "communications worker Compose profile is invalid"
+        ) from exc
+    if not isinstance(environment, dict):
+        raise RuntimeError("communications worker Compose profile is invalid")
+    profile = communications_worker_gate_profile(
+        environment.get("COMMUNICATIONS_WORKER_ENABLED"),
+        environment.get("COMMUNICATIONS_WORKER_ALLOW_ALL_MODE"),
+    )
+    if profile is None:
+        raise RuntimeError("communications worker Compose profile is not reviewed")
+    return profile
+
+
 def communications_worker_role_matches(
     config: Any,
     role: str,
     *,
     compose_runner: Callable[..., subprocess.CompletedProcess[str]],
+    expected_profile: str | None = None,
 ) -> bool:
-    """Check the worker's effective APP_ROLE without reading or logging its env."""
+    """Check APP_ROLE and the closed gate set without reading or logging env."""
 
     if role not in {"primary", "standby"}:
         raise ValueError(f"unsupported communications worker role: {role}")
+    if expected_profile is None:
+        allowed_gates = frozenset(COMMUNICATIONS_WORKER_GATE_PROFILES)
+    else:
+        allowed_gates = frozenset(
+            gates
+            for gates, profile in COMMUNICATIONS_WORKER_GATE_PROFILES.items()
+            if profile == expected_profile
+        )
+        if not allowed_gates:
+            raise ValueError(
+                f"unsupported communications worker profile: {expected_profile}"
+            )
+    allowed_profiles = repr(allowed_gates)
     probe = (
         "import os,sys;"
         "ok=os.environ.get('APP_ROLE')==sys.argv[1]"
-        " and os.environ.get('COMMUNICATIONS_WORKER_ENABLED')=='false'"
-        " and os.environ.get('COMMUNICATIONS_WORKER_ALLOW_ALL_MODE')=='false';"
+        " and (os.environ.get('COMMUNICATIONS_WORKER_ENABLED'),"
+        "os.environ.get('COMMUNICATIONS_WORKER_ALLOW_ALL_MODE'))"
+        f" in {allowed_profiles};"
         "raise SystemExit(0 if ok else 1)"
     )
     result = compose_runner(
@@ -155,6 +225,62 @@ def communications_worker_role_matches(
         timeout=10,
     )
     return result.returncode == 0
+
+
+@dataclass(frozen=True)
+class CommunicationsWorkerContractState:
+    defined: bool
+    running: bool
+    role_matches: bool
+    unsafe_mismatch: bool
+    canonical_profile_matches: bool
+
+
+def communications_worker_contract_state(
+    config: Any,
+    role: str,
+    *,
+    compose: Any,
+    running_services: set[str],
+    release_fenced: bool,
+) -> CommunicationsWorkerContractState:
+    runtime = compose.worker_runtime_state(
+        service=COMMUNICATIONS_WORKER_SERVICE,
+        role=role,
+        running_services=running_services,
+        definition_probe=compose_service_is_defined,
+        role_probe=communications_worker_role_matches,
+        release_fenced=release_fenced,
+    )
+    if not runtime.defined:
+        return CommunicationsWorkerContractState(
+            runtime.defined,
+            runtime.running,
+            runtime.role_matches,
+            runtime.unsafe_mismatch,
+            True,
+        )
+    try:
+        canonical_profile = communications_worker_compose_profile(
+            config,
+            compose_runner=compose.compose_runner,
+        )
+    except Exception:
+        compose.fence_labeled_service_containers(COMMUNICATIONS_WORKER_SERVICE)
+        raise
+    canonical_matches = not runtime.running or communications_worker_role_matches(
+        config,
+        role,
+        compose_runner=compose.compose_runner,
+        expected_profile=canonical_profile,
+    )
+    return CommunicationsWorkerContractState(
+        runtime.defined,
+        runtime.running,
+        runtime.role_matches,
+        runtime.unsafe_mismatch,
+        canonical_matches,
+    )
 
 
 def wait_primary_ready(config: Any) -> None:

@@ -31,7 +31,10 @@ from services.communications.template_registry import (
     WebsiteTemplateRegistry,
 )
 
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 
 
 @pytest.fixture
@@ -221,7 +224,7 @@ async def test_dispatch_ignores_out_of_scope_events_and_respects_priority(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_retries_or_dead_letters_when_management_audience_is_empty(
+async def test_dispatch_retries_or_dead_letters_when_owner_audience_is_empty(
     communications_session_factory,
     monkeypatch,
 ):
@@ -242,7 +245,10 @@ async def test_dispatch_retries_or_dead_letters_when_management_audience_is_empt
         assert retry.outcome == "retry_scheduled"
         assert retry.next_attempt_at is not None
         assert retry_event.status == "pending"
-        assert retry_event.last_error_code == "NoEligibleCommunicationRecipients"
+        assert (
+            retry_event.last_error_code
+            == "installation_owner_recipient_count_invalid"
+        )
         assert await session.get(
             ConsumerInbox, (CONSUMER_NAME, retry_event.event_id)
         ) is None
@@ -458,6 +464,7 @@ async def test_dispatch_materializer_conflict_rolls_back_new_recipient_savepoint
             recipients=existing_recipients,
             now=now,
         )
+        session.add_all([_owner(700), _owner(702, name="Second")])
         await session.commit()
         monkeypatch.setattr(settings, "ADMIN_IDS", "700,702", raising=False)
         monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
@@ -492,14 +499,15 @@ async def test_dispatch_recovers_existing_inbox_without_duplicate_delivery(
     now = datetime(2026, 7, 12, 3, 0, tzinfo=timezone.utc)
     async with communications_session_factory() as session:
         event = _event(61, now=now)
-        plan = CommunicationTemplatePlanV1(
-            template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
-            render_context=event.payload,
-        )
+        owner = _owner(700)
+        session.add(owner)
+        await session.flush()
+        plan = WebsiteTemplateRegistry.plan(event)
         recipient = CommunicationRecipientV1(
-            recipient_key="legacy-telegram:700",
+            recipient_key=f"staff:{owner.id}",
             destination="700",
-            source="legacy",
+            source="staff",
+            staff_user_id=owner.id,
         )
         session.add(event)
         await session.flush()

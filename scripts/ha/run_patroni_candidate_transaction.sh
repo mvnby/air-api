@@ -2,6 +2,9 @@
 # shellcheck disable=SC2034  # globals are consumed by sourced lifecycle modules
 set -Eeuo pipefail
 
+VOICE_SECRET="${BOT_VOICE_TRANSCRIPTION_API_KEY:-}"
+export -n VOICE_SECRET
+unset BOT_VOICE_TRANSCRIPTION_API_KEY
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPERATION="${PATRONI_CANDIDATE_OPERATION:-}"
 PROJECT_DIR="${API_PROJECT_DIR:-/opt/air-api}"
@@ -27,6 +30,9 @@ RECONCILE_SCRIPT="${API_RECONCILE_SCRIPT:-/tmp/reconcile_backend_compose_runtime
 COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER:-${SCRIPT_DIR}/communications_worker_release_contract.sh}"
 PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE="${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE:-${SCRIPT_DIR}/patroni_communications_candidate_lifecycle.sh}"
 PATRONI_ROLE_AGENT_CANDIDATE_ASSETS="${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS:-${SCRIPT_DIR}/patroni_role_agent_candidate_assets.sh}"
+PATRONI_ATTESTED_COMPOSE_GUARD="${PATRONI_ATTESTED_COMPOSE_GUARD:-${SCRIPT_DIR}/patroni_attested_compose_guard.sh}"
+VOICE_ENV_SYNC="${PATRONI_VOICE_ENV_SYNC:-}"
+VOICE_ENV_FILE="${PATRONI_VOICE_ENV_FILE:-${PROJECT_DIR}/.env}"
 DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
@@ -53,7 +59,12 @@ PROXY_UPSTREAM_CREATED=false
 PROXY_FILES_CHANGED=false
 PROXY_DIR_CREATED=false
 PROXY_RUNTIME_STATE=not-applicable
-
+if [[ "${DEPLOY_LOCK_FD}" == "9" && -z "${VOICE_SECRET}" ]]; then
+  IFS= read -r VOICE_SECRET || {
+    echo "voice transcription API key transport is missing" >&2
+    exit 1
+  }
+fi
 [[ -f "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" \
   && ! -L "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" ]] \
   || { echo "communications worker release helper is missing or unsafe" >&2; exit 1; }
@@ -63,13 +74,34 @@ PROXY_RUNTIME_STATE=not-applicable
 [[ -f "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS}" \
   && ! -L "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS}" ]] \
   || { echo "Patroni role-agent candidate assets helper is missing or unsafe" >&2; exit 1; }
+[[ -f "${PATRONI_ATTESTED_COMPOSE_GUARD}" \
+  && ! -L "${PATRONI_ATTESTED_COMPOSE_GUARD}" ]] \
+  || { echo "PITR-attested Compose guard is missing or unsafe" >&2; exit 1; }
+[[ -f "${VOICE_ENV_SYNC}" && ! -L "${VOICE_ENV_SYNC}" ]] \
+  || { echo "voice env sync helper is missing or unsafe" >&2; exit 1; }
 # shellcheck disable=SC1090
 source "${COMMUNICATIONS_WORKER_RELEASE_HELPER}"
 # shellcheck disable=SC1090
 source "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE}"
 # shellcheck disable=SC1090
 source "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS}"
-
+# shellcheck disable=SC1090
+source "${PATRONI_ATTESTED_COMPOSE_GUARD}"
+sync_bot_voice_env_locked() {
+  local secret="${VOICE_SECRET}"
+  local status=0
+  VOICE_SECRET=""
+  unset VOICE_SECRET
+  [[ -n "${secret}" ]] || {
+    echo "voice transcription API key is missing" >&2
+    return 1
+  }
+  printf '%s' "${secret}" \
+    | python3 -I "${VOICE_ENV_SYNC}" --env-file "${VOICE_ENV_FILE}" \
+    || status=$?
+  secret=""
+  [[ "${status}" -eq 0 ]]
+}
 [[ "${DEPLOY_LOCK_HELPER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
   echo "safe deployment lock helper digest is missing" >&2; exit 1;
 }
@@ -94,7 +126,13 @@ if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
     raise SystemExit("safe deployment lock helper source is unreviewed")
 PY
 if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
-  exec python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@"
+  lock_status=0
+  printf '%s\n' "${VOICE_SECRET}" \
+    | python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@" \
+    || lock_status=$?
+  VOICE_SECRET=""
+  unset VOICE_SECRET
+  exit "${lock_status}"
 fi
 [[ "${DEPLOY_LOCK_FD}" == "9" ]] || {
   echo "candidate transaction requires inherited deployment lock fd 9" >&2
@@ -443,7 +481,7 @@ reconcile_failed_deploy() {
       echo "CRITICAL: promoted communications worker could not be fenced" >&2
       exit 90
     fi
-    echo "Patroni candidate compose promotion committed; fenced the dormant worker for inspection" >&2
+    echo "Patroni candidate compose promotion committed; fenced the promoted communications worker for inspection" >&2
     patroni_role_assets_cleanup_backups \
       || echo "warning: stale Patroni role asset backup remains" >&2
     [[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}"
@@ -478,6 +516,7 @@ reconcile_failed_deploy() {
     if ! API_DEPLOY_SERVICES="${recovery_services}" \
       API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
       API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
+      API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE="${PREVIOUS_WORKER_GATE_PROFILE}" \
       API_READY_URL="${API_HEALTH_URL:-http://127.0.0.1:18080/api/health}" \
       bash "${RECONCILE_SCRIPT}"; then
       restoration_failed=true
@@ -491,6 +530,7 @@ reconcile_failed_deploy() {
       API_STOP_SERVICES_AFTER_DEPLOY="bot" \
       API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
       API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
+      API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE="${PREVIOUS_WORKER_GATE_PROFILE}" \
       API_READY_URL="${API_HEALTH_URL:-http://127.0.0.1:18080/api/health}" \
       bash "${RECONCILE_SCRIPT}"; then
       restoration_failed=true
@@ -556,8 +596,10 @@ fi
 require_no_pitr_maintenance
 require_no_patroni_cutover
 stage_candidate_compose
+require_pitr_attested_candidate
 CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
 trap cleanup_candidate_only EXIT
+sync_bot_voice_env_locked
 if [[ "${OPERATION}" == "migrate" ]]; then
   trap cleanup_migration_candidate EXIT
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
@@ -586,15 +628,19 @@ stage_proxy_files
 
 API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+  API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE="${CANDIDATE_WORKER_GATE_PROFILE}" \
+  API_COMMUNICATIONS_WORKER_ROLLBACK_PROFILE="${PREVIOUS_WORKER_GATE_PROFILE}" \
 bash "${DEPLOY_SCRIPT}"
 require_no_patroni_cutover
 require_unchanged_db_contract
 if [[ "${CANDIDATE_WORKER_SUPPORTED}" == "true" ]]; then
-  patroni_communications_require_runtime "${CANDIDATE_FILE}" "${BACKEND_IMAGE}"
+  patroni_communications_require_runtime \
+    "${CANDIDATE_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"
 fi
 transaction promote
 if [[ "${CANDIDATE_WORKER_SUPPORTED}" == "true" ]]; then
-  patroni_communications_require_runtime "${CANONICAL_FILE}" "${BACKEND_IMAGE}"
+  patroni_communications_require_runtime \
+    "${CANONICAL_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"
 fi
 trap - EXIT
 patroni_role_assets_cleanup_backups \

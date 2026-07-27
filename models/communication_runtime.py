@@ -39,6 +39,10 @@ class CommunicationRuntimeState(SQLModel, table=True):
             name="ck_communication_runtime_control_revision_non_negative",
         ),
         CheckConstraint(
+            "mode <> 'all' OR installation_estimate_watermark_at IS NOT NULL",
+            name="ck_communication_runtime_all_watermark_required",
+        ),
+        CheckConstraint(
             "status IN ('stopped', 'fencing', 'disabled', 'paused', "
             "'running', 'stopping', 'faulted')",
             name="ck_communication_runtime_status_valid",
@@ -61,6 +65,10 @@ class CommunicationRuntimeState(SQLModel, table=True):
     control_revision: int = Field(
         default=0,
         sa_column=Column(BigInteger, nullable=False),
+    )
+    installation_estimate_watermark_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
     )
     status: str = Field(
         default="stopped",

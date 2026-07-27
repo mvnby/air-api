@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
@@ -19,6 +19,29 @@ from services.communications.runtime_state import (
 
 RUN_ID_A = "123e4567-e89b-42d3-a456-426614174000"
 RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
+
+
+def test_control_application_cannot_remove_or_move_an_existing_watermark():
+    watermark = datetime(2026, 7, 27, tzinfo=timezone.utc)
+    state = CommunicationRuntimeState(
+        channel="telegram",
+        installation_estimate_watermark_at=watermark,
+    )
+
+    for replacement in (None, watermark + timedelta(seconds=1)):
+        with pytest.raises(
+            CommunicationRuntimeControlConflict,
+            match="installation_activation_watermark_immutable",
+        ):
+            CommunicationRuntimeStateService._apply_control(
+                state,
+                mode=CommunicationRuntimeMode.OFF,
+                canary_run_id=None,
+                now=watermark,
+                installation_estimate_watermark_at=replacement,
+            )
+        assert state.control_revision == 0
+        assert state.installation_estimate_watermark_at == watermark
 
 
 @pytest_asyncio.fixture
@@ -106,7 +129,10 @@ async def test_control_transitions_are_explicit_and_revisioned(
                 channel="telegram",
                 mode=CommunicationRuntimeMode.CANARY,
             )
-        with pytest.raises(ValueError, match="Only canary"):
+        with pytest.raises(
+            CommunicationRuntimeControlConflict,
+            match="installation_activation_requires_typed_control",
+        ):
             await CommunicationRuntimeStateService.set_mode(
                 session,
                 channel="telegram",
@@ -121,20 +147,25 @@ async def test_control_transitions_are_explicit_and_revisioned(
         )
         assert canary.control_revision == 1
 
-        for mode, run_id in (
-            (CommunicationRuntimeMode.ALL, None),
-            (CommunicationRuntimeMode.CANARY, RUN_ID_B),
+        with pytest.raises(
+            CommunicationRuntimeControlConflict,
+            match="installation_activation_requires_typed_control",
         ):
-            with pytest.raises(
-                CommunicationRuntimeControlConflict,
-                match="runtime_control_transition_requires_off",
-            ):
-                await CommunicationRuntimeStateService.set_mode(
-                    session,
-                    channel="telegram",
-                    mode=mode,
-                    canary_run_id=run_id,
-                )
+            await CommunicationRuntimeStateService.set_mode(
+                session,
+                channel="telegram",
+                mode=CommunicationRuntimeMode.ALL,
+            )
+        with pytest.raises(
+            CommunicationRuntimeControlConflict,
+            match="runtime_control_transition_requires_off",
+        ):
+            await CommunicationRuntimeStateService.set_mode(
+                session,
+                channel="telegram",
+                mode=CommunicationRuntimeMode.CANARY,
+                canary_run_id=RUN_ID_B,
+            )
 
         with pytest.raises(
             CommunicationRuntimeControlConflict,
@@ -153,20 +184,16 @@ async def test_control_transitions_are_explicit_and_revisioned(
         )
         assert off.canary_run_id is None
         assert off.control_revision == 2
-        all_control = await CommunicationRuntimeStateService.set_mode(
-            session,
-            channel="telegram",
-            mode=CommunicationRuntimeMode.ALL,
-        )
-        assert all_control.control_revision == 3
-        assert all_control.canary_run_id is None
-
-        idempotent = await CommunicationRuntimeStateService.set_mode(
-            session,
-            channel="telegram",
-            mode=CommunicationRuntimeMode.ALL,
-        )
-        assert idempotent.control_revision == 3
+        with pytest.raises(
+            CommunicationRuntimeControlConflict,
+            match="installation_activation_requires_typed_control",
+        ):
+            await CommunicationRuntimeStateService.set_mode(
+                session,
+                channel="telegram",
+                mode=CommunicationRuntimeMode.ALL,
+            )
+        assert off.control_revision == 2
         await session.commit()
 
 

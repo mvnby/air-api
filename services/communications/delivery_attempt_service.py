@@ -35,19 +35,24 @@ class CommunicationDeliveryAttemptService:
         {
             "delivery_failed",
             "lease_expired",
+            "lease_expired_after_provider",
+            "lease_expired_before_provider",
             "provider_call_failed",
             "provider_result_invalid",
             "recipient_inactive",
+            "runtime_control_fenced_before_provider",
             "telegram_api_error",
             "telegram_bad_request",
             "telegram_chat_migrated",
             "telegram_destination_invalid",
             "telegram_entity_too_large",
+            "telegram_forbidden",
             "telegram_network_error",
             "telegram_provider_auth_or_conflict",
             "telegram_recipient_unavailable",
             "telegram_retry_after",
             "telegram_text_invalid",
+            "telegram_transport_error",
             "telegram_unexpected_error",
             "template_render_failed",
             "timeout",
@@ -149,6 +154,39 @@ class CommunicationDeliveryAttemptService:
         attempt.ambiguous = bool(ambiguous)
         session.add(attempt)
 
+    @classmethod
+    async def mark_provider_started(
+        cls,
+        session: AsyncSession,
+        *,
+        delivery: CommunicationDelivery,
+        started_at: datetime,
+    ) -> None:
+        """Persist the acceptance-ambiguity boundary for the current attempt."""
+
+        attempt_no = int(delivery.attempts)
+        statement = select(CommunicationDeliveryAttempt).where(
+            CommunicationDeliveryAttempt.delivery_id == delivery.delivery_id,
+            CommunicationDeliveryAttempt.attempt_no == attempt_no,
+        )
+        if session.get_bind().dialect.name == "postgresql":
+            statement = statement.with_for_update()
+        attempt = (await session.execute(statement)).scalar_one_or_none()
+        if (
+            attempt is None
+            or attempt.outcome != "running"
+            or attempt.finished_at is not None
+        ):
+            raise CommunicationDeliveryAttemptStateError(
+                f"Communication delivery {delivery.delivery_id!r} attempt "
+                f"{attempt_no} is not running"
+            )
+        # Idempotency matters when the commit acknowledgement itself times out:
+        # an already durable boundary is still safe to proceed from.
+        if attempt.provider_started_at is None:
+            attempt.provider_started_at = started_at
+            session.add(attempt)
+
     @staticmethod
     def is_ambiguous_provider_failure(
         *,
@@ -158,11 +196,31 @@ class CommunicationDeliveryAttemptService:
     ) -> bool:
         normalized_category = str(category or "").strip().lower()
         normalized_code = str(code or "").strip().lower()
-        if normalized_code == "provider_result_invalid":
+        if (
+            result.disposition == ProviderDeliveryDisposition.AMBIGUOUS_FAILURE
+            or normalized_code == "provider_result_invalid"
+        ):
             return True
         return (
             result.disposition == ProviderDeliveryDisposition.TRANSIENT_FAILURE
             and normalized_category in {"network", "provider"}
+        )
+
+    @staticmethod
+    def is_provably_retry_safe(
+        *,
+        result: ProviderDeliveryResult,
+        category: str,
+        code: str,
+    ) -> bool:
+        """Only retry outcomes that prove Telegram rejected before acceptance."""
+
+        return (
+            result.disposition == ProviderDeliveryDisposition.TRANSIENT_FAILURE
+            and str(category or "").strip().lower() == "rate_limit"
+            and str(code or "").strip().lower() == "telegram_retry_after"
+            and result.retry_after_seconds is not None
+            and int(result.retry_after_seconds) > 0
         )
 
     @classmethod

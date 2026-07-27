@@ -333,6 +333,7 @@ export class ApiService {
                 400: `Invalid image or upload limits exceeded`,
                 409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
+                503: `Request can be retried after a short delay`,
             },
         });
     }

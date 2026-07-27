@@ -28,7 +28,7 @@ def _executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
-def test_node_deploy_keeps_api_cutover_separate_and_worker_dormant():
+def test_node_deploy_keeps_api_cutover_separate_and_worker_profile_gated():
     text = NODE_DEPLOY.read_text(encoding="utf-8")
     contract = RELEASE_CONTRACT.read_text(encoding="utf-8")
     primary = text.index('bash "${BLUE_GREEN_SCRIPT}"')
@@ -43,7 +43,9 @@ def test_node_deploy_keeps_api_cutover_separate_and_worker_dormant():
     assert '"${runtime}" == "${BACKEND_IMAGE}|true"' in contract
     assert "COMMUNICATIONS_WORKER_ENABLED" in contract
     assert "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE" in contract
-    assert "must remain false during Phase 2A" in contract
+    assert '("false", "false"): "dormant"' in contract
+    assert '("true", "false"): "canary"' in contract
+    assert '("true", "true"): "active"' in contract
 
 
 def test_candidate_rollback_fences_worker_before_old_compose_and_image_restore():
@@ -57,11 +59,11 @@ def test_candidate_rollback_fences_worker_before_old_compose_and_image_restore()
     assert "PREVIOUS_WORKER_RUNNING" in recovery
     assert 'recovery_services+=" ${COMMUNICATIONS_WORKER_SERVICE}"' in recovery
     assert 'API_DEPLOY_SERVICES="${recovery_services}"' in recovery
-    assert 'patroni_communications_require_runtime "${CANDIDATE_FILE}"' in text
+    assert '"${CANDIDATE_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"' in text
     assert 'transaction promote' in text
-    assert 'patroni_communications_require_runtime "${CANONICAL_FILE}"' in text
+    assert '"${CANONICAL_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"' in text
     assert text.index('transaction promote') < text.index(
-        'patroni_communications_require_runtime "${CANONICAL_FILE}"'
+        '"${CANONICAL_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"'
     )
     assert "patroni_communications_capture_previous()" in lifecycle
     assert "patroni_communications_fence_candidate()" in lifecycle
@@ -132,10 +134,12 @@ if [[ "$1" == "inspect" ]]; then
   exit 0
 fi
 if [[ "$1" == "compose" && "$*" == *"exec -T communications-worker"* ]]; then
-  expected_role="${!#}"
+  expected_role="${@: -3:1}"
+  expected_enabled="${@: -2:1}"
+  expected_allow_all="${!#}"
   [[ "${RUNTIME_APP_ROLE:-primary}" == "$expected_role" ]]
-  [[ "${RUNTIME_WORKER_ENABLED:-false}" == "false" ]]
-  [[ "${RUNTIME_ALLOW_ALL_MODE:-false}" == "false" ]]
+  [[ "${RUNTIME_WORKER_ENABLED:-false}" == "$expected_enabled" ]]
+  [[ "${RUNTIME_ALLOW_ALL_MODE:-false}" == "$expected_allow_all" ]]
   exit 0
 fi
 exit 0
@@ -278,10 +282,11 @@ def test_workflow_verifies_release_parity_on_every_deployed_node():
             "&& bash scripts/ha/run_patroni_node_remote.sh verify"
         )
     final = jobs["deployment-complete"]["steps"][-1]["run"]
-    assert "dormant worker release verified on both nodes" in final
+    assert "communications worker release verified on both nodes" in final
+    assert "dormant worker release" not in final
 
 
-def test_remote_verify_requires_exact_images_running_and_false_phase2a_gates():
+def test_remote_verify_requires_exact_images_runtime_and_closed_gate_profile():
     text = REMOTE.read_text(encoding="utf-8")
     verify = text[text.index('if [[ "${OPERATION}" == "verify" ]]') :]
 
@@ -310,7 +315,7 @@ def test_remote_verify_requires_exact_images_running_and_false_phase2a_gates():
 @pytest.mark.parametrize(
     (
         "runtime_role",
-        "runtime_enabled",
+        "gate_case",
         "restart_drift",
         "stale_marker",
         "canary_result",
@@ -318,32 +323,55 @@ def test_remote_verify_requires_exact_images_running_and_false_phase2a_gates():
         "expected_code",
     ),
     [
-        ("primary", "false", "false", False, "verified", "false", 0),
-        ("primary", "false", "false", False, "changed", "false", 0),
-        ("primary", "false", "false", False, "deferred_once", "false", 0),
-        ("standby", "false", "false", False, "verified", "false", 1),
-        ("primary", "true", "false", False, "verified", "false", 1),
-        ("primary", "false", "true", False, "verified", "false", 1),
-        ("primary", "false", "false", True, "verified", "false", 1),
-        ("primary", "false", "false", False, "failed", "false", 1),
-        ("primary", "false", "false", False, "empty", "false", 1),
-        ("primary", "false", "false", False, "duplicate", "false", 1),
-        ("primary", "false", "false", False, "warning", "false", 1),
-        ("primary", "false", "false", False, "wrong_changed_role", "false", 1),
-        ("primary", "false", "false", False, "always_deferred", "false", 1),
-        ("primary", "false", "false", False, "verified", "true", 1),
+        ("primary", "dormant", "false", False, "verified", "false", 0),
+        ("primary", "canary", "false", False, "verified", "false", 0),
+        ("primary", "active", "false", False, "verified", "false", 0),
+        ("primary", "dormant", "false", False, "changed", "false", 0),
+        ("primary", "dormant", "false", False, "deferred_once", "false", 0),
+        ("standby", "dormant", "false", False, "verified", "false", 1),
+        ("primary", "runtime_mismatch", "false", False, "verified", "false", 1),
+        ("primary", "invalid", "false", False, "verified", "false", 1),
+        ("primary", "uppercase_compose", "false", False, "verified", "false", 1),
+        ("primary", "uppercase_runtime", "false", False, "verified", "false", 1),
+        ("primary", "dormant", "true", False, "verified", "false", 1),
+        ("primary", "dormant", "false", True, "verified", "false", 1),
+        ("primary", "dormant", "false", False, "failed", "false", 1),
+        ("primary", "dormant", "false", False, "empty", "false", 1),
+        ("primary", "dormant", "false", False, "duplicate", "false", 1),
+        ("primary", "dormant", "false", False, "warning", "false", 1),
+        ("primary", "dormant", "false", False, "wrong_changed_role", "false", 1),
+        ("primary", "dormant", "false", False, "always_deferred", "false", 1),
+        ("primary", "dormant", "false", False, "verified", "true", 1),
     ],
 )
 def test_remote_verify_path_executes_against_canonical_compose(
     tmp_path,
     runtime_role,
-    runtime_enabled,
+    gate_case,
     restart_drift,
     stale_marker,
     canary_result,
     final_role_flip,
     expected_code,
 ):
+    compose_gates = {
+        "dormant": ("false", "false"),
+        "canary": ("true", "false"),
+        "active": ("true", "true"),
+        "runtime_mismatch": ("false", "false"),
+        "invalid": ("false", "true"),
+        "uppercase_compose": ("TRUE", "false"),
+        "uppercase_runtime": ("false", "false"),
+    }[gate_case]
+    runtime_gates = (
+        ("true", "false")
+        if gate_case == "runtime_mismatch"
+        else (
+            ("TRUE", "false")
+            if gate_case == "uppercase_runtime"
+            else compose_gates
+        )
+    )
     project = tmp_path / "project"
     project.mkdir()
     (project / "docker-compose.patroni.yml").write_text(
@@ -385,8 +413,8 @@ def test_remote_verify_path_executes_against_canonical_compose(
                 "communications-worker": {
                     "image": NEW_IMAGE,
                     "environment": {
-                        "COMMUNICATIONS_WORKER_ENABLED": "false",
-                        "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
+                        "COMMUNICATIONS_WORKER_ENABLED": compose_gates[0],
+                        "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": compose_gates[1],
                     },
                 },
             }
@@ -406,10 +434,17 @@ def test_remote_verify_path_executes_against_canonical_compose(
             'elif [[ "$1" == "inspect" ]]; then\n'
             f"  printf '%s|true\\n' {repr(NEW_IMAGE)}\n"
         'elif [[ "$1" == "compose" && "$*" == *"exec -T communications-worker"* ]]; then\n'
-        '  expected_role="${!#}"\n'
+        '  expected_profile="${!#}"\n'
+        '  expected_role="${@: -2:1}"\n'
+        '  case "$expected_profile" in\n'
+        '    dormant) expected_enabled=false; expected_allow_all=false ;;\n'
+        '    canary) expected_enabled=true; expected_allow_all=false ;;\n'
+        '    active) expected_enabled=true; expected_allow_all=true ;;\n'
+        '    *) exit 1 ;;\n'
+        '  esac\n'
         '  if [[ "$RUNTIME_APP_ROLE" != "$expected_role" '
-        '|| "$RUNTIME_WORKER_ENABLED" != "false" '
-        '|| "$RUNTIME_ALLOW_ALL_MODE" != "false" ]]; then exit 1; fi\n'
+        '|| "$RUNTIME_WORKER_ENABLED" != "$expected_enabled" '
+        '|| "$RUNTIME_ALLOW_ALL_MODE" != "$expected_allow_all" ]]; then exit 1; fi\n'
             "else\n"
             "  exit 91\n"
             "fi\n",
@@ -495,8 +530,8 @@ def test_remote_verify_path_executes_against_canonical_compose(
             "GITHUB_JOB": "verify",
             "API_PITR_MAINTENANCE_MARKER": str(tmp_path / "absent-maintenance"),
             "RUNTIME_APP_ROLE": runtime_role,
-            "RUNTIME_WORKER_ENABLED": runtime_enabled,
-            "RUNTIME_ALLOW_ALL_MODE": "false",
+            "RUNTIME_WORKER_ENABLED": runtime_gates[0],
+            "RUNTIME_ALLOW_ALL_MODE": runtime_gates[1],
             "SYSTEMCTL_RESTART_DRIFT": restart_drift,
             "SYSTEMCTL_COUNT": str(systemctl_count),
             "REMOTE_DOCKER_LOG": str(remote_docker_log),
@@ -513,6 +548,10 @@ def test_remote_verify_path_executes_against_canonical_compose(
     assert result.returncode == expected_code, result.stderr
     if expected_code == 0:
         assert "API/worker parity confirmed" in result.stdout
+        assert sum(
+            "config --format json" in line
+            for line in remote_docker_log.read_text(encoding="utf-8").splitlines()
+        ) == 2
     else:
         assert "API/worker parity confirmed" not in result.stdout
         assert "error=hidden" not in result.stdout + result.stderr
