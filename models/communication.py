@@ -176,6 +176,15 @@ class CommunicationDeliveryAttempt(SQLModel, table=True):
             name="ck_delivery_attempt_finished_after_started",
         ),
         CheckConstraint(
+            "provider_started_at IS NULL OR provider_started_at >= started_at",
+            name="ck_delivery_attempt_provider_after_started",
+        ),
+        CheckConstraint(
+            "provider_started_at IS NULL OR finished_at IS NULL "
+            "OR provider_started_at <= finished_at",
+            name="ck_delivery_attempt_provider_before_finished",
+        ),
+        CheckConstraint(
             "(outcome IN ('running', 'sent') AND error_category IS NULL "
             "AND error_code IS NULL) OR "
             "(outcome IN ('retry', 'dead', 'canceled') "
@@ -234,6 +243,10 @@ class CommunicationDeliveryAttempt(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     finished_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    provider_started_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )

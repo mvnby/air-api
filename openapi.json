@@ -2539,6 +2539,9 @@
           "409": {
             "description": "Idempotency key reused with different content"
           },
+          "503": {
+            "description": "Request can be retried after a short delay"
+          },
           "422": {
             "description": "Validation Error",
             "content": {

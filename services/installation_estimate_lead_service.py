@@ -27,6 +27,9 @@ from services.communications.contracts import (
     InstallationEstimateLeadCreatedPayloadV1,
 )
 from services.communications.outbox_service import IntegrationOutboxService
+from services.communications.installation_activation_fence import (
+    InstallationEventEnqueueFenceBusy,
+)
 from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
 )
@@ -42,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 
 class InstallationEstimateIdempotencyConflict(ValueError):
+    pass
+
+
+class InstallationEstimateTemporarilyUnavailable(RuntimeError):
     pass
 
 
@@ -284,13 +291,17 @@ class InstallationEstimateLeadService:
             if existing is None:
                 raise
             return cls._replay_response(existing, payload_hash=payload_hash)
-        except Exception:
+        except Exception as exc:
             await session.rollback()
             await cls._cleanup_failed_uploads(
                 session,
                 storage=selected_storage,
                 storage_keys=created_storage_keys,
             )
+            if isinstance(exc, InstallationEventEnqueueFenceBusy):
+                raise InstallationEstimateTemporarilyUnavailable(
+                    "installation_estimate_temporarily_unavailable"
+                ) from exc
             raise
 
         return InstallationEstimateLeadResponse(

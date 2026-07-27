@@ -11,7 +11,9 @@ from datetime import datetime
 from typing import Any, Literal, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
+from models import CommunicationDelivery
 from services.communications.audience_resolver import CommunicationAudienceResolver
 from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.contracts import CommunicationTemplatePlanV1
@@ -22,17 +24,19 @@ from services.communications.delivery_service import (
     DeliveryFailureOutcome,
     ExpiredLeaseRecoveryResult,
 )
+from services.communications.delivery_pre_provider_release import (
+    release_pre_provider_claim,
+)
 from services.communications.providers.base import (
     CommunicationDeliveryProvider,
     ProviderDeliveryDisposition,
     ProviderDeliveryResult,
 )
 from services.communications.processing_scope import CommunicationProcessingScope
-from services.communications.recipient_directory import ManagementRecipientDirectory
+from services.communications.templates import TemplateRenderError
 from services.communications.template_registry import (
     TELEGRAM_CANARY_MAX_ATTEMPTS,
     TELEGRAM_CANARY_TEMPLATE_KEY,
-    InvalidCommunicationEventPayload,
     UnsupportedCommunicationEvent,
     WebsiteTemplateRegistry,
 )
@@ -51,6 +55,12 @@ class _ProviderResultDuringCancellation(RuntimeError):
         super().__init__("Provider result completed during worker cancellation")
         self.result = result
         self.cancellation = cancellation
+
+
+class _ProviderBoundaryCheckFailed(RuntimeError):
+    def __init__(self, error: BaseException) -> None:
+        super().__init__("Provider boundary safety check failed")
+        self.error = error
 
 
 @dataclass(frozen=True)
@@ -87,6 +97,9 @@ class CommunicationDeliveryWorker:
         lease_seconds: int = 90,
         recovery_limit: int = 100,
         safety_check: Callable[[], Awaitable[None]] | None = None,
+        provider_boundary_check: (
+            Callable[[AsyncSession], Awaitable[None]] | None
+        ) = None,
         db_operation_timeout_seconds: float | None = None,
     ) -> None:
         self._session_factory = session_factory
@@ -102,6 +115,7 @@ class CommunicationDeliveryWorker:
             min(CommunicationDeliveryService.MAX_RECOVERY_LIMIT, int(recovery_limit)),
         )
         self._safety_check = safety_check
+        self._provider_boundary_check = provider_boundary_check
         if db_operation_timeout_seconds is None:
             self._db_operation_timeout_seconds = None
         else:
@@ -125,24 +139,9 @@ class CommunicationDeliveryWorker:
                 recovered_dead_count=recovery.dead_count,
             )
 
-        if not await self._recipient_is_current(claim):
-            try:
-                await self._finish_terminal_despite_cancellation(
-                    self._cancel_inactive_recipient(claim),
-                    delivery_id=claim.delivery_id,
-                )
-            except CommunicationDeliveryLeaseLost:
-                return self._lease_lost_outcome(claim, recovery)
-            return DeliveryRunOutcome(
-                outcome="canceled",
-                delivery_id=claim.delivery_id,
-                attempts=claim.attempts,
-                recovered_retry_count=recovery.retry_count,
-                recovered_dead_count=recovery.dead_count,
-            )
-
         try:
-            rendered_text = self._render(claim)
+            plan = self._plan(claim)
+            rendered_text = WebsiteTemplateRegistry.render(plan)
         except Exception as exc:
             logger.warning(
                 "Communication delivery render failed delivery_id=%s error_type=%s",
@@ -159,16 +158,39 @@ class CommunicationDeliveryWorker:
                 delivery_id=claim.delivery_id,
             )
 
+        if not await self._recipient_is_current(claim, plan):
+            try:
+                await self._finish_terminal_despite_cancellation(
+                    self._cancel_inactive_recipient(claim),
+                    delivery_id=claim.delivery_id,
+                )
+            except CommunicationDeliveryLeaseLost:
+                return self._lease_lost_outcome(claim, recovery)
+            return DeliveryRunOutcome(
+                outcome="canceled",
+                delivery_id=claim.delivery_id,
+                attempts=claim.attempts,
+                recovered_retry_count=recovery.retry_count,
+                recovered_dead_count=recovery.dead_count,
+            )
+
+        # Complete every check that can fail before durably crossing the
+        # provider-call boundary. A crash before that boundary is retry-safe.
         try:
-            await self._renew_before_send(claim)
+            await self._assert_safe_to_continue()
+        except BaseException:
+            await self._release_pre_provider_claim_despite_cancellation(claim)
+            raise
+        try:
+            await self._mark_provider_started_before_send(claim)
+        except _ProviderBoundaryCheckFailed as rejected:
+            await self._release_pre_provider_claim_despite_cancellation(claim)
+            raise rejected.error
         except CommunicationDeliveryLeaseLost:
-            # Rendering and recipient resolution are deliberately outside the
-            # claim transaction. Re-fence immediately before any network I/O.
             return self._lease_lost_outcome(claim, recovery)
 
-        # Ownership, primary role and process stop are rechecked after the
-        # durable lease renewal and immediately before provider network I/O.
-        await self._assert_safe_to_continue()
+        # There are deliberately no further safety or database awaits between
+        # this committed boundary and construction of the provider task.
         cancellation_after_finalize: asyncio.CancelledError | None = None
         provider_started_ns = time.monotonic_ns()
         try:
@@ -187,10 +209,10 @@ class CommunicationDeliveryWorker:
                 claim.delivery_id,
                 type(exc).__name__,
             )
-            result = ProviderDeliveryResult.transient_failure(
+            result = ProviderDeliveryResult.ambiguous_failure(
                 category="provider",
                 code="provider_call_failed",
-                message="Communication provider failed unexpectedly",
+                message="Communication provider outcome requires manual reconciliation",
             )
         provider_latency_ms = max(
             0,
@@ -199,10 +221,10 @@ class CommunicationDeliveryWorker:
 
         if result.disposition == ProviderDeliveryDisposition.SENT:
             if not result.provider_message_id:
-                result = ProviderDeliveryResult.permanent_failure(
+                result = ProviderDeliveryResult.ambiguous_failure(
                     category="provider",
                     code="provider_result_invalid",
-                    message="Communication provider returned an invalid success result",
+                    message="Communication provider success requires manual reconciliation",
                 )
             else:
                 try:
@@ -282,29 +304,57 @@ class CommunicationDeliveryWorker:
                 await session.commit()
                 return claim
 
-    async def _recipient_is_current(self, claim: ClaimedCommunicationDelivery) -> bool:
+    async def _recipient_is_current(
+        self,
+        claim: ClaimedCommunicationDelivery,
+        plan: CommunicationTemplatePlanV1,
+    ) -> bool:
         async with self._bounded_db_operation():
             async with self._session_factory() as session:
-                if claim.template_key == TELEGRAM_CANARY_TEMPLATE_KEY:
-                    if claim.max_attempts != TELEGRAM_CANARY_MAX_ATTEMPTS:
-                        return False
-                    try:
-                        recipients = await CommunicationAudienceResolver.list_telegram(
-                            session,
-                            plan=self._plan(claim),
-                        )
-                    except (
-                        CommunicationsCanarySafetyError,
-                        InvalidCommunicationEventPayload,
-                        UnsupportedCommunicationEvent,
+                try:
+                    if (
+                        claim.template_key == TELEGRAM_CANARY_TEMPLATE_KEY
+                        and claim.max_attempts != TELEGRAM_CANARY_MAX_ATTEMPTS
                     ):
-                        # A changed or incomplete owner pair cancels canary delivery;
-                        # it must never fall back to management or legacy recipients.
                         return False
-                else:
-                    recipients = await ManagementRecipientDirectory.list_telegram(
-                        session
+                    recipients = await CommunicationAudienceResolver.list_telegram(
+                        session,
+                        plan=plan,
                     )
+                except (
+                    CommunicationsCanarySafetyError,
+                    TemplateRenderError,
+                    UnsupportedCommunicationEvent,
+                    ValueError,
+                ):
+                    # Exact audiences never fall back to management or legacy
+                    # recipients when their current routing contract is unsafe.
+                    return False
+                if plan.audience == "installation_estimate_owners":
+                    deliveries = list(
+                        (
+                            await session.execute(
+                                select(CommunicationDelivery).where(
+                                    CommunicationDelivery.event_id == claim.event_id,
+                                    CommunicationDelivery.channel == claim.channel,
+                                    CommunicationDelivery.template_key
+                                    == claim.template_key,
+                                    CommunicationDelivery.template_version
+                                    == claim.template_version,
+                                )
+                            )
+                        ).scalars()
+                    )
+                    expected_routing = {
+                        (recipient.recipient_key, recipient.destination)
+                        for recipient in recipients
+                    }
+                    materialized_routing = {
+                        (delivery.recipient_key, delivery.destination)
+                        for delivery in deliveries
+                    }
+                    if materialized_routing != expected_routing:
+                        return False
         return any(
             recipient.recipient_key == claim.recipient_key
             and recipient.destination == claim.destination
@@ -331,11 +381,6 @@ class CommunicationDeliveryWorker:
             template_version=claim.template_version,
             render_context=claim.render_context_dict(),
         )
-
-    @classmethod
-    def _render(cls, claim: ClaimedCommunicationDelivery) -> str:
-        plan = cls._plan(claim)
-        return WebsiteTemplateRegistry.render(plan)
 
     async def _send_with_heartbeat(
         self,
@@ -430,10 +475,12 @@ class CommunicationDeliveryWorker:
                         claim.delivery_id,
                         type(exc).__name__,
                     )
-                    completed_result = ProviderDeliveryResult.transient_failure(
+                    completed_result = ProviderDeliveryResult.ambiguous_failure(
                         category="provider",
                         code="provider_call_failed",
-                        message="Communication provider failed unexpectedly",
+                        message=(
+                            "Communication provider outcome requires manual reconciliation"
+                        ),
                     )
                 raise _ProviderResultDuringCancellation(
                     result=completed_result,
@@ -453,17 +500,57 @@ class CommunicationDeliveryWorker:
                 with suppress(asyncio.CancelledError):
                     await heartbeat_task
 
-    async def _renew_before_send(self, claim: ClaimedCommunicationDelivery) -> None:
+    async def _mark_provider_started_before_send(
+        self,
+        claim: ClaimedCommunicationDelivery,
+    ) -> None:
+        boundary_pending = self._provider_boundary_check is not None
+        try:
+            async with self._bounded_db_operation():
+                async with self._session_factory() as session:
+                    if self._provider_boundary_check is not None:
+                        await self._provider_boundary_check(session)
+                        boundary_pending = False
+                    await CommunicationDeliveryService.mark_provider_started(
+                        session,
+                        delivery_id=claim.delivery_id,
+                        worker_id=self._worker_id,
+                        lease_token=claim.lease_token,
+                        lease_seconds=self._lease_seconds,
+                    )
+                    await session.commit()
+        except BaseException as error:
+            if boundary_pending:
+                raise _ProviderBoundaryCheckFailed(error) from error
+            raise
+
+    async def _release_pre_provider_claim_despite_cancellation(
+        self,
+        claim: ClaimedCommunicationDelivery,
+    ) -> None:
+        try:
+            await self._finish_terminal_despite_cancellation(
+                self._release_pre_provider_claim(claim),
+                delivery_id=claim.delivery_id,
+            )
+        except CommunicationDeliveryLeaseLost:
+            # Another exact-lease transition already made the claim non-running.
+            return
+
+    async def _release_pre_provider_claim(
+        self,
+        claim: ClaimedCommunicationDelivery,
+    ) -> DeliveryFailureOutcome:
         async with self._bounded_db_operation():
             async with self._session_factory() as session:
-                await CommunicationDeliveryService.renew_lease(
+                outcome = await release_pre_provider_claim(
                     session,
                     delivery_id=claim.delivery_id,
                     worker_id=self._worker_id,
                     lease_token=claim.lease_token,
-                    lease_seconds=self._lease_seconds,
                 )
                 await session.commit()
+                return outcome
 
     @staticmethod
     async def _finish_terminal_despite_cancellation(

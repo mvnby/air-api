@@ -2,8 +2,13 @@ import io
 
 import pytest
 from PIL import Image
+from sqlmodel import func, select
 
-from models import Order
+from models import Order, ServiceAttachment
+from services.communications.installation_activation_fence import (
+    InstallationEventEnqueueFenceBusy,
+)
+from services.communications.outbox_service import IntegrationOutboxService
 from services.private_attachment_storage_service import StoredPrivateObject
 
 
@@ -123,3 +128,46 @@ async def test_public_installation_estimate_rejects_invalid_file(
 
     assert response.status_code == 400
     assert "JPEG, PNG и WebP" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_activation_fence_returns_retryable_503_and_rolls_back_intake(
+    async_client,
+    db,
+    monkeypatch,
+):
+    storage = FakePrivateStorage()
+    monkeypatch.setattr(
+        "services.installation_estimate_lead_service.get_private_attachment_storage",
+        lambda: storage,
+    )
+
+    async def busy_enqueue(*args, **kwargs):
+        raise InstallationEventEnqueueFenceBusy()
+
+    monkeypatch.setattr(
+        IntegrationOutboxService,
+        "enqueue",
+        busy_enqueue,
+    )
+    response = await async_client.post(
+        "/api/v1/leads/installation-estimate",
+        data={
+            "name": "Анна",
+            "phone": "+375291112233",
+            "consent": "true",
+        },
+        files=[
+            ("facade", ("facade.png", _png_bytes(), "image/png")),
+        ],
+        headers={"Idempotency-Key": "browser-estimate-request-0003"},
+    )
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "1"
+    assert response.json() == {
+        "detail": "Приём заявки временно занят. Повторите отправку."
+    }
+    assert await db.scalar(select(func.count(Order.id))) == 0
+    assert await db.scalar(select(func.count(ServiceAttachment.id))) == 0
+    assert storage.objects == {}

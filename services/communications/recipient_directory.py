@@ -72,6 +72,68 @@ class ManagementRecipientDirectory:
         return recipients
 
 
+class InstallationEstimateOwnerRecipientDirectory:
+    """Resolve every active owner from StaffUser, or fail closed.
+
+    This production audience deliberately has no manager or ``ADMIN_IDS``
+    compatibility fallback. One malformed active owner invalidates the whole
+    routing snapshot so a partial recipient set can never be materialized.
+    """
+
+    @classmethod
+    async def list_telegram(
+        cls,
+        session: AsyncSession,
+    ) -> list[CommunicationRecipientV1]:
+        result = await session.execute(select(StaffUser).order_by(StaffUser.id.asc()))
+        active_owners = [
+            staff_user
+            for staff_user in result.scalars().all()
+            if staff_user.status == StaffUserService.STATUS_ACTIVE
+            and staff_user.primary_role == StaffUserService.ROLE_OWNER
+        ]
+        if not active_owners:
+            raise CommunicationsCanarySafetyError(
+                "installation_owner_recipient_count_invalid"
+            )
+
+        recipients: list[CommunicationRecipientV1] = []
+        recipient_keys: set[str] = set()
+        destinations: set[str] = set()
+        for staff_user in active_owners:
+            if staff_user.id is None or staff_user.telegram_id is None:
+                raise CommunicationsCanarySafetyError(
+                    "installation_owner_recipient_invalid"
+                )
+            try:
+                telegram_id = int(staff_user.telegram_id)
+            except (TypeError, ValueError, OverflowError):
+                raise CommunicationsCanarySafetyError(
+                    "installation_owner_recipient_invalid"
+                ) from None
+            if telegram_id <= 0:
+                raise CommunicationsCanarySafetyError(
+                    "installation_owner_recipient_invalid"
+                )
+            recipient_key = f"staff:{int(staff_user.id)}"
+            destination = str(telegram_id)
+            if recipient_key in recipient_keys or destination in destinations:
+                raise CommunicationsCanarySafetyError(
+                    "installation_owner_recipient_duplicate"
+                )
+            recipient_keys.add(recipient_key)
+            destinations.add(destination)
+            recipients.append(
+                CommunicationRecipientV1(
+                    recipient_key=recipient_key,
+                    destination=destination,
+                    source="staff",
+                    staff_user_id=int(staff_user.id),
+                )
+            )
+        return recipients
+
+
 class OperationsCanaryRecipientDirectory:
     """Resolve one immutable pair of active owner StaffUsers, or fail closed."""
 

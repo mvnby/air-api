@@ -26,13 +26,14 @@ def _load_migration_module():
     return module
 
 
-def test_order_source_fingerprint_is_the_single_alembic_head():
+def test_order_source_fingerprint_remains_in_the_single_alembic_chain():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == ["e9a1b2c3d4e5"]
     assert revision is not None
     assert revision.down_revision == "f3c4d5e6f7a8"
+    assert set(revision.nextrev) == {"d8e7f6a5b4c3"}
 
 
 def test_order_source_fingerprint_migration_upgrades_and_downgrades_sqlite():

@@ -31,7 +31,10 @@ from services.communications.template_registry import (
 )
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 
 
 @pytest.fixture
@@ -235,7 +238,7 @@ async def test_claim_snapshot_is_frozen_and_redacts_lease_token(
 
 
 @pytest.mark.asyncio
-async def test_expired_running_is_recovered_before_it_can_be_claimed(
+async def test_expired_pre_provider_running_is_retried_after_backoff(
     delivery_session_factory,
 ):
     expired_token = "x" * 43
@@ -286,6 +289,7 @@ async def test_expired_running_is_recovered_before_it_can_be_claimed(
         assert recovered is not None
         assert recovered.status == "retry"
         assert recovered.attempts == 1
+        assert recovered.finished_at is None
         assert recovered.available_at > NOW.replace(tzinfo=None)
         recovered_attempt = await session.get(
             CommunicationDeliveryAttempt,
@@ -294,8 +298,11 @@ async def test_expired_running_is_recovered_before_it_can_be_claimed(
         assert recovered_attempt is not None
         assert recovered_attempt.outcome == "retry"
         assert recovered_attempt.error_category == "lease"
-        assert recovered_attempt.error_code == "lease_expired"
-        assert recovered_attempt.ambiguous is True
+        assert (
+            recovered_attempt.error_code
+            == "lease_expired_before_provider"
+        )
+        assert recovered_attempt.ambiguous is False
 
 
 @pytest.mark.asyncio
@@ -401,9 +408,9 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
         await session.commit()
 
     result = ProviderDeliveryResult.transient_failure(
-        category="rate_limit\nsecret",
-        code="plaintextsecret123",
-        message="Safe\nmessage",
+        category="rate_limit",
+        code="telegram_retry_after",
+        message="Telegram rejected the request before acceptance",
         retry_after_seconds=900,
     )
     async with delivery_session_factory() as session:
@@ -426,9 +433,12 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
         assert row.status == "retry"
         assert row.attempts == 1
         assert row.finished_at is None
-        assert row.last_error_category == "rate_limit secret"
-        assert row.last_error_code == "plaintextsecret123"
-        assert row.last_error_message == "Safe message"
+        assert row.last_error_category == "rate_limit"
+        assert row.last_error_code == "telegram_retry_after"
+        assert (
+            row.last_error_message
+            == "Telegram rejected the request before acceptance"
+        )
         assert row.worker_id is None
         attempt = await session.get(
             CommunicationDeliveryAttempt,
@@ -436,8 +446,8 @@ async def test_transient_failure_has_deterministic_backoff_and_retry_after_lower
         )
         assert attempt is not None
         assert attempt.outcome == "retry"
-        assert attempt.error_category == "unknown"
-        assert attempt.error_code == "delivery_failed"
+        assert attempt.error_category == "rate_limit"
+        assert attempt.error_code == "telegram_retry_after"
         assert attempt.retry_after_seconds == 900
         assert attempt.provider_latency_ms == 125
         assert attempt.ambiguous is False
@@ -599,7 +609,12 @@ async def test_recovery_is_limited_ordered_and_separates_retry_from_dead(
                 )
             ).scalars()
         )
-        assert [row.status for row in rows] == ["retry", "dead", "running", "running"]
+        assert [row.status for row in rows] == [
+            "retry",
+            "dead",
+            "running",
+            "running",
+        ]
         assert [row.attempts for row in rows] == [1, 3, 1, 1]
         attempts = list(
             (
@@ -617,12 +632,17 @@ async def test_recovery_is_limited_ordered_and_separates_retry_from_dead(
             "running",
         ]
         assert [attempt.error_code for attempt in attempts] == [
-            "lease_expired",
-            "lease_expired",
+            "lease_expired_before_provider",
+            "lease_expired_before_provider",
             None,
             None,
         ]
-        assert [attempt.ambiguous for attempt in attempts] == [True, True, False, False]
+        assert [attempt.ambiguous for attempt in attempts] == [
+            False,
+            False,
+            False,
+            False,
+        ]
 
 
 @pytest.mark.asyncio

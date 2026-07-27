@@ -26,6 +26,7 @@ from services.repair_diagnostic_service import (
 from services.installation_estimate_lead_service import (
     InstallationEstimateIdempotencyConflict,
     InstallationEstimateLeadService,
+    InstallationEstimateTemporarilyUnavailable,
 )
 from services.website_lead_service import WebsiteLeadService
 
@@ -79,6 +80,7 @@ async def create_public_contact_lead(
     responses={
         400: {"description": "Invalid image or upload limits exceeded"},
         409: {"description": "Idempotency key reused with different content"},
+        503: {"description": "Request can be retried after a short delay"},
     },
 )
 async def create_installation_estimate_lead(
@@ -120,6 +122,12 @@ async def create_installation_estimate_lead(
         )
     except InstallationEstimateIdempotencyConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InstallationEstimateTemporarilyUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Приём заявки временно занят. Повторите отправку.",
+            headers={"Retry-After": "1"},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

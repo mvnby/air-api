@@ -16,6 +16,9 @@ from services.communications.delivery_materializer import (
     NoEligibleCommunicationRecipients,
 )
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.runtime_state import (
+    CommunicationRuntimeStateService,
+)
 from services.communications.template_registry import (
     CONSUMER_NAME,
     HANDLER_VERSION,
@@ -72,6 +75,11 @@ class CommunicationOutboxDispatcher:
         if scope.exact_event_id is not None:
             query = query.where(
                 IntegrationOutboxEvent.event_id == scope.exact_event_id
+            )
+        if scope.event_created_at_watermark is not None:
+            query = query.where(
+                IntegrationOutboxEvent.created_at
+                >= scope.event_created_at_watermark
             )
         if session.get_bind().dialect.name == "postgresql":
             query = query.with_for_update(skip_locked=True)
@@ -171,7 +179,11 @@ class CommunicationOutboxDispatcher:
             raise ConsumerInboxConsistencyError(
                 "Consumer inbox exists without materialized deliveries"
             )
-        if plan.audience in {"operations_canary", "staff_assignee"}:
+        if plan.audience in {
+            "installation_estimate_owners",
+            "operations_canary",
+            "staff_assignee",
+        }:
             expected_recipients = await CommunicationAudienceResolver.list_telegram(
                 session,
                 plan=plan,
@@ -186,7 +198,7 @@ class CommunicationOutboxDispatcher:
             }
             if actual_routing != expected_routing:
                 raise ConsumerInboxConsistencyError(
-                    "Canary inbox delivery recipients are inconsistent"
+                    "Exact-audience inbox delivery recipients are inconsistent"
                 )
         for delivery in deliveries:
             if (
@@ -227,7 +239,16 @@ class CommunicationOutboxDispatcher:
             raise ValueError("Communication dispatcher_id is required")
         if len(normalized_dispatcher_id) > 128:
             raise ValueError("Communication dispatcher_id is too long")
-        dispatch_time = now or cls._utc_now()
+        if (
+            now is None
+            and scope.mode == "all"
+            and session.get_bind().dialect.name == "postgresql"
+        ):
+            dispatch_time = await CommunicationRuntimeStateService.database_now(
+                session
+            )
+        else:
+            dispatch_time = now or cls._utc_now()
 
         event = await cls._select_next(
             session,

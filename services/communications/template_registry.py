@@ -11,6 +11,9 @@ from services.communications.contracts import (
     PublicOrderCreatedPayloadV1,
     TelegramCanaryRequestedPayloadV1,
 )
+from services.communications.installation_activation_fence import (
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+)
 from services.communications.outbox_service import IntegrationOutboxService
 from services.communications.templates.operations import render_telegram_canary_v1
 from services.communications.templates.website import (
@@ -31,7 +34,6 @@ from services.communications.staff_task_templates import (
 
 PUBLIC_ORDER_CREATED_EVENT = "crm.public_order.created"
 PUBLIC_CONTACT_LEAD_CREATED_EVENT = "crm.public_contact_lead.created"
-INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT = "crm.installation_estimate_lead.created"
 TELEGRAM_CANARY_REQUESTED_EVENT = "ops.communications.telegram_canary.requested"
 TELEGRAM_CANARY_AGGREGATE_TYPE = "communications_canary"
 TELEGRAM_CANARY_AGGREGATE_VERSION = 1
@@ -119,7 +121,7 @@ class WebsiteTemplateRegistry:
                 payload = InstallationEstimateLeadCreatedPayloadV1.model_validate(
                     render_context
                 )
-                audience = "management"
+                audience = "installation_estimate_owners"
             elif template_key == TELEGRAM_CANARY_TEMPLATE_KEY:
                 payload = TelegramCanaryRequestedPayloadV1.model_validate(
                     render_context

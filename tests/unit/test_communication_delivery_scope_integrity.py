@@ -44,7 +44,12 @@ def _scope_case(
 ) -> tuple[CommunicationProcessingScope, str, str]:
     if mode == "all":
         return (
-            CommunicationProcessingScope.all(control_revision=1),
+            CommunicationProcessingScope.all(
+                control_revision=1,
+                event_created_at_watermark=datetime(
+                    2000, 1, 1, tzinfo=timezone.utc
+                ),
+            ),
             INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
             INSTALLATION_ESTIMATE_TEMPLATE_KEY,
         )
@@ -57,6 +62,7 @@ def _event(
     event_id: str,
     event_type: str,
     status: str = "published",
+    created_at: datetime = NOW,
 ) -> IntegrationOutboxEvent:
     return IntegrationOutboxEvent(
         event_id=event_id,
@@ -70,7 +76,7 @@ def _event(
         available_at=NOW,
         occurred_at=NOW,
         published_at=NOW if status == "published" else None,
-        created_at=NOW,
+        created_at=created_at,
         updated_at=NOW,
     )
 
@@ -271,11 +277,110 @@ async def test_recovery_requires_published_allowed_event_and_allowed_template(
         )
         await session.commit()
 
-        assert recovered.retry_count == 1
-        assert recovered.dead_count == 0
+        assert recovered.retry_count == (1 if mode == "all" else 0)
+        assert recovered.dead_count == (1 if mode == "staff_bot" else 0)
         await session.refresh(deliveries[-1])
-        assert deliveries[-1].status == "retry"
+        assert deliveries[-1].status == (
+            "dead" if mode == "staff_bot" else "retry"
+        )
         for excluded in deliveries[:-1]:
             await session.refresh(excluded)
             assert excluded.status == "running"
             assert excluded.worker_id == "expired-worker"
+
+
+@pytest.mark.asyncio
+async def test_all_scope_watermark_fences_claim_and_expired_lease_recovery(
+    session_factory,
+):
+    scope = CommunicationProcessingScope.all(
+        control_revision=2,
+        event_created_at_watermark=NOW,
+    )
+    before_event = _event(
+        event_id="a" * 32,
+        event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+        created_at=NOW - timedelta(microseconds=1),
+    )
+    current_event = _event(
+        event_id="b" * 32,
+        event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+        created_at=NOW,
+    )
+    before_queued = _delivery(
+        21,
+        event_id=before_event.event_id,
+        template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+        status="queued",
+        priority=-100,
+    )
+    current_queued = _delivery(
+        22,
+        event_id=current_event.event_id,
+        template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+        status="queued",
+        priority=100,
+    )
+    before_running = _delivery(
+        23,
+        event_id=before_event.event_id,
+        template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+        status="running",
+        priority=-100,
+    )
+    current_running = _delivery(
+        24,
+        event_id=current_event.event_id,
+        template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+        status="running",
+        priority=100,
+    )
+    async with session_factory() as session:
+        session.add_all(
+            [
+                before_event,
+                current_event,
+                before_queued,
+                current_queued,
+                before_running,
+                current_running,
+                CommunicationDeliveryAttempt(
+                    delivery_id=before_running.delivery_id,
+                    attempt_no=1,
+                    started_at=NOW - timedelta(minutes=1),
+                    outcome="running",
+                ),
+                CommunicationDeliveryAttempt(
+                    delivery_id=current_running.delivery_id,
+                    attempt_no=1,
+                    started_at=NOW - timedelta(minutes=1),
+                    outcome="running",
+                ),
+            ]
+        )
+        await session.commit()
+
+        recovery = await CommunicationDeliveryService.recover_expired_leases(
+            session,
+            scope=scope,
+            now=NOW,
+        )
+        assert recovery.retry_count == 1
+        assert recovery.dead_count == 0
+        await session.refresh(before_running)
+        await session.refresh(current_running)
+        assert before_running.status == "running"
+        assert current_running.status == "retry"
+
+        claim = await CommunicationDeliveryService.claim_next(
+            session,
+            scope=scope,
+            worker_id="watermark-worker",
+            now=NOW,
+        )
+        await session.commit()
+
+        assert claim is not None
+        assert claim.delivery_id == current_queued.delivery_id
+        await session.refresh(before_queued)
+        assert before_queued.status == "queued"

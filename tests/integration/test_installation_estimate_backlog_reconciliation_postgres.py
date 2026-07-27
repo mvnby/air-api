@@ -141,6 +141,9 @@ async def _seed_stopped_runtime(factory, *, mode: str = "off") -> None:
             CommunicationRuntimeState(
                 channel="telegram",
                 mode=mode,
+                installation_estimate_watermark_at=(
+                    now if mode == "all" else None
+                ),
                 status="stopped",
                 control_revision=1,
                 control_updated_at=now,

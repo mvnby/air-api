@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import re
 import secrets
 from collections.abc import Mapping
@@ -12,9 +11,23 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import CommunicationDelivery, IntegrationOutboxEvent
+from models import (
+    CommunicationDelivery,
+    CommunicationDeliveryAttempt,
+    IntegrationOutboxEvent,
+)
 from services.communications.delivery_attempt_service import (
     CommunicationDeliveryAttemptService,
+)
+from services.communications.delivery_lease_recovery import (
+    ExpiredLeaseRecoveryResult,
+    recover_expired_delivery_leases,
+)
+from services.communications.delivery_retry_policy import (
+    RETRY_BASE_SECONDS as DELIVERY_RETRY_BASE_SECONDS,
+    RETRY_JITTER_PERCENT as DELIVERY_RETRY_JITTER_PERCENT,
+    RETRY_MAX_SECONDS as DELIVERY_RETRY_MAX_SECONDS,
+    delivery_retry_delay_seconds,
 )
 from services.communications.delivery_limits import (
     MAX_DELIVERY_LEASE_SECONDS,
@@ -83,12 +96,6 @@ class ClaimedCommunicationDelivery:
 
 
 @dataclass(frozen=True)
-class ExpiredLeaseRecoveryResult:
-    retry_count: int
-    dead_count: int
-
-
-@dataclass(frozen=True)
 class DeliveryFailureOutcome:
     status: str
     attempts: int
@@ -101,9 +108,9 @@ class CommunicationDeliveryService:
     MIN_LEASE_SECONDS = MIN_DELIVERY_LEASE_SECONDS
     MAX_LEASE_SECONDS = MAX_DELIVERY_LEASE_SECONDS
     MAX_RECOVERY_LIMIT = 1000
-    RETRY_BASE_SECONDS = 30
-    RETRY_MAX_SECONDS = 3600
-    RETRY_JITTER_PERCENT = 20
+    RETRY_BASE_SECONDS = DELIVERY_RETRY_BASE_SECONDS
+    RETRY_MAX_SECONDS = DELIVERY_RETRY_MAX_SECONDS
+    RETRY_JITTER_PERCENT = DELIVERY_RETRY_JITTER_PERCENT
 
     @classmethod
     async def claim_next(
@@ -139,6 +146,13 @@ class CommunicationDeliveryService:
                 ),
                 IntegrationOutboxEvent.event_type.in_(scope.outbox_event_types),
                 IntegrationOutboxEvent.status == "published",
+                ~select(CommunicationDeliveryAttempt.delivery_id)
+                .where(
+                    CommunicationDeliveryAttempt.delivery_id
+                    == CommunicationDelivery.delivery_id,
+                    CommunicationDeliveryAttempt.ambiguous.is_(True),
+                )
+                .exists(),
             )
             .order_by(
                 CommunicationDelivery.priority.asc(),
@@ -151,6 +165,11 @@ class CommunicationDeliveryService:
         if scope.exact_event_id is not None:
             statement = statement.where(
                 CommunicationDelivery.event_id == scope.exact_event_id
+            )
+        if scope.event_created_at_watermark is not None:
+            statement = statement.where(
+                IntegrationOutboxEvent.created_at
+                >= scope.event_created_at_watermark
             )
         if session.get_bind().dialect.name == "postgresql":
             statement = statement.with_for_update(
@@ -213,87 +232,47 @@ class CommunicationDeliveryService:
         normalized_channel = cls._normalize_channel(channel)
         recovered_at = await cls._resolve_now(session, now)
         safe_limit = max(1, min(cls.MAX_RECOVERY_LIMIT, int(limit)))
-        statement = (
-            select(CommunicationDelivery)
-            .join(
-                IntegrationOutboxEvent,
-                IntegrationOutboxEvent.event_id == CommunicationDelivery.event_id,
-            )
-            .where(
-                CommunicationDelivery.channel == normalized_channel,
-                CommunicationDelivery.status == DELIVERY_STATUS_RUNNING,
-                CommunicationDelivery.lease_expires_at.is_not(None),
-                CommunicationDelivery.lease_expires_at <= recovered_at,
-                CommunicationDelivery.template_key.in_(
-                    scope.delivery_template_keys
-                ),
-                IntegrationOutboxEvent.event_type.in_(scope.outbox_event_types),
-                IntegrationOutboxEvent.status == "published",
-            )
-            .order_by(
-                CommunicationDelivery.lease_expires_at.asc(),
-                CommunicationDelivery.created_at.asc(),
-                CommunicationDelivery.delivery_id.asc(),
-            )
-            .limit(safe_limit)
+        return await recover_expired_delivery_leases(
+            session,
+            scope=scope,
+            channel=normalized_channel,
+            recovered_at=recovered_at,
+            limit=safe_limit,
         )
-        if scope.exact_event_id is not None:
-            statement = statement.where(
-                CommunicationDelivery.event_id == scope.exact_event_id
-            )
-        if session.get_bind().dialect.name == "postgresql":
-            statement = statement.with_for_update(
-                of=CommunicationDelivery,
-                skip_locked=True,
-            )
 
-        deliveries = list((await session.execute(statement)).scalars().all())
-        retry_count = 0
-        dead_count = 0
-        for delivery in deliveries:
-            await CommunicationDeliveryAttemptService.finish(
-                session,
-                delivery=delivery,
-                finished_at=recovered_at,
-                outcome=(
-                    DELIVERY_STATUS_DEAD
-                    if int(delivery.attempts) >= int(delivery.max_attempts)
-                    else DELIVERY_STATUS_RETRY
-                ),
-                error_category="lease",
-                error_code="lease_expired",
-                ambiguous=True,
-            )
-            delivery.worker_id = None
-            delivery.lease_token = None
-            delivery.lease_expires_at = None
-            delivery.last_error_category = "lease"
-            delivery.last_error_code = "lease_expired"
-            delivery.last_error_message = "Delivery worker lease expired before completion"
-            delivery.updated_at = recovered_at
-            if int(delivery.attempts) >= int(delivery.max_attempts):
-                delivery.status = DELIVERY_STATUS_DEAD
-                delivery.sent_at = None
-                delivery.finished_at = recovered_at
-                dead_count += 1
-            else:
-                delivery.status = DELIVERY_STATUS_RETRY
-                delivery.available_at = recovered_at + timedelta(
-                    seconds=cls.retry_delay_seconds(
-                        delivery_id=delivery.delivery_id,
-                        attempts=delivery.attempts,
-                    )
-                )
-                delivery.sent_at = None
-                delivery.finished_at = None
-                retry_count += 1
-            session.add(delivery)
+    @classmethod
+    async def mark_provider_started(
+        cls,
+        session: AsyncSession,
+        *,
+        delivery_id: str,
+        worker_id: str,
+        lease_token: str,
+        lease_seconds: int = 90,
+        now: datetime | None = None,
+    ) -> datetime:
+        """Durably cross the provider-call boundary under the exact lease."""
 
+        delivery, started_at = await cls._lock_owned_delivery(
+            session,
+            delivery_id=delivery_id,
+            worker_id=worker_id,
+            lease_token=lease_token,
+            now=now,
+        )
+        await CommunicationDeliveryAttemptService.mark_provider_started(
+            session,
+            delivery=delivery,
+            started_at=started_at,
+        )
+        lease_expires_at = started_at + timedelta(
+            seconds=cls._normalize_lease_seconds(lease_seconds)
+        )
+        delivery.lease_expires_at = lease_expires_at
+        delivery.updated_at = started_at
+        session.add(delivery)
         await session.flush()
-        return ExpiredLeaseRecoveryResult(
-            retry_count=retry_count,
-            dead_count=dead_count,
-        )
+        return lease_expires_at
 
     @classmethod
     async def renew_lease(
@@ -391,8 +370,22 @@ class CommunicationDeliveryService:
             now=now,
         )
         category, code, message = cls._sanitize_provider_error(result)
+        ambiguous = (
+            CommunicationDeliveryAttemptService.is_ambiguous_provider_failure(
+                result=result,
+                category=category,
+                code=code,
+            )
+        )
+        retry_safe = CommunicationDeliveryAttemptService.is_provably_retry_safe(
+            result=result,
+            category=category,
+            code=code,
+        )
         terminal = (
             result.disposition == ProviderDeliveryDisposition.PERMANENT_FAILURE
+            or ambiguous
+            or not retry_safe
             or int(delivery.attempts) >= int(delivery.max_attempts)
         )
         next_attempt_at: datetime | None = None
@@ -420,11 +413,7 @@ class CommunicationDeliveryService:
             error_code=code,
             retry_after_seconds=result.retry_after_seconds,
             provider_latency_ms=provider_latency_ms,
-            ambiguous=CommunicationDeliveryAttemptService.is_ambiguous_provider_failure(
-                result=result,
-                category=category,
-                code=code,
-            ),
+            ambiguous=ambiguous,
         )
 
         delivery.status = failure_status
@@ -506,23 +495,9 @@ class CommunicationDeliveryService:
 
     @classmethod
     def retry_delay_seconds(cls, *, delivery_id: str, attempts: int) -> int:
-        safe_attempts = max(1, int(attempts))
-        exponential_delay = min(
-            cls.RETRY_MAX_SECONDS,
-            cls.RETRY_BASE_SECONDS * (2 ** min(safe_attempts - 1, 16)),
-        )
-        if exponential_delay >= cls.RETRY_MAX_SECONDS:
-            return cls.RETRY_MAX_SECONDS
-        jitter_window = max(
-            1,
-            (exponential_delay * cls.RETRY_JITTER_PERCENT) // 100,
-        )
-        digest = hashlib.sha256(
-            f"{delivery_id}:{safe_attempts}".encode("utf-8")
-        ).digest()
-        return min(
-            cls.RETRY_MAX_SECONDS,
-            exponential_delay + int.from_bytes(digest[:4], "big") % (jitter_window + 1),
+        return delivery_retry_delay_seconds(
+            delivery_id=delivery_id,
+            attempts=attempts,
         )
 
     @classmethod
@@ -581,13 +556,23 @@ class CommunicationDeliveryService:
 
     @classmethod
     async def _database_now(cls, session: AsyncSession) -> datetime:
-        clock = (
-            func.clock_timestamp()
-            if session.get_bind().dialect.name == "postgresql"
-            else func.current_timestamp()
-        )
+        dialect_name = session.get_bind().dialect.name
+        if dialect_name == "postgresql":
+            clock = func.clock_timestamp()
+        elif dialect_name == "sqlite":
+            # CURRENT_TIMESTAMP is only second-precision in SQLite and can
+            # make a row created moments earlier appear artificially future.
+            clock = func.strftime("%Y-%m-%d %H:%M:%f", "now")
+        else:
+            clock = func.current_timestamp()
         value = (await session.execute(select(clock))).scalar_one()
         return cls._coerce_database_datetime(value)
+
+    @classmethod
+    async def database_now(cls, session: AsyncSession) -> datetime:
+        """Return the authoritative delivery lifecycle clock."""
+
+        return await cls._database_now(session)
 
     @staticmethod
     def _coerce_database_datetime(value: object) -> datetime:

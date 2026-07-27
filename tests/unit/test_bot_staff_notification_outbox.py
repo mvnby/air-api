@@ -20,6 +20,8 @@ from models import (
 from services.bot_staff_notification_api_service import (
     BotStaffNotificationApiService,
 )
+import services.bot_staff_notification_api_service as bot_api_module
+from services.communications.delivery_service import CommunicationDeliveryService
 from services.staff_task_notification_event_service import (
     StaffTaskNotificationEventService,
 )
@@ -77,7 +79,16 @@ async def _seed_task(session: AsyncSession) -> OrderWorkStage:
 
 
 @pytest.mark.asyncio
-async def test_assignment_event_claim_and_ack_are_end_to_end(staff_outbox_session):
+async def test_assignment_event_claim_and_ack_use_database_clock(
+    staff_outbox_session,
+    monkeypatch,
+):
+    class AppClockMustNotBeRead:
+        @classmethod
+        def now(cls, *args, **kwargs):
+            raise AssertionError("staff lifecycle must use the database clock")
+
+    monkeypatch.setattr(bot_api_module, "datetime", AppClockMustNotBeRead)
     stage = await _seed_task(staff_outbox_session)
     created = await StaffTaskNotificationEventService.enqueue_assigned(
         staff_outbox_session,
@@ -172,7 +183,7 @@ async def test_nack_schedules_retry_and_next_claim_increments_attempt(
         worker_id="bot-1",
         lease_token=first["lease_token"],
         permanent=False,
-        error_code="telegram_timeout",
+        error_code="telegram_retry_after",
         retry_after_seconds=1,
     )
     assert failed.status == "retry"
@@ -188,6 +199,149 @@ async def test_nack_schedules_retry_and_next_claim_increments_attempt(
     )
     assert second is not None
     assert second["attempt"] == 2
+
+
+@pytest.mark.asyncio
+async def test_transport_nack_is_terminal_ambiguous_after_remote_handoff(
+    staff_outbox_session,
+):
+    stage = await _seed_task(staff_outbox_session)
+    await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session,
+        stage=stage,
+        previous_installer_id=None,
+    )
+    await staff_outbox_session.commit()
+    claim = await BotStaffNotificationApiService.claim(
+        staff_outbox_session,
+        worker_id="bot-transport-failure",
+        visibility_timeout_seconds=90,
+    )
+    assert claim is not None
+
+    failed = await BotStaffNotificationApiService.nack(
+        staff_outbox_session,
+        delivery_id=claim["delivery_id"],
+        worker_id="bot-transport-failure",
+        lease_token=claim["lease_token"],
+        permanent=False,
+        error_code="telegram_transport_error",
+        retry_after_seconds=None,
+    )
+    attempt = await staff_outbox_session.get(
+        CommunicationDeliveryAttempt,
+        (claim["delivery_id"], 1),
+    )
+
+    assert failed.status == "dead"
+    assert attempt is not None
+    assert attempt.outcome == "dead"
+    assert attempt.ambiguous is True
+    assert attempt.error_code == "telegram_transport_error"
+
+
+@pytest.mark.asyncio
+async def test_claim_handoff_expiry_is_terminal_and_never_claimed_again(
+    staff_outbox_session,
+):
+    stage = await _seed_task(staff_outbox_session)
+    await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session,
+        stage=stage,
+        previous_installer_id=None,
+    )
+    await staff_outbox_session.commit()
+    first = await BotStaffNotificationApiService.claim(
+        staff_outbox_session,
+        worker_id="bot-that-disappears",
+        visibility_timeout_seconds=90,
+    )
+    assert first is not None
+
+    delivery = await staff_outbox_session.get(
+        CommunicationDelivery,
+        first["delivery_id"],
+    )
+    assert delivery is not None
+    delivery.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    staff_outbox_session.add(delivery)
+    await staff_outbox_session.commit()
+
+    second = await BotStaffNotificationApiService.claim(
+        staff_outbox_session,
+        worker_id="replacement-bot",
+        visibility_timeout_seconds=90,
+    )
+    await staff_outbox_session.refresh(delivery)
+    attempt = await staff_outbox_session.get(
+        CommunicationDeliveryAttempt,
+        (delivery.delivery_id, 1),
+    )
+
+    assert second is None
+    assert delivery.status == "dead"
+    assert attempt is not None
+    assert attempt.provider_started_at is not None
+    assert attempt.outcome == "dead"
+    assert attempt.ambiguous is True
+    assert attempt.error_code == "lease_expired_after_provider"
+
+
+@pytest.mark.asyncio
+async def test_old_api_null_boundary_handoff_is_conservatively_terminal(
+    staff_outbox_session,
+):
+    stage = await _seed_task(staff_outbox_session)
+    await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session,
+        stage=stage,
+        previous_installer_id=None,
+    )
+    await staff_outbox_session.commit()
+    now = await CommunicationDeliveryService.database_now(
+        staff_outbox_session
+    )
+    await BotStaffNotificationApiService._materialize_pending(
+        staff_outbox_session,
+        worker_id="old-api",
+        now=now,
+    )
+    old_claim = await CommunicationDeliveryService.claim_next(
+        staff_outbox_session,
+        worker_id="old-api",
+        scope=BotStaffNotificationApiService._SCOPE,
+        channel="telegram",
+        lease_seconds=90,
+        now=now,
+    )
+    assert old_claim is not None
+    await staff_outbox_session.commit()
+    delivery = await staff_outbox_session.get(
+        CommunicationDelivery,
+        old_claim.delivery_id,
+    )
+    assert delivery is not None
+    delivery.lease_expires_at = now - timedelta(seconds=1)
+    staff_outbox_session.add(delivery)
+    await staff_outbox_session.commit()
+
+    replacement = await BotStaffNotificationApiService.claim(
+        staff_outbox_session,
+        worker_id="new-api",
+        visibility_timeout_seconds=90,
+    )
+    attempt = await staff_outbox_session.get(
+        CommunicationDeliveryAttempt,
+        (old_claim.delivery_id, 1),
+    )
+
+    assert replacement is None
+    assert delivery.status == "dead"
+    assert attempt is not None
+    assert attempt.provider_started_at is None
+    assert attempt.outcome == "dead"
+    assert attempt.ambiguous is True
+    assert attempt.error_code == "lease_expired_after_provider"
 
 
 @pytest.mark.asyncio

@@ -165,7 +165,10 @@ def test_processing_scope_factories_are_closed_immutable_allowlists():
         run_id=RUN_ID_A,
         control_revision=7,
     )
-    full = CommunicationProcessingScope.all(control_revision=8)
+    full = CommunicationProcessingScope.all(
+        control_revision=8,
+        event_created_at_watermark=NOW,
+    )
     staff_bot = CommunicationProcessingScope.staff_bot(control_revision=9)
 
     assert canary.outbox_event_types == CANARY_EVENT_TYPES
@@ -187,6 +190,24 @@ def test_processing_scope_factories_are_closed_immutable_allowlists():
     assert not set(STAFF_BOT_TEMPLATE_KEYS).intersection(ALL_TEMPLATE_KEYS)
     with pytest.raises(FrozenInstanceError):
         canary.control_revision = 9  # type: ignore[misc]
+
+
+def test_all_scope_requires_an_aware_exact_utc_activation_watermark():
+    with pytest.raises(ValueError, match="inconsistent"):
+        CommunicationProcessingScope.all(
+            control_revision=1,
+            event_created_at_watermark=datetime(2026, 7, 27),
+        )
+    with pytest.raises(ValueError, match="normalized to UTC"):
+        CommunicationProcessingScope.all(
+            control_revision=1,
+            event_created_at_watermark=datetime(
+                2026,
+                7,
+                27,
+                tzinfo=timezone(timedelta(hours=3)),
+            ),
+        )
 
 
 @pytest.mark.parametrize(

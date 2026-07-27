@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import replace
+from datetime import timezone
 from uuid import uuid4
 
 import pytest
@@ -244,14 +245,26 @@ async def test_postgres_failover_never_overlaps_provider_calls(
         expire_on_commit=False,
     )
     async with session_factory() as session:
-        control = await CommunicationRuntimeStateService.set_mode(
+        state = await CommunicationRuntimeStateService.ensure_state(
             session,
             channel="telegram",
-            mode=CommunicationRuntimeMode.ALL,
         )
+        watermark = await CommunicationRuntimeStateService.database_now(session)
+        CommunicationRuntimeStateService._apply_control(
+            state,
+            mode=CommunicationRuntimeMode.ALL,
+            canary_run_id=None,
+            now=watermark,
+            installation_estimate_watermark_at=watermark,
+        )
+        await session.flush()
+        control = CommunicationRuntimeStateService._to_control(state)
         await session.commit()
     expected_scope = CommunicationProcessingScope.all(
-        control_revision=control.control_revision
+        control_revision=control.control_revision,
+        event_created_at_watermark=(
+            control.installation_estimate_watermark_at
+        ),
     )
 
     acquired_locks = []

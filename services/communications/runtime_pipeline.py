@@ -93,6 +93,14 @@ class CommunicationRuntimePipeline:
             scope=scope,
             lease_seconds=self._config.lease_seconds,
             safety_check=lambda: self._safety_check(scope),
+            provider_boundary_check=lambda session: (
+                CommunicationRuntimeStateService.lock_owned_processing_scope(
+                    session,
+                    channel=self._config.channel,
+                    instance_id=self._config.instance_id,
+                    scope=scope,
+                )
+            ),
             db_operation_timeout_seconds=self._config.db_probe_timeout_seconds,
         )
 
@@ -152,9 +160,20 @@ class CommunicationRuntimePipeline:
             if not self._config.allow_all_mode:
                 await self._pause_for_mode(control.mode)
                 return None
-            return CommunicationProcessingScope.all(
-                control_revision=control.control_revision
-            )
+            try:
+                return CommunicationProcessingScope.all(
+                    control_revision=control.control_revision,
+                    event_created_at_watermark=(
+                        control.installation_estimate_watermark_at
+                    ),
+                )
+            except (TypeError, ValueError):
+                await self._close_provider()
+                await self._record_status(
+                    CommunicationRuntimeStatus.PAUSED,
+                    last_error_code="installation_activation_watermark_invalid",
+                )
+                return None
         try:
             return CommunicationProcessingScope.canary(
                 run_id=control.canary_run_id or "",

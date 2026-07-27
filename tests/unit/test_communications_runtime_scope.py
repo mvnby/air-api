@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
@@ -65,12 +66,28 @@ async def own_mode(
     canary_run_id: str | None = None,
 ):
     async with session_factory() as session:
-        control = await CommunicationRuntimeStateService.set_mode(
-            session,
-            channel="telegram",
-            mode=mode,
-            canary_run_id=canary_run_id,
-        )
+        if mode == CommunicationRuntimeMode.ALL:
+            state = await CommunicationRuntimeStateService.ensure_state(
+                session,
+                channel="telegram",
+            )
+            state.mode = CommunicationRuntimeMode.ALL.value
+            state.canary_run_id = None
+            state.control_revision = int(state.control_revision) + 1
+            state.installation_estimate_watermark_at = (
+                state.installation_estimate_watermark_at
+                or datetime(2000, 1, 1, tzinfo=timezone.utc)
+            )
+            session.add(state)
+            await session.flush()
+            control = CommunicationRuntimeStateService._to_control(state)
+        else:
+            control = await CommunicationRuntimeStateService.set_mode(
+                session,
+                channel="telegram",
+                mode=mode,
+                canary_run_id=canary_run_id,
+            )
         owned = await CommunicationRuntimeStateService.take_ownership(
             session,
             channel="telegram",

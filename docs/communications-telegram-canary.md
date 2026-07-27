@@ -6,7 +6,7 @@ Each intentional run has an immutable, canonical lowercase UUIDv4 identifier.
 
 Do not execute a live canary merely because this script exists. Before the
 first production run, deploy one release consistently across API/migration and
-the communications worker, verify Alembic revision `6c0d3e5f7a21`, prove the
+the communications worker, verify Alembic revision `e9a1b2c3d4e5`, prove the
 worker owns the writable-primary advisory lock, keep
 `COMMUNICATIONS_WORKER_ALLOW_ALL_MODE=false`, and confirm there is no older
 worker process. This follow-up has not itself performed a production deploy or
@@ -110,14 +110,19 @@ executing a later transaction; after an emergency, first establish that no
 execute command remains in flight and then repeat `--off` on the current
 primary.
 
-`--off` prevents new claims and fences later state changes, but it cannot recall
-a Telegram request that already entered the provider call. Wait at least the
-bounded provider/shutdown window and verify the managed worker has stopped or
-reported disabled before treating the drain as complete. A delivery interrupted
-after claim may remain `running` with an expired lease while the scope is off.
-For this max-attempts-one canary, classify that historical result as ambiguous;
-do not re-arm, recover, requeue, or create a replacement run merely to make the
-status terminal.
+`--off` serializes on the same runtime-control row as the provider boundary. A
+boundary transaction that observes committed `off` fails closed before network
+I/O; an `off` transaction waits for any earlier boundary transaction to commit.
+It still cannot recall a Telegram request that already crossed that durable
+boundary. A rejected exact pre-provider claim is released without ambiguity and
+cannot strand the off drain as `running`. Wait at least the bounded
+provider/shutdown window and verify the managed worker has
+stopped or reported disabled before treating the drain as complete. An expired
+pre-boundary canary attempt is provably unsent, but `max_attempts=1` closes it
+terminally without ambiguity or replay. An expired post-boundary attempt is
+terminal `dead` with `ambiguous=true`. Reconcile that historical result
+manually. Do not re-arm, requeue, or create a replacement run merely to make
+the status look successful.
 
 Direct `canary -> all`, `all -> canary`, and `canary A -> canary B` transitions
 are rejected; every scope change must pass through `off`. There is deliberately

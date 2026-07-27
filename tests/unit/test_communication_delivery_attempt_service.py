@@ -31,7 +31,10 @@ from services.communications.template_registry import (
 )
 
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
-ALL_SCOPE = CommunicationProcessingScope.all(control_revision=0)
+ALL_SCOPE = CommunicationProcessingScope.all(
+    control_revision=0,
+    event_created_at_watermark=datetime(2000, 1, 1, tzinfo=timezone.utc),
+)
 
 
 @pytest.fixture
@@ -113,6 +116,7 @@ def test_attempt_model_contains_only_pii_free_operational_fields():
         "attempt_no",
         "started_at",
         "finished_at",
+        "provider_started_at",
         "outcome",
         "error_category",
         "error_code",

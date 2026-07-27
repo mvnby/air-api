@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from datetime import datetime, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -203,7 +204,12 @@ async def test_installation_estimate_public_intake_is_materialized_and_sent_once
         assert event.aggregate_id == str(first["order_id"])
         assert event.status == "pending"
 
-        scope = CommunicationProcessingScope.all(control_revision=0)
+        scope = CommunicationProcessingScope.all(
+            control_revision=0,
+            event_created_at_watermark=datetime(
+                2000, 1, 1, tzinfo=timezone.utc
+            ),
+        )
         materialized = await CommunicationOutboxDispatcher.dispatch_next(
             session,
             dispatcher_id="installation-estimate-e2e-dispatcher",

@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from models import CommunicationRuntimeState
 from services.communications.canary_run_id import normalize_canary_run_id
@@ -62,6 +63,7 @@ class CommunicationRuntimeControl:
     status: CommunicationRuntimeStatus
     instance_id: str | None
     heartbeat_at: datetime | None
+    installation_estimate_watermark_at: datetime | None
 
 
 class CommunicationRuntimeStateService:
@@ -75,6 +77,26 @@ class CommunicationRuntimeStateService:
     @staticmethod
     def _now() -> datetime:
         return datetime.now(timezone.utc)
+
+    @classmethod
+    async def database_now(cls, session: AsyncSession) -> datetime:
+        clock = (
+            func.clock_timestamp()
+            if session.get_bind().dialect.name == "postgresql"
+            else func.current_timestamp()
+        )
+        value = (await session.execute(select(clock))).scalar_one()
+        return cls._as_utc(value)
+
+    @staticmethod
+    def _as_utc(value: object) -> datetime:
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value.replace(" ", "T"))
+        if not isinstance(value, datetime):
+            raise TypeError("Database clock did not return a datetime")
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     @staticmethod
     def _normalize_channel(channel: str) -> str:
@@ -116,6 +138,7 @@ class CommunicationRuntimeStateService:
             mode=CommunicationRuntimeMode.OFF.value,
             canary_run_id=None,
             control_revision=0,
+            installation_estimate_watermark_at=None,
             status=CommunicationRuntimeStatus.STOPPED.value,
             control_updated_at=now,
             created_at=now,
@@ -180,11 +203,37 @@ class CommunicationRuntimeStateService:
         *,
         mode: CommunicationRuntimeMode,
         canary_run_id: str | None,
+        now: datetime,
+        installation_estimate_watermark_at: datetime | None,
     ) -> None:
-        now = cls._now()
+        current_watermark = (
+            cls._as_utc(state.installation_estimate_watermark_at)
+            if state.installation_estimate_watermark_at is not None
+            else None
+        )
+        requested_watermark = (
+            cls._as_utc(installation_estimate_watermark_at)
+            if installation_estimate_watermark_at is not None
+            else None
+        )
+        if (
+            current_watermark is not None
+            and requested_watermark != current_watermark
+        ):
+            raise CommunicationRuntimeControlConflict(
+                "installation_activation_watermark_immutable"
+            )
+        if (
+            mode == CommunicationRuntimeMode.ALL
+            and requested_watermark is None
+        ):
+            raise CommunicationRuntimeControlConflict(
+                "installation_activation_watermark_required"
+            )
         state.mode = mode.value
         state.canary_run_id = canary_run_id
         state.control_revision = int(state.control_revision) + 1
+        state.installation_estimate_watermark_at = requested_watermark
         state.control_updated_at = now
         state.updated_at = now
 
@@ -198,6 +247,10 @@ class CommunicationRuntimeStateService:
         canary_run_id: str | None = None,
     ) -> CommunicationRuntimeControl:
         normalized_mode = CommunicationRuntimeMode(mode)
+        if normalized_mode == CommunicationRuntimeMode.ALL:
+            raise CommunicationRuntimeControlConflict(
+                "installation_activation_requires_typed_control"
+            )
         normalized_run_id = cls._normalize_canary_scope(
             normalized_mode,
             canary_run_id,
@@ -213,10 +266,15 @@ class CommunicationRuntimeStateService:
             raise CommunicationRuntimeControlConflict(
                 "runtime_control_transition_requires_off"
             )
+        now = await cls.database_now(session)
         cls._apply_control(
             state,
             mode=normalized_mode,
             canary_run_id=normalized_run_id,
+            now=now,
+            installation_estimate_watermark_at=(
+                state.installation_estimate_watermark_at
+            ),
         )
         await session.flush()
         return cls._to_control(state)
@@ -233,10 +291,15 @@ class CommunicationRuntimeStateService:
         state = await cls._lock_state(session, channel=channel)
         if CommunicationRuntimeMode(state.mode) != CommunicationRuntimeMode.OFF:
             raise CommunicationRuntimeControlConflict("canary_runtime_not_off")
+        now = await cls.database_now(session)
         cls._apply_control(
             state,
             mode=CommunicationRuntimeMode.CANARY,
             canary_run_id=normalized_run_id,
+            now=now,
+            installation_estimate_watermark_at=(
+                state.installation_estimate_watermark_at
+            ),
         )
         await session.flush()
         return cls._to_control(state)
@@ -308,6 +371,42 @@ class CommunicationRuntimeStateService:
             mode=control.mode.value,
             canary_run_id=control.canary_run_id,
             control_revision=control.control_revision,
+            event_created_at_watermark=(
+                control.installation_estimate_watermark_at
+            ),
+        ):
+            raise CommunicationRuntimeModeBlocked(
+                control.mode,
+                canary_run_id=control.canary_run_id,
+                control_revision=control.control_revision,
+            )
+        return control
+
+    @classmethod
+    async def lock_owned_processing_scope(
+        cls,
+        session: AsyncSession,
+        *,
+        channel: str,
+        instance_id: str,
+        scope: CommunicationProcessingScope,
+    ) -> CommunicationRuntimeControl:
+        """Linearize the provider boundary against operator control changes."""
+
+        normalized_instance_id = cls._normalize_instance_id(instance_id)
+        state = await cls._lock_state(session, channel=channel)
+        if state.instance_id != normalized_instance_id:
+            raise CommunicationRuntimeStateOwnershipLost(
+                "Communication runtime state ownership was lost"
+            )
+        control = cls._to_control(state)
+        if not scope.matches_control(
+            mode=control.mode.value,
+            canary_run_id=control.canary_run_id,
+            control_revision=control.control_revision,
+            event_created_at_watermark=(
+                control.installation_estimate_watermark_at
+            ),
         ):
             raise CommunicationRuntimeModeBlocked(
                 control.mode,
@@ -362,4 +461,11 @@ class CommunicationRuntimeStateService:
             status=CommunicationRuntimeStatus(state.status),
             instance_id=state.instance_id,
             heartbeat_at=state.heartbeat_at,
+            installation_estimate_watermark_at=(
+                CommunicationRuntimeStateService._as_utc(
+                    state.installation_estimate_watermark_at
+                )
+                if state.installation_estimate_watermark_at is not None
+                else None
+            ),
         )

@@ -8,6 +8,7 @@ from services.communications.contracts import (
     TelegramCanaryRequestedPayloadV1,
 )
 from services.communications.recipient_directory import (
+    InstallationEstimateOwnerRecipientDirectory,
     ManagementRecipientDirectory,
     OperationsCanaryRecipientDirectory,
 )
@@ -29,6 +30,10 @@ class CommunicationAudienceResolver:
     ) -> list[CommunicationRecipientV1]:
         if plan.audience == "management":
             return await ManagementRecipientDirectory.list_telegram(session)
+        if plan.audience == "installation_estimate_owners":
+            return await InstallationEstimateOwnerRecipientDirectory.list_telegram(
+                session
+            )
         if plan.audience == "operations_canary":
             payload = TelegramCanaryRequestedPayloadV1.model_validate(
                 plan.render_context
