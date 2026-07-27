@@ -352,9 +352,12 @@ Do not edit either delivery gate manually.
    installation-notification operator, the pinned PITR communications
    preflight, and the profile-aware role agent on both nodes. Complete the
    usual strict readiness/PITR/replication checks first.
-2. Open a separate Compose-only PR for the next profile (`canary`, then later
-   `active`). It must contain no role-agent, PITR-controller, application, or
-   migration changes. Wait for every CI check to pass. Do not merge it yet.
+2. Open a separate profile-only PR for the next profile (`canary`, then later
+   `active`). It contains only both Patroni Compose gate changes and their exact
+   derived `EXPECTED_COMPOSE_DIGESTS` pins in
+   `verify_postgres_pitr_runtime.py`; the verifier logic must remain unchanged.
+   It must contain no role-agent, PITR-controller, application, or migration
+   logic changes. Wait for every CI check to pass. Do not merge it yet.
 3. Freeze production deployments and unrelated PITR operations. From that
    exact CI-green PR head, run the official atomic PITR cluster migration with
    one recorded transaction ID. Before its first remote mutation, the
@@ -387,9 +390,10 @@ stops and explicitly requires a new transaction ID. Retry the old ID only when
 that cleanup itself is interrupted. The communications fence remains latched
 until a reviewed deploy. After the roll-forward boundary, repair and roll
 forward with the same transaction. If a finalized profile must be reverted,
-prepare a separate CI-green Compose-only rollback head and run a new official
-PITR transaction from that head; an ordinary app rollback is rejected because
-it would replace the attested Compose.
+prepare a separate CI-green profile-only rollback head with matching derived
+`EXPECTED_COMPOSE_DIGESTS` pins and run a new official PITR transaction from
+that head; an ordinary app rollback is rejected because it would replace the
+attested Compose.
 
 ## Production Cutover
 
