@@ -393,10 +393,12 @@ python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
 # release containing this preflight before using this command for a profile
 # change.
 #
-# For a communications profile change, run this command from an otherwise
-# Compose-only, fully CI-green PR head while production deployment is frozen.
-# Immediately after success, merge that unchanged head and deploy it. Do not
-# mix not-yet-installed role-agent/PITR code into the profile PR.
+# For a communications profile change, run this command from a profile-only,
+# fully CI-green PR head while production deployment is frozen. That head
+# contains only both Patroni Compose gate changes and their exact derived
+# EXPECTED_COMPOSE_DIGESTS pins; verifier logic remains unchanged. Immediately
+# after success, merge that unchanged head and deploy it. Do not mix
+# not-yet-installed role-agent/PITR code into the profile PR.
 #
 # The transaction attests and installs the exact
 # helper bundle standby-first, validates the private destination from both
@@ -433,10 +435,11 @@ python3 scripts/ha/apply_postgres_pitr_primary_prerequisites.py \
 #
 # A failure after a finalized profile migration is not repaired with an app
 # rollback: ordinary deploys accept only byte-identical PITR-attested Compose.
-# Roll forward the same head, or prepare a CI-green Compose-only rollback head
-# and apply it with a new official atomic PITR transaction. Keep the deployment
-# freeze through immediate deploy, both-node verification, strict HA/PITR
-# checks, and a 30-minute alert window.
+# Roll forward the same head, or prepare a CI-green profile-only rollback head
+# with matching derived EXPECTED_COMPOSE_DIGESTS pins and apply it with a new
+# official atomic PITR transaction. Keep the deployment freeze through immediate
+# deploy, both-node verification, strict HA/PITR checks, and a 30-minute alert
+# window.
 
 # PostgreSQL archive parameters are Patroni DCS configuration for an existing
 # cluster. The migration requires the reviewed archive settings to be active on
