@@ -295,10 +295,10 @@ content causes a full standby fence.
 Both Patroni API nodes define `communications-worker` from the exact immutable
 `BACKEND_IMAGE` used by the API. It uses that node's local PostgreSQL service
 and the same role-resolved `.ha-app-role.env`; deploy and verification reject
-any image, API/worker parity, or `APP_ROLE` mismatch. The production Compose
-files remain in the Phase 2A `dormant` profile, with both
-`COMMUNICATIONS_WORKER_ENABLED` and
-`COMMUNICATIONS_WORKER_ALLOW_ALL_MODE` exactly `false`.
+any image, API/worker parity, or `APP_ROLE` mismatch. The compatibility release
+starts with the production Compose files in the `dormant` profile. Later
+profile changes must follow the reviewed atomic cutover sequence below;
+ordinary deploys cannot change either gate.
 
 Release tooling recognizes only this closed profile set:
 
