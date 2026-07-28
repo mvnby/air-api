@@ -7,7 +7,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from models import CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink
+from models import CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink, OrderStatus
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
@@ -17,6 +17,10 @@ from services.document_template_service import DocumentTemplateService
 
 class DocumentHasDependentsError(ValueError):
     """Raised when a document is used as a basis for other documents."""
+
+
+class OrderDocumentsLockedError(ValueError):
+    """Raised when a completed order would have its document history mutated."""
 
 
 class DocumentService:
@@ -59,6 +63,17 @@ class DocumentService:
         ".doc": "application/msword",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
+
+    @staticmethod
+    async def ensure_order_documents_mutable(session: AsyncSession, order_id: int) -> Order:
+        order = await session.get(Order, order_id)
+        if not order:
+            raise ValueError("Order not found")
+        if order.status == OrderStatus.CLOSED:
+            raise OrderDocumentsLockedError(
+                "Заказ завершён: документы доступны только для просмотра и повторной отправки"
+            )
+        return order
 
     @staticmethod
     async def get_available_templates(
@@ -179,6 +194,7 @@ class DocumentService:
         Returns:
             OrderDocument объект с данными о документе
         """
+        await DocumentService.ensure_order_documents_mutable(session, order_id)
         if force_create or doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES or doc_type in DocumentService.CLOSING_DOC_TYPES:
             return await DocumentService._create_new_document(
                 session,
@@ -247,6 +263,8 @@ class DocumentService:
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
+
+        await DocumentService.ensure_order_documents_mutable(session, order_id)
 
         if additional_conditions is not None:
             order = await session.get(Order, order_id)
@@ -333,6 +351,7 @@ class DocumentService:
             return None
 
         order_id = document.order_id
+        await DocumentService.ensure_order_documents_mutable(session, order_id)
         google_file_id = document.google_file_id
 
         dependent_query = select(OrderDocument.id).where(
@@ -366,6 +385,7 @@ class DocumentService:
         """
         import os
 
+        await DocumentService.ensure_order_documents_mutable(session, order_id)
         original_filename, suffix = DocumentService._validate_upload_file(file)
         tmp_path = await DocumentService._save_upload_to_temp(file, suffix)
 
@@ -469,6 +489,7 @@ class DocumentService:
         if not document:
             return None
 
+        await DocumentService.ensure_order_documents_mutable(session, document.order_id)
         previous_file_id = document.google_file_id
         title_prefix = f"{DOC_NAMES.get(document.doc_type, 'Документ')} {document.number}"
         file_id, edit_url = await DocumentService._upload_document_file(file, title_prefix=title_prefix)
@@ -497,9 +518,7 @@ class DocumentService:
         file: object = None,
     ) -> OrderDocument:
         """Registers a customer-provided one-time contract for closing docs."""
-        order = await session.get(Order, order_id)
-        if not order:
-            raise ValueError("Order not found")
+        order = await DocumentService.ensure_order_documents_mutable(session, order_id)
 
         cleaned_number = str(number or "").strip()
         if not cleaned_number:

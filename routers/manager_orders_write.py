@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
-from core.manager_error_codes import BAD_REQUEST, DOCUMENT_GENERATION_FAILED, ORDER_NOT_FOUND
+from core.manager_error_codes import BAD_REQUEST, DOCUMENT_GENERATION_FAILED, ORDER_DOCUMENTS_LOCKED, ORDER_NOT_FOUND
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_ORDER,
@@ -44,7 +44,7 @@ from schemas import (
     OrderWorkStageUpdatePayload,
     ManagerStaleWorkStageItem,
 )
-from services.document_service import DocumentService
+from services.document_service import DocumentService, OrderDocumentsLockedError
 from services.order_service import OrderService
 from services.order_transfer_service import OrderTransferService
 
@@ -322,6 +322,13 @@ async def generate_manager_order_document(
             scope_product_line_ids=scope_product_line_ids,
             additional_conditions=payload.additional_conditions if payload else None,
         )
+    except OrderDocumentsLockedError as exc:
+        raise manager_http_error(
+            status_code=409,
+            endpoint=GENERATE_MANAGER_ORDER_DOCUMENT,
+            error_code=ORDER_DOCUMENTS_LOCKED,
+            message=str(exc),
+        ) from exc
     except ValueError as exc:
         if draft_conditions_requested:
             await session.rollback()

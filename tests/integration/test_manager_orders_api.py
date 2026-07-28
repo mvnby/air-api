@@ -1957,7 +1957,8 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    # Generation remains available in the active work lifecycle as well.
+    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3200,7 +3201,8 @@ async def test_manager_doc_delete_success(async_client, db, monkeypatch):
     await db.commit()
     await db.refresh(customer)
     
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    # Documents must stay fully actionable after a deal enters the work stage.
+    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3237,6 +3239,52 @@ async def test_manager_doc_delete_success(async_client, db, monkeypatch):
     
     # Verify Google Call
     assert "fid_del" in deleted_ids
+
+
+@pytest.mark.asyncio
+async def test_manager_closed_order_document_history_is_read_only(async_client, db):
+    customer = Customer(name="Closed doc history", phone="+375290000009", type=CustomerType.individual)
+    order = Order(customer=customer, status=OrderStatus.CLOSED)
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    document = OrderDocument(
+        order_id=order.id,
+        doc_type="service_act",
+        number="ЗА-2026-009",
+        google_file_id="closed-doc-history",
+        google_edit_url="https://docs.google.com/document/d/closed-doc-history/edit",
+    )
+    db.add(document)
+    await db.commit()
+    await db.refresh(document)
+
+    headers = await _auth_headers(async_client)
+
+    history_response = await async_client.get(
+        f"/api/manager/orders/{order.id}/documents",
+        headers=headers,
+    )
+    assert history_response.status_code == 200
+    assert [item["id"] for item in history_response.json()["items"]] == [document.id]
+
+    generate_response = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/offer",
+        headers=headers,
+    )
+    assert generate_response.status_code == 409
+    assert generate_response.json()["detail"]["error_code"] == "order_documents_locked"
+
+    delete_response = await async_client.delete(
+        f"/api/manager/docs/{document.id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 409
+    assert delete_response.json()["detail"]["error_code"] == "order_documents_locked"
+    document_id = document.id
+    db.expire_all()
+    assert await db.get(OrderDocument, document_id) is not None
 
 
 @pytest.mark.asyncio

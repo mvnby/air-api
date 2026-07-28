@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
-from core.manager_error_codes import BAD_REQUEST, DOCUMENT_HAS_DEPENDENTS, DOCUMENT_NOT_FOUND
+from core.manager_error_codes import BAD_REQUEST, DOCUMENT_HAS_DEPENDENTS, DOCUMENT_NOT_FOUND, ORDER_DOCUMENTS_LOCKED
 from core.security import get_current_username
 from routers.manager_operation_ids import (
     GET_MANAGER_ORDER_DOCUMENTS,
@@ -35,7 +35,7 @@ from schemas import (
     DocumentTemplatePayload,
     DocumentTemplateUpdatePayload,
 )
-from services.document_service import DocumentHasDependentsError, DocumentService
+from services.document_service import DocumentHasDependentsError, DocumentService, OrderDocumentsLockedError
 from services.document_template_service import DocumentTemplateService
 from services.google_oauth_credentials import GoogleCredentialsError, GoogleDriveListError
 from services.google_service import get_google_service
@@ -63,6 +63,15 @@ def _document_template_files_google_error(
         endpoint=LIST_MANAGER_DOCUMENT_TEMPLATE_FILES,
         error_code=DOCUMENT_TEMPLATE_FILES_UNAVAILABLE,
         message=DOCUMENT_TEMPLATE_FILES_UNAVAILABLE_MESSAGE,
+    )
+
+
+def _order_documents_locked_error(endpoint: str, exc: OrderDocumentsLockedError):
+    return manager_http_error(
+        status_code=409,
+        endpoint=endpoint,
+        error_code=ORDER_DOCUMENTS_LOCKED,
+        message=str(exc),
     )
 
 
@@ -110,7 +119,10 @@ async def upload_manager_order_document(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
-    doc = await DocumentService.upload_document(session, order_id, file)
+    try:
+        doc = await DocumentService.upload_document(session, order_id, file)
+    except OrderDocumentsLockedError as exc:
+        raise _order_documents_locked_error(UPLOAD_MANAGER_ORDER_DOCUMENT, exc) from exc
     return ManagerOrderDocumentItem(
         id=doc.id,
         proposal_id=doc.proposal_id,
@@ -151,6 +163,8 @@ async def register_manager_external_contract(
             external_url=external_url,
             file=file,
         )
+    except OrderDocumentsLockedError as exc:
+        raise _order_documents_locked_error(REGISTER_MANAGER_EXTERNAL_CONTRACT, exc) from exc
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -188,6 +202,8 @@ async def attach_manager_doc_file(
 ):
     try:
         doc = await DocumentService.attach_file_to_document(session, doc_id, file)
+    except OrderDocumentsLockedError as exc:
+        raise _order_documents_locked_error(ATTACH_MANAGER_DOC_FILE, exc) from exc
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -265,6 +281,8 @@ async def delete_manager_doc(
 ):
     try:
         order_id = await DocumentService.delete_document(session, doc_id)
+    except OrderDocumentsLockedError as exc:
+        raise _order_documents_locked_error(DELETE_MANAGER_DOC, exc) from exc
     except DocumentHasDependentsError as exc:
         raise manager_http_error(
             status_code=409,
