@@ -123,7 +123,8 @@ const downloadOriginal = async () => {
     if (requestId !== downloadRequestId || activeItem.value?.id !== attachmentId) return;
     const anchor = document.createElement('a');
     anchor.href = response.url;
-    anchor.rel = 'noopener';
+    anchor.rel = 'noopener noreferrer';
+    anchor.referrerPolicy = 'no-referrer';
     anchor.download = item.filename;
     document.body.appendChild(anchor);
     anchor.click();
@@ -138,10 +139,31 @@ const downloadOriginal = async () => {
 
 const onKeydown = (event: KeyboardEvent) => {
   if (!isOpen.value) return;
-  if (event.key === 'ArrowLeft') showPrevious();
-  if (event.key === 'ArrowRight') showNext();
-  if (isImage.value && (event.key === '+' || event.key === '=')) setZoom(zoom.value + 0.25);
-  if (isImage.value && event.key === '-') setZoom(zoom.value - 0.25);
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const target = event.target;
+  if (
+    target instanceof HTMLElement
+    && (target.matches('input, textarea, select, audio, video, [contenteditable="true"]') || target.isContentEditable)
+  ) return;
+
+  let handled = false;
+  if (event.key === 'ArrowLeft' && hasPrevious.value) {
+    showPrevious();
+    handled = true;
+  }
+  if (event.key === 'ArrowRight' && hasNext.value) {
+    showNext();
+    handled = true;
+  }
+  if (isImage.value && (event.key === '+' || event.key === '=')) {
+    setZoom(zoom.value + 0.25);
+    handled = true;
+  }
+  if (isImage.value && event.key === '-') {
+    setZoom(zoom.value - 0.25);
+    handled = true;
+  }
+  if (handled) event.preventDefault();
 };
 
 useDialogA11y({
@@ -176,7 +198,7 @@ onBeforeUnmount(() => {
     <div
       v-if="isOpen && activeItem"
       ref="dialogRef"
-      class="fixed inset-0 z-[120] flex flex-col bg-slate-950/95 text-white"
+      class="fixed inset-0 z-[120] flex min-h-[100dvh] flex-col bg-slate-950/95 text-white"
       role="dialog"
       aria-modal="true"
       :aria-label="`Просмотр файла ${activeItem.filename}`"
@@ -204,7 +226,7 @@ onBeforeUnmount(() => {
 
         <button
           v-if="accessUrl"
-          class="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10"
+          class="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-white/10 sm:h-9 sm:w-9"
           type="button"
           :disabled="downloadLoading"
           title="Скачать оригинал"
@@ -213,7 +235,7 @@ onBeforeUnmount(() => {
         >
           <span class="material-icons-round text-[21px]" :class="{ 'animate-pulse': downloadLoading }" aria-hidden="true">download</span>
         </button>
-        <button ref="closeButtonRef" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10" title="Закрыть" aria-label="Закрыть" @click="close">
+        <button ref="closeButtonRef" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-white/10 sm:h-9 sm:w-9" title="Закрыть" aria-label="Закрыть" @click="close">
           <span class="material-icons-round text-[22px]" aria-hidden="true">close</span>
         </button>
       </header>
@@ -239,6 +261,7 @@ onBeforeUnmount(() => {
           <img
             :src="accessUrl"
             :alt="activeItem.caption || activeItem.filename"
+            referrerpolicy="no-referrer"
             class="max-h-full max-w-full select-none object-contain transition-transform duration-150"
             :style="{ transform: `scale(${zoom})` }"
             draggable="false"
@@ -246,7 +269,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else-if="accessUrl && isPdf" class="h-full p-2 sm:p-4">
-          <iframe :src="accessUrl" :title="activeItem.filename" class="h-full w-full rounded-lg bg-white" />
+          <iframe :src="accessUrl" :title="activeItem.filename" referrerpolicy="no-referrer" class="h-full w-full rounded-lg bg-white" />
         </div>
 
         <div v-else-if="accessUrl && isAudio" class="flex h-full items-center justify-center p-5">
@@ -265,7 +288,7 @@ onBeforeUnmount(() => {
             <span class="material-icons-round text-[64px] text-slate-300" aria-hidden="true">{{ fileIcon }}</span>
             <p class="mt-3 truncate text-base font-semibold">{{ activeItem.filename }}</p>
             <p class="mt-1 text-sm text-slate-300">Предпросмотр этого формата недоступен.</p>
-            <a :href="accessUrl" target="_blank" rel="noopener" class="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900">
+            <a :href="accessUrl" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" class="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900">
               <span class="material-icons-round text-[19px]" aria-hidden="true">open_in_new</span>
               Открыть файл
             </a>
@@ -302,11 +325,11 @@ onBeforeUnmount(() => {
             <span v-if="formatAttachmentSize(activeItem.size_bytes)"> · {{ formatAttachmentSize(activeItem.size_bytes) }}</span>
           </p>
           <div v-if="isImage" class="flex items-center gap-1 sm:hidden">
-            <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 disabled:opacity-40" :disabled="zoom <= 0.5" aria-label="Уменьшить" @click="setZoom(zoom - 0.25)"><span class="material-icons-round text-[18px]" aria-hidden="true">remove</span></button>
+            <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 disabled:opacity-40" :disabled="zoom <= 0.5" aria-label="Уменьшить" @click="setZoom(zoom - 0.25)"><span class="material-icons-round text-[18px]" aria-hidden="true">remove</span></button>
             <button type="button" class="min-w-12 text-xs font-semibold" @click="setZoom(1)">{{ Math.round(zoom * 100) }}%</button>
-            <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 disabled:opacity-40" :disabled="zoom >= 3" aria-label="Увеличить" @click="setZoom(zoom + 0.25)"><span class="material-icons-round text-[18px]" aria-hidden="true">add</span></button>
+            <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 disabled:opacity-40" :disabled="zoom >= 3" aria-label="Увеличить" @click="setZoom(zoom + 0.25)"><span class="material-icons-round text-[18px]" aria-hidden="true">add</span></button>
           </div>
-          <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-white/10" :aria-expanded="detailsOpen" title="Сведения о файле" aria-label="Сведения о файле" @click="detailsOpen = !detailsOpen">
+          <button type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-lg hover:bg-white/10" :aria-expanded="detailsOpen" title="Сведения о файле" aria-label="Сведения о файле" @click="detailsOpen = !detailsOpen">
             <span class="material-icons-round text-[20px]" aria-hidden="true">info</span>
           </button>
         </div>

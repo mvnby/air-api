@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { LeadsInboxItemResponse } from '../../api';
+import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 
 const props = defineProps<{
   item: LeadsInboxItemResponse;
@@ -14,6 +15,8 @@ const emit = defineEmits<{
 }>();
 
 const isCommentExpanded = ref(false);
+const attachmentsOpen = ref(false);
+const attachmentsRegionId = computed(() => `lead-attachments-${props.item.id}`);
 
 const sourceLabel: Record<string, string> = {
   site: 'Сайт',
@@ -176,13 +179,36 @@ const hasLongComment = computed(() => (props.item.comment || '').length > 140);
       <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">
         {{ formatDate(displayDate) }}
       </span>
-      <span
+      <button
         v-if="item.attachment_count"
-        class="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300"
+        type="button"
+        class="inline-flex min-h-9 items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 dark:bg-cyan-500/10 dark:text-cyan-300 dark:hover:bg-cyan-500/20 dark:focus-visible:ring-offset-slate-800"
+        :aria-expanded="attachmentsOpen"
+        :aria-controls="attachmentsRegionId"
+        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} фото заявки: ${item.attachment_count}`"
+        @click="attachmentsOpen = !attachmentsOpen"
       >
-        <span class="material-icons-round text-[14px]">photo_library</span>
-        {{ item.attachment_count }}
-      </span>
+        <span class="material-icons-round text-[15px]" aria-hidden="true">photo_library</span>
+        Фото: {{ item.attachment_count }}
+        <span class="material-icons-round text-[15px]" aria-hidden="true">{{ attachmentsOpen ? 'expand_less' : 'expand_more' }}</span>
+      </button>
+    </div>
+
+    <div
+      v-if="attachmentsOpen"
+      :id="attachmentsRegionId"
+      class="mx-4 mb-3 rounded-lg bg-slate-50/80 px-3 dark:bg-slate-900/40"
+      role="region"
+      :aria-label="`Фото заявки #${item.id}`"
+      data-testid="lead-readonly-attachments"
+    >
+      <OrderAttachmentsPanel
+        :order-id="item.id"
+        :initial-count="item.attachment_count"
+        :default-expanded="true"
+        :readonly="true"
+        :embedded="true"
+      />
     </div>
 
     <!-- Comment (the core decision-making field) -->

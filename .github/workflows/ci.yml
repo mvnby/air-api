@@ -56,11 +56,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build Manager Frontend
+      - name: Build Manager Frontend and Run Component Tests
         working-directory: ./manager_frontend
         run: |
           npm ci
           npm run build
+          npm run test:components
 
       - name: Start Services
         run: docker compose up -d --build
