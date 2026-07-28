@@ -21,6 +21,10 @@ from models import (
     OrderStatus,
 )
 from schemas import Meta
+from services.tenant_scope_service import (
+    TenantScope,
+    tenant_or_fully_legacy_scope_clause,
+)
 
 
 class LeadService:
@@ -138,7 +142,12 @@ class LeadService:
         }
 
     @staticmethod
-    async def create_lead(session: AsyncSession, payload: Any) -> Dict[str, Any]:
+    async def create_lead(
+        session: AsyncSession,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
         request_text = (payload.request_text or "").strip()
         if not request_text:
             raise ValueError("request_text is required")
@@ -148,6 +157,8 @@ class LeadService:
         source = LeadIntakeSource(payload.source)
 
         lead = Lead(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
             status=LeadStatus.new,
             source=source,
             segment_hint=segment_hint,
@@ -363,17 +374,44 @@ class LeadService:
         return customers[0]
 
     @staticmethod
-    async def qualify_lead(session: AsyncSession, lead_id: int, payload: Any) -> Optional[Dict[str, Any]]:
-        result = await session.execute(select(Lead).where(Lead.id == lead_id).with_for_update())
+    async def qualify_lead(
+        session: AsyncSession,
+        lead_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
+        result = await session.execute(
+            select(Lead)
+            .where(
+                Lead.id == lead_id,
+                tenant_or_fully_legacy_scope_clause(Lead, tenant_scope),
+            )
+            .with_for_update()
+        )
         lead = result.scalars().first()
         if not lead:
             return None
+        if lead.tenant_id is None:
+            lead.tenant_id = tenant_scope.tenant_id
+        if lead.storefront_id is None:
+            lead.storefront_id = tenant_scope.storefront_id
         if lead.status in {LeadStatus.spam, LeadStatus.lost}:
             raise ValueError("Cannot qualify a lost/spam lead")
         if lead.status == LeadStatus.qualified:
             if not lead.converted_order_id:
                 raise ValueError("Lead is already qualified")
-            converted_order = await session.get(Order, int(lead.converted_order_id))
+            converted_order = (
+                await session.execute(
+                    select(Order).where(
+                        Order.id == int(lead.converted_order_id),
+                        tenant_or_fully_legacy_scope_clause(
+                            Order,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalars().first()
             if not converted_order:
                 raise ValueError("Converted order not found")
             return {
@@ -466,6 +504,8 @@ class LeadService:
             order_delivery_address = selected_branch.delivery_address
 
         order = Order(
+            tenant_id=lead.tenant_id,
+            storefront_id=lead.storefront_id,
             customer_id=customer.id,
             customer_branch_id=int(selected_branch.id) if selected_branch and selected_branch.id is not None else None,
             status=OrderStatus.NEW_LEAD,

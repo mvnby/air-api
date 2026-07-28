@@ -72,6 +72,7 @@ for cloudflare_name in (
 
 import asyncio
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
@@ -120,6 +121,31 @@ async def db_engine():
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
         await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.execute(
+            text(
+                """
+                INSERT INTO tenant (
+                    id, slug, display_name, kind, status, is_system, created_at, updated_at
+                ) VALUES (
+                    1, 'mvn', 'Мастер Воздуха', 'operator', 'active', true,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                INSERT INTO storefront (
+                    id, tenant_id, slug, display_name, status, city,
+                    default_locale, currency, is_default, created_at, updated_at
+                ) VALUES (
+                    1, 1, 'main', 'MVN', 'active', 'Витебск',
+                    'ru-BY', 'BYN', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
     
     yield engine
     
@@ -149,6 +175,13 @@ async def db(db_engine):
     # Rollback the setup transaction
     await transaction.rollback()
     await connection.close()
+
+
+@pytest.fixture
+def tenant_scope():
+    from services.tenant_scope_service import TenantScope
+
+    return TenantScope(tenant_id=1, storefront_id=1)
 
 @pytest.fixture(scope="function")
 async def async_client(db):

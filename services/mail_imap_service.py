@@ -22,6 +22,7 @@ from models import GlobalConfig
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptImportResult, BankReceiptService
 from services.email_lead_intake_service import EmailLeadDecision, EmailLeadImportResult, EmailLeadIntakeService
+from services.tenant_scope_service import TenantScope
 
 
 @dataclass(frozen=True)
@@ -404,6 +405,7 @@ class MailImapService:
     async def import_email_leads(
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         dry_run: bool = False,
         lookback_days: Optional[int] = None,
     ) -> EmailLeadImportResult:
@@ -467,6 +469,7 @@ class MailImapService:
                         message_id=msg.get("Message-ID"),
                         email_date_raw=msg.get("Date"),
                         dry_run=dry_run,
+                        tenant_scope=tenant_scope,
                     )
                 except Exception:
                     result.failed += 1

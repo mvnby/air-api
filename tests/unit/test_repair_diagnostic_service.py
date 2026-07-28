@@ -49,6 +49,7 @@ async def sqlite_repair_diagnostic_session(tmp_path: Path):
 async def test_repair_diagnostic_service_creates_repair_order_with_structured_meta(
     sqlite_repair_diagnostic_session,
     monkeypatch,
+    tenant_scope,
 ):
     monkeypatch.setattr(
         "services.repair_diagnostic_service.get_general_media_storage",
@@ -95,6 +96,7 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
         sqlite_repair_diagnostic_session,
         payload=payload,
         uploads=uploads,
+        tenant_scope=tenant_scope,
     )
 
     assert response.status == "new_lead"
@@ -105,6 +107,8 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     assert order is not None
     assert order.status == OrderStatus.NEW_LEAD
     assert order.lead_source == LeadSource.SITE
+    assert order.tenant_id == tenant_scope.tenant_id
+    assert order.storefront_id == tenant_scope.storefront_id
     assert order.workflow_type == "repair"
     assert order.delivery_address == "Витебск, центр"
     assert order.title == "Ремонт кондиционера: Не охлаждает / слабо охлаждает"

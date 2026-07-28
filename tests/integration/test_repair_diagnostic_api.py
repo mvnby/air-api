@@ -62,6 +62,8 @@ async def test_public_repair_diagnostic_creates_structured_repair_order(async_cl
 
     order = await db.get(Order, data["order_id"])
     assert order is not None
+    assert order.tenant_id == 1
+    assert order.storefront_id == 1
     assert order.status == OrderStatus.NEW_LEAD
     assert order.lead_source == LeadSource.SITE
     assert order.workflow_type == "repair"

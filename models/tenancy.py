@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -9,6 +10,14 @@ from sqlmodel import Field, SQLModel
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@dataclass(frozen=True)
+class TenantScope:
+    """Server-resolved tenant/storefront pair passed across write boundaries."""
+
+    tenant_id: int
+    storefront_id: int
 
 
 class Tenant(SQLModel, table=True):

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import delete
 from models import Order, Product, OrderProductLink, OrderServiceLink
+from models.tenancy import TenantScope
 
 
 class OrderDAO:
@@ -17,13 +18,17 @@ class OrderDAO:
     async def create(
         session: AsyncSession,
         user_id: int,
+        *,
+        tenant_scope: TenantScope,
         # product_id удален!
         username: Optional[str] = None,
         full_name: Optional[str] = None,
-        phone: Optional[str] = None
+        phone: Optional[str] = None,
     ) -> Order:
         """Create a new order wrapper (without items)."""
         order = Order(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
             user_id=user_id,
             username=username,   # Убедитесь, что эти поля есть в Order, если нет - удалите
             # В models.py я видел delivery_address и status, но не видел username/fullname.

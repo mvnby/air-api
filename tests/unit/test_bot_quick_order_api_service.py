@@ -73,7 +73,11 @@ async def test_quick_order_api_denies_executor(db):
 
 
 @pytest.mark.asyncio
-async def test_quick_order_api_uses_actor_scoped_idempotency_fingerprint(db, monkeypatch):
+async def test_quick_order_api_uses_actor_scoped_idempotency_fingerprint(
+    db,
+    monkeypatch,
+    tenant_scope,
+):
     await _add_staff(db, telegram_id=1003, primary_role="manager")
     create = AsyncMock(
         return_value={
@@ -105,6 +109,7 @@ async def test_quick_order_api_uses_actor_scoped_idempotency_fingerprint(db, mon
     assert result.customer_id == 7
     assert result.created is False
     assert create.await_args.kwargs["source_fingerprint"].startswith("bot_quick_order:v1:")
+    assert create.await_args.kwargs["tenant_scope"] == tenant_scope
     sent_draft = create.await_args.args[1]
     assert "service_label" not in sent_draft
 

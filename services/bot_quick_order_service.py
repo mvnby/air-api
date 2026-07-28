@@ -17,6 +17,10 @@ from models import Lead, Order, OrderWorkStage
 from schemas import LeadCreatePayload, LeadQualifyPayload, ManagerOrderUpdatePayload, OrderWorkStageCreatePayload
 from services.address_suggest_service import AddressSuggestService
 from services.lead_service import LeadService
+from services.tenant_scope_service import (
+    TenantScope,
+    tenant_or_fully_legacy_scope_clause,
+)
 from services.notification_service import NotificationService
 from services.order_service import OrderService
 
@@ -429,6 +433,7 @@ class BotQuickOrderService:
         session: AsyncSession,
         draft: dict[str, Any],
         *,
+        tenant_scope: TenantScope,
         source_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         normalized = cls.normalize_draft(draft)
@@ -440,13 +445,27 @@ class BotQuickOrderService:
         source_fingerprint = source_fingerprint or cls._source_fingerprint(normalized)
         result = await session.execute(
             select(Lead)
-            .where(Lead.source == "bot", Lead.source_fingerprint == source_fingerprint)
+            .where(
+                Lead.source == "bot",
+                Lead.source_fingerprint == source_fingerprint,
+                tenant_or_fully_legacy_scope_clause(Lead, tenant_scope),
+            )
             .order_by(Lead.created_at.desc())
             .with_for_update()
         )
         existing_lead = result.scalars().first()
         if existing_lead and existing_lead.converted_order_id:
-            converted_order = await session.get(Order, int(existing_lead.converted_order_id))
+            converted_order = (
+                await session.execute(
+                    select(Order).where(
+                        Order.id == int(existing_lead.converted_order_id),
+                        tenant_or_fully_legacy_scope_clause(
+                            Order,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalars().first()
             if not converted_order:
                 raise ValueError("Связанный заказ для лида не найден")
             qualification = {
@@ -471,6 +490,7 @@ class BotQuickOrderService:
                             source_fingerprint=source_fingerprint,
                             next_followup_date=target_date,
                         ),
+                        tenant_scope=tenant_scope,
                     )
                     lead_id = int(lead["id"])
                 except IntegrityError:
@@ -480,6 +500,10 @@ class BotQuickOrderService:
                             select(Lead).where(
                                 Lead.source == "bot",
                                 Lead.source_fingerprint == source_fingerprint,
+                                tenant_or_fully_legacy_scope_clause(
+                                    Lead,
+                                    tenant_scope,
+                                ),
                             )
                         )
                     ).scalars().first()
@@ -496,6 +520,7 @@ class BotQuickOrderService:
                     customer_type="individual",
                     order_comment=request_text,
                 ),
+                tenant_scope=tenant_scope,
             )
         if not qualification:
             raise ValueError("Не удалось квалифицировать лид")

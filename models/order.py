@@ -393,9 +393,16 @@ class Order(SQLModel, table=True):
             postgresql_where=text("source_fingerprint IS NOT NULL"),
             sqlite_where=text("source_fingerprint IS NOT NULL"),
         ),
+        Index("ix_order_tenant_status_created_at", "tenant_id", "status", "created_at"),
+        Index("ix_order_storefront_status_created_at", "storefront_id", "status", "created_at"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Expand phase: nullable while older app instances can still write rows.
+    # Release 3 will make these provenance fields required.
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    storefront_id: Optional[int] = Field(default=None, foreign_key="storefront.id")
 
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
     customer_branch_id: Optional[int] = Field(

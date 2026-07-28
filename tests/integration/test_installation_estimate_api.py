@@ -103,6 +103,8 @@ async def test_public_installation_estimate_contract_and_replay(
 
     order = await db.get(Order, response.json()["order_id"])
     assert order is not None
+    assert order.tenant_id == 1
+    assert order.storefront_id == 1
     assert order.technical_meta["installation_estimate"]["category_counts"] == {
         "indoor_unit": 1,
         "route": 1,

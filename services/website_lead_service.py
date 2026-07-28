@@ -21,6 +21,10 @@ from services.bot_service import BotService
 from services.lead_service import LeadService
 from services.order_service import OrderService
 from services.staff_user_service import StaffUserService
+from services.tenant_scope_service import (
+    TenantScope,
+    storefront_or_fully_legacy_scope_clause,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,8 @@ class WebsiteLeadService:
     async def create_contact_lead(
         session: AsyncSession,
         payload: PublicContactLeadPayload,
+        *,
+        tenant_scope: TenantScope,
     ) -> PublicContactLeadResponse:
         request_lines = ["Заявка с сайта"]
         if payload.address:
@@ -49,6 +55,7 @@ class WebsiteLeadService:
                 email=payload.email,
                 request_text="\n".join(request_lines),
             ),
+            tenant_scope=tenant_scope,
         )
         await WebsiteLeadService._notify_contact_lead_admins(
             session=session,
@@ -107,6 +114,8 @@ class WebsiteLeadService:
     async def create_product_availability_lead(
         session: AsyncSession,
         payload: ProductAvailabilityLeadPayload,
+        *,
+        tenant_scope: TenantScope,
     ) -> ProductAvailabilityLeadResponse:
         product = await ProductDAO.get_by_id(session, payload.product_id)
         if not product or not product.is_published:
@@ -115,6 +124,7 @@ class WebsiteLeadService:
         now = datetime.now()
         existing_order = await WebsiteLeadService._find_recent_product_availability_order(
             session=session,
+            tenant_scope=tenant_scope,
             product_id=product.id,
             phone=payload.phone,
             now=now,
@@ -154,6 +164,7 @@ class WebsiteLeadService:
             lead_source=LeadSource.SITE,
             initial_status=OrderStatus.NEW_LEAD,
             comment=WebsiteLeadService._build_request_text(product),
+            tenant_scope=tenant_scope,
         )
         WebsiteLeadService._set_order_meta(
             order,
@@ -187,6 +198,7 @@ class WebsiteLeadService:
     @staticmethod
     async def _find_recent_product_availability_order(
         session: AsyncSession,
+        tenant_scope: TenantScope,
         product_id: int,
         phone: str,
         now: datetime,
@@ -198,6 +210,7 @@ class WebsiteLeadService:
             .where(
                 Order.lead_source == LeadSource.SITE,
                 Order.created_at >= cutoff,
+                storefront_or_fully_legacy_scope_clause(Order, tenant_scope),
             )
             .order_by(Order.created_at.desc())
         )

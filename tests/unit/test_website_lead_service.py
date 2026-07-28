@@ -6,9 +6,10 @@ import pytest
 
 from core.config import settings
 from core.database import get_session
+from core.tenant_scope import get_system_tenant_scope
 from crud.product import ProductDAO
 from main import app
-from models import Customer, LeadSource, Order, OrderStatus, Product
+from models import Customer, Lead, LeadSource, Order, OrderStatus, Product
 from schemas import (
     ProductAvailabilityLeadPayload,
     ProductAvailabilityLeadResponse,
@@ -23,13 +24,17 @@ from services.website_lead_service import WebsiteLeadService
 
 
 @pytest.mark.asyncio
-async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(monkeypatch):
+async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(
+    monkeypatch,
+    tenant_scope,
+):
     created_at = datetime.now()
     captured = {}
     messages = []
 
-    async def fake_create_lead(_session, payload):
+    async def fake_create_lead(_session, payload, *, tenant_scope):
         captured["payload"] = payload
+        captured["tenant_scope"] = tenant_scope
         return {"id": 33, "status": "new", "created_at": created_at}
 
     async def fake_recipients(_session):
@@ -55,6 +60,7 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(monk
             address="Минск",
             message="Нужен монтаж <script>",
         ),
+        tenant_scope=tenant_scope,
     )
 
     assert response == PublicContactLeadResponse(
@@ -63,6 +69,7 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(monk
         created_at=created_at,
     )
     assert captured["payload"].source == "site"
+    assert captured["tenant_scope"] == tenant_scope
     assert "Адрес/район: Минск" in captured["payload"].request_text
     assert [admin_id for admin_id, _text in messages] == [1001, 1002]
     assert "&lt;b&gt;" in messages[0][1]
@@ -70,41 +77,32 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(monk
 
 
 @pytest.mark.asyncio
-async def test_public_contact_lead_endpoint_uses_dedicated_lead_contract(monkeypatch):
-    async def override_get_session():
-        yield object()
-
-    async def fake_create(_session, payload):
-        assert payload.name == "Иван"
-        return PublicContactLeadResponse(
-            lead_id=34,
-            status="new",
-            created_at=datetime.now(),
-        )
-
-    monkeypatch.setattr(WebsiteLeadService, "create_contact_lead", fake_create)
-    app.dependency_overrides[get_session] = override_get_session
-    transport = ASGITransport(app=app)
-    try:
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/api/v1/leads/contact",
-                json={
-                    "name": "Иван",
-                    "phone": "+375 (29) 111-22-33",
-                    "address": "Минск",
-                    "message": "Нужна консультация",
-                },
-            )
-    finally:
-        app.dependency_overrides.clear()
+async def test_public_contact_lead_endpoint_uses_dedicated_lead_contract(
+    async_client,
+    db,
+):
+    response = await async_client.post(
+        "/api/v1/leads/contact",
+        json={
+            "name": "Иван",
+            "phone": "+375 (29) 111-22-33",
+            "address": "Минск",
+            "message": "Нужна консультация",
+        },
+    )
 
     assert response.status_code == 200
-    assert response.json()["lead_id"] == 34
+    lead = await db.get(Lead, response.json()["lead_id"])
+    assert lead is not None
+    assert lead.tenant_id == 1
+    assert lead.storefront_id == 1
 
 
 @pytest.mark.asyncio
-async def test_create_product_availability_request_creates_site_order_and_notifies_admins(monkeypatch):
+async def test_create_product_availability_request_creates_site_order_and_notifies_admins(
+    monkeypatch,
+    tenant_scope,
+):
     product = Product(
         id=7,
         title="TCL BreezeIN",
@@ -134,6 +132,7 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
         assert kwargs["items"] == []
         assert kwargs["lead_source"] == LeadSource.SITE
         assert "Сообщить о поступлении" in (kwargs["comment"] or "")
+        assert kwargs["tenant_scope"] == tenant_scope
         return order
 
     async def fake_send_message(admin_id, text):
@@ -163,6 +162,7 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
             phone="+375 (29) 111-22-33",
             name="Иван",
         ),
+        tenant_scope=tenant_scope,
     )
 
     assert response.lead_id == 91
@@ -177,7 +177,10 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
 
 
 @pytest.mark.asyncio
-async def test_create_product_availability_request_reuses_recent_duplicate_without_notify(monkeypatch):
+async def test_create_product_availability_request_reuses_recent_duplicate_without_notify(
+    monkeypatch,
+    tenant_scope,
+):
     product = Product(
         id=7,
         title="TCL BreezeIN",
@@ -234,6 +237,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
             phone="+375 (29) 111-22-33",
             name="Иван",
         ),
+        tenant_scope=tenant_scope,
     )
 
     assert response.lead_id == 91
@@ -245,7 +249,10 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
 
 
 @pytest.mark.asyncio
-async def test_create_product_availability_request_reuses_duplicate_and_notifies_after_cooldown(monkeypatch):
+async def test_create_product_availability_request_reuses_duplicate_and_notifies_after_cooldown(
+    monkeypatch,
+    tenant_scope,
+):
     product = Product(
         id=7,
         title="TCL BreezeIN",
@@ -304,6 +311,7 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
             phone="+375 (29) 111-22-33",
             name="Иван",
         ),
+        tenant_scope=tenant_scope,
     )
 
     assert response.lead_id == 92
@@ -316,12 +324,20 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
 
 
 @pytest.mark.asyncio
-async def test_public_product_availability_lead_endpoint_returns_response(monkeypatch):
+async def test_public_product_availability_lead_endpoint_returns_response(
+    monkeypatch,
+    tenant_scope,
+):
     async def override_get_session():
         yield object()
 
-    async def fake_create(_session, payload):
+    async def override_tenant_scope():
+        return tenant_scope
+
+    async def fake_create(_session, payload, *, tenant_scope):
         assert payload.product_id == 7
+        assert tenant_scope.tenant_id == 1
+        assert tenant_scope.storefront_id == 1
         return ProductAvailabilityLeadResponse(
             lead_id=12,
             status="new_lead",
@@ -334,6 +350,7 @@ async def test_public_product_availability_lead_endpoint_returns_response(monkey
         fake_create,
     )
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_system_tenant_scope] = override_tenant_scope
 
     transport = ASGITransport(app=app)
     try:
@@ -354,15 +371,22 @@ async def test_public_product_availability_lead_endpoint_returns_response(monkey
 
 
 @pytest.mark.asyncio
-async def test_public_product_availability_lead_endpoint_validates_phone():
+async def test_public_product_availability_lead_endpoint_validates_phone(tenant_scope):
+    async def override_tenant_scope():
+        return tenant_scope
+
+    app.dependency_overrides[get_system_tenant_scope] = override_tenant_scope
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/api/v1/leads/product-availability",
-            json={
-                "product_id": 7,
-                "phone": "12345",
-            },
-        )
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/leads/product-availability",
+                json={
+                    "product_id": 7,
+                    "phone": "12345",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 422

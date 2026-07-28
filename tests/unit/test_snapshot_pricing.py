@@ -3,7 +3,7 @@ from sqlmodel import select
 from services.order_service import OrderService
 from models import Product, OrderProductLink, OrderServiceLink, LeadSource, OrderStatus
 
-async def test_snapshot_pricing(db):
+async def test_snapshot_pricing(db, tenant_scope):
     # 1. Create test product
     product = Product(id=63, title="Hero Product", slug="hero-product", price=2500, specs={"area_m2": 30})
     db.add(product)
@@ -35,6 +35,7 @@ async def test_snapshot_pricing(db):
     
     order = await OrderService.create_from_website(
         session=db,
+        tenant_scope=tenant_scope,
         **order_data
     )
     
@@ -55,8 +56,10 @@ async def test_snapshot_pricing(db):
     assert link.installation_details.get("source") == "web_calculator"
     assert service_link.price == 260
     assert order.total_amount == expected_total
+    assert order.tenant_id == tenant_scope.tenant_id
+    assert order.storefront_id == tenant_scope.storefront_id
 
-async def test_order_without_installation(db):
+async def test_order_without_installation(db, tenant_scope):
     # 1. Create test product
     product = Product(id=63, title="Hero Product", slug="hero-product", price=2500, specs={"area_m2": 30})
     db.add(product)
@@ -66,6 +69,7 @@ async def test_order_without_installation(db):
     # 2. Create order WITHOUT installation
     order_no_install = await OrderService.create_from_website(
         session=db,
+        tenant_scope=tenant_scope,
         customer_name="Клиент без монтажа",
         customer_phone="+375992345678",
         customer_email=None,
@@ -91,9 +95,11 @@ async def test_order_without_installation(db):
     assert link.is_installation_included is False
     assert link.installation_price == 0
     assert order_no_install.total_amount == product.price * 2
+    assert order_no_install.tenant_id == tenant_scope.tenant_id
+    assert order_no_install.storefront_id == tenant_scope.storefront_id
 
 
-async def test_create_from_website_supports_negotiation_status_and_preserves_checkout_data(db):
+async def test_create_from_website_supports_negotiation_status_and_preserves_checkout_data(db, tenant_scope):
     product = Product(id=64, title="Negotiation Product", slug="negotiation-product", price=1999, specs={"area_m2": 25})
     db.add(product)
     await db.commit()
@@ -101,6 +107,7 @@ async def test_create_from_website_supports_negotiation_status_and_preserves_che
 
     order = await OrderService.create_from_website(
         session=db,
+        tenant_scope=tenant_scope,
         customer_name="Клиент корзины",
         customer_phone="+375447770011",
         customer_email="checkout@example.com",
@@ -128,9 +135,11 @@ async def test_create_from_website_supports_negotiation_status_and_preserves_che
     assert link.product_id == product.id
     assert link.is_installation_included is True
     assert link.installation_price == 300
+    assert order.tenant_id == tenant_scope.tenant_id
+    assert order.storefront_id == tenant_scope.storefront_id
 
 
-async def test_order_detail_does_not_double_count_installation_in_product_line(db):
+async def test_order_detail_does_not_double_count_installation_in_product_line(db, tenant_scope):
     product = Product(id=65, title="Line Total Product", slug="line-total-product", price=2000, specs={"area_m2": 25})
     db.add(product)
     await db.commit()
@@ -138,6 +147,7 @@ async def test_order_detail_does_not_double_count_installation_in_product_line(d
 
     order = await OrderService.create_from_website(
         session=db,
+        tenant_scope=tenant_scope,
         customer_name="Клиент детализации",
         customer_phone="+375447770012",
         customer_email=None,
@@ -162,3 +172,5 @@ async def test_order_detail_does_not_double_count_installation_in_product_line(d
     assert detail["product_lines"][0]["installation_price"] == 300
     assert detail["product_lines"][0]["line_total"] == 4000
     assert detail["service_lines"][0]["line_total"] == 600
+    assert order.tenant_id == tenant_scope.tenant_id
+    assert order.storefront_id == tenant_scope.storefront_id

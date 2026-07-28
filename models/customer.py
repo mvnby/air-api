@@ -165,9 +165,16 @@ class Lead(SQLModel, table=True):
             postgresql_where=text("source = 'bot' AND source_fingerprint IS NOT NULL"),
             sqlite_where=text("source = 'bot' AND source_fingerprint IS NOT NULL"),
         ),
+        Index("ix_lead_tenant_status_created_at", "tenant_id", "status", "created_at"),
+        Index("ix_lead_storefront_status_created_at", "storefront_id", "status", "created_at"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Expand phase: nullable while mixed-version deployments may still create
+    # legacy rows. The contract migration will make both fields required.
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    storefront_id: Optional[int] = Field(default=None, foreign_key="storefront.id")
 
     status: LeadStatus = Field(default=LeadStatus.new, sa_column=Column(String, index=True))
     source: LeadIntakeSource = Field(default=LeadIntakeSource.manager, sa_column=Column(String, index=True))

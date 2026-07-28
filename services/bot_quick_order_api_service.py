@@ -11,6 +11,7 @@ from api_contracts.bot import BotQuickOrderDraft
 from models import Order
 from services.bot_access_service import BotAccessService
 from services.bot_quick_order_service import BotQuickOrderService
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 
 class BotQuickOrderAccessDeniedError(PermissionError):
@@ -34,10 +35,12 @@ class BotQuickOrderApiService:
         draft: BotQuickOrderDraft,
     ) -> BotQuickOrderCreateResult:
         await BotQuickOrderApiService._require_manager(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         order_data = await BotQuickOrderService.create_order_from_draft(
             session,
             draft.model_dump(mode="json", exclude={"service_label"}),
             source_fingerprint=source_fingerprint,
+            tenant_scope=tenant_scope,
         )
         order_id = int(order_data.get("id") or 0)
         if not order_id:

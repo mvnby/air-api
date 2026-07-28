@@ -6,6 +6,7 @@ from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, LEAD_NOT_FOUND
 from core.manager_telemetry import ManagerTelemetryService
 from core.security import get_current_username
+from core.tenant_scope import get_system_tenant_scope
 from routers.manager_operation_ids import (
     CREATE_MANAGER_LEAD,
     MARK_MANAGER_LEAD_LOST,
@@ -21,6 +22,7 @@ from schemas import (
     LeadUpdatePayload,
 )
 from services.lead_service import LeadService
+from services.tenant_scope_service import TenantScope
 
 
 router = APIRouter(prefix="/api/manager/leads", tags=["manager-leads"])
@@ -31,9 +33,14 @@ async def create_manager_lead(
     payload: LeadCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ):
     try:
-        return await LeadService.create_lead(session=session, payload=payload)
+        return await LeadService.create_lead(
+            session=session,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -74,10 +81,16 @@ async def qualify_manager_lead(
     payload: LeadQualifyPayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ):
     ManagerTelemetryService.record_qualify_attempt(endpoint=QUALIFY_MANAGER_LEAD, payload=payload)
     try:
-        result = await LeadService.qualify_lead(session=session, lead_id=lead_id, payload=payload)
+        result = await LeadService.qualify_lead(
+            session=session,
+            lead_id=lead_id,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,

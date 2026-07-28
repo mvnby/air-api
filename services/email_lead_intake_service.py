@@ -14,6 +14,10 @@ from core.config import settings
 from models import LeadSource, Order, OrderStatus
 from services.bank_email_parser_service import BankEmailParserService
 from services.order_service import OrderService
+from services.tenant_scope_service import (
+    TenantScope,
+    tenant_or_fully_legacy_scope_clause,
+)
 
 
 @dataclass
@@ -191,6 +195,7 @@ class EmailLeadIntakeService:
     async def _find_duplicate_order(
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         message_id: Optional[str],
         fingerprint: str,
     ) -> Optional[Order]:
@@ -199,7 +204,11 @@ class EmailLeadIntakeService:
             predicates.append(cast(Order.technical_meta, String).ilike(f"%{message_id}%"))
         result = await session.execute(
             select(Order)
-            .where(Order.lead_source == LeadSource.EMAIL, or_(*predicates))
+            .where(
+                Order.lead_source == LeadSource.EMAIL,
+                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                or_(*predicates),
+            )
             .order_by(Order.created_at.desc())
             .limit(1)
         )
@@ -372,6 +381,7 @@ class EmailLeadIntakeService:
     async def process_email(
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         sender_email: str,
         sender_name: Optional[str],
         subject: str,
@@ -391,6 +401,7 @@ class EmailLeadIntakeService:
 
         duplicate = await EmailLeadIntakeService._find_duplicate_order(
             session,
+            tenant_scope=tenant_scope,
             message_id=clean_message_id,
             fingerprint=fingerprint,
         )
@@ -472,6 +483,7 @@ class EmailLeadIntakeService:
             customer_type=customer_type,
             customer_inn=inn,
             customer_full_legal_name=company_name if customer_type == "company" else None,
+            tenant_scope=tenant_scope,
         )
 
         from sqlalchemy.orm.attributes import flag_modified

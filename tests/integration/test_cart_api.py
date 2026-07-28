@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
-from models import InstallationRate, Product
+from models import InstallationRate, Order, Product
 from services.bot_service import BotService
 
 @pytest.fixture
@@ -31,7 +31,7 @@ async def cart_product(db):
     return product, rate
 
 @pytest.mark.asyncio
-async def test_checkout_flow(async_client: AsyncClient, cart_product, monkeypatch):
+async def test_checkout_flow(async_client: AsyncClient, cart_product, db, monkeypatch):
     """
     Test the Checkout flow (Create Order).
     Note: The project uses a client-side cart (Nanostores). 
@@ -71,6 +71,10 @@ async def test_checkout_flow(async_client: AsyncClient, cart_product, monkeypatc
     data = response.json()
     assert "id" in data
     assert data["status"] == "negotiation"
+    order = await db.get(Order, data["id"])
+    assert order is not None
+    assert order.tenant_id == 1
+    assert order.storefront_id == 1
     
     # Calculate expected total: (Product * 2) + (Install * 2)
     # 2000 * 2 + 250 * 2 = 4000 + 500 = 4500

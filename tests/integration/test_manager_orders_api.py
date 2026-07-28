@@ -445,6 +445,10 @@ async def test_manager_order_create_repair_sets_default_status_and_diagnostic(as
     data = response.json()
     assert data["workflow_type"] == "repair"
     assert data["repair_meta"]["repair_status"] == "new"
+    created_order = (
+        await db.execute(select(Order).where(Order.id == data["id"]))
+    ).scalar_one()
+    assert (created_order.tenant_id, created_order.storefront_id) == (1, 1)
     diagnostic_lines = [
         line for line in data["service_lines"]
         if "Диагностика кондиционера" in line["service_title"]
