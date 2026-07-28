@@ -56,7 +56,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build and Test Manager Frontend
+      - name: Build Manager Frontend and Run Component Tests
         working-directory: ./manager_frontend
         run: |
           npm ci
