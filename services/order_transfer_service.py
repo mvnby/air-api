@@ -48,6 +48,7 @@ from schemas import (
     ManagerOrderTransferWorkStage,
 )
 from services.order_service import OrderService
+from services.tenant_scope_service import TenantScope
 
 
 @dataclass
@@ -525,7 +526,12 @@ class OrderTransferService:
         return result.scalars().first()
 
     @staticmethod
-    async def import_orders(session: AsyncSession, payload: ManagerOrderImportCommitRequest) -> dict[str, Any]:
+    async def import_orders(
+        session: AsyncSession,
+        payload: ManagerOrderImportCommitRequest,
+        *,
+        tenant_scope: TenantScope,
+    ) -> dict[str, Any]:
         preview = await OrderTransferService.preview_import(
             session,
             ManagerOrderImportPreviewRequest(package=payload.package),
@@ -541,6 +547,8 @@ class OrderTransferService:
             customer = await OrderTransferService._get_or_create_customer(session, order_data.customer)
             branch = await OrderTransferService._get_or_create_branch(session, customer, order_data.customer_branch)
             order = Order(
+                tenant_id=tenant_scope.tenant_id,
+                storefront_id=tenant_scope.storefront_id,
                 customer_id=customer.id if customer else None,
                 customer_branch_id=branch.id if branch else None,
                 delivery_address=order_data.delivery_address or (branch.delivery_address if branch else None),

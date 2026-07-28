@@ -7,6 +7,7 @@ from sqlmodel import select
 
 from models import CustomerEquipment, EquipmentComponent, Order, OrderProductLink, Product
 from services.equipment_service import EquipmentService
+from services.tenant_scope_service import TenantScope
 
 
 class EquipmentWorkflowService:
@@ -404,6 +405,7 @@ class EquipmentWorkflowService:
         session: AsyncSession,
         *,
         equipment_id: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         result = await session.execute(
             select(CustomerEquipment)
@@ -441,7 +443,11 @@ class EquipmentWorkflowService:
             ),
             address=address,
         )
-        created = await OrderService.create_manager_order(session=session, payload=payload)
+        created = await OrderService.create_manager_order(
+            session=session,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
         if not created:
             raise ValueError("Maintenance order could not be created")
         order_id = int(created["id"])

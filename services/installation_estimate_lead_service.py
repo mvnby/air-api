@@ -34,6 +34,10 @@ from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
 )
 from services.order_service import OrderService
+from services.tenant_scope_service import (
+    TenantScope,
+    tenant_or_fully_legacy_scope_clause,
+)
 from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
     get_private_attachment_storage,
@@ -178,6 +182,7 @@ class InstallationEstimateLeadService:
         cls,
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         payload: InstallationEstimateLeadPayload,
         uploads: list[InstallationEstimateIncomingFile],
         idempotency_key: str,
@@ -185,7 +190,11 @@ class InstallationEstimateLeadService:
     ) -> InstallationEstimateLeadResponse:
         fingerprint = cls.source_fingerprint(idempotency_key)
         payload_hash = cls.request_hash(payload=payload, uploads=uploads)
-        existing = await cls._find_existing(session, fingerprint=fingerprint)
+        existing = await cls._find_existing(
+            session,
+            tenant_scope=tenant_scope,
+            fingerprint=fingerprint,
+        )
         if existing is not None:
             return cls._replay_response(existing, payload_hash=payload_hash)
 
@@ -226,6 +235,7 @@ class InstallationEstimateLeadService:
                     },
                 },
                 commit=False,
+                tenant_scope=tenant_scope,
             )
             order.title = "Предварительная оценка монтажа по фото"
             order.workflow_type = "sales_installation"
@@ -287,7 +297,11 @@ class InstallationEstimateLeadService:
                 storage=selected_storage,
                 storage_keys=created_storage_keys,
             )
-            existing = await cls._find_existing(session, fingerprint=fingerprint)
+            existing = await cls._find_existing(
+                session,
+                tenant_scope=tenant_scope,
+                fingerprint=fingerprint,
+            )
             if existing is None:
                 raise
             return cls._replay_response(existing, payload_hash=payload_hash)
@@ -317,10 +331,16 @@ class InstallationEstimateLeadService:
     async def _find_existing(
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         fingerprint: str,
     ) -> Order | None:
         return await session.scalar(
-            select(Order).where(Order.source_fingerprint == fingerprint).limit(1)
+            select(Order)
+            .where(
+                Order.source_fingerprint == fingerprint,
+                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            )
+            .limit(1)
         )
 
     @staticmethod

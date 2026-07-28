@@ -18,6 +18,7 @@ from models import (
     Product,
     Supplier,
 )
+from services.tenant_scope_service import TenantScope
 
 
 class EquipmentService:
@@ -599,11 +600,16 @@ class EquipmentService:
 
     @staticmethod
     async def create_maintenance_order(
-        session: AsyncSession, *, equipment_id: int,
+        session: AsyncSession,
+        *,
+        equipment_id: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_workflow_service import EquipmentWorkflowService
         return await EquipmentWorkflowService.create_maintenance_order(
-            session, equipment_id=equipment_id,
+            session,
+            equipment_id=equipment_id,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod

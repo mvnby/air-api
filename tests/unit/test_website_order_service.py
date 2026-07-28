@@ -13,7 +13,7 @@ from services.website_order_service import WebsiteOrderService
 
 
 @pytest.mark.asyncio
-async def test_website_checkout_creates_negotiation_order(monkeypatch):
+async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_scope):
     captured_kwargs = {}
 
     async def fake_create_from_website(**kwargs):
@@ -57,7 +57,11 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch):
         }
     )
 
-    response = await WebsiteOrderService.create_order(SimpleNamespace(), payload)
+    response = await WebsiteOrderService.create_order(
+        SimpleNamespace(),
+        payload,
+        tenant_scope=tenant_scope,
+    )
 
     assert response.id == 55
     assert response.status == OrderStatus.NEGOTIATION
@@ -66,10 +70,14 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch):
     assert captured_kwargs["customer_address"] == "г. Минск, ул. Тестовая 10"
     assert captured_kwargs["items"][0]["product_id"] == 7
     assert captured_kwargs["items"][0]["with_installation"] is True
+    assert captured_kwargs["tenant_scope"] == tenant_scope
 
 
 @pytest.mark.asyncio
-async def test_website_checkout_does_not_attempt_telegram_without_recipients(monkeypatch):
+async def test_website_checkout_does_not_attempt_telegram_without_recipients(
+    monkeypatch,
+    tenant_scope,
+):
     order = SimpleNamespace(
         id=56,
         status=OrderStatus.NEGOTIATION,
@@ -112,7 +120,11 @@ async def test_website_checkout_does_not_attempt_telegram_without_recipients(mon
         }
     )
 
-    response = await WebsiteOrderService.create_order(object(), payload)
+    response = await WebsiteOrderService.create_order(
+        object(),
+        payload,
+        tenant_scope=tenant_scope,
+    )
 
     assert response.id == 56
     assert send_attempted is False

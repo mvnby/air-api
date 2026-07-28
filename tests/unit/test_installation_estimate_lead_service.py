@@ -115,6 +115,7 @@ def _upload(content: bytes | None = None) -> InstallationEstimateIncomingFile:
 @pytest.mark.asyncio
 async def test_installation_estimate_is_atomic_private_and_idempotent(
     installation_estimate_session,
+    tenant_scope,
 ):
     storage = FakePrivateStorage()
     payload = _payload()
@@ -122,6 +123,7 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
 
     created = await InstallationEstimateLeadService.create_lead(
         installation_estimate_session,
+        tenant_scope=tenant_scope,
         payload=payload,
         uploads=uploads,
         idempotency_key="estimate-request-0001",
@@ -129,6 +131,7 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     )
     replayed = await InstallationEstimateLeadService.create_lead(
         installation_estimate_session,
+        tenant_scope=tenant_scope,
         payload=payload,
         uploads=uploads,
         idempotency_key="estimate-request-0001",
@@ -142,6 +145,8 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
 
     order = await installation_estimate_session.get(Order, created.order_id)
     assert order is not None
+    assert order.tenant_id == tenant_scope.tenant_id
+    assert order.storefront_id == tenant_scope.storefront_id
     assert order.source_fingerprint
     assert order.technical_meta["service_type"] == "pre_install"
     assert order.technical_meta["installation_estimate"]["status"] == "pending_review"
@@ -182,10 +187,12 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
 @pytest.mark.asyncio
 async def test_installation_estimate_rejects_reused_key_with_different_request(
     installation_estimate_session,
+    tenant_scope,
 ):
     storage = FakePrivateStorage()
     await InstallationEstimateLeadService.create_lead(
         installation_estimate_session,
+        tenant_scope=tenant_scope,
         payload=_payload(),
         uploads=[_upload()],
         idempotency_key="estimate-request-0002",
@@ -198,6 +205,7 @@ async def test_installation_estimate_rejects_reused_key_with_different_request(
     ):
         await InstallationEstimateLeadService.create_lead(
             installation_estimate_session,
+            tenant_scope=tenant_scope,
             payload=_payload(description="Другая заявка"),
             uploads=[_upload()],
             idempotency_key="estimate-request-0002",
@@ -209,6 +217,7 @@ async def test_installation_estimate_rejects_reused_key_with_different_request(
 async def test_installation_estimate_rolls_back_db_and_private_objects(
     installation_estimate_session,
     monkeypatch,
+    tenant_scope,
 ):
     storage = FakePrivateStorage()
 
@@ -220,6 +229,7 @@ async def test_installation_estimate_rolls_back_db_and_private_objects(
     with pytest.raises(RuntimeError, match="outbox unavailable"):
         await InstallationEstimateLeadService.create_lead(
             installation_estimate_session,
+            tenant_scope=tenant_scope,
             payload=_payload(),
             uploads=[_upload()],
             idempotency_key="estimate-request-0003",

@@ -28,6 +28,8 @@ from models import (
     IntegrationOutboxEvent,
     Order,
     StaffUser,
+    Storefront,
+    Tenant,
 )
 from services.communications.delivery_worker import CommunicationDeliveryWorker
 from services.communications.dispatcher import CommunicationOutboxDispatcher
@@ -121,6 +123,22 @@ async def test_installation_estimate_public_intake_is_materialized_and_sent_once
     )
     session_factory = installation_estimate_e2e_session_factory
     async with session_factory() as session:
+        tenant = Tenant(
+            id=1,
+            slug="mvn",
+            display_name="Мастер Воздуха",
+            kind="operator",
+            status="active",
+            is_system=True,
+        )
+        storefront = Storefront(
+            id=1,
+            tenant_id=1,
+            slug="main",
+            display_name="MVN",
+            status="active",
+            is_default=True,
+        )
         recipients = [
             StaffUser(
                 display_name="E2E owner one",
@@ -137,7 +155,7 @@ async def test_installation_estimate_public_intake_is_materialized_and_sent_once
                 telegram_id=990002,
             ),
         ]
-        session.add_all(recipients)
+        session.add_all([tenant, storefront, *recipients])
         await session.commit()
 
     form = {
@@ -199,6 +217,10 @@ async def test_installation_estimate_public_intake_is_materialized_and_sent_once
             ).scalars()
         )
         assert order_count == 1
+        order = await session.get(Order, first["order_id"])
+        assert order is not None
+        assert order.tenant_id == 1
+        assert order.storefront_id == 1
         assert len(events) == 1
         event = events[0]
         assert event.aggregate_id == str(first["order_id"])

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import get_session
+from core.tenant_scope import get_system_tenant_scope
 from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
     InstallationEstimateLeadResponse,
@@ -29,6 +30,7 @@ from services.installation_estimate_lead_service import (
     InstallationEstimateTemporarilyUnavailable,
 )
 from services.website_lead_service import WebsiteLeadService
+from services.tenant_scope_service import TenantScope
 
 router = APIRouter(tags=["api"])
 
@@ -69,8 +71,13 @@ async def installation_estimate_form_payload(
 async def create_public_contact_lead(
     payload: PublicContactLeadPayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ):
-    return await WebsiteLeadService.create_contact_lead(session, payload)
+    return await WebsiteLeadService.create_contact_lead(
+        session,
+        payload,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.post(
@@ -103,6 +110,7 @@ async def create_installation_estimate_lead(
     facade: Optional[List[UploadFile]] = File(default=None),
     power_supply: Optional[List[UploadFile]] = File(default=None),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ):
     try:
         uploads = await InstallationEstimateLeadService.collect_uploads(
@@ -119,6 +127,7 @@ async def create_installation_estimate_lead(
             payload=payload,
             uploads=uploads,
             idempotency_key=idempotency_key,
+            tenant_scope=tenant_scope,
         )
     except InstallationEstimateIdempotencyConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -140,9 +149,14 @@ async def create_installation_estimate_lead(
 async def create_product_availability_lead(
     payload: ProductAvailabilityLeadPayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ):
     try:
-        return await WebsiteLeadService.create_product_availability_lead(session, payload)
+        return await WebsiteLeadService.create_product_availability_lead(
+            session,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -161,6 +175,7 @@ async def create_repair_diagnostic_lead(
     error_display: Optional[List[UploadFile]] = File(default=None),
     leak_place: Optional[List[UploadFile]] = File(default=None),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ):
     try:
         parsed_payload = RepairDiagnosticService.parse_payload(payload)
@@ -177,6 +192,7 @@ async def create_repair_diagnostic_lead(
             session,
             payload=parsed_payload,
             uploads=uploads,
+            tenant_scope=tenant_scope,
         )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
@@ -187,6 +203,7 @@ async def create_repair_diagnostic_lead(
         background_tasks.add_task(
             RepairDiagnosticService.run_ai_pre_diagnosis,
             order_id=response.order_id,
+            tenant_id=tenant_scope.tenant_id,
             payload_data=parsed_payload.model_dump(),
             nameplate_files=nameplate_files,
         )

@@ -20,6 +20,7 @@ from services.bot_task_service import BotTaskService
 from services.bot_task_read_service import BotTaskReadService
 from services.product_read_service import ProductReadService
 from services.product_service import ProductService
+from services.tenant_scope_service import TenantScope
 from bot_app.catalog_presenter import format_client_product
 from bot_app.keyboards import get_product_keyboard, get_staff_main_menu, selection_result_keyboard
 from bot_app.task_presenter import build_stage_report, format_tasks, format_tasks_rich_html
@@ -31,6 +32,9 @@ from api_contracts.bot import (
     BotTaskResponse,
     BotTaskStatusUpdateResponse,
 )
+
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1)
 
 
 @pytest.fixture
@@ -1348,12 +1352,17 @@ async def test_product_read_curated_passes_power_range_to_dao(monkeypatch):
 async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(monkeypatch):
     calls = {}
 
-    async def fake_create_lead(session, payload):
+    async def fake_create_lead(session, payload, *, tenant_scope):
         calls["lead_payload"] = payload
+        calls["lead_tenant_scope"] = tenant_scope
         return {"id": 7}
 
-    async def fake_qualify_lead(session, lead_id, payload):
-        calls["qualify"] = {"lead_id": lead_id, "payload": payload}
+    async def fake_qualify_lead(session, lead_id, payload, *, tenant_scope):
+        calls["qualify"] = {
+            "lead_id": lead_id,
+            "payload": payload,
+            "tenant_scope": tenant_scope,
+        }
         return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 42}
 
     async def fake_update_order(session, order_id, payload):
@@ -1395,14 +1404,17 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
             "target_date": "2026-06-15T14:00:00",
             "request_text": "Монтаж, Иван, Победы 15",
         },
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert order["id"] == 42
     assert calls["lead_payload"].source == "bot"
     assert calls["lead_payload"].segment_hint == "b2c"
     assert calls["lead_payload"].next_followup_date.isoformat() == "2026-06-15T14:00:00"
+    assert calls["lead_tenant_scope"] == TEST_TENANT_SCOPE
     assert calls["qualify"]["lead_id"] == 7
     assert calls["qualify"]["payload"].delivery_address == "Победы 15"
+    assert calls["qualify"]["tenant_scope"] == TEST_TENANT_SCOPE
     assert calls["update"]["order_id"] == 42
     assert calls["update"]["payload"].title == "Монтаж"
     assert calls["update"]["payload"].service_type == "install_only"
@@ -1415,12 +1427,17 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
 async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(monkeypatch):
     calls = {}
 
-    async def fake_create_lead(session, payload):
+    async def fake_create_lead(session, payload, *, tenant_scope):
         calls["lead_payload"] = payload
+        calls["lead_tenant_scope"] = tenant_scope
         return {"id": 8}
 
-    async def fake_qualify_lead(session, lead_id, payload):
-        calls["qualify"] = {"lead_id": lead_id, "payload": payload}
+    async def fake_qualify_lead(session, lead_id, payload, *, tenant_scope):
+        calls["qualify"] = {
+            "lead_id": lead_id,
+            "payload": payload,
+            "tenant_scope": tenant_scope,
+        }
         return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 43}
 
     async def fake_update_order(session, order_id, payload):
@@ -1460,11 +1477,14 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
             "target_date": "2026-06-15T14:00:00",
             "request_text": "ТО, Иван, Победы 15",
         },
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert order["id"] == 43
     assert calls["lead_payload"].source == "bot"
+    assert calls["lead_tenant_scope"] == TEST_TENANT_SCOPE
     assert calls["qualify"]["payload"].delivery_address == "Победы 15"
+    assert calls["qualify"]["tenant_scope"] == TEST_TENANT_SCOPE
     assert calls["update"]["payload"].title == "Обслуживание"
     assert calls["update"]["payload"].service_type == "maintenance"
     assert calls["update"]["payload"].status == "negotiation"
@@ -1490,6 +1510,7 @@ async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, mo
             "target_date": "2026-06-15T14:00:00",
             "request_text": "Монтаж, Иван, Победы 15",
         },
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert order["id"] > 0
@@ -1497,9 +1518,13 @@ async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, mo
     assert lead.source == "bot"
     assert lead.status == "qualified"
     assert lead.converted_order_id == order["id"]
+    assert lead.tenant_id == TEST_TENANT_SCOPE.tenant_id
+    assert lead.storefront_id == TEST_TENANT_SCOPE.storefront_id
 
     persisted_order = await db.get(Order, order["id"])
     assert persisted_order is not None
+    assert persisted_order.tenant_id == TEST_TENANT_SCOPE.tenant_id
+    assert persisted_order.storefront_id == TEST_TENANT_SCOPE.storefront_id
     assert persisted_order.lead_source == "bot"
     assert persisted_order.delivery_address == "Победы 15"
     assert persisted_order.title == "Монтаж"
@@ -1543,7 +1568,11 @@ async def test_quick_order_retry_after_partial_failure_reuses_lead_and_order(db,
     }
 
     with pytest.raises(RuntimeError, match="stage failed"):
-        await BotQuickOrderService.create_order_from_draft(db, draft)
+        await BotQuickOrderService.create_order_from_draft(
+            db,
+            draft,
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
 
     leads_after_failure = (await db.execute(select(Lead))).scalars().all()
     orders_after_failure = (await db.execute(select(Order))).scalars().all()
@@ -1552,9 +1581,17 @@ async def test_quick_order_retry_after_partial_failure_reuses_lead_and_order(db,
     assert len(orders_after_failure) == 1
     assert leads_after_failure[0].source_fingerprint.startswith("bot_quick_order:")
     assert leads_after_failure[0].converted_order_id == orders_after_failure[0].id
+    assert leads_after_failure[0].tenant_id == TEST_TENANT_SCOPE.tenant_id
+    assert leads_after_failure[0].storefront_id == TEST_TENANT_SCOPE.storefront_id
+    assert orders_after_failure[0].tenant_id == TEST_TENANT_SCOPE.tenant_id
+    assert orders_after_failure[0].storefront_id == TEST_TENANT_SCOPE.storefront_id
     assert stages_after_failure == []
 
-    order = await BotQuickOrderService.create_order_from_draft(db, draft)
+    order = await BotQuickOrderService.create_order_from_draft(
+        db,
+        draft,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
 
     leads = (await db.execute(select(Lead))).scalars().all()
     orders = (await db.execute(select(Order))).scalars().all()

@@ -5,6 +5,7 @@ from datetime import datetime
 
 from services.email_lead_intake_service import EmailLeadImportResult
 from services.mail_imap_service import MailImapService
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +108,10 @@ class EmailLeadImportJobService:
         notified_admins = 0
         try:
             async with async_session_maker() as session:
+                tenant_scope = await SystemTenantScopeResolver.resolve(session)
                 result = await MailImapService.import_email_leads(
                     session,
+                    tenant_scope=tenant_scope,
                     dry_run=dry_run,
                     lookback_days=lookback_days,
                 )
@@ -151,4 +154,3 @@ class EmailLeadImportJobService:
                     error=str(exc),
                     message="Импорт email-лидов завершился ошибкой.",
                 )
-

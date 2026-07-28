@@ -20,6 +20,10 @@ from services.mail_smtp_service import MailAttachment, MailSmtpService
 from services.mail_imap_service import MailImapService
 from services.notification_service import NotificationService
 from services.order_service import OrderService
+from services.tenant_scope_service import TenantScope
+
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1)
 
 
 SAMPLE_BANK_EMAIL = """
@@ -234,13 +238,18 @@ async def test_email_lead_dry_run_reports_unrecognized_legacy_doc(sqlite_session
 
     async def fake_process_email(_session, **kwargs):
         assert "legacy .doc не распознан" in kwargs["raw_body"]
+        assert kwargs["tenant_scope"] == TEST_TENANT_SCOPE
         return EmailLeadProcessResult(status="filtered", is_candidate=False, reason="keyword_filter")
 
     monkeypatch.setattr("services.mail_imap_service.shutil.which", lambda _name: None)
     monkeypatch.setattr(MailImapService, "_connect", lambda: FakeImapClient())
     monkeypatch.setattr(EmailLeadIntakeService, "process_email", fake_process_email)
 
-    result = await MailImapService.import_email_leads(sqlite_session, dry_run=True)
+    result = await MailImapService.import_email_leads(
+        sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
+        dry_run=True,
+    )
 
     assert result.processed == 1
     assert result.candidates == 0
@@ -274,6 +283,7 @@ async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_mess
 
     first = await EmailLeadIntakeService.process_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         sender_email="sales@example.com",
         sender_name="Иван",
         subject="Монтаж кондиционера",
@@ -289,6 +299,7 @@ async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_mess
 
     duplicate = await EmailLeadIntakeService.process_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         sender_email="sales@example.com",
         sender_name="Иван",
         subject="Монтаж кондиционера",
@@ -305,6 +316,8 @@ async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_mess
     assert len(orders) == 1
     assert orders[0].status == OrderStatus.NEW_LEAD
     assert orders[0].lead_source == LeadSource.EMAIL
+    assert orders[0].tenant_id == TEST_TENANT_SCOPE.tenant_id
+    assert orders[0].storefront_id == TEST_TENANT_SCOPE.storefront_id
     assert orders[0].technical_meta["email_source_message_id"] == "<lead-1@example.test>"
     assert orders[0].technical_meta["email_source_fingerprint"]
     assert orders[0].technical_meta["email_date"] == "2026-05-25T12:00"
@@ -340,6 +353,7 @@ async def test_email_lead_intake_marks_b2c_known_and_unknown_hint_unknown(sqlite
 
     await EmailLeadIntakeService.process_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         sender_email="anna@example.com",
         sender_name="Анна",
         subject="B2C обслуживание кондиционера",
@@ -348,6 +362,7 @@ async def test_email_lead_intake_marks_b2c_known_and_unknown_hint_unknown(sqlite
     )
     await EmailLeadIntakeService.process_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         sender_email="client@example.com",
         sender_name="Клиент",
         subject="Цена кондиционера",
@@ -357,6 +372,8 @@ async def test_email_lead_intake_marks_b2c_known_and_unknown_hint_unknown(sqlite
 
     orders = (await sqlite_session.execute(select(Order).order_by(Order.id))).scalars().all()
 
+    assert all(order.tenant_id == TEST_TENANT_SCOPE.tenant_id for order in orders)
+    assert all(order.storefront_id == TEST_TENANT_SCOPE.storefront_id for order in orders)
     assert orders[0].technical_meta["lead_customer_type_known"] is True
     assert orders[0].technical_meta["lead_customer_type"] == "individual"
     assert orders[1].technical_meta["lead_customer_type_known"] is False
@@ -378,6 +395,7 @@ async def test_email_lead_intake_dry_run_does_not_create_order(sqlite_session, m
 
     result = await EmailLeadIntakeService.process_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         sender_email="client@example.com",
         sender_name="Клиент",
         subject="Цена кондиционера",
@@ -421,7 +439,11 @@ async def test_email_lead_import_dry_run_reports_keyword_filtered_message(sqlite
     monkeypatch.setattr(MailImapService, "_connect", lambda: FakeImapClient())
     monkeypatch.setattr(MailImapService, "_email_lead_scan_since", fake_scan_since)
 
-    result = await MailImapService.import_email_leads(sqlite_session, dry_run=True)
+    result = await MailImapService.import_email_leads(
+        sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
+        dry_run=True,
+    )
 
     assert result.processed == 1
     assert result.candidates == 0

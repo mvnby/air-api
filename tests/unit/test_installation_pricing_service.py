@@ -130,6 +130,7 @@ async def test_public_product_installation_uses_server_rate_discount_and_meters(
     sqlite_checkout_session,
     quote_hint,
     caplog,
+    tenant_scope,
 ):
     product, rates, _option = await _seed_checkout_pricing(sqlite_checkout_session)
     matching_rate = rates[1]
@@ -140,7 +141,11 @@ async def test_public_product_installation_uses_server_rate_discount_and_meters(
     )
 
     with caplog.at_level("INFO"):
-        response = await WebsiteOrderService.create_order(sqlite_checkout_session, payload)
+        response = await WebsiteOrderService.create_order(
+            sqlite_checkout_session,
+            payload,
+            tenant_scope=tenant_scope,
+        )
 
     product_link = (
         await sqlite_checkout_session.execute(
@@ -183,6 +188,9 @@ async def test_public_product_installation_uses_server_rate_discount_and_meters(
     }
     assert sorted(link.price for link in service_links) == [50, 780]
     assert response.total_amount == 5660
+    order = await sqlite_checkout_session.get(Order, response.id)
+    assert order.tenant_id == tenant_scope.tenant_id
+    assert order.storefront_id == tenant_scope.storefront_id
     assert "PUBLIC_INSTALLATION_PRICE_MISMATCH" in caplog.text
     assert "+375291112233" not in caplog.text
     assert "Скрытый клиент" not in caplog.text
@@ -191,6 +199,7 @@ async def test_public_product_installation_uses_server_rate_discount_and_meters(
 @pytest.mark.asyncio
 async def test_service_only_installation_uses_selected_server_rate_without_bundle_discount(
     sqlite_checkout_session,
+    tenant_scope,
 ):
     _product, rates, option = await _seed_checkout_pricing(sqlite_checkout_session)
     payload = OrderPayload.model_validate(
@@ -210,7 +219,11 @@ async def test_service_only_installation_uses_selected_server_rate_without_bundl
         }
     )
 
-    response = await WebsiteOrderService.create_order(sqlite_checkout_session, payload)
+    response = await WebsiteOrderService.create_order(
+        sqlite_checkout_session,
+        payload,
+        tenant_scope=tenant_scope,
+    )
     service_links = list(
         (
             await sqlite_checkout_session.execute(

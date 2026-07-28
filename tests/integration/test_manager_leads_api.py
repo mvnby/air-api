@@ -117,6 +117,16 @@ async def test_manager_lead_qualify_creates_order(async_client, db):
     assert customer.bic == "ALFABY2X"
     assert customer.bank_name == "ЗАО Альфа-Банк, Минск"
 
+    lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one()
+    order = (
+        await db.execute(select(Order).where(Order.id == qualified["order_id"]))
+    ).scalar_one()
+    assert (lead.tenant_id, lead.storefront_id) == (1, 1)
+    assert (order.tenant_id, order.storefront_id) == (
+        lead.tenant_id,
+        lead.storefront_id,
+    )
+
 
 @pytest.mark.asyncio
 async def test_manager_lead_mark_lost_hidden_from_default_list(async_client):

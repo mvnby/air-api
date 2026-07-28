@@ -22,6 +22,7 @@ from services.bot_service import BotService
 from services.defect_act_ai_service import DefectActAIService
 from services.general_media_storage_service import get_general_media_storage
 from services.order_service import OrderService
+from services.tenant_scope_service import TenantScope
 from services.staff_user_service import StaffUserService
 
 logger = logging.getLogger(__name__)
@@ -232,6 +233,7 @@ class RepairDiagnosticService:
     async def create_lead(
         session,
         *,
+        tenant_scope: TenantScope,
         payload: RepairDiagnosticLeadPayload,
         uploads: Dict[str, List[RepairDiagnosticIncomingFile]],
     ) -> tuple[RepairDiagnosticLeadResponse, list[RepairDiagnosticIncomingFile]]:
@@ -246,6 +248,7 @@ class RepairDiagnosticService:
             lead_source=LeadSource.SITE,
             initial_status=OrderStatus.NEW_LEAD,
             comment=comment,
+            tenant_scope=tenant_scope,
         )
 
         order.workflow_type = "repair"
@@ -284,11 +287,17 @@ class RepairDiagnosticService:
     async def run_ai_pre_diagnosis(
         *,
         order_id: int,
+        tenant_id: int,
         payload_data: Dict[str, Any],
         nameplate_files: List[RepairDiagnosticIncomingFile],
     ) -> None:
         async with async_session_maker() as session:
-            result = await session.execute(select(Order).where(Order.id == order_id).limit(1))
+            result = await session.execute(
+                select(Order).where(
+                    Order.id == order_id,
+                    Order.tenant_id == tenant_id,
+                ).limit(1)
+            )
             order = result.scalars().first()
             if not order:
                 return

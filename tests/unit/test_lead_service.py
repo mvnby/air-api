@@ -6,10 +6,11 @@ from sqlmodel import select
 from models import Customer, CustomerBranch, CustomerType, Lead, Order
 from schemas import LeadCreatePayload, LeadLossPayload, LeadQualifyPayload, LeadUpdatePayload
 from services.lead_service import LeadService
+from services.tenant_scope_service import TenantScope
 
 
 @pytest.mark.asyncio
-async def test_create_lead_with_inn_sets_b2b(db):
+async def test_create_lead_with_inn_sets_b2b(db, tenant_scope):
     payload = LeadCreatePayload(
         source="phone",
         name="ООО Тест",
@@ -17,12 +18,17 @@ async def test_create_lead_with_inn_sets_b2b(db):
         request_text="Нужен компрессор",
     )
 
-    lead = await LeadService.create_lead(db, payload)
-    assert lead["segment_hint"] == "b2b"
+    lead_data = await LeadService.create_lead(db, payload, tenant_scope=tenant_scope)
+    lead = await db.get(Lead, lead_data["id"])
+
+    assert lead_data["segment_hint"] == "b2b"
+    assert lead is not None
+    assert lead.tenant_id == tenant_scope.tenant_id
+    assert lead.storefront_id == tenant_scope.storefront_id
 
 
 @pytest.mark.asyncio
-async def test_create_lead_without_inn_sets_unknown(db):
+async def test_create_lead_without_inn_sets_unknown(db, tenant_scope):
     payload = LeadCreatePayload(
         source="phone",
         name="Иван",
@@ -30,12 +36,17 @@ async def test_create_lead_without_inn_sets_unknown(db):
         request_text="Нужна консультация",
     )
 
-    lead = await LeadService.create_lead(db, payload)
-    assert lead["segment_hint"] == "unknown"
+    lead_data = await LeadService.create_lead(db, payload, tenant_scope=tenant_scope)
+    lead = await db.get(Lead, lead_data["id"])
+
+    assert lead_data["segment_hint"] == "unknown"
+    assert lead is not None
+    assert lead.tenant_id == tenant_scope.tenant_id
+    assert lead.storefront_id == tenant_scope.storefront_id
 
 
 @pytest.mark.asyncio
-async def test_qualify_lead_reuses_customer_by_phone(db):
+async def test_qualify_lead_reuses_customer_by_phone(db, tenant_scope):
     customer = Customer(name="Existing", phone="+375292222222", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
@@ -49,12 +60,14 @@ async def test_qualify_lead_reuses_customer_by_phone(db):
             phone="+375292222222",
             request_text="Нужен кондиционер",
         ),
+        tenant_scope=tenant_scope,
     )
 
     result = await LeadService.qualify_lead(
         db,
         lead_id=lead_data["id"],
         payload=LeadQualifyPayload(order_comment="Проверить наличие"),
+        tenant_scope=tenant_scope,
     )
 
     assert result is not None
@@ -67,7 +80,7 @@ async def test_qualify_lead_reuses_customer_by_phone(db):
 
 
 @pytest.mark.asyncio
-async def test_qualify_lead_creates_order_and_updates_status(db):
+async def test_qualify_lead_creates_order_and_updates_status(db, tenant_scope):
     lead_data = await LeadService.create_lead(
         db,
         LeadCreatePayload(
@@ -76,6 +89,7 @@ async def test_qualify_lead_creates_order_and_updates_status(db):
             email="petr@example.com",
             request_text="Ищу сервис",
         ),
+        tenant_scope=tenant_scope,
     )
 
     result = await LeadService.qualify_lead(
@@ -86,6 +100,7 @@ async def test_qualify_lead_creates_order_and_updates_status(db):
             delivery_address="Минск, ул. Примерная 1",
             order_comment="Квалифицированный лид",
         ),
+        tenant_scope=tenant_scope,
     )
 
     assert result is not None
@@ -93,14 +108,48 @@ async def test_qualify_lead_creates_order_and_updates_status(db):
     assert result["lead"]["converted_order_id"] == result["order_id"]
 
     order = await db.get(Order, result["order_id"])
+    lead = await db.get(Lead, lead_data["id"])
     assert order is not None
+    assert lead is not None
     assert order.customer_id == result["customer_id"]
     assert order.lead_source == "email"
     assert order.comment == "Квалифицированный лид"
+    assert order.tenant_id == tenant_scope.tenant_id
+    assert order.storefront_id == tenant_scope.storefront_id
+    assert lead.tenant_id == order.tenant_id
+    assert lead.storefront_id == order.storefront_id
 
 
 @pytest.mark.asyncio
-async def test_qualify_lead_is_idempotent_after_conversion(db):
+async def test_qualify_lead_rejects_mismatched_tenant_scope(db, tenant_scope):
+    lead_data = await LeadService.create_lead(
+        db,
+        LeadCreatePayload(
+            source="manager",
+            name="Wrong tenant scope",
+            request_text="Проверка изоляции tenant",
+        ),
+        tenant_scope=tenant_scope,
+    )
+
+    mismatched_scope = TenantScope(
+        tenant_id=tenant_scope.tenant_id + 1,
+        storefront_id=tenant_scope.storefront_id,
+    )
+    result = await LeadService.qualify_lead(
+        db,
+        lead_id=lead_data["id"],
+        payload=LeadQualifyPayload(order_comment="Не должен создаться"),
+        tenant_scope=mismatched_scope,
+    )
+
+    assert result is None
+    orders = (await db.execute(select(Order))).scalars().all()
+    assert orders == []
+
+
+@pytest.mark.asyncio
+async def test_qualify_lead_is_idempotent_after_conversion(db, tenant_scope):
     lead_data = await LeadService.create_lead(
         db,
         LeadCreatePayload(
@@ -109,17 +158,20 @@ async def test_qualify_lead_is_idempotent_after_conversion(db):
             email="retry@example.com",
             request_text="Повторная квалификация",
         ),
+        tenant_scope=tenant_scope,
     )
 
     first = await LeadService.qualify_lead(
         db,
         lead_id=lead_data["id"],
         payload=LeadQualifyPayload(order_comment="Первый запуск"),
+        tenant_scope=tenant_scope,
     )
     second = await LeadService.qualify_lead(
         db,
         lead_id=lead_data["id"],
         payload=LeadQualifyPayload(order_comment="Повторный запуск"),
+        tenant_scope=tenant_scope,
     )
 
     assert first is not None
@@ -130,7 +182,7 @@ async def test_qualify_lead_is_idempotent_after_conversion(db):
 
 
 @pytest.mark.asyncio
-async def test_update_lead_rejects_terminal_status_shortcut(db):
+async def test_update_lead_rejects_terminal_status_shortcut(db, tenant_scope):
     lead_data = await LeadService.create_lead(
         db,
         LeadCreatePayload(
@@ -138,6 +190,7 @@ async def test_update_lead_rejects_terminal_status_shortcut(db):
             name="Shortcut Lead",
             request_text="Нельзя обходить квалификацию",
         ),
+        tenant_scope=tenant_scope,
     )
 
     with pytest.raises(ValueError, match="dedicated lead workflow"):
@@ -154,7 +207,7 @@ async def test_update_lead_rejects_terminal_status_shortcut(db):
 
 
 @pytest.mark.asyncio
-async def test_mark_lost_rejects_non_loss_status(db):
+async def test_mark_lost_rejects_non_loss_status(db, tenant_scope):
     lead_data = await LeadService.create_lead(
         db,
         LeadCreatePayload(
@@ -162,6 +215,7 @@ async def test_mark_lost_rejects_non_loss_status(db):
             name="Bad Lost Status",
             request_text="Нельзя отмечать qualified через mark-lost",
         ),
+        tenant_scope=tenant_scope,
     )
 
     with pytest.raises(ValueError, match="lost or spam"):
@@ -177,7 +231,7 @@ async def test_mark_lost_rejects_non_loss_status(db):
 
 
 @pytest.mark.asyncio
-async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(db):
+async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(db, tenant_scope):
     customer = Customer(name="Branch Owner", phone="+375291010101", type=CustomerType.company, inn="111111111")
     db.add(customer)
     await db.commit()
@@ -200,6 +254,7 @@ async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(
             name="Lead with branch",
             request_text="Нужна поставка на склад",
         ),
+        tenant_scope=tenant_scope,
     )
 
     result = await LeadService.qualify_lead(
@@ -210,6 +265,7 @@ async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(
             customer_branch_id=branch.id,
             order_comment="Сделка с филиалом",
         ),
+        tenant_scope=tenant_scope,
     )
 
     assert result is not None
@@ -221,7 +277,7 @@ async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(
 
 
 @pytest.mark.asyncio
-async def test_qualify_lead_rejects_foreign_customer_branch(db):
+async def test_qualify_lead_rejects_foreign_customer_branch(db, tenant_scope):
     customer_a = Customer(name="Customer A", phone="+375291111111", type=CustomerType.company, inn="222222222")
     customer_b = Customer(name="Customer B", phone="+375292222222", type=CustomerType.company, inn="333333333")
     db.add(customer_a)
@@ -247,6 +303,7 @@ async def test_qualify_lead_rejects_foreign_customer_branch(db):
             name="Lead invalid branch",
             request_text="Проверка валидации филиала",
         ),
+        tenant_scope=tenant_scope,
     )
 
     with pytest.raises(ValueError, match="does not belong"):
@@ -257,11 +314,12 @@ async def test_qualify_lead_rejects_foreign_customer_branch(db):
                 customer_id=customer_a.id,
                 customer_branch_id=branch_b.id,
             ),
+            tenant_scope=tenant_scope,
         )
 
 
 @pytest.mark.asyncio
-async def test_mark_lost_and_archive_old_leads(db):
+async def test_mark_lost_and_archive_old_leads(db, tenant_scope):
     created = await LeadService.create_lead(
         db,
         LeadCreatePayload(
@@ -270,6 +328,7 @@ async def test_mark_lost_and_archive_old_leads(db):
             phone="+375294444444",
             request_text="Тест потери лида",
         ),
+        tenant_scope=tenant_scope,
     )
 
     updated = await LeadService.mark_lead_lost(

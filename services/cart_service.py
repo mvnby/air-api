@@ -2,6 +2,7 @@ from typing import Dict, Any, TypedDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from crud.cart import CartDAO
 from services.order_service import OrderService
+from services.tenant_scope_service import TenantScope
 
 
 class CheckoutResultDTO(TypedDict):
@@ -51,6 +52,8 @@ class CartService:
         session: AsyncSession,
         user_id: int,
         contact_info: str,
+        *,
+        tenant_scope: TenantScope,
         username: str = None,
         full_name: str = None,
     ) -> CheckoutResultDTO:
@@ -80,7 +83,8 @@ class CartService:
             contact_info=contact_info,
             items_data=items_data,
             username=username,
-            full_name=full_name
+            full_name=full_name,
+            tenant_scope=tenant_scope,
         )
 
         # Очищаем корзину

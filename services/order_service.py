@@ -24,6 +24,7 @@ from services.order_proposal_lifecycle import (
     normalize_proposal_status,
     sync_selected_proposal_status,
 )
+from services.tenant_scope_service import TenantScope
 
 logger = logging.getLogger(__name__)
 
@@ -887,8 +888,10 @@ class OrderService:
         user_id: int,
         contact_info: str, # Телефон или адрес
         items_data: Dict[str, Any], # Словарь с товарами
+        *,
+        tenant_scope: TenantScope,
         username: Optional[str] = None,
-        full_name: Optional[str] = None
+        full_name: Optional[str] = None,
     ) -> Order:
         """
         Create order and populate it with items.
@@ -897,9 +900,10 @@ class OrderService:
         order = await OrderDAO.create(
             session,
             user_id=user_id,
+            tenant_scope=tenant_scope,
             phone=contact_info,
             username=username,
-            full_name=full_name
+            full_name=full_name,
         )
         
         # 2. Наполняем товарами
@@ -909,7 +913,12 @@ class OrderService:
         return order
 
     @staticmethod
-    async def create_manager_order(session: AsyncSession, payload: Any) -> Optional[Dict[str, Any]]:
+    async def create_manager_order(
+        session: AsyncSession,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
         source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
         initial_status = (
             OrderStatus.NEGOTIATION
@@ -931,6 +940,7 @@ class OrderService:
             customer_type=payload.customer_type,
             customer_inn=payload.customer_inn,
             customer_full_legal_name=payload.customer_full_legal_name,
+            tenant_scope=tenant_scope,
         )
 
         changed = False
@@ -969,6 +979,8 @@ class OrderService:
     @staticmethod
     async def create_from_website(
         session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
         customer_name: str,
         customer_phone: str,
         customer_email: Optional[str],
@@ -1080,6 +1092,8 @@ class OrderService:
         # 2. Create order with lead_source
         default_title = OrderService._build_default_order_title(comment=comment, items=items)
         order = Order(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
             customer_id=customer.id,
             delivery_address=customer_address,
             status=initial_status,

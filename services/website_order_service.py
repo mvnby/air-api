@@ -10,13 +10,19 @@ from services.bot_service import BotService
 from services.installation_pricing_service import InstallationPricingService
 from services.order_service import OrderService
 from services.staff_user_service import StaffUserService
+from services.tenant_scope_service import TenantScope
 
 logger = logging.getLogger(__name__)
 
 
 class WebsiteOrderService:
     @staticmethod
-    async def create_order(session: AsyncSession, payload: OrderPayload) -> OrderResponse:
+    async def create_order(
+        session: AsyncSession,
+        payload: OrderPayload,
+        *,
+        tenant_scope: TenantScope,
+    ) -> OrderResponse:
         logger.info(
             "PUBLIC_CHECKOUT_RECEIVED item_count=%s installation_item_count=%s",
             len(payload.items),
@@ -57,6 +63,7 @@ class WebsiteOrderService:
                     "items": pricing_snapshots,
                 }
             } if pricing_snapshots else None,
+            tenant_scope=tenant_scope,
         )
 
         await WebsiteOrderService._notify_admins(session, order, payload)
