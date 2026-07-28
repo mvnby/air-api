@@ -69,6 +69,7 @@ import {
   buildCustomerPatchPayload,
   type CustomerForm,
 } from '../src/components/customers/customer-profile-form';
+import { getOrderDocumentAccess } from '../src/components/orders/order-document-access';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -111,7 +112,7 @@ assert(
 
 assert(
   navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')
-    === 'Кондиционеры|Бренды|Фичи|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
+    === 'Кондиционеры|Подборки|Бренды|Фичи|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
   'catalog navigation must follow the product data workflow',
 );
 
@@ -218,6 +219,26 @@ assert(
 assert(
   compactLegalName('ЗАО «Витебскагропродукт»') === 'ЗАО «Витебскагропродукт»',
   'already compact legal names must remain unchanged',
+);
+
+const executionDocumentAccess = getOrderDocumentAccess('execution');
+assert(
+  executionDocumentAccess.mode === 'active'
+    && executionDocumentAccess.canCreate
+    && executionDocumentAccess.canUpload
+    && executionDocumentAccess.canReplace
+    && executionDocumentAccess.canDelete,
+  'documents must remain fully actionable while an order is in works',
+);
+const closedDocumentAccess = getOrderDocumentAccess('closed');
+assert(
+  closedDocumentAccess.mode === 'history'
+    && !closedDocumentAccess.canCreate
+    && !closedDocumentAccess.canUpload
+    && !closedDocumentAccess.canReplace
+    && !closedDocumentAccess.canDelete
+    && closedDocumentAccess.canSend,
+  'completed orders must keep document history and resend access without document mutations',
 );
 
 const qualityState = parseCatalogQualityState(

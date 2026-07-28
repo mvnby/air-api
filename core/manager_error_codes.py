@@ -9,6 +9,7 @@ PRODUCT_NOT_FOUND = "product_not_found"
 DOCUMENT_GENERATION_FAILED = "document_generation_failed"
 DOCUMENT_NOT_FOUND = "document_not_found"
 DOCUMENT_HAS_DEPENDENTS = "document_has_dependents"
+ORDER_DOCUMENTS_LOCKED = "order_documents_locked"
 
 
 # Shared message map for manager API responses and frontend fallback mapping.
@@ -24,6 +25,7 @@ DEFAULT_MANAGER_ERROR_MESSAGES = {
     DOCUMENT_GENERATION_FAILED: "Не удалось сформировать документ",
     DOCUMENT_NOT_FOUND: "Документ не найден",
     DOCUMENT_HAS_DEPENDENTS: "Нельзя удалить документ-основание: сначала удалите связанные акты или накладные",
+    ORDER_DOCUMENTS_LOCKED: "Заказ завершён: документы доступны только для просмотра и повторной отправки",
 
 }
 

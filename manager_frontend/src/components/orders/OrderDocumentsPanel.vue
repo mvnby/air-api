@@ -18,6 +18,7 @@ import DocumentSendModal from './DocumentSendModal.vue';
 import OrderEmailHistory from './OrderEmailHistory.vue';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import { confirmDialog } from '../../services/ui-feedback';
+import { getOrderDocumentAccess } from './order-document-access';
 
 type ToastType = 'success' | 'error';
 type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
@@ -94,6 +95,11 @@ const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> =
 ];
 
 const documents = ref<ManagerOrderDocumentItem[]>([]);
+const documentAccess = computed(() => getOrderDocumentAccess(props.order.status));
+const canSendDocuments = computed(() => (
+  documentAccess.value.canSend
+  && (documentAccess.value.mode === 'active' || documents.value.length > 0)
+));
 const customerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
 const customerContracts = ref<ManagerCustomerContractItemResponse[]>([]);
 const contractTemplates = ref<DocumentTemplateItem[]>([]);
@@ -757,10 +763,18 @@ const openCustomerProfileForContract = () => {
 };
 
 const openDocumentSendModal = () => {
+  if (!canSendDocuments.value) {
+    notify('В завершённом заказе можно повторно отправить только существующие документы.', 'error');
+    return;
+  }
   showDocumentSendModal.value = true;
 };
 
 const openCreatePanel = () => {
+  if (!documentAccess.value.canCreate) {
+    notify(documentAccess.value.summary, 'error');
+    return;
+  }
   selectedDocumentType.value = suggestedDocumentType.value;
   showAdvancedSettings.value = false;
   isCreatePanelOpen.value = true;
@@ -902,6 +916,10 @@ const handleDocumentsSendSettled = () => {
 };
 
 const generateDocument = async (type: string) => {
+  if (!documentAccess.value.canCreate) {
+    notify(documentAccess.value.summary, 'error');
+    return;
+  }
   isGeneratingDoc.value = true;
   let mutatedOrderBeforeGeneration = false;
   let generatedDocument = false;
@@ -990,10 +1008,15 @@ const generateDocument = async (type: string) => {
 };
 
 const triggerFileUpload = () => {
+  if (!documentAccess.value.canUpload) {
+    notify(documentAccess.value.summary, 'error');
+    return;
+  }
   fileInputRef.value?.click();
 };
 
 const handleFileUpload = async (event: Event) => {
+  if (!documentAccess.value.canUpload) return;
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0] as File | undefined;
   if (!file) return;
@@ -1013,6 +1036,7 @@ const handleFileUpload = async (event: Event) => {
 };
 
 const handleAttachDocumentFile = async (doc: ManagerOrderDocumentItem, event: Event) => {
+  if (!documentAccess.value.canReplace) return;
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0] as File | undefined;
   if (!file) return;
@@ -1051,6 +1075,10 @@ const downloadDocument = async (doc: ManagerOrderDocumentItem) => {
 };
 
 const deleteDocument = async (docId: number) => {
+  if (!documentAccess.value.canDelete) {
+    notify(documentAccess.value.summary, 'error');
+    return;
+  }
   if (!await confirmDialog({ title: 'Удалить документ?', confirmText: 'Удалить', variant: 'danger' })) return;
   processingDocId.value = docId;
   try {
@@ -1078,6 +1106,10 @@ const resetExternalContractForm = () => {
 };
 
 const registerExternalContract = async () => {
+  if (!documentAccess.value.canCreate) {
+    notify(documentAccess.value.summary, 'error');
+    return;
+  }
   const number = externalContractNumber.value.trim();
   if (!number) {
     notify('Укажите номер договора', 'error');
@@ -1129,13 +1161,16 @@ const registerExternalContract = async () => {
         >
           {{ documentSummary }}
         </p>
+        <p v-if="documentAccess.mode === 'history'" class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {{ documentAccess.summary }}
+        </p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <button
           class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
-          title="Отправить письмо"
-          :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc"
+          :title="canSendDocuments ? 'Отправить письмо' : 'В завершённом заказе нет документов для повторной отправки'"
+          :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc || !canSendDocuments"
           @click="openDocumentSendModal"
         >
           <span class="material-icons-round text-[18px]">send</span>
@@ -1143,7 +1178,7 @@ const registerExternalContract = async () => {
         </button>
 
         <button
-          v-if="documents.length"
+          v-if="documents.length && documentAccess.canCreate"
           class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#007f80] px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50 disabled:opacity-50"
           :disabled="isGeneratingDoc || !!processingDocId || isUploadingDoc"
           @click="openCreatePanel"
@@ -1152,8 +1187,9 @@ const registerExternalContract = async () => {
           Создать
         </button>
 
-        <input ref="fileInputRef" type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" @change="handleFileUpload" />
+        <input v-if="documentAccess.canUpload" ref="fileInputRef" type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" @change="handleFileUpload" />
         <button
+          v-if="documentAccess.canUpload"
           class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-700 px-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500/50 disabled:opacity-50"
           title="Загрузить файл"
           :disabled="isUploadingDoc || !!processingDocId || isGeneratingDoc"
@@ -1220,7 +1256,7 @@ const registerExternalContract = async () => {
                 <span class="material-icons-round text-[18px]">download</span>
               </button>
               <label
-                v-else
+              v-else-if="documentAccess.canReplace"
                 class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-teal-600 hover:bg-teal-50 hover:text-teal-700 dark:text-teal-400 dark:hover:bg-teal-900/30 dark:hover:text-teal-300"
                 title="Добавить файл"
               >
@@ -1228,6 +1264,7 @@ const registerExternalContract = async () => {
                 <input type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" :disabled="processingDocId === doc.id" @change="handleAttachDocumentFile(doc, $event)" />
               </label>
               <button
+                v-if="documentAccess.canDelete"
                 class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
                 :disabled="processingDocId === doc.id"
                 title="Удалить"
@@ -1240,14 +1277,15 @@ const registerExternalContract = async () => {
         </div>
         <div v-else class="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center dark:border-slate-700">
           <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Документов нет</p>
-          <button type="button" class="btn-mini h-8 text-xs" @click="openCreatePanel">
+          <button v-if="documentAccess.canCreate" type="button" class="btn-mini h-8 text-xs" @click="openCreatePanel">
             <span class="material-icons-round text-[15px]">add</span>
             Создать
           </button>
+          <p v-else class="text-xs text-slate-500 dark:text-slate-400">{{ documentAccess.summary }}</p>
         </div>
       </div>
 
-      <div v-if="isCreatePanelOpen" class="order-first rounded-xl border border-teal-200 bg-teal-50/30 p-3 dark:border-teal-800/70 dark:bg-teal-950/20">
+      <div v-if="isCreatePanelOpen && documentAccess.canCreate" class="order-first rounded-xl border border-teal-200 bg-teal-50/30 p-3 dark:border-teal-800/70 dark:bg-teal-950/20">
         <div class="mb-3 flex items-center justify-between gap-3">
           <div>
             <p class="text-[11px] font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">Создание документа</p>

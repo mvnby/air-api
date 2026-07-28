@@ -305,7 +305,7 @@ const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
 const documentsPanelRef = ref<InstanceType<typeof OrderDocumentsPanel> | null>(null);
 const proposalToolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
-const executionWorkspaceSection = ref<'documents' | 'payments' | null>(null);
+const executionWorkspaceOpen = ref(false);
 const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
 const orderEmails = ref<OutgoingEmailResponse[]>([]);
 const orderEmailsLoaded = ref(false);
@@ -1093,7 +1093,7 @@ const documentSectionHasError = computed(() => isCompanyOrder.value && !props.or
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
   let mutated = false;
-  if (type === 'offer' || type === 'tn2' || type === 'ttn1') {
+  if (['offer', 'invoice', 'retail_receipt', 'service_act', 'maintenance_service_act', 'warranty_certificate', 'act', 'defect_act', 'tn2', 'ttn1'].includes(type)) {
     await saveCurrentProposalLines();
     mutated = true;
   }
@@ -1563,7 +1563,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     initializedOrderId.value = order.id;
     expandedDrawerSections.value = restoreDrawerSections();
     linkedEquipmentOptions.value = [];
-    executionWorkspaceSection.value = null;
+    executionWorkspaceOpen.value = false;
     activeWorkspaceTarget.value = null;
     orderEmails.value = [];
     orderEmailsLoaded.value = false;
@@ -2639,7 +2639,7 @@ const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = f
     expandedDrawerSections.value.documents = false;
     expandedDrawerSections.value.payments = false;
     expandedDrawerSections.value.execution = false;
-    executionWorkspaceSection.value = null;
+    executionWorkspaceOpen.value = false;
   }
   if (shouldClose) {
     activeWorkspaceTarget.value = null;
@@ -2654,11 +2654,10 @@ const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = f
   }
   if (target === 'proposal') expandedDrawerSections.value.proposals = true;
   if (target === 'documents') {
-    if (status.value === 'execution') executionWorkspaceSection.value = 'documents';
-    else expandedDrawerSections.value.documents = true;
+    expandedDrawerSections.value.documents = true;
   }
   if (target === 'payments') {
-    if (status.value === 'execution') executionWorkspaceSection.value = 'payments';
+    if (status.value === 'execution') executionWorkspaceOpen.value = true;
     else expandedDrawerSections.value.payments = true;
   }
   await nextTick();
@@ -2667,7 +2666,7 @@ const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = f
     await equipmentPanelRef.value?.expand();
     await nextTick();
   }
-  const elementId = status.value === 'execution' && (target === 'documents' || target === 'payments')
+  const elementId = status.value === 'execution' && target === 'payments'
     ? 'order-workspace-execution-details'
     : 'order-workspace-' + target;
   document.getElementById(elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3867,7 +3866,7 @@ watch(
 
       <!-- Экшн-зона (Proposal & Docs) -->
       <OrderDrawerSection
-        v-if="status !== 'execution'"
+        v-if="order"
         id="order-workspace-documents"
         v-model:expanded="expandedDrawerSections.documents"
         title="Документы"
@@ -3956,10 +3955,9 @@ watch(
       </OrderDrawerSection>
 
       <DealExecutionTab
-        v-if="status === 'execution' && order && executionWorkspaceSection"
+        v-if="status === 'execution' && order && executionWorkspaceOpen"
         id="order-workspace-execution-details"
         :order="order"
-        :section="executionWorkspaceSection"
         @refresh="emit('reload', order.id) /* triggering parent reload without closing drawer */"
         @close="closeDrawer"
         class="mt-4"
