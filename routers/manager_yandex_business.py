@@ -1,6 +1,6 @@
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -29,16 +29,9 @@ router = APIRouter(
     },
 )
 async def get_manager_yandex_business_price_list(
-    site_base_url: str = Query(
-        "https://mvn.by",
-        description="Public storefront base URL for product and image links",
-    ),
     session: AsyncSession = Depends(get_session),
 ):
-    content = await YandexBusinessPriceListService.build_xml(
-        session=session,
-        site_base_url=site_base_url,
-    )
+    content = await YandexBusinessPriceListService.build_xml(session)
     filename = quote("yandex-business-price-list.yml")
     return Response(
         content=content,

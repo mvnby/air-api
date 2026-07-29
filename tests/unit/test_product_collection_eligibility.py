@@ -42,3 +42,22 @@ def test_home_eligibility_reports_all_actionable_failures():
         "missing_main_image",
         "missing_card_specs",
     )
+
+
+def test_yandex_business_does_not_require_card_only_fields():
+    product = Product(
+        title="Feed item",
+        slug="feed-item",
+        product_kind="unknown",
+        price=1000,
+        main_image=None,
+        specs={},
+        is_published=True,
+    )
+    result = ProductCollectionEligibility.evaluate(
+        product,
+        surface_key="yandex_business",
+        slot_key="categories",
+        supply_metrics={},
+    )
+    assert result.is_eligible

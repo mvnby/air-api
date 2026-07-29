@@ -36,6 +36,11 @@ import {
     type ProductListWorkspaceContext,
     type ProductWorkspaceSection,
 } from '../utils/product-workspace';
+import {
+    buildApiUrl,
+    YANDEX_BUSINESS_MANAGER_DOWNLOAD_PATH,
+    YANDEX_BUSINESS_PUBLIC_FEED_PATH,
+} from '../utils/yandex-business-feed';
 
 // Product state
 const products = ref<Product[]>([]);
@@ -147,8 +152,7 @@ const downloadYandexBusinessPriceList = async () => {
     if (yandexPriceListLoading.value) return;
     yandexPriceListLoading.value = true;
     try {
-        const params = new URLSearchParams({ site_base_url: getPublicSiteBaseUrl() });
-        const response = await fetch(`/api/manager/yandex-business/price-list.yml?${params.toString()}`, {
+        const response = await fetch(buildApiUrl(YANDEX_BUSINESS_MANAGER_DOWNLOAD_PATH), {
             credentials: 'include',
             headers: {
                 Accept: 'application/xml',
@@ -173,6 +177,15 @@ const downloadYandexBusinessPriceList = async () => {
         console.error(e);
     } finally {
         yandexPriceListLoading.value = false;
+    }
+};
+
+const copyYandexBusinessFeedLink = async () => {
+    try {
+        await copyTextToClipboard(buildApiUrl(YANDEX_BUSINESS_PUBLIC_FEED_PATH));
+        setToast('Ссылка на публичный YML-feed скопирована');
+    } catch (e) {
+        setToast(`Не удалось скопировать ссылку: ${getApiErrorMessage(e)}`);
     }
 };
 
@@ -1729,10 +1742,18 @@ watchDebounced(
             @click="downloadYandexBusinessPriceList"
             :disabled="yandexPriceListLoading"
             class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:hover:bg-slate-600"
-            title="Скачать YML для Яндекс Бизнес"
+            title="Скачать YML"
           >
             <Download class="w-4 h-4" :class="{ 'animate-pulse': yandexPriceListLoading }" />
-            YML
+            Скачать YML
+          </button>
+          <button
+            @click="copyYandexBusinessFeedLink"
+            class="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors shadow-sm"
+            title="Скопировать ссылку feed"
+          >
+            <Copy class="w-4 h-4" />
+            Скопировать ссылку feed
           </button>
       </div>
     </header>

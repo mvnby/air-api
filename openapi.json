@@ -3757,6 +3757,28 @@
         }
       }
     },
+    "/api/v1/feeds/yandex-business.yml": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Yandex Business Feed",
+        "operationId": "get_yandex_business_feed",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/backups": {
       "get": {
         "tags": [
@@ -20080,25 +20102,6 @@
         ],
         "summary": "Get Manager Yandex Business Price List",
         "operationId": "get_manager_yandex_business_price_list",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "site_base_url",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "Public storefront base URL for product and image links",
-              "default": "https://mvn.by",
-              "title": "Site Base Url"
-            },
-            "description": "Public storefront base URL for product and image links"
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -20109,18 +20112,13 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/manager/warranty-policies": {
