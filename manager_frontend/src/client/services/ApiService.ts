@@ -749,4 +749,15 @@ export class ApiService {
             },
         });
     }
+    /**
+     * Get Yandex Business Feed
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static getYandexBusinessFeed(): CancelablePromise<string> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/feeds/yandex-business.yml',
+        });
+    }
 }
