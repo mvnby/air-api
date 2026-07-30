@@ -3,9 +3,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_contracts.yandex_business import YandexBusinessFeedQualityReport
 from core.database import get_session
 from core.security import get_current_username
-from routers.manager_operation_ids import GET_MANAGER_YANDEX_BUSINESS_PRICE_LIST
+from routers.manager_operation_ids import (
+    GET_MANAGER_YANDEX_BUSINESS_PRICE_LIST,
+    GET_MANAGER_YANDEX_BUSINESS_QUALITY_REPORT,
+)
 from services.yandex_business_price_list_service import YandexBusinessPriceListService
 
 
@@ -40,3 +44,14 @@ async def get_manager_yandex_business_price_list(
             "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
         },
     )
+
+
+@router.get(
+    "/quality-report",
+    operation_id=GET_MANAGER_YANDEX_BUSINESS_QUALITY_REPORT,
+    response_model=YandexBusinessFeedQualityReport,
+)
+async def get_manager_yandex_business_quality_report(
+    session: AsyncSession = Depends(get_session),
+) -> YandexBusinessFeedQualityReport:
+    return await YandexBusinessPriceListService.build_quality_report(session)

@@ -105,6 +105,31 @@ async def test_s3_storage_uses_content_addressed_r2_key_and_cache_headers():
 
 
 @pytest.mark.asyncio
+async def test_s3_storage_serves_yandex_feed_variant_as_jpeg():
+    fake_client = FakeS3Client()
+    storage = S3CompatibleProductMediaStorage(
+        provider_name="r2",
+        bucket="mvn-media",
+        endpoint_url="https://example-account.r2.cloudflarestorage.com",
+        public_base_url="https://cdn.mvn.by/media",
+        client=fake_client,
+    )
+
+    stored = await storage.save_product_variant(
+        content=b"jpeg-bytes",
+        variant_type=ProductImageVariantType.YANDEX_FEED.value,
+        extension="jpg",
+    )
+
+    assert stored.url.endswith(".jpg")
+    assert "/yandex-feed/" in stored.url
+    assert fake_client.calls[0]["ContentType"] == "image/jpeg"
+    assert fake_client.calls[0]["CacheControl"] == (
+        "public, max-age=31536000, immutable"
+    )
+
+
+@pytest.mark.asyncio
 async def test_general_s3_storage_uses_namespace_and_variant_keys():
     fake_client = FakeS3Client()
     storage = S3CompatibleGeneralMediaStorage(

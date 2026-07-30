@@ -60,6 +60,9 @@ BULK_DELETE_MANAGER_PRODUCTS = "bulk_delete_manager_products"
 GET_ALL_TAGS = "get_all_tags"
 SMART_SEARCH_PRODUCTS = "smart_search_products"
 GET_MANAGER_YANDEX_BUSINESS_PRICE_LIST = "get_manager_yandex_business_price_list"
+GET_MANAGER_YANDEX_BUSINESS_QUALITY_REPORT = (
+    "get_manager_yandex_business_quality_report"
+)
 
 BULK_UPDATE_SPECS = "bulk_update_specs"
 NORMALIZE_LEGACY_SPECS = "normalize_legacy_specs"
@@ -361,6 +364,7 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_ALL_TAGS,
     SMART_SEARCH_PRODUCTS,
     GET_MANAGER_YANDEX_BUSINESS_PRICE_LIST,
+    GET_MANAGER_YANDEX_BUSINESS_QUALITY_REPORT,
     BULK_UPDATE_SPECS,
     NORMALIZE_LEGACY_SPECS,
     SEARCH_IMAGES,

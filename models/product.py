@@ -168,6 +168,14 @@ class ProductImageVariant(SQLModel, table=True):
     processing_provider: Optional[str] = Field(default=None, index=True)
     manual_quality_status: str = Field(default="unreviewed", index=True)
     content_hash: Optional[str] = Field(default=None, index=True)
+    source_url: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(1000), nullable=True),
+    )
+    source_content_hash: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
     width: Optional[int] = None
     height: Optional[int] = None
     processing_error: Optional[str] = Field(default=None, sa_column=Column(String))

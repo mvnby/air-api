@@ -15,7 +15,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Protocol
 
-from PIL import Image, ImageOps, UnidentifiedImageError, features
+from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError, features
 
 from services.product_image_processing_contract import (
     ProductImageProcessingProvider,
@@ -30,6 +30,8 @@ CARD_CANVAS_SIZE = (960, 960)
 CARD_PADDING_RATIO = 0.08
 PROCESSED_MAX_EDGE = 1600
 FULL_MAX_EDGE = 1800
+YANDEX_FEED_CANVAS_SIZE = (800, 800)
+YANDEX_FEED_JPEG_QUALITY = 85
 MAX_SOURCE_PIXELS = 40_000_000
 BACKGROUND_REMOVAL_PROVIDER_ENV = "BACKGROUND_REMOVAL_PROVIDER"
 BACKGROUND_REMOVAL_REMBG_MODEL_ENV = "BACKGROUND_REMOVAL_REMBG_MODEL"
@@ -549,6 +551,15 @@ def _process_image_bytes(
     image = _open_source_image(source_content)
     image = _trim_transparent_borders(image)
 
+    if variant_type == ProductImageVariantType.YANDEX_FEED.value:
+        image = _normalize_yandex_feed_canvas(image)
+        content = _export_yandex_feed_jpeg(image)
+        return ProductImageProcessingResult(
+            content=content,
+            extension="jpg",
+            width=image.width,
+            height=image.height,
+        )
     if variant_type == ProductImageVariantType.CARD.value:
         image = _normalize_card_canvas(image)
     elif variant_type == ProductImageVariantType.FULL.value:
@@ -574,7 +585,8 @@ def _open_source_image(source_content: bytes) -> Image.Image:
             if image.width * image.height > MAX_SOURCE_PIXELS:
                 raise ValueError("Source image is too large for safe processing")
             transposed = ImageOps.exif_transpose(image)
-            converted = transposed.convert("RGBA" if _has_alpha(transposed) else "RGB")
+            srgb = _convert_to_srgb(transposed)
+            converted = srgb.convert("RGBA" if _has_alpha(srgb) else "RGB")
             converted.load()
             return converted.copy()
     except UnidentifiedImageError as exc:
@@ -585,6 +597,34 @@ def _has_alpha(image: Image.Image) -> bool:
     return image.mode in {"RGBA", "LA"} or (
         image.mode == "P" and "transparency" in image.info
     )
+
+
+def _convert_to_srgb(image: Image.Image) -> Image.Image:
+    icc_profile = image.info.get("icc_profile")
+    if not icc_profile:
+        return image
+    try:
+        source_profile = ImageCms.ImageCmsProfile(BytesIO(icc_profile))
+        target_profile = ImageCms.createProfile("sRGB")
+        if _has_alpha(image):
+            rgba = image.convert("RGBA")
+            alpha = rgba.getchannel("A")
+            converted = ImageCms.profileToProfile(
+                rgba.convert("RGB"),
+                source_profile,
+                target_profile,
+                outputMode="RGB",
+            )
+            converted.putalpha(alpha)
+            return converted
+        return ImageCms.profileToProfile(
+            image.convert("RGB"),
+            source_profile,
+            target_profile,
+            outputMode="RGB",
+        )
+    except (OSError, TypeError, ValueError):
+        return image
 
 
 def _ensure_rgba(image: Image.Image) -> Image.Image:
@@ -620,6 +660,27 @@ def _normalize_card_canvas(image: Image.Image) -> Image.Image:
     return canvas
 
 
+def _normalize_yandex_feed_canvas(image: Image.Image) -> Image.Image:
+    source = _ensure_rgba(_trim_transparent_borders(image))
+    canvas_width, canvas_height = YANDEX_FEED_CANVAS_SIZE
+    fitted = _resize_to_box(
+        source,
+        max_width=canvas_width,
+        max_height=canvas_height,
+        allow_upscale=False,
+    )
+    canvas = Image.new("RGB", YANDEX_FEED_CANVAS_SIZE, (255, 255, 255))
+    offset = (
+        (canvas_width - fitted.width) // 2,
+        (canvas_height - fitted.height) // 2,
+    )
+    if fitted.mode == "RGBA":
+        canvas.paste(fitted, box=offset, mask=fitted.getchannel("A"))
+    else:
+        canvas.paste(fitted.convert("RGB"), box=offset)
+    return canvas
+
+
 def _resize_to_max_edge(image: Image.Image, max_edge: int) -> Image.Image:
     if max(image.width, image.height) <= max_edge:
         return image.copy()
@@ -631,8 +692,16 @@ def _resize_to_max_edge(image: Image.Image, max_edge: int) -> Image.Image:
     return image.resize(size, Image.Resampling.LANCZOS)
 
 
-def _resize_to_box(image: Image.Image, *, max_width: int, max_height: int) -> Image.Image:
+def _resize_to_box(
+    image: Image.Image,
+    *,
+    max_width: int,
+    max_height: int,
+    allow_upscale: bool = True,
+) -> Image.Image:
     scale = min(max_width / image.width, max_height / image.height)
+    if not allow_upscale:
+        scale = min(scale, 1.0)
     if scale == 1:
         return image.copy()
     size = (
@@ -650,3 +719,16 @@ def _export_image(image: Image.Image) -> tuple[bytes, str]:
 
     image.save(buffer, format="PNG", optimize=True)
     return buffer.getvalue(), "png"
+
+
+def _export_yandex_feed_jpeg(image: Image.Image) -> bytes:
+    buffer = BytesIO()
+    image.convert("RGB").save(
+        buffer,
+        format="JPEG",
+        quality=YANDEX_FEED_JPEG_QUALITY,
+        optimize=True,
+        progressive=True,
+        subsampling=2,
+    )
+    return buffer.getvalue()

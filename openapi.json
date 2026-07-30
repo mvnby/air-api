@@ -20121,6 +20121,32 @@
         ]
       }
     },
+    "/api/manager/yandex-business/quality-report": {
+      "get": {
+        "tags": [
+          "manager/yandex-business"
+        ],
+        "summary": "Get Manager Yandex Business Quality Report",
+        "operationId": "get_manager_yandex_business_quality_report",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YandexBusinessFeedQualityReport"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/warranty-policies": {
       "get": {
         "tags": [
@@ -55019,6 +55045,169 @@
           "message"
         ],
         "title": "WebRebuildTriggerResponse"
+      },
+      "YandexBusinessCollectionConflict": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "product_title": {
+            "type": "string",
+            "title": "Product Title"
+          },
+          "selected_collection_id": {
+            "type": "integer",
+            "title": "Selected Collection Id"
+          },
+          "selected_collection_title": {
+            "type": "string",
+            "title": "Selected Collection Title"
+          },
+          "skipped_collection_id": {
+            "type": "integer",
+            "title": "Skipped Collection Id"
+          },
+          "skipped_collection_title": {
+            "type": "string",
+            "title": "Skipped Collection Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "product_title",
+          "selected_collection_id",
+          "selected_collection_title",
+          "skipped_collection_id",
+          "skipped_collection_title"
+        ],
+        "title": "YandexBusinessCollectionConflict"
+      },
+      "YandexBusinessEditorialCategoryQuality": {
+        "properties": {
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "offer_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offer Count"
+          },
+          "picture_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Picture Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category_id",
+          "title",
+          "offer_count",
+          "picture_count"
+        ],
+        "title": "YandexBusinessEditorialCategoryQuality"
+      },
+      "YandexBusinessFeedQualityReport": {
+        "properties": {
+          "product_offer_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Product Offer Count"
+          },
+          "product_picture_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Product Picture Count"
+          },
+          "service_offer_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Service Offer Count"
+          },
+          "editorial_categories": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessEditorialCategoryQuality"
+            },
+            "type": "array",
+            "title": "Editorial Categories"
+          },
+          "categories_below_minimum_pictures": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessEditorialCategoryQuality"
+            },
+            "type": "array",
+            "title": "Categories Below Minimum Pictures"
+          },
+          "products_without_picture": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessProductImageIssue"
+            },
+            "type": "array",
+            "title": "Products Without Picture"
+          },
+          "image_generation_errors": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessProductImageIssue"
+            },
+            "type": "array",
+            "title": "Image Generation Errors"
+          },
+          "collection_conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessCollectionConflict"
+            },
+            "type": "array",
+            "title": "Collection Conflicts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_offer_count",
+          "product_picture_count",
+          "service_offer_count"
+        ],
+        "title": "YandexBusinessFeedQualityReport"
+      },
+      "YandexBusinessProductImageIssue": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "product_title": {
+            "type": "string",
+            "title": "Product Title"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "product_title",
+          "reason"
+        ],
+        "title": "YandexBusinessProductImageIssue"
       }
     },
     "securitySchemes": {

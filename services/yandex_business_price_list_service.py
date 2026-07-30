@@ -10,12 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
+from api_contracts.yandex_business import (
+    YandexBusinessCollectionConflict,
+    YandexBusinessEditorialCategoryQuality,
+    YandexBusinessFeedQualityReport,
+    YandexBusinessProductImageIssue,
+)
 from core.config import settings
 from crud.product_collection import ProductCollectionDAO
 from models import Product, ProductImage, ServiceTariff
 from services.product_collection_resolver import ProductCollectionResolver, utc_now
 from services.product_image_processing_contract import (
-    ProductImageManualQualityStatus,
     ProductImageProcessingStatus,
     ProductImageVariantType,
 )
@@ -30,12 +35,26 @@ logger = logging.getLogger(__name__)
 class YandexCategory:
     id: int
     title: str
+    category_type: str = "brand"
 
 
 @dataclass(frozen=True)
 class ProductOffer:
     product: Product
     category: YandexCategory
+
+
+@dataclass(frozen=True)
+class ProductCatalogBuild:
+    categories: list[YandexCategory]
+    offers: list[ProductOffer]
+    collection_conflicts: list[YandexBusinessCollectionConflict]
+
+
+@dataclass(frozen=True)
+class YandexBusinessFeedBuild:
+    xml: bytes
+    quality_report: YandexBusinessFeedQualityReport
 
 
 class YandexBusinessPriceListService:
@@ -60,13 +79,6 @@ class YandexBusinessPriceListService:
         "repair": "/services/repair",
         "dismantling": "/services",
     }
-    _IMAGE_VARIANT_ORDER = {
-        ProductImageVariantType.CARD.value: 0,
-        ProductImageVariantType.FULL.value: 1,
-        ProductImageVariantType.PROCESSED.value: 2,
-        ProductImageVariantType.ORIGINAL.value: 3,
-    }
-
     @staticmethod
     def _normalize_base_url(base_url: str) -> str:
         normalized = (base_url or "").strip().rstrip("/")
@@ -107,28 +119,74 @@ class YandexBusinessPriceListService:
             None,
         )
         if source is not None:
-            variants = sorted(
-                source.variants or [],
-                key=lambda item: (
-                    cls._IMAGE_VARIANT_ORDER.get(item.variant_type, 99),
-                    int(item.id or 0),
-                ),
-            )
-            for variant in variants:
-                is_public_variant = (
-                    variant.variant_type == ProductImageVariantType.ORIGINAL.value
-                    or variant.manual_quality_status
-                    == ProductImageManualQualityStatus.APPROVED.value
-                )
+            for variant in source.variants or []:
                 if (
-                    variant.processing_status == ProductImageProcessingStatus.READY.value
-                    and is_public_variant
+                    variant.variant_type
+                    == ProductImageVariantType.YANDEX_FEED.value
+                    and variant.processing_status
+                    == ProductImageProcessingStatus.READY.value
+                    and variant.width == 800
+                    and variant.height == 800
                     and cls._is_yandex_image_url(variant.url)
                 ):
                     return cls._absolute_url(base_url, variant.url)
-        if cls._is_yandex_image_url(product.main_image):
-            return cls._absolute_url(base_url, product.main_image)
         return None
+
+    @classmethod
+    def _product_picture_issue(
+        cls,
+        product: Product,
+        base_url: str,
+    ) -> YandexBusinessProductImageIssue | None:
+        if cls._product_picture(product, base_url):
+            return None
+        if not str(product.main_image or "").strip():
+            return YandexBusinessProductImageIssue(
+                product_id=int(product.id),
+                product_title=product.title,
+                reason="missing_source_image",
+            )
+        source = next(
+            (
+                image
+                for image in (product.gallery_images or [])
+                if cls._same_image_url(image.url, product.main_image)
+            ),
+            None,
+        )
+        if source is None:
+            return YandexBusinessProductImageIssue(
+                product_id=int(product.id),
+                product_title=product.title,
+                reason="missing_product_image",
+            )
+        variant = next(
+            (
+                item
+                for item in (source.variants or [])
+                if item.variant_type == ProductImageVariantType.YANDEX_FEED.value
+            ),
+            None,
+        )
+        if variant is None:
+            return YandexBusinessProductImageIssue(
+                product_id=int(product.id),
+                product_title=product.title,
+                reason="missing_yandex_feed_variant",
+            )
+        if variant.processing_status == ProductImageProcessingStatus.FAILED.value:
+            return YandexBusinessProductImageIssue(
+                product_id=int(product.id),
+                product_title=product.title,
+                reason="image_generation_failed",
+                error=variant.processing_error,
+            )
+        return YandexBusinessProductImageIssue(
+            product_id=int(product.id),
+            product_title=product.title,
+            reason="invalid_yandex_feed_variant",
+            error=variant.processing_error,
+        )
 
     @staticmethod
     def _append_text(parent: ET.Element, tag: str, value: str | int | float | None) -> None:
@@ -220,11 +278,13 @@ class YandexBusinessPriceListService:
         cls,
         session: AsyncSession,
         products: list[Product],
-    ) -> tuple[list[YandexCategory], list[ProductOffer]]:
+    ) -> ProductCatalogBuild:
         products_by_id = {int(product.id): product for product in products}
         claimed_ids: set[int] = set()
+        selected_collections: dict[int, YandexCategory] = {}
         categories: list[YandexCategory] = []
         offers: list[ProductOffer] = []
+        collection_conflicts: list[YandexBusinessCollectionConflict] = []
 
         placements = await ProductCollectionDAO.list_placements(
             session,
@@ -246,7 +306,22 @@ class YandexBusinessPriceListService:
             for item in resolved["items"]:
                 product_id = int(item["product"].id)
                 product = products_by_id.get(product_id)
-                if product is None or product_id in claimed_ids:
+                if product is None:
+                    continue
+                if product_id in claimed_ids:
+                    selected_category = selected_collections[product_id]
+                    collection_conflicts.append(
+                        YandexBusinessCollectionConflict(
+                            product_id=product_id,
+                            product_title=product.title,
+                            selected_collection_id=(
+                                selected_category.id - cls.COLLECTION_CATEGORY_OFFSET
+                            ),
+                            selected_collection_title=selected_category.title,
+                            skipped_collection_id=int(collection.id),
+                            skipped_collection_title=collection.public_title,
+                        )
+                    )
                     continue
                 selected.append(product)
                 claimed_ids.add(product_id)
@@ -258,8 +333,11 @@ class YandexBusinessPriceListService:
                     collection.id,
                 ),
                 title=collection.public_title,
+                category_type="editorial",
             )
             categories.append(category)
+            for product in selected:
+                selected_collections[int(product.id)] = category
             offers.extend(ProductOffer(product=product, category=category) for product in selected)
 
         remaining = [
@@ -314,7 +392,11 @@ class YandexBusinessPriceListService:
                     ),
                 )
             )
-        return categories, offers
+        return ProductCatalogBuild(
+            categories=categories,
+            offers=offers,
+            collection_conflicts=collection_conflicts,
+        )
 
     @classmethod
     def _append_product_offer(
@@ -385,35 +467,27 @@ class YandexBusinessPriceListService:
         )
 
     @classmethod
-    async def build_xml(cls, session: AsyncSession) -> bytes:
+    async def _build(cls, session: AsyncSession) -> YandexBusinessFeedBuild:
         base_url = cls._normalize_base_url(settings.PUBLIC_SITE_URL)
         products = await cls._load_products(session)
         tariffs = await cls._load_tariffs(session)
-        product_categories, product_offers = await cls._build_product_catalog(
+        supported_tariffs = [
+            tariff
+            for tariff in tariffs
+            if tariff.service_kind in cls.SERVICE_KIND_CATEGORIES
+        ]
+        product_catalog = await cls._build_product_catalog(
             session,
             products,
         )
-        omitted_picture_count = sum(
-            1
-            for offer_data in product_offers
-            if cls._product_picture(offer_data.product, base_url) is None
-        )
-        if omitted_picture_count:
-            logger.info(
-                "Yandex Business feed omitted incompatible or missing pictures",
-                extra={
-                    "omitted_picture_count": omitted_picture_count,
-                    "product_offer_count": len(product_offers),
-                },
-            )
-        service_kinds = {tariff.service_kind for tariff in tariffs}
+        service_kinds = {tariff.service_kind for tariff in supported_tariffs}
 
         catalog = ET.Element("yml_catalog")
         shop = ET.SubElement(catalog, "shop")
         categories_node = ET.SubElement(shop, "categories")
         offers_node = ET.SubElement(shop, "offers")
 
-        categories = list(product_categories)
+        categories = list(product_catalog.categories)
         categories.extend(
             category
             for kind, category in cls.SERVICE_KIND_CATEGORIES.items()
@@ -426,10 +500,99 @@ class YandexBusinessPriceListService:
             node = ET.SubElement(categories_node, "category", id=str(category.id))
             node.text = category.title
 
-        for offer_data in product_offers:
+        for offer_data in product_catalog.offers:
             cls._append_product_offer(offers_node, offer_data, base_url)
-        for tariff in tariffs:
+        for tariff in supported_tariffs:
             cls._append_service_offer(offers_node, tariff, base_url)
 
+        offer_ids = [offer.attrib["id"] for offer in offers_node.findall("offer")]
+        if len(offer_ids) != len(set(offer_ids)):
+            raise ValueError("Yandex Business offer ID collision")
+
+        image_issues = [
+            issue
+            for offer_data in product_catalog.offers
+            if (
+                issue := cls._product_picture_issue(
+                    offer_data.product,
+                    base_url,
+                )
+            )
+            is not None
+        ]
+        editorial_quality = []
+        for category in product_catalog.categories:
+            if category.category_type != "editorial":
+                continue
+            category_offers = [
+                offer
+                for offer in product_catalog.offers
+                if offer.category.id == category.id
+            ]
+            editorial_quality.append(
+                YandexBusinessEditorialCategoryQuality(
+                    category_id=category.id,
+                    title=category.title,
+                    offer_count=len(category_offers),
+                    picture_count=sum(
+                        1
+                        for offer in category_offers
+                        if cls._product_picture(offer.product, base_url)
+                    ),
+                )
+            )
+        quality_report = YandexBusinessFeedQualityReport(
+            product_offer_count=len(product_catalog.offers),
+            product_picture_count=len(product_catalog.offers) - len(image_issues),
+            service_offer_count=len(supported_tariffs),
+            editorial_categories=editorial_quality,
+            categories_below_minimum_pictures=[
+                category
+                for category in editorial_quality
+                if category.picture_count < 3
+            ],
+            products_without_picture=image_issues,
+            image_generation_errors=[
+                issue
+                for issue in image_issues
+                if issue.reason == "image_generation_failed"
+            ],
+            collection_conflicts=product_catalog.collection_conflicts,
+        )
+        if (
+            image_issues
+            or quality_report.categories_below_minimum_pictures
+            or product_catalog.collection_conflicts
+        ):
+            logger.warning(
+                "Yandex Business feed quality warnings",
+                extra={
+                    "products_without_picture": len(image_issues),
+                    "image_generation_errors": len(
+                        quality_report.image_generation_errors
+                    ),
+                    "editorial_categories_below_three_pictures": len(
+                        quality_report.categories_below_minimum_pictures
+                    ),
+                    "collection_conflicts": len(
+                        product_catalog.collection_conflicts
+                    ),
+                },
+            )
+
         ET.indent(catalog, space="    ")
-        return ET.tostring(catalog, encoding="utf-8", xml_declaration=True)
+        return YandexBusinessFeedBuild(
+            xml=ET.tostring(catalog, encoding="utf-8", xml_declaration=True),
+            quality_report=quality_report,
+        )
+
+    @classmethod
+    async def build_xml(cls, session: AsyncSession) -> bytes:
+        return (await cls._build(session)).xml
+
+    @classmethod
+    async def build_quality_report(
+        cls,
+        session: AsyncSession,
+    ) -> YandexBusinessFeedQualityReport:
+        return (await cls._build(session)).quality_report

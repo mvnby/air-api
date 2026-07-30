@@ -526,6 +526,10 @@ export type { ValidationError } from './models/ValidationError';
 export type { WebRebuildCompletePayload } from './models/WebRebuildCompletePayload';
 export type { WebRebuildStatusResponse } from './models/WebRebuildStatusResponse';
 export type { WebRebuildTriggerResponse } from './models/WebRebuildTriggerResponse';
+export type { YandexBusinessCollectionConflict } from './models/YandexBusinessCollectionConflict';
+export type { YandexBusinessEditorialCategoryQuality } from './models/YandexBusinessEditorialCategoryQuality';
+export type { YandexBusinessFeedQualityReport } from './models/YandexBusinessFeedQualityReport';
+export type { YandexBusinessProductImageIssue } from './models/YandexBusinessProductImageIssue';
 
 export { ApiService } from './services/ApiService';
 export { InternalBotV1Service } from './services/InternalBotV1Service';
