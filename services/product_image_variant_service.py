@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
@@ -258,6 +259,8 @@ class ProductImageVariantService:
         storage: ProductMediaStorage | None = None,
         processor: ProductImageProcessor | None = None,
         rembg_model: str | None = None,
+        source_url_override: str | None = None,
+        force: bool = False,
         commit: bool = True,
     ) -> dict[str, Any]:
         normalized_type = normalize_variant_type(variant_type).value
@@ -271,20 +274,6 @@ class ProductImageVariantService:
             product_image_id=product_image_id,
             variant_type=normalized_type,
         )
-        active_processor = processor or get_product_image_processor(
-            normalized_provider,
-            rembg_model=rembg_model,
-        )
-        effective_provider = getattr(active_processor, "provider_name", normalized_provider)
-        now = datetime.now()
-        variant.processing_status = ProductImageProcessingStatus.PROCESSING.value
-        variant.processing_stage = ProductImageProcessingStage.VARIANT_GENERATION.value
-        variant.processing_provider = effective_provider
-        variant.processing_error = None
-        variant.updated_at = now
-        session.add(variant)
-        await session.flush()
-
         if image.is_installation_photo and normalized_type in CATALOG_VARIANT_TYPES:
             variant.processing_status = ProductImageProcessingStatus.SKIPPED.value
             variant.processing_stage = ProductImageProcessingStage.QUALITY_MANUAL_APPROVAL.value
@@ -295,11 +284,14 @@ class ProductImageVariantService:
                 await session.commit()
             return ProductImageVariantService.serialize_variant(variant)
 
+        source_url = str(source_url_override or image.url or "").strip()
         try:
-            source_content = await ProductImageVariantService._source_content_for_url(image.url)
+            source_content = await ProductImageVariantService._source_content_for_url(source_url)
         except Exception as exc:
             variant.processing_status = ProductImageProcessingStatus.FAILED.value
             variant.processing_stage = ProductImageProcessingStage.ORIGINAL_INGEST.value
+            variant.source_url = source_url or None
+            variant.source_content_hash = None
             variant.processing_error = str(exc)
             variant.updated_at = datetime.now()
             session.add(variant)
@@ -310,6 +302,8 @@ class ProductImageVariantService:
         if source_content is None:
             variant.processing_status = ProductImageProcessingStatus.FAILED.value
             variant.processing_stage = ProductImageProcessingStage.ORIGINAL_INGEST.value
+            variant.source_url = source_url or None
+            variant.source_content_hash = None
             variant.processing_error = "Source image is not available in local media storage"
             variant.updated_at = datetime.now()
             session.add(variant)
@@ -317,13 +311,42 @@ class ProductImageVariantService:
                 await session.commit()
             return ProductImageVariantService.serialize_variant(variant)
 
+        source_content_hash = hashlib.sha256(source_content).hexdigest()
+        if (
+            normalized_type == ProductImageVariantType.YANDEX_FEED.value
+            and not force
+            and variant.processing_status == ProductImageProcessingStatus.READY.value
+            and variant.url
+            and variant.source_url == source_url
+            and variant.source_content_hash == source_content_hash
+            and variant.width == 800
+            and variant.height == 800
+        ):
+            return ProductImageVariantService.serialize_variant(variant)
+
+        active_processor = processor or get_product_image_processor(
+            normalized_provider,
+            rembg_model=rembg_model,
+        )
+        effective_provider = getattr(active_processor, "provider_name", normalized_provider)
+        now = datetime.now()
+        variant.processing_status = ProductImageProcessingStatus.PROCESSING.value
+        variant.processing_stage = ProductImageProcessingStage.VARIANT_GENERATION.value
+        variant.processing_provider = effective_provider
+        variant.source_url = source_url
+        variant.source_content_hash = source_content_hash
+        variant.processing_error = None
+        variant.updated_at = now
+        session.add(variant)
+        await session.flush()
+
         active_storage = storage or get_product_media_storage()
         try:
             processed = await active_processor.process(
                 source_content=source_content,
                 context=ProductImageProcessingContext(
                     product_image_id=product_image_id,
-                    source_url=image.url,
+                    source_url=source_url,
                     variant_type=normalized_type,
                 ),
             )
@@ -346,6 +369,8 @@ class ProductImageVariantService:
         variant.url = stored.url
         variant.storage_provider = stored.storage_provider
         variant.content_hash = stored.content_hash
+        variant.source_url = source_url
+        variant.source_content_hash = source_content_hash
         variant.width = processed.width or width
         variant.height = processed.height or height
         variant.processing_status = ProductImageProcessingStatus.READY.value
@@ -372,6 +397,8 @@ class ProductImageVariantService:
             "processing_provider": variant.processing_provider,
             "manual_quality_status": variant.manual_quality_status,
             "content_hash": variant.content_hash,
+            "source_url": variant.source_url,
+            "source_content_hash": variant.source_content_hash,
             "width": variant.width,
             "height": variant.height,
             "processing_error": variant.processing_error,

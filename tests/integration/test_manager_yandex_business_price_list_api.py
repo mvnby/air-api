@@ -10,6 +10,8 @@ from models import (
     ProductCollection,
     ProductCollectionItem,
     ProductCollectionPlacement,
+    ProductImage,
+    ProductImageVariant,
     ServiceTariff,
 )
 from services.yandex_business_price_list_service import YandexBusinessPriceListService
@@ -70,6 +72,24 @@ def _offers(root: ET.Element) -> list[ET.Element]:
     return root.findall("./shop/offers/offer")
 
 
+async def _add_yandex_picture(db, product: Product, key: str) -> None:
+    source_url = product.main_image or f"/media/products/shared/{key}.webp"
+    product.main_image = source_url
+    image = ProductImage(product_id=product.id, url=source_url)
+    db.add(image)
+    await db.flush()
+    db.add(
+        ProductImageVariant(
+            product_image_id=image.id,
+            variant_type="yandex_feed",
+            url=f"https://cdn.mvn.by/products/variants/yandex_feed/{key}.jpg",
+            processing_status="ready",
+            width=800,
+            height=800,
+        )
+    )
+
+
 @pytest.mark.asyncio
 async def test_public_feed_is_unauthenticated_and_matches_manager_download(async_client, db):
     brand = Brand(title="Daichi", slug="daichi", is_published=True)
@@ -108,6 +128,8 @@ async def test_public_feed_is_unauthenticated_and_matches_manager_download(async
         is_active=True,
     )
     db.add_all([product, active_tariff, inactive_tariff, zero_tariff])
+    await db.flush()
+    await _add_yandex_picture(db, product, "daichi-alpha")
     await db.commit()
 
     public = await async_client.get("/api/v1/feeds/yandex-business.yml")
@@ -142,6 +164,7 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
 ):
     tcl = Brand(title="TCL", slug="tcl", sort_order=10)
     haier = Brand(title="Haier", slug="haier", sort_order=20)
+    aeronik = Brand(title="Aeronik", slug="aeronik", sort_order=20)
     overlap = _product(
         title="TCL First",
         slug="tcl-first",
@@ -167,6 +190,12 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
         brand=haier,
         main_image="/media/haier-brand.jpg",
     )
+    aeronik_remaining = _product(
+        title="Aeronik Brand",
+        slug="aeronik-brand",
+        brand=aeronik,
+        main_image="/media/aeronik-brand.webp",
+    )
     unbranded = _product(title="Без бренда", slug="without-brand")
     first = _collection(slug="value", title="Цена-качество")
     second = _collection(slug="heat", title="Для обогрева")
@@ -185,6 +214,7 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
             second_collection_item,
             tcl_remaining,
             haier_remaining,
+            aeronik_remaining,
             unbranded,
             first,
             second,
@@ -192,6 +222,10 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
         ]
     )
     await db.flush()
+    await _add_yandex_picture(db, overlap, "tcl-first")
+    await _add_yandex_picture(db, tcl_remaining, "tcl-brand")
+    await _add_yandex_picture(db, haier_remaining, "haier-brand")
+    await _add_yandex_picture(db, aeronik_remaining, "aeronik-brand")
     db.add_all(
         [
             ProductCollectionItem(
@@ -232,6 +266,7 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
         "Цена-качество",
         "Для обогрева",
         "TCL",
+        "Aeronik",
         "Haier",
         "Другие модели",
         "Монтаж",
@@ -241,11 +276,12 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
         offer for offer in _offers(root) if int(offer.attrib["id"]) < 900_000_000
     ]
     offer_ids = [int(offer.attrib["id"]) for offer in product_offers]
-    assert len(offer_ids) == len(set(offer_ids)) == 5
+    assert len(offer_ids) == len(set(offer_ids)) == 6
     assert offer_ids == [
         overlap.id,
         second_collection_item.id,
         tcl_remaining.id,
+        aeronik_remaining.id,
         haier_remaining.id,
         unbranded.id,
     ]
@@ -270,6 +306,41 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
         )
         for category in root.findall("./shop/categories/category")
     )
+
+    headers = await _auth_headers(async_client)
+    report_response = await async_client.get(
+        "/api/manager/yandex-business/quality-report",
+        headers=headers,
+    )
+    assert report_response.status_code == 200
+    report = report_response.json()
+    assert report["product_offer_count"] == 6
+    assert report["product_picture_count"] == 4
+    assert report["collection_conflicts"] == [
+        {
+            "product_id": overlap.id,
+            "product_title": overlap.title,
+            "selected_collection_id": first.id,
+            "selected_collection_title": first.public_title,
+            "skipped_collection_id": second.id,
+            "skipped_collection_title": second.public_title,
+        }
+    ]
+    assert [item["title"] for item in report["editorial_categories"]] == [
+        "Цена-качество",
+        "Для обогрева",
+    ]
+    assert [item["picture_count"] for item in report["editorial_categories"]] == [
+        1,
+        0,
+    ]
+    assert {
+        item["product_id"] for item in report["products_without_picture"]
+    } == {second_collection_item.id, unbranded.id}
+    async_client.cookies.clear()
+    assert (
+        await async_client.get("/api/manager/yandex-business/quality-report")
+    ).status_code == 401
 
 
 @pytest.mark.asyncio

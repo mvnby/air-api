@@ -14,6 +14,7 @@ class ProductImageVariantType(str, Enum):
     PROCESSED = "processed"
     CARD = "card"
     FULL = "full"
+    YANDEX_FEED = "yandex_feed"
 
 
 class ProductImageProcessingStatus(str, Enum):
@@ -55,6 +56,7 @@ CATALOG_VARIANT_TYPES = {
     ProductImageVariantType.PROCESSED.value,
     ProductImageVariantType.CARD.value,
     ProductImageVariantType.FULL.value,
+    ProductImageVariantType.YANDEX_FEED.value,
 }
 
 

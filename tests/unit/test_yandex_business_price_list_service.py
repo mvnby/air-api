@@ -12,6 +12,7 @@ from models import (
 )
 from services.yandex_business_feed_text import sanitize_yandex_description
 from services.yandex_business_price_list_service import (
+    ProductCatalogBuild,
     ProductOffer,
     YandexBusinessPriceListService,
     YandexCategory,
@@ -49,16 +50,16 @@ def test_description_is_truncated_after_html_cleanup():
 
 
 @pytest.mark.parametrize(
-    ("image_url", "expected"),
+    "image_url",
     [
-        ("/media/product.jpg", "https://mvn.by/media/product.jpg"),
-        ("/media/product.JPEG?rev=1", "https://mvn.by/media/product.JPEG?rev=1"),
-        ("/media/product.png", "https://mvn.by/media/product.png"),
-        ("/media/product.webp", None),
-        (None, None),
+        "/media/product.jpg",
+        "/media/product.JPEG?rev=1",
+        "/media/product.png",
+        "/media/product.webp",
+        None,
     ],
 )
-def test_product_picture_accepts_only_yandex_compatible_formats(image_url, expected):
+def test_product_picture_never_uses_original_image_directly(image_url):
     product = Product(
         id=1,
         title="Split",
@@ -66,10 +67,10 @@ def test_product_picture_accepts_only_yandex_compatible_formats(image_url, expec
         price=100,
         main_image=image_url,
     )
-    assert YandexBusinessPriceListService._product_picture(product, "https://mvn.by") == expected
+    assert YandexBusinessPriceListService._product_picture(product, "https://mvn.by") is None
 
 
-def test_product_picture_uses_real_ready_jpeg_variant_instead_of_webp():
+def test_product_picture_uses_ready_yandex_feed_variant():
     image = ProductImage(
         id=10,
         product_id=1,
@@ -78,9 +79,11 @@ def test_product_picture_uses_real_ready_jpeg_variant_instead_of_webp():
             ProductImageVariant(
                 id=20,
                 product_image_id=10,
-                variant_type="original",
-                url="/media/product-source.jpg",
+                variant_type="yandex_feed",
+                url="/media/products/variants/yandex_feed/product-source.jpg",
                 processing_status="ready",
+                width=800,
+                height=800,
             )
         ],
     )
@@ -95,7 +98,7 @@ def test_product_picture_uses_real_ready_jpeg_variant_instead_of_webp():
     assert YandexBusinessPriceListService._product_picture(
         product,
         "https://mvn.by",
-    ) == "https://mvn.by/media/product-source.jpg"
+    ) == "https://mvn.by/media/products/variants/yandex_feed/product-source.jpg"
 
 
 @pytest.mark.asyncio
@@ -110,9 +113,30 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
             "<style>.x { color:red }</style><p>Инверторный кондиционер</p>"
         ),
         price=1299,
-        main_image="media/products/daichi-alpha.jpg",
+        main_image="media/products/daichi-alpha.webp",
         brand=brand,
     )
+    product.gallery_images = [
+        ProductImage(
+            id=10,
+            product_id=product.id,
+            url=product.main_image,
+            variants=[
+                ProductImageVariant(
+                    id=20,
+                    product_image_id=10,
+                    variant_type="yandex_feed",
+                    url=(
+                        "https://cdn.example.test/products/variants/"
+                        "yandex_feed/daichi-alpha.jpg"
+                    ),
+                    processing_status="ready",
+                    width=800,
+                    height=800,
+                )
+            ],
+        )
+    ]
     tariff = ServiceTariff(
         id=3,
         service_kind="maintenance",
@@ -133,7 +157,11 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
         return [tariff]
 
     async def build_product_catalog(_session, _products):
-        return [brand_category], [ProductOffer(product=product, category=brand_category)]
+        return ProductCatalogBuild(
+            categories=[brand_category],
+            offers=[ProductOffer(product=product, category=brand_category)],
+            collection_conflicts=[],
+        )
 
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_products", load_products)
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_tariffs", load_tariffs)
@@ -157,13 +185,18 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
     assert product_offer is not None
     assert product_offer.findtext("vendor") == "Daichi"
     assert product_offer.findtext("picture") == (
-        "https://example.mvn.by/media/products/daichi-alpha.jpg"
+        "https://cdn.example.test/products/variants/yandex_feed/daichi-alpha.jpg"
     )
     assert product_offer.findtext("description") == "Инверторный кондиционер"
     assert product_offer.findtext("url") == (
         "https://example.mvn.by/product/daichi-alpha-12"
     )
     assert ".webp" not in first.decode()
+
+    report = await YandexBusinessPriceListService.build_quality_report(session=None)
+    assert report.product_offer_count == 1
+    assert report.product_picture_count == 1
+    assert report.products_without_picture == []
 
 
 def test_category_id_ranges_do_not_overlap():
