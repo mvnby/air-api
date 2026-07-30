@@ -66,6 +66,12 @@ python3 scripts/backfill_yandex_feed_images.py --execute --limit 100
 повторно. Для точечной проверки доступны `--product-id`, а `--force` нужен
 только при намеренной пересборке.
 
+Legacy-товары со сторонним `main_image` при execute сначала проходят общую
+SSRF-защищённую загрузку MediaLibrary. Исходник сохраняется как `original` в
+настроенном product-media storage, но `Product.main_image` и URL изображения
+на сайте не изменяются. Для feed-варианта разрешены старые исходники до 70 MP;
+общий лимит остальных product-вариантов остаётся 40 MP.
+
 Описания преобразуются в plain text: удаляются `style`, `script`, `noscript`,
 HTML-разметка и ведущие CSS-блоки, декодируются entities, после чего текст
 нормализуется и ограничивается по длине.

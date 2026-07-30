@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Any
 from urllib.parse import urlsplit
 
+from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import Product, ProductImage, ProductImageVariant
+from services.media_library_service import MediaLibraryService
 from services.media_storage_service import ProductMediaStorage
 from services.product_image_processing_contract import (
     ProductImageProcessingProvider,
@@ -83,13 +86,23 @@ class YandexFeedImageService:
                         )
                         session.add(image)
                         await session.flush()
+                    source_url = item["source_url"]
+                    source_content: bytes | None = None
+                    if cls._is_external_source(source_url):
+                        source_url, source_content = await cls._ingest_external_original(
+                            session,
+                            image=image,
+                            source_url=source_url,
+                            storage=storage,
+                        )
                     variant = await ProductImageVariantService.reprocess_variant(
                         session,
                         product_image_id=int(image.id),
                         variant_type=cls.VARIANT_TYPE,
                         provider=ProductImageProcessingProvider.NOOP.value,
                         storage=storage,
-                        source_url_override=item["source_url"],
+                        source_url_override=source_url,
+                        source_content_override=source_content,
                         force=force,
                         commit=False,
                     )
@@ -229,6 +242,49 @@ class YandexFeedImageService:
             ),
             None,
         )
+
+    @staticmethod
+    def _is_external_source(url: str) -> bool:
+        normalized = str(url or "").strip()
+        return normalized.startswith(("http://", "https://")) and not (
+            ProductImageVariantService._is_configured_remote_media_url(normalized)
+        )
+
+    @classmethod
+    async def _ingest_external_original(
+        cls,
+        session: AsyncSession,
+        *,
+        image: ProductImage,
+        source_url: str,
+        storage: ProductMediaStorage | None,
+    ) -> tuple[str, bytes]:
+        content, _ = await MediaLibraryService.download_remote_image(source_url)
+        extension, width, height = cls._source_image_metadata(content)
+        original = await ProductImageVariantService.ensure_original_variant(
+            session,
+            image,
+            storage=storage,
+            source_content=content,
+            extension=extension,
+            width=width,
+            height=height,
+        )
+        await session.flush()
+        return str(original.url), content
+
+    @staticmethod
+    def _source_image_metadata(content: bytes) -> tuple[str, int, int]:
+        with Image.open(BytesIO(content)) as image:
+            image_format = str(image.format or "").strip().lower()
+            extension = {
+                "jpeg": "jpg",
+                "png": "png",
+                "webp": "webp",
+            }.get(image_format)
+            if extension is None:
+                raise ValueError("Remote source image format is not supported")
+            return extension, image.width, image.height
 
     @classmethod
     def _source_for_image(
