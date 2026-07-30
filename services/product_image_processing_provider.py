@@ -32,6 +32,8 @@ PROCESSED_MAX_EDGE = 1600
 FULL_MAX_EDGE = 1800
 YANDEX_FEED_CANVAS_SIZE = (800, 800)
 YANDEX_FEED_JPEG_QUALITY = 85
+YANDEX_FEED_PREPROCESS_MAX_EDGE = 1600
+YANDEX_FEED_PREPROCESS_TIMEOUT_SECONDS = 30
 MAX_SOURCE_PIXELS = 40_000_000
 MAX_YANDEX_FEED_SOURCE_PIXELS = 70_000_000
 BACKGROUND_REMOVAL_PROVIDER_ENV = "BACKGROUND_REMOVAL_PROVIDER"
@@ -554,9 +556,17 @@ def _process_image_bytes(
         if variant_type == ProductImageVariantType.YANDEX_FEED.value
         else MAX_SOURCE_PIXELS
     )
+    if variant_type == ProductImageVariantType.YANDEX_FEED.value:
+        source_content = _preprocess_large_yandex_feed_source(source_content)
+    preprocess_max_edge = (
+        YANDEX_FEED_PREPROCESS_MAX_EDGE
+        if variant_type == ProductImageVariantType.YANDEX_FEED.value
+        else None
+    )
     image = _open_source_image(
         source_content,
         max_source_pixels=max_source_pixels,
+        preprocess_max_edge=preprocess_max_edge,
     )
     image = _trim_transparent_borders(image)
 
@@ -589,6 +599,7 @@ def _open_source_image(
     source_content: bytes,
     *,
     max_source_pixels: int = MAX_SOURCE_PIXELS,
+    preprocess_max_edge: int | None = None,
 ) -> Image.Image:
     if not source_content:
         raise ValueError("Source image is empty")
@@ -597,6 +608,12 @@ def _open_source_image(
         with Image.open(BytesIO(source_content)) as image:
             if image.width * image.height > max_source_pixels:
                 raise ValueError("Source image is too large for safe processing")
+            if preprocess_max_edge and max(image.width, image.height) > preprocess_max_edge:
+                image.thumbnail(
+                    (preprocess_max_edge, preprocess_max_edge),
+                    Image.Resampling.LANCZOS,
+                    reducing_gap=3.0,
+                )
             transposed = ImageOps.exif_transpose(image)
             srgb = _convert_to_srgb(transposed)
             converted = srgb.convert("RGBA" if _has_alpha(srgb) else "RGB")
@@ -604,6 +621,78 @@ def _open_source_image(
             return converted.copy()
     except UnidentifiedImageError as exc:
         raise ValueError("Source image cannot be opened by Pillow") from exc
+
+
+def _preprocess_large_yandex_feed_source(source_content: bytes) -> bytes:
+    if not source_content:
+        raise ValueError("Source image is empty")
+
+    try:
+        with Image.open(BytesIO(source_content)) as image:
+            source_pixels = image.width * image.height
+    except UnidentifiedImageError as exc:
+        raise ValueError("Source image cannot be opened by Pillow") from exc
+
+    if source_pixels > MAX_YANDEX_FEED_SOURCE_PIXELS:
+        raise ValueError("Source image is too large for safe processing")
+    if source_pixels <= MAX_SOURCE_PIXELS:
+        return source_content
+
+    with tempfile.TemporaryDirectory(prefix="yandex-feed-source-") as tmp_dir:
+        input_path = os.path.join(tmp_dir, "input.bin")
+        output_path = os.path.join(tmp_dir, "output.png")
+        with open(input_path, "wb") as input_file:
+            input_file.write(source_content)
+
+        command = [
+            "ffmpeg",
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            input_path,
+            "-vf",
+            (
+                f"scale={YANDEX_FEED_PREPROCESS_MAX_EDGE}:"
+                f"{YANDEX_FEED_PREPROCESS_MAX_EDGE}:"
+                "force_original_aspect_ratio=decrease"
+            ),
+            "-frames:v",
+            "1",
+            "-map_metadata",
+            "-1",
+            output_path,
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=YANDEX_FEED_PREPROCESS_TIMEOUT_SECONDS,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "ffmpeg is required to safely process this legacy source image"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "Legacy source image preprocessing timed out"
+            ) from exc
+
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            suffix = f": {detail[:500]}" if detail else ""
+            raise RuntimeError(f"Legacy source image preprocessing failed{suffix}")
+        if not os.path.exists(output_path):
+            raise RuntimeError("Legacy source image preprocessing produced no output")
+        with open(output_path, "rb") as output_file:
+            output = output_file.read()
+        if not output:
+            raise RuntimeError("Legacy source image preprocessing produced empty output")
+        return output
 
 
 def _has_alpha(image: Image.Image) -> bool:

@@ -31,6 +31,13 @@ def _image_bytes(*, fmt: str = "PNG") -> bytes:
     return output.getvalue()
 
 
+def _resized_image_bytes() -> bytes:
+    image = Image.new("RGB", (8, 7), (40, 90, 180))
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
 def _transparent_product_bytes() -> bytes:
     image = Image.new("RGBA", (80, 60), (255, 255, 255, 0))
     image.paste((210, 30, 30, 255), box=(18, 12, 62, 48))
@@ -218,6 +225,34 @@ async def test_yandex_feed_has_a_separate_legacy_source_pixel_limit(monkeypatch)
         "MAX_YANDEX_FEED_SOURCE_PIXELS",
         200,
     )
+    monkeypatch.setattr(
+        product_image_processing_provider,
+        "YANDEX_FEED_PREPROCESS_MAX_EDGE",
+        8,
+    )
+    converted_source_sizes = []
+    preprocessed_source_sizes = []
+    original_convert_to_srgb = product_image_processing_provider._convert_to_srgb
+
+    def preprocess_large_source(source_content):
+        with Image.open(BytesIO(source_content)) as image:
+            preprocessed_source_sizes.append(image.size)
+        return _resized_image_bytes()
+
+    def record_converted_source_size(image):
+        converted_source_sizes.append(image.size)
+        return original_convert_to_srgb(image)
+
+    monkeypatch.setattr(
+        product_image_processing_provider,
+        "_preprocess_large_yandex_feed_source",
+        preprocess_large_source,
+    )
+    monkeypatch.setattr(
+        product_image_processing_provider,
+        "_convert_to_srgb",
+        record_converted_source_size,
+    )
     source = _image_bytes()
     processor = NoopProductImageProcessor()
 
@@ -231,6 +266,8 @@ async def test_yandex_feed_has_a_separate_legacy_source_pixel_limit(monkeypatch)
     )
 
     assert result.extension == "jpg"
+    assert preprocessed_source_sizes == [(12, 10)]
+    assert converted_source_sizes == [(8, 7)]
     with pytest.raises(ValueError, match="too large for safe processing"):
         await processor.process(
             source_content=source,
@@ -240,6 +277,60 @@ async def test_yandex_feed_has_a_separate_legacy_source_pixel_limit(monkeypatch)
                 variant_type=ProductImageVariantType.CARD.value,
             ),
         )
+
+
+def test_large_yandex_source_uses_bounded_ffmpeg_preprocess(monkeypatch):
+    monkeypatch.setattr(product_image_processing_provider, "MAX_SOURCE_PIXELS", 100)
+    monkeypatch.setattr(
+        product_image_processing_provider,
+        "MAX_YANDEX_FEED_SOURCE_PIXELS",
+        200,
+    )
+    monkeypatch.setattr(
+        product_image_processing_provider,
+        "YANDEX_FEED_PREPROCESS_MAX_EDGE",
+        8,
+    )
+    monkeypatch.setattr(
+        product_image_processing_provider,
+        "YANDEX_FEED_PREPROCESS_TIMEOUT_SECONDS",
+        5,
+    )
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        Path(command[-1]).write_bytes(_resized_image_bytes())
+        return product_image_processing_provider.subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        product_image_processing_provider.subprocess,
+        "run",
+        fake_run,
+    )
+
+    output = product_image_processing_provider._preprocess_large_yandex_feed_source(
+        _image_bytes()
+    )
+
+    with Image.open(BytesIO(output)) as image:
+        assert image.size == (8, 7)
+    assert len(calls) == 1
+    command, kwargs = calls[0]
+    assert command[0] == "ffmpeg"
+    assert "-nostdin" in command
+    assert "scale=8:8:force_original_aspect_ratio=decrease" in command
+    assert kwargs == {
+        "check": False,
+        "capture_output": True,
+        "text": True,
+        "timeout": 5,
+    }
 
 
 @pytest.mark.asyncio
