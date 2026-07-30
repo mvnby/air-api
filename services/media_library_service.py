@@ -162,13 +162,7 @@ class MediaLibraryService:
         tags: list[str] | None,
         created_by: str | None,
     ) -> dict:
-        normalized_url = MediaLibraryService._validate_remote_image_url(url)
-        try:
-            content, filename = await MediaLibraryService._download_remote_image(normalized_url)
-        except httpx.HTTPStatusError as exc:
-            raise ValueError(f"Remote image returned HTTP {exc.response.status_code}") from exc
-        except httpx.HTTPError as exc:
-            raise ValueError("Remote image could not be downloaded") from exc
+        content, filename = await MediaLibraryService.download_remote_image(url)
         return await MediaLibraryService.upload_assets(
             session=session,
             files=[(filename, content)],
@@ -176,6 +170,19 @@ class MediaLibraryService:
             tags=tags,
             created_by=created_by,
         )
+
+    @staticmethod
+    async def download_remote_image(url: str) -> tuple[bytes, str]:
+        """Download an operator-supplied image through the shared SSRF guard."""
+        normalized_url = MediaLibraryService._validate_remote_image_url(url)
+        try:
+            return await MediaLibraryService._download_remote_image(normalized_url)
+        except httpx.HTTPStatusError as exc:
+            raise ValueError(
+                f"Remote image returned HTTP {exc.response.status_code}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ValueError("Remote image could not be downloaded") from exc
 
     @staticmethod
     async def backfill_referenced_assets(

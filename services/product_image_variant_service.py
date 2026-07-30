@@ -260,6 +260,7 @@ class ProductImageVariantService:
         processor: ProductImageProcessor | None = None,
         rembg_model: str | None = None,
         source_url_override: str | None = None,
+        source_content_override: bytes | None = None,
         force: bool = False,
         commit: bool = True,
     ) -> dict[str, Any]:
@@ -286,7 +287,11 @@ class ProductImageVariantService:
 
         source_url = str(source_url_override or image.url or "").strip()
         try:
-            source_content = await ProductImageVariantService._source_content_for_url(source_url)
+            source_content = (
+                source_content_override
+                if source_content_override is not None
+                else await ProductImageVariantService._source_content_for_url(source_url)
+            )
         except Exception as exc:
             variant.processing_status = ProductImageProcessingStatus.FAILED.value
             variant.processing_stage = ProductImageProcessingStage.ORIGINAL_INGEST.value

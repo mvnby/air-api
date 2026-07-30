@@ -9,6 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from models import Product, ProductImage, ProductImageVariant
+from services import product_image_processing_provider
+from services.media_library_service import MediaLibraryService
 from services.media_storage_service import StoredMediaObject
 from services.product_image_processing_contract import (
     ProductImageProcessingStatus,
@@ -209,6 +211,38 @@ async def test_yandex_feed_applies_exif_orientation_and_strips_metadata():
 
 
 @pytest.mark.asyncio
+async def test_yandex_feed_has_a_separate_legacy_source_pixel_limit(monkeypatch):
+    monkeypatch.setattr(product_image_processing_provider, "MAX_SOURCE_PIXELS", 100)
+    monkeypatch.setattr(
+        product_image_processing_provider,
+        "MAX_YANDEX_FEED_SOURCE_PIXELS",
+        200,
+    )
+    source = _image_bytes()
+    processor = NoopProductImageProcessor()
+
+    result = await processor.process(
+        source_content=source,
+        context=ProductImageProcessingContext(
+            product_image_id=1,
+            source_url="/media/products/shared/legacy-source.png",
+            variant_type=ProductImageVariantType.YANDEX_FEED.value,
+        ),
+    )
+
+    assert result.extension == "jpg"
+    with pytest.raises(ValueError, match="too large for safe processing"):
+        await processor.process(
+            source_content=source,
+            context=ProductImageProcessingContext(
+                product_image_id=1,
+                source_url="/media/products/shared/legacy-source.png",
+                variant_type=ProductImageVariantType.CARD.value,
+            ),
+        )
+
+
+@pytest.mark.asyncio
 async def test_yandex_feed_backfill_is_idempotent(
     sqlite_session,
     tmp_path: Path,
@@ -245,6 +279,60 @@ async def test_yandex_feed_backfill_is_idempotent(
     assert second["planned"] == 0
     assert second["up_to_date"] == 1
     assert len(storage.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_yandex_feed_ingests_external_source_without_changing_product_urls(
+    sqlite_session,
+    monkeypatch,
+):
+    product = await _make_product(sqlite_session, 97)
+    source_url = "https://supplier.example.test/product.png"
+    product.main_image = source_url
+    image = ProductImage(product_id=product.id, url=source_url)
+    sqlite_session.add_all([product, image])
+    await sqlite_session.commit()
+    source_content = _image_bytes()
+
+    async def download_remote_image(url: str):
+        assert url == source_url
+        return source_content, "product.png"
+
+    monkeypatch.setattr(
+        MediaLibraryService,
+        "download_remote_image",
+        download_remote_image,
+    )
+    storage = _FakeProductMediaStorage()
+
+    result = await YandexFeedImageService.backfill(
+        sqlite_session,
+        execute=True,
+        product_id=product.id,
+        storage=storage,
+    )
+    variants = (
+        await sqlite_session.execute(
+            select(ProductImageVariant)
+            .where(ProductImageVariant.product_image_id == image.id)
+            .order_by(ProductImageVariant.variant_type)
+        )
+    ).scalars().all()
+    variants_by_type = {variant.variant_type: variant for variant in variants}
+    original = variants_by_type[ProductImageVariantType.ORIGINAL.value]
+    yandex_feed = variants_by_type[ProductImageVariantType.YANDEX_FEED.value]
+
+    assert result["processed"] == 1
+    assert result["errors"] == []
+    assert product.main_image == source_url
+    assert image.url == source_url
+    assert original.url.endswith(".png")
+    assert yandex_feed.url.endswith(".jpg")
+    assert yandex_feed.source_url == original.url
+    assert [call["variant_type"] for call in storage.calls] == [
+        ProductImageVariantType.ORIGINAL.value,
+        ProductImageVariantType.YANDEX_FEED.value,
+    ]
 
 
 @pytest.mark.asyncio

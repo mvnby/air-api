@@ -33,6 +33,7 @@ FULL_MAX_EDGE = 1800
 YANDEX_FEED_CANVAS_SIZE = (800, 800)
 YANDEX_FEED_JPEG_QUALITY = 85
 MAX_SOURCE_PIXELS = 40_000_000
+MAX_YANDEX_FEED_SOURCE_PIXELS = 70_000_000
 BACKGROUND_REMOVAL_PROVIDER_ENV = "BACKGROUND_REMOVAL_PROVIDER"
 BACKGROUND_REMOVAL_REMBG_MODEL_ENV = "BACKGROUND_REMOVAL_REMBG_MODEL"
 BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS_ENV = "BACKGROUND_REMOVAL_REMBG_PRELOAD_MODELS"
@@ -548,7 +549,15 @@ def _process_image_bytes(
         if context is not None
         else ProductImageVariantType.PROCESSED.value
     )
-    image = _open_source_image(source_content)
+    max_source_pixels = (
+        MAX_YANDEX_FEED_SOURCE_PIXELS
+        if variant_type == ProductImageVariantType.YANDEX_FEED.value
+        else MAX_SOURCE_PIXELS
+    )
+    image = _open_source_image(
+        source_content,
+        max_source_pixels=max_source_pixels,
+    )
     image = _trim_transparent_borders(image)
 
     if variant_type == ProductImageVariantType.YANDEX_FEED.value:
@@ -576,13 +585,17 @@ def _process_image_bytes(
     )
 
 
-def _open_source_image(source_content: bytes) -> Image.Image:
+def _open_source_image(
+    source_content: bytes,
+    *,
+    max_source_pixels: int = MAX_SOURCE_PIXELS,
+) -> Image.Image:
     if not source_content:
         raise ValueError("Source image is empty")
 
     try:
         with Image.open(BytesIO(source_content)) as image:
-            if image.width * image.height > MAX_SOURCE_PIXELS:
+            if image.width * image.height > max_source_pixels:
                 raise ValueError("Source image is too large for safe processing")
             transposed = ImageOps.exif_transpose(image)
             srgb = _convert_to_srgb(transposed)
