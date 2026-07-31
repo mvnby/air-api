@@ -48,6 +48,15 @@ handler owns one transaction and returns the post-commit projection. Failure at
 any point must roll back the order, customer changes, links and outbox events as
 one unit. Add fault-injection tests at the final step of each command.
 
+Deliver R2 as three independently deployable slices:
+
+1. proposal create/update/select commands;
+2. work-stage and payment commands;
+3. order create/update/delete plus Lead qualification.
+
+When a command participates in an explicit caller-owned unit of work, its local
+boundary is a SAVEPOINT; ordinary HTTP commands own the root transaction.
+
 ## R3: Order and Lead schemas
 
 Move Order/Lead DTOs into domain modules and re-export them from `schemas.py` so

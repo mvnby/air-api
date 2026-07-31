@@ -45,6 +45,7 @@ from schemas import (
     ManagerStaleWorkStageItem,
 )
 from services.document_service import DocumentService, OrderDocumentsLockedError
+from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
 from services.order_transfer_service import OrderTransferService
 from services.tenant_scope_service import TenantScope
@@ -225,7 +226,7 @@ async def create_manager_order_proposal(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.create_order_proposal(
+        return await OrderProposalCommandService.create_order_proposal(
             session,
             order_id,
             payload,
@@ -253,7 +254,7 @@ async def duplicate_manager_order_proposal(
         duplicate_from_proposal_id=proposal_id,
     )
     try:
-        return await OrderService.create_order_proposal(
+        return await OrderProposalCommandService.create_order_proposal(
             session,
             order_id,
             duplicate_payload,
@@ -277,7 +278,7 @@ async def patch_manager_order_proposal(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.update_order_proposal(
+        return await OrderProposalCommandService.update_order_proposal(
             session,
             order_id,
             proposal_id,
@@ -301,7 +302,7 @@ async def archive_manager_order_proposal(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.update_order_proposal(
+        return await OrderProposalCommandService.update_order_proposal(
             session,
             order_id,
             proposal_id,
@@ -325,7 +326,7 @@ async def select_manager_order_proposal(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.select_order_proposal(
+        return await OrderProposalCommandService.select_order_proposal(
             session,
             order_id,
             proposal_id,
