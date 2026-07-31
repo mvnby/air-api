@@ -22,30 +22,22 @@ import type { ServiceAttachmentEquipmentOption } from '../service-attachments/ty
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
-  ManagerInstallerResponse,
-  PaymentResponse,
-  PaymentCurrency,
-  FxRateResponse,
   OutgoingEmailResponse,
 } from '../../client';
-import { ManagerOrdersService, ManagerSettingsService, ManagerMailService } from '../../client';
+import { ManagerOrdersService, ManagerMailService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
-  normalizeOrderWorkflowType,
-  type OrderWorkflowType,
   type OrderWorkspaceTarget,
 } from './order-workspace';
-import { emptyRepairMeta, normalizeRepairMeta, type RepairMeta } from './repair-meta';
-import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { useSmartStickyHeader } from '../../composables/useSmartStickyHeader';
 import { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
 import { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
+import { useOrderDrawerForm } from '../../composables/useOrderDrawerForm';
 import type {
   OrderDrawerDraft,
   OrderLogisticsComponent,
   ProductLogisticsTemplateComponent,
-  ServiceLine,
 } from './order-editor-types';
 
 const props = defineProps<{
@@ -85,73 +77,6 @@ function setToast(message: string, type: 'success' | 'error' = 'success') {
     if (toast.value === message) toast.value = '';
   }, 3000);
 }
-
-const status = ref('new_lead');
-const orderTitle = ref('');
-const workflowType = ref<OrderWorkflowType>('sales_installation');
-const repairMeta = ref<RepairMeta>(emptyRepairMeta());
-const managerLabels = ref<string[]>([]);
-const managerLabelDraft = ref('');
-const nextFollowupDate = ref('');
-const assessmentDate = ref('');
-const installationDate = ref('');
-const comment = ref('');
-const isPaid = ref(false);
-const installerId = ref<number | null>(null);
-
-const customerDeliveryAddress = ref('');
-const customerBranchId = ref<number | null>(null);
-const newBranchAddress = ref('');
-
-const targetCurrency = ref<PaymentCurrency | null>(null);
-const targetCurrencyAmount = ref<number | null>(null);
-const enableCurrency = ref(false);
-const currentFxRate = ref<FxRateResponse | null>(null);
-
-const syncTargetCurrencyAmountFromRate = () => {
-  const rate = getActiveFxRate(targetCurrency.value);
-  if (!enableCurrency.value || !rate || totalPreview.value <= 0) return;
-  targetCurrencyAmount.value = Number((totalPreview.value / rate).toFixed(2));
-};
-
-watch(enableCurrency, async (val) => {
-  if (!val) {
-    targetCurrency.value = null;
-    targetCurrencyAmount.value = null;
-  } else if (!targetCurrency.value) {
-    targetCurrency.value = 'USD';
-    try {
-       currentFxRate.value = await ManagerSettingsService.getFxRate();
-       syncTargetCurrencyAmountFromRate();
-    } catch (e) {
-       console.warn('Failed to fetch FX rate', e);
-       enableCurrency.value = false;
-       setToast('Не удалось загрузить курс валют', 'error');
-    }
-  }
-});
-
-watch(targetCurrency, (newCurrency) => {
-  if (newCurrency === 'EUR' && !hasManualEurRate.value) {
-    targetCurrency.value = 'USD';
-    return;
-  }
-  syncTargetCurrencyAmountFromRate();
-});
-
-// Negotiation stage properties
-const measurementRequired = ref(false);
-const measurerId = ref<number | null>(null);
-const measurementResult = ref('');
-const additionalConditions = ref('');
-const negotiationStatus = ref('awaiting_offer');
-const executionStatus = ref('needs_schedule');
-const executionWithoutPayment = ref(false);
-const executionWithoutPaymentReason = ref('');
-const autoExecutionOnPayment = ref(false);
-const autoCloseOnPayment = ref(false);
-
-const installersList = ref<ManagerInstallerResponse[]>([]);
 
 const savedLinesSnapshot = ref('');
 const savedFormSnapshot = ref('');
@@ -212,7 +137,62 @@ const {
   setToast,
   persistDraft: () => persistDraft(),
 });
-const payments = ref<PaymentResponse[]>([]);
+const {
+  addManagerLabel,
+  assessmentDate,
+  autoCloseOnPayment,
+  autoExecutionOnPayment,
+  balanceDue: balanceDuePreview,
+  buildRepairMetaPayload,
+  buildSavePayload,
+  calculatedTargetCurrencyPayments,
+  comment,
+  currentFormSnapshot: buildCurrentFormSnapshot,
+  currentFxRate,
+  customerBranchId,
+  customerDeliveryAddress,
+  enableCurrency,
+  executionStatus,
+  executionWithoutPayment,
+  executionWithoutPaymentReason,
+  executorOptions,
+  hydrateOrder,
+  installationDate,
+  installerId,
+  isB2cCustomer: buildIsB2cCustomer,
+  isRepairWorkflow,
+  localFormError,
+  localServerErrors,
+  managerLabelDraft,
+  managerLabels,
+  measurementRequired,
+  measurementResult,
+  measurerId,
+  negotiationStatus,
+  newBranchAddress,
+  orderTitle,
+  payments,
+  removeManagerLabel,
+  repairMeta,
+  setWorkflowType,
+  showProductLinesSection,
+  status,
+  targetCurrency,
+  targetCurrencyAmount,
+  targetCurrencyBalanceDue,
+  totalPayments: totalPaymentsPreview,
+  workflowType,
+} = useOrderDrawerForm({
+  total: totalPreview,
+  productLines,
+  serviceLines,
+  serviceTariffOptions,
+  activeServiceSuggestionIndex,
+  applyTariffTemplateToLine,
+  buildLinesPayload: () => buildLinesPayload(activeProposalId.value),
+  validateLines: validateProposalLines,
+  setToast,
+});
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
 const documentsWorkspaceRef = ref<InstanceType<typeof OrderDocumentsWorkspace> | null>(null);
@@ -222,14 +202,6 @@ const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
 const orderEmails = ref<OutgoingEmailResponse[]>([]);
 const orderEmailsLoaded = ref(false);
 let orderEmailsRequestId = 0;
-
-const executorOptions = computed(() => {
-  const selectedIds = new Set<number>();
-  if (installerId.value !== null) selectedIds.add(installerId.value);
-  if (measurerId.value !== null) selectedIds.add(measurerId.value);
-  return installersList.value.filter((inst) => inst.is_active || selectedIds.has(inst.id));
-});
-const localServerErrors = ref<Record<string, string>>({});
 
 const createDefaultDrawerSections = () => ({
   website: false,
@@ -245,7 +217,6 @@ type DrawerSectionsState = ReturnType<typeof createDefaultDrawerSections>;
 const expandedDrawerSections = ref(createDefaultDrawerSections());
 const initializedOrderId = ref<number | null>(null);
 
-const localFormError = ref('');
 const showManagerLabelInput = ref(false);
 
 const {
@@ -292,10 +263,7 @@ const customerDisplayName = computed(() => (
   || ''
 ));
 const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
-const isB2cCustomer = computed(() => {
-  if (!customer.value) return true; // defaults to B2C if unknown
-  return customer.value.type !== 'company';
-});
+const isB2cCustomer = buildIsB2cCustomer(computed(() => props.order));
 const displayOrderTitle = computed(() => (
   orderTitle.value.trim()
   || customer.value?.full_legal_name
@@ -396,15 +364,6 @@ const draftKey = computed(() => (
 const drawerSectionsKey = computed(() => (
   props.order ? `manager_order_drawer_sections_${props.order.id}` : ''
 ));
-const hasManualEurRate = computed(() => Boolean(currentFxRate.value?.eur_byn));
-
-const getActiveFxRate = (currency: PaymentCurrency | null): number | null => {
-  if (!currentFxRate.value || !currency) return null;
-  if (currency === 'USD') return currentFxRate.value.usd_byn ?? null;
-  if (currency === 'EUR') return currentFxRate.value.eur_byn ?? null;
-  return null;
-};
-
 const loadOrderEmails = async (orderId: number) => {
   const requestId = ++orderEmailsRequestId;
   try {
@@ -418,21 +377,6 @@ const loadOrderEmails = async (orderId: number) => {
     orderEmails.value = [];
     orderEmailsLoaded.value = false;
   }
-};
-
-const normalizeManagerLabel = (value: string) => value.trim().replace(/\s+/g, ' ');
-
-const addManagerLabel = () => {
-  const label = normalizeManagerLabel(managerLabelDraft.value);
-  if (!label) return;
-  const exists = managerLabels.value.some((item) => item.toLocaleLowerCase('ru-RU') === label.toLocaleLowerCase('ru-RU'));
-  if (!exists) managerLabels.value.push(label);
-  managerLabelDraft.value = '';
-  showManagerLabelInput.value = false;
-};
-
-const removeManagerLabel = (label: string) => {
-  managerLabels.value = managerLabels.value.filter((item) => item !== label);
 };
 
 const copyText = async (value: string | null | undefined, label: string) => {
@@ -478,12 +422,6 @@ const toggleHold = async () => {
 };
 
 const orderDocuments = computed(() => props.order?.documents || []);
-const isRepairWorkflow = computed(() => workflowType.value === 'repair');
-const showProductLinesSection = computed(() => workflowType.value === 'sales_installation');
-const buildRepairMetaPayload = () => normalizeRepairMeta(
-  repairMeta.value,
-  { defaultRepairStatus: isRepairWorkflow.value },
-);
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
   let mutated = false;
@@ -515,75 +453,8 @@ const refreshOrderFromDocumentsPanel = () => {
   }
 };
 
-const totalPaymentsPreview = computed(() => {
-  const bynPaid = payments.value.filter((p) => p.currency === 'BYN').reduce((sum, p) => sum + p.amount, 0);
-  if (!enableCurrency.value || !currentFxRate.value || !targetCurrency.value) {
-    return bynPaid;
-  }
-  const foreignPaid = payments.value.filter((p) => p.currency === targetCurrency.value).reduce((sum, p) => sum + p.amount, 0);
-  const rate = getActiveFxRate(targetCurrency.value);
-  if (!rate) return bynPaid;
-  return bynPaid + (foreignPaid * rate);
-});
-
-const calculatedTargetCurrencyPayments = computed(() => {
-  return payments.value.reduce((sum, p) => {
-    if (p.currency === targetCurrency.value) {
-      return sum + p.amount;
-    }
-    if (p.currency === 'BYN' && currentFxRate.value && targetCurrency.value) {
-      const rate = getActiveFxRate(targetCurrency.value);
-      if (rate) {
-        return sum + (p.amount / rate);
-      }
-    }
-    return sum;
-  }, 0);
-});
-
-const balanceDuePreview = computed(() => {
-  if (enableCurrency.value && currentFxRate.value && targetCurrency.value) {
-    const rate = getActiveFxRate(targetCurrency.value);
-    if (!rate) return Math.max(0, totalPreview.value - totalPaymentsPreview.value);
-    return targetCurrencyBalanceDue.value * rate;
-  }
-  return Math.max(0, totalPreview.value - totalPaymentsPreview.value);
-});
-
-const targetCurrencyBalanceDue = computed(() => {
-  return Math.max(0, (targetCurrencyAmount.value || 0) - calculatedTargetCurrencyPayments.value);
-});
-
 const currentLinesSnapshot = () => buildCurrentLinesSnapshot(activeProposalId.value);
-const currentFormSnapshot = () => JSON.stringify({
-  status: status.value,
-  title: orderTitle.value.trim(),
-  workflowType: workflowType.value,
-  repairMeta: buildRepairMetaPayload(),
-  managerLabels: [...managerLabels.value],
-  nextFollowupDate: nextFollowupDate.value,
-  assessmentDate: assessmentDate.value,
-  installationDate: installationDate.value,
-  comment: comment.value,
-  installerId: installerId.value,
-  customerDeliveryAddress: customerDeliveryAddress.value.trim(),
-  customerBranchId: customerBranchId.value,
-  measurementRequired: measurementRequired.value,
-  measurerId: measurerId.value,
-  measurementResult: measurementResult.value,
-  additionalConditions: additionalConditions.value,
-  proposalStatus: proposalStatus.value,
-  negotiationStatus: negotiationStatus.value,
-  executionStatus: executionStatus.value,
-  executionWithoutPayment: executionWithoutPayment.value,
-  executionWithoutPaymentReason: executionWithoutPaymentReason.value,
-  autoExecutionOnPayment: autoExecutionOnPayment.value,
-  autoCloseOnPayment: autoCloseOnPayment.value,
-  enableCurrency: enableCurrency.value,
-  targetCurrency: targetCurrency.value,
-  targetCurrencyAmount: targetCurrencyAmount.value,
-});
-
+const currentFormSnapshot = () => buildCurrentFormSnapshot(proposalStatus.value);
 const hasUnsavedChanges = computed(() => (
   Boolean(props.order?.id)
   && (
@@ -696,52 +567,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     orderEmails.value = [];
     orderEmailsLoaded.value = false;
   }
-  status.value = order.status;
-  orderTitle.value = order.title ?? '';
-  workflowType.value = normalizeOrderWorkflowType((order as any).workflow_type);
-  repairMeta.value = normalizeRepairMeta(((order as any).repair_meta || {}) as Partial<RepairMeta>, {
-    defaultRepairStatus: workflowType.value === 'repair',
-  });
-  managerLabels.value = [...(order.manager_labels ?? [])];
-  managerLabelDraft.value = '';
-  nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
-  assessmentDate.value = toLocalDateTimeInput(order.measurement_date);
-  installationDate.value = toLocalDateTimeInput(order.installation_date);
-  comment.value = order.comment ?? '';
-  isPaid.value = order.is_paid;
-  installerId.value = order.installer_id ?? null;
-  customerDeliveryAddress.value = order.delivery_address || '';
-  customerBranchId.value = order.customer_branch?.id ?? null;
-  measurementRequired.value = order.measurement_required ?? false;
-  measurerId.value = order.measurer_id ?? null;
-  measurementResult.value = order.measurement_result ?? '';
-  additionalConditions.value = order.additional_conditions ?? '';
-  negotiationStatus.value = order.negotiation_status || 'awaiting_offer';
-  executionStatus.value = order.execution_status || 'needs_schedule';
-  executionWithoutPayment.value = Boolean(order.execution_without_payment);
-  executionWithoutPaymentReason.value = order.execution_without_payment_reason || '';
-  autoExecutionOnPayment.value = Boolean(order.auto_execution_on_payment);
-  autoCloseOnPayment.value = Boolean(order.auto_close_on_payment);
-  targetCurrency.value = order.target_currency || null;
-  targetCurrencyAmount.value = order.target_currency_amount || null;
-
-  // Set default currency toggle state
-  enableCurrency.value = !!order.target_currency;
-
-  if (enableCurrency.value && !currentFxRate.value) {
-      ManagerSettingsService.getFxRate().then(res => {
-          currentFxRate.value = res;
-          if (targetCurrency.value === 'EUR' && !res.eur_byn) {
-            targetCurrency.value = 'USD';
-          }
-      }).catch(e => console.warn('Failed to load fx rate on init', e));
-  }
-
-  if (installersList.value.length === 0) {
-    api.getManagerInstallers(1, 100).then(res => {
-      installersList.value = res.items;
-    }).catch(e => console.error("Failed to load installers", e));
-  }
+  hydrateOrder(order);
 
   const selectedProposal = (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
     || (order.proposals || []).find((proposal) => !proposal.is_archived)
@@ -754,9 +580,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   savedLinesSnapshot.value = currentLinesSnapshot();
   showEstimateImport.value = false;
   await loadEstimateOptions();
-
-  // Payments
-  payments.value = [...(order.payments || [])];
 
   resetLookupState();
   savedFormSnapshot.value = currentFormSnapshot();
@@ -802,8 +625,6 @@ watch(
   },
 );
 
-const buildProposalLinesPayload = () => buildLinesPayload(activeProposalId.value);
-
 const openProposalSend = async () => {
   const proposal = activeProposal.value;
   if (!proposal) return;
@@ -846,173 +667,13 @@ const handleWorkspaceNextAction = async () => {
   openWorkspaceTarget(action.target);
 };
 
-const hasDiagnosticServiceLine = () => serviceLines.value.some((line) => /диагност/i.test(line.title || ''));
-
-let workflowChangeRequestId = 0;
-
-const addDefaultRepairDiagnostic = async (requestId: number) => {
-  if (hasDiagnosticServiceLine()) return;
-  try {
-    const response = await api.listManagerQuickTariffs('диагностика', 'repair' as any, 5);
-    if (requestId !== workflowChangeRequestId || workflowType.value !== 'repair') return;
-    const option = (response.items || [])[0];
-    const diagnosticLine: ServiceLine = {
-      service_id: null,
-      title: 'Диагностика кондиционера на объекте',
-      quantity: 1,
-      price: 0,
-      cost: 0,
-    };
-    if (option) applyTariffTemplateToLine(diagnosticLine, option);
-    serviceLines.value = [
-      diagnosticLine,
-      ...serviceLines.value,
-    ];
-    setToast('Добавили базовую диагностику для ремонта');
-  } catch (error) {
-    if (requestId !== workflowChangeRequestId || workflowType.value !== 'repair') return;
-    serviceLines.value = [
-      {
-        service_id: null,
-        title: 'Диагностика кондиционера на объекте',
-        quantity: 1,
-        price: 0,
-        cost: 0,
-      },
-      ...serviceLines.value,
-    ];
-    setToast(`Не нашли тариф диагностики: ${getApiErrorMessage(error)}`, 'error');
-  }
-};
-
-const setWorkflowType = async (next: OrderWorkflowType) => {
-  if (workflowType.value === next) return;
-  const hasScenarioData = productLines.value.length > 0
-    || serviceLines.value.length > 0
-    || Boolean(comment.value.trim())
-    || Boolean(installationDate.value)
-    || Boolean(measurementResult.value.trim());
-  if (hasScenarioData) {
-    const confirmed = await confirmDialog({
-      title: 'Сменить сценарий заказа?',
-      description: 'В заказе уже есть данные. Скрытые разделы сохранятся и останутся доступны после возврата к сценарию.',
-      confirmText: 'Сменить сценарий',
-      variant: 'warning',
-    });
-    if (!confirmed) return;
-  }
-  const requestId = ++workflowChangeRequestId;
-  workflowType.value = next;
-  serviceTariffOptions.value = [];
-  activeServiceSuggestionIndex.value = null;
-  if (next === 'repair') {
-    repairMeta.value = normalizeRepairMeta(repairMeta.value, { defaultRepairStatus: true });
-    await addDefaultRepairDiagnostic(requestId);
-  }
-};
-
 const handleSave = () => {
   if (!props.order) return;
-  localServerErrors.value = {};
-  localFormError.value = '';
-
-  const errors: Record<string, string> = {};
-  if (!status.value) {
-    errors.status = 'Укажите статус';
-  }
-
-  if (assessmentDate.value && installationDate.value && installationDate.value < assessmentDate.value) {
-    errors.installation_date = 'Дата монтажа не может быть раньше даты замера';
-  }
-
-  if (productLines.value.some((line) => line.quantity <= 0)) {
-    errors.products = 'Количество товара должно быть больше 0';
-  } else if (productLines.value.some((line) => line.price < 0)) {
-    errors.products = 'Цена товара не может быть отрицательной';
-  } else if (productLines.value.some((line) => !line.product_id)) {
-    errors.products = 'Выберите товар из выпадающего списка';
-  }
-
-  if (serviceLines.value.some((line) => line.quantity <= 0)) {
-    errors.services = 'Количество услуги должно быть больше 0';
-  } else if (serviceLines.value.some((line) => line.price < 0)) {
-    errors.services = 'Цена услуги не может быть отрицательной';
-  } else if (serviceLines.value.some((line) => !line.title?.trim())) {
-    errors.services = 'Для услуги укажите название';
-  }
-
-  if (Object.keys(errors).length) {
-    localServerErrors.value = errors;
-    localFormError.value = 'Исправьте ошибки в форме';
-    return;
-  }
-
-  // Cross-field validation for Negotiation
-  if (status.value === 'execution') {
-    if (totalPreview.value <= 0) {
-      localFormError.value = 'Нельзя перевести в монтаж с пустой сметой';
-      return;
-    }
-    if (measurementRequired.value && !measurementResult.value?.trim()) {
-      localFormError.value = 'Требуется замер: заполните результат замера';
-      return;
-    }
-  }
-
-  if (enableCurrency.value) {
-    if (!targetCurrency.value) {
-      localFormError.value = 'Выберите валюту сделки';
-      return;
-    }
-    const activeRate = getActiveFxRate(targetCurrency.value);
-    if (!activeRate) {
-      localFormError.value = 'Для выбранной валюты сейчас нет доступного курса';
-      return;
-    }
-    if (!targetCurrencyAmount.value || targetCurrencyAmount.value <= 0) {
-      localFormError.value = 'Укажите зафиксированную сумму в валюте';
-      return;
-    }
-  } else if (payments.value.some((payment) => payment.currency !== 'BYN')) {
-    localFormError.value = 'Нельзя отключить валютный режим, пока в заказе есть валютные платежи';
-    return;
-  }
-
+  const payload = buildSavePayload(activeProposalLocked.value);
+  if (!payload) return;
   pendingDraftClearOrderId.value = props.order.id;
-  const linePayload = buildProposalLinesPayload();
-  repairMeta.value = buildRepairMetaPayload();
-  const payload: ManagerOrderUpdatePayload = {
-    status: status.value,
-    title: orderTitle.value,
-    workflow_type: workflowType.value as any,
-    repair_meta: buildRepairMetaPayload() as any,
-    manager_labels: managerLabels.value,
-    next_followup_date: fromLocalDateTimeInput(nextFollowupDate.value),
-    measurement_date: fromLocalDateTimeInput(assessmentDate.value),
-    installation_date: fromLocalDateTimeInput(installationDate.value),
-    comment: comment.value,
-    is_paid: isPaid.value,
-    installer_id: installerId.value,
-    customer_branch_id: customerBranchId.value,
-    customer_delivery_address: customerDeliveryAddress.value,
-    products: activeProposalLocked.value ? undefined : linePayload.products,
-    services: activeProposalLocked.value ? undefined : linePayload.services,
-    measurement_required: measurementRequired.value,
-    measurer_id: measurerId.value,
-    measurement_result: measurementResult.value,
-    additional_conditions: additionalConditions.value,
-    negotiation_status: status.value === 'negotiation' ? negotiationStatus.value : undefined,
-    execution_status: status.value === 'execution' ? executionStatus.value : undefined,
-    execution_without_payment: status.value === 'execution' ? executionWithoutPayment.value : false,
-    execution_without_payment_reason: status.value === 'execution' && executionWithoutPayment.value ? executionWithoutPaymentReason.value : null,
-    auto_execution_on_payment: autoExecutionOnPayment.value,
-    auto_close_on_payment: status.value === 'execution' ? autoCloseOnPayment.value : false,
-    target_currency: enableCurrency.value ? (targetCurrency.value || null) : null,
-    target_currency_amount: enableCurrency.value && targetCurrencyAmount.value ? Number(String(targetCurrencyAmount.value).replace(',', '.')) : null,
-  };
   emit('save', { orderId: props.order.id, data: payload });
 };
-
 const closeDrawer = async (options?: { force?: boolean } | Event) => {
   const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
   const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
