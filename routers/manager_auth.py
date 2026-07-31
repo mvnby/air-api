@@ -21,4 +21,7 @@ async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_ac
         "role": auth.role,
         "display_name": auth.display_name,
         "auth_source": auth.auth_source,
+        "tenant_id": auth.tenant_id,
+        "storefront_id": auth.storefront_id,
+        "tenant_membership_id": auth.tenant_membership_id,
     }

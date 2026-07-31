@@ -13,7 +13,7 @@ from core.security import (
     AuthenticatedUser,
     require_manager_access,
 )
-from models import StaffUser
+from models import StaffUser, Storefront, Tenant, TenantMembership
 from routers.auth import router as auth_router
 from routers.manager_auth import router as manager_auth_router
 from routers.manager_backups import router as manager_backups_router
@@ -49,32 +49,60 @@ async def rbac_client(tmp_path: Path, monkeypatch):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        tenant = Tenant(
+            slug="mvn",
+            display_name="MVN",
+            kind="operator",
+            status="active",
+            is_system=True,
+        )
+        session.add(tenant)
+        await session.flush()
+        storefront = Storefront(
+            tenant_id=int(tenant.id),
+            slug="main",
+            display_name="MVN",
+            status="active",
+            is_default=True,
+        )
+        users = [
+            StaffUser(
+                display_name="Installer",
+                status="active",
+                primary_role="installer",
+                roles=["installer"],
+                username="installer-rbac",
+                password_hash=StaffUserService.hash_password(TEST_PASSWORD),
+            ),
+            StaffUser(
+                display_name="Manager",
+                status="active",
+                primary_role="manager",
+                roles=["manager"],
+                username="manager-rbac",
+                password_hash=StaffUserService.hash_password(TEST_PASSWORD),
+            ),
+            StaffUser(
+                display_name="Owner",
+                status="active",
+                primary_role="owner",
+                roles=["owner"],
+                username="owner-rbac",
+                password_hash=StaffUserService.hash_password(TEST_PASSWORD),
+            ),
+        ]
+        session.add(storefront)
+        session.add_all(users)
+        await session.flush()
         session.add_all(
             [
-                StaffUser(
-                    display_name="Installer",
+                TenantMembership(
+                    tenant_id=int(tenant.id),
+                    staff_user_id=int(user.id),
+                    role=user.primary_role,
                     status="active",
-                    primary_role="installer",
-                    roles=["installer"],
-                    username="installer-rbac",
-                    password_hash=StaffUserService.hash_password(TEST_PASSWORD),
-                ),
-                StaffUser(
-                    display_name="Manager",
-                    status="active",
-                    primary_role="manager",
-                    roles=["manager"],
-                    username="manager-rbac",
-                    password_hash=StaffUserService.hash_password(TEST_PASSWORD),
-                ),
-                StaffUser(
-                    display_name="Owner",
-                    status="active",
-                    primary_role="owner",
-                    roles=["owner"],
-                    username="owner-rbac",
-                    password_hash=StaffUserService.hash_password(TEST_PASSWORD),
-                ),
+                )
+                for user in users
             ]
         )
         await session.commit()

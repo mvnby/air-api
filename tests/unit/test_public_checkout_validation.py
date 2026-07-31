@@ -31,7 +31,11 @@ def checkout_app(monkeypatch):
         yield object()
 
     async def override_tenant_scope():
-        return TenantScope(tenant_id=1, storefront_id=1)
+        return TenantScope(
+            tenant_id=1,
+            storefront_id=1,
+            is_system=True,
+        )
 
     create_order = AsyncMock()
     monkeypatch.setattr(WebsiteOrderService, "create_order", create_order)

@@ -24,7 +24,9 @@ from core.input_validation import (
     validate_optional_phone,
 )
 from models import Customer, CustomerRequisitesRecognition, CustomerType
+from models.tenancy import TenantScope
 from services.customer_service import CustomerService
+from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
 
 logger = logging.getLogger(__name__)
 
@@ -332,10 +334,23 @@ class CustomerRequisitesRecognitionService:
         return data, {"field_errors": field_errors, "warnings": warnings, "is_valid": not field_errors}
 
     @staticmethod
-    async def _find_duplicate(session: AsyncSession, inn: Optional[str]) -> Optional[Customer]:
+    async def _find_duplicate(
+        session: AsyncSession,
+        inn: Optional[str],
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Customer]:
         if not inn:
             return None
-        result = await session.execute(select(Customer).where(Customer.inn == inn).order_by(Customer.id.asc()).limit(1))
+        result = await session.execute(
+            select(Customer)
+            .where(
+                Customer.inn == inn,
+                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            )
+            .order_by(Customer.id.asc())
+            .limit(1)
+        )
         return result.scalars().first()
 
     @staticmethod
@@ -375,6 +390,7 @@ class CustomerRequisitesRecognitionService:
         filename: Optional[str],
         mime_type: Optional[str],
         source: str,
+        tenant_scope: TenantScope,
         telegram_user_id: Optional[int] = None,
         telegram_chat_id: Optional[int] = None,
         telegram_message_id: Optional[int] = None,
@@ -389,10 +405,15 @@ class CustomerRequisitesRecognitionService:
             raise ValueError("Не удалось распознать текст в файле")
         extracted_raw = await cls.extract_requisites(raw_text)
         extracted, validation_flags = cls._normalize_extracted(extracted_raw, raw_text)
-        duplicate = await cls._find_duplicate(session, extracted.get("inn"))
+        duplicate = await cls._find_duplicate(
+            session,
+            extracted.get("inn"),
+            tenant_scope=tenant_scope,
+        )
         local_path, local_url = cls._store_file(content, filename, mime_type)
 
         recognition = CustomerRequisitesRecognition(
+            tenant_id=tenant_scope.tenant_id,
             source=source,
             status=cls.STATUS_RECOGNIZED,
             telegram_user_id=telegram_user_id,
@@ -419,6 +440,7 @@ class CustomerRequisitesRecognitionService:
         *,
         text: str,
         source: str,
+        tenant_scope: TenantScope,
         telegram_user_id: Optional[int] = None,
         telegram_chat_id: Optional[int] = None,
         telegram_message_id: Optional[int] = None,
@@ -431,9 +453,14 @@ class CustomerRequisitesRecognitionService:
 
         extracted_raw = await cls.extract_requisites(raw_text)
         extracted, validation_flags = cls._normalize_extracted(extracted_raw, raw_text)
-        duplicate = await cls._find_duplicate(session, extracted.get("inn"))
+        duplicate = await cls._find_duplicate(
+            session,
+            extracted.get("inn"),
+            tenant_scope=tenant_scope,
+        )
 
         recognition = CustomerRequisitesRecognition(
+            tenant_id=tenant_scope.tenant_id,
             source=source,
             status=cls.STATUS_RECOGNIZED,
             telegram_user_id=telegram_user_id,
@@ -479,10 +506,25 @@ class CustomerRequisitesRecognitionService:
         recognition_id: int,
         action: str,
         customer_id: Optional[int] = None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any]:
-        recognition = await session.get(CustomerRequisitesRecognition, recognition_id)
+        recognition = (
+            await session.execute(
+                select(CustomerRequisitesRecognition)
+                .where(
+                    CustomerRequisitesRecognition.id == recognition_id,
+                    tenant_or_legacy_owner_scope_clause(
+                        CustomerRequisitesRecognition,
+                        tenant_scope,
+                    ),
+                )
+                .with_for_update()
+            )
+        ).scalars().first()
         if not recognition:
             raise LookupError("Recognition not found")
+        if recognition.tenant_id is None:
+            recognition.tenant_id = tenant_scope.tenant_id
         if recognition.status == cls.STATUS_CONFIRMED:
             raise ValueError("Распознавание уже подтверждено")
 
@@ -499,9 +541,21 @@ class CustomerRequisitesRecognitionService:
             target_id = customer_id or recognition.duplicate_customer_id
             if not target_id:
                 raise ValueError("Не выбран клиент для обновления")
-            customer = await session.get(Customer, int(target_id))
+            customer = (
+                await session.execute(
+                    select(Customer).where(
+                        Customer.id == int(target_id),
+                        tenant_or_legacy_owner_scope_clause(
+                            Customer,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalars().first()
             if not customer:
                 raise LookupError("Customer not found")
+            if customer.tenant_id is None:
+                customer.tenant_id = tenant_scope.tenant_id
             for key, value in payload.items():
                 if key == "type":
                     setattr(customer, key, CustomerType.company)
@@ -511,7 +565,10 @@ class CustomerRequisitesRecognitionService:
             session.add(customer)
             await session.flush()
         elif normalized_action == "create":
-            customer = Customer(**payload)
+            customer = Customer(
+                **payload,
+                tenant_id=tenant_scope.tenant_id,
+            )
             session.add(customer)
             await session.flush()
         else:
@@ -525,20 +582,52 @@ class CustomerRequisitesRecognitionService:
         await session.commit()
         await session.refresh(recognition)
 
-        duplicate = await cls._find_duplicate(session, extracted.get("inn"))
-        customer_data = await CustomerService.get_for_manager(session=session, customer_id=int(customer.id or 0))
+        duplicate = await cls._find_duplicate(
+            session,
+            extracted.get("inn"),
+            tenant_scope=tenant_scope,
+        )
+        customer_data = await CustomerService.get_for_manager(
+            session=session,
+            customer_id=int(customer.id or 0),
+            tenant_scope=tenant_scope,
+        )
         return {"recognition": cls._recognition_response(recognition, duplicate), "customer": customer_data}
 
     @classmethod
-    async def cancel(cls, session: AsyncSession, *, recognition_id: int) -> dict[str, Any]:
-        recognition = await session.get(CustomerRequisitesRecognition, recognition_id)
+    async def cancel(
+        cls,
+        session: AsyncSession,
+        *,
+        recognition_id: int,
+        tenant_scope: TenantScope,
+    ) -> dict[str, Any]:
+        recognition = (
+            await session.execute(
+                select(CustomerRequisitesRecognition)
+                .where(
+                    CustomerRequisitesRecognition.id == recognition_id,
+                    tenant_or_legacy_owner_scope_clause(
+                        CustomerRequisitesRecognition,
+                        tenant_scope,
+                    ),
+                )
+                .with_for_update()
+            )
+        ).scalars().first()
         if not recognition:
             raise LookupError("Recognition not found")
+        if recognition.tenant_id is None:
+            recognition.tenant_id = tenant_scope.tenant_id
         if recognition.status == cls.STATUS_CONFIRMED:
             raise ValueError("Подтвержденное распознавание нельзя отменить")
         recognition.status = cls.STATUS_CANCELLED
         session.add(recognition)
         await session.commit()
         await session.refresh(recognition)
-        duplicate = await cls._find_duplicate(session, (recognition.extracted_json or {}).get("inn"))
+        duplicate = await cls._find_duplicate(
+            session,
+            (recognition.extracted_json or {}).get("inn"),
+            tenant_scope=tenant_scope,
+        )
         return cls._recognition_response(recognition, duplicate)

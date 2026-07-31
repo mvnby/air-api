@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import Customer, CustomerContract, CustomerType, GlobalConfig, Order
+from models.tenancy import TenantScope
 from services.document_role_service import DocumentRoleService
 from services.google_service import get_google_service
+from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
 
 
 OPEN_SERVICE_CONTRACT_TEMPLATE_ID = "1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI"
@@ -91,8 +93,33 @@ class CustomerContractService:
         }
 
     @staticmethod
-    async def list_for_customer(session: AsyncSession, customer_id: int) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+    async def _get_scoped_customer(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        tenant_scope: TenantScope,
+    ) -> Optional[Customer]:
+        return (
+            await session.execute(
+                select(Customer).where(
+                    Customer.id == customer_id,
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+            )
+        ).scalars().first()
+
+    @staticmethod
+    async def list_for_customer(
+        session: AsyncSession,
+        customer_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
+        customer = await CustomerContractService._get_scoped_customer(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
 
@@ -186,8 +213,13 @@ class CustomerContractService:
         *,
         customer_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+        customer = await CustomerContractService._get_scoped_customer(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
         if customer.type != CustomerType.company:
@@ -235,11 +267,16 @@ class CustomerContractService:
         template_id: Optional[str] = None,
         document_role_type: Optional[str] = None,
         file: "Any",
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         import os
         import tempfile
 
-        customer = await session.get(Customer, customer_id)
+        customer = await CustomerContractService._get_scoped_customer(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
         if customer.type != CustomerType.company:
@@ -302,7 +339,15 @@ class CustomerContractService:
         customer_id: int,
         contract_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
+        customer = await CustomerContractService._get_scoped_customer(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
+        if customer is None:
+            return None
         contract = await session.get(CustomerContract, contract_id)
         if not contract or int(contract.customer_id) != int(customer_id):
             return None
@@ -328,7 +373,6 @@ class CustomerContractService:
             contract.status = status
 
         if contract.google_file_id and any(field in payload for field in {"number", "contract_date", "valid_until", "document_role_type"}):
-            customer = await session.get(Customer, customer_id)
             if customer:
                 get_google_service().replace_placeholders(
                     contract.google_file_id,
@@ -341,17 +385,37 @@ class CustomerContractService:
         return CustomerContractService._to_item(contract)
 
     @staticmethod
-    async def archive_for_customer(session: AsyncSession, *, customer_id: int, contract_id: int) -> Optional[bool]:
+    async def archive_for_customer(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        contract_id: int,
+        tenant_scope: TenantScope,
+    ) -> Optional[bool]:
         data = await CustomerContractService.update_for_customer(
             session=session,
             customer_id=customer_id,
             contract_id=contract_id,
             payload={"status": CustomerContractService.ARCHIVED_STATUS},
+            tenant_scope=tenant_scope,
         )
         return None if data is None else True
 
     @staticmethod
-    async def delete_for_customer(session: AsyncSession, *, customer_id: int, contract_id: int) -> Optional[bool]:
+    async def delete_for_customer(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        contract_id: int,
+        tenant_scope: TenantScope,
+    ) -> Optional[bool]:
+        customer = await CustomerContractService._get_scoped_customer(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
+        if customer is None:
+            return None
         contract = await session.get(CustomerContract, contract_id)
         if not contract or int(contract.customer_id) != int(customer_id):
             return None

@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient
 from core.config import settings
-from models import StaffUser
+from models import StaffUser, TenantMembership
 from services.staff_user_service import StaffUserService
 
 @pytest.mark.asyncio
@@ -23,14 +23,22 @@ async def test_login_success(async_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_login_success_with_staff_user(async_client: AsyncClient, db):
+    staff_user = StaffUser(
+        display_name="Manager",
+        status="active",
+        primary_role="manager",
+        roles=["manager"],
+        username="manager",
+        password_hash=StaffUserService.hash_password("secret123"),
+    )
+    db.add(staff_user)
+    await db.flush()
     db.add(
-        StaffUser(
-            display_name="Manager",
+        TenantMembership(
+            tenant_id=1,
+            staff_user_id=int(staff_user.id),
+            role="manager",
             status="active",
-            primary_role="manager",
-            roles=["manager"],
-            username="manager",
-            password_hash=StaffUserService.hash_password("secret123"),
         )
     )
     await db.commit()
@@ -49,6 +57,9 @@ async def test_login_success_with_staff_user(async_client: AsyncClient, db):
     assert payload["role"] == "manager"
     assert payload["display_name"] == "Manager"
     assert payload["auth_source"] == "staff_password"
+    assert payload["tenant_id"] == 1
+    assert payload["storefront_id"] == 1
+    assert payload["tenant_membership_id"] is not None
 
 @pytest.mark.asyncio
 async def test_login_failure(async_client: AsyncClient):

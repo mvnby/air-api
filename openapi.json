@@ -28795,12 +28795,33 @@
             "type": "string",
             "title": "Auth Source",
             "default": "legacy"
+          },
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "storefront_id": {
+            "type": "integer",
+            "title": "Storefront Id"
+          },
+          "tenant_membership_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Membership Id"
           }
         },
         "type": "object",
         "required": [
           "username",
-          "status"
+          "status",
+          "tenant_id",
+          "storefront_id"
         ],
         "title": "ManagerAuthStatusResponse"
       },

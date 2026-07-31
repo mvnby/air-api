@@ -5,6 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import Customer, CustomerBranch, CustomerType, Order
+from models.tenancy import TenantScope
+from services.tenant_scope_service import (
+    tenant_or_fully_legacy_scope_clause,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 
 class CustomerService:
@@ -63,27 +68,72 @@ class CustomerService:
         }
 
     @staticmethod
-    async def _get_last_delivery_address(session: AsyncSession, customer_id: int) -> Optional[str]:
+    async def _get_customer_entity(
+        session: AsyncSession,
+        *,
+        customer_id: int,
+        tenant_scope: TenantScope,
+        lock: bool = False,
+    ) -> Optional[Customer]:
+        statement = select(Customer).where(
+            Customer.id == customer_id,
+            tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+        )
+        if lock:
+            statement = statement.with_for_update()
+        return (await session.execute(statement)).scalars().first()
+
+    @staticmethod
+    async def _get_last_delivery_address(
+        session: AsyncSession,
+        customer_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[str]:
         last_delivery_result = await session.execute(
             select(Order.delivery_address)
-            .where(Order.customer_id == customer_id, Order.delivery_address.is_not(None))
+            .where(
+                Order.customer_id == customer_id,
+                Order.delivery_address.is_not(None),
+                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            )
             .order_by(Order.created_at.desc())
             .limit(1)
         )
         return last_delivery_result.scalar_one_or_none()
 
     @staticmethod
-    async def get_for_manager(session: AsyncSession, customer_id: int) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+    async def get_for_manager(
+        session: AsyncSession,
+        customer_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
+        customer = await CustomerService._get_customer_entity(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
 
         order_count_result = await session.execute(
-            select(func.count(Order.id)).where(Order.customer_id == customer_id)
+            select(func.count(Order.id)).where(
+                Order.customer_id == customer_id,
+                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            )
         )
         order_count = int(order_count_result.scalar() or 0)
-        last_delivery_address = await CustomerService._get_last_delivery_address(session=session, customer_id=customer_id)
-        branches = await CustomerService.list_branches_for_manager(session=session, customer_id=customer_id)
+        last_delivery_address = await CustomerService._get_last_delivery_address(
+            session=session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
+        branches = await CustomerService.list_branches_for_manager(
+            session=session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
 
         return CustomerService._to_manager_item(
             customer,
@@ -93,8 +143,17 @@ class CustomerService:
         )
 
     @staticmethod
-    async def list_branches_for_manager(session: AsyncSession, customer_id: int) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+    async def list_branches_for_manager(
+        session: AsyncSession,
+        customer_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
+        customer = await CustomerService._get_customer_entity(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
 
@@ -112,8 +171,13 @@ class CustomerService:
         *,
         customer_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+        customer = await CustomerService._get_customer_entity(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
 
@@ -155,8 +219,13 @@ class CustomerService:
         customer_id: int,
         branch_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+        customer = await CustomerService._get_customer_entity(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
 
@@ -197,8 +266,13 @@ class CustomerService:
         *,
         customer_id: int,
         branch_id: int,
+        tenant_scope: TenantScope,
     ) -> Optional[bool]:
-        customer = await session.get(Customer, customer_id)
+        customer = await CustomerService._get_customer_entity(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
         if not customer:
             return None
 
@@ -231,10 +305,18 @@ class CustomerService:
         *,
         customer_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+        customer = await CustomerService._get_customer_entity(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+            lock=True,
+        )
         if not customer:
             return None
+        if customer.tenant_id is None:
+            customer.tenant_id = tenant_scope.tenant_id
 
         defaulted_text_fields = {
             "signer_position": "директора",
@@ -285,20 +367,30 @@ class CustomerService:
         session.add(customer)
         await session.commit()
 
-        return await CustomerService.get_for_manager(session=session, customer_id=customer_id)
+        return await CustomerService.get_for_manager(
+            session=session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def list_for_manager(
         session: AsyncSession,
+        *,
         page: int,
         limit: int,
         search: Optional[str] = None,
         customer_type: Optional[str] = None,
         only_with_orders: bool = True,
         include_archived: bool = False,
+        tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
-        stmt = select(Customer)
-        count_stmt = select(func.count(Customer.id))
+        customer_scope_clause = tenant_or_legacy_owner_scope_clause(
+            Customer,
+            tenant_scope,
+        )
+        stmt = select(Customer).where(customer_scope_clause)
+        count_stmt = select(func.count(Customer.id)).where(customer_scope_clause)
 
         # Hide archived customers unless explicitly requested
         if not include_archived:
@@ -306,7 +398,12 @@ class CustomerService:
             count_stmt = count_stmt.where(Customer.is_archived == False)
 
         if only_with_orders:
-            has_orders_clause = exists(select(Order.id).where(Order.customer_id == Customer.id))
+            has_orders_clause = exists(
+                select(Order.id).where(
+                    Order.customer_id == Customer.id,
+                    tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                )
+            )
             stmt = stmt.where(has_orders_clause)
             count_stmt = count_stmt.where(has_orders_clause)
 
@@ -338,7 +435,10 @@ class CustomerService:
         if customer_ids:
             oc_stmt = (
                 select(Order.customer_id, func.count(Order.id))
-                .where(Order.customer_id.in_(customer_ids))
+                .where(
+                    Order.customer_id.in_(customer_ids),
+                    tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                )
                 .group_by(Order.customer_id)
             )
             oc_result = await session.execute(oc_stmt)
@@ -360,8 +460,18 @@ class CustomerService:
         }
 
     @staticmethod
-    async def delete_for_manager(session: AsyncSession, customer_id: int) -> bool:
-        customer = await session.get(Customer, customer_id)
+    async def delete_for_manager(
+        session: AsyncSession,
+        customer_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> bool:
+        customer = await CustomerService._get_customer_entity(
+            session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+            lock=True,
+        )
         if not customer:
             return False
             

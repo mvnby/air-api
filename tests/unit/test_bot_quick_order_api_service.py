@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from api_contracts.bot import BotQuickOrderDraft
-from models import StaffUser
+from models import StaffUser, TenantMembership
 from services.bot_quick_order_api_service import (
     BotQuickOrderAccessDeniedError,
     BotQuickOrderApiService,
@@ -11,13 +11,21 @@ from services.bot_quick_order_api_service import (
 
 
 async def _add_staff(db, *, telegram_id: int, primary_role: str) -> None:
+    staff_user = StaffUser(
+        display_name=f"Staff {telegram_id}",
+        status="active",
+        roles=[primary_role],
+        primary_role=primary_role,
+        telegram_id=telegram_id,
+    )
+    db.add(staff_user)
+    await db.flush()
     db.add(
-        StaffUser(
-            display_name=f"Staff {telegram_id}",
+        TenantMembership(
+            tenant_id=1,
+            staff_user_id=int(staff_user.id),
+            role=primary_role,
             status="active",
-            roles=[primary_role],
-            primary_role=primary_role,
-            telegram_id=telegram_id,
         )
     )
     await db.commit()

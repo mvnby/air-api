@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.tenancy import Storefront, StorefrontDomain, Tenant
+from models.tenancy import Storefront, StorefrontDomain, Tenant, TenantMembership
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,16 @@ class TenantScopeRow:
 
     tenant_id: int
     storefront_id: int
+    is_system: bool = True
+
+
+@dataclass(frozen=True)
+class ManagerTenantAccessRow:
+    membership_id: int
+    tenant_id: int
+    storefront_id: int
+    role: str
+    is_system: bool
 
 
 class TenancyDAO:
@@ -60,8 +70,46 @@ class TenancyDAO:
             TenantScopeRow(
                 tenant_id=int(tenant.id or 0),
                 storefront_id=int(storefront.id or 0),
+                is_system=bool(tenant.is_system),
             )
             for tenant, storefront in rows
+        ]
+
+    @staticmethod
+    async def list_active_manager_access_candidates(
+        session: AsyncSession,
+        *,
+        staff_user_id: int,
+    ) -> list[ManagerTenantAccessRow]:
+        """Return all active memberships with an active default storefront.
+
+        Selection of one membership is deliberately left to the service layer.
+        Until the Manager UI has an explicit tenant switcher, more than one
+        candidate is ambiguous and must fail closed.
+        """
+        statement = (
+            select(TenantMembership, Tenant, Storefront)
+            .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+            .join(Storefront, Storefront.tenant_id == Tenant.id)
+            .where(
+                TenantMembership.staff_user_id == staff_user_id,
+                TenantMembership.status == "active",
+                Tenant.status == "active",
+                Storefront.status == "active",
+                Storefront.is_default.is_(True),
+            )
+            .order_by(TenantMembership.id.asc(), Storefront.id.asc())
+        )
+        rows = (await session.execute(statement)).all()
+        return [
+            ManagerTenantAccessRow(
+                membership_id=int(membership.id or 0),
+                tenant_id=int(tenant.id or 0),
+                storefront_id=int(storefront.id or 0),
+                role=str(membership.role or "").strip().lower(),
+                is_system=bool(tenant.is_system),
+            )
+            for membership, tenant, storefront in rows
         ]
 
     @staticmethod

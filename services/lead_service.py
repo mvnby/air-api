@@ -24,6 +24,7 @@ from schemas import Meta
 from services.tenant_scope_service import (
     TenantScope,
     tenant_or_fully_legacy_scope_clause,
+    tenant_or_legacy_owner_scope_clause,
 )
 
 
@@ -343,6 +344,8 @@ class LeadService:
         phone: Optional[str],
         email: Optional[str],
         inn: Optional[str],
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[Customer]:
         normalized_email = (email or "").strip().lower()
         normalized_phone = LeadService._normalize_phone_digits(phone)
@@ -358,7 +361,12 @@ class LeadService:
         if not predicates:
             return None
 
-        result = await session.execute(select(Customer).where(or_(*predicates)))
+        result = await session.execute(
+            select(Customer).where(
+                or_(*predicates),
+                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            )
+        )
         customers = result.scalars().all()
         if not customers:
             return None
@@ -435,11 +443,27 @@ class LeadService:
         selected_customer_id = getattr(payload, "customer_id", None)
         selected_customer_branch_id = getattr(payload, "customer_branch_id", None)
         if selected_customer_id:
-            customer = await session.get(Customer, int(selected_customer_id))
+            customer = (
+                await session.execute(
+                    select(Customer).where(
+                        Customer.id == int(selected_customer_id),
+                        tenant_or_legacy_owner_scope_clause(
+                            Customer,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalars().first()
             if not customer:
                 raise ValueError("Selected customer not found")
         else:
-            customer = await LeadService._find_existing_customer(session, phone=phone, email=email, inn=inn)
+            customer = await LeadService._find_existing_customer(
+                session,
+                phone=phone,
+                email=email,
+                inn=inn,
+                tenant_scope=tenant_scope,
+            )
 
         if payload.customer_type:
             customer_type = CustomerType(payload.customer_type)
@@ -453,6 +477,7 @@ class LeadService:
 
         if customer is None:
             customer = Customer(
+                tenant_id=tenant_scope.tenant_id,
                 name=customer_name,
                 phone=customer_phone,
                 email=email,
@@ -467,6 +492,8 @@ class LeadService:
             session.add(customer)
             await session.flush()
         else:
+            if customer.tenant_id is None:
+                customer.tenant_id = tenant_scope.tenant_id
             customer.name = customer_name
             if phone:
                 customer.phone = phone

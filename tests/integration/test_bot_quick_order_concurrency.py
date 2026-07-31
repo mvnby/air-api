@@ -14,9 +14,11 @@ from models import (
     Order,
     OrderWorkStage,
     StaffUser,
+    TenantMembership,
 )
 from services.bot_customer_requisites_api_service import BotCustomerRequisitesApiService
 from services.bot_quick_order_api_service import BotQuickOrderApiService
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 
 @pytest.mark.asyncio
@@ -31,16 +33,26 @@ async def test_postgres_bot_order_and_customer_mutations_are_concurrently_idempo
         expire_on_commit=False,
     )
     async with session_factory() as setup_session:
+        tenant_scope = await SystemTenantScopeResolver.resolve(setup_session)
+        staff_user = StaffUser(
+            display_name="Concurrency manager",
+            status="active",
+            roles=["manager"],
+            primary_role="manager",
+            telegram_id=987650001,
+        )
+        setup_session.add(staff_user)
+        await setup_session.flush()
         setup_session.add(
-            StaffUser(
-                display_name="Concurrency manager",
+            TenantMembership(
+                tenant_id=tenant_scope.tenant_id,
+                staff_user_id=int(staff_user.id),
+                role="manager",
                 status="active",
-                roles=["manager"],
-                primary_role="manager",
-                telegram_id=987650001,
             )
         )
         recognition = CustomerRequisitesRecognition(
+            tenant_id=tenant_scope.tenant_id,
             source="telegram_text",
             status="recognized",
             telegram_user_id=987650001,
@@ -100,6 +112,7 @@ async def test_postgres_bot_order_and_customer_mutations_are_concurrently_idempo
                 telegram_id=987650001,
                 recognition_id=int(recognition.id),
                 action="create",
+                tenant_scope=tenant_scope,
             )
 
     action_results = await asyncio.gather(*(confirm_customer_once() for _ in range(12)))

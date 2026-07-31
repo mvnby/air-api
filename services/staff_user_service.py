@@ -11,8 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func, or_
 
 from core.config import settings
-from models import Installer, StaffUser
+from models import Installer, StaffUser, TenantMembership
+from models.tenancy import TenantScope
 from schemas import ManagerStaffCreatePayload, ManagerStaffUpdatePayload, ManagerStaffResponse, ManagerStaffListResponse, Meta
+from services.staff_tenant_membership_service import (
+    StaffTenantMembershipService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,12 +164,25 @@ class StaffUserService:
             return False
 
     @classmethod
-    def _response(cls, user: StaffUser) -> ManagerStaffResponse:
+    def _response(
+        cls,
+        user: StaffUser,
+        *,
+        membership: TenantMembership | None = None,
+    ) -> ManagerStaffResponse:
         return ManagerStaffResponse(
             id=int(user.id or 0),
             display_name=user.display_name,
-            status=cls.normalize_status(user.status),
-            primary_role=cls.primary_role(user),
+            status=(
+                StaffTenantMembershipService.staff_status(membership.status)
+                if membership is not None
+                else cls.normalize_status(user.status)
+            ),
+            primary_role=(
+                cls.normalize_primary_role(membership.role)
+                if membership is not None
+                else cls.primary_role(user)
+            ),
             username=user.username,
             has_password=bool(user.password_hash),
             phone=user.phone,
@@ -277,8 +294,17 @@ class StaffUserService:
         page: int = 1,
         limit: int = 100,
         search: Optional[str] = None,
+        *,
+        tenant_scope: TenantScope,
     ) -> ManagerStaffListResponse:
-        stmt = select(StaffUser)
+        stmt = (
+            select(StaffUser, TenantMembership)
+            .join(
+                TenantMembership,
+                TenantMembership.staff_user_id == StaffUser.id,
+            )
+            .where(TenantMembership.tenant_id == tenant_scope.tenant_id)
+        )
         if search:
             query = f"%{search.strip().lower()}%"
             stmt = stmt.where(
@@ -298,7 +324,10 @@ class StaffUserService:
         result = await session.execute(
             stmt.order_by(StaffUser.display_name.asc()).offset((page - 1) * limit).limit(limit)
         )
-        items = [cls._response(user) for user in result.scalars().all()]
+        items = [
+            cls._response(user, membership=membership)
+            for user, membership in result.all()
+        ]
         pages = (total + limit - 1) // limit if total > 0 else 1
         return ManagerStaffListResponse(items=items, meta=Meta(total=total, page=page, limit=limit, pages=pages))
 
@@ -307,6 +336,8 @@ class StaffUserService:
         cls,
         session: AsyncSession,
         payload: ManagerStaffCreatePayload,
+        *,
+        tenant_scope: TenantScope,
     ) -> ManagerStaffResponse:
         username = cls.normalize_username(payload.username)
         primary_role = cls.normalize_primary_role(payload.primary_role)
@@ -329,10 +360,20 @@ class StaffUserService:
         )
         session.add(staff_user)
         await session.flush()
+        membership = TenantMembership(
+            tenant_id=tenant_scope.tenant_id,
+            staff_user_id=int(staff_user.id or 0),
+            role=primary_role,
+            status=StaffTenantMembershipService.membership_status(
+                staff_user.status
+            ),
+        )
+        session.add(membership)
         await cls._sync_installer_link(session, staff_user, assignable)
         await session.commit()
         await session.refresh(staff_user)
-        return cls._response(staff_user)
+        await session.refresh(membership)
+        return cls._response(staff_user, membership=membership)
 
     @classmethod
     async def update_staff(
@@ -340,12 +381,39 @@ class StaffUserService:
         session: AsyncSession,
         staff_user_id: int,
         payload: ManagerStaffUpdatePayload,
+        *,
+        tenant_scope: TenantScope,
     ) -> ManagerStaffResponse | None:
-        staff_user = await cls.get_by_id(session, staff_user_id)
-        if staff_user is None:
+        row = (
+            await session.execute(
+                select(StaffUser, TenantMembership)
+                .join(
+                    TenantMembership,
+                    TenantMembership.staff_user_id == StaffUser.id,
+                )
+                .where(
+                    StaffUser.id == staff_user_id,
+                    TenantMembership.tenant_id == tenant_scope.tenant_id,
+                )
+                .with_for_update()
+            )
+        ).first()
+        if row is None:
             return None
+        staff_user, membership = row
 
-        changed_fields = payload.model_fields_set
+        changed_fields = set(payload.model_fields_set)
+        memberships = await StaffTenantMembershipService.list_for_staff(
+            session,
+            staff_user_id=staff_user_id,
+            lock=True,
+        )
+        StaffTenantMembershipService.validate_shared_identity_update(
+            changed_fields=changed_fields,
+            membership_count=len(memberships),
+            is_system_tenant=tenant_scope.is_system,
+        )
+        sync_global_profile = tenant_scope.is_system or len(memberships) == 1
 
         if "display_name" in changed_fields and payload.display_name is not None:
             display_name = payload.display_name.strip()
@@ -353,9 +421,20 @@ class StaffUserService:
                 raise ValueError("Имя сотрудника обязательно")
             staff_user.display_name = display_name
         if "status" in changed_fields:
-            staff_user.status = cls.normalize_status(payload.status)
+            membership.status = StaffTenantMembershipService.membership_status(
+                payload.status
+            )
+            StaffTenantMembershipService.touch(membership)
+            staff_user.status = (
+                StaffTenantMembershipService.aggregate_staff_status(
+                    memberships
+                )
+            )
         if "primary_role" in changed_fields:
-            staff_user.primary_role = cls.normalize_primary_role(payload.primary_role)
+            membership.role = cls.normalize_primary_role(payload.primary_role)
+            StaffTenantMembershipService.touch(membership)
+            if sync_global_profile:
+                staff_user.primary_role = membership.role
         else:
             staff_user.primary_role = cls.primary_role(staff_user)
         if "username" in changed_fields:
@@ -378,13 +457,20 @@ class StaffUserService:
             if "is_assignable_installer" in changed_fields
             else staff_user.legacy_installer_id is not None
         )
-        staff_user.roles = cls.roles_for_primary(staff_user.primary_role, assignable_as_installer=assignable)
+        if sync_global_profile:
+            staff_user.roles = cls.roles_for_primary(
+                staff_user.primary_role,
+                assignable_as_installer=assignable,
+            )
         session.add(staff_user)
+        session.add(membership)
         await session.flush()
-        await cls._sync_installer_link(session, staff_user, assignable)
+        if sync_global_profile:
+            await cls._sync_installer_link(session, staff_user, assignable)
         await session.commit()
         await session.refresh(staff_user)
-        return cls._response(staff_user)
+        await session.refresh(membership)
+        return cls._response(staff_user, membership=membership)
 
     @classmethod
     async def _sync_installer_link(
@@ -536,6 +622,8 @@ class StaffUserService:
         cls,
         session: AsyncSession,
         installer: Installer,
+        *,
+        tenant_scope: TenantScope | None = None,
     ) -> StaffUser:
         if installer.id is None:
             await session.flush()
@@ -553,6 +641,16 @@ class StaffUserService:
             )
             session.add(staff_user)
             await session.flush()
+            if tenant_scope is not None:
+                await StaffTenantMembershipService.ensure(
+                    session,
+                    tenant_id=tenant_scope.tenant_id,
+                    staff_user_id=int(staff_user.id or 0),
+                    role=cls.ROLE_INSTALLER,
+                    status=StaffTenantMembershipService.membership_status(
+                        staff_user.status
+                    ),
+                )
             return staff_user
 
         staff_user.display_name = installer.name
@@ -565,6 +663,16 @@ class StaffUserService:
         staff_user.roles = roles
         session.add(staff_user)
         await session.flush()
+        if tenant_scope is not None:
+            await StaffTenantMembershipService.ensure(
+                session,
+                tenant_id=tenant_scope.tenant_id,
+                staff_user_id=int(staff_user.id or 0),
+                role=cls.primary_role(staff_user),
+                status=StaffTenantMembershipService.membership_status(
+                    staff_user.status
+                ),
+            )
         return staff_user
 
     @classmethod

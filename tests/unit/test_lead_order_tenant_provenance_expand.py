@@ -14,7 +14,8 @@ import models  # noqa: F401 - registers SQLModel tables for metadata assertions
 
 
 REVISION = "f6b2a4d8e1c3"
-HEAD_REVISION = "a7c8d9e0f1b2"
+PROVENANCE_BOUNDARY_REVISION = "a7c8d9e0f1b2"
+HEAD_REVISION = "b8d9e0f1a2c3"
 MIGRATION_PATH = Path("alembic/versions/f6b2a4d8e1c3_add_lead_order_tenant_provenance_expand.py")
 
 
@@ -75,7 +76,14 @@ def test_lead_order_tenant_provenance_expand_is_in_single_head_chain():
     assert heads == [HEAD_REVISION]
     assert revision is not None
     assert revision.down_revision == "e9a1b2c3d4e5"
-    assert script.get_revision(HEAD_REVISION).down_revision == REVISION
+    assert (
+        script.get_revision(HEAD_REVISION).down_revision
+        == PROVENANCE_BOUNDARY_REVISION
+    )
+    assert (
+        script.get_revision(PROVENANCE_BOUNDARY_REVISION).down_revision
+        == REVISION
+    )
 
 
 def test_lead_order_tenant_provenance_expand_is_nullable_and_reversible_on_sqlite():

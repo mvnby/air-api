@@ -8,7 +8,16 @@ from .common import CustomerType, DocumentRoleType, LeadIntakeSource, LeadLossRe
 
 
 class Customer(SQLModel, table=True):
+    __table_args__ = (
+        Index("ix_customer_tenant_created_at", "tenant_id", "created_at"),
+        Index("ix_customer_tenant_phone", "tenant_id", "phone"),
+        Index("ix_customer_tenant_inn", "tenant_id", "inn"),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Expand phase: nullable until the controlled MVN backfill is complete.
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
 
     name: str = Field(index=True)
     phone: str = Field(index=True)
@@ -128,9 +137,18 @@ class CustomerRequisitesRecognition(SQLModel, table=True):
                 "AND telegram_message_id IS NOT NULL"
             ),
         ),
+        Index(
+            "ix_customer_requisites_tenant_created_at",
+            "tenant_id",
+            "created_at",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Recognition payloads contain customer PII and share the same tenant
+    # boundary as the Customer they may create or update.
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
 
     source: str = Field(default="manager", index=True)
     status: str = Field(default="recognized", index=True)

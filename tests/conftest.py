@@ -181,7 +181,7 @@ async def db(db_engine):
 def tenant_scope():
     from services.tenant_scope_service import TenantScope
 
-    return TenantScope(tenant_id=1, storefront_id=1)
+    return TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
 @pytest.fixture(scope="function")
 async def async_client(db):

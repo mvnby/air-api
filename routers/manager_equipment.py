@@ -6,8 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND, EQUIPMENT_NOT_FOUND
-from core.security import get_current_username
-from core.tenant_scope import get_system_tenant_scope
+from core.security import get_current_manager_tenant_scope, get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_EQUIPMENT_COMPONENT,
     CREATE_MANAGER_EQUIPMENT,
@@ -153,7 +152,7 @@ async def create_manager_maintenance_order(
     equipment_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.create_maintenance_order(

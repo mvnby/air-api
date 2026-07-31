@@ -5,8 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, DOCUMENT_GENERATION_FAILED, ORDER_DOCUMENTS_LOCKED, ORDER_NOT_FOUND
-from core.security import get_current_username
-from core.tenant_scope import get_system_tenant_scope
+from core.security import get_current_manager_tenant_scope, get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_ORDER,
     CREATE_MANAGER_ORDER_PROPOSAL,
@@ -59,7 +58,7 @@ async def create_manager_order(
     payload: ManagerOrderCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await OrderService.create_manager_order(
@@ -154,9 +153,14 @@ async def preview_import_manager_orders(
     payload: ManagerOrderImportPreviewRequest,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderTransferService.preview_import(session, payload)
+        return await OrderTransferService.preview_import(
+            session,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -175,7 +179,7 @@ async def import_manager_orders(
     payload: ManagerOrderImportCommitRequest,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await OrderTransferService.import_orders(

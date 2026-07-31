@@ -14,6 +14,7 @@ from services.customer_service import CustomerService
 from services.product_service import ProductService
 from services.product_manager_service import ProductManagerService
 from sqlalchemy.ext.asyncio import AsyncSession
+from models.tenancy import TenantScope
 
 
 class ManagerCatalogService:
@@ -73,6 +74,7 @@ class ManagerCatalogService:
         search: Optional[str],
         customer_type: Optional[str],
         only_with_orders: bool,
+        tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
         return await CustomerService.list_for_manager(
             session=session,
@@ -81,6 +83,7 @@ class ManagerCatalogService:
             search=search,
             customer_type=customer_type,
             only_with_orders=only_with_orders,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -88,8 +91,13 @@ class ManagerCatalogService:
         session: AsyncSession,
         *,
         customer_id: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        return await CustomerService.get_for_manager(session=session, customer_id=customer_id)
+        return await CustomerService.get_for_manager(
+            session=session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def update_customer(
@@ -97,12 +105,14 @@ class ManagerCatalogService:
         *,
         customer_id: int,
         payload: ManagerCustomerUpdatePayload,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         update_data = payload.model_dump(exclude_unset=True)
         return await CustomerService.update_for_manager(
             session=session,
             customer_id=customer_id,
             payload=update_data,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -110,8 +120,13 @@ class ManagerCatalogService:
         session: AsyncSession,
         *,
         customer_id: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        return await CustomerService.list_branches_for_manager(session=session, customer_id=customer_id)
+        return await CustomerService.list_branches_for_manager(
+            session=session,
+            customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def create_customer_branch(
@@ -119,11 +134,13 @@ class ManagerCatalogService:
         *,
         customer_id: int,
         payload: ManagerCustomerBranchCreatePayload,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         return await CustomerService.create_branch_for_manager(
             session=session,
             customer_id=customer_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -133,12 +150,14 @@ class ManagerCatalogService:
         customer_id: int,
         branch_id: int,
         payload: ManagerCustomerBranchUpdatePayload,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         return await CustomerService.update_branch_for_manager(
             session=session,
             customer_id=customer_id,
             branch_id=branch_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -147,11 +166,13 @@ class ManagerCatalogService:
         *,
         customer_id: int,
         branch_id: int,
+        tenant_scope: TenantScope,
     ) -> Optional[bool]:
         return await CustomerService.delete_branch_for_manager(
             session=session,
             customer_id=customer_id,
             branch_id=branch_id,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod

@@ -1653,6 +1653,9 @@ class ManagerAuthStatusResponse(BaseModel):
     role: Optional[str] = None
     display_name: Optional[str] = None
     auth_source: str = "legacy"
+    tenant_id: int
+    storefront_id: int
+    tenant_membership_id: Optional[int] = None
 
 
 class ManagerCatalogProductImageResponse(BaseModel):

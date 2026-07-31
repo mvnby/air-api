@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     ARCHIVE_MANAGER_CUSTOMER_CONTRACT,
     CREATE_MANAGER_CUSTOMER_CONTRACT,
@@ -35,10 +36,14 @@ router = APIRouter(prefix="/api/manager/customers", tags=["manager-contracts"])
 )
 async def get_manager_customer_contracts(
     customer_id: int,
-    _: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
-    data = await CustomerContractService.list_for_customer(session, customer_id)
+    data = await CustomerContractService.list_for_customer(
+        session,
+        customer_id,
+        tenant_scope=tenant_scope,
+    )
     if data is None:
         raise manager_http_error(
             status_code=404,
@@ -56,7 +61,7 @@ async def get_manager_customer_contracts(
 async def create_manager_customer_contract(
     customer_id: int,
     payload: ManagerCustomerContractCreatePayload,
-    _: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -64,6 +69,7 @@ async def create_manager_customer_contract(
             session,
             customer_id=customer_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -94,7 +100,7 @@ async def upload_manager_customer_contract(
     template_id: str | None = Form(None),
     document_role_type: str | None = Form(None),
     file: UploadFile = File(...),
-    _: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -107,6 +113,7 @@ async def upload_manager_customer_contract(
             template_id=template_id,
             document_role_type=document_role_type,
             file=file,
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -133,7 +140,7 @@ async def patch_manager_customer_contract(
     customer_id: int,
     contract_id: int,
     payload: ManagerCustomerContractUpdatePayload,
-    _: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -142,6 +149,7 @@ async def patch_manager_customer_contract(
             customer_id=customer_id,
             contract_id=contract_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -167,13 +175,14 @@ async def patch_manager_customer_contract(
 async def archive_manager_customer_contract(
     customer_id: int,
     contract_id: int,
-    _: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     ok = await CustomerContractService.archive_for_customer(
         session,
         customer_id=customer_id,
         contract_id=contract_id,
+        tenant_scope=tenant_scope,
     )
     if ok is None:
         raise manager_http_error(
@@ -192,13 +201,14 @@ async def archive_manager_customer_contract(
 async def delete_manager_customer_contract(
     customer_id: int,
     contract_id: int,
-    _: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     ok = await CustomerContractService.delete_for_customer(
         session,
         customer_id=customer_id,
         contract_id=contract_id,
+        tenant_scope=tenant_scope,
     )
     if ok is None:
         raise manager_http_error(

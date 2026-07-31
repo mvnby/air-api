@@ -48,7 +48,10 @@ from schemas import (
     ManagerOrderTransferWorkStage,
 )
 from services.order_service import OrderService
-from services.tenant_scope_service import TenantScope
+from services.tenant_scope_service import (
+    TenantScope,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 
 @dataclass
@@ -311,27 +314,53 @@ class OrderTransferService:
         )
 
     @staticmethod
-    async def _find_customer(session: AsyncSession, customer_data: Optional[ManagerOrderTransferCustomer]) -> tuple[Optional[Customer], str]:
+    async def _find_customer(
+        session: AsyncSession,
+        customer_data: Optional[ManagerOrderTransferCustomer],
+        *,
+        tenant_scope: TenantScope,
+    ) -> tuple[Optional[Customer], str]:
         if not customer_data:
             return None, "no_customer"
 
         inn = OrderTransferService._optional_clean(customer_data.inn)
         if inn:
-            result = await session.execute(select(Customer).where(Customer.inn == inn).limit(1))
+            result = await session.execute(
+                select(Customer)
+                .where(
+                    Customer.inn == inn,
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+                .limit(1)
+            )
             customer = result.scalars().first()
             if customer:
                 return customer, "matched_by_inn"
 
         phone = OrderTransferService._optional_clean(customer_data.phone)
         if phone:
-            result = await session.execute(select(Customer).where(Customer.phone == phone).limit(1))
+            result = await session.execute(
+                select(Customer)
+                .where(
+                    Customer.phone == phone,
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+                .limit(1)
+            )
             customer = result.scalars().first()
             if customer:
                 return customer, "matched_by_phone"
 
         email = OrderTransferService._optional_clean(customer_data.email)
         if email:
-            result = await session.execute(select(Customer).where(func.lower(Customer.email) == email.lower()).limit(1))
+            result = await session.execute(
+                select(Customer)
+                .where(
+                    func.lower(Customer.email) == email.lower(),
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+                .limit(1)
+            )
             customer = result.scalars().first()
             if customer:
                 return customer, "matched_by_email"
@@ -389,6 +418,8 @@ class OrderTransferService:
     async def preview_import(
         session: AsyncSession,
         payload: ManagerOrderImportPreviewRequest,
+        *,
+        tenant_scope: TenantScope,
     ) -> ManagerOrderImportPreviewResponse:
         package = payload.package
         warnings: list[str] = []
@@ -401,7 +432,11 @@ class OrderTransferService:
         products_matched = 0
 
         for order_data in package.orders:
-            customer, reason = await OrderTransferService._find_customer(session, order_data.customer)
+            customer, reason = await OrderTransferService._find_customer(
+                session,
+                order_data.customer,
+                tenant_scope=tenant_scope,
+            )
             customer_matches.append(
                 {
                     "source_order_id": order_data.source_id,
@@ -450,12 +485,21 @@ class OrderTransferService:
     async def _get_or_create_customer(
         session: AsyncSession,
         customer_data: Optional[ManagerOrderTransferCustomer],
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[Customer]:
-        customer, _ = await OrderTransferService._find_customer(session, customer_data)
+        customer, _ = await OrderTransferService._find_customer(
+            session,
+            customer_data,
+            tenant_scope=tenant_scope,
+        )
         if customer or not customer_data:
+            if customer and customer.tenant_id is None:
+                customer.tenant_id = tenant_scope.tenant_id
             return customer
 
         customer = Customer(
+            tenant_id=tenant_scope.tenant_id,
             name=customer_data.name or "Без имени",
             phone=customer_data.phone or "",
             email=customer_data.email,
@@ -535,6 +579,7 @@ class OrderTransferService:
         preview = await OrderTransferService.preview_import(
             session,
             ManagerOrderImportPreviewRequest(package=payload.package),
+            tenant_scope=tenant_scope,
         )
         if not preview.can_import:
             raise ValueError("Import preview has unresolved products")
@@ -544,7 +589,11 @@ class OrderTransferService:
         skipped_payments = 0
 
         for order_data in payload.package.orders:
-            customer = await OrderTransferService._get_or_create_customer(session, order_data.customer)
+            customer = await OrderTransferService._get_or_create_customer(
+                session,
+                order_data.customer,
+                tenant_scope=tenant_scope,
+            )
             branch = await OrderTransferService._get_or_create_branch(session, customer, order_data.customer_branch)
             order = Order(
                 tenant_id=tenant_scope.tenant_id,
