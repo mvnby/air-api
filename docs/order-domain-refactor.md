@@ -82,16 +82,23 @@ domain at a time and verify generated client output after every move.
 
 Split `OrderEditDrawer.vue` along user-visible responsibilities:
 
-- customer/object context;
-- proposal and commercial lines;
-- execution planning and installers;
-- repair workflow;
-- payments and bank receipts;
-- documents, mail and attachments.
+- [x] customer/object context;
+- [x] proposal and commercial lines;
+- [x] execution planning and installers;
+- [x] repair workflow;
+- [x] payments and bank receipts;
+- [x] documents, mail and attachments.
 
 Shared network/draft state belongs in typed composables. The drawer remains the
 orchestrator and should not duplicate section state. Every extraction requires
 component tests plus a production build.
+
+Completed result: `OrderEditDrawer.vue` is 640 lines (down from about 4,200).
+Commercial search and estimates, proposal lifecycle, form validation, draft
+persistence, document status, navigation and destructive actions now have
+separate typed composables. User-visible workspaces have focused component
+tests; the full Manager component suite, UI logic audit, TypeScript check and
+production build pass.
 
 ## Stop condition
 
