@@ -86,7 +86,9 @@ Execute only the `reviewed_execute_command` printed by that dry-run. The
 command includes the resolved tenant/storefront IDs and plan token. Execute
 rebuilds the plan under a transaction-scoped advisory lock, rejects a stale
 token or any provenance anomaly, locks the selected rows and commits Lead and
-Order updates together.
+Order updates together. The technical update preserves each row's existing
+`updated_at`; provenance backfill must not change business recency, sorting or
+archival behavior.
 
 After the canary, repeat dry-run/execute with a larger bounded batch:
 

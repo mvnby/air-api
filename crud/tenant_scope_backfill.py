@@ -180,6 +180,10 @@ class TenantScopeBackfillDAO:
             .values(
                 tenant_id=tenant_scope.tenant_id,
                 storefront_id=tenant_scope.storefront_id,
+                # Both models define a Python ``onupdate`` value. This explicit
+                # self-assignment prevents a technical provenance backfill from
+                # changing business recency, sorting or archival semantics.
+                updated_at=entity.updated_at,
             )
             .returning(entity.id)
         )
