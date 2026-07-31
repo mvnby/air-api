@@ -3,7 +3,6 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
 import DealExecutionTab from './DealExecutionTab.vue';
-import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
@@ -18,6 +17,7 @@ import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
 import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
 import OrderExecutionPanel from './OrderExecutionPanel.vue';
+import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
@@ -208,7 +208,7 @@ const showEstimateImport = ref(false);
 const payments = ref<PaymentResponse[]>([]);
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
-const documentsPanelRef = ref<InstanceType<typeof OrderDocumentsPanel> | null>(null);
+const documentsWorkspaceRef = ref<InstanceType<typeof OrderDocumentsWorkspace> | null>(null);
 const proposalToolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const executionWorkspaceOpen = ref(false);
 const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
@@ -525,27 +525,13 @@ const toggleHold = async () => {
     }
 };
 
-const isCompanyOrder = computed(() => props.order?.customer?.type === 'company' || !!props.order?.customer?.inn);
 const orderDocuments = computed(() => props.order?.documents || []);
-const hasOrderContract = computed(() => orderDocuments.value.some((doc) => doc.doc_type === 'contract'));
-const hasContract = computed(() => (isCompanyOrder.value ? !!props.order?.customer_contract_id : false) || hasOrderContract.value);
-const hasOrderInvoice = computed(() => orderDocuments.value.some((doc) => doc.doc_type === 'invoice'));
-const hasClosingBaseDocument = computed(() => hasContract.value || hasOrderInvoice.value);
 const isRepairWorkflow = computed(() => workflowType.value === 'repair');
 const showProductLinesSection = computed(() => workflowType.value === 'sales_installation');
 const buildRepairMetaPayload = () => normalizeRepairMeta(
   repairMeta.value,
   { defaultRepairStatus: isRepairWorkflow.value },
 );
-const documentSectionSummary = computed(() => {
-  const count = orderDocuments.value.length;
-  if (!count) return 'Документов нет';
-  const mod100 = count % 100;
-  const mod10 = count % 10;
-  const noun = mod100 >= 11 && mod100 <= 14 ? 'документов' : mod10 === 1 ? 'документ' : mod10 >= 2 && mod10 <= 4 ? 'документа' : 'документов';
-  return `${count} ${noun}${hasContract.value ? '' : ' · договор не создан'}`;
-});
-const documentSectionHasError = computed(() => isCompanyOrder.value && !props.order?.customer_contract_id && !hasClosingBaseDocument.value);
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
   let mutated = false;
@@ -1352,9 +1338,9 @@ const openProposalSend = async () => {
     document.doc_type === 'offer'
     && (!document.proposal_id || document.proposal_id === proposal.id)
   ));
-  if (offerExists) documentsPanelRef.value?.openSend();
+  if (offerExists) documentsWorkspaceRef.value?.openSend();
   else {
-    documentsPanelRef.value?.openCreate();
+    documentsWorkspaceRef.value?.openCreate();
     setToast('Сначала создайте коммерческое предложение для активного варианта', 'error');
   }
   document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1364,7 +1350,7 @@ const openDocumentsSend = async () => {
   expandedDrawerSections.value.documents = true;
   activeWorkspaceTarget.value = 'documents';
   await nextTick();
-  documentsPanelRef.value?.openSend();
+  documentsWorkspaceRef.value?.openSend();
   document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
@@ -2135,49 +2121,18 @@ watch(
       </div>
       </OrderDrawerSection>
 
-      <!-- Экшн-зона (Proposal & Docs) -->
-      <OrderDrawerSection
+      <OrderDocumentsWorkspace
         v-if="order"
-        id="order-workspace-documents"
+        ref="documentsWorkspaceRef"
         v-model:expanded="expandedDrawerSections.documents"
-        title="Документы"
-        :summary="documentSectionSummary"
-        tone="amber"
-        :has-error="documentSectionHasError"
-      >
-        <div v-if="status === 'negotiation'" class="mb-6">
-          <div class="flex flex-wrap gap-2">
-            <!-- B2C Action -->
-            <a
-              v-if="customer?.type === 'individual'"
-              :href="`https://wa.me/${(customer?.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Здравствуйте, ${customer?.name}! Расчет по вашему заказу: Итого к оплате ${formatMoney(totalPreview)}. Подтверждаем?`)}`"
-              target="_blank"
-              class="flex items-center gap-1 rounded-xl bg-[#25D366] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#20BE5A]"
-            >
-              <span class="material-icons-round text-[18px]">chat</span> Отправить в WhatsApp
-            </a>
-            <a
-              v-if="customer?.type === 'individual'"
-              :href="`viber://chat?number=%2B${(customer?.phone || '').replace(/\D/g, '')}`"
-              target="_blank"
-              class="flex items-center gap-1 rounded-xl bg-[#7360f2] px-4 py-2 text-sm font-medium text-white shadow hover:bg-[#5e4cd1]"
-            >
-              <span class="material-icons-round text-[18px]">chat</span> Viber
-            </a>
-          </div>
-        </div>
-
-        <OrderDocumentsPanel
-          v-if="order"
-          ref="documentsPanelRef"
-          :order="order"
-          :active-proposal-id="activeProposalId"
-          :product-lines="productLines"
-          :before-generate="beforeDocumentGenerate"
-          @refresh="refreshOrderFromDocumentsPanel"
-          @toast="handleDocumentPanelToast"
-        />
-      </OrderDrawerSection>
+        :order="order"
+        :active-proposal-id="activeProposalId"
+        :product-lines="productLines"
+        :total="totalPreview"
+        :before-generate="beforeDocumentGenerate"
+        @refresh="refreshOrderFromDocumentsPanel"
+        @toast="handleDocumentPanelToast"
+      />
 
 
       <OrderExecutionPanel
