@@ -11,6 +11,8 @@ from services.order_service import OrderService
 
 def test_order_calculate_totals_handles_mixed_currency_payments():
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         target_currency=PaymentCurrency.USD,
         target_currency_amount=1000,
     )

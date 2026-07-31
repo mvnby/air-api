@@ -10,7 +10,7 @@ from models import Customer, CustomerContract, CustomerType, GlobalConfig, Order
 from models.tenancy import TenantScope
 from services.document_role_service import DocumentRoleService
 from services.google_service import get_google_service
-from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 OPEN_SERVICE_CONTRACT_TEMPLATE_ID = "1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI"
@@ -103,7 +103,7 @@ class CustomerContractService:
             await session.execute(
                 select(Customer).where(
                     Customer.id == customer_id,
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
             )
         ).scalars().first()

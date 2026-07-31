@@ -6,15 +6,15 @@ from services.customer_service import CustomerService
 
 @pytest.mark.asyncio
 async def test_list_for_manager_defaults_to_only_with_orders(db, tenant_scope):
-    customer_with_order = Customer(name="With Order", phone="+375291000001", type=CustomerType.individual)
-    customer_without_order = Customer(name="No Order", phone="+375291000002", type=CustomerType.individual)
+    customer_with_order = Customer(tenant_id=1, name="With Order", phone="+375291000001", type=CustomerType.individual)
+    customer_without_order = Customer(tenant_id=1, name="No Order", phone="+375291000002", type=CustomerType.individual)
     db.add(customer_with_order)
     db.add(customer_without_order)
     await db.commit()
     await db.refresh(customer_with_order)
     await db.refresh(customer_without_order)
 
-    db.add(Order(customer_id=customer_with_order.id, status=OrderStatus.NEW_LEAD))
+    db.add(Order(tenant_id=1, storefront_id=1, customer_id=customer_with_order.id, status=OrderStatus.NEW_LEAD))
     await db.commit()
 
     result_default = await CustomerService.list_for_manager(

@@ -23,7 +23,7 @@ from services.order_service import OrderService
 from services.staff_user_service import StaffUserService
 from services.tenant_scope_service import (
     TenantScope,
-    storefront_or_fully_legacy_scope_clause,
+    storefront_scope_clause,
 )
 
 logger = logging.getLogger(__name__)
@@ -217,7 +217,7 @@ class WebsiteLeadService:
             .where(
                 Order.lead_source == LeadSource.SITE,
                 Order.created_at >= cutoff,
-                storefront_or_fully_legacy_scope_clause(Order, tenant_scope),
+                storefront_scope_clause(Order, tenant_scope),
             )
             .order_by(Order.created_at.desc())
         )

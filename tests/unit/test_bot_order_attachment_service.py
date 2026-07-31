@@ -74,10 +74,10 @@ async def sqlite_order_attachment_session(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_stores_file_id_in_order_meta_and_comment(sqlite_order_attachment_session):
-    customer = Customer(name="Иван", phone="+375291234567")
+    customer = Customer(tenant_id=1, name="Иван", phone="+375291234567")
     sqlite_order_attachment_session.add(customer)
     await sqlite_order_attachment_session.flush()
-    order = Order(customer_id=customer.id, title="Монтаж", comment="Исходный комментарий")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, title="Монтаж", comment="Исходный комментарий")
     sqlite_order_attachment_session.add(order)
     await sqlite_order_attachment_session.commit()
 
@@ -125,7 +125,7 @@ async def test_stores_attachment_content_in_private_history(
         "services.service_attachment_service.get_private_attachment_storage",
         lambda: fake_storage,
     )
-    order = Order(id=121, title="Монтаж")
+    order = Order(tenant_id=1, storefront_id=1, id=121, title="Монтаж")
     sqlite_order_attachment_session.add(order)
     await sqlite_order_attachment_session.commit()
 
@@ -163,7 +163,7 @@ async def test_stores_attachment_content_in_private_history(
 
 @pytest.mark.asyncio
 async def test_does_not_duplicate_same_file(sqlite_order_attachment_session):
-    order = Order(title="Монтаж")
+    order = Order(tenant_id=1, storefront_id=1, title="Монтаж")
     sqlite_order_attachment_session.add(order)
     await sqlite_order_attachment_session.commit()
 
@@ -197,6 +197,8 @@ async def test_updates_existing_attachment_with_stored_content(
         lambda: fake_storage,
     )
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=121,
         title="Монтаж",
         technical_meta={
@@ -247,8 +249,8 @@ async def test_updates_existing_attachment_with_stored_content(
 
 @pytest.mark.asyncio
 async def test_lists_recent_active_orders(sqlite_order_attachment_session):
-    active = Order(title="Активный", status=OrderStatus.NEGOTIATION)
-    closed = Order(title="Закрытый", status=OrderStatus.CLOSED)
+    active = Order(tenant_id=1, storefront_id=1, title="Активный", status=OrderStatus.NEGOTIATION)
+    closed = Order(tenant_id=1, storefront_id=1, title="Закрытый", status=OrderStatus.CLOSED)
     sqlite_order_attachment_session.add(active)
     sqlite_order_attachment_session.add(closed)
     await sqlite_order_attachment_session.commit()
@@ -268,8 +270,8 @@ async def test_executor_can_attach_only_assigned_order(sqlite_order_attachment_s
         telegram_id=777,
         legacy_installer_id=10,
     )
-    assigned = Order(title="Назначенный")
-    other = Order(title="Чужой")
+    assigned = Order(tenant_id=1, storefront_id=1, title="Назначенный")
+    other = Order(tenant_id=1, storefront_id=1, title="Чужой")
     sqlite_order_attachment_session.add(staff)
     sqlite_order_attachment_session.add(assigned)
     sqlite_order_attachment_session.add(other)
@@ -315,7 +317,7 @@ async def test_executor_can_attach_legacy_installer_order(sqlite_order_attachmen
         telegram_id=777,
         legacy_installer_id=10,
     )
-    order = Order(title="Старый монтаж")
+    order = Order(tenant_id=1, storefront_id=1, title="Старый монтаж")
     sqlite_order_attachment_session.add(staff)
     sqlite_order_attachment_session.add(order)
     await sqlite_order_attachment_session.flush()
@@ -342,7 +344,7 @@ async def test_executor_can_attach_legacy_installer_order(sqlite_order_attachmen
 
 @pytest.mark.asyncio
 async def test_manager_can_attach_any_existing_order(sqlite_order_attachment_session):
-    order = Order(title="Менеджерский заказ")
+    order = Order(tenant_id=1, storefront_id=1, title="Менеджерский заказ")
     sqlite_order_attachment_session.add(order)
     await sqlite_order_attachment_session.commit()
     assert await BotOrderAttachmentService.can_attach_to_order(

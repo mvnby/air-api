@@ -27,11 +27,13 @@ async def sqlite_session(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_check_stalled_deals_marks_old_negotiations_for_follow_up(sqlite_session):
-    customer = Customer(name="Scheduler Customer", phone="+375290000000")
+    customer = Customer(tenant_id=1, name="Scheduler Customer", phone="+375290000000")
     sqlite_session.add(customer)
     await sqlite_session.flush()
 
     old_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEGOTIATION,
         negotiation_status="awaiting_offer",
@@ -39,12 +41,16 @@ async def test_check_stalled_deals_marks_old_negotiations_for_follow_up(sqlite_s
         technical_meta={"source": "test"},
     )
     recent_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEGOTIATION,
         negotiation_status="awaiting_offer",
         updated_at=datetime.now() - timedelta(days=2),
     )
     execution_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.EXECUTION,
         negotiation_status="awaiting_offer",

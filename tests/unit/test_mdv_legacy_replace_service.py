@@ -75,10 +75,10 @@ async def test_mdv_legacy_replace_preview_splits_deletable_and_order_linked(sqli
             ProductTagLink(product_id=multi.id, tag_id=multi_tag.id),
         ]
     )
-    customer = Customer(name="Test", phone="+375291111111", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Test", phone="+375291111111", type=CustomerType.individual)
     sqlite_session.add(customer)
     await sqlite_session.flush()
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     sqlite_session.add(order)
     await sqlite_session.flush()
     sqlite_session.add(OrderProductLink(order_id=order.id, product_id=multi.id, quantity=1, price=100))

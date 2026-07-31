@@ -15,8 +15,7 @@ from services.documents.base import DOC_NAMES
 from services.google_service import get_google_service
 from services.settings_service import SettingsService
 from services.tenant_scope_service import (
-    tenant_or_fully_legacy_scope_clause,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 
 
@@ -359,7 +358,7 @@ class CustomerReconciliationService:
             await session.execute(
                 select(Customer).where(
                     Customer.id == customer_id,
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
             )
         ).scalars().first()
@@ -371,7 +370,7 @@ class CustomerReconciliationService:
             select(Order)
             .where(
                 Order.customer_id == customer_id,
-                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                tenant_scope_clause(Order, tenant_scope),
             )
             .options(
                 selectinload(Order.documents),
@@ -480,7 +479,7 @@ class CustomerReconciliationService:
             await session.execute(
                 select(Customer).where(
                     Customer.id == customer_id,
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
             )
         ).scalars().first()

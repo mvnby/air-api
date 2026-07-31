@@ -29,7 +29,7 @@ from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 class BotWarrantyNameplateService:
@@ -147,7 +147,7 @@ class BotWarrantyNameplateService:
         base_filters = [
             Order.status == OrderStatus.EXECUTION,
             Order.workflow_type.in_(sorted(cls.ORDER_WORKFLOWS)),
-            tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            tenant_scope_clause(Order, tenant_scope),
             TenantEntityAccessService.order_customer_clause(tenant_scope),
         ]
         if not can_attach_any:

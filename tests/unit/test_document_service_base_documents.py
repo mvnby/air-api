@@ -27,8 +27,8 @@ async def sqlite_session(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_document_numbering_uses_prefix_and_year(sqlite_session):
-    customer = Customer(name="Numbering", phone="+375291111111")
-    order = Order(customer=customer)
+    customer = Customer(tenant_id=1, name="Numbering", phone="+375291111111")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer)
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -61,8 +61,8 @@ async def test_document_numbering_uses_prefix_and_year(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_resolve_base_document_requires_choice_when_multiple_exist(sqlite_session):
-    customer = Customer(name="Base", phone="+375291111111")
-    order = Order(customer=customer)
+    customer = Customer(tenant_id=1, name="Base", phone="+375291111111")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer)
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -107,8 +107,8 @@ async def test_resolve_base_document_requires_choice_when_multiple_exist(sqlite_
 
 @pytest.mark.asyncio
 async def test_base_document_placeholders_support_invoice(sqlite_session):
-    customer = Customer(name="Invoice Customer", phone="+375291111111")
-    order = Order(customer=customer, total_amount=120)
+    customer = Customer(tenant_id=1, name="Invoice Customer", phone="+375291111111")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, total_amount=120)
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -145,8 +145,8 @@ async def test_base_document_placeholders_support_invoice(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_base_document_placeholders_support_offer(sqlite_session):
-    customer = Customer(name="Offer Customer", phone="+375291111111")
-    order = Order(customer=customer, total_amount=120)
+    customer = Customer(tenant_id=1, name="Offer Customer", phone="+375291111111")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, total_amount=120)
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -190,8 +190,8 @@ async def test_base_document_placeholders_support_offer(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_current_invoice_placeholders_use_generated_number_and_uppercase_aliases(sqlite_session):
-    customer = Customer(name="Invoice Self", phone="+375291111111")
-    order = Order(customer=customer, total_amount=120)
+    customer = Customer(tenant_id=1, name="Invoice Self", phone="+375291111111")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, total_amount=120)
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -213,8 +213,8 @@ async def test_current_invoice_placeholders_use_generated_number_and_uppercase_a
 
 @pytest.mark.asyncio
 async def test_base_document_type_uses_invoice_template_label(sqlite_session):
-    customer = Customer(name="Invoice Label", phone="+375291111111")
-    order = Order(customer=customer, total_amount=120)
+    customer = Customer(tenant_id=1, name="Invoice Label", phone="+375291111111")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, total_amount=120)
     template = DocumentTemplate(
         name="Счет-договор",
         doc_type="invoice",
@@ -255,9 +255,9 @@ async def test_base_document_type_uses_invoice_template_label(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_act_scope_filters_services_and_overrides_object(sqlite_session):
-    customer = Customer(name="Scoped Act", phone="+375291111111", type="company")
+    customer = Customer(tenant_id=1, name="Scoped Act", phone="+375291111111", type="company")
     branch = CustomerBranch(customer=customer, name="Объект Полоцк", delivery_address="Полоцк, Скорины 8А")
-    order = Order(customer=customer, customer_branch=branch, delivery_address="Витебск, старый адрес")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, customer_branch=branch, delivery_address="Витебск, старый адрес")
     proposal = OrderProposal(order=order, name="Основное", is_selected=True)
     service_a = Service(title="Монтаж", slug="scope-install", base_price=300)
     service_b = Service(title="Демонтаж", slug="scope-dismantle", base_price=150)
@@ -319,9 +319,9 @@ async def test_act_scope_filters_services_and_overrides_object(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_act_scope_rejects_service_line_from_another_order(sqlite_session):
-    customer = Customer(name="Scope Guard", phone="+375291111111")
-    order = Order(customer=customer)
-    other_order = Order(customer=customer)
+    customer = Customer(tenant_id=1, name="Scope Guard", phone="+375291111111")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer)
+    other_order = Order(tenant_id=1, storefront_id=1, customer=customer)
     service = Service(title="Монтаж guard", slug="scope-guard-install", base_price=300)
     sqlite_session.add_all([customer, order, other_order, service])
     await sqlite_session.commit()
@@ -354,7 +354,7 @@ async def test_act_scope_rejects_service_line_from_another_order(sqlite_session)
 
 @pytest.mark.asyncio
 async def test_open_customer_contract_can_be_stable_base(sqlite_session):
-    customer = Customer(name="Contract Customer", phone="+375291111111", type="company")
+    customer = Customer(tenant_id=1, name="Contract Customer", phone="+375291111111", type="company")
     contract = CustomerContract(
         customer=customer,
         number="ОД-2026-010",
@@ -362,7 +362,7 @@ async def test_open_customer_contract_can_be_stable_base(sqlite_session):
         valid_until=datetime(2027, 1, 15),
         status="active",
     )
-    order = Order(customer=customer, customer_contract=contract)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, customer_contract=contract)
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -395,8 +395,10 @@ async def test_open_customer_contract_can_be_stable_base(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_repair_order_existing_document_types_prepare_replacements(sqlite_session):
-    customer = Customer(name="Repair Docs", phone="+375291111111")
+    customer = Customer(tenant_id=1, name="Repair Docs", phone="+375291111111")
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         workflow_type="repair",
         title="Кондиционер",
@@ -434,10 +436,12 @@ async def test_repair_order_existing_document_types_prepare_replacements(sqlite_
 
 @pytest.mark.asyncio
 async def test_b2c_retail_receipt_placeholders_use_offer_basis_and_order_lines(sqlite_session):
-    customer = Customer(name="Private Customer", phone="+375291111111")
+    customer = Customer(tenant_id=1, name="Private Customer", phone="+375291111111")
     product = Product(title="Кондиционер Test 09", slug="test-09", price=1500, cost=1000)
     service = Service(title="Стандартный монтаж", slug="standard-install", base_price=500)
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         delivery_address="г. Витебск, адрес установки",
         total_amount=2000,
@@ -480,9 +484,11 @@ async def test_b2c_retail_receipt_placeholders_use_offer_basis_and_order_lines(s
 
 @pytest.mark.asyncio
 async def test_b2c_service_act_placeholders_support_service_only_order(sqlite_session):
-    customer = Customer(name="Service Customer", phone="+375292222222")
+    customer = Customer(tenant_id=1, name="Service Customer", phone="+375292222222")
     service = Service(title="Обслуживание кондиционера", slug="maintenance", base_price=180)
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         delivery_address="г. Витебск, сервисный адрес",
         total_amount=180,
@@ -512,9 +518,11 @@ async def test_b2c_service_act_placeholders_support_service_only_order(sqlite_se
 
 @pytest.mark.asyncio
 async def test_b2c_maintenance_service_act_uses_to_template_type(sqlite_session):
-    customer = Customer(name="Maintenance Customer", phone="+375292222333")
+    customer = Customer(tenant_id=1, name="Maintenance Customer", phone="+375292222333")
     service = Service(title="Техническое обслуживание кондиционера", slug="maintenance-to", category="maintenance", base_price=220)
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         delivery_address="г. Витебск, адрес ТО",
         total_amount=220,
@@ -543,8 +551,10 @@ async def test_b2c_maintenance_service_act_uses_to_template_type(sqlite_session)
 
 @pytest.mark.asyncio
 async def test_defect_act_canonical_repair_placeholders_from_repair_meta(sqlite_session):
-    customer = Customer(name="Repair Canonical", phone="+375291111111")
+    customer = Customer(tenant_id=1, name="Repair Canonical", phone="+375291111111")
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         title="Кондиционер",
         additional_conditions="1. Работы выполнять после согласования.\n- Доступ предоставить с 9:00.",
@@ -607,8 +617,10 @@ async def test_defect_act_canonical_repair_placeholders_from_repair_meta(sqlite_
 
 @pytest.mark.asyncio
 async def test_defect_act_legacy_repair_aliases_feed_canonical_placeholders(sqlite_session):
-    customer = Customer(name="Repair Legacy", phone="+375291111111")
+    customer = Customer(tenant_id=1, name="Repair Legacy", phone="+375291111111")
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         title="Кондиционер",
         technical_meta={
@@ -652,8 +664,10 @@ async def test_defect_act_legacy_repair_aliases_feed_canonical_placeholders(sqli
 
 @pytest.mark.asyncio
 async def test_defect_act_legacy_conclusion_placeholder_prefers_legacy_value(sqlite_session):
-    customer = Customer(name="Repair Mixed", phone="+375291111111")
+    customer = Customer(tenant_id=1, name="Repair Mixed", phone="+375291111111")
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         title="Кондиционер",
         technical_meta={
@@ -718,7 +732,7 @@ async def test_defect_act_legacy_conclusion_placeholder_prefers_legacy_value(sql
 )
 def test_defect_act_formats_equipment_name(repair_meta, title, expected_name):
     strategy = DefectActStrategy(None, 0)
-    strategy.order = Order(title=title, technical_meta={"repair": repair_meta})
+    strategy.order = Order(tenant_id=1, storefront_id=1, title=title, technical_meta={"repair": repair_meta})
     replacements = {}
     strategy._add_specific_replacements(replacements)
     assert replacements["{{equipment_name}}"] == expected_name

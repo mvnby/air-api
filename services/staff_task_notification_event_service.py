@@ -28,8 +28,7 @@ from services.communications.staff_task_contracts import (
 )
 from services.staff_user_service import StaffUserService
 from services.tenant_scope_service import (
-    tenant_or_fully_legacy_scope_clause,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 
 
@@ -98,7 +97,7 @@ class StaffTaskNotificationEventService:
             await session.execute(
                 select(Order.customer_id, Order.delivery_address).where(
                     Order.id == int(stage.order_id),
-                    tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                    tenant_scope_clause(Order, tenant_scope),
                 )
             )
         ).one_or_none()
@@ -110,7 +109,7 @@ class StaffTaskNotificationEventService:
                 await session.execute(
                     select(Customer.name, Customer.phone).where(
                         Customer.id == int(order_row.customer_id),
-                        tenant_or_legacy_owner_scope_clause(
+                        tenant_scope_clause(
                             Customer,
                             tenant_scope,
                         ),
@@ -238,7 +237,7 @@ class StaffTaskNotificationEventService:
                         OrderWorkStage.status.notin_(
                             [OrderStageStatus.CANCELED, OrderStageStatus.COMPLETED]
                         ),
-                        tenant_or_fully_legacy_scope_clause(
+                        tenant_scope_clause(
                             Order,
                             tenant_scope,
                         ),
@@ -286,7 +285,7 @@ class StaffTaskNotificationEventService:
                         OrderWorkStage.status.notin_(
                             [OrderStageStatus.CANCELED, OrderStageStatus.COMPLETED]
                         ),
-                        tenant_or_fully_legacy_scope_clause(
+                        tenant_scope_clause(
                             Order,
                             tenant_scope,
                         ),

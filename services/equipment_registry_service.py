@@ -15,7 +15,7 @@ from models import (
 )
 from models.tenancy import TenantScope
 from services.equipment_service import EquipmentService
-from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 class EquipmentRegistryService:
@@ -45,7 +45,7 @@ class EquipmentRegistryService:
                 customer_branch_id=customer_branch_id,
             )
 
-        filters = [tenant_or_legacy_owner_scope_clause(Customer, tenant_scope)]
+        filters = [tenant_scope_clause(Customer, tenant_scope)]
         if customer_id is not None:
             filters.append(CustomerEquipment.customer_id == customer_id)
         if customer_branch_id is not None:

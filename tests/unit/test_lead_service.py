@@ -51,7 +51,7 @@ async def test_create_lead_without_inn_sets_unknown(db, tenant_scope):
 
 @pytest.mark.asyncio
 async def test_qualify_lead_reuses_customer_by_phone(db, tenant_scope):
-    customer = Customer(name="Existing", phone="+375292222222", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Existing", phone="+375292222222", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -238,7 +238,7 @@ async def test_mark_lost_rejects_non_loss_status(db, tenant_scope):
 
 @pytest.mark.asyncio
 async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(db, tenant_scope):
-    customer = Customer(name="Branch Owner", phone="+375291010101", type=CustomerType.company, inn="111111111")
+    customer = Customer(tenant_id=1, name="Branch Owner", phone="+375291010101", type=CustomerType.company, inn="111111111")
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -284,8 +284,8 @@ async def test_qualify_lead_with_customer_branch_sets_order_branch_and_snapshot(
 
 @pytest.mark.asyncio
 async def test_qualify_lead_rejects_foreign_customer_branch(db, tenant_scope):
-    customer_a = Customer(name="Customer A", phone="+375291111111", type=CustomerType.company, inn="222222222")
-    customer_b = Customer(name="Customer B", phone="+375292222222", type=CustomerType.company, inn="333333333")
+    customer_a = Customer(tenant_id=1, name="Customer A", phone="+375291111111", type=CustomerType.company, inn="222222222")
+    customer_b = Customer(tenant_id=1, name="Customer B", phone="+375292222222", type=CustomerType.company, inn="333333333")
     db.add(customer_a)
     db.add(customer_b)
     await db.commit()

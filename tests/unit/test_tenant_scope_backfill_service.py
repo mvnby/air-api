@@ -16,6 +16,9 @@ from services.tenant_scope_backfill_service import (
 )
 
 
+pytestmark = pytest.mark.expand_phase_schema
+
+
 async def _add_legacy_rows(db, *, leads: int, orders: int) -> tuple[list[Lead], list[Order]]:
     lead_rows = [Lead(request_text=f"Legacy lead {index}") for index in range(leads)]
     order_rows = [Order(title=f"Legacy order {index}") for index in range(orders)]

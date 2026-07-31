@@ -25,8 +25,7 @@ from models import (
 )
 from models.tenancy import TenantScope
 from services.tenant_scope_service import (
-    tenant_or_fully_legacy_scope_clause,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 
 
@@ -35,17 +34,17 @@ class TenantEntityAccessService:
 
     @staticmethod
     def order_clause(tenant_scope: TenantScope):
-        return tenant_or_fully_legacy_scope_clause(Order, tenant_scope)
+        return tenant_scope_clause(Order, tenant_scope)
 
     @staticmethod
     def lead_clause(tenant_scope: TenantScope):
-        return tenant_or_fully_legacy_scope_clause(Lead, tenant_scope)
+        return tenant_scope_clause(Lead, tenant_scope)
 
     @staticmethod
     def order_customer_clause(tenant_scope: TenantScope):
         return or_(
             Order.customer_id.is_(None),
-            tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            tenant_scope_clause(Customer, tenant_scope),
         )
 
     @staticmethod
@@ -58,7 +57,7 @@ class TenantEntityAccessService:
     ) -> Customer | None:
         statement = select(Customer).where(
             Customer.id == int(customer_id),
-            tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            tenant_scope_clause(Customer, tenant_scope),
         )
         if for_update:
             statement = statement.with_for_update(of=Customer)
@@ -152,7 +151,7 @@ class TenantEntityAccessService:
             .join(Customer, Customer.id == CustomerEquipment.customer_id)
             .where(
                 CustomerEquipment.id == int(equipment_id),
-                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                tenant_scope_clause(Customer, tenant_scope),
             )
         )
         for option in options:

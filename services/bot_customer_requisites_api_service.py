@@ -13,7 +13,7 @@ from models.tenancy import TenantScope
 from services.bot_access_service import BotAccessService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.customer_service import CustomerService
-from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 class BotCustomerRequisitesAccessDeniedError(PermissionError):
@@ -88,7 +88,7 @@ class BotCustomerRequisitesApiService:
                     CustomerRequisitesRecognition.telegram_user_id == telegram_user_id,
                     CustomerRequisitesRecognition.telegram_chat_id == telegram_chat_id,
                     CustomerRequisitesRecognition.telegram_message_id == telegram_message_id,
-                    tenant_or_legacy_owner_scope_clause(
+                    tenant_scope_clause(
                         CustomerRequisitesRecognition,
                         tenant_scope,
                     ),
@@ -261,7 +261,7 @@ class BotCustomerRequisitesApiService:
                 select(CustomerRequisitesRecognition)
                 .where(
                     CustomerRequisitesRecognition.id == recognition_id,
-                    tenant_or_legacy_owner_scope_clause(
+                    tenant_scope_clause(
                         CustomerRequisitesRecognition,
                         tenant_scope,
                     ),

@@ -70,8 +70,8 @@ async def _seed_task(session: AsyncSession) -> OrderWorkStage:
         telegram_id=123456,
         legacy_installer_id=10,
     )
-    customer = Customer(id=30, name="Клиент", phone="+375291112233")
-    order = Order(id=40, customer_id=30, delivery_address="Минск, Ленина 1")
+    customer = Customer(tenant_id=1, id=30, name="Клиент", phone="+375291112233")
+    order = Order(tenant_id=1, storefront_id=1, id=40, customer_id=30, delivery_address="Минск, Ленина 1")
     stage = OrderWorkStage(
         id=50,
         order_id=40,

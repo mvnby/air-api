@@ -112,6 +112,8 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
         is_published=True,
     )
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=91,
         status=OrderStatus.NEW_LEAD,
         lead_source=LeadSource.SITE,
@@ -189,8 +191,10 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
         specs={"area_m2": 35},
         is_published=True,
     )
-    customer = Customer(name="Старое имя", phone="+375 (29) 111-22-33")
+    customer = Customer(tenant_id=1, name="Старое имя", phone="+375 (29) 111-22-33")
     existing_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=91,
         status=OrderStatus.NEW_LEAD,
         lead_source=LeadSource.SITE,
@@ -261,8 +265,10 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
         specs={"area_m2": 35},
         is_published=True,
     )
-    customer = Customer(name="Старое имя", phone="+375 (29) 111-22-33")
+    customer = Customer(tenant_id=1, name="Старое имя", phone="+375 (29) 111-22-33")
     existing_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=92,
         status=OrderStatus.CLOSED,
         lead_source=LeadSource.SITE,

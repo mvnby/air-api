@@ -6,7 +6,7 @@ from core.database import async_session_maker
 from models import Customer, CustomerType
 from services.tenant_scope_service import (
     SystemTenantScopeResolver,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 
 CSV_FILE = "контрагенты - main.csv"
@@ -40,7 +40,7 @@ async def import_customers():
                     if inn:
                         stmt = select(Customer).where(
                             Customer.inn == inn,
-                            tenant_or_legacy_owner_scope_clause(
+                            tenant_scope_clause(
                                 Customer,
                                 tenant_scope,
                             ),

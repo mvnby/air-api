@@ -18,7 +18,7 @@ async def _auth_headers(async_client):
 async def test_manager_service_estimates_calculate_and_snapshot_flow(async_client, db):
     headers = await _auth_headers(async_client)
 
-    customer = Customer(name="ООО Тест", phone="+375291112233")
+    customer = Customer(tenant_id=1, name="ООО Тест", phone="+375291112233")
     tariff = ServiceTariff(
         service_kind="installation",
         selector_label="Монтаж настенного до 3.5 кВт",

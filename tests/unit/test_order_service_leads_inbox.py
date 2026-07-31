@@ -15,11 +15,13 @@ TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 async def test_leads_inbox_is_paginated(db):
     now = datetime.now()
     for idx in range(3):
-        customer = Customer(name=f"Lead {idx}", phone=f"+37529000000{idx}")
+        customer = Customer(tenant_id=1, name=f"Lead {idx}", phone=f"+37529000000{idx}")
         db.add(customer)
         await db.flush()
         db.add(
             Order(
+                tenant_id=1,
+                storefront_id=1,
                 customer_id=customer.id,
                 status=OrderStatus.NEW_LEAD,
                 lead_source=LeadSource.MANAGER,
@@ -41,11 +43,13 @@ async def test_leads_inbox_is_paginated(db):
 
 @pytest.mark.asyncio
 async def test_leads_inbox_uses_email_date_for_email_source(db):
-    customer = Customer(name="Email Lead", phone="+375291111111", email="client@example.com")
+    customer = Customer(tenant_id=1, name="Email Lead", phone="+375291111111", email="client@example.com")
     db.add(customer)
     await db.flush()
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEW_LEAD,
             lead_source=LeadSource.EMAIL,
@@ -64,11 +68,13 @@ async def test_leads_inbox_uses_email_date_for_email_source(db):
 
 @pytest.mark.asyncio
 async def test_leads_inbox_extracts_legacy_email_date_from_comment(db):
-    customer = Customer(name="Legacy Email Lead", phone="+375292222222", email="legacy@example.com")
+    customer = Customer(tenant_id=1, name="Legacy Email Lead", phone="+375292222222", email="legacy@example.com")
     db.add(customer)
     await db.flush()
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEW_LEAD,
             lead_source=LeadSource.EMAIL,
@@ -85,11 +91,13 @@ async def test_leads_inbox_extracts_legacy_email_date_from_comment(db):
 
 @pytest.mark.asyncio
 async def test_leads_inbox_ignores_invalid_no_answer_at(db):
-    customer = Customer(name="Bad Date Lead", phone="+375292222223", email="bad-date@example.com")
+    customer = Customer(tenant_id=1, name="Bad Date Lead", phone="+375292222223", email="bad-date@example.com")
     db.add(customer)
     await db.flush()
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEW_LEAD,
             lead_source=LeadSource.MANAGER,
@@ -105,11 +113,13 @@ async def test_leads_inbox_ignores_invalid_no_answer_at(db):
 
 @pytest.mark.asyncio
 async def test_leads_inbox_keeps_unknown_customer_type_and_task_essence_null(db):
-    customer = Customer(name="Default Individual", phone="+375290000001", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Default Individual", phone="+375290000001", type=CustomerType.individual)
     db.add(customer)
     await db.flush()
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEW_LEAD,
             lead_source=LeadSource.MANAGER,
@@ -129,6 +139,7 @@ async def test_leads_inbox_keeps_unknown_customer_type_and_task_essence_null(db)
 @pytest.mark.asyncio
 async def test_leads_inbox_returns_known_type_and_task_when_stored(db):
     customer = Customer(
+        tenant_id=1,
         name="ООО Климат",
         phone="+375293333333",
         type=CustomerType.company,
@@ -138,6 +149,8 @@ async def test_leads_inbox_returns_known_type_and_task_when_stored(db):
     await db.flush()
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEW_LEAD,
             lead_source=LeadSource.MANAGER,
@@ -165,11 +178,13 @@ async def test_leads_inbox_returns_known_type_and_task_when_stored(db):
 
 @pytest.mark.asyncio
 async def test_leads_inbox_returns_confirmed_individual_customer_type(db):
-    customer = Customer(name="Иван", phone="+375294444444", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Иван", phone="+375294444444", type=CustomerType.individual)
     db.add(customer)
     await db.flush()
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEW_LEAD,
             lead_source=LeadSource.MANAGER,
@@ -188,12 +203,14 @@ async def test_leads_inbox_returns_confirmed_individual_customer_type(db):
 
 @pytest.mark.asyncio
 async def test_linking_existing_individual_marks_lead_customer_type_known(db):
-    default_customer = Customer(name="Новый клиент", phone="", type=CustomerType.individual)
-    existing_customer = Customer(name="Постоянный клиент", phone="+375295555555", type=CustomerType.individual)
+    default_customer = Customer(tenant_id=1, name="Новый клиент", phone="", type=CustomerType.individual)
+    existing_customer = Customer(tenant_id=1, name="Постоянный клиент", phone="+375295555555", type=CustomerType.individual)
     db.add(default_customer)
     db.add(existing_customer)
     await db.flush()
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=default_customer.id,
         status=OrderStatus.NEW_LEAD,
         lead_source=LeadSource.MANAGER,

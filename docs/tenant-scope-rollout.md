@@ -1,6 +1,7 @@
 # Tenant scope rollout contract
 
-**Status:** accepted transitional contract for the MVN white-label rollout.
+**Status:** CRM provenance contract release. The production backfill is clean;
+the database contract is enforced by revision `c9e0f1a2b3d4`.
 
 ## Decision
 
@@ -8,23 +9,23 @@
 storefront inside that tenant. Neither value is accepted from public or Manager
 request payloads.
 
-The rollout uses expand/backfill/contract releases:
+The rollout used expand/backfill/contract releases:
 
 1. **Expand and dual-write.** `Lead`, `Order`, `Customer` and requisites
    recognition receive nullable ownership keys with no database or Python
    default. Every production constructor requires an immutable
    server-resolved `TenantScope`. Customer belongs to a tenant; Lead and Order
    also retain the originating storefront.
-2. **Backfill and verify.** Existing and mixed-version null rows are assigned to
+2. **Backfill and verify (complete).** Existing and mixed-version null rows are assigned to
    the canonical `mvn/main` scope. A report must show zero null, partial,
    unknown and cross-tenant references before contract.
-3. **Contract and enforce.** Scope becomes mandatory and tenant-safe composite
+3. **Contract and enforce (this release).** Scope becomes mandatory and tenant-safe composite
    constraints, idempotency indexes, Manager authorization and query filters
    are enabled together.
 
-Application rollback during the expand phase means rolling the image back while
-keeping the additive schema. The migration refuses to drop provenance columns
-after scoped rows exist.
+Application rollback keeps the contracted schema in place. The preceding
+dual-write releases already provide provenance on every production constructor,
+so an image rollback does not require making the columns nullable again.
 
 ## Current trusted resolvers
 
@@ -73,7 +74,21 @@ receive that scope before entering those boundaries.
 
 Public DTOs and Manager command payloads deliberately expose neither ID.
 
-## Controlled historical backfill
+## Completed historical backfill
+
+The final production dry-run on 2026-07-31 resolved `mvn/main` as tenant/storefront
+`1/1` and reported:
+
+- Lead: 5 total, 5 target-scoped;
+- Order: 124 total, 124 target-scoped;
+- Customer: 210 total, 210 target-scoped;
+- requisites recognition: 6 total, 6 target-scoped;
+- zero null, partial, unexpected, unknown and cross-tenant rows;
+- `contract_ready=true` for both backfill commands.
+
+No write was necessary because the bounded backfill had already completed.
+The scripts remain available for an expand-schema rollback or forensic report,
+but the contracted schema rejects new nullable provenance.
 
 `scripts/backfill_lead_order_tenant_scope.py` is the only supported write path
 for historical Lead/Order provenance. It is dry-run by default and must run
@@ -160,9 +175,9 @@ or mutating their root or child records. The boundary covers:
 - tenant-local notification recipients and staff-task outbox events.
 
 Foreign opaque IDs fail closed and do not reveal or mutate records. Negative
-integration tests exercise separate tenants, while the system tenant alone may
-temporarily read fully legacy null provenance during backfill. Dashboard Order
-and customer projections use the same boundary. The global bank-receipt and
+integration tests exercise separate tenants. There is no system-tenant bypass
+for nullable legacy rows after contract. Dashboard Order and customer
+projections use the same boundary. The global bank-receipt and
 outgoing-email Manager module has no tenant provenance yet, so non-system
 tenants receive `403` instead of shared financial or mail data. Global
 document-template administration and the backing Google Drive folder are also
@@ -170,13 +185,24 @@ system-only until templates receive an explicit tenant policy. Tenant users
 may query selectable templates only with an owned Order or Customer context;
 foreign opaque IDs fail with `404` and unrelated customer IDs are not returned.
 
-## What this release does not claim
+## Contract guarantees
 
-This is still the expand phase, not the database contract phase. Lead and Order
-ownership columns remain nullable until the controlled production backfills
-report zero legacy, partial, unknown and cross-tenant rows. Tenant-aware unique
-indexes and mandatory foreign-key constraints still require the contract
-migration.
+Revision `c9e0f1a2b3d4` fails before schema changes if any readiness invariant is
+violated. After it succeeds:
+
+- `tenant_id` is mandatory for Customer and requisites recognition;
+- `tenant_id` and `storefront_id` are mandatory for Lead and Order;
+- a Lead or Order storefront must belong to the same tenant;
+- an Order customer must belong to the same tenant;
+- a qualified Lead may reference only an Order from its exact tenant/storefront;
+- recognition duplicate/confirmed Customer references cannot cross tenants;
+- bot Lead, Order and Telegram recognition idempotency is unique per tenant,
+  allowing independent storefront networks to reuse external identifiers.
+
+Application queries now use strict tenant/storefront predicates. The former
+system-only nullable-row fallback has been removed.
+
+## What this release does not claim
 
 Shared catalog, document-template and finance/mail ownership policy must be
 decided before those platform resources can be delegated to external tenants.
@@ -185,8 +211,8 @@ meantime. Public storefront selection still needs a trusted proxy or signed
 server context, and multi-membership Manager users still need an explicit
 server-validated tenant selector.
 
-A second tenant with real external traffic must not be enabled until the
-backfill reports are clean, the contract migration and isolation suite pass,
-and an internal second-storefront canary has completed. Idempotency/reuse
-lookups temporarily include fully legacy rows only for the system tenant; their
-global indexes remain unchanged until contract.
+A second tenant with real external traffic must not be enabled until trusted
+public storefront resolution, the Manager selector policy, tenant-aware offers
+and an internal second-storefront canary have completed. External traffic still
+remains disabled even though the CRM provenance contract and isolation suite
+are complete.

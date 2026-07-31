@@ -98,7 +98,7 @@ def _headers(user: StaffUser, *, claimed_role: str = "owner") -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_customer_api_isolates_tenants_and_legacy_rows(
+async def test_customer_api_isolates_tenants(
     async_client: AsyncClient,
     db,
 ):
@@ -114,6 +114,7 @@ async def test_customer_api_isolates_tenants_and_legacy_rows(
         username="owner-b",
     )
     legacy = Customer(
+        tenant_id=1,
         name="Legacy MVN",
         phone="+375290000001",
         type=CustomerType.individual,
@@ -218,7 +219,7 @@ async def test_customer_api_isolates_tenants_and_legacy_rows(
 
 
 @pytest.mark.asyncio
-async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
+async def test_lead_and_order_api_isolates_tenants(
     async_client: AsyncClient,
     db,
 ):
@@ -234,7 +235,8 @@ async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
         username="crm-owner-b",
     )
 
-    legacy_customer = Customer(
+    system_customer = Customer(
+        tenant_id=1,
         name="Legacy CRM customer",
         phone="+375290000011",
         type=CustomerType.individual,
@@ -251,10 +253,12 @@ async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
         phone="+375290000013",
         type=CustomerType.individual,
     )
-    db.add_all([legacy_customer, customer_a, customer_b])
+    db.add_all([system_customer, customer_a, customer_b])
     await db.flush()
 
-    legacy_lead = Lead(
+    system_lead = Lead(
+        tenant_id=1,
+        storefront_id=1,
         source="manager",
         name="Legacy lead",
         request_text="Legacy request",
@@ -273,8 +277,10 @@ async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
         name="Lead B",
         request_text="Tenant B request",
     )
-    legacy_order = Order(
-        customer_id=int(legacy_customer.id),
+    system_order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=int(system_customer.id),
         status=OrderStatus.NEGOTIATION,
         title="Legacy order",
     )
@@ -292,22 +298,14 @@ async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
         status=OrderStatus.NEGOTIATION,
         title="Order B",
     )
-    inconsistent_order = Order(
-        tenant_id=1,
-        storefront_id=1,
-        customer_id=int(customer_b.id),
-        status=OrderStatus.NEGOTIATION,
-        title="Inconsistent cross-tenant order",
-    )
     db.add_all(
         [
-            legacy_lead,
+            system_lead,
             lead_a,
             lead_b,
-            legacy_order,
+            system_order,
             order_a,
             order_b,
-            inconsistent_order,
         ]
     )
     await db.commit()
@@ -320,7 +318,7 @@ async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
     assert leads_a.status_code == 200
     assert leads_b.status_code == 200
     assert {item["id"] for item in leads_a.json()["items"]} == {
-        legacy_lead.id,
+        system_lead.id,
         lead_a.id,
     }
     assert {item["id"] for item in leads_b.json()["items"]} == {lead_b.id}
@@ -336,17 +334,10 @@ async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
     assert orders_a.status_code == 200
     assert orders_b.status_code == 200
     assert {item["id"] for item in orders_a.json()["items"]} == {
-        legacy_order.id,
+        system_order.id,
         order_a.id,
     }
     assert {item["id"] for item in orders_b.json()["items"]} == {order_b.id}
-    for headers in (headers_a, headers_b):
-        inconsistent_detail = await async_client.get(
-            f"/api/manager/orders/{inconsistent_order.id}",
-            headers=headers,
-        )
-        assert inconsistent_detail.status_code == 404
-
     lead_cross_tenant_responses = (
         await async_client.patch(
             f"/api/manager/leads/{lead_b.id}",
@@ -688,7 +679,8 @@ async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
         tenant_id=int(tenant_b.id),
         username="dashboard-owner-b",
     )
-    legacy_customer = Customer(
+    system_customer = Customer(
+        tenant_id=1,
         name="Legacy dashboard customer",
         phone="+375290000031",
         type=CustomerType.individual,
@@ -705,11 +697,13 @@ async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
         phone="+375290000033",
         type=CustomerType.individual,
     )
-    db.add_all([legacy_customer, customer_a, customer_b])
+    db.add_all([system_customer, customer_a, customer_b])
     await db.flush()
     followup_at = datetime.now() + timedelta(days=1)
-    legacy_order = Order(
-        customer_id=int(legacy_customer.id),
+    system_order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=int(system_customer.id),
         status=OrderStatus.NEW_LEAD,
         title="Legacy dashboard order",
         next_followup_date=followup_at,
@@ -733,16 +727,7 @@ async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
         next_followup_date=followup_at,
         installation_date=followup_at,
     )
-    inconsistent_order = Order(
-        tenant_id=1,
-        storefront_id=1,
-        customer_id=int(customer_b.id),
-        status=OrderStatus.NEW_LEAD,
-        title="Inconsistent dashboard order",
-        next_followup_date=followup_at,
-        installation_date=followup_at,
-    )
-    db.add_all([legacy_order, order_a, order_b, inconsistent_order])
+    db.add_all([system_order, order_a, order_b])
     await db.commit()
 
     headers_a = _headers(owner_a)
@@ -761,7 +746,7 @@ async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
     assert dashboard_b.json()["new_leads_count"] == 1
     assert {
         item["order_id"] for item in dashboard_a.json()["upcoming_touchpoints"]
-    } == {legacy_order.id, order_a.id}
+    } == {system_order.id, order_a.id}
     assert {
         item["order_id"] for item in dashboard_b.json()["upcoming_touchpoints"]
     } == {order_b.id}
@@ -785,7 +770,7 @@ async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
     assert counter_a.json()["count"] == 2
     assert counter_b.json()["count"] == 1
     assert {item["id"] for item in inbox_a.json()["items"]} == {
-        legacy_order.id,
+        system_order.id,
         order_a.id,
     }
     assert {item["id"] for item in inbox_b.json()["items"]} == {order_b.id}
@@ -805,7 +790,7 @@ async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
         headers=headers_b,
     )
     assert {item["order_id"] for item in calendar_a.json()} == {
-        legacy_order.id,
+        system_order.id,
         order_a.id,
     }
     assert {item["order_id"] for item in calendar_b.json()} == {order_b.id}

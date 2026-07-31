@@ -46,17 +46,17 @@ async def _auth_headers(async_client):
 
 @pytest.mark.asyncio
 async def test_manager_orders_list_segment_filter(async_client, db):
-    c1 = Customer(name="B2C", phone="+375291111111", type=CustomerType.individual)
-    c2 = Customer(name="B2B", phone="+375292222222", type=CustomerType.individual, inn="123456789")
+    c1 = Customer(tenant_id=1, name="B2C", phone="+375291111111", type=CustomerType.individual)
+    c2 = Customer(tenant_id=1, name="B2B", phone="+375292222222", type=CustomerType.individual, inn="123456789")
     db.add(c1)
     db.add(c2)
     await db.commit()
     await db.refresh(c1)
     await db.refresh(c2)
 
-    db.add(Order(customer_id=c1.id, status=OrderStatus.NEGOTIATION, total_amount=100))
-    db.add(Order(customer_id=c2.id, status=OrderStatus.NEGOTIATION, total_amount=200))
-    db.add(Order(customer_id=None, status=OrderStatus.NEGOTIATION, total_amount=50))
+    db.add(Order(tenant_id=1, storefront_id=1, customer_id=c1.id, status=OrderStatus.NEGOTIATION, total_amount=100))
+    db.add(Order(tenant_id=1, storefront_id=1, customer_id=c2.id, status=OrderStatus.NEGOTIATION, total_amount=200))
+    db.add(Order(tenant_id=1, storefront_id=1, customer_id=None, status=OrderStatus.NEGOTIATION, total_amount=50))
     await db.commit()
 
     headers = await _auth_headers(async_client)
@@ -82,7 +82,7 @@ async def test_manager_orders_list_segment_filter(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_orders_list_excludes_leads_before_pagination(async_client, db):
-    customer = Customer(name="Real Order", phone="+375291010101", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Real Order", phone="+375291010101", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -91,12 +91,16 @@ async def test_manager_orders_list_excludes_leads_before_pagination(async_client
     for idx in range(101):
         db.add(
             Order(
+                tenant_id=1,
+                storefront_id=1,
                 customer_id=customer.id,
                 status=OrderStatus.NEW_LEAD,
                 created_at=now + timedelta(minutes=idx),
             )
         )
     real_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEGOTIATION,
         created_at=now - timedelta(days=1),
@@ -117,13 +121,15 @@ async def test_manager_orders_list_excludes_leads_before_pagination(async_client
 
 @pytest.mark.asyncio
 async def test_manager_orders_overdue_filter(async_client, db):
-    customer = Customer(name="Overdue", phone="+375293333333", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Overdue", phone="+375293333333", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEGOTIATION,
             next_followup_date=datetime.now() - timedelta(days=1),
@@ -131,6 +137,8 @@ async def test_manager_orders_overdue_filter(async_client, db):
     )
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.NEGOTIATION,
             next_followup_date=datetime.now() + timedelta(days=1),
@@ -150,7 +158,7 @@ async def test_manager_orders_overdue_filter(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_order_detail_uses_snapshot_prices(async_client, db):
-    customer = Customer(name="Snapshot", phone="+375294444444", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Snapshot", phone="+375294444444", type=CustomerType.individual)
     product = Product(title="Snapshot Product", slug="snapshot-product", price=5000, specs={"area_m2": 30})
     db.add(customer)
     db.add(product)
@@ -158,7 +166,7 @@ async def test_manager_order_detail_uses_snapshot_prices(async_client, db):
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск, объект 1")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск, объект 1")
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -193,12 +201,12 @@ async def test_manager_order_detail_uses_snapshot_prices(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_scalar_fields(async_client, db):
-    customer = Customer(name="Patch", phone="+375295555555", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Patch", phone="+375295555555", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, is_paid=False)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD, is_paid=False)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -223,12 +231,12 @@ async def test_manager_order_patch_scalar_fields(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_closes_lost_without_deleting_order(async_client, db):
-    customer = Customer(name="Lost Customer", phone="+375295555556", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Lost Customer", phone="+375295555556", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=500, balance_due=500)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=500, balance_due=500)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -253,7 +261,7 @@ async def test_manager_order_patch_closes_lost_without_deleting_order(async_clie
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_moves_to_execution_without_payment_flag(async_client, db):
-    customer = Customer(name="Trusted Customer", phone="+375295555557", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Trusted Customer", phone="+375295555557", type=CustomerType.individual)
     product = Product(title="Trusted AC", slug="trusted-ac", price=1000, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
@@ -261,7 +269,7 @@ async def test_manager_order_patch_moves_to_execution_without_payment_flag(async
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=0, balance_due=0)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=0, balance_due=0)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -291,7 +299,7 @@ async def test_manager_order_patch_moves_to_execution_without_payment_flag(async
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_recomputes_balance_before_closing_won(async_client, db):
-    customer = Customer(name="Close Guard", phone="+375295555551", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Close Guard", phone="+375295555551", type=CustomerType.individual)
     product = Product(title="Close Guard Product", slug="close-guard-product", price=500, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
@@ -299,7 +307,7 @@ async def test_manager_order_patch_recomputes_balance_before_closing_won(async_c
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=0, balance_due=0)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION, total_amount=0, balance_due=0)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -328,7 +336,7 @@ async def test_manager_order_patch_recomputes_balance_before_closing_won(async_c
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_repair_workflow_adds_diagnostic_and_meta(async_client, db):
-    customer = Customer(name="Repair Workflow", phone="+375295555558", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Repair Workflow", phone="+375295555558", type=CustomerType.company)
     tariff = ServiceTariff(
         service_kind="repair",
         selector_label="Диагностика кондиционера на объекте",
@@ -344,7 +352,7 @@ async def test_manager_order_patch_repair_workflow_adds_diagnostic_and_meta(asyn
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -387,12 +395,12 @@ async def test_manager_order_patch_repair_workflow_adds_diagnostic_and_meta(asyn
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_rejects_invalid_repair_status(async_client, db):
-    customer = Customer(name="Repair Invalid Status", phone="+375295555559", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Repair Invalid Status", phone="+375295555559", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -562,12 +570,12 @@ async def test_manager_repair_act_ai_draft_generates_sanitized_meta(async_client
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_title_and_labels_search(async_client, db):
-    customer = Customer(name="Patch Labels", phone="+375295555557", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Patch Labels", phone="+375295555557", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -594,12 +602,14 @@ async def test_manager_order_patch_title_and_labels_search(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_order_execution_auto_approves_proposal(async_client, db):
-    customer = Customer(name="Execution", phone="+375295555556", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Execution", phone="+375295555556", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEGOTIATION,
         proposal_status="draft",
@@ -624,8 +634,8 @@ async def test_manager_order_execution_auto_approves_proposal(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_customer_branch_validation(async_client, db):
-    c1 = Customer(name="Branch C1", phone="+375295511111", type=CustomerType.individual)
-    c2 = Customer(name="Branch C2", phone="+375295522222", type=CustomerType.individual)
+    c1 = Customer(tenant_id=1, name="Branch C1", phone="+375295511111", type=CustomerType.individual)
+    c2 = Customer(tenant_id=1, name="Branch C2", phone="+375295522222", type=CustomerType.individual)
     db.add(c1)
     db.add(c2)
     await db.commit()
@@ -640,7 +650,7 @@ async def test_manager_order_patch_customer_branch_validation(async_client, db):
     await db.refresh(branch_c1)
     await db.refresh(branch_c2)
 
-    order = Order(customer_id=c1.id, status=OrderStatus.NEW_LEAD, is_paid=False)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=c1.id, status=OrderStatus.NEW_LEAD, is_paid=False)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -668,12 +678,12 @@ async def test_manager_order_patch_customer_branch_validation(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_rejects_unknown_customer_id(async_client, db):
-    customer = Customer(name="Known Customer", phone="+375295533333", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Known Customer", phone="+375295533333", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -691,12 +701,12 @@ async def test_manager_order_patch_rejects_unknown_customer_id(async_client, db)
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_rejects_invalid_closing_result(async_client, db):
-    customer = Customer(name="Closing Result", phone="+375295544444", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Closing Result", phone="+375295544444", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -714,7 +724,7 @@ async def test_manager_order_patch_rejects_invalid_closing_result(async_client, 
 
 @pytest.mark.asyncio
 async def test_manager_order_contract_selection_and_act_guard(async_client, db, monkeypatch):
-    customer = Customer(name="Contract Customer", phone="+375296001122", type=CustomerType.company, inn="123456789")
+    customer = Customer(tenant_id=1, name="Contract Customer", phone="+375296001122", type=CustomerType.company, inn="123456789")
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -728,7 +738,7 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
         google_file_id="fake",
         google_edit_url="https://docs.google.com/document/d/fake/edit",
     )
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск, объект 1")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск, объект 1")
     db.add(contract)
     db.add(order)
     await db.commit()
@@ -778,7 +788,7 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
     assert captured_replacements[-1]["{{contract_number}}"] != "ОД-2026-777"
     assert captured_replacements[-1]["{{contract_date}}"] == "26.04.2026"
 
-    one_time_order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    one_time_order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(one_time_order)
     await db.commit()
     await db.refresh(one_time_order)
@@ -817,7 +827,7 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
     assert first_act_doc.base_document_id is None
     assert first_act_doc.base_customer_contract_id == contract.id
 
-    second_order = Order(customer_id=customer.id, customer_contract_id=contract.id, status=OrderStatus.NEW_LEAD)
+    second_order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, customer_contract_id=contract.id, status=OrderStatus.NEW_LEAD)
     db.add(second_order)
     await db.commit()
     await db.refresh(second_order)
@@ -855,7 +865,7 @@ async def test_manager_order_contract_selection_and_act_guard(async_client, db, 
 
 @pytest.mark.asyncio
 async def test_manager_order_act_generation_can_be_scoped_to_object_and_service_lines(async_client, db, monkeypatch):
-    customer = Customer(name="Scoped Act Company", phone="+375296001133", type=CustomerType.company, inn="123456780")
+    customer = Customer(tenant_id=1, name="Scoped Act Company", phone="+375296001133", type=CustomerType.company, inn="123456780")
     contract = CustomerContract(
         customer=customer,
         number="ОД-2026-900",
@@ -866,7 +876,7 @@ async def test_manager_order_act_generation_can_be_scoped_to_object_and_service_
         google_edit_url="https://docs.google.com/document/d/open-contract/edit",
     )
     branch = CustomerBranch(customer=customer, name="Полоцк", delivery_address="Полоцк, Скорины 8А")
-    order = Order(customer=customer, customer_contract=contract, customer_branch=branch, delivery_address="Минск, старый объект")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, customer_contract=contract, customer_branch=branch, delivery_address="Минск, старый объект")
     db.add_all([customer, contract, branch, order])
     await db.commit()
     await db.refresh(order)
@@ -952,7 +962,7 @@ async def test_manager_document_roles_from_template_contract_and_order_override(
             description="Contract templates",
         )
     )
-    customer = Customer(name="Role Customer", phone="+375296009988", type=CustomerType.company, inn="123456789")
+    customer = Customer(tenant_id=1, name="Role Customer", phone="+375296009988", type=CustomerType.company, inn="123456789")
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -981,7 +991,7 @@ async def test_manager_document_roles_from_template_contract_and_order_override(
 
     monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
 
-    one_time_order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Витебск, объект")
+    one_time_order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Витебск, объект")
     db.add(one_time_order)
     await db.commit()
     await db.refresh(one_time_order)
@@ -1013,6 +1023,8 @@ async def test_manager_document_roles_from_template_contract_and_order_override(
         google_edit_url="https://docs.google.com/document/d/fake-contract/edit",
     )
     override_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         customer_contract_id=None,
         status=OrderStatus.NEW_LEAD,
@@ -1038,8 +1050,8 @@ async def test_manager_document_roles_from_template_contract_and_order_override(
 
 @pytest.mark.asyncio
 async def test_manager_order_switch_customer_clears_incompatible_branch(async_client, db):
-    c1 = Customer(name="Switch C1", phone="+375295533333", type=CustomerType.individual)
-    c2 = Customer(name="Switch C2", phone="+375295544444", type=CustomerType.individual)
+    c1 = Customer(tenant_id=1, name="Switch C1", phone="+375295533333", type=CustomerType.individual)
+    c2 = Customer(tenant_id=1, name="Switch C2", phone="+375295544444", type=CustomerType.individual)
     db.add(c1)
     db.add(c2)
     await db.commit()
@@ -1051,7 +1063,7 @@ async def test_manager_order_switch_customer_clears_incompatible_branch(async_cl
     await db.commit()
     await db.refresh(branch_c1)
 
-    order = Order(customer_id=c1.id, customer_branch_id=branch_c1.id, status=OrderStatus.NEW_LEAD, is_paid=False)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=c1.id, customer_branch_id=branch_c1.id, status=OrderStatus.NEW_LEAD, is_paid=False)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1070,7 +1082,7 @@ async def test_manager_order_switch_customer_clears_incompatible_branch(async_cl
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_lines_preserves_installers(async_client, db):
-    customer = Customer(name="Lines", phone="+375296666666", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Lines", phone="+375296666666", type=CustomerType.individual)
     product = Product(title="P", slug="prod-p", price=3000, specs={"area_m2": 30})
     service = Service(title="S", slug="service-s", base_price=100)
     installer = Installer(name="Installer 1", is_active=True)
@@ -1084,7 +1096,7 @@ async def test_manager_order_patch_lines_preserves_installers(async_client, db):
     await db.refresh(service)
     await db.refresh(installer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1108,7 +1120,7 @@ async def test_manager_order_patch_lines_preserves_installers(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_product_price_preserves_supply_request_link(async_client, db):
-    customer = Customer(name="Supply linked", phone="+375296666669", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Supply linked", phone="+375296666669", type=CustomerType.individual)
     product = Product(title="Supply linked product", slug="supply-linked-product", price=2490, specs={"area_m2": 35})
     supplier = Supplier(name="Supply linked supplier", code="supply-linked-order-update")
     db.add(customer)
@@ -1119,7 +1131,7 @@ async def test_manager_order_patch_product_price_preserves_supply_request_link(a
     await db.refresh(product)
     await db.refresh(supplier)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1181,7 +1193,7 @@ async def test_manager_order_patch_product_price_preserves_supply_request_link(a
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_lines_persists_logistics_components(async_client, db):
-    customer = Customer(name="Logistics", phone="+375296666668", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Logistics", phone="+375296666668", type=CustomerType.individual)
     product = Product(title="Split Logistics", slug="split-logistics", price=1803, specs={"area_m2": 30})
     db.add(customer)
     db.add(product)
@@ -1189,7 +1201,7 @@ async def test_manager_order_patch_lines_persists_logistics_components(async_cli
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1253,7 +1265,7 @@ async def test_manager_order_patch_lines_persists_logistics_components(async_cli
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_lines_does_not_overwrite_product_logistics_template(async_client, db):
-    customer = Customer(name="Logistics Existing", phone="+375296666665", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Logistics Existing", phone="+375296666665", type=CustomerType.individual)
     existing_template = [
         {
             "title": "Заводской внутренний блок",
@@ -1276,7 +1288,7 @@ async def test_manager_order_patch_lines_does_not_overwrite_product_logistics_te
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1315,7 +1327,7 @@ async def test_manager_order_patch_lines_does_not_overwrite_product_logistics_te
 
 @pytest.mark.asyncio
 async def test_manager_order_proposals_can_duplicate_edit_and_select(async_client, db):
-    customer = Customer(name="Proposal Customer", phone="+375296666667", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Proposal Customer", phone="+375296666667", type=CustomerType.individual)
     p1 = Product(title="Proposal P1", slug="proposal-p1", price=1000, specs={"area_m2": 25})
     p2 = Product(title="Proposal P2", slug="proposal-p2", price=2000, specs={"area_m2": 35})
     s1 = Service(title="Proposal S1", slug="proposal-s1", category="maintenance", base_price=100)
@@ -1332,7 +1344,7 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
     await db.refresh(s1)
     await db.refresh(s2)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1436,14 +1448,14 @@ async def test_manager_order_proposals_can_duplicate_edit_and_select(async_clien
 
 @pytest.mark.asyncio
 async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(async_client, db):
-    customer = Customer(name="Lifecycle Customer", phone="+375296666668", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Lifecycle Customer", phone="+375296666668", type=CustomerType.individual)
     product = Product(title="Lifecycle Product", slug="lifecycle-product", price=1200, specs={"area_m2": 25})
     db.add_all([customer, product])
     await db.commit()
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1522,7 +1534,7 @@ async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(a
 
 @pytest.mark.asyncio
 async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db):
-    customer = Customer(name="Transfer Customer", phone="+375291234000", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Transfer Customer", phone="+375291234000", type=CustomerType.individual)
     product = Product(title="Transfer Product", slug="transfer-product", price=1800, specs={"area_m2": 25})
     service = Service(title="Transfer Service", slug="transfer-service", base_price=250)
     installer = Installer(name="Transfer Installer", is_active=True)
@@ -1537,6 +1549,8 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
     await db.refresh(installer)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.EXECUTION,
         title="Переносимый заказ",
@@ -1626,7 +1640,7 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
 
 @pytest.mark.asyncio
 async def test_manager_order_import_preview_blocks_missing_products(async_client, db):
-    customer = Customer(name="Transfer Missing", phone="+375291234001", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Transfer Missing", phone="+375291234001", type=CustomerType.individual)
     product = Product(title="Existing Transfer Product", slug="existing-transfer-product", price=900, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
@@ -1634,7 +1648,7 @@ async def test_manager_order_import_preview_blocks_missing_products(async_client
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1679,7 +1693,7 @@ async def test_manager_order_import_preview_blocks_missing_products(async_client
 
 @pytest.mark.asyncio
 async def test_manager_order_offer_generation_uses_requested_proposal_and_creates_each_time(async_client, db, monkeypatch):
-    customer = Customer(name="Proposal Docs", phone="+375296666668", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Proposal Docs", phone="+375296666668", type=CustomerType.individual)
     p1 = Product(title="Proposal Doc P1", slug="proposal-doc-p1", price=1000, specs={"area_m2": 25})
     p2 = Product(title="Proposal Doc P2", slug="proposal-doc-p2", price=2000, specs={"area_m2": 35})
     db.add(customer)
@@ -1690,7 +1704,7 @@ async def test_manager_order_offer_generation_uses_requested_proposal_and_create
     await db.refresh(p1)
     await db.refresh(p2)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1783,7 +1797,7 @@ async def test_manager_order_offer_generation_uses_requested_proposal_and_create
 
 @pytest.mark.asyncio
 async def test_manager_order_tn2_generation_uses_requested_proposal_logistics_components(async_client, db, monkeypatch):
-    customer = Customer(name="Waybill Proposal", phone="+375296666669", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Waybill Proposal", phone="+375296666669", type=CustomerType.individual)
     p1 = Product(title="Waybill P1", slug="waybill-p1", price=1000, specs={"area_m2": 25})
     p2 = Product(title="Waybill P2", slug="waybill-p2", price=1803, specs={"area_m2": 35})
     db.add(customer)
@@ -1794,7 +1808,7 @@ async def test_manager_order_tn2_generation_uses_requested_proposal_logistics_co
     await db.refresh(p1)
     await db.refresh(p2)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1918,12 +1932,12 @@ async def test_manager_order_tn2_generation_uses_requested_proposal_logistics_co
 
 @pytest.mark.asyncio
 async def test_manager_order_patch_validation_errors(async_client, db):
-    customer = Customer(name="Validation", phone="+375299999999", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Validation", phone="+375299999999", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -1956,13 +1970,13 @@ async def test_manager_order_payment_unknown_order_returns_404(async_client):
 
 @pytest.mark.asyncio
 async def test_manager_order_generate_document(async_client, db, monkeypatch):
-    customer = Customer(name="Doc", phone="+375297777777", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Doc", phone="+375297777777", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
     # Generation remains available in the active work lifecycle as well.
-    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -2007,12 +2021,12 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_manager_doc_download_returns_pdf_bytes(async_client, db, monkeypatch):
-    customer = Customer(name="Download", phone="+375297777777", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Download", phone="+375297777777", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -2054,8 +2068,8 @@ async def test_manager_doc_download_returns_pdf_bytes(async_client, db, monkeypa
 async def test_document_numbering_uses_shared_prefix_sequence_per_year(db):
     from services.document_service import DocumentService
 
-    customer = Customer(name="Numbering", phone="+375297777777", type=CustomerType.individual)
-    order = Order(customer=customer, status=OrderStatus.NEGOTIATION)
+    customer = Customer(tenant_id=1, name="Numbering", phone="+375297777777", type=CustomerType.individual)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -2088,8 +2102,8 @@ async def test_document_numbering_uses_shared_prefix_sequence_per_year(db):
 
 @pytest.mark.asyncio
 async def test_manager_order_act_can_use_invoice_as_base_document(async_client, db, monkeypatch):
-    customer = Customer(name="Invoice Base", phone="+375297777777", type=CustomerType.individual)
-    order = Order(customer=customer, status=OrderStatus.NEGOTIATION, total_amount=200)
+    customer = Customer(tenant_id=1, name="Invoice Base", phone="+375297777777", type=CustomerType.individual)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEGOTIATION, total_amount=200)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -2177,12 +2191,14 @@ async def test_manager_order_act_can_use_invoice_as_base_document(async_client, 
 
 @pytest.mark.asyncio
 async def test_manager_customer_reconciliation_groups_documents_and_payments(async_client, db):
-    customer = Customer(name='ООО "Сверка"', phone="+375297777778", type=CustomerType.company, inn="192663084")
+    customer = Customer(tenant_id=1, name='ООО "Сверка"', phone="+375297777778", type=CustomerType.company, inn="192663084")
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
     order_before = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.CLOSED,
         title="Старый заказ",
@@ -2192,6 +2208,8 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
         contract_date=datetime(2025, 12, 20),
     )
     order_inside = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.CLOSED,
         title="Монтаж",
@@ -2294,6 +2312,7 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
 @pytest.mark.asyncio
 async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(async_client, db):
     customer = Customer(
+        tenant_id=1,
         name='ООО "Сверка распределения"',
         phone="+375297777780",
         type=CustomerType.company,
@@ -2304,6 +2323,8 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
     await db.refresh(customer)
     orders = [
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.CLOSED,
             title="Акт 1",
@@ -2311,6 +2332,8 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
             created_at=datetime(2026, 7, 1),
         ),
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.CLOSED,
             title="Акт 2",
@@ -2379,6 +2402,7 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
 @pytest.mark.asyncio
 async def test_manager_customer_reconciliation_document_generation(async_client, db, monkeypatch):
     customer = Customer(
+        tenant_id=1,
         name='ООО "Док сверки"',
         full_legal_name='Общество с ограниченной ответственностью "Док сверки"',
         phone="+375297777779",
@@ -2391,6 +2415,8 @@ async def test_manager_customer_reconciliation_document_generation(async_client,
     await db.refresh(customer)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.CLOSED,
         title="Поставка и монтаж",
@@ -2450,9 +2476,9 @@ async def test_manager_customer_reconciliation_document_generation(async_client,
 
 @pytest.mark.asyncio
 async def test_manager_order_waybills_can_use_invoice_as_base_document(async_client, db, monkeypatch):
-    customer = Customer(name="Waybill Base", phone="+375297777777", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Waybill Base", phone="+375297777777", type=CustomerType.individual)
     product = Product(title="Кондиционер", slug="base-waybill-product", price=1000)
-    order = Order(customer=customer, status=OrderStatus.NEGOTIATION, total_amount=1000)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEGOTIATION, total_amount=1000)
     db.add_all([customer, product, order])
     await db.commit()
     await db.refresh(order)
@@ -2522,8 +2548,8 @@ async def test_manager_order_waybills_can_use_invoice_as_base_document(async_cli
 
 @pytest.mark.asyncio
 async def test_manager_order_requires_selected_base_document_when_multiple_exist(async_client, db, monkeypatch):
-    customer = Customer(name="Multi Base", phone="+375297777777", type=CustomerType.individual)
-    order = Order(customer=customer, status=OrderStatus.NEGOTIATION)
+    customer = Customer(tenant_id=1, name="Multi Base", phone="+375297777777", type=CustomerType.individual)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -2579,7 +2605,7 @@ async def test_manager_order_requires_selected_base_document_when_multiple_exist
 
 @pytest.mark.asyncio
 async def test_manager_order_closing_doc_keeps_open_contract_base_after_order_contract_changes(async_client, db, monkeypatch):
-    customer = Customer(name='ООО "Стабильность"', phone="+375297777777", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name='ООО "Стабильность"', phone="+375297777777", type=CustomerType.company)
     contract_a = CustomerContract(
         customer=customer,
         number="ОД-2026-А",
@@ -2594,7 +2620,7 @@ async def test_manager_order_closing_doc_keeps_open_contract_base_after_order_co
         valid_until=datetime(2027, 2, 20),
         status="active",
     )
-    order = Order(customer=customer, customer_contract=contract_a, status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, customer_contract=contract_a, status=OrderStatus.NEGOTIATION)
     db.add_all([customer, contract_a, contract_b, order])
     await db.commit()
     await db.refresh(order)
@@ -2686,7 +2712,7 @@ async def test_manager_order_closing_doc_keeps_open_contract_base_after_order_co
 
 @pytest.mark.asyncio
 async def test_manager_order_generate_defect_act_placeholders(async_client, db, monkeypatch):
-    customer = Customer(name='ООО "Сервис"', phone="+375297777777", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name='ООО "Сервис"', phone="+375297777777", type=CustomerType.company)
     product = Product(title="Кондиционер BEKO BK 260 AK", slug="beko-bk-260-ak", price=1000)
     db.add(customer)
     db.add(product)
@@ -2695,6 +2721,8 @@ async def test_manager_order_generate_defect_act_placeholders(async_client, db, 
     await db.refresh(product)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEW_LEAD,
         additional_conditions="- Работы выполнять после согласования с администратором.",
@@ -2777,8 +2805,10 @@ async def test_manager_order_generate_defect_act_placeholders(async_client, db, 
 
 @pytest.mark.asyncio
 async def test_manager_order_generate_defect_act_from_structured_repair_meta(async_client, db, monkeypatch):
-    customer = Customer(name='ООО "Структура"', phone="+375297777700", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name='ООО "Структура"', phone="+375297777700", type=CustomerType.company)
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEW_LEAD,
         technical_meta={
@@ -2838,9 +2868,9 @@ async def test_manager_order_generate_defect_act_from_structured_repair_meta(asy
 
 @pytest.mark.asyncio
 async def test_manager_order_generate_document_applies_draft_conditions_atomically(async_client, db, monkeypatch):
-    customer = Customer(name="ООО Атом", phone="+375291010101", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="ООО Атом", phone="+375291010101", type=CustomerType.company)
     product = Product(title="Кондиционер Atom", slug="atom-ac", price=1000)
-    order = Order(customer=customer, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEW_LEAD)
     db.add_all([customer, product, order])
     await db.commit()
     await db.refresh(order)
@@ -2877,9 +2907,9 @@ async def test_manager_order_generate_document_applies_draft_conditions_atomical
 
 @pytest.mark.asyncio
 async def test_manager_order_generate_document_with_draft_conditions_recreates_existing_singleton(async_client, db, monkeypatch):
-    customer = Customer(name="ООО Повтор", phone="+375291010103", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="ООО Повтор", phone="+375291010103", type=CustomerType.company)
     product = Product(title="Кондиционер Repeat", slug="repeat-ac", price=1000)
-    order = Order(customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
     db.add_all([customer, product, order])
     await db.commit()
     await db.refresh(order)
@@ -2942,9 +2972,9 @@ async def test_manager_order_generate_document_rolls_back_draft_conditions_on_fa
 
     session_factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
 
-    customer = Customer(name="ООО Rollback", phone="+375291010102", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="ООО Rollback", phone="+375291010102", type=CustomerType.company)
     product = Product(title="Кондиционер Rollback", slug="rollback-ac", price=1000)
-    order = Order(customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
     async with session_factory() as setup_session:
         setup_session.add_all([customer, product, order])
         await setup_session.commit()
@@ -2997,9 +3027,9 @@ async def test_manager_order_generate_document_cleans_google_file_after_replace_
 
     session_factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
 
-    customer = Customer(name="ООО Cleanup", phone="+375291010104", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="ООО Cleanup", phone="+375291010104", type=CustomerType.company)
     product = Product(title="Кондиционер Cleanup", slug="cleanup-ac", price=1000)
-    order = Order(customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.NEW_LEAD, additional_conditions="Старые условия")
     async with session_factory() as setup_session:
         setup_session.add_all([customer, product, order])
         await setup_session.commit()
@@ -3059,12 +3089,14 @@ async def test_manager_order_generate_document_cleans_google_file_after_replace_
 
 @pytest.mark.asyncio
 async def test_manager_order_defect_act_prefers_official_complaint_for_technical_condition(async_client, db, monkeypatch):
-    customer = Customer(name="ООО Мегахенд", phone="+375291111111", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="ООО Мегахенд", phone="+375291111111", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEW_LEAD,
         technical_meta={
@@ -3110,6 +3142,7 @@ async def test_manager_order_defect_act_prefers_official_complaint_for_technical
 @pytest.mark.asyncio
 async def test_manager_order_patch_customer_critical_requisites_requires_confirmation(async_client, db):
     customer = Customer(
+        tenant_id=1,
         name="Critical Requisites",
         phone="+375299999999",
         type=CustomerType.company,
@@ -3122,7 +3155,7 @@ async def test_manager_order_patch_customer_critical_requisites_requires_confirm
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3152,12 +3185,12 @@ async def test_manager_order_patch_customer_critical_requisites_requires_confirm
 
 @pytest.mark.asyncio
 async def test_manager_order_list_documents(async_client, db):
-    customer = Customer(name="DocList", phone="+375298888888", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="DocList", phone="+375298888888", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
     
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3200,13 +3233,13 @@ async def test_manager_doc_download_404(async_client, db):
 
 @pytest.mark.asyncio
 async def test_manager_doc_delete_success(async_client, db, monkeypatch):
-    customer = Customer(name="DocDel", phone="+375290000000", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="DocDel", phone="+375290000000", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
     
     # Documents must stay fully actionable after a deal enters the work stage.
-    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3247,8 +3280,8 @@ async def test_manager_doc_delete_success(async_client, db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_manager_closed_order_document_history_is_read_only(async_client, db):
-    customer = Customer(name="Closed doc history", phone="+375290000009", type=CustomerType.individual)
-    order = Order(customer=customer, status=OrderStatus.CLOSED)
+    customer = Customer(tenant_id=1, name="Closed doc history", phone="+375290000009", type=CustomerType.individual)
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status=OrderStatus.CLOSED)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3293,12 +3326,12 @@ async def test_manager_closed_order_document_history_is_read_only(async_client, 
 
 @pytest.mark.asyncio
 async def test_manager_doc_delete_blocks_base_document_with_dependents(async_client, db, monkeypatch):
-    customer = Customer(name="DocBaseGuard", phone="+375290000001", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="DocBaseGuard", phone="+375290000001", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3352,7 +3385,7 @@ async def test_manager_doc_delete_blocks_base_document_with_dependents(async_cli
 
 @pytest.mark.asyncio
 async def test_manager_order_delete_cascades_related_entities(async_client, db, monkeypatch):
-    customer = Customer(name="Delete Order", phone="+375290001234", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Delete Order", phone="+375290001234", type=CustomerType.individual)
     product = Product(title="Delete Product", slug="delete-product", price=4000, specs={"area_m2": 35})
     service = Service(title="Delete Service", slug="delete-service", base_price=200)
     installer = Installer(name="Delete Installer", is_active=True)
@@ -3366,7 +3399,7 @@ async def test_manager_order_delete_cascades_related_entities(async_client, db, 
     await db.refresh(service)
     await db.refresh(installer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD, delivery_address="Минск")
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -3420,12 +3453,12 @@ async def test_manager_order_delete_cascades_related_entities(async_client, db, 
 
 @pytest.mark.asyncio
 async def test_manager_order_detail_includes_bank_receipt_payment_details(async_client, db):
-    customer = Customer(name="Bank Customer", phone="+375290009999", type=CustomerType.individual, inn="192663084")
+    customer = Customer(tenant_id=1, name="Bank Customer", phone="+375290009999", type=CustomerType.individual, inn="192663084")
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, total_amount=420, balance_due=420)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION, total_amount=420, balance_due=420)
     db.add(order)
     await db.commit()
     await db.refresh(order)

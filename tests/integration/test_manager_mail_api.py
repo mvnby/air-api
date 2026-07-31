@@ -64,6 +64,7 @@ async def test_manager_mail_lists_bank_receipts(async_client, db):
 @pytest.mark.asyncio
 async def test_manager_mail_auto_attaches_exact_group_bank_receipt(async_client, db):
     customer = Customer(
+        tenant_id=1,
         name='ТД "Витебск Агропродукт"',
         phone="+375291234567",
         type=CustomerType.company,
@@ -73,8 +74,8 @@ async def test_manager_mail_auto_attaches_exact_group_bank_receipt(async_client,
     await db.commit()
     await db.refresh(customer)
 
-    order_a = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
-    order_b = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
+    order_a = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
+    order_b = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
     db.add_all([order_a, order_b])
     await db.commit()
     await db.refresh(order_a)
@@ -140,6 +141,7 @@ async def test_manager_mail_auto_attaches_exact_group_bank_receipt(async_client,
 @pytest.mark.asyncio
 async def test_manager_mail_manually_attaches_review_group_bank_receipt(async_client, db):
     customer = Customer(
+        tenant_id=1,
         name='ТД "Витебск Агропродукт"',
         phone="+375291234568",
         type=CustomerType.company,
@@ -149,8 +151,8 @@ async def test_manager_mail_manually_attaches_review_group_bank_receipt(async_cl
     await db.commit()
     await db.refresh(customer)
 
-    order_a = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
-    order_b = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
+    order_a = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
+    order_b = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
     db.add_all([order_a, order_b])
     await db.commit()
     await db.refresh(order_a)
@@ -202,6 +204,7 @@ async def test_manager_mail_manually_attaches_review_group_bank_receipt(async_cl
 @pytest.mark.asyncio
 async def test_manager_mail_replaces_partial_bank_receipt_allocations(async_client, db):
     customer = Customer(
+        tenant_id=1,
         name="ООО Частичное распределение",
         phone="+375291234569",
         type=CustomerType.company,
@@ -210,8 +213,8 @@ async def test_manager_mail_replaces_partial_bank_receipt_allocations(async_clie
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
-    order_a = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
-    order_b = Order(customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
+    order_a = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 1")
+    order_b = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.EXECUTION, title="Акт 2")
     db.add_all([order_a, order_b])
     await db.commit()
     await db.refresh(order_a)
@@ -427,12 +430,12 @@ async def test_manager_mail_send_test_endpoint_uses_smtp_service(async_client, m
 
 @pytest.mark.asyncio
 async def test_manager_mail_lists_outgoing_emails_with_failures(async_client, db):
-    customer = Customer(name="Outbox Client", phone="+375291112233", email="client@example.com", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Outbox Client", phone="+375291112233", email="client@example.com", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Документы на отправку")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Документы на отправку")
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -489,13 +492,13 @@ async def test_manager_mail_lists_outgoing_emails_with_failures(async_client, db
 
 @pytest.mark.asyncio
 async def test_manager_mail_lists_order_outgoing_emails(async_client, db):
-    customer = Customer(name="Order Mail Client", phone="+375291112244", email="mail@example.com", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Order Mail Client", phone="+375291112244", email="mail@example.com", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Заказ с письмами")
-    other_order = Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Другой заказ")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Заказ с письмами")
+    other_order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION, title="Другой заказ")
     db.add_all([order, other_order])
     await db.commit()
     await db.refresh(order)

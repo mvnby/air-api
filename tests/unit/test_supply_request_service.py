@@ -33,7 +33,7 @@ async def _seed_supplier_product(db):
     await db.refresh(supplier_a)
     await db.refresh(supplier_b)
 
-    order = Order(status=OrderStatus.NEGOTIATION)
+    order = Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEGOTIATION)
     db.add(order)
     await db.commit()
     await db.refresh(order)

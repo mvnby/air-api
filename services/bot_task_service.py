@@ -21,7 +21,7 @@ from models import (
 from models.tenancy import TenantScope
 from services.staff_user_service import StaffUserService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 class BotTaskService:
@@ -125,7 +125,7 @@ class BotTaskService:
             OrderWorkStage.start_time.is_not(None),
             OrderWorkStage.start_time >= range_start,
             OrderWorkStage.start_time <= range_end,
-            tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            tenant_scope_clause(Order, tenant_scope),
             TenantEntityAccessService.order_customer_clause(tenant_scope),
         ]
         if requested_statuses:
@@ -163,7 +163,7 @@ class BotTaskService:
             .join(OrderInstaller, OrderInstaller.order_id == Order.id)
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(OrderInstaller.installer_id == installer_id)
-            .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
+            .where(tenant_scope_clause(Order, tenant_scope))
             .where(TenantEntityAccessService.order_customer_clause(tenant_scope))
             .where(Order.status.in_(list(cls.ACTIVE_ORDER_STATUSES)))
             .where(Order.installation_date.is_not(None))

@@ -27,7 +27,7 @@ from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 class BotRepairNameplateService:
@@ -395,7 +395,7 @@ class BotRepairNameplateService:
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(Order.status.in_(list(cls.ACTIVE_REPAIR_STATUSES)))
             .where(Order.workflow_type == "repair")
-            .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
+            .where(tenant_scope_clause(Order, tenant_scope))
             .where(TenantEntityAccessService.order_customer_clause(tenant_scope))
             .options(selectinload(Order.customer))
             .order_by(Order.updated_at.desc(), Order.created_at.desc(), Order.id.desc())
