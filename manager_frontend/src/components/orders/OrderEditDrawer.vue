@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { api } from '../../api';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
@@ -17,7 +16,6 @@ import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
 import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
-import { confirmDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
@@ -27,7 +25,6 @@ import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
 } from './order-workspace';
-import { getApiErrorMessage } from '../../utils/api-errors';
 import { useSmartStickyHeader } from '../../composables/useSmartStickyHeader';
 import { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
 import { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
@@ -35,6 +32,7 @@ import { useOrderDrawerForm } from '../../composables/useOrderDrawerForm';
 import { useOrderDrawerPersistence } from '../../composables/useOrderDrawerPersistence';
 import { useOrderDocumentStatus } from '../../composables/useOrderDocumentStatus';
 import { useOrderWorkspaceNavigation } from '../../composables/useOrderWorkspaceNavigation';
+import { useOrderDrawerActions } from '../../composables/useOrderDrawerActions';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -295,6 +293,26 @@ const displayOrderTitle = computed(() => (
   || customer.value?.name
   || 'Без названия'
 ));
+const {
+  closeDrawer,
+  copyText,
+  deleteOrder,
+  toggleHold,
+} = useOrderDrawerActions({
+  order: computed(() => props.order),
+  displayOrderTitle,
+  hasUnsavedChanges,
+  localFormError,
+  persistDraft,
+  clearDraft,
+  setToast,
+  onBeforeClose: () => {
+    pendingDraftClearOrderId.value = null;
+  },
+  onModelValue: (open) => emit('update:modelValue', open),
+  onUpdated: (updatedOrder) => emit('updated', updatedOrder),
+  onDeleted: (orderId) => emit('deleted', orderId),
+});
 const compactObjectAddress = computed(() => (
   customerDeliveryAddress.value.trim()
   || props.order?.customer_branch?.delivery_address
@@ -324,48 +342,6 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   paid: totalPaymentsPreview.value,
   balance: balanceDuePreview.value,
 }));
-const copyText = async (value: string | null | undefined, label: string) => {
-  const normalized = String(value || '').trim();
-  if (!normalized) {
-    setToast(`${label} отсутствует`, 'error');
-    return;
-  }
-
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(normalized);
-    } else {
-      const textarea = document.createElement('textarea');
-      textarea.value = normalized;
-      textarea.setAttribute('readonly', 'true');
-      textarea.style.position = 'absolute';
-      textarea.style.left = '-9999px';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-    setToast(`${label} скопирован`, 'success');
-  } catch (error) {
-    setToast(`Не удалось скопировать ${label.toLowerCase()}`, 'error');
-  }
-};
-
-const toggleHold = async () => {
-    if (!props.order) return;
-    const hold = !props.order.is_on_hold;
-    try {
-        const updatedOrder = await api.patchManagerOrder(
-            props.order.id,
-            { is_on_hold: hold, on_hold_reason: hold ? 'Переговоры / Ручная пауза' : '' },
-        );
-        emit('updated', updatedOrder);
-        setToast(hold ? 'Сделка поставлена на паузу' : 'Сделка снята с паузы', 'success');
-    } catch {
-        setToast('Ошибка паузы', 'error');
-    }
-};
-
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
   let mutated = false;
@@ -488,51 +464,6 @@ const handleSave = () => {
   if (!payload) return;
   pendingDraftClearOrderId.value = props.order.id;
   emit('save', { orderId: props.order.id, data: payload });
-};
-const closeDrawer = async (options?: { force?: boolean } | Event) => {
-  const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
-  const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
-  if (!force && hasUnsavedChanges.value) {
-    persistDraft();
-    const discard = await confirmDialog({
-      title: 'Закрыть без сохранения?',
-      description: 'В карточке есть несохранённые изменения. Они будут потеряны.',
-      confirmText: 'Закрыть без сохранения',
-      variant: 'warning',
-    });
-    if (!discard) return;
-  }
-  pendingDraftClearOrderId.value = null;
-  clearDraft();
-  emit('update:modelValue', false);
-};
-
-const isDeleting = ref(false);
-const deleteOrder = async () => {
-  if (!props.order?.id) return;
-  const orderLabel = `Заказ №${props.order.id}${displayOrderTitle.value ? ` «${displayOrderTitle.value}»` : ''}`;
-  const proceed = await confirmDialog({
-    title: `Удалить ${orderLabel}?`,
-    description: 'Заказ будет безвозвратно удалён вместе со связанными документами, выездами и платежами.',
-    confirmText: 'Удалить заказ',
-    variant: 'danger',
-  });
-  if (!proceed) return;
-
-  isDeleting.value = true;
-  try {
-    await ManagerOrdersService.deleteManagerOrder(props.order.id);
-    toast.value = 'Заказ успешно удален';
-    setTimeout(() => {
-      toast.value = '';
-      emit('deleted', props.order!.id);
-      void closeDrawer({ force: true });
-    }, 1500);
-  } catch (err: any) {
-    localFormError.value = getApiErrorMessage(err) || 'Ошибка при удалении заказа';
-  } finally {
-    isDeleting.value = false;
-  }
 };
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
