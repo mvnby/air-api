@@ -2,7 +2,6 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
-import DateTimeField from '../ui/DateTimeField.vue';
 import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
@@ -15,6 +14,8 @@ import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
+import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
+import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
@@ -39,9 +40,8 @@ import type {
   OutgoingEmailResponse,
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
-import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS, formatMoney } from './order-utils';
+import { EXECUTION_STATUS_OPTIONS, formatMoney } from './order-utils';
 import {
-  buildMeasurementSummary,
   buildOrderWorkspaceViewModel,
   normalizeOrderWorkflowType,
   type OrderWorkflowType,
@@ -241,10 +241,6 @@ const proposalActionLoading = ref(false);
 const executionStatusLabel = computed(() => (
   EXECUTION_STATUS_OPTIONS.find((option) => option.value === executionStatus.value)?.label || 'Назначить работы'
 ));
-
-const setNegotiationStatus = (value: string) => {
-  negotiationStatus.value = value;
-};
 
 const setExecutionStatus = (value: string) => {
   executionStatus.value = value;
@@ -936,26 +932,6 @@ const copyText = async (value: string | null | undefined, label: string) => {
   }
 };
 
-const websiteProductSummaryLines = computed(() => {
-  return (props.order?.product_lines ?? []).map((line) => ({
-    id: line.id,
-    title: line.product_title || `Товар #${line.product_id}`,
-    quantity: line.quantity,
-    lineTotal: line.line_total,
-    installationIncluded: Boolean(line.is_installation_included),
-    installationPrice: Number(line.installation_price || 0),
-  }));
-});
-
-const websiteServiceSummaryLines = computed(() => {
-  return (props.order?.service_lines ?? []).map((line) => ({
-    id: line.id,
-    title: line.service_title || 'Услуга',
-    quantity: line.quantity,
-    lineTotal: line.line_total,
-  }));
-});
-
 const toggleHold = async () => {
     if (!props.order) return;
     const hold = !props.order.is_on_hold;
@@ -977,48 +953,8 @@ const hasOrderContract = computed(() => orderDocuments.value.some((doc) => doc.d
 const hasContract = computed(() => (isCompanyOrder.value ? !!props.order?.customer_contract_id : false) || hasOrderContract.value);
 const hasOrderInvoice = computed(() => orderDocuments.value.some((doc) => doc.doc_type === 'invoice'));
 const hasClosingBaseDocument = computed(() => hasContract.value || hasOrderInvoice.value);
-const websiteOrderSummary = computed(() => {
-  const lines = websiteProductSummaryLines.value.length + websiteServiceSummaryLines.value.length;
-  const parts = [];
-  const createdAt = formatDateTime(props.order?.created_at);
-  if (createdAt) parts.push(`создан ${createdAt}`);
-  parts.push(`${lines} поз.`);
-  if (customerDeliveryAddress.value) parts.push(customerDeliveryAddress.value);
-  return parts.join(' · ');
-});
-const planningSummary = computed(() => {
-  const parts = [buildMeasurementSummary({
-    required: measurementRequired.value,
-    date: assessmentDate.value,
-    result: measurementResult.value,
-    kind: workflowType.value === 'repair' ? 'diagnostic' : 'measurement',
-    formatDate: formatDateTime,
-  })];
-  if (installationDate.value) parts.push(`${workDateLabel.value.toLowerCase()} ${formatDateTime(installationDate.value)}`);
-  return parts.join(' · ');
-});
-const planningDetailsSummary = computed(() => {
-  const parts = [];
-  if (measurerId.value) parts.push('замерщик назначен');
-  if (measurementResult.value.trim()) parts.push('есть результат замера');
-  if (customerBranchId.value) parts.push('выбран филиал');
-  if (newBranchAddress.value.trim()) parts.push('готовится новый филиал');
-  return parts.join(' · ') || 'дополнительные поля не заполнены';
-});
 const isRepairWorkflow = computed(() => workflowType.value === 'repair');
 const showProductLinesSection = computed(() => workflowType.value === 'sales_installation');
-const planningTitle = computed(() => {
-  if (workflowType.value === 'repair') return 'Диагностика и выезд';
-  if (workflowType.value === 'maintenance') return 'Планирование обслуживания';
-  if (workflowType.value === 'service_work') return 'Планирование работ';
-  return 'Планирование';
-});
-const workDateLabel = computed(() => {
-  if (workflowType.value === 'repair') return 'Дата диагностики / ремонта';
-  if (workflowType.value === 'maintenance') return 'Дата обслуживания';
-  if (workflowType.value === 'service_work') return 'Дата работ';
-  return 'Дата монтажа';
-});
 const repairWorkflowStatusLabel = computed(() => (
   REPAIR_WORKFLOW_STATUS_OPTIONS.find((item) => item.value === repairMeta.value.repair_status)?.label || ''
 ));
@@ -2721,197 +2657,35 @@ watch(
         @error="setToast($event, 'error')"
       />
 
-      <OrderDrawerSection
+      <OrderWebsiteIntakePanel
         v-if="isWebsiteOrder"
         v-model:expanded="expandedDrawerSections.website"
-        title="Входящий заказ с сайта"
-        :summary="websiteOrderSummary"
-        tone="emerald"
-      >
-        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Входящий заказ с сайта</p>
-            <p class="mt-1 text-sm text-gray-500">
-              <span v-if="formatDateTime(order?.created_at)">Создан: {{ formatDateTime(order?.created_at) }}</span>
-              <span v-if="order?.status" class="ml-2 inline-flex items-center rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600 ring-1 ring-gray-200">
-                {{ order.status }}
-              </span>
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50"
-              @click="copyText(customer?.phone, 'Телефон')"
-            >
-              <span class="material-icons-round text-[16px]">content_copy</span>
-              Телефон
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50"
-              @click="copyText(customerDeliveryAddress, 'Адрес')"
-            >
-              <span class="material-icons-round text-[16px]">content_copy</span>
-              Адрес
-            </button>
-          </div>
-        </div>
-
-        <div class="grid gap-3 md:grid-cols-2">
-          <div class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Клиент</p>
-            <p class="mt-2 text-sm font-semibold text-gray-900">{{ customer?.full_legal_name || customer?.name || 'Без имени' }}</p>
-            <p v-if="customer?.phone" class="mt-1 text-sm text-gray-700">{{ customer.phone }}</p>
-            <p v-if="customer?.email" class="mt-1 text-sm text-gray-500">{{ customer.email }}</p>
-          </div>
-
-          <div class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Адрес доставки</p>
-            <p class="mt-2 text-sm font-medium text-gray-900">{{ customerDeliveryAddress || 'Адрес не указан' }}</p>
-          </div>
-
-          <div class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100 md:col-span-2">
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Состав заказа</p>
-              <span class="text-xs font-medium text-emerald-700">
-                {{ websiteProductSummaryLines.length + websiteServiceSummaryLines.length }} поз.
-              </span>
-            </div>
-            <div class="mt-3 space-y-2">
-              <div
-                v-for="line in websiteProductSummaryLines"
-                :key="`website-product-${line.id}`"
-                class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <p class="text-sm font-medium text-gray-900">{{ line.title }}</p>
-                    <div class="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                      <span>Кол-во: {{ line.quantity }}</span>
-                      <span v-if="line.installationIncluded" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                        <span class="material-icons-round text-[14px]">construction</span>
-                        Монтаж включен
-                        <span v-if="line.installationPrice > 0">+ {{ formatMoney(line.installationPrice) }}</span>
-                      </span>
-                    </div>
-                  </div>
-                  <span class="whitespace-nowrap text-sm font-semibold text-gray-800">{{ formatMoney(line.lineTotal) }}</span>
-                </div>
-              </div>
-
-              <div
-                v-for="line in websiteServiceSummaryLines"
-                :key="`website-service-${line.id}`"
-                class="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2"
-              >
-                <div>
-                  <p class="text-sm font-medium text-gray-900">{{ line.title }}</p>
-                  <p class="mt-1 text-xs text-gray-500">Кол-во: {{ line.quantity }}</p>
-                </div>
-                <span class="whitespace-nowrap text-sm font-semibold text-gray-800">{{ formatMoney(line.lineTotal) }}</span>
-              </div>
-
-              <p
-                v-if="!websiteProductSummaryLines.length && !websiteServiceSummaryLines.length"
-                class="rounded-xl border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-500"
-              >
-                Позиции заказа отсутствуют.
-              </p>
-            </div>
-          </div>
-
-          <div v-if="comment?.trim()" class="rounded-xl bg-white/90 p-3 ring-1 ring-emerald-100 md:col-span-2">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500">Комментарий клиента</p>
-            <p class="mt-2 whitespace-pre-line text-sm text-gray-800">{{ comment }}</p>
-          </div>
-        </div>
-      </OrderDrawerSection>
+        :order="order!"
+        :delivery-address="customerDeliveryAddress"
+        :comment="comment"
+        @copy="copyText($event.value, $event.label)"
+      />
 
 
 
-      <!-- Планирование (Measurement & Logistics) -->
-      <section v-if="status === 'negotiation'" id="order-workspace-planning" class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/30 p-3 dark:border-blue-500/30 dark:bg-blue-500/10">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="min-w-0">
-            <h3 class="text-sm font-semibold text-blue-900 dark:text-blue-100">{{ planningTitle }}</h3>
-            <p class="mt-0.5 truncate text-xs text-blue-700/70 dark:text-blue-200/70">{{ planningSummary }}</p>
-          </div>
-          <button
-            v-if="!measurementRequired"
-            type="button"
-            class="btn-mini-outline justify-center whitespace-nowrap text-xs"
-            @click="measurementRequired = true"
-          >
-            <span class="material-icons-round text-[15px]">add_location_alt</span>
-            {{ isRepairWorkflow ? 'Назначить диагностику' : 'Назначить замер' }}
-          </button>
-          <label v-else class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-blue-900 ring-1 ring-blue-100 dark:bg-slate-900 dark:text-blue-100 dark:ring-blue-500/30">
-            <input type="checkbox" v-model="measurementRequired" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            {{ isRepairWorkflow ? 'Диагностика нужна' : 'Замер нужен' }}
-          </label>
-        </div>
-
-        <div class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm dark:border-blue-500/30 dark:bg-slate-900">
-          <label class="block">
-            <span class="text-xs font-semibold uppercase tracking-[0.12em] text-blue-900/70 dark:text-blue-200/80">Состояние переговоров</span>
-            <select :value="negotiationStatus" class="field-input mt-2 bg-white dark:bg-slate-950" @change="setNegotiationStatus(($event.target as HTMLSelectElement).value)">
-              <option v-for="option in NEGOTIATION_STATUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
-          </label>
-          <label class="mt-3 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
-            <input v-model="autoExecutionOnPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            <span>
-              <span class="block font-semibold">После полной оплаты автоматически перевести заказ в этап «Работы»</span>
-              <span class="mt-0.5 block text-emerald-700/80 dark:text-emerald-200/70">Сработает автоматически, когда долг по заказу станет нулевым.</span>
-            </span>
-          </label>
-        </div>
-
-        <div v-if="measurementRequired" class="mt-3 rounded-xl border border-blue-100 bg-white p-3 shadow-sm dark:border-blue-500/30 dark:bg-slate-900">
-          <DateTimeField v-model="assessmentDate" :label="isRepairWorkflow ? 'Дата и время диагностики' : 'Дата и время замера'" :error="getFieldError('measurement_date')" />
-        </div>
-
-        <OrderDrawerSection
-          v-model:expanded="expandedDrawerSections.planningDetails"
-          :title="isRepairWorkflow ? 'Детали диагностики и ремонта' : 'Детали выезда и монтажа'"
-          :summary="planningDetailsSummary"
-          tone="blue"
-          :has-error="Boolean(getFieldError('measurement_date') || getFieldError('installation_date'))"
-        >
-          <div class="grid gap-3 md:grid-cols-2">
-            <template v-if="measurementRequired">
-              <label class="field-label">
-                {{ isRepairWorkflow ? 'Специалист' : 'Замерщик' }}
-                <select v-model="measurerId" class="field-input">
-                  <option :value="null">Не назначен</option>
-                  <option v-for="inst in executorOptions" :key="inst.id" :value="inst.id">
-                    {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
-                  </option>
-                </select>
-              </label>
-              <label class="field-label md:col-span-2">
-                Результат замера
-                <textarea
-                  v-model="measurementResult"
-                  class="field-input min-h-[60px]"
-                  :placeholder="isRepairWorkflow ? 'Краткий результат диагностики...' : 'Резюме после выезда (длины трасс, доп. работы)...'"
-                />
-              </label>
-            </template>
-            <DateTimeField v-model="installationDate" :label="workDateLabel" :error="getFieldError('installation_date')" />
-            <label class="field-label">
-              {{ isRepairWorkflow ? 'Исполнитель ремонта' : 'Монтажник' }}
-              <select v-model="installerId" class="field-input">
-                <option :value="null">Не назначен</option>
-                <option v-for="inst in executorOptions" :key="inst.id" :value="inst.id">
-                  {{ inst.name }} {{ !inst.is_active ? '(в архиве)' : '' }}
-                </option>
-              </select>
-            </label>
-          </div>
-        </OrderDrawerSection>
-      </section>
+      <OrderPlanningPanel
+        v-if="status === 'negotiation'"
+        v-model:measurement-required="measurementRequired"
+        v-model:assessment-date="assessmentDate"
+        v-model:negotiation-status="negotiationStatus"
+        v-model:auto-execution-on-payment="autoExecutionOnPayment"
+        v-model:details-expanded="expandedDrawerSections.planningDetails"
+        v-model:measurer-id="measurerId"
+        v-model:measurement-result="measurementResult"
+        v-model:installation-date="installationDate"
+        v-model:installer-id="installerId"
+        :workflow-type="workflowType"
+        :executor-options="executorOptions"
+        :customer-branch-id="customerBranchId"
+        :new-branch-address="newBranchAddress"
+        :measurement-error="getFieldError('measurement_date')"
+        :installation-error="getFieldError('installation_date')"
+      />
 
 
       <OrderDrawerSection
