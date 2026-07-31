@@ -14,6 +14,7 @@ import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
 import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
+import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
@@ -29,7 +30,6 @@ import type {
   ManagerQuickTariffResponse,
   PaymentResponse,
   PaymentCurrency,
-  BankReceiptResponse,
   FxRateResponse,
   ManagerRepairComplaintPresetResponse,
   EquipmentServiceEventType,
@@ -182,7 +182,6 @@ const newBranchAddress = ref('');
 
 const targetCurrency = ref<PaymentCurrency | null>(null);
 const targetCurrencyAmount = ref<number | null>(null);
-const targetCurrencyPayments = ref<number>(0);
 const enableCurrency = ref(false);
 const currentFxRate = ref<FxRateResponse | null>(null);
 
@@ -204,7 +203,6 @@ watch(enableCurrency, async (val) => {
   if (!val) {
     targetCurrency.value = null;
     targetCurrencyAmount.value = null;
-    targetCurrencyPayments.value = 0;
   } else if (!targetCurrency.value) {
     targetCurrency.value = 'USD';
     try {
@@ -299,8 +297,6 @@ const recordingRepairHistory = ref(false);
 const repairHistoryEventType = ref<EquipmentServiceEventType | ''>('');
 const repairHistoryNotes = ref('');
 const payments = ref<PaymentResponse[]>([]);
-const bankReceipts = ref<BankReceiptResponse[]>([]);
-const bankReceiptsLoading = ref(false);
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
 const documentsPanelRef = ref<InstanceType<typeof OrderDocumentsPanel> | null>(null);
@@ -317,7 +313,6 @@ const executorOptions = computed(() => {
   if (measurerId.value !== null) selectedIds.add(measurerId.value);
   return installersList.value.filter((inst) => inst.is_active || selectedIds.has(inst.id));
 });
-const attachingReceiptId = ref<number | null>(null);
 const localServerErrors = ref<Record<string, string>>({});
 
 const createDefaultDrawerSections = () => ({
@@ -664,9 +659,6 @@ const activeProposalLineLabel = computed(() => {
   const noun = mod100 >= 11 && mod100 <= 14 ? 'позиций' : mod10 === 1 ? 'позиция' : mod10 >= 2 && mod10 <= 4 ? 'позиции' : 'позиций';
   return `${proposal.name} · ${proposalStatusLabel(proposal.status)} · ${count} ${noun} · ${formatMoney(proposal.total_amount || 0)}`;
 });
-const paymentsSectionSummary = computed(() => (
-  `оплачено ${formatMoney(totalPaymentsPreview.value)} · остаток ${formatMoney(balanceDuePreview.value)} · итого ${formatMoney(totalPreview.value)} · маржа ${formatMoney(marginPreview.value)}`
-));
 const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sent' | 'failed'>(() => {
   if (!orderEmailsLoaded.value) return 'unknown';
   const latestDocumentEmail = [...orderEmails.value]
@@ -750,8 +742,6 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   paid: totalPaymentsPreview.value,
   balance: balanceDuePreview.value,
 }));
-const candidateBankReceipts = computed(() => bankReceipts.value.filter((receipt) => receipt.status === 'requires_review'));
-const hasDebtForBankReceipts = computed(() => balanceDuePreview.value > 0 && Boolean(props.order?.customer?.inn));
 const draftKey = computed(() => (
   props.order ? `manager_order_drawer_draft_${props.order.id}_${activeProposalId.value || 'default'}` : ''
 ));
@@ -1121,134 +1111,6 @@ const refreshOrderFromDocumentsPanel = () => {
   }
 };
 
-const newPaymentAmount = ref<number | null>(null);
-const newPaymentType = ref<string>('prepayment');
-const isAddingPayment = ref(false);
-
-const addPayment = async () => {
-  if (!props.order?.id || !newPaymentAmount.value) return;
-  if (enableCurrency.value) {
-    if (!targetCurrency.value) {
-      setToast('Сначала выберите валюту сделки', 'error');
-      return;
-    }
-    if (!getActiveFxRate(targetCurrency.value)) {
-      setToast('Для выбранной валюты нет доступного курса', 'error');
-      return;
-    }
-  }
-  isAddingPayment.value = true;
-  try {
-    const res = await ManagerOrdersService.addManagerOrderPayment(props.order.id, {
-        amount: newPaymentAmount.value,
-        type: newPaymentType.value,
-        currency: enableCurrency.value ? (targetCurrency.value || 'USD') : 'BYN',
-    });
-    payments.value = res;
-    newPaymentAmount.value = null;
-    setToast('Платеж добавлен', 'success');
-  } catch (error) {
-    setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    isAddingPayment.value = false;
-  }
-};
-
-const loadCandidateBankReceipts = async (order: ManagerOrderDetailResponse | null) => {
-  const inn = order?.customer?.inn;
-  if (!inn) {
-    bankReceipts.value = [];
-    return;
-  }
-  bankReceiptsLoading.value = true;
-  try {
-    const response = await ManagerMailService.listManagerBankReceipts(1, 20, 'requires_review', inn);
-    bankReceipts.value = response.items || [];
-  } catch (error) {
-    console.error('Failed to load bank receipts', error);
-    bankReceipts.value = [];
-  } finally {
-    bankReceiptsLoading.value = false;
-  }
-};
-
-const attachBankReceipt = async (receipt: BankReceiptResponse) => {
-  if (!props.order?.id || !receipt.id) return;
-  attachingReceiptId.value = receipt.id;
-  try {
-    await ManagerMailService.attachManagerBankReceipt(receipt.id, {
-      order_id: props.order.id,
-      payment_type: 'postpayment',
-    });
-    setToast('Поступление прикреплено к заказу', 'success');
-    await loadCandidateBankReceipts(props.order);
-    emit('reload', props.order.id);
-  } catch (error) {
-    setToast(`Ошибка привязки: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    attachingReceiptId.value = null;
-  }
-};
-
-const receiptCandidateHint = (receipt: BankReceiptResponse) => {
-  const meta = receipt.match_meta as any;
-  const docs = Array.isArray(meta?.document_candidates) ? meta.document_candidates : [];
-  if (docs.length) {
-    const doc = docs[0];
-    return `${doc.doc_type || 'документ'} ${doc.number || ''} · заказ #${doc.order_id}`;
-  }
-  const ids = Array.isArray(meta?.candidate_order_ids) ? meta.candidate_order_ids : [];
-  if (ids.length) return `кандидат: заказ #${ids[0]}`;
-  return '';
-};
-
-const formatReceiptDate = (value?: string | null) => {
-  if (!value) return 'дата не указана';
-  return new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-};
-
-const formatPaymentType = (value?: string | null) => (value === 'prepayment' ? 'Аванс' : 'Доплата');
-
-const formatBankPaymentDate = (value?: string | null) => {
-  if (!value) return 'дата не указана';
-  return new Date(value).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const openBankReceiptJournal = (payment: PaymentResponse) => {
-  if (!props.order?.id || !payment.bank_receipt_id) return;
-  window.history.pushState({}, '', `/manager/payments?orderId=${props.order.id}`);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-};
-
-const deletingPaymentId = ref<number | null>(null);
-
-const confirmDeletePayment = (paymentId: number) => {
-  deletingPaymentId.value = paymentId;
-};
-
-const cancelDeletePayment = () => {
-  deletingPaymentId.value = null;
-};
-
-const deletePayment = async (paymentId: number) => {
-  if (!props.order?.id) return;
-  try {
-    const res = await ManagerOrdersService.deleteManagerOrderPayment(props.order.id, paymentId);
-    payments.value = res;
-    deletingPaymentId.value = null;
-    setToast('Платеж удален', 'success');
-  } catch (error) {
-    setToast(`Ошибка: ${getApiErrorMessage(error)}`, 'error');
-  }
-};
-
-
 const totalPreview = computed(() => {
   const pTotal = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
   const sTotal = serviceLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
@@ -1609,7 +1471,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   autoCloseOnPayment.value = Boolean(order.auto_close_on_payment);
   targetCurrency.value = order.target_currency || null;
   targetCurrencyAmount.value = order.target_currency_amount || null;
-  targetCurrencyPayments.value = order.target_currency_payments || 0;
 
   // Set default currency toggle state
   enableCurrency.value = !!order.target_currency;
@@ -1643,7 +1504,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
 
   // Payments
   payments.value = [...(order.payments || [])];
-  await loadCandidateBankReceipts(order);
 
   const customerId = order.customer?.id;
   if (customerId) {
@@ -3963,158 +3823,25 @@ watch(
         class="mt-4"
       />
 
-      <!-- Оплаты и Валюта (Объединенный блок) -->
-      <OrderDrawerSection
+      <OrderPaymentsPanel
         v-if="order && status !== 'execution'"
-        id="order-workspace-payments"
         v-model:expanded="expandedDrawerSections.payments"
-        title="Оплаты"
-        :summary="paymentsSectionSummary"
-        icon="account_balance_wallet"
-        tone="default"
-      >
-      <section class="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-5">
-        <div v-if="isB2cCustomer" class="mb-4 flex justify-end">
-            <label v-if="isB2cCustomer" class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
-                <input type="checkbox" v-model="enableCurrency" class="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-4 h-4" />
-                Считать в валюте
-            </label>
-        </div>
-
-        <!-- Поля валюты (показываются если включен чекбокс) -->
-        <div v-if="enableCurrency" class="mb-5 rounded-xl border border-blue-100 bg-blue-50/30 p-3 sm:p-4">
-            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
-                <label class="field-label !mb-0 text-xs sm:w-1/3">Валюта
-                    <select v-model="targetCurrency" class="field-input mt-1">
-                        <option value="USD">USD ($)</option>
-                        <option value="EUR" :disabled="!hasManualEurRate">EUR (€)</option>
-                    </select>
-                </label>
-                <label class="field-label !mb-0 text-xs flex-1">Зафиксировать сумму
-                    <div class="relative">
-                        <input v-model.number="targetCurrencyAmount" type="number" step="0.01" min="0" class="field-input mt-1 w-full" placeholder="Итоговая сумма в валюте" />
-                        <span v-if="currentFxRate?.usd_byn && targetCurrency === 'USD'" class="absolute right-3 top-[50%] -translate-y-[50%] text-[10px] text-blue-400 font-medium bg-blue-50/80 px-1 rounded" title="Текущий курс NBRB">Курс: {{ currentFxRate.usd_byn }}</span>
-                        <span v-else-if="currentFxRate?.eur_byn && targetCurrency === 'EUR'" class="absolute right-3 top-[50%] -translate-y-[50%] text-[10px] text-blue-400 font-medium bg-blue-50/80 px-1 rounded" title="Текущий курс NBRB">Курс: {{ currentFxRate.eur_byn }}</span>
-                    </div>
-                </label>
-            </div>
-            <p v-if="targetCurrency === 'EUR' && !hasManualEurRate" class="text-xs text-amber-700">
-                EUR недоступен при ручном источнике курса. Переключите источник курса на NBRB.
-            </p>
-
-            <div class="flex flex-col gap-3 border-t border-blue-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                 <div class="sm:w-1/2">
-                    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Внесено оплат ({{ targetCurrency || 'USD' }})</p>
-                    <p class="text-xl font-bold text-gray-800">{{ calculatedTargetCurrencyPayments.toFixed(2) }}</p>
-                 </div>
-                 <div class="sm:text-right">
-                    <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Остаток долга ({{ targetCurrency || 'USD' }})</p>
-                    <p class="text-2xl font-bold" :class="targetCurrencyBalanceDue > 0 ? 'text-red-500' : 'text-blue-600'">
-                        {{ targetCurrencyBalanceDue.toFixed(2) }}
-                    </p>
-                 </div>
-            </div>
-        </div>
-
-        <div class="mt-3 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-end">
-            <label class="flex-1 field-label !mb-0 text-xs">Внести платеж ({{ enableCurrency ? (targetCurrency || 'USD') : 'BYN' }})
-                <input v-model.number="newPaymentAmount" type="number" step="0.01" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
-            </label>
-            <label class="field-label !mb-0 text-xs sm:w-1/3">Тип
-                <select v-model="newPaymentType" class="field-input mt-1 shadow-sm">
-                    <option value="prepayment">Аванс</option>
-                    <option value="postpayment">Доплата</option>
-                </select>
-            </label>
-            <button class="btn-mini h-[38px] w-full sm:w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">Внести</button>
-        </div>
-
-        <div v-if="hasDebtForBankReceipts" class="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p class="text-sm font-semibold text-amber-900">Банковские поступления по УНП</p>
-              <p class="text-xs text-amber-700">Можно прикрепить поступление, которое требует ручной проверки.</p>
-            </div>
-            <span v-if="bankReceiptsLoading" class="material-icons-round animate-spin text-amber-600">refresh</span>
-          </div>
-          <div v-if="candidateBankReceipts.length" class="space-y-2">
-            <div
-              v-for="receipt in candidateBankReceipts"
-              :key="receipt.id"
-              class="rounded-lg border border-amber-100 bg-white p-3 text-xs shadow-sm"
-            >
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-bold text-slate-900">{{ formatMoney(receipt.amount) }}</span>
-                    <span class="text-slate-500">{{ formatReceiptDate(receipt.received_at) }}</span>
-                    <span v-if="receipt.payment_document_number" class="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-500">№ {{ receipt.payment_document_number }}</span>
-                  </div>
-                  <p v-if="receiptCandidateHint(receipt)" class="mt-1 text-amber-700">{{ receiptCandidateHint(receipt) }}</p>
-                  <p class="mt-1 line-clamp-2 text-slate-500">{{ receipt.payment_purpose || 'Назначение не указано' }}</p>
-                </div>
-                <button
-                  class="btn-mini h-8 shrink-0"
-                  :disabled="attachingReceiptId === receipt.id"
-                  @click="attachBankReceipt(receipt)"
-                >
-                  {{ attachingReceiptId === receipt.id ? '...' : 'Прикрепить' }}
-                </button>
-              </div>
-            </div>
-          </div>
-          <div v-else-if="!bankReceiptsLoading" class="rounded-lg border border-dashed border-amber-200 bg-white/70 p-3 text-center text-xs text-amber-700">
-            Нет неподтвержденных поступлений по УНП {{ order?.customer?.inn }}
-          </div>
-        </div>
-
-        <div class="mt-4 space-y-2 max-h-56 overflow-y-auto pr-1">
-            <div v-for="p in payments" :key="p.id" class="rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs shadow-sm">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-slate-500">{{ new Date(p.date).toLocaleDateString() }}</span>
-                        <span
-                          v-if="p.bank_receipt"
-                          class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700"
-                        >
-                          <span class="material-icons-round text-[13px]">account_balance</span>
-                          Банк
-                        </span>
-                    </div>
-                    <span class="font-bold text-slate-800" :class="p.currency !== 'BYN' ? 'text-blue-600' : ''">
-                        <template v-if="p.currency !== 'BYN'">{{ p.amount.toFixed(2) }} {{ p.currency }}</template>
-                        <template v-else>{{ formatMoney(p.amount) }}</template>
-                    </span>
-                    <span class="text-slate-400 w-16 text-right">{{ formatPaymentType(p.type) }}</span>
-                    <div v-if="deletingPaymentId === p.id" class="flex gap-2 ml-2 items-center">
-                        <button class="text-slate-500 hover:text-slate-800 font-medium" @click="cancelDeletePayment()">Отмена</button>
-                        <button class="text-red-500 hover:text-red-700 font-bold" @click="deletePayment(p.id)">Да, удалить</button>
-                    </div>
-                    <button v-else class="flex h-6 w-6 ml-2 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" @click="confirmDeletePayment(p.id)" title="Удалить платеж">
-                        <span class="material-icons-round text-[14px]">delete</span>
-                    </button>
-                </div>
-                <div v-if="p.bank_receipt" class="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/40 p-2 text-[11px] text-slate-600">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span class="font-semibold text-emerald-800">ПП № {{ p.bank_receipt.payment_document_number || p.bank_receipt.payment_document_raw || p.bank_receipt.id }}</span>
-                        <span>{{ formatBankPaymentDate(p.bank_receipt.received_at || p.date) }}</span>
-                        <span v-if="p.bank_receipt.payer_unp">УНП {{ p.bank_receipt.payer_unp }}</span>
-                    </div>
-                    <p v-if="p.bank_receipt.payer_name" class="mt-1 truncate font-medium text-slate-700">{{ p.bank_receipt.payer_name }}</p>
-                    <p v-if="p.bank_receipt.payment_purpose" class="mt-1 line-clamp-2 text-slate-500">{{ p.bank_receipt.payment_purpose }}</p>
-                    <button class="mt-1 inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-900" @click="openBankReceiptJournal(p)">
-                        <span class="material-icons-round text-[13px]">receipt_long</span>
-                        Открыть в журнале
-                    </button>
-                </div>
-                <p v-else-if="p.comment" class="mt-1 text-[11px] text-slate-500">{{ p.comment }}</p>
-            </div>
-            <div v-if="!payments.length" class="text-sm text-gray-500 italic py-3 text-center rounded-xl border border-dashed border-gray-200">
-                Нет оплат
-            </div>
-        </div>
-      </section>
-      </OrderDrawerSection>
+        v-model:payments="payments"
+        v-model:enable-currency="enableCurrency"
+        v-model:target-currency="targetCurrency"
+        v-model:target-currency-amount="targetCurrencyAmount"
+        :order="order"
+        :current-fx-rate="currentFxRate"
+        :is-b2c-customer="isB2cCustomer"
+        :total="totalPreview"
+        :total-payments="totalPaymentsPreview"
+        :balance-due="balanceDuePreview"
+        :margin="marginPreview"
+        :calculated-target-currency-payments="calculatedTargetCurrencyPayments"
+        :target-currency-balance-due="targetCurrencyBalanceDue"
+        @toast="setToast($event.message, $event.type)"
+        @reload="emit('reload', $event)"
+      />
 
       </div>
     </aside>
