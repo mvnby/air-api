@@ -17,12 +17,11 @@ import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
 import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
-import { confirmDialog, promptDialog } from '../../services/ui-feedback';
+import { confirmDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
-  OrderProposalResponse,
   ManagerInstallerResponse,
   PaymentResponse,
   PaymentCurrency,
@@ -30,24 +29,18 @@ import type {
   OutgoingEmailResponse,
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService } from '../../client';
-import { formatMoney } from './order-utils';
 import {
   buildOrderWorkspaceViewModel,
   normalizeOrderWorkflowType,
   type OrderWorkflowType,
   type OrderWorkspaceTarget,
 } from './order-workspace';
-import {
-  isProposalRevisionLocked,
-  normalizeProposalStatus,
-  proposalStatusLabel,
-  type ProposalLifecycleStatus,
-} from './proposal-lifecycle';
 import { emptyRepairMeta, normalizeRepairMeta, type RepairMeta } from './repair-meta';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { useSmartStickyHeader } from '../../composables/useSmartStickyHeader';
 import { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
+import { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
 import type {
   OrderDrawerDraft,
   OrderLogisticsComponent,
@@ -151,15 +144,12 @@ const measurementRequired = ref(false);
 const measurerId = ref<number | null>(null);
 const measurementResult = ref('');
 const additionalConditions = ref('');
-const proposalStatus = ref<ProposalLifecycleStatus>('draft');
 const negotiationStatus = ref('awaiting_offer');
 const executionStatus = ref('needs_schedule');
 const executionWithoutPayment = ref(false);
 const executionWithoutPaymentReason = ref('');
 const autoExecutionOnPayment = ref(false);
 const autoCloseOnPayment = ref(false);
-const activeProposalId = ref<number | null>(null);
-const proposalActionLoading = ref(false);
 
 const installersList = ref<ManagerInstallerResponse[]>([]);
 
@@ -258,6 +248,43 @@ const initializedOrderId = ref<number | null>(null);
 const localFormError = ref('');
 const showManagerLabelInput = ref(false);
 
+const {
+  activeProposal,
+  activeProposalId,
+  activeProposalLineLabel,
+  activeProposalLocked,
+  activeProposalStatus,
+  archiveProposal,
+  changeActiveProposalStatus,
+  createProposal,
+  duplicateProposal,
+  loadProposalLines,
+  onProposalClick,
+  proposalActionLoading,
+  proposalStatus,
+  proposals: orderProposals,
+  renameProposal,
+  saveCurrentProposalLines,
+  selectProposalForOrder,
+  selectedProposal: selectedOrderProposal,
+} = useOrderProposalLifecycle({
+  order: computed(() => props.order),
+  negotiationStatus,
+  total: totalPreview,
+  localFormError,
+  buildLinesPayload,
+  validateLines: validateProposalLines,
+  loadLines,
+  resetLookupState,
+  loadSupplyRequests: loadOrderSupplyRequests,
+  clearDraft: () => clearDraft(),
+  currentLinesSnapshot: buildCurrentLinesSnapshot,
+  savedLinesSnapshot,
+  setToast,
+  onUpdated: (updatedOrder) => emit('updated', updatedOrder),
+  onReload: (orderId) => emit('reload', orderId),
+});
+
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => (
   customer.value?.full_legal_name
@@ -280,32 +307,6 @@ const compactObjectAddress = computed(() => (
   || props.order?.customer_branch?.delivery_address
   || ''
 ));
-const orderProposals = computed(() => {
-  const proposals = props.order?.proposals || [];
-  return [...proposals]
-    .filter((proposal) => !proposal.is_archived)
-    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || Number(a.id) - Number(b.id));
-});
-const selectedOrderProposal = computed(() => (
-  orderProposals.value.find((proposal) => proposal.is_selected)
-  || orderProposals.value[0]
-  || null
-));
-const activeProposal = computed(() => (
-  orderProposals.value.find((proposal) => proposal.id === activeProposalId.value)
-  || selectedOrderProposal.value
-));
-const activeProposalStatus = computed(() => normalizeProposalStatus(activeProposal.value?.status || proposalStatus.value));
-const activeProposalLocked = computed(() => isProposalRevisionLocked(activeProposalStatus.value));
-const activeProposalLineLabel = computed(() => {
-  const proposal = activeProposal.value;
-  if (!proposal) return 'Предложение не создано';
-  const count = (proposal.product_lines?.length || 0) + (proposal.service_lines?.length || 0);
-  const mod100 = count % 100;
-  const mod10 = count % 10;
-  const noun = mod100 >= 11 && mod100 <= 14 ? 'позиций' : mod10 === 1 ? 'позиция' : mod10 >= 2 && mod10 <= 4 ? 'позиции' : 'позиций';
-  return `${proposal.name} · ${proposalStatusLabel(proposal.status)} · ${count} ${noun} · ${formatMoney(proposal.total_amount || 0)}`;
-});
 const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sent' | 'failed'>(() => {
   if (!orderEmailsLoaded.value) return 'unknown';
   const latestDocumentEmail = [...orderEmails.value]
@@ -673,26 +674,14 @@ const restoreDrawerSections = (): DrawerSectionsState => {
   }
 };
 
-const clearDraft = () => {
+function clearDraft() {
   if (!draftKey.value) return;
   try {
     window.sessionStorage.removeItem(draftKey.value);
   } catch (error) {
     console.warn('Failed to clear order drawer draft', error);
   }
-};
-
-const loadProposalLines = (proposal: OrderProposalResponse | null | undefined, fallbackOrder?: ManagerOrderDetailResponse | null) => {
-  editingServiceLineIndex.value = null;
-  if (proposal) {
-    activeProposalId.value = proposal.id;
-    proposalStatus.value = normalizeProposalStatus(proposal.status);
-    loadLines(proposal.product_lines || [], proposal.service_lines || []);
-    return;
-  }
-  activeProposalId.value = null;
-  loadLines(fallbackOrder?.product_lines ?? [], fallbackOrder?.service_lines ?? []);
-};
+}
 
 const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
@@ -727,7 +716,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   measurerId.value = order.measurer_id ?? null;
   measurementResult.value = order.measurement_result ?? '';
   additionalConditions.value = order.additional_conditions ?? '';
-  proposalStatus.value = normalizeProposalStatus(order.proposal_status);
   negotiationStatus.value = order.negotiation_status || 'awaiting_offer';
   executionStatus.value = order.execution_status || 'needs_schedule';
   executionWithoutPayment.value = Boolean(order.execution_without_payment);
@@ -814,217 +802,7 @@ watch(
   },
 );
 
-const applyOrderResponse = async (
-  order: ManagerOrderDetailResponse,
-  preferredProposalId?: number | null,
-  emitReload = true,
-) => {
-  emit('updated', order);
-  const nextProposal = preferredProposalId
-    ? (order.proposals || []).find((proposal) => proposal.id === preferredProposalId && !proposal.is_archived)
-    : ((order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
-      || (order.proposals || []).find((proposal) => !proposal.is_archived));
-  loadProposalLines(nextProposal || null, order);
-  syncProductLookupFromLines();
-  await loadOrderSupplyRequests(order.id);
-  if (emitReload) emit('reload', order.id);
-};
-
 const buildProposalLinesPayload = () => buildLinesPayload(activeProposalId.value);
-
-const saveCurrentProposalLines = async () => {
-  if (!props.order?.id) return props.order || null;
-  if (activeProposalLocked.value) return props.order;
-  const validationError = validateProposalLines();
-  if (validationError) {
-    localFormError.value = validationError;
-    throw new Error(validationError);
-  }
-  const currentProposalId = activeProposalId.value;
-  const order = await ManagerOrdersService.patchManagerOrder(props.order.id, buildProposalLinesPayload());
-  clearDraft();
-  await applyOrderResponse(order, currentProposalId, false);
-  savedLinesSnapshot.value = currentLinesSnapshot();
-  return order;
-};
-
-const setActiveProposal = async (proposal: OrderProposalResponse) => {
-  if (!proposal || activeProposalId.value === proposal.id || proposalActionLoading.value) return;
-  proposalActionLoading.value = true;
-  try {
-    await saveCurrentProposalLines();
-  } catch (error) {
-    setToast(`Сначала сохраните текущий вариант: ${getApiErrorMessage(error)}`, 'error');
-    return;
-  } finally {
-    proposalActionLoading.value = false;
-  }
-  loadProposalLines(proposal, props.order);
-  productLookupById.value = {};
-  syncProductLookupFromLines();
-};
-
-const onProposalClick = (proposal: OrderProposalResponse) => {
-  void setActiveProposal(proposal);
-};
-
-const createProposal = async () => {
-  if (!props.order?.id || proposalActionLoading.value) return;
-  const name = await promptDialog({
-    title: 'Новое предложение',
-    inputLabel: 'Название',
-    initialValue: `Вариант ${orderProposals.value.length + 1}`,
-    required: true,
-    confirmText: 'Создать',
-  });
-  if (name === null) return;
-  proposalActionLoading.value = true;
-  try {
-    await saveCurrentProposalLines();
-    const order = await ManagerOrdersService.createManagerOrderProposal(props.order.id, { name });
-    const created = order.proposals?.[Math.max(0, (order.proposals?.length || 1) - 1)] || null;
-    await applyOrderResponse(order, created?.id || null);
-    setToast('Предложение создано', 'success');
-  } catch (error) {
-    setToast(`Ошибка создания предложения: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    proposalActionLoading.value = false;
-  }
-};
-
-const duplicateProposal = async () => {
-  if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
-  const name = await promptDialog({
-    title: 'Копия предложения',
-    inputLabel: 'Название',
-    initialValue: `${activeProposal.value.name} копия`,
-    required: true,
-    confirmText: 'Создать копию',
-  });
-  if (name === null) return;
-  proposalActionLoading.value = true;
-  try {
-    const sourceProposalId = activeProposal.value.id;
-    await saveCurrentProposalLines();
-    const order = await ManagerOrdersService.duplicateManagerOrderProposal(props.order.id, sourceProposalId, { name });
-    const created = order.proposals?.[Math.max(0, (order.proposals?.length || 1) - 1)] || null;
-    await applyOrderResponse(order, created?.id || null);
-    setToast('Предложение скопировано', 'success');
-  } catch (error) {
-    setToast(`Ошибка копирования предложения: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    proposalActionLoading.value = false;
-  }
-};
-
-const renameProposal = async () => {
-  if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
-  const name = await promptDialog({
-    title: 'Переименовать предложение',
-    inputLabel: 'Название',
-    initialValue: activeProposal.value.name,
-    required: true,
-    confirmText: 'Переименовать',
-  });
-  if (name === null || !name.trim()) return;
-  proposalActionLoading.value = true;
-  try {
-    const proposalId = activeProposal.value.id;
-    await saveCurrentProposalLines();
-    const order = await ManagerOrdersService.patchManagerOrderProposal(props.order.id, proposalId, { name });
-    await applyOrderResponse(order, proposalId);
-    setToast('Название обновлено', 'success');
-  } catch (error) {
-    setToast(`Ошибка переименования: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    proposalActionLoading.value = false;
-  }
-};
-
-const archiveProposal = async () => {
-  if (!props.order?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
-  if (orderProposals.value.length <= 1) {
-    setToast('Нельзя удалить единственное предложение', 'error');
-    return;
-  }
-  if (!await confirmDialog({
-    title: 'Архивировать предложение?',
-    description: activeProposal.value.name,
-    confirmText: 'Архивировать',
-    variant: 'warning',
-  })) return;
-  const archivedId = activeProposal.value.id;
-  proposalActionLoading.value = true;
-  try {
-    const order = await ManagerOrdersService.archiveManagerOrderProposal(props.order.id, archivedId);
-    const next = (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
-      || (order.proposals || []).find((proposal) => proposal.id !== archivedId && !proposal.is_archived)
-      || null;
-    await applyOrderResponse(order, next?.id || null);
-    setToast('Предложение архивировано', 'success');
-  } catch (error) {
-    setToast(`Ошибка архивации: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    proposalActionLoading.value = false;
-  }
-};
-
-const selectProposalForOrder = async (proposal?: OrderProposalResponse) => {
-  const targetProposal = proposal || activeProposal.value;
-  if (!props.order?.id || !targetProposal?.id || targetProposal.is_selected || proposalActionLoading.value) return;
-  proposalActionLoading.value = true;
-  try {
-    await saveCurrentProposalLines();
-    const order = await ManagerOrdersService.selectManagerOrderProposal(props.order.id, targetProposal.id);
-    await applyOrderResponse(order, targetProposal.id);
-    setToast('Предложение выбрано для заказа', 'success');
-  } catch (error) {
-    setToast(`Ошибка выбора предложения: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    proposalActionLoading.value = false;
-  }
-};
-
-const changeActiveProposalStatus = async (nextStatus: ProposalLifecycleStatus) => {
-  const proposal = activeProposal.value;
-  if (!props.order?.id || !proposal?.id || proposalActionLoading.value) return;
-  if (nextStatus === activeProposalStatus.value) return;
-
-  if (nextStatus === 'ready_to_send') {
-    const validationError = validateProposalLines();
-    if (validationError || totalPreview.value <= 0) {
-      setToast(validationError || 'Добавьте хотя бы одну позицию с ненулевой суммой', 'error');
-      return;
-    }
-  }
-  if (nextStatus === 'sent' && !await confirmDialog({
-    title: 'Отметить предложение отправленным?',
-    description: 'Используйте это действие, если предложение отправлено не через CRM. Для email используйте основную кнопку отправки.',
-    confirmText: 'Отметить отправленным',
-    variant: 'warning',
-  })) return;
-  if (nextStatus === 'draft' && activeProposalLocked.value && !await confirmDialog({
-    title: 'Вернуть предложение в черновик?',
-    description: 'После этого предложение снова можно будет редактировать.',
-    confirmText: 'Вернуть в черновик',
-    variant: 'warning',
-  })) return;
-
-  proposalActionLoading.value = true;
-  try {
-    if (nextStatus === 'ready_to_send') await saveCurrentProposalLines();
-    const order = await ManagerOrdersService.patchManagerOrderProposal(props.order.id, proposal.id, { status: nextStatus });
-    proposalStatus.value = nextStatus;
-    negotiationStatus.value = order.negotiation_status || negotiationStatus.value;
-    await applyOrderResponse(order, proposal.id);
-    const label = proposalStatusLabel(nextStatus);
-    setToast(`Статус предложения: ${label}`, 'success');
-  } catch (error) {
-    setToast(`Не удалось изменить статус: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    proposalActionLoading.value = false;
-  }
-};
 
 const openProposalSend = async () => {
   const proposal = activeProposal.value;
