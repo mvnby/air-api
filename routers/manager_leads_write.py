@@ -20,7 +20,7 @@ from schemas import (
     LeadResponse,
     LeadUpdatePayload,
 )
-from services.lead_service import LeadService
+from services.lead_command_service import LeadCommandService
 from services.tenant_scope_service import TenantScope
 
 
@@ -35,7 +35,7 @@ async def create_manager_lead(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await LeadService.create_lead(
+        return await LeadCommandService.create_lead(
             session=session,
             payload=payload,
             tenant_scope=tenant_scope,
@@ -58,7 +58,7 @@ async def patch_manager_lead(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        lead = await LeadService.update_lead(
+        lead = await LeadCommandService.update_lead(
             session=session,
             lead_id=lead_id,
             payload=payload,
@@ -90,7 +90,7 @@ async def qualify_manager_lead(
 ):
     ManagerTelemetryService.record_qualify_attempt(endpoint=QUALIFY_MANAGER_LEAD, payload=payload)
     try:
-        result = await LeadService.qualify_lead(
+        result = await LeadCommandService.qualify_lead(
             session=session,
             lead_id=lead_id,
             payload=payload,
@@ -122,7 +122,7 @@ async def mark_manager_lead_lost(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        result = await LeadService.mark_lead_lost(
+        result = await LeadCommandService.mark_lead_lost(
             session=session,
             lead_id=lead_id,
             payload=payload,
