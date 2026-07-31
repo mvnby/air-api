@@ -16,6 +16,7 @@ import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
 import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
 import OrderPlanningPanel from './OrderPlanningPanel.vue';
+import OrderRepairPanel from './OrderRepairPanel.vue';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
@@ -32,14 +33,9 @@ import type {
   PaymentResponse,
   PaymentCurrency,
   FxRateResponse,
-  ManagerRepairComplaintPresetResponse,
-  EquipmentServiceEventType,
-  ManagerEquipmentDetailResponse,
-  ManagerEquipmentItemResponse,
-  ManagerEquipmentHistoryFromRepairOrderPayload,
   OutgoingEmailResponse,
 } from '../../client';
-import { ManagerOrdersService, ManagerSettingsService, ManagerMailService, ManagerRepairComplaintsService, ManagerEquipmentService } from '../../client';
+import { ManagerOrdersService, ManagerSettingsService, ManagerMailService } from '../../client';
 import { EXECUTION_STATUS_OPTIONS, formatMoney } from './order-utils';
 import {
   buildOrderWorkspaceViewModel,
@@ -53,20 +49,7 @@ import {
   proposalStatusLabel,
   type ProposalLifecycleStatus,
 } from './proposal-lifecycle';
-import {
-  CUSTOMER_APPROVAL_STATUS_OPTIONS,
-  EQUIPMENT_EVENT_OPTIONS,
-  PARTS_STATUS_OPTIONS,
-  REFRIGERANT_PRICING_MODE_OPTIONS,
-  REPAIR_AI_DEFECT_TYPES,
-  REPAIR_CHOICE_OPTIONS,
-  REPAIR_WORKFLOW_STATUS_OPTIONS,
-  emptyRepairMeta,
-  labeledOptionsWithCurrent,
-  normalizeRepairMeta,
-  selectOptionsWithCurrent,
-  type RepairMeta,
-} from './repair-meta';
+import { emptyRepairMeta, normalizeRepairMeta, type RepairMeta } from './repair-meta';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../../utils/datetime';
 import {
   useServiceDescriptionMode,
@@ -274,24 +257,6 @@ const selectedEstimateId = ref<number | null>(null);
 const estimateSearchQuery = ref('');
 const importingEstimate = ref(false);
 const showEstimateImport = ref(false);
-const repairComplaintPresets = ref<ManagerRepairComplaintPresetResponse[]>([]);
-const repairComplaintSearch = ref('');
-const repairComplaintsLoading = ref(false);
-const repairAiDefectType = ref(REPAIR_AI_DEFECT_TYPES[0]?.value || '');
-const repairAiExtraContext = ref('');
-const repairAiAllowAssumptions = ref(false);
-const repairAiPolishExisting = ref(true);
-const repairAiGenerating = ref(false);
-const repairEquipment = ref<ManagerEquipmentItemResponse[]>([]);
-const repairEquipmentLoading = ref(false);
-const repairEquipmentError = ref('');
-const selectedRepairEquipmentId = ref<number | null>(null);
-const selectedRepairEquipmentDetail = ref<ManagerEquipmentDetailResponse | null>(null);
-const repairEquipmentHistoryLoading = ref(false);
-const creatingRepairEquipment = ref(false);
-const recordingRepairHistory = ref(false);
-const repairHistoryEventType = ref<EquipmentServiceEventType | ''>('');
-const repairHistoryNotes = ref('');
 const payments = ref<PaymentResponse[]>([]);
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
@@ -460,132 +425,6 @@ const createCustomerBranch = async () => {
   }
 };
 
-const resetRepairEquipment = () => {
-  repairEquipment.value = [];
-  selectedRepairEquipmentId.value = null;
-  selectedRepairEquipmentDetail.value = null;
-  repairEquipmentError.value = '';
-  repairHistoryEventType.value = '';
-  repairHistoryNotes.value = '';
-};
-
-const loadRepairEquipmentDetail = async (equipmentId: number) => {
-  repairEquipmentHistoryLoading.value = true;
-  repairEquipmentError.value = '';
-  try {
-    selectedRepairEquipmentDetail.value = await ManagerEquipmentService.getManagerEquipment(equipmentId, 10);
-  } catch (error) {
-    selectedRepairEquipmentDetail.value = null;
-    repairEquipmentError.value = `Не удалось загрузить историю оборудования: ${getApiErrorMessage(error)}`;
-  } finally {
-    repairEquipmentHistoryLoading.value = false;
-  }
-};
-
-const selectRepairEquipment = async (equipmentId: number) => {
-  selectedRepairEquipmentId.value = equipmentId;
-  await loadRepairEquipmentDetail(equipmentId);
-};
-
-const loadRepairEquipment = async () => {
-  const customerId = customer.value?.id;
-  if (!customerId || !isRepairWorkflow.value) {
-    resetRepairEquipment();
-    return;
-  }
-  repairEquipmentLoading.value = true;
-  repairEquipmentError.value = '';
-  try {
-    const branchId = customerBranchId.value || null;
-    const response = await ManagerEquipmentService.listManagerEquipment(customerId, branchId, 1, 50, false);
-    repairEquipment.value = response.items || [];
-    if (selectedRepairEquipmentId.value && !repairEquipment.value.some((item) => item.id === selectedRepairEquipmentId.value)) {
-      selectedRepairEquipmentId.value = null;
-      selectedRepairEquipmentDetail.value = null;
-    }
-    if (!selectedRepairEquipmentId.value && repairEquipment.value.length) {
-      await selectRepairEquipment(repairEquipment.value[0]!.id);
-    } else if (selectedRepairEquipmentId.value) {
-      await loadRepairEquipmentDetail(selectedRepairEquipmentId.value);
-    }
-  } catch (error) {
-    repairEquipment.value = [];
-    selectedRepairEquipmentDetail.value = null;
-    repairEquipmentError.value = `Не удалось загрузить оборудование клиента: ${getApiErrorMessage(error)}`;
-  } finally {
-    repairEquipmentLoading.value = false;
-  }
-};
-
-const createRepairEquipmentFromMeta = async () => {
-  const customerId = customer.value?.id;
-  if (!customerId || creatingRepairEquipment.value) return;
-  const meta = repairMeta.value;
-  const displayName = trimOrNull(meta.equipment_name) || trimOrNull(orderTitle.value) || trimOrNull(props.order?.title || '');
-  const hasPassportData = Boolean(
-    displayName
-    || trimOrNull(meta.equipment_brand)
-    || trimOrNull(meta.equipment_model)
-    || trimOrNull(meta.equipment_serial_number)
-    || trimOrNull(meta.equipment_inventory_number),
-  );
-  if (!hasPassportData) {
-    repairEquipmentError.value = 'Заполните название, бренд, модель, серийный или инвентарный номер';
-    return;
-  }
-  creatingRepairEquipment.value = true;
-  repairEquipmentError.value = '';
-  try {
-    const notes = [
-      meta.equipment_power ? `Мощность: ${meta.equipment_power}` : '',
-      meta.equipment_commissioning_date ? `Ввод в эксплуатацию: ${meta.equipment_commissioning_date}` : '',
-    ].filter(Boolean).join('\n') || null;
-    const created = await ManagerEquipmentService.createManagerEquipment({
-      customer_id: customerId,
-      customer_branch_id: customerBranchId.value || null,
-      equipment_type: 'hvac',
-      display_name: displayName,
-      brand: trimOrNull(meta.equipment_brand),
-      model: trimOrNull(meta.equipment_model),
-      serial: trimOrNull(meta.equipment_serial_number),
-      inventory_number: trimOrNull(meta.equipment_inventory_number),
-      location_hint: trimOrNull(compactObjectAddress.value),
-      refrigerant_type: trimOrNull(meta.refrigerant_type),
-      notes,
-    });
-    selectedRepairEquipmentId.value = created.id;
-    await loadRepairEquipment();
-    await loadRepairEquipmentDetail(created.id);
-    setToast('Оборудование создано из полей ремонта', 'success');
-  } catch (error) {
-    repairEquipmentError.value = `Не удалось создать оборудование: ${getApiErrorMessage(error)}`;
-  } finally {
-    creatingRepairEquipment.value = false;
-  }
-};
-
-const recordRepairHistoryFromOrder = async () => {
-  if (!props.order?.id || !selectedRepairEquipmentId.value || recordingRepairHistory.value) return;
-  recordingRepairHistory.value = true;
-  repairEquipmentError.value = '';
-  try {
-    const payload: ManagerEquipmentHistoryFromRepairOrderPayload = {
-      order_id: props.order.id,
-      event_type: repairHistoryEventType.value || null,
-      notes: trimOrNull(repairHistoryNotes.value),
-    };
-    await ManagerEquipmentService.createManagerEquipmentHistoryFromRepairOrder(selectedRepairEquipmentId.value, payload);
-    repairHistoryEventType.value = '';
-    repairHistoryNotes.value = '';
-    await loadRepairEquipmentDetail(selectedRepairEquipmentId.value);
-    setToast('Событие записано в историю оборудования', 'success');
-  } catch (error) {
-    repairEquipmentError.value = `Не удалось записать историю: ${getApiErrorMessage(error)}`;
-  } finally {
-    recordingRepairHistory.value = false;
-  }
-};
-
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => (
   customer.value?.full_legal_name
@@ -607,9 +446,6 @@ const selectedCustomerBranch = computed(() => (
   customerBranches.value.find((branch) => branch.id === customerBranchId.value)
   || props.order?.customer_branch
   || null
-));
-const selectedRepairEquipment = computed(() => (
-  repairEquipment.value.find((item) => item.id === selectedRepairEquipmentId.value) || null
 ));
 const compactObjectAddress = computed(() => (
   customerDeliveryAddress.value.trim()
@@ -849,62 +685,6 @@ const removeManagerLabel = (label: string) => {
   managerLabels.value = managerLabels.value.filter((item) => item !== label);
 };
 
-const formatDateTime = (value?: string | null) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const trimOrNull = (value: string) => {
-  const normalized = value.trim();
-  return normalized || null;
-};
-
-const equipmentEventLabel = (value?: EquipmentServiceEventType | null) => (
-  EQUIPMENT_EVENT_OPTIONS.find((option) => option.value === value)?.label || 'Другое'
-);
-
-const equipmentTitle = (item?: Pick<ManagerEquipmentItemResponse, 'display_name' | 'brand' | 'model' | 'serial' | 'inventory_number'> | null) => {
-  if (!item) return 'Оборудование';
-  const name = item.display_name?.trim();
-  if (name) return name;
-  const parts = [item.brand, item.model, item.serial || item.inventory_number].map((value) => value?.trim()).filter(Boolean);
-  return parts.join(' ') || 'Оборудование';
-};
-
-const equipmentSubtitle = (item: ManagerEquipmentItemResponse | ManagerEquipmentDetailResponse) => {
-  const parts = [
-    item.brand,
-    item.model,
-    item.serial ? `SN ${item.serial}` : '',
-    item.inventory_number ? `Инв. ${item.inventory_number}` : '',
-    item.location_hint,
-    item.refrigerant_type,
-  ].map((value) => value?.trim()).filter(Boolean);
-  return parts.join(' · ') || 'Паспортные данные не заполнены';
-};
-
-const repairHistoryLine = (item: NonNullable<ManagerEquipmentDetailResponse['recent_history']>[number]) => {
-  const parts = [
-    item.complaint_snapshot,
-    item.diagnostic_result,
-    item.repair_recommendation,
-    item.refrigerant_type ? `Хладагент ${item.refrigerant_type}` : '',
-    item.refrigerant_amount,
-    item.not_repairable ? 'Не ремонтируется' : '',
-    item.not_repairable_reason,
-    item.notes,
-  ].map((value) => value?.trim()).filter(Boolean);
-  return parts.join(' · ') || 'Без подробностей';
-};
-
 const copyText = async (value: string | null | undefined, label: string) => {
   const normalized = String(value || '').trim();
   if (!normalized) {
@@ -955,58 +735,10 @@ const hasOrderInvoice = computed(() => orderDocuments.value.some((doc) => doc.do
 const hasClosingBaseDocument = computed(() => hasContract.value || hasOrderInvoice.value);
 const isRepairWorkflow = computed(() => workflowType.value === 'repair');
 const showProductLinesSection = computed(() => workflowType.value === 'sales_installation');
-const repairWorkflowStatusLabel = computed(() => (
-  REPAIR_WORKFLOW_STATUS_OPTIONS.find((item) => item.value === repairMeta.value.repair_status)?.label || ''
-));
-const repairSectionSummary = computed(() => {
-  const parts = [];
-  if (repairWorkflowStatusLabel.value) parts.push(repairWorkflowStatusLabel.value);
-  if (repairMeta.value.equipment_name.trim()) parts.push(repairMeta.value.equipment_name.trim());
-  const serial = repairMeta.value.equipment_serial_number.trim() || repairMeta.value.equipment_inventory_number.trim();
-  if (serial) parts.push(serial);
-  if (repairMeta.value.customer_complaint.trim()) parts.push('есть жалоба');
-  if (repairMeta.value.diagnostic_result.trim()) parts.push('есть диагностика');
-  if (repairMeta.value.repair_recommendation.trim() || repairMeta.value.technical_conclusion.trim()) parts.push('есть вывод');
-  return parts.join(' · ') || 'данные для диагностики и дефектного акта';
-});
-const filteredRepairComplaintPresets = computed(() => {
-  const q = repairComplaintSearch.value.trim().toLowerCase();
-  const items = repairComplaintPresets.value.filter((item) => {
-    if (!q) return true;
-    return [
-      item.customer_phrase,
-      item.document_wording,
-      item.likely_diagnosis,
-      item.complaint_group,
-    ].some((value) => String(value || '').toLowerCase().includes(q));
-  });
-  return items.slice(0, 12);
-});
-const selectedRepairAiDefect = computed(() => (
-  REPAIR_AI_DEFECT_TYPES.find((item) => item.value === repairAiDefectType.value) || REPAIR_AI_DEFECT_TYPES[0]
-));
-const repairStructuredJson = computed(() => {
-  const payload = {
-    structured_diagnosis: repairMeta.value.structured_diagnosis || {},
-    defect_act_blocks: repairMeta.value.defect_act_blocks || {},
-    risks: repairMeta.value.risks || [],
-    recommended_actions: repairMeta.value.recommended_actions || [],
-  };
-  return JSON.stringify(payload, null, 2);
-});
-const repairPossibleOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_possible));
-const repairNotViableOptions = computed(() => selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_not_viable));
-const customerApprovalStatusOptions = computed(() => labeledOptionsWithCurrent(CUSTOMER_APPROVAL_STATUS_OPTIONS, repairMeta.value.customer_approval_status));
-const partsStatusOptions = computed(() => labeledOptionsWithCurrent(PARTS_STATUS_OPTIONS, repairMeta.value.parts_status));
-watch(repairAiDefectType, (value) => {
-  if (isRepairWorkflow.value) {
-    repairMeta.value.fault_type = value;
-  }
-});
-const buildRepairMetaPayload = () => normalizeRepairMeta({
-  ...repairMeta.value,
-  fault_type: repairMeta.value.fault_type || repairAiDefectType.value,
-}, { defaultRepairStatus: isRepairWorkflow.value });
+const buildRepairMetaPayload = () => normalizeRepairMeta(
+  repairMeta.value,
+  { defaultRepairStatus: isRepairWorkflow.value },
+);
 const documentSectionSummary = computed(() => {
   const count = orderDocuments.value.length;
   if (!count) return 'Документов нет';
@@ -1372,18 +1104,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   repairMeta.value = normalizeRepairMeta(((order as any).repair_meta || {}) as Partial<RepairMeta>, {
     defaultRepairStatus: workflowType.value === 'repair',
   });
-  if (workflowType.value === 'repair') {
-    const savedFaultType = repairMeta.value.fault_type || (repairMeta.value.structured_diagnosis || {}).fault_type;
-    if (savedFaultType && REPAIR_AI_DEFECT_TYPES.some((item) => item.value === savedFaultType)) {
-      repairAiDefectType.value = savedFaultType;
-    } else {
-      repairMeta.value.fault_type = repairAiDefectType.value;
-    }
-  }
-  repairComplaintSearch.value = '';
-  if (workflowType.value === 'repair' && !repairComplaintPresets.value.length) {
-    void loadRepairComplaintPresets();
-  }
   managerLabels.value = [...(order.manager_labels ?? [])];
   managerLabelDraft.value = '';
   nextFollowupDate.value = toLocalDateTimeInput(order.next_followup_date);
@@ -1447,11 +1167,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   } else {
     resetCustomerBranches();
   }
-  if (workflowType.value === 'repair') {
-    await loadRepairEquipment();
-  } else {
-    resetRepairEquipment();
-  }
 
   productLookupById.value = {};
 
@@ -1504,12 +1219,6 @@ watch(
     if (props.modelValue) await initForm(value);
   },
 );
-
-watch(customerBranchId, () => {
-  if (props.modelValue && isRepairWorkflow.value && customer.value?.id) {
-    void loadRepairEquipment();
-  }
-});
 
 const onProductChanged = (index: number, applyCatalogPrice = false) => {
   const row = productLines.value[index];
@@ -2034,69 +1743,7 @@ const setWorkflowType = async (next: OrderWorkflowType) => {
   activeServiceSuggestionIndex.value = null;
   if (next === 'repair') {
     repairMeta.value = normalizeRepairMeta(repairMeta.value, { defaultRepairStatus: true });
-    void loadRepairComplaintPresets();
-    void loadRepairEquipment();
     await addDefaultRepairDiagnostic(requestId);
-  } else {
-    resetRepairEquipment();
-  }
-};
-
-const loadRepairComplaintPresets = async () => {
-  if (repairComplaintsLoading.value) return;
-  repairComplaintsLoading.value = true;
-  try {
-    const response = await ManagerRepairComplaintsService.listManagerRepairComplaintPresets('', null, false, false, 100);
-    repairComplaintPresets.value = response.items || [];
-  } catch (error) {
-    console.warn('Failed to load repair complaint presets', error);
-  } finally {
-    repairComplaintsLoading.value = false;
-  }
-};
-
-const applyRepairComplaintPreset = (preset: ManagerRepairComplaintPresetResponse) => {
-  repairMeta.value.customer_complaint = preset.customer_phrase || repairMeta.value.customer_complaint;
-  repairMeta.value.complaint_official = preset.document_wording || repairMeta.value.complaint_official;
-  repairMeta.value.likely_diagnosis = preset.likely_diagnosis || repairMeta.value.likely_diagnosis;
-};
-
-const generateRepairAiDraft = async () => {
-  const defect = selectedRepairAiDefect.value;
-  if (!defect || repairAiGenerating.value) return;
-  repairAiGenerating.value = true;
-  try {
-    const response = await ManagerRepairComplaintsService.generateManagerRepairActAiDraft({
-      defect_type: defect.value,
-      defect_label: defect.label,
-      allow_assumptions: repairAiAllowAssumptions.value,
-      polish_existing: repairAiPolishExisting.value,
-      equipment_name: repairMeta.value.equipment_name || orderTitle.value || props.order?.title || '',
-      equipment_brand: repairMeta.value.equipment_brand,
-      equipment_model: repairMeta.value.equipment_model,
-      equipment_power: repairMeta.value.equipment_power,
-      customer_complaint: repairMeta.value.customer_complaint,
-      complaint_official: repairMeta.value.complaint_official,
-      likely_diagnosis: repairMeta.value.likely_diagnosis,
-      diagnostic_notes: repairMeta.value.diagnostic_notes,
-      refrigerant_type: repairMeta.value.refrigerant_type,
-      refrigerant_amount: repairMeta.value.refrigerant_amount,
-      extra_context: repairMeta.value.diagnostic_notes || repairAiExtraContext.value || defect.hint,
-      current_meta: repairMeta.value as any,
-    });
-    repairMeta.value = normalizeRepairMeta({ ...repairMeta.value, ...((response.repair_meta || {}) as Partial<RepairMeta>) });
-    if (props.order?.id) {
-      await ManagerOrdersService.patchManagerOrder(props.order.id, {
-        repair_meta: buildRepairMetaPayload() as any,
-        measurement_result: measurementResult.value,
-      });
-      emit('reload', props.order.id);
-    }
-    setToast('Черновик дефектного акта заполнен и сохранен', 'success');
-  } catch (error) {
-    setToast(`AI не смог подготовить черновик: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    repairAiGenerating.value = false;
   }
 };
 
@@ -2688,453 +2335,18 @@ watch(
       />
 
 
-      <OrderDrawerSection
-        v-if="isRepairWorkflow"
+      <OrderRepairPanel
+        v-if="isRepairWorkflow && order"
         v-model:expanded="expandedDrawerSections.repair"
-        title="Ремонт / диагностика"
-        :summary="repairSectionSummary"
-        tone="default"
-      >
-        <div class="grid gap-3 md:grid-cols-2">
-          <div class="md:col-span-2 rounded-xl border border-teal-100 bg-teal-50/50 p-3">
-            <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p class="text-sm font-semibold text-teal-900">Библиотека жалоб</p>
-                <p class="text-xs text-teal-700/80">Выберите типовую жалобу, чтобы заполнить формулировку и вероятный диагноз.</p>
-              </div>
-              <button
-                type="button"
-                class="btn-mini-outline justify-center whitespace-nowrap text-xs"
-                :disabled="repairComplaintsLoading"
-                @click="loadRepairComplaintPresets"
-              >
-                <span class="material-icons-round text-[15px]" :class="{ 'animate-spin': repairComplaintsLoading }">refresh</span>
-                Обновить
-              </button>
-            </div>
-            <input
-              v-model="repairComplaintSearch"
-              type="search"
-              class="field-input mb-2"
-              placeholder="Найти: не холодит, капает, шумит..."
-            />
-            <div v-if="filteredRepairComplaintPresets.length" class="flex max-h-44 flex-wrap gap-2 overflow-auto pr-1">
-              <button
-                v-for="preset in filteredRepairComplaintPresets"
-                :key="preset.id"
-                type="button"
-                class="rounded-lg border bg-white px-3 py-2 text-left text-xs shadow-sm transition hover:border-teal-300 hover:text-teal-800"
-                :class="preset.is_favorite ? 'border-teal-200 text-teal-900' : 'border-slate-200 text-slate-700'"
-                @click="applyRepairComplaintPreset(preset)"
-              >
-                <span class="flex items-center gap-1 font-semibold">
-                  <span v-if="preset.is_favorite" class="material-icons-round text-[14px] text-amber-500">star</span>
-                  {{ preset.customer_phrase }}
-                </span>
-                <span v-if="preset.document_wording" class="mt-1 line-clamp-2 block max-w-[260px] opacity-75">{{ preset.document_wording }}</span>
-              </button>
-            </div>
-            <p v-else class="rounded-lg border border-dashed border-teal-200 bg-white/70 px-3 py-3 text-xs text-teal-700">
-              {{ repairComplaintsLoading ? 'Загружаем пресеты...' : 'Подходящих пресетов пока нет.' }}
-            </p>
-          </div>
-          <div class="md:col-span-2 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
-            <div class="mb-2 flex flex-col gap-2 lg:flex-row lg:items-end">
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-semibold text-violet-950">AI-черновик по выбранной неисправности</p>
-                <p class="mt-1 truncate text-xs text-violet-700/80">
-                  {{ selectedRepairAiDefect?.label || 'Базовая неисправность не выбрана' }}
-                </p>
-              </div>
-              <button
-                type="button"
-                class="btn-mini h-[42px] justify-center whitespace-nowrap bg-violet-600 hover:bg-violet-700"
-                :disabled="repairAiGenerating"
-                @click="generateRepairAiDraft"
-              >
-                <span v-if="repairAiGenerating" class="material-icons-round animate-spin text-[16px]">loop</span>
-                <span v-else class="material-icons-round text-[16px]">auto_awesome</span>
-                AI-черновик
-              </button>
-            </div>
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p class="text-xs text-violet-700/80">{{ selectedRepairAiDefect?.hint }}</p>
-              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <label class="inline-flex items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-violet-800">
-                  <input v-model="repairAiPolishExisting" type="checkbox" class="h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500" />
-                  Причесать заполненное
-                </label>
-                <label class="inline-flex items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-semibold text-violet-800">
-                  <input v-model="repairAiAllowAssumptions" type="checkbox" class="h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500" />
-                  Заполнить на усмотрение
-                </label>
-              </div>
-            </div>
-          </div>
-          <details class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <summary class="cursor-pointer select-none text-sm font-semibold text-slate-900">
-              Статусы, согласование и запчасти
-              <span class="ml-2 text-xs font-normal text-slate-500">{{ repairWorkflowStatusLabel || 'не указано' }}</span>
-            </summary>
-            <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <label class="field-label">
-                Этап ремонта
-                <select v-model="repairMeta.repair_status" class="field-input bg-white">
-                  <option v-for="option in REPAIR_WORKFLOW_STATUS_OPTIONS" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </select>
-              </label>
-              <label class="field-label">
-                Согласование клиента
-                <select v-model="repairMeta.customer_approval_status" class="field-input bg-white">
-                  <option v-for="option in customerApprovalStatusOptions" :key="`approval-${option.value || 'empty'}`" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </select>
-              </label>
-              <label class="field-label">
-                Запчасти
-                <select v-model="repairMeta.parts_status" class="field-input bg-white">
-                  <option v-for="option in partsStatusOptions" :key="`parts-${option.value || 'empty'}`" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </select>
-              </label>
-              <label class="field-label">
-                Комментарий согласования
-                <textarea
-                  v-model="repairMeta.customer_approval_note"
-                  class="field-input min-h-[64px] bg-white"
-                  placeholder="Кто согласовал, когда, условия"
-                />
-              </label>
-              <label class="field-label">
-                Комментарий по запчастям
-                <textarea
-                  v-model="repairMeta.parts_note"
-                  class="field-input min-h-[64px] bg-white"
-                  placeholder="Что нужно, сроки, поставщик"
-                />
-              </label>
-              <label class="field-label">
-                Итог ремонта
-                <textarea
-                  v-model="repairMeta.repair_completion_note"
-                  class="field-input min-h-[64px] bg-white"
-                  placeholder="Что выполнено или почему закрыто"
-                />
-              </label>
-            </div>
-          </details>
-          <label class="field-label md:col-span-2">
-            Жалоба клиента
-            <textarea
-              v-model="repairMeta.customer_complaint"
-              class="field-input min-h-[72px]"
-              placeholder="Например: не охлаждает, шумит, течет вода..."
-            />
-          </label>
-          <label class="field-label">
-            Базовая неисправность
-            <select v-model="repairAiDefectType" class="field-input">
-              <option v-for="item in REPAIR_AI_DEFECT_TYPES" :key="`main-${item.value}`" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-          </label>
-          <label class="field-label md:col-span-2">
-            Детали диагностики / заметки инженера
-            <textarea
-              v-model="repairMeta.diagnostic_notes"
-              class="field-input min-h-[72px]"
-              placeholder="Что увидел инженер: симптомы, проверки, ограничения, важные нюансы"
-            />
-          </label>
-          <label class="field-label">
-            Результат диагностики
-            <textarea
-              v-model="repairMeta.diagnostic_result"
-              class="field-input min-h-[88px]"
-              placeholder="Что выявлено при диагностике, без лишних чисел и предположений"
-            />
-          </label>
-          <label class="field-label">
-            Рекомендация по ремонту
-            <textarea
-              v-model="repairMeta.repair_recommendation"
-              class="field-input min-h-[88px]"
-              placeholder="Что сделать: устранить утечку, заменить узел, дозаправить..."
-            />
-          </label>
-          <label class="field-label md:col-span-2">
-            Формулировка для сметы ремонта
-            <textarea
-              v-model="repairMeta.repair_estimate_text"
-              class="field-input min-h-[72px]"
-              placeholder="Короткая строка работ для сметы"
-            />
-          </label>
-          <label class="field-label">
-            Возможен ремонт
-            <select v-model="repairMeta.repair_possible" class="field-input">
-              <option v-for="option in repairPossibleOptions" :key="`repair-possible-${option || 'empty'}`" :value="option">
-                {{ option || 'Не указано' }}
-              </option>
-            </select>
-          </label>
-          <label class="field-label">
-            Ремонт невозможен / нецелесообразен
-            <select v-model="repairMeta.repair_not_viable" class="field-input">
-              <option v-for="option in repairNotViableOptions" :key="`repair-not-viable-${option || 'empty'}`" :value="option">
-                {{ option || 'Не указано' }}
-              </option>
-            </select>
-          </label>
-          <label class="field-label">
-            Хладагент
-            <input v-model="repairMeta.refrigerant_type" class="field-input" placeholder="R32, R410A..." />
-          </label>
-          <label class="field-label">
-            Количество хладагента
-            <input v-model="repairMeta.refrigerant_amount" class="field-input" placeholder="0,45 кг или по факту" />
-          </label>
-          <label class="field-label md:col-span-2">
-            Расчет хладагента
-            <input
-              v-model="repairMeta.refrigerant_pricing_mode"
-              list="refrigerant-pricing-mode-options"
-              class="field-input"
-              placeholder="по фактической массе, включен в стоимость..."
-            />
-            <datalist id="refrigerant-pricing-mode-options">
-              <option v-for="option in REFRIGERANT_PRICING_MODE_OPTIONS" :key="option" :value="option" />
-            </datalist>
-          </label>
-          <label class="field-label md:col-span-2">
-            Причина неремонтопригодности
-            <textarea
-              v-model="repairMeta.repair_not_viable_reason"
-              class="field-input min-h-[72px]"
-              placeholder="Заполняйте, если ремонт невозможен или экономически нецелесообразен"
-            />
-          </label>
-
-          <details class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <summary class="cursor-pointer select-none text-sm font-semibold text-slate-900">
-              Оборудование и паспортные данные
-              <span class="ml-2 text-xs font-normal text-slate-500">{{ repairMeta.equipment_model || repairMeta.equipment_name || 'не заполнено' }}</span>
-            </summary>
-            <div class="mt-3 grid gap-3 md:grid-cols-2">
-          <label class="field-label">
-            Оборудование
-            <input v-model="repairMeta.equipment_name" class="field-input" placeholder="Кондиционер настенный" />
-          </label>
-          <label class="field-label">
-            Бренд
-            <input v-model="repairMeta.equipment_brand" class="field-input" placeholder="LG, Gree, Mitsubishi..." />
-          </label>
-          <label class="field-label">
-            Модель
-            <input v-model="repairMeta.equipment_model" class="field-input" placeholder="Модель внутреннего/наружного блока" />
-          </label>
-          <label class="field-label">
-            Мощность
-            <input v-model="repairMeta.equipment_power" class="field-input" placeholder="2,5 кВт" />
-          </label>
-          <label class="field-label">
-            Серийный номер
-            <input v-model="repairMeta.equipment_serial_number" class="field-input" placeholder="SN..." />
-          </label>
-          <label class="field-label">
-            Инвентарный номер
-            <input v-model="repairMeta.equipment_inventory_number" class="field-input" placeholder="Инв. номер заказчика" />
-          </label>
-          <label class="field-label md:col-span-2">
-            Дата ввода в эксплуатацию
-            <input v-model="repairMeta.equipment_commissioning_date" class="field-input" placeholder="Например: 2021 г. или 12.05.2021" />
-          </label>
-
-          <div class="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-slate-900">Карточка оборудования и история</p>
-                <p class="mt-1 text-xs text-slate-600">
-                  История оборудования записывается отдельным действием и не меняет CRM/Kanban статус заказа.
-                </p>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  class="btn-mini-outline justify-center whitespace-nowrap text-xs"
-                  :disabled="repairEquipmentLoading"
-                  @click="loadRepairEquipment"
-                >
-                  Обновить
-                </button>
-                <button
-                  type="button"
-                  class="btn-mini justify-center whitespace-nowrap text-xs"
-                  :disabled="creatingRepairEquipment || !customer?.id"
-                  @click="createRepairEquipmentFromMeta"
-                >
-                  {{ creatingRepairEquipment ? 'Создаем...' : 'Создать из полей' }}
-                </button>
-              </div>
-            </div>
-
-            <p v-if="repairEquipmentError" class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {{ repairEquipmentError }}
-            </p>
-
-            <div v-if="!customer?.id" class="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
-              Выберите клиента, чтобы вести оборудование.
-            </div>
-            <div v-else-if="repairEquipmentLoading" class="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-xs text-slate-500">
-              Загружаем оборудование клиента...
-            </div>
-            <div v-else class="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <div class="space-y-2">
-                <button
-                  v-for="item in repairEquipment"
-                  :key="item.id"
-                  type="button"
-                  class="w-full rounded-lg border px-3 py-2 text-left text-xs transition"
-                  :class="selectedRepairEquipmentId === item.id
-                    ? 'border-teal-400 bg-white text-teal-900 shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-teal-200'"
-                  @click="selectRepairEquipment(item.id)"
-                >
-                  <span class="block break-words font-semibold">{{ equipmentTitle(item) }}</span>
-                  <span class="mt-1 block break-words text-slate-500">{{ equipmentSubtitle(item) }}</span>
-                </button>
-                <div v-if="!repairEquipment.length" class="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
-                  {{ customerBranchId ? 'Для выбранного филиала оборудование не найдено.' : 'Оборудование клиента пока не заведено.' }}
-                </div>
-              </div>
-
-              <div class="rounded-lg border border-slate-200 bg-white p-3">
-                <div v-if="repairEquipmentHistoryLoading" class="text-xs text-slate-500">Загружаем историю...</div>
-                <template v-else-if="selectedRepairEquipment">
-                  <div class="mb-3">
-                    <p class="break-words text-sm font-semibold text-slate-900">{{ equipmentTitle(selectedRepairEquipment) }}</p>
-                    <p class="mt-1 break-words text-xs text-slate-500">{{ equipmentSubtitle(selectedRepairEquipment) }}</p>
-                  </div>
-                  <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                    <label class="field-label !mb-0">
-                      Тип записи из заказа
-                      <select v-model="repairHistoryEventType" class="field-input bg-white">
-                        <option value="">Определить автоматически</option>
-                        <option v-for="option in EQUIPMENT_EVENT_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-                      </select>
-                    </label>
-                    <label class="field-label !mb-0">
-                      Заметка
-                      <input v-model="repairHistoryNotes" class="field-input bg-white" placeholder="Например: закрыто после согласования" />
-                    </label>
-                  </div>
-                  <button
-                    type="button"
-                    class="btn-mini mt-2 w-full justify-center text-xs"
-                    :disabled="recordingRepairHistory || !selectedRepairEquipmentId || !order?.id"
-                    @click="recordRepairHistoryFromOrder"
-                  >
-                    {{ recordingRepairHistory ? 'Записываем...' : 'Записать историю из этого ремонта' }}
-                  </button>
-                  <p class="mt-2 text-[11px] text-slate-500">
-                    Действие создаст запись истории оборудования из repair meta текущего заказа. Статус заказа и этап ремонта останутся отдельными.
-                  </p>
-
-                  <div class="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
-                    <div
-                      v-for="entry in selectedRepairEquipmentDetail?.recent_history || []"
-                      :key="entry.id"
-                      class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
-                    >
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="rounded-full bg-teal-50 px-2 py-0.5 font-semibold text-teal-700">{{ equipmentEventLabel(entry.event_type) }}</span>
-                        <span class="text-slate-500">{{ formatDateTime(entry.event_date) || 'Без даты' }}</span>
-                        <span v-if="entry.order_id" class="text-slate-500">Заказ #{{ entry.order_id }}</span>
-                      </div>
-                      <p class="mt-1 break-words text-slate-600">{{ repairHistoryLine(entry) }}</p>
-                    </div>
-                    <div v-if="!(selectedRepairEquipmentDetail?.recent_history || []).length" class="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-500">
-                      История пока пустая
-                    </div>
-                  </div>
-                </template>
-                <div v-else class="text-xs text-slate-500">Выберите оборудование слева или создайте карточку из полей ремонта.</div>
-              </div>
-            </div>
-          </div>
-            </div>
-          </details>
-
-          <details class="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-            <summary class="cursor-pointer select-none text-sm font-semibold text-amber-900">
-              Экспертный режим: JSON и ручные override-поля
-            </summary>
-            <div class="mt-3 grid gap-3 md:grid-cols-2">
-              <label class="field-label md:col-span-2">
-                Структурированные выводы AI
-                <textarea :value="repairStructuredJson" readonly class="field-input min-h-[180px] font-mono text-xs" />
-              </label>
-              <label class="field-label">
-                Формулировка для акта
-                <textarea
-                  v-model="repairMeta.complaint_official"
-                  class="field-input min-h-[72px]"
-                  placeholder="Override официальной формулировки жалобы"
-                />
-              </label>
-              <label class="field-label">
-                Вероятный диагноз
-                <textarea
-                  v-model="repairMeta.likely_diagnosis"
-                  class="field-input min-h-[72px]"
-                  placeholder="Override предварительной причины"
-                />
-              </label>
-          <label class="field-label">
-            Техническое состояние
-            <textarea v-model="repairMeta.technical_condition" class="field-input min-h-[80px]" placeholder="Общее состояние, износ, загрязнение, следы вмешательства..." />
-          </label>
-          <label class="field-label">
-            Проверка запуска
-            <textarea v-model="repairMeta.startup_check_result" class="field-input min-h-[80px]" placeholder="Запускается / не запускается, ошибки, симптомы..." />
-          </label>
-          <label class="field-label">
-            Проверка компрессора
-            <textarea v-model="repairMeta.compressor_check_result" class="field-input min-h-[80px]" placeholder="Токи, сопротивления, срабатывание защиты..." />
-          </label>
-          <label class="field-label">
-            Замеры / диагностика
-            <textarea v-model="repairMeta.measurement_result" class="field-input min-h-[80px]" placeholder="Давление, температура, утечки, электрические замеры..." />
-          </label>
-          <label class="field-label">
-            Возможность дальнейшей эксплуатации
-            <textarea v-model="repairMeta.further_use_assessment" class="field-input min-h-[80px]" placeholder="Допускается / не допускается / с ограничениями..." />
-          </label>
-          <label class="field-label">
-            Ограничения эксплуатации
-            <textarea v-model="repairMeta.operation_restrictions" class="field-input min-h-[80px]" placeholder="Что нельзя делать до ремонта или замены" />
-          </label>
-          <label class="field-label">
-            Целесообразность ремонта
-            <textarea v-model="repairMeta.repair_feasibility" class="field-input min-h-[80px]" placeholder="Ремонт целесообразен / нецелесообразен..." />
-          </label>
-          <label class="field-label">
-            Рекомендованное решение
-            <textarea v-model="repairMeta.recommended_decision" class="field-input min-h-[80px]" placeholder="Ремонт, замена узла, списание, замена оборудования..." />
-          </label>
-          <label class="field-label md:col-span-2">
-            Техническое заключение
-            <textarea v-model="repairMeta.technical_conclusion" class="field-input min-h-[96px]" placeholder="Итоговый вывод для дефектного акта" />
-          </label>
-            </div>
-          </details>
-        </div>
-      </OrderDrawerSection>
+        v-model:repair-meta="repairMeta"
+        :order="order"
+        :order-title="orderTitle"
+        :measurement-result="measurementResult"
+        :customer-branch-id="customerBranchId"
+        :object-address="compactObjectAddress"
+        @toast="setToast($event.message, $event.type)"
+        @reload="emit('reload', $event)"
+      />
 
 
 
