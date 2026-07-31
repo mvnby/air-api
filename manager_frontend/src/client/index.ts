@@ -463,6 +463,7 @@ export type { PublicProductCollectionPlacementResponse } from './models/PublicPr
 export type { PublicProductCollectionResponse } from './models/PublicProductCollectionResponse';
 export type { PublicRelatedSeriesResponse } from './models/PublicRelatedSeriesResponse';
 export type { PublicSeriesPageResponse } from './models/PublicSeriesPageResponse';
+export type { PublicStorefrontContextResponse } from './models/PublicStorefrontContextResponse';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
 export type { ServiceResponse } from './models/ServiceResponse';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';

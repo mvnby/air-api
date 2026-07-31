@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.tenant_scope import get_system_tenant_scope
+from core.tenant_scope import get_public_tenant_scope
 from schemas import OrderPayload, OrderResponse, PublicOrderPricingErrorResponse
 from services.installation_pricing_service import InstallationPricingError
 from services.website_order_service import WebsiteOrderService
@@ -27,7 +27,7 @@ router = APIRouter(tags=["api"])
 async def create_order(
     payload: OrderPayload,
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """
     Create a new order from website.

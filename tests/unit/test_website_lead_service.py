@@ -6,7 +6,7 @@ import pytest
 
 from core.config import settings
 from core.database import get_session
-from core.tenant_scope import get_system_tenant_scope
+from core.tenant_scope import get_public_tenant_scope
 from crud.product import ProductDAO
 from main import app
 from models import Customer, Lead, LeadSource, Order, OrderStatus, Product
@@ -356,7 +356,7 @@ async def test_public_product_availability_lead_endpoint_returns_response(
         fake_create,
     )
     app.dependency_overrides[get_session] = override_get_session
-    app.dependency_overrides[get_system_tenant_scope] = override_tenant_scope
+    app.dependency_overrides[get_public_tenant_scope] = override_tenant_scope
 
     transport = ASGITransport(app=app)
     try:
@@ -381,7 +381,7 @@ async def test_public_product_availability_lead_endpoint_validates_phone(tenant_
     async def override_tenant_scope():
         return tenant_scope
 
-    app.dependency_overrides[get_system_tenant_scope] = override_tenant_scope
+    app.dependency_overrides[get_public_tenant_scope] = override_tenant_scope
     transport = ASGITransport(app=app)
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as client:

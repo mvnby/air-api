@@ -82,3 +82,41 @@ async def test_resolve_by_host_returns_none_for_unknown_domain(monkeypatch):
     )
 
     assert await StorefrontContextService.resolve_by_host(object(), "unknown.example") is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_by_scope_returns_public_context(monkeypatch):
+    session = object()
+    row = StorefrontContextRow(
+        tenant_id=1,
+        tenant_slug="mvn",
+        tenant_kind="operator",
+        storefront_id=2,
+        storefront_slug="orsha",
+        storefront_name="MVN Орша",
+        hostname="orsha.mvn.by",
+        city="Орша",
+        default_locale="ru-BY",
+        currency="BYN",
+        tenant_is_system=True,
+    )
+    resolver = AsyncMock(return_value=row)
+    monkeypatch.setattr(
+        "services.storefront_context_service.TenancyDAO.get_active_storefront_by_scope",
+        resolver,
+    )
+
+    context = await StorefrontContextService.resolve_by_scope(
+        session,
+        tenant_id=1,
+        storefront_id=2,
+    )
+
+    assert context is not None
+    assert context.storefront_name == "MVN Орша"
+    assert context.tenant_is_system is True
+    resolver.assert_awaited_once_with(
+        session,
+        tenant_id=1,
+        storefront_id=2,
+    )

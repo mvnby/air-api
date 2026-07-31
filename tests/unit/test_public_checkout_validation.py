@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from core.database import get_session
-from core.tenant_scope import get_system_tenant_scope
+from core.tenant_scope import get_public_tenant_scope
 from routers.api_orders import router
 from services.installation_pricing_service import InstallationPricingError
 from services.website_order_service import WebsiteOrderService
@@ -40,7 +40,7 @@ def checkout_app(monkeypatch):
     create_order = AsyncMock()
     monkeypatch.setattr(WebsiteOrderService, "create_order", create_order)
     app.dependency_overrides[get_session] = override_session
-    app.dependency_overrides[get_system_tenant_scope] = override_tenant_scope
+    app.dependency_overrides[get_public_tenant_scope] = override_tenant_scope
     return app, create_order
 
 
