@@ -62,6 +62,48 @@ receive that scope before entering those boundaries.
 
 Public DTOs and Manager command payloads deliberately expose neither ID.
 
+## Controlled historical backfill
+
+`scripts/backfill_lead_order_tenant_scope.py` is the only supported write path
+for historical Lead/Order provenance. It is dry-run by default and must run
+inside the active API container on the current Patroni primary.
+
+The dry-run:
+
+- resolves `mvn/main` through the same fail-closed server resolver;
+- reports legacy-null, target, partial, unexpected, unknown and cross-tenant
+  rows independently for Lead and Order;
+- selects at most `--limit` rows from each table;
+- prints the exact candidate IDs and a SHA-256 plan token.
+
+Example canary:
+
+```bash
+python3 scripts/backfill_lead_order_tenant_scope.py --limit 1
+```
+
+Execute only the `reviewed_execute_command` printed by that dry-run. The
+command includes the resolved tenant/storefront IDs and plan token. Execute
+rebuilds the plan under a transaction-scoped advisory lock, rejects a stale
+token or any provenance anomaly, locks the selected rows and commits Lead and
+Order updates together.
+
+After the canary, repeat dry-run/execute with a larger bounded batch:
+
+```bash
+python3 scripts/backfill_lead_order_tenant_scope.py --limit 1000
+```
+
+Normal new writes already carrying the correct scope do not invalidate a
+reviewed plan. A new legacy row, changed candidate set, partial pair, unknown
+reference, cross-tenant pair or unexpected tenant/storefront does.
+
+The backfill phase is complete only when a final dry-run prints:
+
+- `legacy_null=0` for both tables;
+- zero partial, unexpected, unknown and cross-tenant rows;
+- `contract_ready=true`.
+
 ## What this release does not claim
 
 The expand release records ownership provenance; it does not yet provide
