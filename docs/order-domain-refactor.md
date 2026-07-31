@@ -72,6 +72,12 @@ Move Order/Lead DTOs into domain modules and re-export them from `schemas.py` so
 existing imports and OpenAPI operation contracts remain stable. Complete one
 domain at a time and verify generated client output after every move.
 
+- [x] shared pagination and installer contracts extracted;
+- [x] Order command/projection contracts extracted;
+- [x] portable Order import/export contracts extracted;
+- [x] public and Manager Lead contracts extracted;
+- [x] generated OpenAPI and Manager client remain unchanged.
+
 ## R4: Manager Order workspace
 
 Split `OrderEditDrawer.vue` along user-visible responsibilities:
