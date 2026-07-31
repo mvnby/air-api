@@ -53,7 +53,7 @@ Deliver R2 as independently deployable slices:
 1. [x] proposal create/update/select commands;
 2. [x] work-stage and payment commands;
 3. [x] Manager order creation and Lead create/update/loss/qualification;
-4. [ ] Manager order update;
+4. [x] Manager order update, split into order/customer/commercial/finalization slices;
 5. [ ] order deletion and external document cleanup.
 
 Order deletion stays separate because deleting a Google Drive document is an

@@ -742,14 +742,15 @@ async def test_service_update_order_for_manager_validation(db):
     db.add(order)
     await db.commit()
     await db.refresh(order)
+    order_id = int(order.id)
 
     with pytest.raises(ValueError):
-        await OrderService.update_order_for_manager(db, order.id, ManagerOrderUpdatePayload(status="bad_status"), tenant_scope=TEST_TENANT_SCOPE)
+        await OrderService.update_order_for_manager(db, order_id, ManagerOrderUpdatePayload(status="bad_status"), tenant_scope=TEST_TENANT_SCOPE)
 
     with pytest.raises(ValueError, match="Invalid negotiation_status"):
         await OrderService.update_order_for_manager(
             db,
-            order.id,
+            order_id,
             ManagerOrderUpdatePayload(negotiation_status="waiting_for_magic"),
             tenant_scope=TEST_TENANT_SCOPE,
         )
@@ -757,7 +758,7 @@ async def test_service_update_order_for_manager_validation(db):
     with pytest.raises(ValueError):
         await OrderService.update_order_for_manager(
             db,
-            order.id,
+            order_id,
             ManagerOrderUpdatePayload(products=[{"product_id": 1, "quantity": 1, "price": -1}]),
             tenant_scope=TEST_TENANT_SCOPE,
         )
@@ -765,7 +766,7 @@ async def test_service_update_order_for_manager_validation(db):
     with pytest.raises(ValueError, match="Product not found"):
         await OrderService.update_order_for_manager(
             db,
-            order.id,
+            order_id,
             ManagerOrderUpdatePayload(products=[{"product_id": 999999, "quantity": 1, "price": 100}]),
             tenant_scope=TEST_TENANT_SCOPE,
         )
@@ -777,19 +778,22 @@ async def test_service_update_order_for_manager_validation(db):
     await db.commit()
     await db.refresh(product)
     await db.refresh(service)
+    product_id = int(product.id)
+    service_id = int(service.id)
+    service_title = service.title
 
     with pytest.raises(ValueError, match="Product cost cannot be negative"):
         await OrderService.update_order_for_manager(
             db,
-            order.id,
-            ManagerOrderUpdatePayload(products=[{"product_id": product.id, "quantity": 1, "price": 100, "cost": -1}]),
+            order_id,
+            ManagerOrderUpdatePayload(products=[{"product_id": product_id, "quantity": 1, "price": 100, "cost": -1}]),
             tenant_scope=TEST_TENANT_SCOPE,
         )
 
     with pytest.raises(ValueError, match="Service not found"):
         await OrderService.update_order_for_manager(
             db,
-            order.id,
+            order_id,
             ManagerOrderUpdatePayload(services=[{"service_id": 999999, "title": "Bad", "quantity": 1, "price": 100}]),
             tenant_scope=TEST_TENANT_SCOPE,
         )
@@ -797,9 +801,9 @@ async def test_service_update_order_for_manager_validation(db):
     with pytest.raises(ValueError, match="Service cost cannot be negative"):
         await OrderService.update_order_for_manager(
             db,
-            order.id,
+            order_id,
             ManagerOrderUpdatePayload(
-                services=[{"service_id": service.id, "title": service.title, "quantity": 1, "price": 100, "cost": -1}]
+                services=[{"service_id": service_id, "title": service_title, "quantity": 1, "price": 100, "cost": -1}]
             ),
             tenant_scope=TEST_TENANT_SCOPE,
         )

@@ -50,6 +50,7 @@ from services.order_payment_command_service import OrderPaymentCommandService
 from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
 from services.order_transfer_service import OrderTransferService
+from services.order_update.command import OrderUpdateCommandService
 from services.order_work_stage_command_service import OrderWorkStageCommandService
 from services.tenant_scope_service import TenantScope
 
@@ -141,7 +142,7 @@ async def patch_manager_order(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        data = await OrderService.update_order_for_manager(
+        data = await OrderUpdateCommandService.update_order_for_manager(
             session,
             order_id,
             payload,
