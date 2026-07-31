@@ -127,7 +127,7 @@ async def test_installer_list_keeps_historical_blocked_staff_visible(sqlite_inst
 @pytest.mark.asyncio
 async def test_new_order_assignment_rejects_blocked_staff_user(sqlite_installer_session):
     installer = Installer(name="Blocked Installer", is_active=True)
-    order = Order()
+    order = Order(tenant_id=1, storefront_id=1)
     sqlite_installer_session.add(installer)
     sqlite_installer_session.add(order)
     await sqlite_installer_session.flush()
@@ -157,7 +157,7 @@ async def test_new_order_assignment_notification_uses_active_staff_telegram_id(
     monkeypatch,
 ):
     installer = Installer(name="Active Installer", is_active=True, telegram_id=1001)
-    order = Order(delivery_address="Vitebsk")
+    order = Order(tenant_id=1, storefront_id=1, delivery_address="Vitebsk")
     sqlite_installer_session.add(installer)
     sqlite_installer_session.add(order)
     await sqlite_installer_session.flush()
@@ -190,7 +190,7 @@ async def test_new_order_assignment_notification_uses_active_staff_telegram_id(
 @pytest.mark.asyncio
 async def test_existing_historical_blocked_assignment_can_still_update(sqlite_installer_session):
     installer = Installer(name="Historical Installer", is_active=True)
-    order = Order()
+    order = Order(tenant_id=1, storefront_id=1)
     sqlite_installer_session.add(installer)
     sqlite_installer_session.add(order)
     await sqlite_installer_session.flush()
@@ -227,7 +227,7 @@ async def test_existing_historical_blocked_assignment_can_still_update(sqlite_in
 @pytest.mark.asyncio
 async def test_new_manager_measurer_assignment_rejects_blocked_staff_user(sqlite_installer_session):
     installer = Installer(name="Blocked Measurer", is_active=True)
-    order = Order(comment="before")
+    order = Order(tenant_id=1, storefront_id=1, comment="before")
     sqlite_installer_session.add(installer)
     sqlite_installer_session.add(order)
     await sqlite_installer_session.flush()
@@ -254,7 +254,7 @@ async def test_new_manager_measurer_assignment_rejects_blocked_staff_user(sqlite
 @pytest.mark.asyncio
 async def test_unchanged_historical_blocked_measurer_can_still_save(sqlite_installer_session):
     installer = Installer(name="Historical Measurer", is_active=True)
-    order = Order(measurer_id=None, comment="before")
+    order = Order(tenant_id=1, storefront_id=1, measurer_id=None, comment="before")
     sqlite_installer_session.add(installer)
     sqlite_installer_session.add(order)
     await sqlite_installer_session.flush()

@@ -60,6 +60,8 @@ async def migration_session(tmp_path: Path):
 
 def test_extract_order_candidates_deduplicates_and_prefers_equipment_context():
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=17,
         technical_meta={
             "telegram_attachments": [
@@ -275,8 +277,10 @@ async def test_private_copy_rejects_corrupt_storage_readback(migration_session, 
         async def presign(self, storage_key, *, expires_seconds, download_name=None):
             return None
 
-    customer = Customer(id=1, name="Legacy customer", phone="+375290000001")
+    customer = Customer(tenant_id=1, id=1, name="Legacy customer", phone="+375290000001")
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=17,
         title="Legacy order",
         customer_id=1,
@@ -408,8 +412,8 @@ async def test_execute_uses_advisory_lock_and_fails_closed_on_partial_result(mon
 
 @pytest.mark.asyncio
 async def test_migration_idempotency_helpers_detect_existing_rows(migration_session):
-    customer = Customer(id=1, name="Legacy customer", phone="+375290000001")
-    order = Order(id=17, title="Legacy order", customer_id=1)
+    customer = Customer(tenant_id=1, id=1, name="Legacy customer", phone="+375290000001")
+    order = Order(tenant_id=1, storefront_id=1, id=17, title="Legacy order", customer_id=1)
     equipment = CustomerEquipment(
         id=81,
         customer_id=1,
@@ -441,6 +445,8 @@ async def test_migration_idempotency_helpers_detect_existing_rows(migration_sess
 
     candidate = extract_order_candidates(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             id=17,
             technical_meta={
                 "telegram_attachments": [
@@ -482,8 +488,8 @@ async def test_migration_idempotency_helpers_detect_existing_rows(migration_sess
 
 @pytest.mark.asyncio
 async def test_url_only_candidate_is_idempotent_by_stable_source_key(migration_session):
-    customer = Customer(id=1, name="Legacy customer", phone="+375290000001")
-    order = Order(id=17, title="Legacy order", customer_id=1)
+    customer = Customer(tenant_id=1, id=1, name="Legacy customer", phone="+375290000001")
+    order = Order(tenant_id=1, storefront_id=1, id=17, title="Legacy order", customer_id=1)
     candidate = LegacyAttachmentCandidate(
         order_id=17,
         file_id=None,
@@ -522,9 +528,9 @@ async def test_url_only_candidate_is_idempotent_by_stable_source_key(migration_s
 
 @pytest.mark.asyncio
 async def test_migration_skips_cross_customer_equipment_order_links(migration_session):
-    first_customer = Customer(id=1, name="First", phone="+375290000001")
-    second_customer = Customer(id=2, name="Second", phone="+375290000002")
-    foreign_order = Order(id=17, title="Foreign order", customer_id=2)
+    first_customer = Customer(tenant_id=1, id=1, name="First", phone="+375290000001")
+    second_customer = Customer(tenant_id=1, id=2, name="Second", phone="+375290000002")
+    foreign_order = Order(tenant_id=1, storefront_id=1, id=17, title="Foreign order", customer_id=2)
     equipment = CustomerEquipment(id=81, customer_id=1, source_order_id=17)
     migration_session.add_all([first_customer, second_customer, foreign_order, equipment])
     await migration_session.commit()

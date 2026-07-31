@@ -10,6 +10,9 @@ from services.customer_tenant_backfill_service import (
 )
 
 
+pytestmark = pytest.mark.expand_phase_schema
+
+
 @pytest.mark.asyncio
 async def test_customer_backfill_is_bounded_reviewed_and_preserves_recency(db):
     original_updated_at = datetime(2025, 1, 2, 3, 4, 5)

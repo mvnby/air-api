@@ -122,7 +122,8 @@ def test_model_indexes_match_current_database_shape():
     assert any(
         index.name == "uq_lead_bot_source_fingerprint"
         and index.unique
-        and [column.name for column in index.columns] == ["source_fingerprint"]
+        and [column.name for column in index.columns]
+        == ["tenant_id", "source_fingerprint"]
         and str(index.dialect_options["postgresql"]["where"])
         == "source = 'bot' AND source_fingerprint IS NOT NULL"
         for index in lead.indexes
@@ -133,7 +134,13 @@ def test_model_indexes_match_current_database_shape():
         index.name == "uq_customer_requisites_telegram_message"
         and index.unique
         and [column.name for column in index.columns]
-        == ["source", "telegram_user_id", "telegram_chat_id", "telegram_message_id"]
+        == [
+            "tenant_id",
+            "source",
+            "telegram_user_id",
+            "telegram_chat_id",
+            "telegram_message_id",
+        ]
         for index in recognition.indexes
     )
 

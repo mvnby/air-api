@@ -459,12 +459,12 @@ async def test_email_lead_import_dry_run_reports_keyword_filtered_message(sqlite
 
 @pytest.mark.asyncio
 async def test_bank_receipt_dedupes_and_creates_exact_order_payment(sqlite_session):
-    customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
+    customer = Customer(tenant_id=1, name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="execution")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -502,12 +502,14 @@ async def test_bank_receipt_dedupes_and_creates_exact_order_payment(sqlite_sessi
 
 @pytest.mark.asyncio
 async def test_bank_receipt_payment_applies_order_payment_automation(sqlite_session):
-    customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
+    customer = Customer(tenant_id=1, name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status="negotiation",
         negotiation_status="awaiting_payment",
@@ -538,12 +540,12 @@ async def test_bank_receipt_payment_applies_order_payment_automation(sqlite_sess
 
 @pytest.mark.asyncio
 async def test_bank_receipt_multi_act_payment_requires_review(sqlite_session):
-    customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
+    customer = Customer(tenant_id=1, name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="execution")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -567,15 +569,15 @@ async def test_bank_receipt_multi_act_payment_requires_review(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_bank_receipt_auto_attaches_exact_group_subset(sqlite_session):
-    customer = Customer(name='ТД "Витебск Агропродукт"', phone="+375291111116", type="company", inn="300123456")
+    customer = Customer(tenant_id=1, name='ТД "Витебск Агропродукт"', phone="+375291111116", type="company", inn="300123456")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
     orders = [
-        Order(customer_id=customer.id, status="execution", title="Акт 1"),
-        Order(customer_id=customer.id, status="execution", title="Акт 2"),
-        Order(customer_id=customer.id, status="execution", title="Акт 3"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Акт 1"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Акт 2"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Акт 3"),
     ]
     sqlite_session.add_all(orders)
     await sqlite_session.commit()
@@ -637,14 +639,14 @@ async def test_bank_receipt_auto_attaches_exact_group_subset(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_delete_order_payment_detaches_group_bank_receipt(sqlite_session):
-    customer = Customer(name='ТД "Витебск Агропродукт"', phone="+375291111117", type="company", inn="300123457")
+    customer = Customer(tenant_id=1, name='ТД "Витебск Агропродукт"', phone="+375291111117", type="company", inn="300123457")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
     orders = [
-        Order(customer_id=customer.id, status="execution", title="Акт 1"),
-        Order(customer_id=customer.id, status="execution", title="Акт 2"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Акт 1"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Акт 2"),
     ]
     sqlite_session.add_all(orders)
     await sqlite_session.commit()
@@ -705,12 +707,12 @@ async def test_delete_order_payment_detaches_group_bank_receipt(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
-    customer = Customer(name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
+    customer = Customer(tenant_id=1, name="УКС Витебск", phone="+375291111111", type="company", inn="300200572")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="execution")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -744,14 +746,14 @@ async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
 
 @pytest.mark.asyncio
 async def test_bank_receipt_allocations_keep_overpayment_as_unallocated_remainder(sqlite_session):
-    customer = Customer(name="Тестовый плательщик", phone="+375291111120", type="company", inn="300999001")
+    customer = Customer(tenant_id=1, name="Тестовый плательщик", phone="+375291111120", type="company", inn="300999001")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
     amounts = [500, 880, 1110, 485]
     orders = [
-        Order(customer_id=customer.id, status="execution", title=f"Акт {index}")
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title=f"Акт {index}")
         for index in range(1, 5)
     ]
     sqlite_session.add_all(orders)
@@ -813,13 +815,13 @@ async def test_bank_receipt_allocations_keep_overpayment_as_unallocated_remainde
 
 @pytest.mark.asyncio
 async def test_bank_receipt_allocations_support_underpayment_and_idempotent_save(sqlite_session):
-    customer = Customer(name="Частичная оплата", phone="+375291111121", type="company", inn="300999002")
+    customer = Customer(tenant_id=1, name="Частичная оплата", phone="+375291111121", type="company", inn="300999002")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
     orders = [
-        Order(customer_id=customer.id, status="execution", title="Старый акт"),
-        Order(customer_id=customer.id, status="execution", title="Новый акт"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Старый акт"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Новый акт"),
     ]
     sqlite_session.add_all(orders)
     await sqlite_session.commit()
@@ -881,13 +883,13 @@ async def test_bank_receipt_allocations_support_underpayment_and_idempotent_save
 
 @pytest.mark.asyncio
 async def test_bank_receipt_can_replace_legacy_full_allocation_across_orders(sqlite_session):
-    customer = Customer(name="Переразнесение", phone="+375291111122", type="company", inn="300999003")
+    customer = Customer(tenant_id=1, name="Переразнесение", phone="+375291111122", type="company", inn="300999003")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
     orders = [
-        Order(customer_id=customer.id, status="execution", title="Акт 1"),
-        Order(customer_id=customer.id, status="execution", title="Акт 2"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Акт 1"),
+        Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", title="Акт 2"),
     ]
     sqlite_session.add_all(orders)
     await sqlite_session.commit()
@@ -959,12 +961,12 @@ async def test_bank_receipt_can_replace_legacy_full_allocation_across_orders(sql
 
 @pytest.mark.asyncio
 async def test_bank_receipt_can_be_marked_void_and_reverses_linked_payment(sqlite_session):
-    customer = Customer(name="Мегахенд", phone="+375291111113", type="company", inn="192663084")
+    customer = Customer(tenant_id=1, name="Мегахенд", phone="+375291111113", type="company", inn="192663084")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="execution")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -1002,12 +1004,12 @@ async def test_bank_receipt_can_be_marked_void_and_reverses_linked_payment(sqlit
 
 @pytest.mark.asyncio
 async def test_bank_receipt_can_be_marked_closed_orders_and_reverses_linked_payment(sqlite_session):
-    customer = Customer(name="Мясная лавка", phone="+375291111115", type="company", inn="390185132")
+    customer = Customer(tenant_id=1, name="Мясная лавка", phone="+375291111115", type="company", inn="390185132")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="execution")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -1087,12 +1089,12 @@ async def test_bank_interest_receipt_auto_marks_non_order_income(sqlite_session)
 
 @pytest.mark.asyncio
 async def test_order_detail_payment_includes_bank_receipt(sqlite_session):
-    customer = Customer(name="Мегахенд", phone="+375291111114", type="company", inn="192663084")
+    customer = Customer(tenant_id=1, name="Мегахенд", phone="+375291111114", type="company", inn="192663084")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="execution", total_amount=420, balance_due=420)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution", total_amount=420, balance_due=420)
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -1144,12 +1146,12 @@ def test_bank_statement_csv_parser_reads_credit_rows():
 
 @pytest.mark.asyncio
 async def test_bank_statement_import_creates_missing_and_flags_duplicate_receipts(sqlite_session):
-    customer = Customer(name="Мегахенд", phone="+375291111113", type="company", inn="192663084")
+    customer = Customer(tenant_id=1, name="Мегахенд", phone="+375291111113", type="company", inn="192663084")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="execution")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="execution")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -1258,6 +1260,8 @@ async def test_bank_receipt_import_notification_counts_confirmed_admins(sqlite_s
 @pytest.mark.asyncio
 async def test_email_lead_import_notification_counts_confirmed_admins(sqlite_session, monkeypatch, caplog):
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         status=OrderStatus.NEW_LEAD,
         lead_source=LeadSource.EMAIL,
         comment="Просим подготовить коммерческое предложение на обслуживание кондиционеров.",
@@ -1325,12 +1329,12 @@ async def test_send_order_email_attaches_documents_and_marks_offer_sent(sqlite_s
     monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
     monkeypatch.setattr(settings, "MAIL_FROM_NAME", "Мастер Воздуха")
 
-    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    customer = Customer(tenant_id=1, name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="negotiation", proposal_status="draft")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="negotiation", proposal_status="draft")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -1407,12 +1411,12 @@ async def test_send_order_email_without_offer_keeps_proposal_status(sqlite_sessi
     monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")
     monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
 
-    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    customer = Customer(tenant_id=1, name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="negotiation", proposal_status="draft")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="negotiation", proposal_status="draft")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -1455,12 +1459,12 @@ async def test_send_contract_email_moves_negotiation_to_awaiting_signature(sqlit
     monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")
     monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
 
-    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    customer = Customer(tenant_id=1, name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="negotiation", proposal_status="draft")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="negotiation", proposal_status="draft")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -1502,12 +1506,12 @@ async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, m
     monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "super-secret")
     monkeypatch.setattr(settings, "MAIL_FROM_EMAIL", "a@mvn.by")
 
-    customer = Customer(name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
+    customer = Customer(tenant_id=1, name="ООО Клиент", phone="+375291111111", type="company", email="client@example.com")
     sqlite_session.add(customer)
     await sqlite_session.commit()
     await sqlite_session.refresh(customer)
 
-    order = Order(customer_id=customer.id, status="negotiation", proposal_status="ready_to_send")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status="negotiation", proposal_status="ready_to_send")
     sqlite_session.add(order)
     await sqlite_session.commit()
     await sqlite_session.refresh(order)

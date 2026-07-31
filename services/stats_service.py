@@ -9,8 +9,7 @@ from models.common import OrderStatus
 from models.tenancy import TenantScope
 from schemas import DashboardBankReceiptReviewItem, DashboardContractExpiry, DashboardStatsResponse, DashboardTouchpoint
 from services.tenant_scope_service import (
-    tenant_or_fully_legacy_scope_clause,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 
 class StatsService:
@@ -22,10 +21,10 @@ class StatsService:
     ) -> DashboardStatsResponse:
         now = datetime.now()
         start_of_month = datetime(now.year, now.month, 1)
-        order_scope = tenant_or_fully_legacy_scope_clause(Order, tenant_scope)
+        order_scope = tenant_scope_clause(Order, tenant_scope)
         order_customer_scope = or_(
             Order.customer_id.is_(None),
-            tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            tenant_scope_clause(Customer, tenant_scope),
         )
 
         # 1. Total Amount for CLOSED deals in the current month
@@ -97,7 +96,7 @@ class StatsService:
             .join(Customer, Customer.id == CustomerContract.customer_id)
             .options(selectinload(CustomerContract.customer))
             .where(
-                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                tenant_scope_clause(Customer, tenant_scope),
                 CustomerContract.status == "active",
                 CustomerContract.valid_until <= end_of_window,
             )

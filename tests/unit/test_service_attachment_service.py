@@ -84,8 +84,8 @@ async def attachment_session(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_private_attachment_dedupes_binary_without_merging_business_occurrences(attachment_session):
     storage = FakePrivateAttachmentStorage()
-    first_order = Order(title="First service visit")
-    second_order = Order(title="Second service visit")
+    first_order = Order(tenant_id=1, storefront_id=1, title="First service visit")
+    second_order = Order(tenant_id=1, storefront_id=1, title="Second service visit")
     attachment_session.add_all([first_order, second_order])
     await attachment_session.commit()
 
@@ -180,7 +180,7 @@ async def test_private_attachment_dedupes_binary_without_merging_business_occurr
 @pytest.mark.asyncio
 async def test_telegram_occurrence_is_idempotent_but_a_new_message_keeps_its_own_record(attachment_session):
     storage = FakePrivateAttachmentStorage()
-    order = Order(title="Telegram evidence")
+    order = Order(tenant_id=1, storefront_id=1, title="Telegram evidence")
     attachment_session.add(order)
     await attachment_session.commit()
     common = {
@@ -222,12 +222,12 @@ async def test_telegram_occurrence_is_idempotent_but_a_new_message_keeps_its_own
 @pytest.mark.asyncio
 async def test_identical_evidence_does_not_cross_link_equipment_between_customers(attachment_session):
     storage = FakePrivateAttachmentStorage()
-    first_customer = Customer(name="First customer", phone="+375290000001")
-    second_customer = Customer(name="Second customer", phone="+375290000002")
+    first_customer = Customer(tenant_id=1, name="First customer", phone="+375290000001")
+    second_customer = Customer(tenant_id=1, name="Second customer", phone="+375290000002")
     attachment_session.add_all([first_customer, second_customer])
     await attachment_session.flush()
-    first_order = Order(title="First order", customer_id=int(first_customer.id))
-    second_order = Order(title="Second order", customer_id=int(second_customer.id))
+    first_order = Order(tenant_id=1, storefront_id=1, title="First order", customer_id=int(first_customer.id))
+    second_order = Order(tenant_id=1, storefront_id=1, title="Second order", customer_id=int(second_customer.id))
     first_equipment = CustomerEquipment(customer_id=int(first_customer.id), display_name="First system")
     second_equipment = CustomerEquipment(customer_id=int(second_customer.id), display_name="Second system")
     attachment_session.add_all([first_order, second_order, first_equipment, second_equipment])
@@ -271,6 +271,8 @@ async def test_list_order_attachments_dual_reads_normalized_and_unmigrated_legac
 ):
     storage = FakePrivateAttachmentStorage()
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         title="Legacy service visit",
         technical_meta={
             "telegram_attachments": [
@@ -332,7 +334,7 @@ async def test_url_only_legacy_item_is_not_duplicated_after_private_migration(at
         "mime_type": "image/jpeg",
         "purpose": "installation_result",
     }
-    order = Order(title="URL-only evidence", technical_meta={"telegram_attachments": [raw]})
+    order = Order(tenant_id=1, storefront_id=1, title="URL-only evidence", technical_meta={"telegram_attachments": [raw]})
     attachment_session.add(order)
     await attachment_session.commit()
 
@@ -372,10 +374,10 @@ async def test_url_only_legacy_item_is_not_duplicated_after_private_migration(at
 @pytest.mark.asyncio
 async def test_attachment_can_follow_an_equipment_service_history_event(attachment_session):
     storage = FakePrivateAttachmentStorage()
-    customer = Customer(name="Service customer", phone="+375290000003")
+    customer = Customer(tenant_id=1, name="Service customer", phone="+375290000003")
     attachment_session.add(customer)
     await attachment_session.flush()
-    order = Order(title="Maintenance visit", customer_id=int(customer.id))
+    order = Order(tenant_id=1, storefront_id=1, title="Maintenance visit", customer_id=int(customer.id))
     equipment = CustomerEquipment(customer_id=int(customer.id), display_name="Living room AC")
     attachment_session.add_all([order, equipment])
     await attachment_session.flush()
@@ -426,11 +428,11 @@ async def test_attachment_can_follow_an_equipment_service_history_event(attachme
 @pytest.mark.asyncio
 async def test_attachment_rejects_service_history_from_another_order(attachment_session):
     storage = FakePrivateAttachmentStorage()
-    customer = Customer(name="Another customer", phone="+375290000004")
+    customer = Customer(tenant_id=1, name="Another customer", phone="+375290000004")
     attachment_session.add(customer)
     await attachment_session.flush()
-    first_order = Order(title="First visit", customer_id=int(customer.id))
-    second_order = Order(title="Second visit", customer_id=int(customer.id))
+    first_order = Order(tenant_id=1, storefront_id=1, title="First visit", customer_id=int(customer.id))
+    second_order = Order(tenant_id=1, storefront_id=1, title="Second visit", customer_id=int(customer.id))
     equipment = CustomerEquipment(customer_id=int(customer.id), display_name="Office AC")
     attachment_session.add_all([first_order, second_order, equipment])
     await attachment_session.flush()

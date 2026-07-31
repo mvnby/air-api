@@ -1,7 +1,18 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import BigInteger, Column, Index, JSON, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import Field, Relationship, SQLModel
 
 from .common import ClosingResult, DocumentRoleType, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentCurrency, PaymentType
@@ -386,8 +397,15 @@ class OrderWorkStage(SQLModel, table=True):
 
 class Order(SQLModel, table=True):
     __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "tenant_id",
+            "storefront_id",
+            name="uq_order_id_tenant_storefront",
+        ),
         Index(
             "uq_order_source_fingerprint",
+            "tenant_id",
             "source_fingerprint",
             unique=True,
             postgresql_where=text("source_fingerprint IS NOT NULL"),
@@ -395,16 +413,27 @@ class Order(SQLModel, table=True):
         ),
         Index("ix_order_tenant_status_created_at", "tenant_id", "status", "created_at"),
         Index("ix_order_storefront_status_created_at", "storefront_id", "status", "created_at"),
+        ForeignKeyConstraint(
+            ["storefront_id", "tenant_id"],
+            ["storefront.id", "storefront.tenant_id"],
+            name="fk_order_storefront_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["customer_id", "tenant_id"],
+            ["customer.id", "customer.tenant_id"],
+            name="fk_order_customer_tenant",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # Expand phase: nullable while older app instances can still write rows.
-    # Release 3 will make these provenance fields required.
-    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
-    storefront_id: Optional[int] = Field(default=None, foreign_key="storefront.id")
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False)
+    storefront_id: int = Field(sa_column=Column(Integer, nullable=False))
 
-    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
+    customer_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True),
+    )
     customer_branch_id: Optional[int] = Field(
         default=None,
         foreign_key="customer_branches.id",

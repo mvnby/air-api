@@ -20,7 +20,7 @@ from models import (
 )
 from services.tenant_scope_service import TenantScope
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 class EquipmentService:
@@ -471,7 +471,7 @@ class EquipmentService:
             await session.execute(
                 select(Customer).where(
                     Customer.id == customer_id,
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
             )
         ).scalars().first()

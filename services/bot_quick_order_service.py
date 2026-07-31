@@ -19,7 +19,7 @@ from services.address_suggest_service import AddressSuggestService
 from services.lead_service import LeadService
 from services.tenant_scope_service import (
     TenantScope,
-    tenant_or_fully_legacy_scope_clause,
+    tenant_scope_clause,
 )
 from services.notification_service import NotificationService
 from services.order_service import OrderService
@@ -448,7 +448,7 @@ class BotQuickOrderService:
             .where(
                 Lead.source == "bot",
                 Lead.source_fingerprint == source_fingerprint,
-                tenant_or_fully_legacy_scope_clause(Lead, tenant_scope),
+                tenant_scope_clause(Lead, tenant_scope),
             )
             .order_by(Lead.created_at.desc())
             .with_for_update()
@@ -459,7 +459,7 @@ class BotQuickOrderService:
                 await session.execute(
                     select(Order).where(
                         Order.id == int(existing_lead.converted_order_id),
-                        tenant_or_fully_legacy_scope_clause(
+                        tenant_scope_clause(
                             Order,
                             tenant_scope,
                         ),
@@ -500,7 +500,7 @@ class BotQuickOrderService:
                             select(Lead).where(
                                 Lead.source == "bot",
                                 Lead.source_fingerprint == source_fingerprint,
-                                tenant_or_fully_legacy_scope_clause(
+                                tenant_scope_clause(
                                     Lead,
                                     tenant_scope,
                                 ),

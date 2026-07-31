@@ -44,7 +44,7 @@ def _repair_order(**kwargs):
         },
     }
     defaults.update(kwargs)
-    return Order(**defaults)
+    return Order(tenant_id=1, storefront_id=1, **defaults)
 
 
 def test_order_equipment_fingerprint_reads_top_level_and_repair_meta_aliases():
@@ -115,7 +115,7 @@ def test_backfill_decision_skips_existing_history_by_order_id():
     order = _repair_order(id=101)
     context = RepairOrderBackfillContext(
         order=order,
-        customer=Customer(id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
+        customer=Customer(tenant_id=1, id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
         branch=CustomerBranch(id=10, customer_id=1, name="Office", delivery_address="Minsk"),
         fingerprint=build_order_equipment_fingerprint(order),
         existing_history=(EquipmentServiceHistory(id=55, equipment_id=9, order_id=101),),
@@ -140,7 +140,7 @@ def test_backfill_decision_sends_ambiguous_exact_matches_to_manual_review():
     )
     context = RepairOrderBackfillContext(
         order=order,
-        customer=Customer(id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
+        customer=Customer(tenant_id=1, id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
         branch=CustomerBranch(id=10, customer_id=1, name="Office", delivery_address="Minsk"),
         fingerprint=fingerprint,
         existing_history=(),
@@ -157,7 +157,7 @@ def test_backfill_decision_auto_creates_only_with_strong_identifier_and_branch_s
     order = _repair_order(id=103)
     context = RepairOrderBackfillContext(
         order=order,
-        customer=Customer(id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
+        customer=Customer(tenant_id=1, id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
         branch=CustomerBranch(id=10, customer_id=1, name="Office", delivery_address="Minsk"),
         fingerprint=build_order_equipment_fingerprint(order),
         existing_history=(),
@@ -173,7 +173,7 @@ def test_backfill_decision_auto_creates_only_with_strong_identifier_and_branch_s
     no_branch_order = _repair_order(id=104, customer_branch_id=None)
     no_branch_context = RepairOrderBackfillContext(
         order=no_branch_order,
-        customer=Customer(id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
+        customer=Customer(tenant_id=1, id=1, name="Owner", phone="+375291111111", type=CustomerType.company),
         branch=None,
         fingerprint=build_order_equipment_fingerprint(no_branch_order),
         existing_history=(),
@@ -188,7 +188,7 @@ def test_backfill_decision_auto_creates_only_with_strong_identifier_and_branch_s
 
 @pytest.mark.asyncio
 async def test_backfill_dry_run_does_not_create_history(db):
-    customer = Customer(name="Dry Run Owner", phone="+375291110201", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Dry Run Owner", phone="+375291110201", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -230,7 +230,7 @@ async def test_backfill_dry_run_does_not_create_history(db):
 
 @pytest.mark.asyncio
 async def test_backfill_execute_is_idempotent_by_order_id(db):
-    customer = Customer(name="Repeat Owner", phone="+375291110202", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Repeat Owner", phone="+375291110202", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)

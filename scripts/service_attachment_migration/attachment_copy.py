@@ -12,7 +12,7 @@ from models import Order, OrderAttachmentLink, OrderWorkStage, ServiceAttachment
 from models.tenancy import TenantScope
 from services.private_attachment_storage_service import PrivateAttachmentStorage
 from services.service_attachment_service import ServiceAttachmentService
-from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 from .legacy_sources import (
     AttachmentDownloadError,
@@ -88,14 +88,14 @@ async def migrate_attachments(
 ) -> None:
     order_stmt = (
         select(Order)
-        .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
+        .where(tenant_scope_clause(Order, tenant_scope))
         .order_by(Order.id.asc())
     )
     stage_stmt = (
         select(OrderWorkStage)
         .join(Order, Order.id == OrderWorkStage.order_id)
         .where(OrderWorkStage.installer_report.is_not(None))
-        .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
+        .where(tenant_scope_clause(Order, tenant_scope))
         .order_by(OrderWorkStage.id.asc())
     )
     if order_id is not None:

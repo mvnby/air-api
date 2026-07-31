@@ -26,7 +26,7 @@ from core.input_validation import (
 from models import Customer, CustomerRequisitesRecognition, CustomerType
 from models.tenancy import TenantScope
 from services.customer_service import CustomerService
-from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +346,7 @@ class CustomerRequisitesRecognitionService:
             select(Customer)
             .where(
                 Customer.inn == inn,
-                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                tenant_scope_clause(Customer, tenant_scope),
             )
             .order_by(Customer.id.asc())
             .limit(1)
@@ -513,7 +513,7 @@ class CustomerRequisitesRecognitionService:
                 select(CustomerRequisitesRecognition)
                 .where(
                     CustomerRequisitesRecognition.id == recognition_id,
-                    tenant_or_legacy_owner_scope_clause(
+                    tenant_scope_clause(
                         CustomerRequisitesRecognition,
                         tenant_scope,
                     ),
@@ -545,7 +545,7 @@ class CustomerRequisitesRecognitionService:
                 await session.execute(
                     select(Customer).where(
                         Customer.id == int(target_id),
-                        tenant_or_legacy_owner_scope_clause(
+                        tenant_scope_clause(
                             Customer,
                             tenant_scope,
                         ),
@@ -607,7 +607,7 @@ class CustomerRequisitesRecognitionService:
                 select(CustomerRequisitesRecognition)
                 .where(
                     CustomerRequisitesRecognition.id == recognition_id,
-                    tenant_or_legacy_owner_scope_clause(
+                    tenant_scope_clause(
                         CustomerRequisitesRecognition,
                         tenant_scope,
                     ),

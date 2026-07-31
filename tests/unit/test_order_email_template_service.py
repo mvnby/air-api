@@ -7,6 +7,7 @@ from services.order_email_template_service import OrderEmailTemplateService
 @pytest.mark.asyncio
 async def test_invoice_template_uses_order_scenario_and_reports_missing_requisites(db):
     customer = Customer(
+        tenant_id=1,
         name="ООО Тест",
         full_legal_name="Общество с ограниченной ответственностью «Тест»",
         phone="+375291111111",
@@ -19,6 +20,8 @@ async def test_invoice_template_uses_order_scenario_and_reports_missing_requisit
     await db.refresh(customer)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status="negotiation",
         workflow_type="maintenance",
@@ -57,6 +60,7 @@ async def test_invoice_template_uses_order_scenario_and_reports_missing_requisit
 @pytest.mark.asyncio
 async def test_requisites_template_lists_only_missing_customer_fields(db):
     customer = Customer(
+        tenant_id=1,
         name="ООО Клиент",
         full_legal_name="Общество с ограниченной ответственностью «Клиент»",
         phone="+375292222222",
@@ -74,7 +78,7 @@ async def test_requisites_template_lists_only_missing_customer_fields(db):
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
-    order = Order(customer_id=customer.id, workflow_type="service_work")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, workflow_type="service_work")
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -94,11 +98,11 @@ async def test_requisites_template_lists_only_missing_customer_fields(db):
 
 @pytest.mark.asyncio
 async def test_documents_template_describes_multiple_attachments(db):
-    customer = Customer(name="Клиент", phone="+375293333333", type="individual")
+    customer = Customer(tenant_id=1, name="Клиент", phone="+375293333333", type="individual")
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
-    order = Order(customer_id=customer.id, workflow_type="sales_installation")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, workflow_type="sales_installation")
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -144,6 +148,7 @@ async def test_documents_template_describes_multiple_attachments(db):
 @pytest.mark.asyncio
 async def test_signer_template_and_diagnostic_scenario_are_adaptive(db):
     customer = Customer(
+        tenant_id=1,
         name="ООО Диагностика",
         phone="+375294444444",
         email="client@example.com",
@@ -155,7 +160,7 @@ async def test_signer_template_and_diagnostic_scenario_are_adaptive(db):
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
-    order = Order(customer_id=customer.id, workflow_type="repair")
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, workflow_type="repair")
     db.add(order)
     await db.commit()
     await db.refresh(order)

@@ -16,8 +16,7 @@ from services.document_role_service import DocumentRoleService
 from services.document_template_service import DocumentTemplateService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
-    tenant_or_fully_legacy_scope_clause,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 
 
@@ -646,7 +645,7 @@ class DocumentService:
             await session.execute(
                 select(Customer.id).where(
                     Customer.id == customer_id,
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
             )
         ).scalar_one_or_none()
@@ -654,7 +653,7 @@ class DocumentService:
             return None
         query = select(OrderDocument).join(Order).where(
             Order.customer_id == customer_id,
-            tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            tenant_scope_clause(Order, tenant_scope),
         ).order_by(OrderDocument.date.desc())
 
         result = await session.execute(query)

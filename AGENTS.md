@@ -148,13 +148,12 @@ Production server intentionally runs from Docker images only (no git checkout in
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --min-orders 2 --execute`
    - CRM branch backfill for one customer (recommended first run):
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --customer-id 123 --execute`
-   - Lead/Order tenant-scope backfill (manual-only; run inside the active app
-     container on the current Patroni primary):
-     - Canary dry-run: `python3 scripts/backfill_lead_order_tenant_scope.py --limit 1`
-     - Canary execute: paste the exact `reviewed_execute_command` printed by
-       the dry-run.
-     - Final bounded batch: repeat dry-run/execute with `--limit 1000` until
-       the report prints `contract_ready=true`.
+   - Tenant-scope historical report (primary-only):
+     - Lead/Order: `python3 scripts/backfill_lead_order_tenant_scope.py --limit 1`
+     - Customer/OCR: `python3 scripts/backfill_customer_tenant_scope.py --limit 1`
+     - The production contract is complete. Both commands should report no
+       candidates and `contract_ready=true`; do not execute them unless the
+       schema was deliberately rolled back to the expand phase.
    - Normalize:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
    - Backfill brand/series:
@@ -168,8 +167,9 @@ Production server intentionally runs from Docker images only (no git checkout in
 4. Policy:
    - Cleanup is manual and explicit only.
    - CRM branch backfill is manual-only and starts from dry-run.
-   - Tenant-scope backfill is manual-only, primary-only, starts from dry-run
-     and requires its exact plan token for execute.
+   - Tenant-scope backfill execution is retired after the contract migration.
+     The retained scripts are report-only unless an expand-schema rollback was
+     explicitly reviewed.
    - Post-deploy smoke-check must pass (`/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
 
 ## Notes

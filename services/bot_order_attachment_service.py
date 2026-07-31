@@ -20,7 +20,7 @@ from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
+from services.tenant_scope_service import tenant_scope_clause
 
 
 class BotOrderAttachmentService:
@@ -184,7 +184,7 @@ class BotOrderAttachmentService:
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(
                 Order.status.in_(list(cls.ACTIVE_STATUSES)),
-                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                tenant_scope_clause(Order, tenant_scope),
                 TenantEntityAccessService.order_customer_clause(tenant_scope),
             )
             .options(selectinload(Order.customer))
@@ -345,7 +345,13 @@ class BotOrderAttachmentService:
             flag_modified(order, "technical_meta")
             session.add(order)
             await session.commit()
-            await session.refresh(order)
+            # Refresh only server-managed scalar timestamps.  A full refresh
+            # expires the eagerly loaded customer relationship and makes the
+            # synchronous response mapper attempt async lazy I/O.
+            await session.refresh(
+                order,
+                attribute_names=["created_at", "updated_at"],
+            )
 
         data = cls._map_order(order)
         data["attachment"] = entry

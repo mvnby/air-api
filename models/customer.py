@@ -1,7 +1,16 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, Index, JSON, String, text
+from sqlalchemy import (
+    Column,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import Field, Relationship, SQLModel
 
 from .common import CustomerType, DocumentRoleType, LeadIntakeSource, LeadLossReason, LeadSegmentHint, LeadStatus
@@ -9,6 +18,7 @@ from .common import CustomerType, DocumentRoleType, LeadIntakeSource, LeadLossRe
 
 class Customer(SQLModel, table=True):
     __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_customer_id_tenant"),
         Index("ix_customer_tenant_created_at", "tenant_id", "created_at"),
         Index("ix_customer_tenant_phone", "tenant_id", "phone"),
         Index("ix_customer_tenant_inn", "tenant_id", "inn"),
@@ -16,8 +26,7 @@ class Customer(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # Expand phase: nullable until the controlled MVN backfill is complete.
-    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False)
 
     name: str = Field(index=True)
     phone: str = Field(index=True)
@@ -119,6 +128,7 @@ class CustomerRequisitesRecognition(SQLModel, table=True):
     __table_args__ = (
         Index(
             "uq_customer_requisites_telegram_message",
+            "tenant_id",
             "source",
             "telegram_user_id",
             "telegram_chat_id",
@@ -142,13 +152,23 @@ class CustomerRequisitesRecognition(SQLModel, table=True):
             "tenant_id",
             "created_at",
         ),
+        ForeignKeyConstraint(
+            ["duplicate_customer_id", "tenant_id"],
+            ["customer.id", "customer.tenant_id"],
+            name="fk_customer_requisites_duplicate_customer_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["confirmed_customer_id", "tenant_id"],
+            ["customer.id", "customer.tenant_id"],
+            name="fk_customer_requisites_confirmed_customer_tenant",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
     # Recognition payloads contain customer PII and share the same tenant
     # boundary as the Customer they may create or update.
-    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False)
 
     source: str = Field(default="manager", index=True)
     status: str = Field(default="recognized", index=True)
@@ -165,8 +185,14 @@ class CustomerRequisitesRecognition(SQLModel, table=True):
     extracted_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, default=dict))
     validation_flags: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, default=dict))
 
-    duplicate_customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
-    confirmed_customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+    duplicate_customer_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, index=True),
+    )
+    confirmed_customer_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, index=True),
+    )
     confirmed_action: Optional[str] = None
 
     created_at: datetime = Field(default_factory=datetime.now, index=True)
@@ -178,6 +204,7 @@ class Lead(SQLModel, table=True):
     __table_args__ = (
         Index(
             "uq_lead_bot_source_fingerprint",
+            "tenant_id",
             "source_fingerprint",
             unique=True,
             postgresql_where=text("source = 'bot' AND source_fingerprint IS NOT NULL"),
@@ -185,14 +212,22 @@ class Lead(SQLModel, table=True):
         ),
         Index("ix_lead_tenant_status_created_at", "tenant_id", "status", "created_at"),
         Index("ix_lead_storefront_status_created_at", "storefront_id", "status", "created_at"),
+        ForeignKeyConstraint(
+            ["storefront_id", "tenant_id"],
+            ["storefront.id", "storefront.tenant_id"],
+            name="fk_lead_storefront_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["converted_order_id", "tenant_id", "storefront_id"],
+            ["order.id", "order.tenant_id", "order.storefront_id"],
+            name="fk_lead_converted_order_scope",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # Expand phase: nullable while mixed-version deployments may still create
-    # legacy rows. The contract migration will make both fields required.
-    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id")
-    storefront_id: Optional[int] = Field(default=None, foreign_key="storefront.id")
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False)
+    storefront_id: int = Field(sa_column=Column(Integer, nullable=False))
 
     status: LeadStatus = Field(default=LeadStatus.new, sa_column=Column(String, index=True))
     source: LeadIntakeSource = Field(default=LeadIntakeSource.manager, sa_column=Column(String, index=True))
@@ -211,7 +246,10 @@ class Lead(SQLModel, table=True):
     next_followup_date: Optional[datetime] = None
     archived_at: Optional[datetime] = Field(default=None, index=True)
 
-    converted_order_id: Optional[int] = Field(default=None, foreign_key="order.id")
+    converted_order_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True),
+    )
 
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})

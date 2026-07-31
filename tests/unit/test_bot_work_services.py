@@ -248,7 +248,7 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
         primary_role="installer",
         legacy_installer_id=installer.id,
     )
-    customer = Customer(name="Клиент", phone="+375291234567")
+    customer = Customer(tenant_id=1, name="Клиент", phone="+375291234567")
     sqlite_staff_session.add(staff)
     sqlite_staff_session.add(customer)
     await sqlite_staff_session.flush()
@@ -264,6 +264,8 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
     await sqlite_staff_session.refresh(customer)
 
     active_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.EXECUTION,
         title="Активный заказ",
@@ -271,6 +273,8 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
         installation_date=datetime.now() + timedelta(days=1),
     )
     closed_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.CLOSED,
         title="Закрытый заказ",
@@ -278,6 +282,8 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
         installation_date=datetime.now() + timedelta(days=3),
     )
     legacy_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.EXECUTION,
         title="Старый монтаж без даты",

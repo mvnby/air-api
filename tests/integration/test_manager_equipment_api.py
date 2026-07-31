@@ -28,7 +28,7 @@ async def _auth_headers(async_client):
 @pytest.mark.asyncio
 async def test_manager_equipment_create_list_detail_and_history_ordering(async_client, db):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="HVAC Owner", phone="+375291110101", type=CustomerType.company, inn="100200300")
+    customer = Customer(tenant_id=1, name="HVAC Owner", phone="+375291110101", type=CustomerType.company, inn="100200300")
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -45,6 +45,8 @@ async def test_manager_equipment_create_list_detail_and_history_ordering(async_c
     await db.commit()
     await db.refresh(product)
     source_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         customer_branch_id=branch.id,
         status=OrderStatus.NEGOTIATION,
@@ -191,7 +193,7 @@ async def test_manager_equipment_create_list_detail_and_history_ordering(async_c
 @pytest.mark.asyncio
 async def test_manager_equipment_history_from_repair_order_maps_meta_and_allows_unassigned_branch(async_client, db):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="Repair Owner", phone="+375291110102", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Repair Owner", phone="+375291110102", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -220,6 +222,8 @@ async def test_manager_equipment_history_from_repair_order_maps_meta_and_allows_
     equipment_id = equipment_resp.json()["id"]
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         customer_branch_id=None,
         status=OrderStatus.NEGOTIATION,
@@ -278,7 +282,7 @@ async def test_manager_equipment_history_from_repair_order_maps_meta_and_allows_
 @pytest.mark.asyncio
 async def test_manager_equipment_history_from_repair_order_preserves_omitted_overrides_on_repeat(async_client, db):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="Repair Sync Owner", phone="+375291110112", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Repair Sync Owner", phone="+375291110112", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -298,6 +302,8 @@ async def test_manager_equipment_history_from_repair_order_preserves_omitted_ove
     equipment_id = equipment_resp.json()["id"]
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         customer_branch_id=None,
         status=OrderStatus.NEGOTIATION,
@@ -370,7 +376,7 @@ async def test_manager_equipment_history_from_repair_order_rejects_existing_hist
     db,
 ):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="Repair Conflict Owner", phone="+375291110113", type=CustomerType.company)
+    customer = Customer(tenant_id=1, name="Repair Conflict Owner", phone="+375291110113", type=CustomerType.company)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
@@ -402,6 +408,8 @@ async def test_manager_equipment_history_from_repair_order_rejects_existing_hist
     second_equipment_id = second_equipment_resp.json()["id"]
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         customer_branch_id=None,
         status=OrderStatus.NEGOTIATION,
@@ -442,8 +450,8 @@ async def test_manager_equipment_history_from_repair_order_rejects_existing_hist
 @pytest.mark.asyncio
 async def test_manager_equipment_ownership_guards_reject_cross_customer_and_branch_mismatch(async_client, db):
     headers = await _auth_headers(async_client)
-    customer_a = Customer(name="Owner A", phone="+375291110103", type=CustomerType.company)
-    customer_b = Customer(name="Owner B", phone="+375291110104", type=CustomerType.company)
+    customer_a = Customer(tenant_id=1, name="Owner A", phone="+375291110103", type=CustomerType.company)
+    customer_b = Customer(tenant_id=1, name="Owner B", phone="+375291110104", type=CustomerType.company)
     db.add(customer_a)
     db.add(customer_b)
     await db.commit()
@@ -486,6 +494,8 @@ async def test_manager_equipment_ownership_guards_reject_cross_customer_and_bran
     equipment_id = equipment_resp.json()["id"]
 
     cross_customer_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer_b.id,
         customer_branch_id=branch_b.id,
         status=OrderStatus.NEGOTIATION,
@@ -493,6 +503,8 @@ async def test_manager_equipment_ownership_guards_reject_cross_customer_and_bran
         technical_meta={"repair": {"repair_status": "completed", "customer_complaint": "Не холодит"}},
     )
     unknown_customer_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=None,
         customer_branch_id=None,
         status=OrderStatus.NEGOTIATION,
@@ -500,6 +512,8 @@ async def test_manager_equipment_ownership_guards_reject_cross_customer_and_bran
         technical_meta={"repair": {"repair_status": "completed", "customer_complaint": "Не холодит"}},
     )
     branch_mismatch_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer_a.id,
         customer_branch_id=branch_a_other.id,
         status=OrderStatus.NEGOTIATION,

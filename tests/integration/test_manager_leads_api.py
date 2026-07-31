@@ -167,6 +167,7 @@ async def test_manager_lead_qualify_reuses_customer_and_keeps_existing_requisite
     headers = await _auth_headers(async_client)
 
     customer = Customer(
+        tenant_id=1,
         name="ООО Эвистор",
         phone="+375331112233",
         email="info@evistor.by",
@@ -219,6 +220,7 @@ async def test_manager_lead_qualify_prefers_more_complete_customer_on_equal_matc
     headers = await _auth_headers(async_client)
 
     sparse = Customer(
+        tenant_id=1,
         name="Client Sparse",
         phone="+375291234567",
         email="duplicate@example.com",
@@ -227,6 +229,7 @@ async def test_manager_lead_qualify_prefers_more_complete_customer_on_equal_matc
         full_legal_name="ООО Спарс",
     )
     rich = Customer(
+        tenant_id=1,
         name="Client Rich",
         phone="+375291234567",
         email="duplicate@example.com",
@@ -273,6 +276,7 @@ async def test_manager_lead_qualify_with_selected_customer_id_reuses_exact_custo
     headers = await _auth_headers(async_client)
 
     target = Customer(
+        tenant_id=1,
         name="Target Customer",
         phone="+375291111111",
         email="target@example.com",
@@ -284,6 +288,7 @@ async def test_manager_lead_qualify_with_selected_customer_id_reuses_exact_custo
         iban="BY12AKBB30120000000000000000",
     )
     other = Customer(
+        tenant_id=1,
         name="Other Customer",
         phone="+375292222222",
         email="other@example.com",
@@ -333,6 +338,7 @@ async def test_manager_lead_qualify_with_selected_branch_sets_order_snapshot(asy
     headers = await _auth_headers(async_client)
 
     customer = Customer(
+        tenant_id=1,
         name="Branch Customer",
         phone="+375299998877",
         type=CustomerType.company,
@@ -387,8 +393,8 @@ async def test_manager_lead_qualify_with_selected_branch_sets_order_snapshot(asy
 async def test_manager_lead_qualify_rejects_branch_of_other_customer(async_client, db):
     headers = await _auth_headers(async_client)
 
-    customer_a = Customer(name="Company A", phone="+375291010101", type=CustomerType.company, inn="555555555")
-    customer_b = Customer(name="Company B", phone="+375292020202", type=CustomerType.company, inn="666666666")
+    customer_a = Customer(tenant_id=1, name="Company A", phone="+375291010101", type=CustomerType.company, inn="555555555")
+    customer_b = Customer(tenant_id=1, name="Company B", phone="+375292020202", type=CustomerType.company, inn="666666666")
     db.add(customer_a)
     db.add(customer_b)
     await db.commit()

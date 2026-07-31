@@ -79,6 +79,7 @@ async def test_requisites_confirmation_is_idempotent_and_bound_to_owner(db):
     await _add_manager(db, 2002)
     await _add_manager(db, 2003)
     recognition = CustomerRequisitesRecognition(
+        tenant_id=1,
         source="telegram_text",
         status="recognized",
         telegram_user_id=2002,

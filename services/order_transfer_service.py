@@ -51,7 +51,7 @@ from services.order_service import OrderService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
     TenantScope,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 
 
@@ -340,7 +340,7 @@ class OrderTransferService:
                 select(Customer)
                 .where(
                     Customer.inn == inn,
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
                 .limit(1)
             )
@@ -354,7 +354,7 @@ class OrderTransferService:
                 select(Customer)
                 .where(
                     Customer.phone == phone,
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
                 .limit(1)
             )
@@ -368,7 +368,7 @@ class OrderTransferService:
                 select(Customer)
                 .where(
                     func.lower(Customer.email) == email.lower(),
-                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                    tenant_scope_clause(Customer, tenant_scope),
                 )
                 .limit(1)
             )

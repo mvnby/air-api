@@ -5,14 +5,13 @@ import pytest
 from sqlmodel import select
 
 from crud.tenancy import TenantScopeRow
-from models import Customer, CustomerType, Order
+from models import Customer, CustomerType, Order, Storefront, Tenant
 from services.tenant_scope_service import (
     SystemTenantScopeResolver,
     TenantScope,
     TenantScopeResolutionError,
-    storefront_or_fully_legacy_scope_clause,
-    tenant_or_fully_legacy_scope_clause,
-    tenant_or_legacy_owner_scope_clause,
+    storefront_scope_clause,
+    tenant_scope_clause,
 )
 
 
@@ -81,113 +80,141 @@ async def test_resolve_system_scope_rejects_invalid_database_ids(monkeypatch, ca
 
 
 @pytest.mark.asyncio
-async def test_tenant_scope_legacy_clause_rejects_partially_scoped_rows(db, tenant_scope):
+async def test_tenant_scope_clause_requires_exact_tenant(db, tenant_scope):
+    foreign_tenant = Tenant(
+        id=2,
+        slug="foreign",
+        display_name="Foreign",
+        status="active",
+        is_system=False,
+    )
+    db.add(foreign_tenant)
+    await db.flush()
+    foreign_storefront = Storefront(
+        id=2,
+        tenant_id=int(foreign_tenant.id),
+        slug="main",
+        display_name="Foreign main",
+        status="active",
+        is_default=True,
+    )
+    db.add(foreign_storefront)
+    await db.flush()
+
     current = Order(
         title="Current scope",
         tenant_id=tenant_scope.tenant_id,
         storefront_id=tenant_scope.storefront_id,
     )
-    current_tenant_without_storefront = Order(
-        title="Current tenant pending storefront backfill",
-        tenant_id=tenant_scope.tenant_id,
-        storefront_id=None,
+    foreign = Order(
+        title="Foreign scope",
+        tenant_id=int(foreign_tenant.id),
+        storefront_id=int(foreign_storefront.id),
     )
-    fully_legacy = Order(title="Fully legacy")
-    partial_legacy = Order(
-        title="Unsafe partial legacy",
-        tenant_id=None,
-        storefront_id=tenant_scope.storefront_id,
-    )
-    db.add_all(
-        [
-            current,
-            current_tenant_without_storefront,
-            fully_legacy,
-            partial_legacy,
-        ]
-    )
+    db.add_all([current, foreign])
     await db.commit()
 
     matches = (
         await db.execute(
             select(Order).where(
-                tenant_or_fully_legacy_scope_clause(Order, tenant_scope)
+                tenant_scope_clause(Order, tenant_scope)
             )
         )
     ).scalars().all()
 
-    assert {order.title for order in matches} == {
-        "Current scope",
-        "Current tenant pending storefront backfill",
-        "Fully legacy",
-    }
+    assert [order.title for order in matches] == ["Current scope"]
 
 
 @pytest.mark.asyncio
-async def test_storefront_scope_legacy_clause_requires_exact_or_fully_null_pair(
+async def test_storefront_scope_clause_requires_exact_pair(
     db,
     tenant_scope,
 ):
+    secondary = Storefront(
+        id=2,
+        tenant_id=tenant_scope.tenant_id,
+        slug="secondary",
+        display_name="Secondary",
+        status="active",
+        is_default=False,
+    )
+    db.add(secondary)
+    await db.flush()
     exact = Order(
         title="Exact storefront",
         tenant_id=tenant_scope.tenant_id,
         storefront_id=tenant_scope.storefront_id,
     )
-    fully_legacy = Order(title="Fully legacy storefront")
-    missing_storefront = Order(
-        title="Missing storefront",
+    other_storefront = Order(
+        title="Other storefront",
         tenant_id=tenant_scope.tenant_id,
-        storefront_id=None,
+        storefront_id=int(secondary.id),
     )
-    missing_tenant = Order(
-        title="Missing tenant",
-        tenant_id=None,
-        storefront_id=tenant_scope.storefront_id,
-    )
-    db.add_all([exact, fully_legacy, missing_storefront, missing_tenant])
+    db.add_all([exact, other_storefront])
     await db.commit()
 
     matches = (
         await db.execute(
             select(Order).where(
-                storefront_or_fully_legacy_scope_clause(Order, tenant_scope)
+                storefront_scope_clause(Order, tenant_scope)
             )
         )
     ).scalars().all()
 
-    assert {order.title for order in matches} == {
-        "Exact storefront",
-        "Fully legacy storefront",
-    }
+    assert [order.title for order in matches] == ["Exact storefront"]
 
 
 @pytest.mark.asyncio
-async def test_non_system_scope_never_claims_legacy_rows(db):
-    foreign_scope = TenantScope(
-        tenant_id=2,
-        storefront_id=2,
+async def test_scope_clause_does_not_grant_system_tenant_special_access(db):
+    foreign_tenant = Tenant(
+        id=2,
+        slug="foreign-system-test",
+        display_name="Foreign",
+        status="active",
         is_system=False,
     )
-    legacy_order = Order(title="System legacy order")
-    legacy_customer = Customer(
-        name="System legacy customer",
+    db.add(foreign_tenant)
+    await db.flush()
+    foreign_storefront = Storefront(
+        id=2,
+        tenant_id=int(foreign_tenant.id),
+        slug="main",
+        display_name="Foreign main",
+        status="active",
+        is_default=True,
+    )
+    db.add(foreign_storefront)
+    await db.flush()
+    foreign_scope = TenantScope(
+        tenant_id=int(foreign_tenant.id),
+        storefront_id=int(foreign_storefront.id),
+        is_system=False,
+    )
+    system_order = Order(
+        title="System order",
+        tenant_id=1,
+        storefront_id=1,
+    )
+    system_customer = Customer(
+        tenant_id=1,
+        name="System customer",
         phone="+375290000099",
         type=CustomerType.individual,
     )
-    db.add_all([legacy_order, legacy_customer])
+    db.add_all([system_order, system_customer])
     await db.commit()
 
     order_matches = (
         await db.execute(
             select(Order).where(
-                tenant_or_fully_legacy_scope_clause(Order, foreign_scope)
+                tenant_scope_clause(Order, foreign_scope)
             )
         )
     ).scalars().all()
     customer_matches = (
         await db.execute(
             select(Customer).where(
-                tenant_or_legacy_owner_scope_clause(
+                tenant_scope_clause(
                     Customer,
                     foreign_scope,
                 )

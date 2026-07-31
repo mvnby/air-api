@@ -22,6 +22,7 @@ async def test_manager_customer_detail_contains_extended_requisites(async_client
     headers = await _auth_headers(async_client)
 
     customer = Customer(
+        tenant_id=1,
         name="ООО Тест Клиент",
         phone="+375291111111",
         email="corp@example.com",
@@ -43,6 +44,8 @@ async def test_manager_customer_detail_contains_extended_requisites(async_client
     await db.refresh(customer)
 
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEW_LEAD,
         delivery_address="Минск, ул. Орловская, 15",
@@ -76,6 +79,7 @@ async def test_manager_customer_patch_updates_requisites(async_client, db):
     headers = await _auth_headers(async_client)
 
     customer = Customer(
+        tenant_id=1,
         name="ООО Старое имя",
         phone="+375291112233",
         email="old@example.com",
@@ -128,6 +132,7 @@ async def test_manager_customer_patch_defaults_blank_required_requisites(async_c
     headers = await _auth_headers(async_client)
 
     customer = Customer(
+        tenant_id=1,
         name="ООО Клиент",
         phone="+375291112233",
         type=CustomerType.company,
@@ -160,12 +165,14 @@ async def test_manager_customer_favorite_patch_and_sort(async_client, db):
     headers = await _auth_headers(async_client)
 
     regular_customer = Customer(
+        tenant_id=1,
         name="ООО Обычный клиент",
         phone="+375291110000",
         type=CustomerType.company,
         created_at=datetime(2026, 1, 10, 10, 0, 0),
     )
     favorite_customer = Customer(
+        tenant_id=1,
         name="ООО Частый клиент",
         phone="+375291110001",
         type=CustomerType.company,
@@ -179,6 +186,8 @@ async def test_manager_customer_favorite_patch_and_sort(async_client, db):
 
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=regular_customer.id,
             status=OrderStatus.NEW_LEAD,
             title="Обычная сделка",
@@ -186,6 +195,8 @@ async def test_manager_customer_favorite_patch_and_sort(async_client, db):
     )
     db.add(
         Order(
+            tenant_id=1,
+            storefront_id=1,
             customer_id=favorite_customer.id,
             status=OrderStatus.NEW_LEAD,
             title="Частая сделка",
@@ -216,6 +227,7 @@ async def test_manager_customer_patch_rejects_invalid_iban(async_client, db):
     headers = await _auth_headers(async_client)
 
     customer = Customer(
+        tenant_id=1,
         name="Тест",
         phone="+375291112233",
         type=CustomerType.company,
@@ -298,6 +310,7 @@ async def test_manager_customer_requisites_recognize_and_confirm_create(async_cl
 async def test_manager_customer_requisites_duplicate_can_update(async_client, db, monkeypatch):
     headers = await _auth_headers(async_client)
     existing = Customer(
+        tenant_id=1,
         name="Старое имя",
         phone="",
         type=CustomerType.company,
@@ -387,6 +400,7 @@ async def test_manager_customer_branch_crud(async_client, db):
     headers = await _auth_headers(async_client)
 
     customer = Customer(
+        tenant_id=1,
         name="Филиальный клиент",
         phone="+375291009900",
         type=CustomerType.company,
@@ -459,6 +473,7 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
     monkeypatch.setattr("services.customer_contract_service.get_google_service", lambda: FakeGoogleService())
 
     customer = Customer(
+        tenant_id=1,
         name="ООО Договор",
         phone="+375291223344",
         type=CustomerType.company,
@@ -531,6 +546,7 @@ async def test_manager_customer_contract_upload_and_delete(async_client, db, mon
     monkeypatch.setattr("services.customer_contract_service.get_google_service", lambda: FakeGoogleService())
 
     customer = Customer(
+        tenant_id=1,
         name="ООО Загруженный",
         phone="+375291223355",
         type=CustomerType.company,
@@ -570,6 +586,8 @@ async def test_manager_customer_contract_upload_and_delete(async_client, db, mon
     assert captured["content"] == b"%PDF-contract"
 
     linked_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         customer_contract_id=uploaded["id"],
         status=OrderStatus.NEW_LEAD,
@@ -594,12 +612,12 @@ async def test_manager_customer_contract_upload_and_delete(async_client, db, mon
 @pytest.mark.asyncio
 async def test_manager_customer_delete_blocked_if_has_orders(async_client, db):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="Delete Blocked", phone="+375299001122", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Delete Blocked", phone="+375299001122", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)
 
-    db.add(Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD))
+    db.add(Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD))
     await db.commit()
 
     resp = await async_client.delete(f"/api/manager/customers/{customer.id}", headers=headers)
@@ -615,7 +633,7 @@ async def test_manager_customer_delete_blocked_if_has_orders(async_client, db):
 @pytest.mark.asyncio
 async def test_manager_customer_delete_success_without_orders(async_client, db):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="Delete OK", phone="+375299112233", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Delete OK", phone="+375299112233", type=CustomerType.individual)
     db.add(customer)
     await db.commit()
     await db.refresh(customer)

@@ -81,6 +81,7 @@ class TenantMembership(SQLModel, table=True):
 class Storefront(SQLModel, table=True):
     __tablename__ = "storefront"
     __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_storefront_id_tenant"),
         UniqueConstraint("tenant_id", "slug", name="uq_storefront_tenant_slug"),
         Index(
             "uq_storefront_default_per_tenant",

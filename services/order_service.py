@@ -26,8 +26,7 @@ from services.order_proposal_lifecycle import (
 )
 from services.tenant_scope_service import (
     TenantScope,
-    tenant_or_fully_legacy_scope_clause,
-    tenant_or_legacy_owner_scope_clause,
+    tenant_scope_clause,
 )
 from services.tenant_entity_access_service import TenantEntityAccessService
 
@@ -1047,7 +1046,7 @@ class OrderService:
                 await session.execute(
                     select(Customer).where(
                         Customer.id == customer_id,
-                        tenant_or_legacy_owner_scope_clause(
+                        tenant_scope_clause(
                             Customer,
                             tenant_scope,
                         ),
@@ -1059,7 +1058,7 @@ class OrderService:
         elif len(phone_clean) > 5:
             stmt = select(Customer).where(
                 Customer.phone == phone_clean,
-                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                tenant_scope_clause(Customer, tenant_scope),
             )
             result = await session.execute(stmt)
             # Handle potential duplicates gracefully
@@ -2380,7 +2379,7 @@ class OrderService:
             Order.status != OrderStatus.NEW_LEAD,
             or_(
                 Order.customer_id.is_(None),
-                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                tenant_scope_clause(Customer, tenant_scope),
             ),
         ]
         if segment == "b2b":
@@ -2507,7 +2506,7 @@ class OrderService:
                 await session.execute(
                     select(Customer.id).where(
                         Customer.id == order.customer_id,
-                        tenant_or_legacy_owner_scope_clause(
+                        tenant_scope_clause(
                             Customer,
                             tenant_scope,
                         ),
@@ -2536,7 +2535,7 @@ class OrderService:
             .join(Customer, Customer.id == CustomerEquipment.customer_id)
             .where(
                 EquipmentOrderLink.order_id == order_id,
-                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                tenant_scope_clause(Customer, tenant_scope),
             )
         )
         linked_equipment_ids = {int(value) for value in linked_equipment_result.scalars().all()}
@@ -2546,7 +2545,7 @@ class OrderService:
             .where(
                 CustomerEquipment.source_order_id == order_id,
                 CustomerEquipment.is_archived == False,
-                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                tenant_scope_clause(Customer, tenant_scope),
             )
         )
         linked_equipment_ids.update(int(value) for value in source_equipment_result.scalars().all())
@@ -3096,7 +3095,7 @@ class OrderService:
                     await session.execute(
                         select(Customer).where(
                             Customer.id == payload.customer_id,
-                            tenant_or_legacy_owner_scope_clause(
+                            tenant_scope_clause(
                                 Customer,
                                 tenant_scope,
                             ),
@@ -3179,7 +3178,7 @@ class OrderService:
                 await session.execute(
                     select(Customer).where(
                         Customer.id == order.customer_id,
-                        tenant_or_legacy_owner_scope_clause(
+                        tenant_scope_clause(
                             Customer,
                             tenant_scope,
                         ),
@@ -3405,7 +3404,7 @@ class OrderService:
                     await session.execute(
                         select(Customer).where(
                             Customer.id == order.customer_id,
-                            tenant_or_legacy_owner_scope_clause(
+                            tenant_scope_clause(
                                 Customer,
                                 tenant_scope,
                             ),
@@ -3691,7 +3690,7 @@ class OrderService:
         ownership_clause = TenantEntityAccessService.order_clause(tenant_scope)
         customer_ownership_clause = or_(
             Order.customer_id.is_(None),
-            tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            tenant_scope_clause(Customer, tenant_scope),
         )
         stmt = (
             select(Order)

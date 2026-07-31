@@ -110,7 +110,7 @@ assert "test" in TEST_DATABASE_URL.lower(), (
 
 
 @pytest.fixture(scope="function")
-async def db_engine():
+async def db_engine(request):
     """
     Create a fresh database engine for the test session.
     Always uses the dedicated test database (db_test service).
@@ -133,6 +133,43 @@ async def db_engine():
                 """
             )
         )
+        if request.node.get_closest_marker("expand_phase_schema"):
+            # Historical backfill tests exercise the retired nullable schema.
+            # Production and every other test use the contracted NOT NULL
+            # metadata so missing provenance cannot be hidden by fixtures.
+            for table_name, constraint_name in (
+                ("lead", "fk_lead_converted_order_scope"),
+                ("lead", "fk_lead_storefront_tenant"),
+                ("order", "fk_order_customer_tenant"),
+                ("order", "fk_order_storefront_tenant"),
+                (
+                    "customer_requisites_recognition",
+                    "fk_customer_requisites_confirmed_customer_tenant",
+                ),
+                (
+                    "customer_requisites_recognition",
+                    "fk_customer_requisites_duplicate_customer_tenant",
+                ),
+            ):
+                await conn.execute(
+                    text(
+                        f'ALTER TABLE "{table_name}" '
+                        f'DROP CONSTRAINT "{constraint_name}"'
+                    )
+                )
+            for table_name, column_names in (
+                ("customer", ("tenant_id",)),
+                ("customer_requisites_recognition", ("tenant_id",)),
+                ("lead", ("tenant_id", "storefront_id")),
+                ("order", ("tenant_id", "storefront_id")),
+            ):
+                for column_name in column_names:
+                    await conn.execute(
+                        text(
+                            f'ALTER TABLE "{table_name}" '
+                            f'ALTER COLUMN "{column_name}" DROP NOT NULL'
+                        )
+                    )
         await conn.execute(
             text(
                 """

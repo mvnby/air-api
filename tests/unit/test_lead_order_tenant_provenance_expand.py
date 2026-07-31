@@ -15,7 +15,8 @@ import models  # noqa: F401 - registers SQLModel tables for metadata assertions
 
 REVISION = "f6b2a4d8e1c3"
 PROVENANCE_BOUNDARY_REVISION = "a7c8d9e0f1b2"
-HEAD_REVISION = "b8d9e0f1a2c3"
+CUSTOMER_SCOPE_REVISION = "b8d9e0f1a2c3"
+HEAD_REVISION = "c9e0f1a2b3d4"
 MIGRATION_PATH = Path("alembic/versions/f6b2a4d8e1c3_add_lead_order_tenant_provenance_expand.py")
 
 
@@ -78,6 +79,10 @@ def test_lead_order_tenant_provenance_expand_is_in_single_head_chain():
     assert revision.down_revision == "e9a1b2c3d4e5"
     assert (
         script.get_revision(HEAD_REVISION).down_revision
+        == CUSTOMER_SCOPE_REVISION
+    )
+    assert (
+        script.get_revision(CUSTOMER_SCOPE_REVISION).down_revision
         == PROVENANCE_BOUNDARY_REVISION
     )
     assert (
@@ -160,11 +165,11 @@ def test_lead_order_tenant_provenance_expand_emits_postgresql_foreign_keys():
     assert "REFERENCES storefront (id)" in ddl
 
 
-def test_lead_order_model_metadata_keeps_provenance_nullable_in_expand_phase():
+def test_lead_order_model_metadata_reflects_contract_phase():
     for table_name in ("lead", "order"):
         table = SQLModel.metadata.tables[table_name]
-        assert table.c.tenant_id.nullable is True
-        assert table.c.storefront_id.nullable is True
+        assert table.c.tenant_id.nullable is False
+        assert table.c.storefront_id.nullable is False
         assert table.c.tenant_id.server_default is None
         assert table.c.storefront_id.server_default is None
         foreign_key_targets = {foreign_key.target_fullname for foreign_key in table.foreign_keys}

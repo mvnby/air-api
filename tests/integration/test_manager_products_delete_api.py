@@ -19,7 +19,7 @@ async def _auth_headers(async_client):
 @pytest.mark.asyncio
 async def test_manager_product_delete_blocked_if_used_in_orders(async_client, db):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="Prod Customer", phone="+375291000000", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Prod Customer", phone="+375291000000", type=CustomerType.individual)
     product = Product(title="Used Product", slug="used-product", price=3000, specs={"area_m2": 20})
     db.add(customer)
     db.add(product)
@@ -27,7 +27,7 @@ async def test_manager_product_delete_blocked_if_used_in_orders(async_client, db
     await db.refresh(customer)
     await db.refresh(product)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)
@@ -70,7 +70,7 @@ async def test_manager_product_delete_success_when_unlinked(async_client, db):
 @pytest.mark.asyncio
 async def test_manager_bulk_delete_reports_deleted_and_blocked_products(async_client, db):
     headers = await _auth_headers(async_client)
-    customer = Customer(name="Bulk Prod Customer", phone="+375291000001", type=CustomerType.individual)
+    customer = Customer(tenant_id=1, name="Bulk Prod Customer", phone="+375291000001", type=CustomerType.individual)
     deletable = Product(title="Bulk Clean Product", slug="bulk-clean-product", price=2500, specs={"area_m2": 15})
     blocked = Product(title="Bulk Used Product", slug="bulk-used-product", price=3000, specs={"area_m2": 20})
     db.add_all([customer, deletable, blocked])
@@ -79,7 +79,7 @@ async def test_manager_bulk_delete_reports_deleted_and_blocked_products(async_cl
     await db.refresh(deletable)
     await db.refresh(blocked)
 
-    order = Order(customer_id=customer.id, status=OrderStatus.NEW_LEAD)
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEW_LEAD)
     db.add(order)
     await db.commit()
     await db.refresh(order)

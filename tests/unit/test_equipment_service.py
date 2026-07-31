@@ -82,6 +82,8 @@ def test_normalize_component_type_rejects_unknown_values():
 
 def test_build_history_payload_from_repair_order_maps_repair_meta_fields():
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=42,
         status=OrderStatus.NEGOTIATION,
         workflow_type="repair",
@@ -116,6 +118,8 @@ def test_build_history_payload_from_repair_order_maps_repair_meta_fields():
 
 def test_build_history_payload_from_repair_order_maps_not_repairable_path():
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=43,
         status=OrderStatus.NEGOTIATION,
         workflow_type="repair",
@@ -139,7 +143,7 @@ def test_build_history_payload_from_repair_order_maps_not_repairable_path():
 
 
 def test_build_history_payload_from_repair_order_rejects_non_repair_order():
-    order = Order(status=OrderStatus.NEW_LEAD, workflow_type="sales_installation")
+    order = Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD, workflow_type="sales_installation")
 
     with pytest.raises(ValueError, match="Only repair orders"):
         EquipmentService.build_history_payload_from_repair_order(order)
@@ -157,6 +161,8 @@ def test_build_history_payload_from_repair_order_rejects_non_repair_order():
 )
 def test_repair_order_history_sync_eligibility_policy_is_terminal_only(repair_status, expected):
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         status=OrderStatus.NEGOTIATION,
         workflow_type="repair",
         technical_meta={"repair": {"repair_status": repair_status}},
@@ -167,6 +173,8 @@ def test_repair_order_history_sync_eligibility_policy_is_terminal_only(repair_st
 
 def test_repair_order_history_sync_eligibility_rejects_non_repair_order():
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         status=OrderStatus.NEW_LEAD,
         workflow_type="sales_installation",
         technical_meta={"repair": {"repair_status": "completed"}},

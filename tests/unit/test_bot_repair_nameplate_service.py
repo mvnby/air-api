@@ -174,11 +174,11 @@ async def test_nameplate_recognize_rejects_too_large_file_before_ocr(monkeypatch
 
 @pytest.mark.asyncio
 async def test_lists_active_repair_orders_for_manager(sqlite_repair_nameplate_session):
-    repair_new = Order(title="Новый ремонт", status=OrderStatus.NEW_LEAD, workflow_type="repair")
-    repair_execution = Order(title="Ремонт в работе", status=OrderStatus.EXECUTION, workflow_type="repair")
-    repair_negotiation = Order(title="Ремонт в переговорах", status=OrderStatus.NEGOTIATION, workflow_type="repair")
-    repair_closed = Order(title="Закрытый ремонт", status=OrderStatus.CLOSED, workflow_type="repair")
-    install_execution = Order(title="Монтаж", status=OrderStatus.EXECUTION, workflow_type="sales_installation")
+    repair_new = Order(tenant_id=1, storefront_id=1, title="Новый ремонт", status=OrderStatus.NEW_LEAD, workflow_type="repair")
+    repair_execution = Order(tenant_id=1, storefront_id=1, title="Ремонт в работе", status=OrderStatus.EXECUTION, workflow_type="repair")
+    repair_negotiation = Order(tenant_id=1, storefront_id=1, title="Ремонт в переговорах", status=OrderStatus.NEGOTIATION, workflow_type="repair")
+    repair_closed = Order(tenant_id=1, storefront_id=1, title="Закрытый ремонт", status=OrderStatus.CLOSED, workflow_type="repair")
+    install_execution = Order(tenant_id=1, storefront_id=1, title="Монтаж", status=OrderStatus.EXECUTION, workflow_type="sales_installation")
     sqlite_repair_nameplate_session.add(repair_new)
     sqlite_repair_nameplate_session.add(repair_execution)
     sqlite_repair_nameplate_session.add(repair_negotiation)
@@ -210,9 +210,9 @@ async def test_executor_sees_only_assigned_repair_orders(sqlite_repair_nameplate
         telegram_id=777,
         legacy_installer_id=10,
     )
-    assigned = Order(title="Назначенный ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
-    legacy_assigned = Order(title="Старый ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
-    other = Order(title="Чужой ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    assigned = Order(tenant_id=1, storefront_id=1, title="Назначенный ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    legacy_assigned = Order(tenant_id=1, storefront_id=1, title="Старый ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    other = Order(tenant_id=1, storefront_id=1, title="Чужой ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(staff)
     sqlite_repair_nameplate_session.add(assigned)
     sqlite_repair_nameplate_session.add(legacy_assigned)
@@ -248,8 +248,10 @@ async def test_executor_sees_only_assigned_repair_orders(sqlite_repair_nameplate
 
 @pytest.mark.asyncio
 async def test_apply_to_order_merges_without_overwriting_existing_repair_meta(sqlite_repair_nameplate_session):
-    customer = Customer(name="Иван", phone="+375291234567")
+    customer = Customer(tenant_id=1, name="Иван", phone="+375291234567")
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer=customer,
         title="Ремонт",
         status=OrderStatus.EXECUTION,
@@ -317,7 +319,7 @@ async def test_apply_to_order_stores_repair_nameplate_content(
         "services.service_attachment_service.get_private_attachment_storage",
         lambda: FakePrivateAttachmentStorage(),
     )
-    order = Order(id=42, title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    order = Order(tenant_id=1, storefront_id=1, id=42, title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(order)
     await sqlite_repair_nameplate_session.commit()
 
@@ -363,6 +365,8 @@ async def test_apply_to_order_preserves_new_attachment_when_order_already_has_te
         lambda: FakePrivateAttachmentStorage(),
     )
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=42,
         title="Ремонт",
         status=OrderStatus.EXECUTION,
@@ -424,6 +428,8 @@ async def test_apply_to_order_updates_existing_repair_nameplate_attachment_url(
         lambda: FakePrivateAttachmentStorage(),
     )
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         id=42,
         title="Ремонт",
         status=OrderStatus.EXECUTION,
@@ -477,7 +483,7 @@ async def test_apply_to_order_updates_existing_repair_nameplate_attachment_url(
 
 @pytest.mark.asyncio
 async def test_apply_to_order_accepts_negotiation_repair_order(sqlite_repair_nameplate_session):
-    order = Order(title="Ремонт", status=OrderStatus.NEGOTIATION, workflow_type="repair")
+    order = Order(tenant_id=1, storefront_id=1, title="Ремонт", status=OrderStatus.NEGOTIATION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(order)
     await sqlite_repair_nameplate_session.commit()
 
@@ -504,7 +510,7 @@ async def test_apply_to_order_accepts_negotiation_repair_order(sqlite_repair_nam
 
 @pytest.mark.asyncio
 async def test_apply_to_order_rejects_non_repair_order(sqlite_repair_nameplate_session):
-    order = Order(title="Монтаж", status=OrderStatus.EXECUTION, workflow_type="sales_installation")
+    order = Order(tenant_id=1, storefront_id=1, title="Монтаж", status=OrderStatus.EXECUTION, workflow_type="sales_installation")
     sqlite_repair_nameplate_session.add(order)
     await sqlite_repair_nameplate_session.commit()
 
@@ -530,6 +536,8 @@ async def test_apply_to_order_rejects_non_repair_order(sqlite_repair_nameplate_s
 @pytest.mark.asyncio
 async def test_build_diagnostic_comment_draft_uses_ai_and_previews_changes(sqlite_repair_nameplate_session, monkeypatch):
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         title="Ремонт",
         status=OrderStatus.EXECUTION,
         workflow_type="repair",
@@ -571,6 +579,8 @@ async def test_build_diagnostic_comment_draft_uses_ai_and_previews_changes(sqlit
 @pytest.mark.asyncio
 async def test_build_diagnostic_preset_draft_is_deterministic_and_compact(sqlite_repair_nameplate_session):
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         title="Ремонт",
         status=OrderStatus.EXECUTION,
         workflow_type="repair",
@@ -617,7 +627,7 @@ def test_preview_comment_merge_keeps_structured_values_typed():
 
 @pytest.mark.asyncio
 async def test_apply_diagnostic_comment_updates_repair_meta_and_keeps_history(sqlite_repair_nameplate_session):
-    order = Order(title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    order = Order(tenant_id=1, storefront_id=1, title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(order)
     await sqlite_repair_nameplate_session.commit()
 
@@ -652,18 +662,22 @@ async def test_apply_diagnostic_comment_updates_repair_meta_and_keeps_history(sq
 @pytest.mark.asyncio
 async def test_warranty_nameplate_lists_today_installations_first(sqlite_repair_nameplate_session):
     today_order = Order(
+        tenant_id=1,
+        storefront_id=1,
         title="Сегодняшний монтаж",
         status=OrderStatus.EXECUTION,
         workflow_type="sales_installation",
         installation_date=datetime(2026, 6, 18, 14, 0, 0),
     )
     other_execution = Order(
+        tenant_id=1,
+        storefront_id=1,
         title="Другой монтаж",
         status=OrderStatus.EXECUTION,
         workflow_type="sales_installation",
         installation_date=datetime(2026, 6, 17, 14, 0, 0),
     )
-    repair = Order(title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
+    repair = Order(tenant_id=1, storefront_id=1, title="Ремонт", status=OrderStatus.EXECUTION, workflow_type="repair")
     sqlite_repair_nameplate_session.add(today_order)
     sqlite_repair_nameplate_session.add(other_execution)
     sqlite_repair_nameplate_session.add(repair)
@@ -684,6 +698,8 @@ async def test_warranty_nameplate_lists_today_installations_first(sqlite_repair_
 @pytest.mark.asyncio
 async def test_warranty_nameplate_falls_back_to_execution_installations(sqlite_repair_nameplate_session):
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         title="Монтаж без даты сегодня",
         status=OrderStatus.EXECUTION,
         workflow_type="service_work",
@@ -706,7 +722,7 @@ async def test_warranty_nameplate_falls_back_to_execution_installations(sqlite_r
 
 @pytest.mark.asyncio
 async def test_warranty_nameplate_creates_order_equipment_and_updates_selected_component(sqlite_repair_nameplate_session):
-    customer = Customer(name="Иван", phone="+375291234567")
+    customer = Customer(tenant_id=1, name="Иван", phone="+375291234567")
     product = Product(
         title="Haier Flexis 12",
         slug="haier-flexis-12",
@@ -721,6 +737,8 @@ async def test_warranty_nameplate_creates_order_equipment_and_updates_selected_c
     sqlite_repair_nameplate_session.add(product)
     await sqlite_repair_nameplate_session.flush()
     order = Order(
+        tenant_id=1,
+        storefront_id=1,
         customer_id=customer.id,
         title="Продажа и монтаж",
         status=OrderStatus.EXECUTION,

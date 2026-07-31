@@ -24,8 +24,8 @@ async def sqlite_session(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_relevant_contract_templates_include_default_and_customer_specific(sqlite_session):
-    customer = Customer(name="Банк", phone="+375291111111", type="company")
-    other_customer = Customer(name="Другой клиент", phone="+375292222222", type="company")
+    customer = Customer(tenant_id=1, name="Банк", phone="+375291111111", type="company")
+    other_customer = Customer(tenant_id=1, name="Другой клиент", phone="+375292222222", type="company")
     default_template = DocumentTemplate(
         name="Стандартный договор",
         doc_type="contract",
@@ -62,7 +62,7 @@ async def test_relevant_contract_templates_include_default_and_customer_specific
 
 @pytest.mark.asyncio
 async def test_act_template_is_selected_from_contract_template_link(sqlite_session):
-    customer = Customer(name="Банк", phone="+375291111111", type="company")
+    customer = Customer(tenant_id=1, name="Банк", phone="+375291111111", type="company")
     contract_template = DocumentTemplate(
         name="Форма банка",
         doc_type="contract",
@@ -83,7 +83,7 @@ async def test_act_template_is_selected_from_contract_template_link(sqlite_sessi
         is_default=True,
     )
     act_template.linked_contract_templates = [contract_template]
-    order = Order(customer=customer, status="negotiation")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status="negotiation")
     sqlite_session.add_all([customer, contract_template, act_template, default_act, order])
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -143,7 +143,7 @@ async def test_non_managed_document_type_uses_legacy_template_id(sqlite_session)
 
 @pytest.mark.asyncio
 async def test_b2c_document_templates_are_managed_and_have_defaults(sqlite_session):
-    customer = Customer(name="Частный клиент", phone="+375291111111")
+    customer = Customer(tenant_id=1, name="Частный клиент", phone="+375291111111")
     receipt_template = DocumentTemplate(
         name="Товарный чек B2C",
         doc_type="retail_receipt",
@@ -165,7 +165,7 @@ async def test_b2c_document_templates_are_managed_and_have_defaults(sqlite_sessi
         is_active=True,
         is_default=True,
     )
-    order = Order(customer=customer, status="negotiation")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status="negotiation")
     sqlite_session.add_all([customer, receipt_template, service_act_template, maintenance_act_template, order])
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
@@ -199,7 +199,7 @@ async def test_b2c_document_templates_are_managed_and_have_defaults(sqlite_sessi
 
 @pytest.mark.asyncio
 async def test_act_template_can_be_selected_from_invoice_template_link(sqlite_session):
-    customer = Customer(name="Белагробанк", phone="+375293333333", type="company")
+    customer = Customer(tenant_id=1, name="Белагробанк", phone="+375293333333", type="company")
     invoice_template = DocumentTemplate(
         name="Счет-договор банка",
         doc_type="invoice",
@@ -213,7 +213,7 @@ async def test_act_template_can_be_selected_from_invoice_template_link(sqlite_se
         is_active=True,
     )
     act_template.linked_contract_templates = [invoice_template]
-    order = Order(customer=customer, status="negotiation")
+    order = Order(tenant_id=1, storefront_id=1, customer=customer, status="negotiation")
     sqlite_session.add_all([customer, invoice_template, act_template, order])
     await sqlite_session.commit()
     await sqlite_session.refresh(order)
