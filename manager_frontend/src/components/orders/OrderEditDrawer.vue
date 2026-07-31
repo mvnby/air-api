@@ -22,9 +22,8 @@ import type { ServiceAttachmentEquipmentOption } from '../service-attachments/ty
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
-  OutgoingEmailResponse,
 } from '../../client';
-import { ManagerOrdersService, ManagerMailService } from '../../client';
+import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
   type OrderWorkspaceTarget,
@@ -35,6 +34,7 @@ import { useOrderCommercialEditor } from '../../composables/useOrderCommercialEd
 import { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
 import { useOrderDrawerForm } from '../../composables/useOrderDrawerForm';
 import { useOrderDrawerPersistence } from '../../composables/useOrderDrawerPersistence';
+import { useOrderDocumentStatus } from '../../composables/useOrderDocumentStatus';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -194,9 +194,6 @@ const documentsWorkspaceRef = ref<InstanceType<typeof OrderDocumentsWorkspace> |
 const proposalToolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const executionWorkspaceOpen = ref(false);
 const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
-const orderEmails = ref<OutgoingEmailResponse[]>([]);
-const orderEmailsLoaded = ref(false);
-let orderEmailsRequestId = 0;
 
 const showManagerLabelInput = ref(false);
 
@@ -257,6 +254,18 @@ const {
   currentFormSnapshot: () => buildCurrentFormSnapshot(proposalStatus.value),
 });
 
+const {
+  documentEmailStatus,
+  loadOrderEmails,
+  missingReferencedInvoice,
+  orderDocuments,
+  resetOrderEmails,
+  sentDocumentTypes,
+} = useOrderDocumentStatus({
+  order: computed(() => props.order),
+  payments,
+});
+
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => (
   customer.value?.full_legal_name
@@ -276,65 +285,6 @@ const compactObjectAddress = computed(() => (
   || props.order?.customer_branch?.delivery_address
   || ''
 ));
-const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sent' | 'failed'>(() => {
-  if (!orderEmailsLoaded.value) return 'unknown';
-  const latestDocumentEmail = [...orderEmails.value]
-    .filter((email) => Boolean(email.attachments?.length))
-    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
-  if (!latestDocumentEmail) return 'none';
-  if (latestDocumentEmail.status === 'sent') return 'sent';
-  if (latestDocumentEmail.status === 'pending') return 'pending';
-  if (latestDocumentEmail.status === 'failed') return 'failed';
-  return 'none';
-});
-const normalizeDocumentIdentity = (value: unknown) => (
-  String(value || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '')
-);
-const sentDocumentTypes = computed(() => {
-  const types = new Set<string>();
-  const documentsByNumber = new Map(
-    orderDocuments.value
-      .filter((document) => document.number)
-      .map((document) => [normalizeDocumentIdentity(document.number), document.doc_type]),
-  );
-  for (const email of orderEmails.value) {
-    if (email.status !== 'sent') continue;
-    for (const attachment of email.attachments || []) {
-      const metadata = attachment as typeof attachment & {
-        document_type?: string | null;
-        document_number?: string | null;
-      };
-      if (metadata.document_type) {
-        types.add(metadata.document_type);
-        continue;
-      }
-      const filename = normalizeDocumentIdentity(metadata.document_number || metadata.filename);
-      for (const [number, docType] of documentsByNumber) {
-        if (number && filename.includes(number)) {
-          types.add(docType);
-          break;
-        }
-      }
-    }
-  }
-  return [...types];
-});
-const normalizeDocumentNumber = (value: string) => value.toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
-const missingReferencedInvoice = computed(() => {
-  const invoiceNumbers = new Set(
-    orderDocuments.value
-      .filter((document) => document.doc_type === 'invoice')
-      .map((document) => normalizeDocumentNumber(document.number || ''))
-      .filter(Boolean),
-  );
-  for (const payment of payments.value) {
-    const purpose = payment.bank_receipt?.payment_purpose || payment.comment || '';
-    const match = purpose.match(/сч[её]т(?:у|а|ом|е)?\s*(?:№\s*)?([A-ZА-ЯЁ0-9][A-ZА-ЯЁ0-9/-]{2,})/iu);
-    const referencedNumber = match?.[1]?.trim();
-    if (referencedNumber && !invoiceNumbers.has(normalizeDocumentNumber(referencedNumber))) return referencedNumber;
-  }
-  return null;
-});
 const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   status: status.value,
   negotiationStatus: negotiationStatus.value,
@@ -359,21 +309,6 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   paid: totalPaymentsPreview.value,
   balance: balanceDuePreview.value,
 }));
-const loadOrderEmails = async (orderId: number) => {
-  const requestId = ++orderEmailsRequestId;
-  try {
-    const response = await ManagerMailService.listManagerOrderOutgoingEmails(orderId, 20);
-    if (requestId !== orderEmailsRequestId || props.order?.id !== orderId) return;
-    orderEmails.value = response.items || [];
-    orderEmailsLoaded.value = true;
-  } catch (error) {
-    if (requestId !== orderEmailsRequestId) return;
-    console.warn('Failed to load order email summary', error);
-    orderEmails.value = [];
-    orderEmailsLoaded.value = false;
-  }
-};
-
 const copyText = async (value: string | null | undefined, label: string) => {
   const normalized = String(value || '').trim();
   if (!normalized) {
@@ -416,7 +351,6 @@ const toggleHold = async () => {
     }
 };
 
-const orderDocuments = computed(() => props.order?.documents || []);
 const beforeDocumentGenerate = async (type: string) => {
   if (!props.order?.id) return false;
   let mutated = false;
@@ -458,8 +392,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     linkedEquipmentOptions.value = [];
     executionWorkspaceOpen.value = false;
     activeWorkspaceTarget.value = null;
-    orderEmails.value = [];
-    orderEmailsLoaded.value = false;
+    resetOrderEmails();
   }
   hydrateOrder(order);
 
