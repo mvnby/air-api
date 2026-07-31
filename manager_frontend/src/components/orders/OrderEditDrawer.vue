@@ -2,14 +2,12 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
-import CustomerSummaryCard from '../customers/CustomerSummaryCard.vue';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
 import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
-import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
@@ -18,13 +16,12 @@ import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
 import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
-import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
+import OrderCustomerContext from './OrderCustomerContext.vue';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
   ManagerOrderUpdatePayload,
-  ManagerCustomerBranchItemResponse,
   ManagerServiceEstimateResponse,
   OrderProductLineResponse,
   OrderProposalResponse,
@@ -118,11 +115,7 @@ const isPaid = ref(false);
 const installerId = ref<number | null>(null);
 
 const customerDeliveryAddress = ref('');
-const customerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
 const customerBranchId = ref<number | null>(null);
-const customerBranchesLoading = ref(false);
-const creatingCustomerBranch = ref(false);
-const newBranchName = ref('');
 const newBranchAddress = ref('');
 
 const targetCurrency = ref<PaymentCurrency | null>(null);
@@ -205,7 +198,6 @@ const activeServiceSuggestionIndex = ref<number | null>(null);
 const serviceTariffOptions = ref<ManagerQuickTariffResponse[]>([]);
 const serviceTariffLookupLoading = ref(false);
 let serviceTariffSearchRequestId = 0;
-let customerBranchesRequestId = 0;
 const estimateOptions = ref<ManagerServiceEstimateResponse[]>([]);
 const estimateOptionsLoading = ref(false);
 const estimateImportMode = ref<'detailed' | 'collapsed'>('detailed');
@@ -253,139 +245,7 @@ const expandedDrawerSections = ref(createDefaultDrawerSections());
 const initializedOrderId = ref<number | null>(null);
 
 const localFormError = ref('');
-const showCustomerModal = ref(false);
-const savingCustomerInline = ref(false);
 const showManagerLabelInput = ref(false);
-const showBranchFields = ref(false);
-
-const showChangeCustomerModal = ref(false);
-const customerSearchQuery = ref('');
-const customerSearchResults = ref<any[]>([]);
-const isCustomerSearchLoading = ref(false);
-let customerSearchRequestId = 0;
-
-const debouncedSearchCustomer = useDebounceFn(async (query: string) => {
-  const requestId = ++customerSearchRequestId;
-  if (!query || query.length < 3) {
-    customerSearchResults.value = [];
-    isCustomerSearchLoading.value = false;
-    return;
-  }
-  isCustomerSearchLoading.value = true;
-  try {
-    const res = await api.getManagerCustomers(1, 10, query);
-    if (requestId !== customerSearchRequestId || query !== customerSearchQuery.value) return;
-    customerSearchResults.value = res.items || [];
-  } catch (error) {
-    if (requestId !== customerSearchRequestId) return;
-    console.error('Customer search error', error);
-  } finally {
-    if (requestId === customerSearchRequestId) {
-      isCustomerSearchLoading.value = false;
-    }
-  }
-}, 400);
-
-const onCustomerSearchInput = () => {
-  debouncedSearchCustomer(customerSearchQuery.value);
-};
-
-const assignNewCustomer = async (newCustomer: any) => {
-  if (!props.order?.id) return;
-  try {
-    const res = await api.patchManagerOrder(props.order.id, { customer_id: newCustomer.id });
-    emit('updated', res);
-    await initForm(res);
-    showChangeCustomerModal.value = false;
-    setToast('Клиент успешно изменен', 'success');
-    emit('reload', res.id);
-  } catch (error) {
-    setToast(`Ошибка смены клиента: ${getApiErrorMessage(error)}`, 'error');
-  }
-};
-
-const resetCustomerBranches = () => {
-  customerBranchesRequestId += 1;
-  customerBranches.value = [];
-  customerBranchId.value = null;
-  customerBranchesLoading.value = false;
-  creatingCustomerBranch.value = false;
-  newBranchName.value = '';
-  newBranchAddress.value = '';
-};
-
-const loadCustomerBranches = async (customerId: number, preferredBranchId?: number | null) => {
-  const requestId = ++customerBranchesRequestId;
-  customerBranchesLoading.value = true;
-  try {
-    const response = await api.getManagerCustomerBranches(customerId);
-    if (requestId !== customerBranchesRequestId) return;
-    customerBranches.value = response.items || [];
-    if (!customerBranches.value.length) {
-      customerBranchId.value = null;
-      return;
-    }
-    // Keep "Без филиала" when order explicitly stores null branch.
-    if (preferredBranchId === null) {
-      customerBranchId.value = null;
-      return;
-    }
-    const preferredFromOrder = typeof preferredBranchId === 'number'
-      ? customerBranches.value.find((branch) => branch.id === preferredBranchId)
-      : null;
-    const preferred = preferredFromOrder
-      || customerBranches.value.find((branch) => branch.is_default)
-      || customerBranches.value[0]
-      || null;
-    customerBranchId.value = preferred?.id || null;
-  } catch (error) {
-    if (requestId !== customerBranchesRequestId) return;
-    console.error('Failed to load customer branches', error);
-    resetCustomerBranches();
-  } finally {
-    if (requestId === customerBranchesRequestId) {
-      customerBranchesLoading.value = false;
-    }
-  }
-};
-
-const onCustomerBranchChange = (event: Event) => {
-  const value = (event.target as HTMLSelectElement).value;
-  customerBranchId.value = value ? Number(value) : null;
-  const branch = customerBranches.value.find((item) => item.id === customerBranchId.value) || null;
-  if (branch) {
-    customerDeliveryAddress.value = branch.delivery_address;
-  }
-};
-
-const createCustomerBranch = async () => {
-  const customerId = customer.value?.id;
-  if (!customerId || creatingCustomerBranch.value) return;
-  const deliveryAddress = newBranchAddress.value.trim();
-  if (!deliveryAddress) {
-    setToast('Введите адрес филиала', 'error');
-    return;
-  }
-
-  creatingCustomerBranch.value = true;
-  try {
-    const created = await api.createManagerCustomerBranch(customerId, {
-      name: newBranchName.value.trim() || undefined,
-      delivery_address: deliveryAddress,
-      is_default: customerBranches.value.length === 0,
-    });
-    customerBranches.value = [created, ...customerBranches.value.filter((branch) => branch.id !== created.id)];
-    customerBranchId.value = created.id;
-    customerDeliveryAddress.value = created.delivery_address;
-    newBranchName.value = '';
-    newBranchAddress.value = '';
-    setToast('Филиал создан', 'success');
-  } catch (error) {
-    setToast(`Ошибка создания филиала: ${getApiErrorMessage(error)}`, 'error');
-  } finally {
-    creatingCustomerBranch.value = false;
-  }
-};
 
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => (
@@ -404,20 +264,11 @@ const displayOrderTitle = computed(() => (
   || customer.value?.name
   || 'Без названия'
 ));
-const selectedCustomerBranch = computed(() => (
-  customerBranches.value.find((branch) => branch.id === customerBranchId.value)
-  || props.order?.customer_branch
-  || null
-));
 const compactObjectAddress = computed(() => (
   customerDeliveryAddress.value.trim()
-  || selectedCustomerBranch.value?.delivery_address
+  || props.order?.customer_branch?.delivery_address
   || ''
 ));
-const customerDetailsSummary = computed(() => {
-  if (customerBranchId.value) return 'Филиал и дополнительные данные';
-  return 'Адрес и комментарий';
-});
 const orderProposals = computed(() => {
   const proposals = props.order?.proposals || [];
   return [...proposals]
@@ -1113,13 +964,6 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
 
   // Payments
   payments.value = [...(order.payments || [])];
-
-  const customerId = order.customer?.id;
-  if (customerId) {
-    await loadCustomerBranches(customerId, order.customer_branch?.id ?? null);
-  } else {
-    resetCustomerBranches();
-  }
 
   productLookupById.value = {};
 
@@ -1974,43 +1818,6 @@ const deleteOrder = async () => {
 };
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
-const closeCustomerModal = () => {
-  showCustomerModal.value = false;
-};
-
-const openCustomerProfile = () => {
-  const customerId = props.order?.customer?.id;
-  if (!customerId) return;
-  showCustomerModal.value = false;
-  const returnTo = `${window.location.pathname}${window.location.search}`;
-  const query = new URLSearchParams({
-    customerId: String(customerId),
-    returnTo,
-  });
-  window.history.pushState({}, '', `/manager/customers/profile?${query.toString()}`);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-};
-
-const saveCustomerInline = async (payload: { name: string; phone: string; email: string }) => {
-  const customerId = customer.value?.id;
-  if (!customerId || savingCustomerInline.value) return;
-  savingCustomerInline.value = true;
-  try {
-    await api.patchManagerCustomer(customerId, {
-      name: payload.name,
-      full_legal_name: customer.value?.type === 'company' ? payload.name : undefined,
-      phone: payload.phone || null,
-      email: payload.email || null,
-    });
-    setToast('Контакты клиента обновлены', 'success');
-    if (props.order?.id) emit('reload', props.order.id);
-  } catch (error) {
-    setToast('Не удалось обновить клиента: ' + getApiErrorMessage(error), 'error');
-  } finally {
-    savingCustomerInline.value = false;
-  }
-};
-
 const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = false) => {
   const shouldClose = allowToggle && activeWorkspaceTarget.value === target;
   if (activeWorkspaceTarget.value === 'equipment') equipmentPanelRef.value?.collapse();
@@ -2057,6 +1864,11 @@ const discardUnsavedChanges = async () => {
   clearDraft();
   await initForm(props.order);
   setToast('Изменения отменены', 'success');
+};
+
+const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) => {
+  emit('updated', updatedOrder);
+  await initForm(updatedOrder);
 };
 
 watch(
@@ -2142,78 +1954,31 @@ watch(
         <span class="material-icons-round text-[14px]">add</span> Добавить метку
       </button>
 
-      <OrderCustomerObjectSummary
-        :customer="customer"
-        :branch="selectedCustomerBranch"
-        :address="compactObjectAddress"
-        :has-comment="Boolean(comment.trim())"
-        :saving-customer="savingCustomerInline"
-        @copy="copyText"
-        @save-customer="saveCustomerInline"
-        @update:address="customerDeliveryAddress = $event"
-        @open-customer="openCustomerProfile"
-        @change-customer="showChangeCustomerModal = true"
-        @toggle-branch="showBranchFields = !showBranchFields"
-      />
-
-      <div v-if="showBranchFields && customer?.id" class="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900 sm:grid-cols-2">
-        <label class="field-label sm:col-span-2">
-          Филиал клиента
-          <select :value="customerBranchId ?? ''" class="field-input mt-1" :disabled="customerBranchesLoading" @change="onCustomerBranchChange">
-            <option value="">Без филиала</option>
-            <option v-for="branch in customerBranches" :key="'compact-branch-' + branch.id" :value="branch.id">
-              {{ branch.name || 'Филиал #' + branch.id }} — {{ branch.delivery_address }}
-            </option>
-          </select>
-        </label>
-        <input v-model="newBranchName" class="field-input" placeholder="Название нового филиала" />
-        <AddressSuggestInput v-model="newBranchAddress" placeholder="Адрес нового филиала" />
-        <div class="sm:col-span-2 flex justify-end">
-          <button type="button" class="btn-mini-outline text-xs" :disabled="creatingCustomerBranch" @click="createCustomerBranch">
-            {{ creatingCustomerBranch ? 'Создаём...' : 'Создать и выбрать' }}
-          </button>
-        </div>
-      </div>
-
-      <OrderSalesInstallationWorkspace
-        v-if="workflowType === 'sales_installation'"
-        :lanes="orderWorkspace.lanes"
-        :active-target="activeWorkspaceTarget"
-        @open="openWorkspaceTarget($event, true)"
-      />
-
-      <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
-        {{ displayFormError }}
-      </p>
-
-      <OrderDrawerSection
-        id="order-workspace-object"
+      <OrderCustomerContext
+        v-if="order"
+        v-model:delivery-address="customerDeliveryAddress"
+        v-model:customer-branch-id="customerBranchId"
+        v-model:comment="comment"
         v-model:expanded="expandedDrawerSections.clientDetails"
-        title="Подробнее об объекте"
-        :summary="customerDetailsSummary"
-        tone="default"
-        :has-error="Boolean(getFieldError('customer_delivery_address') || getFieldError('comment'))"
+        v-model:new-branch-address="newBranchAddress"
+        :order="order"
+        :address-error="getFieldError('customer_delivery_address')"
+        :comment-error="getFieldError('comment')"
+        @toast="setToast($event.message, $event.type)"
+        @updated="handleCustomerUpdated"
+        @reload="emit('reload', $event)"
       >
-        <div class="grid gap-3 md:grid-cols-2">
-          <AddressSuggestInput
-            v-model="customerDeliveryAddress"
-            class="md:col-span-2"
-            label="Адрес объекта / доставки"
-            placeholder="Введите адрес..."
-            :error="getFieldError('customer_delivery_address')"
-          />
+        <OrderSalesInstallationWorkspace
+          v-if="workflowType === 'sales_installation'"
+          :lanes="orderWorkspace.lanes"
+          :active-target="activeWorkspaceTarget"
+          @open="openWorkspaceTarget($event, true)"
+        />
 
-          <label class="field-label md:col-span-2">
-            Комментарий
-            <textarea
-              v-model="comment"
-              class="field-input min-h-[90px]"
-              :class="getFieldError('comment') ? 'border-red-500 focus:outline-red-400' : ''"
-            />
-            <span v-if="getFieldError('comment')" class="text-xs text-red-300">{{ getFieldError('comment') }}</span>
-          </label>
-        </div>
-      </OrderDrawerSection>
+        <p v-if="displayFormError" class="mb-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {{ displayFormError }}
+        </p>
+      </OrderCustomerContext>
 
       <OrderEquipmentPanel
         v-if="order"
@@ -2498,88 +2263,5 @@ watch(
       </div>
     </aside>
 
-    <div
-      v-if="showCustomerModal"
-      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4"
-      @click.self="closeCustomerModal"
-    >
-      <div class="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-5 text-gray-900 shadow-2xl">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <h3 class="text-lg font-semibold font-['Space_Grotesk']">Карточка клиента</h3>
-          <button class="btn-mini-outline" @click="closeCustomerModal">Закрыть</button>
-        </div>
-        <CustomerSummaryCard :customer="customer" mode="expanded" :show-open-button="false" />
-        <div class="mt-4 flex justify-end gap-2">
-          <button class="btn-mini-outline" @click="showChangeCustomerModal = true">Сменить</button>
-          <button class="btn-mini" :disabled="!customer?.id" @click="openCustomerProfile">Редактировать в карточке клиента</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal for changing order customer -->
-    <Transition name="fade">
-      <div
-        v-if="showChangeCustomerModal"
-        class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-        @click.self="showChangeCustomerModal = false"
-      >
-        <div class="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-          <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shadow-sm bg-slate-50/50">
-            <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <span class="material-icons-round text-slate-500">swap_horiz</span>
-              Сменить клиента для заказа
-            </h3>
-            <button class="bg-slate-100 hover:bg-slate-200 text-slate-500 w-8 h-8 flex items-center justify-center rounded-full transition-colors" @click="showChangeCustomerModal = false">
-              <span class="material-icons-round text-[18px]">close</span>
-            </button>
-          </div>
-          
-          <div class="p-6 overflow-y-auto">
-            <div class="relative mb-4">
-              <span class="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-              <input 
-                v-model="customerSearchQuery" 
-                @input="onCustomerSearchInput"
-                type="text" 
-                class="w-full bg-slate-50 border-none rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-teal-500 transition-shadow" 
-                placeholder="Поиск по телефону, УНП, имени..." 
-                autofocus
-              />
-              <span v-if="isCustomerSearchLoading" class="material-icons-round absolute right-4 top-1/2 -translate-y-1/2 text-teal-500 animate-spin">refresh</span>
-            </div>
-
-            <div v-if="customerSearchQuery.length >= 3 && customerSearchResults.length === 0 && !isCustomerSearchLoading" class="text-center py-6 text-slate-500 text-sm bg-slate-50 rounded-xl border border-slate-100 border-dashed">
-              Клиенты не найдены
-            </div>
-
-            <div v-if="customerSearchQuery.length < 3" class="text-center py-6 text-slate-400 text-xs uppercase tracking-wider font-semibold">
-              Введите минимум 3 символа
-            </div>
-
-            <div class="space-y-2 mt-2">
-              <button
-                v-for="res in customerSearchResults"
-                :key="`csearch-${res.id}`"
-                class="w-full text-left p-4 rounded-xl border border-slate-100 bg-white hover:border-teal-200 hover:shadow-md hover:-translate-y-0.5 transition-all outline-none focus:ring-2 focus:ring-teal-500 flex flex-col gap-1 group"
-                @click="assignNewCustomer(res)"
-              >
-                <div class="font-bold text-slate-800 text-sm group-hover:text-teal-700 transition-colors">
-                  {{ res.full_legal_name || res.name || `Клиент #${res.id}` }}
-                </div>
-                <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                  <span v-if="res.phone" class="flex items-center gap-1"><span class="material-icons-round text-[12px]">phone</span> {{ res.phone }}</span>
-                  <span v-if="res.inn" class="flex items-center gap-1"><span class="font-medium">УНП:</span> {{ res.inn }}</span>
-                </div>
-              </button>
-            </div>
-          </div>
-          <div class="px-6 py-4 border-t border-gray-100 bg-slate-50/50 flex justify-end">
-            <button class="px-5 py-2 rounded-xl text-slate-600 font-medium hover:bg-slate-200 hover:text-slate-800 transition-colors" @click="showChangeCustomerModal = false">
-              Отмена
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
   </div>
 </template>
