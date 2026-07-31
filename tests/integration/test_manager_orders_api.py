@@ -14,6 +14,7 @@ from models import (
     DocumentTemplate,
     GlobalConfig,
     Installer,
+    IntegrationOutboxEvent,
     Order,
     OrderDocument,
     OrderInstaller,
@@ -3407,15 +3408,16 @@ async def test_manager_order_delete_cascades_related_entities(async_client, db, 
     db.add(order)
     await db.commit()
     await db.refresh(order)
+    order_id = int(order.id)
 
-    db.add(OrderProductLink(order_id=order.id, product_id=product.id, quantity=1, price=4000, cost=2500))
-    db.add(OrderServiceLink(order_id=order.id, service_id=service.id, title=service.title, quantity=1, price=200, cost=80))
-    db.add(OrderInstaller(order_id=order.id, installer_id=installer.id, role="main", agreed_pay=100))
-    db.add(OrderWorkStage(order_id=order.id, name="Монтаж"))
-    db.add(Payment(order_id=order.id, amount=500))
+    db.add(OrderProductLink(order_id=order_id, product_id=product.id, quantity=1, price=4000, cost=2500))
+    db.add(OrderServiceLink(order_id=order_id, service_id=service.id, title=service.title, quantity=1, price=200, cost=80))
+    db.add(OrderInstaller(order_id=order_id, installer_id=installer.id, role="main", agreed_pay=100))
+    db.add(OrderWorkStage(order_id=order_id, name="Монтаж"))
+    db.add(Payment(order_id=order_id, amount=500))
     db.add(
         OrderDocument(
-            order_id=order.id,
+            order_id=order_id,
             doc_type="contract",
             number="D-DELETE-1",
             google_file_id="google-file-delete-1",
@@ -3431,28 +3433,40 @@ async def test_manager_order_delete_cascades_related_entities(async_client, db, 
     def _fake_delete_file(file_id):
         deleted_ids.append(file_id)
 
-    monkeypatch.setattr(get_google_service(), "delete_file", _fake_delete_file)
+    monkeypatch.setattr(get_google_service(), "delete_file_strict", _fake_delete_file)
 
     headers = await _auth_headers(async_client)
-    resp = await async_client.delete(f"/api/manager/orders/{order.id}", headers=headers)
+    resp = await async_client.delete(f"/api/manager/orders/{order_id}", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
 
-    assert await db.get(Order, order.id) is None
+    assert await db.get(Order, order_id) is None
 
-    plinks = await db.execute(select(OrderProductLink).where(OrderProductLink.order_id == order.id))
+    plinks = await db.execute(select(OrderProductLink).where(OrderProductLink.order_id == order_id))
     assert plinks.scalars().first() is None
-    slinks = await db.execute(select(OrderServiceLink).where(OrderServiceLink.order_id == order.id))
+    slinks = await db.execute(select(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
     assert slinks.scalars().first() is None
-    installers = await db.execute(select(OrderInstaller).where(OrderInstaller.order_id == order.id))
+    installers = await db.execute(select(OrderInstaller).where(OrderInstaller.order_id == order_id))
     assert installers.scalars().first() is None
-    stages = await db.execute(select(OrderWorkStage).where(OrderWorkStage.order_id == order.id))
+    stages = await db.execute(select(OrderWorkStage).where(OrderWorkStage.order_id == order_id))
     assert stages.scalars().first() is None
-    payments = await db.execute(select(Payment).where(Payment.order_id == order.id))
+    payments = await db.execute(select(Payment).where(Payment.order_id == order_id))
     assert payments.scalars().first() is None
-    docs = await db.execute(select(OrderDocument).where(OrderDocument.order_id == order.id))
+    docs = await db.execute(select(OrderDocument).where(OrderDocument.order_id == order_id))
     assert docs.scalars().first() is None
-    assert "google-file-delete-1" in deleted_ids
+    cleanup_event = (
+        await db.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == "order.document.delete_requested.v1",
+                IntegrationOutboxEvent.aggregate_type == "order_document",
+            )
+        )
+    ).scalar_one()
+    assert cleanup_event.status == "pending"
+    assert cleanup_event.payload["order_id"] == order_id
+    assert cleanup_event.payload["google_file_id"] == "google-file-delete-1"
+    assert deleted_ids == []
 
 
 @pytest.mark.asyncio

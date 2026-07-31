@@ -46,6 +46,7 @@ from schemas import (
 )
 from services.document_service import DocumentService, OrderDocumentsLockedError
 from services.order_create_command_service import OrderCreateCommandService
+from services.order_delete_command_service import OrderDeleteCommandService
 from services.order_payment_command_service import OrderPaymentCommandService
 from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
@@ -557,7 +558,7 @@ async def delete_manager_order(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        await OrderService.delete_order(
+        await OrderDeleteCommandService.delete_order(
             session,
             order_id,
             tenant_scope=tenant_scope,
