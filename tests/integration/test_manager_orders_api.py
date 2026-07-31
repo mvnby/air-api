@@ -1459,32 +1459,34 @@ async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(a
     db.add(order)
     await db.commit()
     await db.refresh(order)
+    order_id = int(order.id)
+    product_id = int(product.id)
     headers = await _auth_headers(async_client)
 
     create_lines = await async_client.patch(
-        f"/api/manager/orders/{order.id}",
-        json={"products": [{"product_id": product.id, "quantity": 1, "price": 1200, "cost": 700}]},
+        f"/api/manager/orders/{order_id}",
+        json={"products": [{"product_id": product_id, "quantity": 1, "price": 1200, "cost": 700}]},
         headers=headers,
     )
     assert create_lines.status_code == 200
     proposal = create_lines.json()["proposals"][0]
 
     empty_variant = await async_client.post(
-        f"/api/manager/orders/{order.id}/proposals",
+        f"/api/manager/orders/{order_id}/proposals",
         json={"name": "Пустой вариант"},
         headers=headers,
     )
     assert empty_variant.status_code == 200
     empty_proposal = next(item for item in empty_variant.json()["proposals"] if item["name"] == "Пустой вариант")
     empty_ready = await async_client.patch(
-        f"/api/manager/orders/{order.id}/proposals/{empty_proposal['id']}",
+        f"/api/manager/orders/{order_id}/proposals/{empty_proposal['id']}",
         json={"status": "ready_to_send"},
         headers=headers,
     )
     assert empty_ready.status_code == 400
 
     ready = await async_client.patch(
-        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        f"/api/manager/orders/{order_id}/proposals/{proposal['id']}",
         json={"status": "ready_to_send"},
         headers=headers,
     )
@@ -1493,14 +1495,14 @@ async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(a
     assert ready.json()["negotiation_status"] == "awaiting_offer"
 
     invalid = await async_client.patch(
-        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        f"/api/manager/orders/{order_id}/proposals/{proposal['id']}",
         json={"status": "unknown"},
         headers=headers,
     )
     assert invalid.status_code == 400
 
     sent = await async_client.patch(
-        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        f"/api/manager/orders/{order_id}/proposals/{proposal['id']}",
         json={"status": "sent"},
         headers=headers,
     )
@@ -1509,23 +1511,23 @@ async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(a
     assert sent.json()["negotiation_status"] == "proposal_sent"
 
     locked_edit = await async_client.patch(
-        f"/api/manager/orders/{order.id}",
-        json={"products": [{"product_id": product.id, "quantity": 2, "price": 1200, "cost": 700}]},
+        f"/api/manager/orders/{order_id}",
+        json={"products": [{"product_id": product_id, "quantity": 2, "price": 1200, "cost": 700}]},
         headers=headers,
     )
     assert locked_edit.status_code == 400
     assert "cannot be edited" in str(locked_edit.json())
 
     draft = await async_client.patch(
-        f"/api/manager/orders/{order.id}/proposals/{proposal['id']}",
+        f"/api/manager/orders/{order_id}/proposals/{proposal['id']}",
         json={"status": "draft"},
         headers=headers,
     )
     assert draft.status_code == 200
     assert draft.json()["proposal_status"] == "draft"
     editable_again = await async_client.patch(
-        f"/api/manager/orders/{order.id}",
-        json={"products": [{"product_id": product.id, "quantity": 2, "price": 1200, "cost": 700}]},
+        f"/api/manager/orders/{order_id}",
+        json={"products": [{"product_id": product_id, "quantity": 2, "price": 1200, "cost": 700}]},
         headers=headers,
     )
     assert editable_again.status_code == 200
@@ -1941,12 +1943,13 @@ async def test_manager_order_patch_validation_errors(async_client, db):
     db.add(order)
     await db.commit()
     await db.refresh(order)
+    order_id = int(order.id)
 
     headers = await _auth_headers(async_client)
     payload = {
         "products": [{"product_id": 1, "quantity": 0, "price": 100, "cost": 10}],
     }
-    response = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
+    response = await async_client.patch(f"/api/manager/orders/{order_id}", json=payload, headers=headers)
     assert response.status_code == 400
     detail = response.json()["detail"]
     assert detail["error_code"] == "bad_request"
@@ -3159,6 +3162,7 @@ async def test_manager_order_patch_customer_critical_requisites_requires_confirm
     db.add(order)
     await db.commit()
     await db.refresh(order)
+    order_id = int(order.id)
 
     headers = await _auth_headers(async_client)
     payload = {
@@ -3167,12 +3171,12 @@ async def test_manager_order_patch_customer_critical_requisites_requires_confirm
         "customer_bank_name": "Новый Банк",
     }
 
-    without_confirm = await async_client.patch(f"/api/manager/orders/{order.id}", json=payload, headers=headers)
+    without_confirm = await async_client.patch(f"/api/manager/orders/{order_id}", json=payload, headers=headers)
     assert without_confirm.status_code == 400
     assert "requires confirmation" in str(without_confirm.json()["detail"]).lower()
 
     with_confirm = await async_client.patch(
-        f"/api/manager/orders/{order.id}",
+        f"/api/manager/orders/{order_id}",
         json={**payload, "confirm_critical_customer_changes": True},
         headers=headers,
     )
