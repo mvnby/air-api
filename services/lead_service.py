@@ -26,6 +26,7 @@ from services.tenant_scope_service import (
     tenant_or_fully_legacy_scope_clause,
     tenant_or_legacy_owner_scope_clause,
 )
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 class LeadService:
@@ -183,6 +184,8 @@ class LeadService:
         session: AsyncSession,
         page: int,
         limit: int,
+        *,
+        tenant_scope: TenantScope,
         status: Optional[str] = None,
         source: Optional[str] = None,
         search: Optional[str] = None,
@@ -190,8 +193,9 @@ class LeadService:
         include_archived: bool = False,
         sort: str = "created_at_desc",
     ) -> Dict[str, Any]:
-        stmt = select(Lead)
-        count_stmt = select(func.count(Lead.id))
+        ownership_clause = TenantEntityAccessService.lead_clause(tenant_scope)
+        stmt = select(Lead).where(ownership_clause)
+        count_stmt = select(func.count(Lead.id)).where(ownership_clause)
 
         if not include_archived:
             stmt = stmt.where(Lead.archived_at.is_(None))
@@ -261,8 +265,19 @@ class LeadService:
         }
 
     @staticmethod
-    async def update_lead(session: AsyncSession, lead_id: int, payload: Any) -> Optional[Dict[str, Any]]:
-        lead = await session.get(Lead, lead_id)
+    async def update_lead(
+        session: AsyncSession,
+        lead_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
+        lead = await TenantEntityAccessService.get_lead(
+            session,
+            lead_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not lead:
             return None
 
@@ -319,8 +334,19 @@ class LeadService:
         return LeadService._map_lead(lead)
 
     @staticmethod
-    async def mark_lead_lost(session: AsyncSession, lead_id: int, payload: Any) -> Optional[Dict[str, Any]]:
-        lead = await session.get(Lead, lead_id)
+    async def mark_lead_lost(
+        session: AsyncSession,
+        lead_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
+        lead = await TenantEntityAccessService.get_lead(
+            session,
+            lead_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not lead:
             return None
 

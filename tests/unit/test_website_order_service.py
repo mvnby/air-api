@@ -89,7 +89,7 @@ async def test_website_checkout_does_not_attempt_telegram_without_recipients(
     async def fake_create_from_website(**_kwargs):
         return order
 
-    async def fake_recipients(_session):
+    async def fake_recipients(_session, *, tenant_scope):
         return []
 
     async def fail_if_sent(*_args, **_kwargs):
@@ -131,7 +131,11 @@ async def test_website_checkout_does_not_attempt_telegram_without_recipients(
 
 
 @pytest.mark.asyncio
-async def test_website_order_notification_escapes_and_bounds_untrusted_fields(monkeypatch, caplog):
+async def test_website_order_notification_escapes_and_bounds_untrusted_fields(
+    monkeypatch,
+    caplog,
+    tenant_scope,
+):
     payload = OrderPayload.model_validate(
         {
             "customer": {
@@ -165,7 +169,7 @@ async def test_website_order_notification_escapes_and_bounds_untrusted_fields(mo
         async def refresh(self, *_args, **_kwargs):
             return None
 
-    async def fake_recipients(_session):
+    async def fake_recipients(_session, *, tenant_scope):
         return [101, 202]
 
     async def fake_send_message(admin_id, text):
@@ -180,7 +184,12 @@ async def test_website_order_notification_escapes_and_bounds_untrusted_fields(mo
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
 
     with caplog.at_level("WARNING"):
-        await WebsiteOrderService._notify_admins(_Session(), order, payload)
+        await WebsiteOrderService._notify_admins(
+            _Session(),
+            order,
+            payload,
+            tenant_scope=tenant_scope,
+        )
 
     assert [admin_id for admin_id, _text in sent_messages] == [101, 202]
     sent_text = sent_messages[0][1]

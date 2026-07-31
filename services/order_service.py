@@ -26,8 +26,10 @@ from services.order_proposal_lifecycle import (
 )
 from services.tenant_scope_service import (
     TenantScope,
+    tenant_or_fully_legacy_scope_clause,
     tenant_or_legacy_owner_scope_clause,
 )
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 logger = logging.getLogger(__name__)
 
@@ -784,9 +786,11 @@ class OrderService:
 
     @staticmethod
     async def get_calendar_events(
-        session: AsyncSession, 
-        start_date: datetime, 
-        end_date: datetime
+        session: AsyncSession,
+        start_date: datetime,
+        end_date: datetime,
+        *,
+        tenant_scope: TenantScope,
     ) -> List["CalendarEventResponse"]:
         """
         Get calendar events for orders (assessments and installations).
@@ -806,7 +810,10 @@ class OrderService:
         stmt = (
             select(Order)
             .outerjoin(OrderWorkStage, Order.id == OrderWorkStage.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
                 or_(
                     and_(Order.measurement_date >= start_date, Order.measurement_date <= end_date),
                     and_(Order.installation_date >= start_date, Order.installation_date <= end_date),
@@ -977,7 +984,11 @@ class OrderService:
             await session.commit()
             await session.refresh(order)
 
-        return await OrderService.get_order_detail_for_manager(session, int(order.id))
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            int(order.id),
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def create_from_website(
@@ -1562,28 +1573,60 @@ class OrderService:
     async def _ensure_assignable_legacy_executor(
         session: AsyncSession,
         installer_id: int,
+        *,
+        tenant_scope: TenantScope,
     ) -> None:
         from models import Installer
         from services.staff_user_service import StaffUserService
 
         staff_user = await StaffUserService.get_by_legacy_installer_id(session, installer_id)
         if staff_user is not None:
-            if not StaffUserService.can_be_any_executor(staff_user):
+            from services.staff_tenant_membership_service import (
+                StaffTenantMembershipService,
+            )
+
+            membership = await StaffTenantMembershipService.get_for_tenant(
+                session,
+                tenant_id=tenant_scope.tenant_id,
+                staff_user_id=int(staff_user.id or 0),
+                active_only=True,
+            )
+            if (
+                membership is None
+                or not StaffUserService.can_be_any_executor(staff_user)
+            ):
                 raise ValueError("Selected installer is inactive or blocked")
             return
 
+        if not tenant_scope.is_system:
+            raise ValueError("Selected installer is not available for this tenant")
         installer = await session.get(Installer, installer_id)
         if not installer or not installer.is_active:
             raise ValueError("Selected installer is inactive or blocked")
 
     @staticmethod
-    async def update_order_installers(session: AsyncSession, order_id: int, installers_data: List[Dict[str, Any]]) -> None:
+    async def update_order_installers(
+        session: AsyncSession,
+        order_id: int,
+        installers_data: List[Dict[str, Any]],
+        *,
+        tenant_scope: TenantScope,
+    ) -> None:
         """
         Updates installers for an order and triggers notifications for NEW assignments.
         """
         from models import OrderInstaller, Installer
         from services.bot_service import BotService
         from services.staff_user_service import StaffUserService
+
+        owned_order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
+        if owned_order is None:
+            raise ValueError("Order not found")
         
         # 1. Забираем текущие назначения чтобы понять, кто новый
         existing = await session.execute(select(OrderInstaller).where(OrderInstaller.order_id == order_id))
@@ -1605,7 +1648,11 @@ class OrderService:
         for i_data in installers_data:
             i_id = int(i_data['installer_id'])
             if i_id not in existing_map:
-                await OrderService._ensure_assignable_legacy_executor(session, i_id)
+                await OrderService._ensure_assignable_legacy_executor(
+                    session,
+                    i_id,
+                    tenant_scope=tenant_scope,
+                )
                 # Это новый!
                 item = OrderInstaller(
                     order_id=order_id,
@@ -1665,7 +1712,9 @@ class OrderService:
     async def update_all_items(
         session: AsyncSession, 
         order_id: int, 
-        items_data: Dict[str, Any]
+        items_data: Dict[str, Any],
+        *,
+        tenant_scope: TenantScope,
     ) -> None:
         """
         Full sync of order items including products, services, and installers.
@@ -1677,7 +1726,19 @@ class OrderService:
             items_data: Dict with 'products', 'services', 'installers' lists
         """
         from models import OrderInstaller
-        order = await OrderDAO.get_with_links(session, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(
+                selectinload(Order.proposals),
+                selectinload(Order.product_links),
+                selectinload(Order.service_links),
+                selectinload(Order.payments),
+                selectinload(Order.installers),
+            ),
+            for_update=True,
+        )
         if not order:
             return
         proposal = await OrderService.ensure_default_proposal(session, order)
@@ -1728,7 +1789,11 @@ class OrderService:
         
         # 4. Add installers
         for inst in items_data.get("installers", []):
-            await OrderService._ensure_assignable_legacy_executor(session, int(inst["installer_id"]))
+            await OrderService._ensure_assignable_legacy_executor(
+                session,
+                int(inst["installer_id"]),
+                tenant_scope=tenant_scope,
+            )
             new_inst = OrderInstaller(
                 order_id=order_id,
                 installer_id=int(inst["installer_id"]),
@@ -1782,18 +1847,30 @@ class OrderService:
         return await OrderDAO.get_all(session)
 
     @staticmethod
-    async def add_order_stage(session: AsyncSession, order_id: int, payload: Any):
+    async def add_order_stage(
+        session: AsyncSession,
+        order_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ):
         from models import OrderWorkStage
         from services.staff_task_notification_event_service import (
             StaffTaskNotificationEventService,
         )
-        order = await session.get(Order, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not order:
             raise ValueError("Order not found")
         if payload.installer_id is not None:
             await OrderService._ensure_assignable_legacy_executor(
                 session,
                 int(payload.installer_id),
+                tenant_scope=tenant_scope,
             )
         stage = OrderWorkStage(
             order_id=order_id,
@@ -1812,9 +1889,14 @@ class OrderService:
                 session,
                 stage=stage,
                 previous_installer_id=None,
+                tenant_scope=tenant_scope,
             )
         await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     def _map_stale_order_stage(stage: OrderWorkStage) -> Dict[str, Any]:
@@ -1843,6 +1925,7 @@ class OrderService:
     async def list_stale_order_stages(
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         older_than_days: int = 7,
         include_unscheduled: bool = True,
         limit: int = 100,
@@ -1854,6 +1937,8 @@ class OrderService:
             stale_conditions.append(OrderWorkStage.start_time.is_(None))
 
         base_filters = [
+            TenantEntityAccessService.order_clause(tenant_scope),
+            TenantEntityAccessService.order_customer_clause(tenant_scope),
             OrderWorkStage.status.notin_([OrderStageStatus.COMPLETED, OrderStageStatus.CANCELED]),
             or_(*stale_conditions),
         ]
@@ -1861,6 +1946,7 @@ class OrderService:
             select(func.count())
             .select_from(OrderWorkStage)
             .join(Order, Order.id == OrderWorkStage.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(*base_filters)
         )
         total = int(count_result.scalar_one() or 0)
@@ -1868,6 +1954,7 @@ class OrderService:
         result = await session.execute(
             select(OrderWorkStage)
             .join(Order, Order.id == OrderWorkStage.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(*base_filters)
             .options(
                 selectinload(OrderWorkStage.order).selectinload(Order.customer),
@@ -1882,11 +1969,21 @@ class OrderService:
         }
 
     @staticmethod
-    async def cancel_order_stage_direct(session: AsyncSession, stage_id: int) -> Dict[str, Any]:
+    async def cancel_order_stage_direct(
+        session: AsyncSession,
+        stage_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
         from services.staff_task_notification_event_service import (
             StaffTaskNotificationEventService,
         )
-        stage = await session.get(OrderWorkStage, stage_id)
+        stage = await TenantEntityAccessService.get_order_stage(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not stage:
             raise ValueError("Stage not found")
         previous_status = stage.status
@@ -1897,22 +1994,36 @@ class OrderService:
                 session,
                 stage=stage,
                 previous_status=previous_status,
+                tenant_scope=tenant_scope,
             )
         await session.commit()
         await session.refresh(stage)
-        result = await session.execute(
-            select(OrderWorkStage)
-            .where(OrderWorkStage.id == stage_id)
-            .options(
+        stage = await TenantEntityAccessService.get_order_stage(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+            options=(
                 selectinload(OrderWorkStage.order).selectinload(Order.customer),
                 selectinload(OrderWorkStage.installer),
-            )
+            ),
         )
-        return OrderService._map_stale_order_stage(result.scalars().one())
+        if stage is None:
+            raise ValueError("Stage not found")
+        return OrderService._map_stale_order_stage(stage)
 
     @staticmethod
-    async def delete_order_stage_direct(session: AsyncSession, stage_id: int) -> Dict[str, Any]:
-        stage = await session.get(OrderWorkStage, stage_id)
+    async def delete_order_stage_direct(
+        session: AsyncSession,
+        stage_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
+        stage = await TenantEntityAccessService.get_order_stage(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not stage:
             raise ValueError("Stage not found")
         await session.delete(stage)
@@ -1920,13 +2031,26 @@ class OrderService:
         return {"ok": True, "id": stage_id}
 
     @staticmethod
-    async def update_order_stage(session: AsyncSession, order_id: int, stage_id: int, payload: Any):
+    async def update_order_stage(
+        session: AsyncSession,
+        order_id: int,
+        stage_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ):
         from models import OrderWorkStage, Order, OrderStatus, OrderStageStatus
         from services.staff_task_notification_event_service import (
             StaffTaskNotificationEventService,
         )
-        stage = await session.get(OrderWorkStage, stage_id)
-        if not stage or stage.order_id != order_id:
+        stage = await TenantEntityAccessService.get_order_stage(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+            order_id=order_id,
+            for_update=True,
+        )
+        if not stage:
             raise ValueError("Stage not found")
         previous_installer_id = stage.installer_id
         previous_start_time = stage.start_time
@@ -1938,6 +2062,7 @@ class OrderService:
             await OrderService._ensure_assignable_legacy_executor(
                 session,
                 int(next_installer_id),
+                tenant_scope=tenant_scope,
             )
         for key, value in update_data.items():
             if key in ("start_time", "end_time"):
@@ -1957,12 +2082,14 @@ class OrderService:
                 session,
                 stage=stage,
                 previous_status=previous_status,
+                tenant_scope=tenant_scope,
             )
         elif stage.installer_id != previous_installer_id and stage.installer_id is not None:
             await StaffTaskNotificationEventService.enqueue_assigned(
                 session,
                 stage=stage,
                 previous_installer_id=previous_installer_id,
+                tenant_scope=tenant_scope,
             )
         elif stage.installer_id is not None:
             changed_fields = []
@@ -1979,10 +2106,15 @@ class OrderService:
                     stage=stage,
                     change_fields=changed_fields,
                     previous_values=previous_values,
+                    tenant_scope=tenant_scope,
                 )
         
         # Auto-pause logic
-        order = await session.get(Order, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if order:
             await session.refresh(order, ['work_stages'])
             all_completed = True
@@ -1998,17 +2130,37 @@ class OrderService:
                 session.add(order)
                 
         await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
-    async def delete_order_stage(session: AsyncSession, order_id: int, stage_id: int):
+    async def delete_order_stage(
+        session: AsyncSession,
+        order_id: int,
+        stage_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ):
         from models import OrderWorkStage
-        stage = await session.get(OrderWorkStage, stage_id)
-        if not stage or stage.order_id != order_id:
+        stage = await TenantEntityAccessService.get_order_stage(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+            order_id=order_id,
+            for_update=True,
+        )
+        if not stage:
             raise ValueError("Stage not found")
         await session.delete(stage)
         await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def update_status(session: AsyncSession, order_id: int, new_status: Any) -> bool:
@@ -2203,6 +2355,8 @@ class OrderService:
         customer_segment: str,
         page: int,
         limit: int,
+        *,
+        tenant_scope: TenantScope,
         status: Optional[str] = None,
         search: Optional[str] = None,
         overdue_only: bool = False,
@@ -2221,7 +2375,14 @@ class OrderService:
             cast(Customer.type, String) == CustomerType.company.value,
             has_inn,
         )
-        base_filters = [Order.status != OrderStatus.NEW_LEAD]
+        base_filters = [
+            TenantEntityAccessService.order_clause(tenant_scope),
+            Order.status != OrderStatus.NEW_LEAD,
+            or_(
+                Order.customer_id.is_(None),
+                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            ),
+        ]
         if segment == "b2b":
             base_filters.append(is_b2b)
         elif segment == "b2c":
@@ -2315,11 +2476,17 @@ class OrderService:
         }
 
     @staticmethod
-    async def get_order_detail_for_manager(session: AsyncSession, order_id: int) -> Optional[Dict[str, Any]]:
-        stmt = (
-            select(Order)
-            .where(Order.id == order_id)
-            .options(
+    async def get_order_detail_for_manager(
+        session: AsyncSession,
+        order_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Dict[str, Any]]:
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),
                 selectinload(Order.customer_contract),
@@ -2330,13 +2497,25 @@ class OrderService:
                 selectinload(Order.documents),
                 selectinload(Order.payments).selectinload(Payment.bank_receipt),
                 selectinload(Order.work_stages).selectinload(OrderWorkStage.installer),
-            )
-            .execution_options(populate_existing=True)
+            ),
+            populate_existing=True,
         )
-        result = await session.execute(stmt)
-        order = result.scalars().first()
         if not order:
             return None
+        if order.customer_id is not None:
+            owned_customer_id = (
+                await session.execute(
+                    select(Customer.id).where(
+                        Customer.id == order.customer_id,
+                        tenant_or_legacy_owner_scope_clause(
+                            Customer,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalar_one_or_none()
+            if owned_customer_id is None:
+                return None
         await OrderService.ensure_default_proposal(session, order)
 
         data = OrderService._map_order_list_item(order)
@@ -2346,15 +2525,28 @@ class OrderService:
         data["attachment_count"] = await ServiceAttachmentService.order_attachment_count(
             session,
             order=order,
+            tenant_scope=tenant_scope,
         )
         linked_equipment_result = await session.execute(
-            select(EquipmentOrderLink.equipment_id).where(EquipmentOrderLink.order_id == order_id)
+            select(EquipmentOrderLink.equipment_id)
+            .join(
+                CustomerEquipment,
+                CustomerEquipment.id == EquipmentOrderLink.equipment_id,
+            )
+            .join(Customer, Customer.id == CustomerEquipment.customer_id)
+            .where(
+                EquipmentOrderLink.order_id == order_id,
+                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            )
         )
         linked_equipment_ids = {int(value) for value in linked_equipment_result.scalars().all()}
         source_equipment_result = await session.execute(
-            select(CustomerEquipment.id).where(
+            select(CustomerEquipment.id)
+            .join(Customer, Customer.id == CustomerEquipment.customer_id)
+            .where(
                 CustomerEquipment.source_order_id == order_id,
                 CustomerEquipment.is_archived == False,
+                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
             )
         )
         linked_equipment_ids.update(int(value) for value in source_equipment_result.scalars().all())
@@ -2417,28 +2609,43 @@ class OrderService:
         return data
 
     @staticmethod
-    async def _load_order_for_proposal_write(session: AsyncSession, order_id: int) -> Order:
-        stmt = (
-            select(Order)
-            .where(Order.id == order_id)
-            .options(
+    async def _load_order_for_proposal_write(
+        session: AsyncSession,
+        order_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Order:
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(
                 selectinload(Order.proposals),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product),
                 selectinload(Order.service_links).selectinload(OrderServiceLink.service),
                 selectinload(Order.payments),
                 selectinload(Order.installers),
-            )
+            ),
+            for_update=True,
         )
-        result = await session.execute(stmt)
-        order = result.scalars().first()
         if not order:
             raise ValueError("Order not found")
         await OrderService.ensure_default_proposal(session, order)
         return order
 
     @staticmethod
-    async def create_order_proposal(session: AsyncSession, order_id: int, payload: Any) -> Dict[str, Any]:
-        order = await OrderService._load_order_for_proposal_write(session, order_id)
+    async def create_order_proposal(
+        session: AsyncSession,
+        order_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
+        order = await OrderService._load_order_for_proposal_write(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         source = None
         source_id = getattr(payload, "duplicate_from_proposal_id", None)
         if source_id:
@@ -2491,11 +2698,26 @@ class OrderService:
         await OrderService._refresh_order_financials(session, order)
         session.add(order)
         await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
-    async def update_order_proposal(session: AsyncSession, order_id: int, proposal_id: int, payload: Any) -> Dict[str, Any]:
-        order = await OrderService._load_order_for_proposal_write(session, order_id)
+    async def update_order_proposal(
+        session: AsyncSession,
+        order_id: int,
+        proposal_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
+        order = await OrderService._load_order_for_proposal_write(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         proposal = next((item for item in order.proposals if item.id == proposal_id), None)
         if not proposal:
             raise ValueError("Proposal not found")
@@ -2536,11 +2758,25 @@ class OrderService:
         await OrderService._refresh_order_financials(session, order)
         session.add(order)
         await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
-    async def select_order_proposal(session: AsyncSession, order_id: int, proposal_id: int) -> Dict[str, Any]:
-        order = await OrderService._load_order_for_proposal_write(session, order_id)
+    async def select_order_proposal(
+        session: AsyncSession,
+        order_id: int,
+        proposal_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
+        order = await OrderService._load_order_for_proposal_write(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         proposal = next((item for item in order.proposals if item.id == proposal_id and not item.is_archived), None)
         if not proposal:
             raise ValueError("Proposal not found")
@@ -2553,7 +2789,11 @@ class OrderService:
         await OrderService._refresh_order_financials(session, order)
         session.add(order)
         await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
 
 
     @staticmethod
@@ -2642,8 +2882,15 @@ class OrderService:
         session: AsyncSession,
         order_id: int,
         payload: Any,
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        order = await session.get(Order, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not order:
             return None
         from models import Customer  # noqa: avoid UnboundLocalError from conditional import below
@@ -2723,7 +2970,11 @@ class OrderService:
             order.measurement_required = payload.measurement_required
         if "measurer_id" in fields_set:
             if payload.measurer_id is not None and payload.measurer_id != order.measurer_id:
-                await OrderService._ensure_assignable_legacy_executor(session, int(payload.measurer_id))
+                await OrderService._ensure_assignable_legacy_executor(
+                    session,
+                    int(payload.measurer_id),
+                    tenant_scope=tenant_scope,
+                )
             order.measurer_id = payload.measurer_id
         if "measurement_result" in fields_set:
             order.measurement_result = payload.measurement_result
@@ -2823,7 +3074,11 @@ class OrderService:
             )
             existing_installer_ids = set(existing_installer_ids_res.scalars().all())
             if getattr(payload, "installer_id", None) is not None and payload.installer_id not in existing_installer_ids:
-                await OrderService._ensure_assignable_legacy_executor(session, int(payload.installer_id))
+                await OrderService._ensure_assignable_legacy_executor(
+                    session,
+                    int(payload.installer_id),
+                    tenant_scope=tenant_scope,
+                )
             await session.execute(delete(OrderInstaller).where(OrderInstaller.order_id == order_id))
             if getattr(payload, "installer_id", None) is not None:
                 new_installer_link = OrderInstaller(
@@ -2837,7 +3092,17 @@ class OrderService:
         if "customer_id" in fields_set and payload.customer_id is not None:
             if order.customer_id != payload.customer_id:
                 # Link to new existing customer
-                new_customer = await session.get(Customer, payload.customer_id)
+                new_customer = (
+                    await session.execute(
+                        select(Customer).where(
+                            Customer.id == payload.customer_id,
+                            tenant_or_legacy_owner_scope_clause(
+                                Customer,
+                                tenant_scope,
+                            ),
+                        )
+                    )
+                ).scalars().first()
                 if not new_customer:
                     raise ValueError("Customer not found")
                 order.customer_id = payload.customer_id
@@ -2910,7 +3175,17 @@ class OrderService:
         # 2. Update customer fields
         requested_customer_fields = [field for field in customer_field_map if field in fields_set]
         if requested_customer_fields and order.customer_id:
-            customer = await session.get(Customer, order.customer_id)
+            customer = (
+                await session.execute(
+                    select(Customer).where(
+                        Customer.id == order.customer_id,
+                        tenant_or_legacy_owner_scope_clause(
+                            Customer,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalars().first()
             if customer:
                 def _clean_optional(value: Any) -> Optional[str]:
                     if value is None:
@@ -3114,6 +3389,7 @@ class OrderService:
                 .where(
                     Order.customer_id == order.customer_id,
                     Order.id != order.id,
+                    TenantEntityAccessService.order_clause(tenant_scope),
                     not_(
                         or_(
                             Order.status == OrderStatus.NEW_LEAD,
@@ -3125,7 +3401,17 @@ class OrderService:
             other_real_result = await session.execute(other_real_orders_stmt)
             other_real_count = int(other_real_result.scalar() or 0)
             if other_real_count == 0:
-                customer = await session.get(Customer, order.customer_id)
+                customer = (
+                    await session.execute(
+                        select(Customer).where(
+                            Customer.id == order.customer_id,
+                            tenant_or_legacy_owner_scope_clause(
+                                Customer,
+                                tenant_scope,
+                            ),
+                        )
+                    )
+                ).scalars().first()
                 if customer and not customer.is_archived:
                     customer.is_archived = True
                     session.add(customer)
@@ -3142,15 +3428,31 @@ class OrderService:
                 order_id=order_id,
                 previous_address=previous_delivery_address,
                 current_address=order.delivery_address,
+                tenant_scope=tenant_scope,
             )
         await session.commit()
 
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
-    async def add_payment(session: AsyncSession, order_id: int, payload: Any):
+    async def add_payment(
+        session: AsyncSession,
+        order_id: int,
+        payload: Any,
+        *,
+        tenant_scope: TenantScope,
+    ):
         from models import Payment, PaymentType
-        order = await session.get(Order, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not order:
             raise ValueError("Order not found")
         
@@ -3181,9 +3483,20 @@ class OrderService:
         return [OrderService._map_payment(p) for p in sorted(order.payments, key=lambda d: d.date, reverse=True)]
 
     @staticmethod
-    async def delete_payment(session: AsyncSession, order_id: int, payment_id: int):
+    async def delete_payment(
+        session: AsyncSession,
+        order_id: int,
+        payment_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ):
         from models import BankReceipt, Payment
-        order = await session.get(Order, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not order:
             raise ValueError("Order not found")
             
@@ -3195,10 +3508,30 @@ class OrderService:
         affected_order_ids = {int(order_id)}
 
         if bank_receipt_id:
+            all_linked_ids = list(
+                (
+                    await session.execute(
+                        select(Payment.id).where(
+                            Payment.bank_receipt_id == bank_receipt_id
+                        )
+                    )
+                ).scalars()
+            )
             linked_payments_result = await session.execute(
-                select(Payment).where(Payment.bank_receipt_id == bank_receipt_id)
+                select(Payment)
+                .join(Order, Order.id == Payment.order_id)
+                .outerjoin(Customer, Customer.id == Order.customer_id)
+                .where(
+                    Payment.bank_receipt_id == bank_receipt_id,
+                    TenantEntityAccessService.order_clause(tenant_scope),
+                    TenantEntityAccessService.order_customer_clause(
+                        tenant_scope
+                    ),
+                )
             )
             linked_payments = list(linked_payments_result.scalars().all())
+            if len(linked_payments) != len(all_linked_ids):
+                raise ValueError("Bank receipt spans a tenant boundary")
             deleted_payment_ids = [int(item.id or 0) for item in linked_payments if item.id]
             for linked_payment in linked_payments:
                 if linked_payment.order_id:
@@ -3228,7 +3561,11 @@ class OrderService:
         await session.flush()
 
         for affected_order_id in affected_order_ids:
-            affected_order = await session.get(Order, affected_order_id)
+            affected_order = await TenantEntityAccessService.get_order(
+                session,
+                affected_order_id,
+                tenant_scope=tenant_scope,
+            )
             if not affected_order:
                 continue
             await OrderService._refresh_order_financials(session, affected_order)
@@ -3249,13 +3586,26 @@ class OrderService:
     # -----------------------------------------------------------------
 
     @staticmethod
-    async def get_new_lead_counter(session: AsyncSession) -> tuple[int, bool]:
+    async def get_new_lead_counter(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> tuple[int, bool]:
         """Fast count of orders with status 'new_lead'.
 
         Intended for the Dashboard/Sidebar badge — runs a single
         indexed COUNT query with no joins.
         """
-        stmt = select(func.count()).where(Order.status == OrderStatus.NEW_LEAD)
+        stmt = (
+            select(func.count())
+            .select_from(Order)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                Order.status == OrderStatus.NEW_LEAD,
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
+            )
+        )
         result = await session.execute(stmt)
         count: int = result.scalar() or 0
         return count, count > 0
@@ -3321,6 +3671,8 @@ class OrderService:
     @staticmethod
     async def get_leads_inbox(
         session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
         scope: str = "active",
         page: int = 1,
         limit: int = 50,
@@ -3336,8 +3688,22 @@ class OrderService:
 
         page = max(1, int(page or 1))
         limit = min(100, max(1, int(limit or 50)))
-        stmt = select(Order).options(selectinload(Order.customer))
-        count_stmt = select(func.count(Order.id))
+        ownership_clause = TenantEntityAccessService.order_clause(tenant_scope)
+        customer_ownership_clause = or_(
+            Order.customer_id.is_(None),
+            tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+        )
+        stmt = (
+            select(Order)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(ownership_clause, customer_ownership_clause)
+            .options(selectinload(Order.customer))
+        )
+        count_stmt = (
+            select(func.count(Order.id))
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(ownership_clause, customer_ownership_clause)
+        )
 
         if scope == "archive":
             # Archived leads are just closed/lost leads
@@ -3373,6 +3739,7 @@ class OrderService:
         attachment_counts = await ServiceAttachmentService.order_attachment_counts(
             session,
             order_ids=[int(order.id or 0) for order in orders],
+            tenant_scope=tenant_scope,
         )
 
         items = [
@@ -3419,7 +3786,12 @@ class OrderService:
         )
 
     @staticmethod
-    async def delete_order(session: AsyncSession, order_id: int) -> bool:
+    async def delete_order(
+        session: AsyncSession,
+        order_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> bool:
         """
         Delete an order and all cascading dependencies from DB.
         Google Drive files are deleted on a best-effort basis and do not block DB deletion.
@@ -3440,14 +3812,23 @@ class OrderService:
         from services.document_service import DocumentService
         from services.google_service import get_google_service
         
-        order = await session.get(Order, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not order:
             raise ValueError(f"Order {order_id} not found")
 
         # Delete associated documents from Google Drive (best-effort).
         # OrderDocument rows themselves are deleted by ORM cascade together with the order.
-        docs = await DocumentService.list_order_documents(session, order_id)
-        for doc in docs:
+        docs = await DocumentService.list_order_documents(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
+        for doc in docs or []:
             if not doc.google_file_id:
                 continue
             try:

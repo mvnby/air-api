@@ -6,6 +6,10 @@ from models import Customer, CustomerType, LeadSource, Order, OrderStatus
 from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 
 @pytest.mark.asyncio
 async def test_leads_inbox_is_paginated(db):
@@ -24,7 +28,7 @@ async def test_leads_inbox_is_paginated(db):
         )
     await db.commit()
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=2)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=2, tenant_scope=TEST_TENANT_SCOPE)
 
     assert response.total == 3
     assert response.meta.total == 3
@@ -51,7 +55,7 @@ async def test_leads_inbox_uses_email_date_for_email_source(db):
     )
     await db.commit()
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10, tenant_scope=TEST_TENANT_SCOPE)
 
     assert response.items[0].email == "client@example.com"
     assert response.items[0].created_at == datetime(2026, 5, 27, 21, 40)
@@ -74,7 +78,7 @@ async def test_leads_inbox_extracts_legacy_email_date_from_comment(db):
     )
     await db.commit()
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10, tenant_scope=TEST_TENANT_SCOPE)
 
     assert response.items[0].source_created_at == datetime(2026, 5, 11, 12, 33)
 
@@ -94,7 +98,7 @@ async def test_leads_inbox_ignores_invalid_no_answer_at(db):
     )
     await db.commit()
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10, tenant_scope=TEST_TENANT_SCOPE)
 
     assert response.items[0].no_answer_at is None
 
@@ -115,7 +119,7 @@ async def test_leads_inbox_keeps_unknown_customer_type_and_task_essence_null(db)
     )
     await db.commit()
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10, tenant_scope=TEST_TENANT_SCOPE)
 
     assert response.items[0].customer_id == customer.id
     assert response.items[0].customer_type is None
@@ -148,7 +152,7 @@ async def test_leads_inbox_returns_known_type_and_task_when_stored(db):
     )
     await db.commit()
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10, tenant_scope=TEST_TENANT_SCOPE)
     item = response.items[0]
 
     assert item.customer_type == "company"
@@ -177,7 +181,7 @@ async def test_leads_inbox_returns_confirmed_individual_customer_type(db):
     )
     await db.commit()
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10, tenant_scope=TEST_TENANT_SCOPE)
 
     assert response.items[0].customer_type == "individual"
 
@@ -203,9 +207,10 @@ async def test_linking_existing_individual_marks_lead_customer_type_known(db):
         db,
         int(order.id),
         ManagerOrderUpdatePayload(customer_id=int(existing_customer.id)),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
-    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10)
+    response = await OrderService.get_leads_inbox(db, scope="active", page=1, limit=10, tenant_scope=TEST_TENANT_SCOPE)
 
     assert response.items[0].customer_id == existing_customer.id
     assert response.items[0].customer_type == "individual"

@@ -85,9 +85,14 @@ async def cancel_manager_order_stage_direct(
     stage_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.cancel_order_stage_direct(session, stage_id)
+        return await OrderService.cancel_order_stage_direct(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=404,
@@ -106,9 +111,14 @@ async def delete_manager_order_stage_direct(
     stage_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.delete_order_stage_direct(session, stage_id)
+        return await OrderService.delete_order_stage_direct(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=404,
@@ -124,9 +134,15 @@ async def patch_manager_order(
     payload: ManagerOrderUpdatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        data = await OrderService.update_order_for_manager(session, order_id, payload)
+        data = await OrderService.update_order_for_manager(
+            session,
+            order_id,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -206,9 +222,15 @@ async def create_manager_order_proposal(
     payload: OrderProposalCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.create_order_proposal(session, order_id, payload)
+        return await OrderService.create_order_proposal(
+            session,
+            order_id,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=CREATE_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
 
@@ -224,13 +246,19 @@ async def duplicate_manager_order_proposal(
     payload: OrderProposalCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     duplicate_payload = OrderProposalCreatePayload(
         name=payload.name,
         duplicate_from_proposal_id=proposal_id,
     )
     try:
-        return await OrderService.create_order_proposal(session, order_id, duplicate_payload)
+        return await OrderService.create_order_proposal(
+            session,
+            order_id,
+            duplicate_payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=DUPLICATE_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
 
@@ -246,9 +274,16 @@ async def patch_manager_order_proposal(
     payload: OrderProposalUpdatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.update_order_proposal(session, order_id, proposal_id, payload)
+        return await OrderService.update_order_proposal(
+            session,
+            order_id,
+            proposal_id,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=PATCH_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
 
@@ -263,6 +298,7 @@ async def archive_manager_order_proposal(
     proposal_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await OrderService.update_order_proposal(
@@ -270,6 +306,7 @@ async def archive_manager_order_proposal(
             order_id,
             proposal_id,
             OrderProposalUpdatePayload(is_archived=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=ARCHIVE_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
@@ -285,9 +322,15 @@ async def select_manager_order_proposal(
     proposal_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.select_order_proposal(session, order_id, proposal_id)
+        return await OrderService.select_order_proposal(
+            session,
+            order_id,
+            proposal_id,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=SELECT_MANAGER_ORDER_PROPOSAL, error_code=BAD_REQUEST, message=str(exc)) from exc
 
@@ -314,6 +357,7 @@ async def generate_manager_order_document(
     scope_product_line_ids: Optional[List[int]] = Query(None, description="Order product line IDs included in scoped closing document"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     draft_conditions_requested = payload is not None and payload.additional_conditions is not None
     try:
@@ -337,6 +381,7 @@ async def generate_manager_order_document(
             scope_service_line_quantities=scope_service_line_quantities,
             scope_product_line_ids=scope_product_line_ids,
             additional_conditions=payload.additional_conditions if payload else None,
+            tenant_scope=tenant_scope,
         )
     except OrderDocumentsLockedError as exc:
         raise manager_http_error(
@@ -375,9 +420,15 @@ async def add_manager_order_payment(
     payload: PaymentCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.add_payment(session, order_id, payload)
+        return await OrderService.add_payment(
+            session,
+            order_id,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         is_not_found = str(exc) == "Order not found"
         raise manager_http_error(
@@ -398,9 +449,15 @@ async def delete_manager_order_payment(
     payment_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.delete_payment(session, order_id, payment_id)
+        return await OrderService.delete_payment(
+            session,
+            order_id,
+            payment_id,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         is_not_found = str(exc) == "Order not found"
         raise manager_http_error(
@@ -422,9 +479,15 @@ async def create_manager_order_stage(
     payload: OrderWorkStageCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.add_order_stage(session, order_id, payload)
+        return await OrderService.add_order_stage(
+            session,
+            order_id,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=CREATE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
 
@@ -440,9 +503,16 @@ async def update_manager_order_stage(
     payload: OrderWorkStageUpdatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.update_order_stage(session, order_id, stage_id, payload)
+        return await OrderService.update_order_stage(
+            session,
+            order_id,
+            stage_id,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=UPDATE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
 
@@ -457,9 +527,15 @@ async def delete_manager_order_stage(
     stage_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.delete_order_stage(session, order_id, stage_id)
+        return await OrderService.delete_order_stage(
+            session,
+            order_id,
+            stage_id,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(status_code=400, endpoint=DELETE_MANAGER_ORDER_STAGE, error_code=BAD_REQUEST, message=str(exc)) from exc
 
@@ -473,9 +549,14 @@ async def delete_manager_order(
     order_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        await OrderService.delete_order(session, order_id)
+        await OrderService.delete_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         return {"ok": True}
     except ValueError as exc:
         raise manager_http_error(

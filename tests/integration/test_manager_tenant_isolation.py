@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -7,7 +7,15 @@ from sqlmodel import select
 from core.security import create_access_token
 from models import (
     Customer,
+    CustomerEquipment,
     CustomerRequisitesRecognition,
+    Installer,
+    Lead,
+    Order,
+    OrderDocument,
+    OrderStatus,
+    OrderWorkStage,
+    Payment,
     StaffUser,
     Storefront,
     Tenant,
@@ -207,6 +215,611 @@ async def test_customer_api_isolates_tenants_and_legacy_rows(
     assert claim_legacy.status_code == 200
     await db.refresh(legacy)
     assert legacy.tenant_id == 1
+
+
+@pytest.mark.asyncio
+async def test_lead_and_order_api_isolates_tenants_and_legacy_rows(
+    async_client: AsyncClient,
+    db,
+):
+    tenant_b, storefront_b = await _create_tenant(db, slug="crm-b")
+    owner_a = await _create_staff(
+        db,
+        tenant_id=1,
+        username="crm-owner-a",
+    )
+    owner_b = await _create_staff(
+        db,
+        tenant_id=int(tenant_b.id),
+        username="crm-owner-b",
+    )
+
+    legacy_customer = Customer(
+        name="Legacy CRM customer",
+        phone="+375290000011",
+        type=CustomerType.individual,
+    )
+    customer_a = Customer(
+        tenant_id=1,
+        name="CRM customer A",
+        phone="+375290000012",
+        type=CustomerType.individual,
+    )
+    customer_b = Customer(
+        tenant_id=int(tenant_b.id),
+        name="CRM customer B",
+        phone="+375290000013",
+        type=CustomerType.individual,
+    )
+    db.add_all([legacy_customer, customer_a, customer_b])
+    await db.flush()
+
+    legacy_lead = Lead(
+        source="manager",
+        name="Legacy lead",
+        request_text="Legacy request",
+    )
+    lead_a = Lead(
+        tenant_id=1,
+        storefront_id=1,
+        source="manager",
+        name="Lead A",
+        request_text="Tenant A request",
+    )
+    lead_b = Lead(
+        tenant_id=int(tenant_b.id),
+        storefront_id=int(storefront_b.id),
+        source="manager",
+        name="Lead B",
+        request_text="Tenant B request",
+    )
+    legacy_order = Order(
+        customer_id=int(legacy_customer.id),
+        status=OrderStatus.NEGOTIATION,
+        title="Legacy order",
+    )
+    order_a = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=int(customer_a.id),
+        status=OrderStatus.NEGOTIATION,
+        title="Order A",
+    )
+    order_b = Order(
+        tenant_id=int(tenant_b.id),
+        storefront_id=int(storefront_b.id),
+        customer_id=int(customer_b.id),
+        status=OrderStatus.NEGOTIATION,
+        title="Order B",
+    )
+    inconsistent_order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=int(customer_b.id),
+        status=OrderStatus.NEGOTIATION,
+        title="Inconsistent cross-tenant order",
+    )
+    db.add_all(
+        [
+            legacy_lead,
+            lead_a,
+            lead_b,
+            legacy_order,
+            order_a,
+            order_b,
+            inconsistent_order,
+        ]
+    )
+    await db.commit()
+
+    headers_a = _headers(owner_a)
+    headers_b = _headers(owner_b)
+
+    leads_a = await async_client.get("/api/manager/leads", headers=headers_a)
+    leads_b = await async_client.get("/api/manager/leads", headers=headers_b)
+    assert leads_a.status_code == 200
+    assert leads_b.status_code == 200
+    assert {item["id"] for item in leads_a.json()["items"]} == {
+        legacy_lead.id,
+        lead_a.id,
+    }
+    assert {item["id"] for item in leads_b.json()["items"]} == {lead_b.id}
+
+    orders_a = await async_client.get(
+        "/api/manager/orders?segment=all",
+        headers=headers_a,
+    )
+    orders_b = await async_client.get(
+        "/api/manager/orders?segment=all",
+        headers=headers_b,
+    )
+    assert orders_a.status_code == 200
+    assert orders_b.status_code == 200
+    assert {item["id"] for item in orders_a.json()["items"]} == {
+        legacy_order.id,
+        order_a.id,
+    }
+    assert {item["id"] for item in orders_b.json()["items"]} == {order_b.id}
+    for headers in (headers_a, headers_b):
+        inconsistent_detail = await async_client.get(
+            f"/api/manager/orders/{inconsistent_order.id}",
+            headers=headers,
+        )
+        assert inconsistent_detail.status_code == 404
+
+    lead_cross_tenant_responses = (
+        await async_client.patch(
+            f"/api/manager/leads/{lead_b.id}",
+            headers=headers_a,
+            json={"name": "Cross-tenant lead write"},
+        ),
+        await async_client.post(
+            f"/api/manager/leads/{lead_b.id}/mark-lost",
+            headers=headers_a,
+            json={"status": "lost"},
+        ),
+        await async_client.post(
+            f"/api/manager/leads/{lead_b.id}/qualify",
+            headers=headers_a,
+            json={},
+        ),
+    )
+    assert [response.status_code for response in lead_cross_tenant_responses] == [
+        404,
+        404,
+        404,
+    ]
+
+    order_detail = await async_client.get(
+        f"/api/manager/orders/{order_b.id}",
+        headers=headers_a,
+    )
+    order_patch = await async_client.patch(
+        f"/api/manager/orders/{order_b.id}",
+        headers=headers_a,
+        json={"comment": "Cross-tenant order write"},
+    )
+    order_export = await async_client.post(
+        "/api/manager/orders/export",
+        headers=headers_a,
+        json={"order_ids": [order_b.id]},
+    )
+    order_delete = await async_client.delete(
+        f"/api/manager/orders/{order_b.id}",
+        headers=headers_a,
+    )
+    assert order_detail.status_code == 404
+    assert order_patch.status_code == 404
+    assert order_export.status_code == 400
+    assert order_delete.status_code == 400
+
+    await db.refresh(lead_b)
+    await db.refresh(order_b)
+    assert lead_b.name == "Lead B"
+    assert str(lead_b.status) == "new"
+    assert lead_b.converted_order_id is None
+    assert order_b.comment is None
+    assert order_b.title == "Order B"
+
+
+@pytest.mark.asyncio
+async def test_order_children_and_equipment_reject_foreign_tenant_ids(
+    async_client: AsyncClient,
+    db,
+):
+    tenant_b, storefront_b = await _create_tenant(db, slug="children-b")
+    owner_a = await _create_staff(
+        db,
+        tenant_id=1,
+        username="children-owner-a",
+    )
+    owner_b = await _create_staff(
+        db,
+        tenant_id=int(tenant_b.id),
+        username="children-owner-b",
+    )
+    customer_b = Customer(
+        tenant_id=int(tenant_b.id),
+        name="Children customer B",
+        phone="+375290000021",
+        type=CustomerType.individual,
+    )
+    db.add(customer_b)
+    await db.flush()
+    order_b = Order(
+        tenant_id=int(tenant_b.id),
+        storefront_id=int(storefront_b.id),
+        customer_id=int(customer_b.id),
+        status=OrderStatus.NEGOTIATION,
+        title="Children order B",
+    )
+    db.add(order_b)
+    await db.flush()
+    stage_b = OrderWorkStage(
+        order_id=int(order_b.id),
+        name="Foreign tenant stage",
+    )
+    payment_b = Payment(
+        order_id=int(order_b.id),
+        amount=100,
+    )
+    document_b = OrderDocument(
+        order_id=int(order_b.id),
+        doc_type="invoice",
+        number="B-1",
+        google_file_id="foreign-document",
+        google_edit_url="https://example.invalid/foreign-document",
+    )
+    equipment_b = CustomerEquipment(
+        customer_id=int(customer_b.id),
+        source_order_id=int(order_b.id),
+        display_name="Foreign tenant equipment",
+        equipment_type="split",
+    )
+    db.add_all([stage_b, payment_b, document_b, equipment_b])
+    await db.commit()
+
+    headers_a = _headers(owner_a)
+    headers_b = _headers(owner_b)
+
+    equipment_a = await async_client.get(
+        "/api/manager/equipment",
+        headers=headers_a,
+    )
+    equipment_b_list = await async_client.get(
+        "/api/manager/equipment",
+        headers=headers_b,
+    )
+    assert equipment_a.status_code == 200
+    assert equipment_b_list.status_code == 200
+    assert equipment_a.json()["items"] == []
+    assert {item["id"] for item in equipment_b_list.json()["items"]} == {
+        equipment_b.id,
+    }
+
+    foreign_responses = (
+        await async_client.patch(
+            f"/api/manager/orders/work-stages/{stage_b.id}/cancel",
+            headers=headers_a,
+        ),
+        await async_client.delete(
+            f"/api/manager/orders/{order_b.id}/payments/{payment_b.id}",
+            headers=headers_a,
+        ),
+        await async_client.get(
+            f"/api/manager/orders/{order_b.id}/documents",
+            headers=headers_a,
+        ),
+        await async_client.delete(
+            f"/api/manager/docs/{document_b.id}",
+            headers=headers_a,
+        ),
+        await async_client.get(
+            f"/api/manager/orders/{order_b.id}/attachments",
+            headers=headers_a,
+        ),
+        await async_client.get(
+            f"/api/manager/orders/{order_b.id}/equipment-links",
+            headers=headers_a,
+        ),
+        await async_client.get(
+            f"/api/manager/equipment/{equipment_b.id}",
+            headers=headers_a,
+        ),
+        await async_client.patch(
+            f"/api/manager/equipment/{equipment_b.id}",
+            headers=headers_a,
+            json={"notes": "Cross-tenant equipment write"},
+        ),
+        await async_client.get(
+            f"/api/manager/equipment/{equipment_b.id}/history",
+            headers=headers_a,
+        ),
+        await async_client.get(
+            f"/api/manager/equipment/{equipment_b.id}/attachments",
+            headers=headers_a,
+        ),
+        await async_client.get(
+            "/api/manager/docs/templates/contract",
+            params={"order_id": order_b.id},
+            headers=headers_a,
+        ),
+        await async_client.get(
+            "/api/manager/docs/templates/contract",
+            params={"customer_id": customer_b.id},
+            headers=headers_a,
+        ),
+    )
+    assert [response.status_code for response in foreign_responses] == [
+        404,
+        404,
+        404,
+        404,
+        404,
+        404,
+        404,
+        404,
+        404,
+        404,
+        404,
+        404,
+    ]
+
+    owned_order_templates = await async_client.get(
+        "/api/manager/docs/templates/contract",
+        params={"order_id": order_b.id},
+        headers=headers_b,
+    )
+    owned_customer_templates = await async_client.get(
+        "/api/manager/docs/templates/contract",
+        params={"customer_id": customer_b.id},
+        headers=headers_b,
+    )
+    missing_context_templates = await async_client.get(
+        "/api/manager/docs/templates/contract",
+        headers=headers_b,
+    )
+    global_templates = await async_client.get(
+        "/api/manager/docs/document-templates",
+        headers=headers_b,
+    )
+    global_template_files = await async_client.get(
+        "/api/manager/docs/document-template-files",
+        headers=headers_b,
+    )
+    assert owned_order_templates.status_code == 200
+    assert owned_customer_templates.status_code == 200
+    assert missing_context_templates.status_code == 403
+    assert global_templates.status_code == 403
+    assert global_template_files.status_code == 403
+
+    await db.refresh(stage_b)
+    await db.refresh(payment_b)
+    await db.refresh(document_b)
+    await db.refresh(equipment_b)
+    assert str(stage_b.status) == "planned"
+    assert payment_b.amount == 100
+    assert document_b.number == "B-1"
+    assert equipment_b.notes is None
+
+
+@pytest.mark.asyncio
+async def test_installer_directory_and_updates_are_tenant_scoped(
+    async_client: AsyncClient,
+    db,
+):
+    tenant_b, _ = await _create_tenant(db, slug="installer-b")
+    owner_a = await _create_staff(
+        db,
+        tenant_id=1,
+        username="installer-owner-a",
+    )
+    owner_b = await _create_staff(
+        db,
+        tenant_id=int(tenant_b.id),
+        username="installer-owner-b",
+    )
+    legacy_installer = Installer(
+        name="Legacy standalone installer",
+        is_active=True,
+    )
+    installer_b = Installer(
+        name="Tenant B legacy identity",
+        is_active=True,
+    )
+    db.add_all([legacy_installer, installer_b])
+    await db.flush()
+    staff_b = StaffUser(
+        display_name="Tenant B installer",
+        status="active",
+        primary_role="installer",
+        roles=["installer"],
+        username="tenant-b-installer",
+        legacy_installer_id=int(installer_b.id),
+    )
+    db.add(staff_b)
+    await db.flush()
+    db.add(
+        TenantMembership(
+            tenant_id=int(tenant_b.id),
+            staff_user_id=int(staff_b.id),
+            role="installer",
+            status="active",
+        )
+    )
+    await db.commit()
+
+    headers_a = _headers(owner_a)
+    headers_b = _headers(owner_b)
+    list_a = await async_client.get(
+        "/api/manager/installers",
+        headers=headers_a,
+    )
+    list_b = await async_client.get(
+        "/api/manager/installers",
+        headers=headers_b,
+    )
+    assert list_a.status_code == 200
+    assert list_b.status_code == 200
+    assert {item["id"] for item in list_a.json()["items"]} == {
+        legacy_installer.id,
+    }
+    assert {item["id"] for item in list_b.json()["items"]} == {installer_b.id}
+
+    search_a = await async_client.get(
+        "/api/manager/installers/search",
+        params={"q": "Tenant B"},
+        headers=headers_a,
+    )
+    search_b = await async_client.get(
+        "/api/manager/installers/search",
+        params={"q": "Tenant B"},
+        headers=headers_b,
+    )
+    assert search_a.status_code == 200
+    assert search_a.json()["items"] == []
+    assert [item["id"] for item in search_b.json()["items"]] == [installer_b.id]
+
+    foreign_update = await async_client.put(
+        f"/api/manager/installers/{installer_b.id}",
+        headers=headers_a,
+        json={"name": "Cross-tenant installer write"},
+    )
+    assert foreign_update.status_code == 404
+    await db.refresh(installer_b)
+    await db.refresh(staff_b)
+    assert installer_b.name == "Tenant B legacy identity"
+    assert staff_b.display_name == "Tenant B installer"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
+    async_client: AsyncClient,
+    db,
+):
+    tenant_b, storefront_b = await _create_tenant(db, slug="dashboard-b")
+    owner_a = await _create_staff(
+        db,
+        tenant_id=1,
+        username="dashboard-owner-a",
+    )
+    owner_b = await _create_staff(
+        db,
+        tenant_id=int(tenant_b.id),
+        username="dashboard-owner-b",
+    )
+    legacy_customer = Customer(
+        name="Legacy dashboard customer",
+        phone="+375290000031",
+        type=CustomerType.individual,
+    )
+    customer_a = Customer(
+        tenant_id=1,
+        name="Dashboard customer A",
+        phone="+375290000032",
+        type=CustomerType.individual,
+    )
+    customer_b = Customer(
+        tenant_id=int(tenant_b.id),
+        name="Dashboard customer B",
+        phone="+375290000033",
+        type=CustomerType.individual,
+    )
+    db.add_all([legacy_customer, customer_a, customer_b])
+    await db.flush()
+    followup_at = datetime.now() + timedelta(days=1)
+    legacy_order = Order(
+        customer_id=int(legacy_customer.id),
+        status=OrderStatus.NEW_LEAD,
+        title="Legacy dashboard order",
+        next_followup_date=followup_at,
+        installation_date=followup_at,
+    )
+    order_a = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=int(customer_a.id),
+        status=OrderStatus.NEW_LEAD,
+        title="Dashboard order A",
+        next_followup_date=followup_at,
+        installation_date=followup_at,
+    )
+    order_b = Order(
+        tenant_id=int(tenant_b.id),
+        storefront_id=int(storefront_b.id),
+        customer_id=int(customer_b.id),
+        status=OrderStatus.NEW_LEAD,
+        title="Dashboard order B",
+        next_followup_date=followup_at,
+        installation_date=followup_at,
+    )
+    inconsistent_order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=int(customer_b.id),
+        status=OrderStatus.NEW_LEAD,
+        title="Inconsistent dashboard order",
+        next_followup_date=followup_at,
+        installation_date=followup_at,
+    )
+    db.add_all([legacy_order, order_a, order_b, inconsistent_order])
+    await db.commit()
+
+    headers_a = _headers(owner_a)
+    headers_b = _headers(owner_b)
+    dashboard_a = await async_client.get(
+        "/api/manager/dashboard/stats",
+        headers=headers_a,
+    )
+    dashboard_b = await async_client.get(
+        "/api/manager/dashboard/stats",
+        headers=headers_b,
+    )
+    assert dashboard_a.status_code == 200
+    assert dashboard_b.status_code == 200
+    assert dashboard_a.json()["new_leads_count"] == 2
+    assert dashboard_b.json()["new_leads_count"] == 1
+    assert {
+        item["order_id"] for item in dashboard_a.json()["upcoming_touchpoints"]
+    } == {legacy_order.id, order_a.id}
+    assert {
+        item["order_id"] for item in dashboard_b.json()["upcoming_touchpoints"]
+    } == {order_b.id}
+
+    counter_a = await async_client.get(
+        "/api/manager/leads/counter",
+        headers=headers_a,
+    )
+    counter_b = await async_client.get(
+        "/api/manager/leads/counter",
+        headers=headers_b,
+    )
+    inbox_a = await async_client.get(
+        "/api/manager/leads/inbox",
+        headers=headers_a,
+    )
+    inbox_b = await async_client.get(
+        "/api/manager/leads/inbox",
+        headers=headers_b,
+    )
+    assert counter_a.json()["count"] == 2
+    assert counter_b.json()["count"] == 1
+    assert {item["id"] for item in inbox_a.json()["items"]} == {
+        legacy_order.id,
+        order_a.id,
+    }
+    assert {item["id"] for item in inbox_b.json()["items"]} == {order_b.id}
+
+    calendar_params = {
+        "start": (datetime.now() - timedelta(days=1)).isoformat(),
+        "end": (datetime.now() + timedelta(days=2)).isoformat(),
+    }
+    calendar_a = await async_client.get(
+        "/api/manager/calendar/events",
+        params=calendar_params,
+        headers=headers_a,
+    )
+    calendar_b = await async_client.get(
+        "/api/manager/calendar/events",
+        params=calendar_params,
+        headers=headers_b,
+    )
+    assert {item["order_id"] for item in calendar_a.json()} == {
+        legacy_order.id,
+        order_a.id,
+    }
+    assert {item["order_id"] for item in calendar_b.json()} == {order_b.id}
+
+    system_mail = await async_client.get(
+        "/api/manager/mail/bank-receipts",
+        headers=headers_a,
+    )
+    foreign_mail = await async_client.get(
+        "/api/manager/mail/bank-receipts",
+        headers=headers_b,
+    )
+    assert system_mail.status_code == 200
+    assert foreign_mail.status_code == 403
 
 
 @pytest.mark.asyncio

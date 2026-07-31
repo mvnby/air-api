@@ -6,6 +6,7 @@ from sqlalchemy import inspect, text
 
 from core.database import async_session_maker, engine
 from services.private_attachment_storage_service import get_private_attachment_storage
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 from .attachment_copy import migrate_attachments
 from .equipment_backfill import migrate_equipment_links, migrate_legacy_coverages
@@ -45,6 +46,7 @@ async def run(
 
     stats = MigrationStats()
     async with async_session_maker() as session:
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         if execute and session.get_bind().dialect.name == "postgresql":
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(:lock_key)"),
@@ -56,6 +58,7 @@ async def run(
             order_id=order_id,
             stats=stats,
             storage=storage,
+            tenant_scope=tenant_scope,
         )
         await migrate_equipment_links(
             session,

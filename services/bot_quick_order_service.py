@@ -544,7 +544,12 @@ class BotQuickOrderService:
             session,
             order_id,
             ManagerOrderUpdatePayload(**update_fields),
-        ) if update_fields else await OrderService.get_order_detail_for_manager(session, order_id)
+            tenant_scope=tenant_scope,
+        ) if update_fields else await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not order:
             raise ValueError("Не удалось создать заказ")
 
@@ -555,6 +560,7 @@ class BotQuickOrderService:
                     session,
                     order_id,
                     source_label="Telegram-бот",
+                    tenant_scope=tenant_scope,
                 )
             except Exception:
                 logger.exception("BOT_QUICK_ORDER_NOTIFY_FAILED order_id=%s", order_id)
@@ -575,10 +581,19 @@ class BotQuickOrderService:
                 )
             ).scalars().first()
             if existing_stage:
-                order = await OrderService.get_order_detail_for_manager(session, order_id) or order
+                order = await OrderService.get_order_detail_for_manager(
+                    session,
+                    order_id,
+                    tenant_scope=tenant_scope,
+                ) or order
             else:
                 try:
-                    updated = await OrderService.add_order_stage(session, order_id, stage_payload)
+                    updated = await OrderService.add_order_stage(
+                        session,
+                        order_id,
+                        stage_payload,
+                        tenant_scope=tenant_scope,
+                    )
                     order = updated or order
                 except IntegrityError:
                     await session.rollback()
@@ -594,7 +609,11 @@ class BotQuickOrderService:
                     ).scalars().first()
                     if not concurrent_stage:
                         raise
-                    order = await OrderService.get_order_detail_for_manager(session, order_id) or order
+                    order = await OrderService.get_order_detail_for_manager(
+                        session,
+                        order_id,
+                        tenant_scope=tenant_scope,
+                    ) or order
 
         order["_bot_order_created"] = order_created
         return order

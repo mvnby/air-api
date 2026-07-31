@@ -7,6 +7,10 @@ import pytest
 from core.config import settings
 from services.notification_service import NotificationService
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 
 class _DummyResult:
     def __init__(self, order):
@@ -14,6 +18,15 @@ class _DummyResult:
 
     def scalar_one_or_none(self):
         return self._order
+
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self._order
+
+    def all(self):
+        return []
 
 
 class _DummySession:
@@ -40,6 +53,7 @@ async def test_notify_admins_new_order_skips_when_no_admins(monkeypatch):
         customer_name="User",
         customer_username="user",
         customer_phone="+123",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     send_mock.assert_not_called()
@@ -61,6 +75,7 @@ async def test_notify_admins_new_order_warns_for_missing_order(monkeypatch, capl
             customer_name="User",
             customer_username="user",
             customer_phone="+123",
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     assert "NOTIFY_NEW_ORDER_SKIPPED missing_order_id=404" in caplog.text
@@ -98,6 +113,7 @@ async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
         customer_name="Ivan <script>",
         customer_username="ivan&co",
         customer_phone="<+375291234567>",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert send_mock.await_count == 3
@@ -133,6 +149,7 @@ async def test_notify_admins_staff_order_created_counts_only_confirmed_delivery(
             session=session,
             order_id=88,
             source_label="Telegram-бот",
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     assert sent == 1
@@ -172,7 +189,7 @@ async def test_notify_admins_work_stage_status_changed_counts_only_confirmed_del
     monkeypatch.setattr("services.notification_service.BotService.send_rich_message", send_mock)
 
     with caplog.at_level("WARNING"):
-        sent = await NotificationService.notify_admins_work_stage_status_changed(session, stage_id=5)
+        sent = await NotificationService.notify_admins_work_stage_status_changed(session, stage_id=5, tenant_scope=TEST_TENANT_SCOPE)
 
     assert sent == 1
     rich_text = send_mock.await_args_list[0].args[1]

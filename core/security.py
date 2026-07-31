@@ -199,6 +199,18 @@ async def get_current_manager_tenant_scope(
     return auth.tenant_scope()
 
 
+async def require_system_manager_tenant_scope(
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+) -> TenantScope:
+    """Keep global platform surfaces unavailable to white-label tenants."""
+    if not tenant_scope.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System tenant access required",
+        )
+    return tenant_scope
+
+
 # Alias for backward compatibility if needed, but we should refactor usages.
 get_current_username = get_current_user
 

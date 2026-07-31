@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST
-from core.security import get_current_username
+from core.security import (
+    get_current_manager_tenant_scope,
+    require_system_manager_tenant_scope,
+)
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     ATTACH_MANAGER_BANK_RECEIPT,
     ATTACH_MANAGER_BANK_RECEIPT_GROUP,
@@ -65,7 +69,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/manager/mail",
     tags=["manager/mail"],
-    dependencies=[Depends(get_current_username)],
+    dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 
 
@@ -125,6 +129,7 @@ def _email_lead_import_job_response(snapshot: EmailLeadImportJobSnapshot) -> Ema
 async def import_manager_bank_receipts(
     limit: int = Query(50, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         result = await MailImapService.import_bank_receipts(session, limit=limit)
@@ -133,6 +138,7 @@ async def import_manager_bank_receipts(
                 await NotificationService.notify_admins_bank_receipts_imported(
                     session,
                     result.created_receipt_ids,
+                    tenant_scope=tenant_scope,
                 )
             except Exception:
                 logger.exception(

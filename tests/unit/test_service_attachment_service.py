@@ -20,6 +20,10 @@ from services.private_attachment_storage_service import StoredPrivateObject
 from services.service_attachment_presenter import legacy_attachment_source_key
 from services.service_attachment_service import ServiceAttachmentService
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 
 class FakePrivateAttachmentStorage:
     provider_name = "test_private"
@@ -94,6 +98,7 @@ async def test_private_attachment_dedupes_binary_without_merging_business_occurr
         mime_type="text/plain",
         category="document",
         storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     second = await ServiceAttachmentService.create_and_link_order_attachment(
         attachment_session,
@@ -103,6 +108,7 @@ async def test_private_attachment_dedupes_binary_without_merging_business_occurr
         mime_type="text/plain",
         category="service",
         storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     attachments = list((await attachment_session.execute(select(ServiceAttachment))).scalars().all())
@@ -122,6 +128,7 @@ async def test_private_attachment_dedupes_binary_without_merging_business_occurr
         variant="original",
         download=True,
         storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert access is not None
     parsed = urlparse(access["url"])
@@ -140,6 +147,7 @@ async def test_private_attachment_dedupes_binary_without_merging_business_occurr
         attachment_session,
         attachment_id=first["id"],
         order_id=int(first_order.id),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     first_attachment = next(item for item in attachments if item.id == first["id"])
     second_attachment = next(item for item in attachments if item.id == second["id"])
@@ -155,16 +163,17 @@ async def test_private_attachment_dedupes_binary_without_merging_business_occurr
     assert second_link.archived_at is None
     assert (await ServiceAttachmentService.list_order_attachments(
         attachment_session, order_id=int(first_order.id)
-    ))["total"] == 0
+    , tenant_scope=TEST_TENANT_SCOPE))["total"] == 0
     assert (await ServiceAttachmentService.list_order_attachments(
         attachment_session, order_id=int(second_order.id)
-    ))["total"] == 1
+    , tenant_scope=TEST_TENANT_SCOPE))["total"] == 1
     assert await ServiceAttachmentService.get_access(
         attachment_session,
         attachment_id=first["id"],
         variant="original",
         download=False,
         storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
     ) is None
 
 
@@ -187,16 +196,19 @@ async def test_telegram_occurrence_is_idempotent_but_a_new_message_keeps_its_own
         attachment_session,
         **common,
         telegram_meta={"file_id": "file-a", "chat_id": 10, "message_id": 20},
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     retry = await ServiceAttachmentService.create_and_link_order_attachment(
         attachment_session,
         **common,
         telegram_meta={"file_id": "file-a", "chat_id": 10, "message_id": 20},
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     second_message = await ServiceAttachmentService.create_and_link_order_attachment(
         attachment_session,
         **common,
         telegram_meta={"file_id": "file-a", "chat_id": 10, "message_id": 21},
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert retry["id"] == first["id"]
@@ -235,15 +247,18 @@ async def test_identical_evidence_does_not_cross_link_equipment_between_customer
             category="nameplate",
             telegram_meta={"file_id": f"file-{message_id}", "chat_id": 10, "message_id": message_id},
             storage=storage,
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     first_result = await ServiceAttachmentService.list_order_attachments(
         attachment_session,
         order_id=int(first_order.id),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     second_result = await ServiceAttachmentService.list_order_attachments(
         attachment_session,
         order_id=int(second_order.id),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert first_result is not None and first_result["items"][0]["equipment_id"] == first_equipment.id
     assert second_result is not None and second_result["items"][0]["equipment_id"] == second_equipment.id
@@ -289,11 +304,13 @@ async def test_list_order_attachments_dual_reads_normalized_and_unmigrated_legac
         category="document",
         telegram_meta={"file_id": "already-normalized"},
         storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     result = await ServiceAttachmentService.list_order_attachments(
         attachment_session,
         order_id=int(order.id),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -332,15 +349,18 @@ async def test_url_only_legacy_item_is_not_duplicated_after_private_migration(at
             }
         },
         storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     result = await ServiceAttachmentService.list_order_attachments(
         attachment_session,
         order_id=int(order.id),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     count = await ServiceAttachmentService.order_attachment_count(
         attachment_session,
         order=order,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -376,6 +396,7 @@ async def test_attachment_can_follow_an_equipment_service_history_event(attachme
         mime_type="text/plain",
         category="service",
         storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert created["equipment_id"] == equipment.id
@@ -395,6 +416,7 @@ async def test_attachment_can_follow_an_equipment_service_history_event(attachme
         attachment_id=int(created["id"]),
         order_id=int(order.id),
         payload={"service_history_id": None},
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert updated is not None
     assert updated["equipment_id"] == equipment.id
@@ -428,4 +450,84 @@ async def test_attachment_rejects_service_history_from_another_order(attachment_
             filename="wrong.txt",
             mime_type="text/plain",
             storage=storage,
+            tenant_scope=TEST_TENANT_SCOPE,
         )
+
+
+@pytest.mark.asyncio
+async def test_shared_cross_tenant_attachment_cannot_be_globally_mutated_or_archived(
+    attachment_session,
+):
+    storage = FakePrivateAttachmentStorage()
+    tenant_b_scope = TenantScope(tenant_id=2, storefront_id=2, is_system=False)
+    customer_a = Customer(
+        tenant_id=1,
+        name="Attachment customer A",
+        phone="+375290000011",
+    )
+    customer_b = Customer(
+        tenant_id=2,
+        name="Attachment customer B",
+        phone="+375290000012",
+    )
+    attachment_session.add_all([customer_a, customer_b])
+    await attachment_session.flush()
+    order_a = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=int(customer_a.id),
+        title="Attachment order A",
+    )
+    order_b = Order(
+        tenant_id=tenant_b_scope.tenant_id,
+        storefront_id=tenant_b_scope.storefront_id,
+        customer_id=int(customer_b.id),
+        title="Attachment order B",
+    )
+    attachment_session.add_all([order_a, order_b])
+    await attachment_session.commit()
+
+    created = await ServiceAttachmentService.create_and_link_order_attachment(
+        attachment_session,
+        order_id=int(order_a.id),
+        content=b"shared attachment",
+        filename="shared.txt",
+        mime_type="text/plain",
+        storage=storage,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    attachment_session.add(
+        OrderAttachmentLink(
+            order_id=int(order_b.id),
+            attachment_id=int(created["id"]),
+            category="other",
+        )
+    )
+    await attachment_session.commit()
+
+    updated = await ServiceAttachmentService.update_attachment(
+        attachment_session,
+        attachment_id=int(created["id"]),
+        order_id=int(order_a.id),
+        payload={"transcript": "must not cross tenants"},
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    archived = await ServiceAttachmentService.archive_attachment(
+        attachment_session,
+        attachment_id=int(created["id"]),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    attachment = await attachment_session.get(ServiceAttachment, int(created["id"]))
+    links = (
+        await attachment_session.execute(
+            select(OrderAttachmentLink).where(
+                OrderAttachmentLink.attachment_id == int(created["id"])
+            )
+        )
+    ).scalars().all()
+    assert updated is None
+    assert archived is False
+    assert attachment.transcript is None
+    assert attachment.archived_at is None
+    assert all(link.archived_at is None for link in links)

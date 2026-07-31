@@ -7,6 +7,7 @@ from sqlmodel import select
 
 from models import CustomerEquipment, EquipmentComponent, Order, OrderProductLink, Product
 from services.equipment_service import EquipmentService
+from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import TenantScope
 
 
@@ -16,9 +17,14 @@ class EquipmentWorkflowService:
         session: AsyncSession,
         *,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         customer_id = int(payload["customer_id"])
-        if not await EquipmentService._ensure_customer_exists(session, customer_id):
+        if not await EquipmentService._ensure_customer_exists(
+            session,
+            customer_id,
+            tenant_scope=tenant_scope,
+        ):
             return None
         customer_branch_id = payload.get("customer_branch_id")
         if customer_branch_id is not None:
@@ -38,6 +44,7 @@ class EquipmentWorkflowService:
                 session,
                 customer_id=customer_id,
                 source_order_id=int(source_order_id),
+                tenant_scope=tenant_scope,
             )
             if customer_branch_id is None:
                 customer_branch_id = source_order.customer_branch_id
@@ -116,8 +123,13 @@ class EquipmentWorkflowService:
         *,
         equipment_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
+        equipment = await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
         if not equipment:
             return None
 
@@ -150,6 +162,7 @@ class EquipmentWorkflowService:
                     session,
                     customer_id=int(equipment.customer_id),
                     source_order_id=int(source_order_id),
+                    tenant_scope=tenant_scope,
                 )
                 if (
                     source_order.customer_branch_id is not None
@@ -214,18 +227,19 @@ class EquipmentWorkflowService:
         *,
         order_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
-        result = await session.execute(
-            select(Order)
-            .where(Order.id == order_id)
-            .options(
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),
                 selectinload(Order.proposals),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product).selectinload(Product.brand),
-            )
+            ),
         )
-        order = result.scalars().first()
         if not order:
             raise ValueError("Order not found")
         if order.customer_id is None:
@@ -391,6 +405,7 @@ class EquipmentWorkflowService:
                 session,
                 equipment_id=equipment_id,
                 history_limit=0,
+                tenant_scope=tenant_scope,
             )
             if detail:
                 items.append(detail)
@@ -407,15 +422,15 @@ class EquipmentWorkflowService:
         equipment_id: int,
         tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        result = await session.execute(
-            select(CustomerEquipment)
-            .where(CustomerEquipment.id == equipment_id)
-            .options(
+        equipment = await TenantEntityAccessService.get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+            options=(
                 selectinload(CustomerEquipment.customer),
                 selectinload(CustomerEquipment.customer_branch),
-            )
+            ),
         )
-        equipment = result.scalars().first()
         if not equipment or equipment.is_archived or not equipment.customer:
             return None
 
@@ -468,4 +483,8 @@ class EquipmentWorkflowService:
             role="maintenance",
         )
         await session.commit()
-        return await OrderService.get_order_detail_for_manager(session, order_id)
+        return await OrderService.get_order_detail_for_manager(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )

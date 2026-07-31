@@ -251,6 +251,15 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
     customer = Customer(name="Клиент", phone="+375291234567")
     sqlite_staff_session.add(staff)
     sqlite_staff_session.add(customer)
+    await sqlite_staff_session.flush()
+    sqlite_staff_session.add(
+        TenantMembership(
+            tenant_id=TEST_TENANT_SCOPE.tenant_id,
+            staff_user_id=int(staff.id or 0),
+            role="installer",
+            status="active",
+        )
+    )
     await sqlite_staff_session.commit()
     await sqlite_staff_session.refresh(customer)
 
@@ -326,7 +335,11 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
     )
     await sqlite_staff_session.commit()
 
-    tasks = await BotTaskService.list_my_tasks(sqlite_staff_session, 12345)
+    tasks = await BotTaskService.list_my_tasks(
+        sqlite_staff_session,
+        12345,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
 
     assert [task["title"] for task in tasks] == [
         "Ближайший монтаж",
@@ -343,7 +356,12 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
         for task in tasks
     )
 
-    limited = await BotTaskService.list_my_tasks(sqlite_staff_session, 12345, limit=2)
+    limited = await BotTaskService.list_my_tasks(
+        sqlite_staff_session,
+        12345,
+        limit=2,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
     assert [task["title"] for task in limited] == ["Ближайший монтаж", "Пусконаладка"]
 
     reference_time = datetime.now()
@@ -353,6 +371,7 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
         date_from=reference_time + timedelta(days=1, hours=12),
         date_to=reference_time + timedelta(days=2, hours=12),
         statuses=["planned"],
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert [task["title"] for task in today] == ["Ближайший монтаж", "Пусконаладка"]
 
@@ -419,6 +438,7 @@ async def test_task_read_service_reuses_authorized_installer_mapping(monkeypatch
         session,
         telegram_id=777,
         limit=10,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert tasks == []
@@ -430,6 +450,7 @@ async def test_task_read_service_reuses_authorized_installer_mapping(monkeypatch
         date_from=None,
         date_to=None,
         statuses=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
 
@@ -1411,17 +1432,26 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
         }
         return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 42}
 
-    async def fake_update_order(session, order_id, payload):
-        calls["update"] = {"order_id": order_id, "payload": payload}
+    async def fake_update_order(session, order_id, payload, *, tenant_scope):
+        calls["update"] = {
+            "order_id": order_id,
+            "payload": payload,
+            "tenant_scope": tenant_scope,
+        }
         return {"id": order_id, "status": "new_lead"}
 
-    async def fake_add_order_stage(session, order_id, payload):
+    async def fake_add_order_stage(session, order_id, payload, *, tenant_scope):
         calls["stage_order_id"] = order_id
         calls["stage_payload"] = payload
+        calls["stage_tenant_scope"] = tenant_scope
         return {"id": order_id, "work_stages": [{"name": payload.name}]}
 
-    async def fake_notify(session, order_id, *, source_label):
-        calls["notify"] = {"order_id": order_id, "source_label": source_label}
+    async def fake_notify(session, order_id, *, source_label, tenant_scope):
+        calls["notify"] = {
+            "order_id": order_id,
+            "source_label": source_label,
+            "tenant_scope": tenant_scope,
+        }
         return 1
 
     monkeypatch.setattr("services.bot_quick_order_service.LeadService.create_lead", fake_create_lead)
@@ -1464,9 +1494,15 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
     assert calls["update"]["order_id"] == 42
     assert calls["update"]["payload"].title == "Монтаж"
     assert calls["update"]["payload"].service_type == "install_only"
+    assert calls["update"]["tenant_scope"] == TEST_TENANT_SCOPE
     assert calls["stage_order_id"] == 42
     assert calls["stage_payload"].name == "Монтаж"
-    assert calls["notify"] == {"order_id": 42, "source_label": "Telegram-бот"}
+    assert calls["stage_tenant_scope"] == TEST_TENANT_SCOPE
+    assert calls["notify"] == {
+        "order_id": 42,
+        "source_label": "Telegram-бот",
+        "tenant_scope": TEST_TENANT_SCOPE,
+    }
 
 
 @pytest.mark.asyncio
@@ -1486,15 +1522,23 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
         }
         return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 43}
 
-    async def fake_update_order(session, order_id, payload):
-        calls["update"] = {"order_id": order_id, "payload": payload}
+    async def fake_update_order(session, order_id, payload, *, tenant_scope):
+        calls["update"] = {
+            "order_id": order_id,
+            "payload": payload,
+            "tenant_scope": tenant_scope,
+        }
         return {"id": order_id, "status": payload.status}
 
-    async def fake_add_order_stage(session, order_id, payload):
+    async def fake_add_order_stage(session, order_id, payload, *, tenant_scope):
         raise AssertionError("maintenance quick orders should use order installation_date, not a work stage")
 
-    async def fake_notify(session, order_id, *, source_label):
-        calls["notify"] = {"order_id": order_id, "source_label": source_label}
+    async def fake_notify(session, order_id, *, source_label, tenant_scope):
+        calls["notify"] = {
+            "order_id": order_id,
+            "source_label": source_label,
+            "tenant_scope": tenant_scope,
+        }
         return 1
 
     monkeypatch.setattr("services.bot_quick_order_service.LeadService.create_lead", fake_create_lead)
@@ -1535,7 +1579,12 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
     assert calls["update"]["payload"].service_type == "maintenance"
     assert calls["update"]["payload"].status == "negotiation"
     assert calls["update"]["payload"].installation_date.isoformat() == "2026-06-15T14:00:00"
-    assert calls["notify"] == {"order_id": 43, "source_label": "Telegram-бот"}
+    assert calls["update"]["tenant_scope"] == TEST_TENANT_SCOPE
+    assert calls["notify"] == {
+        "order_id": 43,
+        "source_label": "Telegram-бот",
+        "tenant_scope": TEST_TENANT_SCOPE,
+    }
 
 
 @pytest.mark.asyncio
@@ -1580,7 +1629,12 @@ async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, mo
     assert stage.order_id == order["id"]
     assert stage.name == "Монтаж"
     assert stage.start_time.isoformat() == "2026-06-15T14:00:00"
-    notify.assert_awaited_once_with(db, order["id"], source_label="Telegram-бот")
+    notify.assert_awaited_once_with(
+        db,
+        order["id"],
+        source_label="Telegram-бот",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
 
 
 @pytest.mark.asyncio
@@ -1595,12 +1649,17 @@ async def test_quick_order_retry_after_partial_failure_reuses_lead_and_order(db,
     original_add_order_stage = OrderService.add_order_stage
     stage_attempts = 0
 
-    async def flaky_add_order_stage(session, order_id, payload):
+    async def flaky_add_order_stage(session, order_id, payload, *, tenant_scope):
         nonlocal stage_attempts
         stage_attempts += 1
         if stage_attempts == 1:
             raise RuntimeError("stage failed")
-        return await original_add_order_stage(session, order_id, payload)
+        return await original_add_order_stage(
+            session,
+            order_id,
+            payload,
+            tenant_scope=tenant_scope,
+        )
 
     monkeypatch.setattr("services.bot_quick_order_service.OrderService.add_order_stage", flaky_add_order_stage)
 

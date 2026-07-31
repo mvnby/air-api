@@ -322,15 +322,18 @@ class SchedulerService:
         from services.staff_task_notification_event_service import (
             StaffTaskNotificationEventService,
         )
+        from services.tenant_scope_service import SystemTenantScopeResolver
 
         while True:
             try:
                 async with async_session_maker() as session:
+                    tenant_scope = await SystemTenantScopeResolver.resolve(session)
                     created = (
                         await StaffTaskNotificationEventService.enqueue_departure_reminders(
                             session,
                             offset_minutes=120,
                             scan_window_minutes=10,
+                            tenant_scope=tenant_scope,
                         )
                     )
                     await session.commit()
@@ -354,13 +357,16 @@ class SchedulerService:
 
                 from services.mail_imap_service import MailImapService
                 from services.notification_service import NotificationService
+                from services.tenant_scope_service import SystemTenantScopeResolver
 
                 logger.info("⏳ Bank mail import job started...")
                 async with async_session_maker() as session:
+                    tenant_scope = await SystemTenantScopeResolver.resolve(session)
                     result = await MailImapService.import_bank_receipts(session, limit=50)
                     notified_admins = await NotificationService.notify_admins_bank_receipts_imported(
                         session,
                         result.created_receipt_ids,
+                        tenant_scope=tenant_scope,
                     )
                 logger.info(
                     "✅ Bank mail import done. processed=%s created=%s duplicates=%s failed=%s notified_admins=%s",

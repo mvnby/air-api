@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
@@ -16,6 +17,7 @@ from models import (
     OrderStageStatus,
     OrderWorkStage,
     StaffUser,
+    TenantMembership,
 )
 from services.bot_staff_notification_api_service import (
     BotStaffNotificationApiService,
@@ -26,6 +28,10 @@ from services.staff_task_notification_event_service import (
     StaffTaskNotificationEventService,
 )
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 
 @pytest.fixture
 async def staff_outbox_session(tmp_path):
@@ -33,6 +39,7 @@ async def staff_outbox_session(tmp_path):
     tables = (
         Installer.__table__,
         StaffUser.__table__,
+        TenantMembership.__table__,
         Customer.__table__,
         Order.__table__,
         OrderWorkStage.__table__,
@@ -74,8 +81,66 @@ async def _seed_task(session: AsyncSession) -> OrderWorkStage:
         installer_id=10,
     )
     session.add_all([installer, staff, customer, order, stage])
+    session.add(
+        TenantMembership(
+            tenant_id=TEST_TENANT_SCOPE.tenant_id,
+            staff_user_id=int(staff.id or 0),
+            role="installer",
+            status="active",
+        )
+    )
     await session.commit()
     return stage
+
+
+@pytest.mark.asyncio
+async def test_assignment_event_rejects_foreign_order_scope(
+    staff_outbox_session,
+):
+    stage = await _seed_task(staff_outbox_session)
+    foreign_scope = TenantScope(tenant_id=2, storefront_id=2, is_system=False)
+    await staff_outbox_session.execute(
+        update(Order)
+        .where(Order.id == int(stage.order_id))
+        .values(
+            tenant_id=foreign_scope.tenant_id,
+            storefront_id=foreign_scope.storefront_id,
+        )
+    )
+    await staff_outbox_session.execute(
+        update(Customer)
+        .where(Customer.id == 30)
+        .values(tenant_id=foreign_scope.tenant_id)
+    )
+    staff_outbox_session.add(
+        TenantMembership(
+            tenant_id=foreign_scope.tenant_id,
+            staff_user_id=20,
+            role="installer",
+            status="active",
+        )
+    )
+    await staff_outbox_session.commit()
+
+    rejected = await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session,
+        stage=stage,
+        previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    events_after_rejection = (
+        await staff_outbox_session.execute(select(IntegrationOutboxEvent))
+    ).scalars().all()
+    accepted = await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session,
+        stage=stage,
+        previous_installer_id=None,
+        tenant_scope=foreign_scope,
+    )
+
+    assert rejected is False
+    assert events_after_rejection == []
+    assert accepted is True
 
 
 @pytest.mark.asyncio
@@ -94,11 +159,13 @@ async def test_assignment_event_claim_and_ack_use_database_clock(
         staff_outbox_session,
         stage=stage,
         previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     duplicate = await StaffTaskNotificationEventService.enqueue_assigned(
         staff_outbox_session,
         stage=stage,
         previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await staff_outbox_session.commit()
 
@@ -139,6 +206,7 @@ async def test_claim_cancels_delivery_when_assignment_is_stale(staff_outbox_sess
         staff_outbox_session,
         stage=stage,
         previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await staff_outbox_session.commit()
     stage.installer_id = None
@@ -168,6 +236,7 @@ async def test_nack_schedules_retry_and_next_claim_increments_attempt(
         staff_outbox_session,
         stage=stage,
         previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await staff_outbox_session.commit()
     first = await BotStaffNotificationApiService.claim(
@@ -210,6 +279,7 @@ async def test_transport_nack_is_terminal_ambiguous_after_remote_handoff(
         staff_outbox_session,
         stage=stage,
         previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await staff_outbox_session.commit()
     claim = await BotStaffNotificationApiService.claim(
@@ -249,6 +319,7 @@ async def test_claim_handoff_expiry_is_terminal_and_never_claimed_again(
         staff_outbox_session,
         stage=stage,
         previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await staff_outbox_session.commit()
     first = await BotStaffNotificationApiService.claim(
@@ -296,6 +367,7 @@ async def test_old_api_null_boundary_handoff_is_conservatively_terminal(
         staff_outbox_session,
         stage=stage,
         previous_installer_id=None,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await staff_outbox_session.commit()
     now = await CommunicationDeliveryService.database_now(
@@ -357,12 +429,14 @@ async def test_departure_reminder_scan_is_idempotent(staff_outbox_session):
         now=now,
         offset_minutes=120,
         scan_window_minutes=10,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     second = await StaffTaskNotificationEventService.enqueue_departure_reminders(
         staff_outbox_session,
         now=now,
         offset_minutes=120,
         scan_window_minutes=10,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert first == 1

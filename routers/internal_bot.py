@@ -145,6 +145,7 @@ async def get_internal_bot_catalog_product(
 async def list_internal_bot_my_tasks(
     payload: BotTaskListRequest,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotTaskListResponse:
     try:
         tasks = await BotTaskReadService.list_for_staff(
@@ -154,6 +155,7 @@ async def list_internal_bot_my_tasks(
             date_from=payload.date_from,
             date_to=payload.date_to,
             statuses=payload.statuses,
+            tenant_scope=tenant_scope,
         )
     except BotTaskAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
@@ -171,6 +173,7 @@ async def update_internal_bot_task_status(
     payload: BotTaskStatusUpdateRequest,
     stage_id: int = Path(ge=1),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotTaskStatusUpdateResponse:
     try:
         result = await BotTaskMutationService.update_stage_status(
@@ -178,6 +181,7 @@ async def update_internal_bot_task_status(
             telegram_id=payload.telegram_id,
             stage_id=stage_id,
             status=OrderStageStatus(payload.status),
+            tenant_scope=tenant_scope,
         )
     except BotTaskMutationAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
@@ -199,6 +203,7 @@ async def save_internal_bot_task_report(
     payload: BotTaskReportSaveRequest,
     stage_id: int = Path(ge=1),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotTaskReportSaveResponse:
     try:
         result = await BotTaskMutationService.save_stage_report(
@@ -206,6 +211,7 @@ async def save_internal_bot_task_report(
             telegram_id=payload.telegram_id,
             stage_id=stage_id,
             report=payload.report,
+            tenant_scope=tenant_scope,
         )
     except BotTaskMutationAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc

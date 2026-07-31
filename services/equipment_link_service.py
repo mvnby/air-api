@@ -6,14 +6,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import CustomerEquipment, EquipmentOrderLink, Order
+from models import Customer, CustomerEquipment, EquipmentOrderLink, Order
+from models.tenancy import TenantScope
 from services.equipment_service import EquipmentService
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 class EquipmentLinkService:
     @staticmethod
-    async def list_for_order(session: AsyncSession, *, order_id: int) -> dict[str, Any] | None:
-        order = await session.get(Order, order_id)
+    async def list_for_order(
+        session: AsyncSession,
+        *,
+        order_id: int,
+        tenant_scope: TenantScope,
+    ) -> dict[str, Any] | None:
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not order:
             return None
         result = await session.execute(
@@ -46,6 +57,7 @@ class EquipmentLinkService:
                 session,
                 equipment_id=int(equipment.id or 0),
                 history_limit=3,
+                tenant_scope=tenant_scope,
             )
             if detail:
                 items.append(
@@ -65,12 +77,26 @@ class EquipmentLinkService:
         order_id: int,
         equipment_id: int,
         role: str,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
-        order = await session.get(Order, order_id)
-        equipment = await session.get(CustomerEquipment, equipment_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
+        equipment = await TenantEntityAccessService.get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
         if not order or not equipment:
             return None
-        await EquipmentService._validate_order_link(session, equipment=equipment, order_id=order_id)
+        await EquipmentService._validate_order_link(
+            session,
+            equipment=equipment,
+            order_id=order_id,
+            tenant_scope=tenant_scope,
+        )
         link = await EquipmentService._ensure_equipment_order_link(
             session,
             equipment_id=equipment_id,
@@ -78,7 +104,12 @@ class EquipmentLinkService:
             role=role,
         )
         await session.commit()
-        detail = await EquipmentService.get_equipment_detail(session, equipment_id=equipment_id, history_limit=3)
+        detail = await EquipmentService.get_equipment_detail(
+            session,
+            equipment_id=equipment_id,
+            history_limit=3,
+            tenant_scope=tenant_scope,
+        )
         return {
             "link_id": int(link.id or 0),
             "role": link.role,
@@ -87,7 +118,19 @@ class EquipmentLinkService:
         }
 
     @staticmethod
-    async def unlink(session: AsyncSession, *, order_id: int, link_id: int) -> bool:
+    async def unlink(
+        session: AsyncSession,
+        *,
+        order_id: int,
+        link_id: int,
+        tenant_scope: TenantScope,
+    ) -> bool:
+        if await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        ) is None:
+            return False
         result = await session.execute(
             select(EquipmentOrderLink).where(
                 EquipmentOrderLink.id == link_id,
@@ -97,7 +140,13 @@ class EquipmentLinkService:
         link = result.scalars().first()
         if not link:
             return False
-        equipment = await session.get(CustomerEquipment, link.equipment_id)
+        equipment = await TenantEntityAccessService.get_equipment(
+            session,
+            link.equipment_id,
+            tenant_scope=tenant_scope,
+        )
+        if equipment is None:
+            return False
         if equipment and equipment.source_order_id == order_id:
             equipment.source_order_id = None
             session.add(equipment)
@@ -106,11 +155,28 @@ class EquipmentLinkService:
         return True
 
     @staticmethod
-    async def list_linked_orders(session: AsyncSession, *, equipment_id: int) -> list[dict[str, Any]]:
+    async def list_linked_orders(
+        session: AsyncSession,
+        *,
+        equipment_id: int,
+        tenant_scope: TenantScope,
+    ) -> list[dict[str, Any]]:
+        equipment = await TenantEntityAccessService.get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
+        if equipment is None:
+            return []
         result = await session.execute(
             select(EquipmentOrderLink, Order)
             .join(Order, Order.id == EquipmentOrderLink.order_id)
-            .where(EquipmentOrderLink.equipment_id == equipment_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                EquipmentOrderLink.equipment_id == equipment_id,
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
+            )
             .options(selectinload(Order.customer))
             .order_by(Order.created_at.desc(), Order.id.desc())
         )
@@ -127,9 +193,12 @@ class EquipmentLinkService:
                     "created_at": order.created_at,
                 }
             )
-        equipment = await session.get(CustomerEquipment, equipment_id)
         if equipment and equipment.source_order_id and int(equipment.source_order_id) not in seen:
-            order = await session.get(Order, int(equipment.source_order_id))
+            order = await TenantEntityAccessService.get_order(
+                session,
+                int(equipment.source_order_id),
+                tenant_scope=tenant_scope,
+            )
             if order:
                 items.append(
                     {

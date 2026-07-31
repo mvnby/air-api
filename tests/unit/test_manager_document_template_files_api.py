@@ -2,7 +2,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from core.security import get_current_username
+from core.security import require_system_manager_tenant_scope
+from models.tenancy import TenantScope
 from routers.manager_docs import (
     DOCUMENT_TEMPLATE_FILES_UNAVAILABLE,
     DOCUMENT_TEMPLATE_FILES_UNAVAILABLE_MESSAGE,
@@ -37,7 +38,9 @@ async def test_document_template_files_maps_google_failures_to_controlled_502(
     )
     app = FastAPI()
     app.include_router(manager_docs_router)
-    app.dependency_overrides[get_current_username] = lambda: "admin"
+    app.dependency_overrides[require_system_manager_tenant_scope] = lambda: (
+        TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

@@ -55,9 +55,15 @@ async def patch_manager_lead(
     payload: LeadUpdatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        lead = await LeadService.update_lead(session=session, lead_id=lead_id, payload=payload)
+        lead = await LeadService.update_lead(
+            session=session,
+            lead_id=lead_id,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -113,9 +119,15 @@ async def mark_manager_lead_lost(
     payload: LeadLossPayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        result = await LeadService.mark_lead_lost(session=session, lead_id=lead_id, payload=payload)
+        result = await LeadService.mark_lead_lost(
+            session=session,
+            lead_id=lead_id,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,

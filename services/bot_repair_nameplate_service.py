@@ -10,13 +10,24 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
 from core.config import settings
-from models import Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from models import (
+    Customer,
+    Order,
+    OrderInstaller,
+    OrderStatus,
+    OrderWorkStage,
+    StaffUser,
+    TenantMembership,
+)
+from models.tenancy import TenantScope
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.order_service import OrderService
 from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
+from services.tenant_entity_access_service import TenantEntityAccessService
+from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
 
 
 class BotRepairNameplateService:
@@ -336,7 +347,13 @@ class BotRepairNameplateService:
         }
 
     @classmethod
-    async def _legacy_installer_id(cls, session: AsyncSession, telegram_user_id: int | str | None) -> Optional[int]:
+    async def _legacy_installer_id(
+        cls,
+        session: AsyncSession,
+        telegram_user_id: int | str | None,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[int]:
         try:
             normalized_telegram_id = int(telegram_user_id) if telegram_user_id is not None else 0
         except (TypeError, ValueError):
@@ -348,6 +365,14 @@ class BotRepairNameplateService:
             select(StaffUser)
             .where(StaffUser.telegram_id == normalized_telegram_id)
             .where(StaffUser.status == StaffUserService.STATUS_ACTIVE)
+            .join(
+                TenantMembership,
+                TenantMembership.staff_user_id == StaffUser.id,
+            )
+            .where(
+                TenantMembership.tenant_id == tenant_scope.tenant_id,
+                TenantMembership.status == "active",
+            )
             .order_by(StaffUser.id.asc())
             .limit(1)
         )
@@ -363,18 +388,26 @@ class BotRepairNameplateService:
         telegram_user_id: int | str | None,
         can_attach_any: bool = False,
         limit: int = 5,
+        tenant_scope: TenantScope,
     ) -> list[dict[str, Any]]:
         stmt = (
             select(Order)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(Order.status.in_(list(cls.ACTIVE_REPAIR_STATUSES)))
             .where(Order.workflow_type == "repair")
+            .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
+            .where(TenantEntityAccessService.order_customer_clause(tenant_scope))
             .options(selectinload(Order.customer))
             .order_by(Order.updated_at.desc(), Order.created_at.desc(), Order.id.desc())
             .limit(max(1, min(limit, 10)))
         )
 
         if not can_attach_any:
-            installer_id = await cls._legacy_installer_id(session, telegram_user_id)
+            installer_id = await cls._legacy_installer_id(
+                session,
+                telegram_user_id,
+                tenant_scope=tenant_scope,
+            )
             if not installer_id:
                 return []
             stage_exists = (
@@ -402,9 +435,13 @@ class BotRepairNameplateService:
         *,
         telegram_user_id: int | str | None,
         can_attach_any: bool = False,
+        tenant_scope: TenantScope,
     ) -> bool:
-        result = await session.execute(select(Order).where(Order.id == order_id).limit(1))
-        order = result.scalars().first()
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not cls._is_active_repair_order(order):
             return False
         if can_attach_any:
@@ -413,6 +450,7 @@ class BotRepairNameplateService:
             session,
             order_id,
             telegram_user_id=telegram_user_id,
+            tenant_scope=tenant_scope,
         )
 
     @classmethod
@@ -618,9 +656,13 @@ class BotRepairNameplateService:
         *,
         order_id: int,
         extracted: dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
-        result = await session.execute(select(Order).where(Order.id == order_id).limit(1))
-        order = result.scalars().first()
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not order:
             return None
         return cls.preview_merge(OrderService._get_repair_meta(order), extracted)
@@ -642,23 +684,25 @@ class BotRepairNameplateService:
         telegram_message_id: int | None,
         can_attach_any: bool = False,
         file_content: bytes | None = None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
         allowed = await cls.can_use_order(
             session,
             order_id,
             telegram_user_id=telegram_user_id,
             can_attach_any=can_attach_any,
+            tenant_scope=tenant_scope,
         )
         if not allowed:
             return None
 
-        result = await session.execute(
-            select(Order)
-            .where(Order.id == order_id)
-            .options(selectinload(Order.customer))
-            .limit(1)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(selectinload(Order.customer),),
+            for_update=True,
         )
-        order = result.scalars().first()
         if not order:
             return None
 
@@ -709,6 +753,7 @@ class BotRepairNameplateService:
                     "message_id": telegram_message_id,
                     "source_meta": {"purpose": "repair_nameplate"},
                 },
+                tenant_scope=tenant_scope,
             )
             storage_meta = {
                 "storage_provider": "private_service_attachment",

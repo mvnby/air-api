@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest.mock import AsyncMock
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from core.config import settings
@@ -36,6 +37,15 @@ TEST_TENANT_SCOPE = TenantScope(
     storefront_id=1,
     is_system=True,
 )
+
+
+@pytest.fixture(autouse=True)
+def _system_tenant_scope_override():
+    app.dependency_overrides[get_system_tenant_scope] = lambda: TEST_TENANT_SCOPE
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_system_tenant_scope, None)
 
 
 async def _request(
@@ -411,11 +421,13 @@ async def test_internal_bot_task_list_returns_stable_projection(monkeypatch):
         date_from,
         date_to,
         statuses,
+        tenant_scope,
     ):
         assert (telegram_id, limit) == (123456, 10)
         assert date_from is None
         assert date_to is None
         assert statuses == []
+        assert tenant_scope == TEST_TENANT_SCOPE
         return [
             {
                 "kind": "stage",
@@ -478,6 +490,7 @@ async def test_internal_bot_task_list_forwards_today_filters(monkeypatch):
         assert kwargs["date_from"] == datetime(2026, 7, 20, 0, 0)
         assert kwargs["date_to"] == datetime(2026, 7, 20, 23, 59, 59)
         assert kwargs["statuses"] == ["planned", "in_progress"]
+        assert kwargs["tenant_scope"] == TEST_TENANT_SCOPE
         return []
 
     async def fake_session():
@@ -550,6 +563,7 @@ async def test_internal_bot_task_status_mutation_uses_authorized_service(monkeyp
             "telegram_id": 123456,
             "stage_id": 7,
             "status": OrderStageStatus.COMPLETED,
+            "tenant_scope": TEST_TENANT_SCOPE,
         }
         return BotTaskStatusMutationResult(
             stage_id=7,
@@ -624,6 +638,7 @@ async def test_internal_bot_task_report_normalizes_and_saves(monkeypatch):
             "telegram_id": 123456,
             "stage_id": 7,
             "report": "Работа выполнена",
+            "tenant_scope": TEST_TENANT_SCOPE,
         }
         return BotTaskReportMutationResult(stage_id=7, changed=False)
 

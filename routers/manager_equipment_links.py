@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_ORDER_EQUIPMENT_LINK,
     DELETE_MANAGER_ORDER_EQUIPMENT_LINK,
@@ -14,6 +14,7 @@ from schemas import (
     ManagerOrderEquipmentLinkListResponse,
 )
 from services.equipment_link_service import EquipmentLinkService
+from services.tenant_scope_service import TenantScope
 
 
 router = APIRouter(prefix="/api/manager/orders/{order_id}/equipment-links", tags=["manager-equipment-links"])
@@ -24,8 +25,13 @@ async def list_manager_order_equipment_links(
     order_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    data = await EquipmentLinkService.list_for_order(session, order_id=order_id)
+    data = await EquipmentLinkService.list_for_order(
+        session,
+        order_id=order_id,
+        tenant_scope=tenant_scope,
+    )
     if data is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return data
@@ -42,6 +48,7 @@ async def create_manager_order_equipment_link(
     payload: ManagerOrderEquipmentLinkCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentLinkService.link_existing(
@@ -49,6 +56,7 @@ async def create_manager_order_equipment_link(
             order_id=order_id,
             equipment_id=payload.equipment_id,
             role=payload.role,
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -63,7 +71,13 @@ async def delete_manager_order_equipment_link(
     link_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    if not await EquipmentLinkService.unlink(session, order_id=order_id, link_id=link_id):
+    if not await EquipmentLinkService.unlink(
+        session,
+        order_id=order_id,
+        link_id=link_id,
+        tenant_scope=tenant_scope,
+    ):
         raise HTTPException(status_code=404, detail="Equipment link not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

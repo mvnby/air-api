@@ -4,9 +4,17 @@ from unittest.mock import AsyncMock
 import pytest
 
 from models import OrderStageStatus
+from models.tenancy import TenantScope
 from services.bot_task_mutation_service import (
     BotTaskMutationConflictError,
     BotTaskMutationService,
+)
+
+
+TEST_TENANT_SCOPE = TenantScope(
+    tenant_id=1,
+    storefront_id=1,
+    is_system=True,
 )
 
 
@@ -66,19 +74,25 @@ async def test_task_status_mutation_is_locked_idempotent_and_notifies_once(monke
         telegram_id=777,
         stage_id=10,
         status=OrderStageStatus.IN_PROGRESS,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     repeated = await BotTaskMutationService.update_stage_status(
         session,
         telegram_id=777,
         stage_id=10,
         status=OrderStageStatus.IN_PROGRESS,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert first.changed is True
     assert repeated.changed is False
     assert stage.status == OrderStageStatus.IN_PROGRESS
     assert session.commit_count == 1
-    notify.assert_awaited_once_with(session, 10)
+    notify.assert_awaited_once_with(
+        session,
+        10,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
     assert len(session.statements) == 2
     assert all(statement._for_update_arg is not None for statement in session.statements)
 
@@ -103,6 +117,7 @@ async def test_completed_task_cannot_be_reopened_by_stale_accept(monkeypatch):
             telegram_id=777,
             stage_id=10,
             status=OrderStageStatus.IN_PROGRESS,
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     assert stage.status == OrderStageStatus.COMPLETED
@@ -128,12 +143,14 @@ async def test_task_report_mutation_is_normalized_and_idempotent(monkeypatch):
         telegram_id=777,
         stage_id=10,
         report="  Монтаж завершен  ",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     repeated = await BotTaskMutationService.save_stage_report(
         session,
         telegram_id=777,
         stage_id=10,
         report="Монтаж завершен",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert first.changed is True

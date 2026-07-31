@@ -272,7 +272,13 @@ class RepairDiagnosticService:
         await session.commit()
         await session.refresh(order)
 
-        await RepairDiagnosticService._notify_admins(session, order, payload, photos)
+        await RepairDiagnosticService._notify_admins(
+            session,
+            order,
+            payload,
+            photos,
+            tenant_scope=tenant_scope,
+        )
 
         response = RepairDiagnosticLeadResponse(
             order_id=int(order.id or 0),
@@ -523,8 +529,13 @@ class RepairDiagnosticService:
         order: Order,
         payload: RepairDiagnosticLeadPayload,
         photos: Dict[str, List[Dict[str, Any]]],
+        *,
+        tenant_scope: TenantScope,
     ) -> None:
-        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
         if not admin_ids:
             return
         photo_count = sum(len(items) for items in photos.values())

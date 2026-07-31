@@ -33,6 +33,7 @@ async def list_installers(
     search: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Paginated list of installers.
@@ -42,6 +43,7 @@ async def list_installers(
         page=page,
         limit=limit,
         search=search,
+        tenant_scope=tenant_scope,
     )
 
 
@@ -78,6 +80,7 @@ async def search_installers(
     limit: int = Query(50, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Search active installers by name (for autocomplete).
@@ -86,6 +89,7 @@ async def search_installers(
         session=session,
         q=q,
         limit=limit,
+        tenant_scope=tenant_scope,
     )
 
 

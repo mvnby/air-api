@@ -8,6 +8,7 @@ from services.bot_api_access import require_bot_manager, require_bot_staff
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 
 class BotMediaApiService:
@@ -16,7 +17,12 @@ class BotMediaApiService:
         session: AsyncSession, *, telegram_id: int, limit: int
     ) -> list[dict[str, Any]]:
         await require_bot_manager(session, telegram_id)
-        return await BotOrderAttachmentService.list_recent_orders(session, limit=limit)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        return await BotOrderAttachmentService.list_recent_orders(
+            session,
+            limit=limit,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def attach_to_order(
@@ -32,11 +38,13 @@ class BotMediaApiService:
         telegram_message_id: int | None,
     ) -> dict[str, Any] | None:
         context = await require_bot_staff(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         allowed = await BotOrderAttachmentService.can_attach_to_order(
             session,
             order_id,
             telegram_user_id=telegram_id,
             can_attach_any=context.is_manager,
+            tenant_scope=tenant_scope,
         )
         if not allowed:
             return None
@@ -50,6 +58,7 @@ class BotMediaApiService:
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
             content=content,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -57,11 +66,13 @@ class BotMediaApiService:
         session: AsyncSession, *, telegram_id: int, limit: int
     ) -> list[dict[str, Any]]:
         context = await require_bot_staff(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         return await BotRepairNameplateService.list_repair_orders(
             session,
             telegram_user_id=telegram_id,
             can_attach_any=context.is_manager,
             limit=limit,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -75,11 +86,13 @@ class BotMediaApiService:
         mime_type: str,
     ) -> dict[str, Any] | None:
         context = await require_bot_staff(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         allowed = await BotRepairNameplateService.can_use_order(
             session,
             order_id,
             telegram_user_id=telegram_id,
             can_attach_any=context.is_manager,
+            tenant_scope=tenant_scope,
         )
         if not allowed:
             return None
@@ -92,6 +105,7 @@ class BotMediaApiService:
             session,
             order_id=order_id,
             extracted=recognized.get("extracted") or {},
+            tenant_scope=tenant_scope,
         )
         return {**recognized, "order_id": order_id, "merge_preview": preview or {}}
 
@@ -112,6 +126,7 @@ class BotMediaApiService:
         telegram_message_id: int | None,
     ) -> dict[str, Any] | None:
         context = await require_bot_staff(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         return await BotRepairNameplateService.apply_to_order(
             session,
             order_id,
@@ -126,6 +141,7 @@ class BotMediaApiService:
             telegram_message_id=telegram_message_id,
             can_attach_any=context.is_manager,
             file_content=content,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -133,11 +149,13 @@ class BotMediaApiService:
         session: AsyncSession, *, telegram_id: int, limit: int
     ) -> dict[str, Any]:
         context = await require_bot_staff(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         return await BotWarrantyNameplateService.list_installation_orders(
             session,
             telegram_user_id=telegram_id,
             can_attach_any=context.is_manager,
             limit=limit,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -152,11 +170,13 @@ class BotMediaApiService:
         mime_type: str,
     ) -> dict[str, Any] | None:
         context = await require_bot_staff(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         allowed = await BotWarrantyNameplateService.can_use_order(
             session,
             order_id,
             telegram_user_id=telegram_id,
             can_attach_any=context.is_manager,
+            tenant_scope=tenant_scope,
         )
         if not allowed:
             return None
@@ -170,6 +190,7 @@ class BotMediaApiService:
             order_id=order_id,
             unit_type=unit_type,
             extracted=recognized.get("extracted") or {},
+            tenant_scope=tenant_scope,
         )
         return {
             **recognized,
@@ -196,6 +217,7 @@ class BotMediaApiService:
         telegram_message_id: int | None,
     ) -> dict[str, Any] | None:
         context = await require_bot_staff(session, telegram_id)
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         return await BotWarrantyNameplateService.apply_to_order(
             session,
             order_id,
@@ -211,4 +233,5 @@ class BotMediaApiService:
             telegram_message_id=telegram_message_id,
             can_attach_any=context.is_manager,
             file_content=content,
+            tenant_scope=tenant_scope,
         )

@@ -4,9 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
+from models import Customer
 from models.order import BankReceipt, Order, OrderProductLink, OrderWorkStage
+from models.tenancy import TenantScope
 from services.bot_service import BotService
 from services.staff_user_service import StaffUserService
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +36,15 @@ class NotificationService:
     }
 
     @staticmethod
-    async def _admin_recipient_ids(session: AsyncSession) -> list[int]:
-        return await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+    async def _admin_recipient_ids(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> list[int]:
+        return await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def notify_admins_new_order(
@@ -43,20 +53,27 @@ class NotificationService:
         customer_name: str | None,
         customer_username: str | None,
         customer_phone: str | None,
+        *,
+        tenant_scope: TenantScope,
     ) -> None:
-        admin_ids = await NotificationService._admin_recipient_ids(session)
-        if not admin_ids:
-            return
-
-        stmt = (
-            select(Order)
-            .where(Order.id == order_id)
-            .options(selectinload(Order.product_links).selectinload(OrderProductLink.product))
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(
+                selectinload(Order.product_links).selectinload(
+                    OrderProductLink.product
+                ),
+            ),
         )
-        result = await session.execute(stmt)
-        order = result.scalar_one_or_none()
         if not order:
             logger.warning("NOTIFY_NEW_ORDER_SKIPPED missing_order_id=%s", order_id)
+            return
+        admin_ids = await NotificationService._admin_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        if not admin_ids:
             return
 
         message_lines = [
@@ -105,20 +122,22 @@ class NotificationService:
         order_id: int,
         *,
         source_label: str = "рабочий бот",
+        tenant_scope: TenantScope,
     ) -> int:
-        admin_ids = await NotificationService._admin_recipient_ids(session)
-        if not admin_ids:
-            return 0
-
-        stmt = (
-            select(Order)
-            .where(Order.id == order_id)
-            .options(selectinload(Order.customer))
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(selectinload(Order.customer),),
         )
-        result = await session.execute(stmt)
-        order = result.scalar_one_or_none()
         if not order:
             logger.warning("NOTIFY_STAFF_ORDER_SKIPPED missing_order_id=%s", order_id)
+            return 0
+        admin_ids = await NotificationService._admin_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        if not admin_ids:
             return 0
 
         customer = getattr(order, "customer", None)
@@ -184,23 +203,26 @@ class NotificationService:
     async def notify_admins_work_stage_status_changed(
         session: AsyncSession,
         stage_id: int,
+        *,
+        tenant_scope: TenantScope,
     ) -> int:
-        admin_ids = await NotificationService._admin_recipient_ids(session)
-        if not admin_ids:
-            return 0
-
-        stmt = (
-            select(OrderWorkStage)
-            .where(OrderWorkStage.id == stage_id)
-            .options(
+        stage = await TenantEntityAccessService.get_order_stage(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+            options=(
                 selectinload(OrderWorkStage.order).selectinload(Order.customer),
                 selectinload(OrderWorkStage.installer),
-            )
+            ),
         )
-        result = await session.execute(stmt)
-        stage = result.scalar_one_or_none()
         if not stage:
             logger.warning("NOTIFY_WORK_STAGE_STATUS_SKIPPED missing_stage_id=%s", stage_id)
+            return 0
+        admin_ids = await NotificationService._admin_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        if not admin_ids:
             return 0
 
         order = getattr(stage, "order", None)
@@ -276,8 +298,19 @@ class NotificationService:
     async def notify_admins_bank_receipts_imported(
         session: AsyncSession,
         receipt_ids: list[int],
+        *,
+        tenant_scope: TenantScope,
     ) -> int:
-        admin_ids = await NotificationService._admin_recipient_ids(session)
+        if not tenant_scope.is_system:
+            logger.warning(
+                "NOTIFY_BANK_RECEIPTS_SKIPPED non_system_tenant_id=%s",
+                tenant_scope.tenant_id,
+            )
+            return 0
+        admin_ids = await NotificationService._admin_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
         if not admin_ids or not receipt_ids:
             return 0
 
@@ -367,14 +400,24 @@ class NotificationService:
     async def notify_admins_email_leads_imported(
         session: AsyncSession,
         order_ids: list[int],
+        *,
+        tenant_scope: TenantScope,
     ) -> int:
-        admin_ids = await NotificationService._admin_recipient_ids(session)
+        admin_ids = await NotificationService._admin_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
         if not admin_ids or not order_ids:
             return 0
 
         stmt = (
             select(Order)
-            .where(Order.id.in_(order_ids))
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                Order.id.in_(order_ids),
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
+            )
             .order_by(Order.created_at.desc())
         )
         result = await session.execute(stmt)

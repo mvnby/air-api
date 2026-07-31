@@ -1,7 +1,7 @@
 import pytest
 
 from core.config import settings
-from models import Installer, StaffUser
+from models import Installer, StaffUser, TenantMembership
 
 
 async def _auth_headers(async_client):
@@ -22,29 +22,47 @@ async def test_manager_installers_search_uses_active_staff_users(async_client, d
     db.add_all([active, blocked, inactive])
     await db.flush()
 
-    db.add(
-        StaffUser(
-            display_name="Active Staff Installer",
-            status="active",
-            roles=["installer"],
-            legacy_installer_id=active.id,
-        )
+    active_staff = StaffUser(
+        display_name="Active Staff Installer",
+        status="active",
+        roles=["installer"],
+        legacy_installer_id=active.id,
     )
-    db.add(
-        StaffUser(
-            display_name="Blocked Staff Installer",
-            status="blocked",
-            roles=["installer"],
-            legacy_installer_id=blocked.id,
-        )
+    blocked_staff = StaffUser(
+        display_name="Blocked Staff Installer",
+        status="blocked",
+        roles=["installer"],
+        legacy_installer_id=blocked.id,
     )
-    db.add(
-        StaffUser(
-            display_name="Inactive Staff Installer",
-            status="inactive",
-            roles=["installer"],
-            legacy_installer_id=inactive.id,
-        )
+    inactive_staff = StaffUser(
+        display_name="Inactive Staff Installer",
+        status="inactive",
+        roles=["installer"],
+        legacy_installer_id=inactive.id,
+    )
+    db.add_all([active_staff, blocked_staff, inactive_staff])
+    await db.flush()
+    db.add_all(
+        [
+            TenantMembership(
+                tenant_id=1,
+                staff_user_id=int(active_staff.id),
+                role="installer",
+                status="active",
+            ),
+            TenantMembership(
+                tenant_id=1,
+                staff_user_id=int(blocked_staff.id),
+                role="installer",
+                status="suspended",
+            ),
+            TenantMembership(
+                tenant_id=1,
+                staff_user_id=int(inactive_staff.id),
+                role="installer",
+                status="disabled",
+            ),
+        ]
     )
     await db.commit()
 
@@ -75,12 +93,20 @@ async def test_manager_installers_list_keeps_blocked_historical_staff_visible(as
     installer = Installer(name="Legacy Historical", is_active=True)
     db.add(installer)
     await db.flush()
+    staff = StaffUser(
+        display_name="Blocked Historical Staff",
+        status="blocked",
+        roles=["installer"],
+        legacy_installer_id=installer.id,
+    )
+    db.add(staff)
+    await db.flush()
     db.add(
-        StaffUser(
-            display_name="Blocked Historical Staff",
-            status="blocked",
-            roles=["installer"],
-            legacy_installer_id=installer.id,
+        TenantMembership(
+            tenant_id=1,
+            staff_user_id=int(staff.id),
+            role="installer",
+            status="suspended",
         )
     )
     await db.commit()

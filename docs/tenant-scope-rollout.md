@@ -146,18 +146,47 @@ each existing staff identity. It does not overwrite an existing membership.
 After deployment, Manager authorization and staff lists use membership
 role/status and tenant ownership rather than the role copied into a token.
 
+## Application isolation in this release
+
+The Manager application now resolves Order and Lead ownership before exposing
+or mutating their root or child records. The boundary covers:
+
+- Lead lists, updates, qualification and loss workflows;
+- Order lists, details, dashboard, calendar, inbox, export, update and delete;
+- proposals, payments, work stages, documents and service attachments;
+- customer equipment, components, service history and Order/equipment links;
+- tenant membership-backed installer lists, searches and assignments;
+- staff-bot task/media/nameplate/defect-act entrypoints;
+- tenant-local notification recipients and staff-task outbox events.
+
+Foreign opaque IDs fail closed and do not reveal or mutate records. Negative
+integration tests exercise separate tenants, while the system tenant alone may
+temporarily read fully legacy null provenance during backfill. Dashboard Order
+and customer projections use the same boundary. The global bank-receipt and
+outgoing-email Manager module has no tenant provenance yet, so non-system
+tenants receive `403` instead of shared financial or mail data. Global
+document-template administration and the backing Google Drive folder are also
+system-only until templates receive an explicit tenant policy. Tenant users
+may query selectable templates only with an owned Order or Customer context;
+foreign opaque IDs fail with `404` and unrelated customer IDs are not returned.
+
 ## What this release does not claim
 
-This release isolates direct Customer reads/writes and customer-owned branches,
-contracts, documents, reconciliation and requisites recognition. Manager
-authentication and staff administration are membership-scoped, including
-negative cross-tenant tests. Only the system tenant can see or claim legacy
-nullable Customer rows during rollout.
+This is still the expand phase, not the database contract phase. Lead and Order
+ownership columns remain nullable until the controlled production backfills
+report zero legacy, partial, unknown and cross-tenant rows. Tenant-aware unique
+indexes and mandatory foreign-key constraints still require the contract
+migration.
 
-It does not yet make the complete CRM safe for an external tenant. Order and
-Lead read/update projections, equipment/service history, installer registry,
-notifications and several child resources still need tenant-scoped query
-boundaries and negative integration tests. Idempotency/reuse lookups
-temporarily include legacy null rows only for the system tenant; their unique
-indexes remain global until the contract migration. A second tenant with real
-traffic or an external customer must not be enabled yet.
+Shared catalog, document-template and finance/mail ownership policy must be
+decided before those platform resources can be delegated to external tenants.
+Document-template administration and finance/mail remain system-only in the
+meantime. Public storefront selection still needs a trusted proxy or signed
+server context, and multi-membership Manager users still need an explicit
+server-validated tenant selector.
+
+A second tenant with real external traffic must not be enabled until the
+backfill reports are clean, the contract migration and isolation suite pass,
+and an internal second-storefront canary has completed. Idempotency/reuse
+lookups temporarily include fully legacy rows only for the system tenant; their
+global indexes remain unchanged until contract.

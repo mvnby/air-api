@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import EquipmentComponent
+from models.tenancy import TenantScope
 from services.equipment_service import EquipmentService
 
 
@@ -15,7 +16,14 @@ class EquipmentComponentService:
         *,
         equipment_id: int,
         include_archived: bool = False,
+        tenant_scope: TenantScope,
     ) -> list[Dict[str, Any]]:
+        if not await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        ):
+            return []
         filters = [EquipmentComponent.equipment_id == equipment_id]
         if not include_archived:
             filters.append(EquipmentComponent.is_archived == False)
@@ -36,8 +44,13 @@ class EquipmentComponentService:
         *,
         equipment_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
+        equipment = await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
         if not equipment:
             return None
 
@@ -66,7 +79,14 @@ class EquipmentComponentService:
         equipment_id: int,
         component_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
+        if not await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        ):
+            return None
         component = await EquipmentService._get_equipment_component(
             session,
             equipment_id=equipment_id,
