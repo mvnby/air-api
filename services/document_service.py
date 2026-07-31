@@ -14,6 +14,7 @@ from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
 from services.document_role_service import DocumentRoleService
 from services.document_template_service import DocumentTemplateService
+from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
     tenant_or_fully_legacy_scope_clause,
     tenant_or_legacy_owner_scope_clause,
@@ -265,19 +266,25 @@ class DocumentService:
         scope_service_line_quantities: Any = None,
         scope_product_line_ids: Optional[List[int]] = None,
         additional_conditions: Optional[str] = None,
+        *,
+        tenant_scope: TenantScope,
     ) -> dict:
         if doc_type not in DocumentService.ALLOWED_DOC_TYPES:
             raise ValueError(f"Unsupported document type: {doc_type}")
 
+        owned_order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
+        if owned_order is None:
+            raise ValueError("Order not found")
         await DocumentService.ensure_order_documents_mutable(session, order_id)
 
         if additional_conditions is not None:
-            order = await session.get(Order, order_id)
-            if not order:
-                raise ValueError("Order not found")
             cleaned_conditions = additional_conditions.strip()
-            order.additional_conditions = cleaned_conditions or None
-            session.add(order)
+            owned_order.additional_conditions = cleaned_conditions or None
+            session.add(owned_order)
             await session.flush()
 
         doc = await DocumentService.create_or_get_document(
@@ -313,14 +320,23 @@ class DocumentService:
     @staticmethod
     async def get_download_stream(
         session: AsyncSession,
-        doc_id: int
+        doc_id: int,
+        *,
+        tenant_scope: TenantScope | None = None,
     ) -> tuple:
         """
         Возвращает поток данных PDF и имя файла.
         """
-        query = select(OrderDocument).where(OrderDocument.id == doc_id)
-        result = await session.execute(query)
-        document = result.scalar_one_or_none()
+        if tenant_scope is None:
+            query = select(OrderDocument).where(OrderDocument.id == doc_id)
+            result = await session.execute(query)
+            document = result.scalar_one_or_none()
+        else:
+            document = await TenantEntityAccessService.get_order_document(
+                session,
+                doc_id,
+                tenant_scope=tenant_scope,
+            )
 
         if not document:
             return None, None
@@ -342,15 +358,20 @@ class DocumentService:
     @staticmethod
     async def delete_document(
         session: AsyncSession,
-        doc_id: int
+        doc_id: int,
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[int]:
         """
         Удаляет документ из БД и Google Drive.
         Возвращает order_id удаленного документа.
         """
-        query = select(OrderDocument).where(OrderDocument.id == doc_id)
-        result = await session.execute(query)
-        document = result.scalar_one_or_none()
+        document = await TenantEntityAccessService.get_order_document(
+            session,
+            doc_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
 
         if not document:
             return None
@@ -383,13 +404,21 @@ class DocumentService:
     async def upload_document(
         session: AsyncSession,
         order_id: int,
-        file: "fastapi.UploadFile"
+        file: "fastapi.UploadFile",
+        *,
+        tenant_scope: TenantScope,
     ) -> OrderDocument:
         """
         Загружает произвольный документ в Google Drive и связывает его с заказом.
         """
         import os
 
+        if await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        ) is None:
+            raise ValueError("Order not found")
         await DocumentService.ensure_order_documents_mutable(session, order_id)
         original_filename, suffix = DocumentService._validate_upload_file(file)
         tmp_path = await DocumentService._save_upload_to_temp(file, suffix)
@@ -489,8 +518,15 @@ class DocumentService:
         session: AsyncSession,
         doc_id: int,
         file: "fastapi.UploadFile",
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[OrderDocument]:
-        document = await session.get(OrderDocument, doc_id)
+        document = await TenantEntityAccessService.get_order_document(
+            session,
+            doc_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not document:
             return None
 
@@ -521,9 +557,18 @@ class DocumentService:
         contract_date: datetime,
         external_url: Optional[str] = None,
         file: object = None,
+        tenant_scope: TenantScope,
     ) -> OrderDocument:
         """Registers a customer-provided one-time contract for closing docs."""
-        order = await DocumentService.ensure_order_documents_mutable(session, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
+        if order is None:
+            raise ValueError("Order not found")
+        await DocumentService.ensure_order_documents_mutable(session, order_id)
 
         cleaned_number = str(number or "").strip()
         if not cleaned_number:
@@ -568,12 +613,23 @@ class DocumentService:
     @staticmethod
     async def list_order_documents(
         session: AsyncSession,
-        order_id: int
-    ) -> list[OrderDocument]:
+        order_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[list[OrderDocument]]:
         """Возвращает список документов заказа"""
-        query = select(OrderDocument).where(
-            OrderDocument.order_id == order_id
-        ).order_by(OrderDocument.created_at.desc())
+        owned_order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
+        if owned_order is None:
+            return None
+        query = (
+            select(OrderDocument)
+            .where(OrderDocument.order_id == order_id)
+            .order_by(OrderDocument.created_at.desc())
+        )
 
         result = await session.execute(query)
         return result.scalars().all()

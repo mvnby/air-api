@@ -1,15 +1,27 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
-from core.manager_error_codes import BAD_REQUEST, DOCUMENT_HAS_DEPENDENTS, DOCUMENT_NOT_FOUND, ORDER_DOCUMENTS_LOCKED
-from core.security import get_current_username
+from core.manager_error_codes import (
+    BAD_REQUEST,
+    CUSTOMER_NOT_FOUND,
+    DOCUMENT_HAS_DEPENDENTS,
+    DOCUMENT_NOT_FOUND,
+    ORDER_DOCUMENTS_LOCKED,
+    ORDER_NOT_FOUND,
+)
+from core.security import (
+    get_current_manager_tenant_scope,
+    get_current_username,
+    require_system_manager_tenant_scope,
+)
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     GET_MANAGER_ORDER_DOCUMENTS,
     ATTACH_MANAGER_DOC_FILE,
@@ -39,6 +51,7 @@ from services.document_service import DocumentHasDependentsError, DocumentServic
 from services.document_template_service import DocumentTemplateService
 from services.google_oauth_credentials import GoogleCredentialsError, GoogleDriveListError
 from services.google_service import get_google_service
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 logger = logging.getLogger(__name__)
@@ -84,8 +97,19 @@ async def get_manager_order_documents(
     order_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    docs = await DocumentService.list_order_documents(session, order_id)
+    docs = await DocumentService.list_order_documents(
+        session,
+        order_id,
+        tenant_scope=tenant_scope,
+    )
+    if docs is None:
+        raise manager_http_error(
+            status_code=404,
+            endpoint=GET_MANAGER_ORDER_DOCUMENTS,
+            error_code=ORDER_NOT_FOUND,
+        )
     basis_lookup = await DocumentService.build_document_basis_lookup(session, list(docs))
     return {
         "items": [
@@ -118,9 +142,15 @@ async def upload_manager_order_document(
     file: UploadFile = File(...),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        doc = await DocumentService.upload_document(session, order_id, file)
+        doc = await DocumentService.upload_document(
+            session,
+            order_id,
+            file,
+            tenant_scope=tenant_scope,
+        )
     except OrderDocumentsLockedError as exc:
         raise _order_documents_locked_error(UPLOAD_MANAGER_ORDER_DOCUMENT, exc) from exc
     return ManagerOrderDocumentItem(
@@ -153,6 +183,7 @@ async def register_manager_external_contract(
     file: UploadFile | None = File(None),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         doc = await DocumentService.register_external_contract(
@@ -162,6 +193,7 @@ async def register_manager_external_contract(
             contract_date=contract_date,
             external_url=external_url,
             file=file,
+            tenant_scope=tenant_scope,
         )
     except OrderDocumentsLockedError as exc:
         raise _order_documents_locked_error(REGISTER_MANAGER_EXTERNAL_CONTRACT, exc) from exc
@@ -199,9 +231,15 @@ async def attach_manager_doc_file(
     file: UploadFile = File(...),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        doc = await DocumentService.attach_file_to_document(session, doc_id, file)
+        doc = await DocumentService.attach_file_to_document(
+            session,
+            doc_id,
+            file,
+            tenant_scope=tenant_scope,
+        )
     except OrderDocumentsLockedError as exc:
         raise _order_documents_locked_error(ATTACH_MANAGER_DOC_FILE, exc) from exc
     except ValueError as exc:
@@ -242,9 +280,14 @@ async def get_manager_doc_download(
     doc_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        pdf_content, filename_encoded = await DocumentService.get_download_stream(session, doc_id)
+        pdf_content, filename_encoded = await DocumentService.get_download_stream(
+            session,
+            doc_id,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -278,9 +321,14 @@ async def delete_manager_doc(
     doc_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        order_id = await DocumentService.delete_document(session, doc_id)
+        order_id = await DocumentService.delete_document(
+            session,
+            doc_id,
+            tenant_scope=tenant_scope,
+        )
     except OrderDocumentsLockedError as exc:
         raise _order_documents_locked_error(DELETE_MANAGER_DOC, exc) from exc
     except DocumentHasDependentsError as exc:
@@ -308,7 +356,7 @@ async def delete_manager_doc(
 )
 async def list_manager_document_templates(
     doc_type: str | None = Query(None),
-    _: str = Depends(get_current_username),
+    _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     items = await DocumentTemplateService.list_template_items(session, doc_type, include_legacy=False)
@@ -323,7 +371,7 @@ async def list_manager_document_templates(
 async def list_manager_document_template_files(
     folder_id: str = Query(DEFAULT_DOCUMENT_TEMPLATE_FOLDER_ID),
     limit: int = Query(100, ge=1, le=200),
-    _: str = Depends(get_current_username),
+    _: TenantScope = Depends(require_system_manager_tenant_scope),
 ):
     try:
         files = await run_in_threadpool(
@@ -352,7 +400,7 @@ async def list_manager_document_template_files(
 )
 async def create_manager_document_template(
     payload: DocumentTemplatePayload,
-    _: str = Depends(get_current_username),
+    _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -370,7 +418,7 @@ async def create_manager_document_template(
 async def patch_manager_document_template(
     template_id: int,
     payload: DocumentTemplateUpdatePayload,
-    _: str = Depends(get_current_username),
+    _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -387,7 +435,7 @@ async def patch_manager_document_template(
 )
 async def delete_manager_document_template(
     template_id: int,
-    _: str = Depends(get_current_username),
+    _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -408,8 +456,53 @@ async def get_doc_templates(
     customer_id: int | None = Query(None),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    selected_customer_id = customer_id
+    if not tenant_scope.is_system and order_id is None and customer_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Order or customer context required",
+        )
+    if order_id is not None:
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
+        if order is None:
+            raise manager_http_error(
+                status_code=404,
+                endpoint=GET_DOC_TEMPLATES,
+                error_code=ORDER_NOT_FOUND,
+            )
+        selected_customer_id = order.customer_id
+    if customer_id is not None:
+        customer = await TenantEntityAccessService.get_customer(
+            session,
+            customer_id,
+            tenant_scope=tenant_scope,
+        )
+        if customer is None:
+            raise manager_http_error(
+                status_code=404,
+                endpoint=GET_DOC_TEMPLATES,
+                error_code=CUSTOMER_NOT_FOUND,
+            )
     items = await DocumentService.get_available_templates(session, doc_type, order_id=order_id, customer_id=customer_id)
+    if not tenant_scope.is_system:
+        items = [
+            {
+                **item,
+                "customer_ids": [
+                    value
+                    for value in item.get("customer_ids") or []
+                    if selected_customer_id is not None
+                    and int(value) == int(selected_customer_id)
+                ],
+            }
+            for item in items
+        ]
     return {
         "items": [
             DocumentTemplateItem(

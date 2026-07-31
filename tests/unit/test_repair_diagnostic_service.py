@@ -127,7 +127,11 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
 
 
 @pytest.mark.asyncio
-async def test_repair_notification_escapes_contact_fields(monkeypatch, caplog):
+async def test_repair_notification_escapes_contact_fields(
+    monkeypatch,
+    caplog,
+    tenant_scope,
+):
     payload = RepairDiagnosticLeadPayload.model_validate(
         {
             "scenario": "repair",
@@ -142,7 +146,7 @@ async def test_repair_notification_escapes_contact_fields(monkeypatch, caplog):
     )
     sent_messages = []
 
-    async def fake_recipients(_session):
+    async def fake_recipients(_session, *, tenant_scope):
         return [101, 202]
 
     async def fake_send_message(admin_id, text):
@@ -162,6 +166,7 @@ async def test_repair_notification_escapes_contact_fields(monkeypatch, caplog):
             SimpleNamespace(id=42),
             payload,
             {},
+            tenant_scope=tenant_scope,
         )
 
     sent_text = sent_messages[0][1]

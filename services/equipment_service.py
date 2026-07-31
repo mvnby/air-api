@@ -19,6 +19,8 @@ from models import (
     Supplier,
 )
 from services.tenant_scope_service import TenantScope
+from services.tenant_entity_access_service import TenantEntityAccessService
+from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
 
 
 class EquipmentService:
@@ -457,8 +459,22 @@ class EquipmentService:
         return preserved_payload
 
     @staticmethod
-    async def _ensure_customer_exists(session: AsyncSession, customer_id: int) -> Optional[Customer]:
-        return await session.get(Customer, customer_id)
+    async def _ensure_customer_exists(
+        session: AsyncSession,
+        customer_id: int,
+        *,
+        tenant_scope: TenantScope | None = None,
+    ) -> Optional[Customer]:
+        if tenant_scope is None:
+            return await session.get(Customer, customer_id)
+        return (
+            await session.execute(
+                select(Customer).where(
+                    Customer.id == customer_id,
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+            )
+        ).scalars().first()
 
     @staticmethod
     async def _ensure_product_exists(session: AsyncSession, product_id: int) -> Product:
@@ -480,8 +496,17 @@ class EquipmentService:
         *,
         customer_id: int,
         source_order_id: int,
+        tenant_scope: TenantScope | None = None,
     ) -> Order:
-        order = await session.get(Order, source_order_id)
+        order = (
+            await TenantEntityAccessService.get_order(
+                session,
+                source_order_id,
+                tenant_scope=tenant_scope,
+            )
+            if tenant_scope is not None
+            else await session.get(Order, source_order_id)
+        )
         if not order:
             raise ValueError("Source order not found")
         if order.customer_id is None:
@@ -505,7 +530,18 @@ class EquipmentService:
         return branch
 
     @staticmethod
-    async def _get_equipment(session: AsyncSession, equipment_id: int) -> Optional[CustomerEquipment]:
+    async def _get_equipment(
+        session: AsyncSession,
+        equipment_id: int,
+        *,
+        tenant_scope: TenantScope | None = None,
+    ) -> Optional[CustomerEquipment]:
+        if tenant_scope is not None:
+            return await TenantEntityAccessService.get_equipment(
+                session,
+                equipment_id,
+                tenant_scope=tenant_scope,
+            )
         result = await session.execute(select(CustomerEquipment).where(CustomerEquipment.id == equipment_id))
         return result.scalars().first()
 
@@ -530,8 +566,17 @@ class EquipmentService:
         *,
         equipment: CustomerEquipment,
         order_id: int,
+        tenant_scope: TenantScope | None = None,
     ) -> Order:
-        order = await session.get(Order, order_id)
+        order = (
+            await TenantEntityAccessService.get_order(
+                session,
+                order_id,
+                tenant_scope=tenant_scope,
+            )
+            if tenant_scope is not None
+            else await session.get(Order, order_id)
+        )
         if not order:
             raise ValueError("Order not found")
         if order.customer_id is None:
@@ -557,45 +602,57 @@ class EquipmentService:
         include_archived: bool = False,
         q: str | None = None,
         attention: str | None = None,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_registry_service import EquipmentRegistryService
         return await EquipmentRegistryService.list_equipment(
             session, customer_id=customer_id, customer_branch_id=customer_branch_id,
             page=page, limit=limit, include_archived=include_archived, q=q, attention=attention,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
     async def get_equipment_detail(
         session: AsyncSession, *, equipment_id: int, history_limit: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_registry_service import EquipmentRegistryService
         return await EquipmentRegistryService.get_equipment_detail(
             session, equipment_id=equipment_id, history_limit=history_limit,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
     async def create_equipment(
-        session: AsyncSession, *, payload: Dict[str, Any],
+        session: AsyncSession, *, payload: Dict[str, Any], tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_workflow_service import EquipmentWorkflowService
-        return await EquipmentWorkflowService.create_equipment(session, payload=payload)
+        return await EquipmentWorkflowService.create_equipment(
+            session,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def update_equipment(
         session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_workflow_service import EquipmentWorkflowService
         return await EquipmentWorkflowService.update_equipment(
             session, equipment_id=equipment_id, payload=payload,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
     async def create_equipment_from_order(
         session: AsyncSession, *, order_id: int, payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
         from services.equipment_workflow_service import EquipmentWorkflowService
         return await EquipmentWorkflowService.create_equipment_from_order(
             session, order_id=order_id, payload=payload,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -615,37 +672,45 @@ class EquipmentService:
     @staticmethod
     async def list_components(
         session: AsyncSession, *, equipment_id: int, include_archived: bool = False,
+        tenant_scope: TenantScope,
     ) -> list[Dict[str, Any]]:
         from services.equipment_component_service import EquipmentComponentService
         return await EquipmentComponentService.list_components(
             session, equipment_id=equipment_id, include_archived=include_archived,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
     async def create_component(
         session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_component_service import EquipmentComponentService
         return await EquipmentComponentService.create_component(
             session, equipment_id=equipment_id, payload=payload,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
     async def update_component(
         session: AsyncSession, *, equipment_id: int, component_id: int, payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_component_service import EquipmentComponentService
         return await EquipmentComponentService.update_component(
             session, equipment_id=equipment_id, component_id=component_id, payload=payload,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
     async def list_history(
         session: AsyncSession, *, equipment_id: int, page: int, limit: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_history_service import EquipmentHistoryService
         return await EquipmentHistoryService.list_history(
             session, equipment_id=equipment_id, page=page, limit=limit,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -665,10 +730,12 @@ class EquipmentService:
     @staticmethod
     async def add_history(
         session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_history_service import EquipmentHistoryService
         return await EquipmentHistoryService.add_history(
             session, equipment_id=equipment_id, payload=payload,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -689,8 +756,10 @@ class EquipmentService:
     @staticmethod
     async def add_history_from_repair_order(
         session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_history_service import EquipmentHistoryService
         return await EquipmentHistoryService.add_history_from_repair_order(
             session, equipment_id=equipment_id, payload=payload,
+            tenant_scope=tenant_scope,
         )

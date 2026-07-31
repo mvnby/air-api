@@ -8,8 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Order, OrderInstaller, OrderStageStatus, OrderStatus, OrderWorkStage, StaffUser
+from models import (
+    Customer,
+    Order,
+    OrderInstaller,
+    OrderStageStatus,
+    OrderStatus,
+    OrderWorkStage,
+    StaffUser,
+    TenantMembership,
+)
+from models.tenancy import TenantScope
 from services.staff_user_service import StaffUserService
+from services.tenant_entity_access_service import TenantEntityAccessService
+from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
 
 
 class BotTaskService:
@@ -20,7 +32,12 @@ class BotTaskService:
     }
 
     @staticmethod
-    async def _staff_by_telegram_id(session: AsyncSession, telegram_id: int | str | None) -> StaffUser | None:
+    async def _staff_by_telegram_id(
+        session: AsyncSession,
+        telegram_id: int | str | None,
+        *,
+        tenant_scope: TenantScope,
+    ) -> StaffUser | None:
         try:
             normalized_telegram_id = int(telegram_id) if telegram_id is not None else 0
         except (TypeError, ValueError):
@@ -31,6 +48,14 @@ class BotTaskService:
             select(StaffUser)
             .where(StaffUser.telegram_id == normalized_telegram_id)
             .where(StaffUser.status == StaffUserService.STATUS_ACTIVE)
+            .join(
+                TenantMembership,
+                TenantMembership.staff_user_id == StaffUser.id,
+            )
+            .where(
+                TenantMembership.tenant_id == tenant_scope.tenant_id,
+                TenantMembership.status == "active",
+            )
         )
         return result.scalars().first()
 
@@ -44,8 +69,13 @@ class BotTaskService:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         statuses: list[str] | None = None,
+        tenant_scope: TenantScope,
     ) -> list[dict[str, Any]]:
-        staff = await cls._staff_by_telegram_id(session, telegram_id)
+        staff = await cls._staff_by_telegram_id(
+            session,
+            telegram_id,
+            tenant_scope=tenant_scope,
+        )
         if not staff or not staff.legacy_installer_id:
             return []
 
@@ -56,6 +86,7 @@ class BotTaskService:
             date_from=date_from,
             date_to=date_to,
             statuses=statuses,
+            tenant_scope=tenant_scope,
         )
 
     @classmethod
@@ -69,6 +100,7 @@ class BotTaskService:
         date_to: datetime | None = None,
         statuses: list[str] | None = None,
         reference_time: datetime | None = None,
+        tenant_scope: TenantScope,
     ) -> list[dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 10), 20))
 
@@ -93,6 +125,8 @@ class BotTaskService:
             OrderWorkStage.start_time.is_not(None),
             OrderWorkStage.start_time >= range_start,
             OrderWorkStage.start_time <= range_end,
+            tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            TenantEntityAccessService.order_customer_clause(tenant_scope),
         ]
         if requested_statuses:
             active_stage_filters.append(OrderWorkStage.status.in_(stage_statuses))
@@ -107,6 +141,7 @@ class BotTaskService:
         stage_result = await session.execute(
             select(OrderWorkStage)
             .join(Order, Order.id == OrderWorkStage.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(*active_stage_filters)
             .options(
                 selectinload(OrderWorkStage.order).selectinload(Order.customer),
@@ -119,13 +154,17 @@ class BotTaskService:
         active_stage_order_ids = (
             select(OrderWorkStage.order_id)
             .join(Order, Order.id == OrderWorkStage.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(*active_stage_filters)
         )
 
         order_query = (
             select(Order)
             .join(OrderInstaller, OrderInstaller.order_id == Order.id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(OrderInstaller.installer_id == installer_id)
+            .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
+            .where(TenantEntityAccessService.order_customer_clause(tenant_scope))
             .where(Order.status.in_(list(cls.ACTIVE_ORDER_STATUSES)))
             .where(Order.installation_date.is_not(None))
             .where(

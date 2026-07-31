@@ -3,6 +3,10 @@ from sqlmodel import select
 from services.order_service import OrderService
 from models import Product, OrderProductLink, OrderServiceLink, LeadSource, OrderStatus
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 async def test_snapshot_pricing(db, tenant_scope):
     # 1. Create test product
     product = Product(id=63, title="Hero Product", slug="hero-product", price=2500, specs={"area_m2": 30})
@@ -166,7 +170,7 @@ async def test_order_detail_does_not_double_count_installation_in_product_line(d
         comment=None,
     )
 
-    detail = await OrderService.get_order_detail_for_manager(db, order.id)
+    detail = await OrderService.get_order_detail_for_manager(db, order.id, tenant_scope=TEST_TENANT_SCOPE)
 
     assert detail["total_amount"] == 4600
     assert detail["product_lines"][0]["installation_price"] == 300

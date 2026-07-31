@@ -9,11 +9,13 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
 from models import Order
+from models.tenancy import TenantScope
 from schemas import ManagerRepairActAiDraftPayload
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.defect_act_ai_service import DefectActAIService
 from services.order_service import OrderService
 from services.repair_defect_template_service import RepairDefectTemplateService
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 class BotDefectActService:
@@ -138,14 +140,14 @@ class BotDefectActService:
         *,
         order_id: int,
         comment: str,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
-        result = await session.execute(
-            select(Order)
-            .where(Order.id == order_id)
-            .options(selectinload(Order.customer))
-            .limit(1)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(selectinload(Order.customer),),
         )
-        order = result.scalars().first()
         if not order or OrderService._normalize_workflow_type(order.workflow_type) != "repair":
             return None
 
@@ -171,18 +173,18 @@ class BotDefectActService:
         *,
         order_id: int,
         fault_type: str,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
         normalized_fault_type = RepairDefectTemplateService.normalize_fault_type(fault_type)
         if normalized_fault_type not in cls.PRESET_FAULT_TYPES:
             raise ValueError("Неизвестный шаблон диагностики")
 
-        result = await session.execute(
-            select(Order)
-            .where(Order.id == order_id)
-            .options(selectinload(Order.customer))
-            .limit(1)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(selectinload(Order.customer),),
         )
-        order = result.scalars().first()
         if not order or OrderService._normalize_workflow_type(order.workflow_type) != "repair":
             return None
 
@@ -225,18 +227,24 @@ class BotDefectActService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
         can_attach_any: bool = False,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
         allowed = await BotRepairNameplateService.can_use_order(
             session,
             order_id,
             telegram_user_id=telegram_user_id,
             can_attach_any=can_attach_any,
+            tenant_scope=tenant_scope,
         )
         if not allowed:
             return None
 
-        result = await session.execute(select(Order).where(Order.id == order_id).limit(1))
-        order = result.scalars().first()
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if not order:
             return None
 

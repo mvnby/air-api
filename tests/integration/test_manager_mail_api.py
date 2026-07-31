@@ -301,7 +301,8 @@ async def test_manager_mail_import_endpoint_uses_imap_service(async_client, monk
             created_receipt_ids=[10],
         )
 
-    async def fake_notify(_session, receipt_ids):
+    async def fake_notify(_session, receipt_ids, *, tenant_scope):
+        assert tenant_scope.is_system is True
         notified_receipt_ids.extend(receipt_ids)
         return 1
 

@@ -7,12 +7,15 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import (
+    Customer,
     CustomerBranch,
     CustomerEquipment,
     EquipmentServiceHistory,
     EquipmentWarrantyCoverage,
 )
+from models.tenancy import TenantScope
 from services.equipment_service import EquipmentService
+from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
 
 
 class EquipmentRegistryService:
@@ -27,8 +30,13 @@ class EquipmentRegistryService:
         include_archived: bool = False,
         q: str | None = None,
         attention: str | None = None,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        if customer_id is not None and not await EquipmentService._ensure_customer_exists(session, customer_id):
+        if customer_id is not None and not await EquipmentService._ensure_customer_exists(
+            session,
+            customer_id,
+            tenant_scope=tenant_scope,
+        ):
             return None
         if customer_id is not None and customer_branch_id is not None:
             await EquipmentService._ensure_branch_for_customer(
@@ -37,7 +45,7 @@ class EquipmentRegistryService:
                 customer_branch_id=customer_branch_id,
             )
 
-        filters = []
+        filters = [tenant_or_legacy_owner_scope_clause(Customer, tenant_scope)]
         if customer_id is not None:
             filters.append(CustomerEquipment.customer_id == customer_id)
         if customer_branch_id is not None:
@@ -111,10 +119,15 @@ class EquipmentRegistryService:
                 matching_equipment_ids = select(EquipmentWarrantyCoverage.equipment_id).where(*selected_conditions)
                 filters.append(CustomerEquipment.id.in_(matching_equipment_ids))
 
-        count_result = await session.execute(select(func.count(CustomerEquipment.id)).where(*filters))
+        count_result = await session.execute(
+            select(func.count(CustomerEquipment.id))
+            .join(Customer, Customer.id == CustomerEquipment.customer_id)
+            .where(*filters)
+        )
         total = int(count_result.scalar() or 0)
         result = await session.execute(
             select(CustomerEquipment)
+            .join(Customer, Customer.id == CustomerEquipment.customer_id)
             .options(
                 selectinload(CustomerEquipment.customer),
                 selectinload(CustomerEquipment.customer_branch),
@@ -217,8 +230,13 @@ class EquipmentRegistryService:
         *,
         equipment_id: int,
         history_limit: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
+        equipment = await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
         if not equipment:
             return None
         history = await EquipmentService.list_history(
@@ -226,11 +244,13 @@ class EquipmentRegistryService:
             equipment_id=equipment_id,
             page=1,
             limit=history_limit,
+            tenant_scope=tenant_scope,
         )
         components = await EquipmentService.list_components(
             session,
             equipment_id=equipment_id,
             include_archived=True,
+            tenant_scope=tenant_scope,
         )
         data = EquipmentService._to_equipment_item(equipment)
         data["components"] = components
@@ -246,5 +266,9 @@ class EquipmentRegistryService:
         coverage_models = list(coverage_result.scalars().all())
         data["coverages"] = [WarrantyService.to_item(item) for item in coverage_models]
         EquipmentService._apply_coverage_summary(data, coverage_models)
-        data["linked_orders"] = await EquipmentLinkService.list_linked_orders(session, equipment_id=equipment_id)
+        data["linked_orders"] = await EquipmentLinkService.list_linked_orders(
+            session,
+            equipment_id=equipment_id,
+            tenant_scope=tenant_scope,
+        )
         return data

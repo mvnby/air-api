@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.bot_access_service import BotAccessService
 from services.bot_task_service import BotTaskService
+from models.tenancy import TenantScope
 
 
 class BotTaskAccessDeniedError(PermissionError):
@@ -22,6 +23,7 @@ class BotTaskReadService:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         statuses: list[str] | None = None,
+        tenant_scope: TenantScope,
     ) -> list[dict]:
         context = await BotAccessService.get_context(session, telegram_id)
         if not context.is_staff:
@@ -35,4 +37,5 @@ class BotTaskReadService:
             date_from=date_from,
             date_to=date_to,
             statuses=statuses,
+            tenant_scope=tenant_scope,
         )

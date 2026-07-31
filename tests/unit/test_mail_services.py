@@ -683,7 +683,7 @@ async def test_delete_order_payment_detaches_group_bank_receipt(sqlite_session):
     ).scalars().all()
     assert len(payments) == 2
 
-    await OrderService.delete_payment(sqlite_session, payments[0].order_id, payments[0].id)
+    await OrderService.delete_payment(sqlite_session, payments[0].order_id, payments[0].id, tenant_scope=TEST_TENANT_SCOPE)
 
     refreshed_receipt = await sqlite_session.get(BankReceipt, receipt.id)
     assert refreshed_receipt.status == "requires_review"
@@ -1122,7 +1122,7 @@ async def test_order_detail_payment_includes_bank_receipt(sqlite_session):
     await sqlite_session.commit()
     sqlite_session.expunge(order)
 
-    detail = await OrderService.get_order_detail_for_manager(sqlite_session, order.id)
+    detail = await OrderService.get_order_detail_for_manager(sqlite_session, order.id, tenant_scope=TEST_TENANT_SCOPE)
 
     assert detail is not None
     assert detail["payments"][0]["bank_receipt_id"] == receipt.id
@@ -1240,6 +1240,7 @@ async def test_bank_receipt_import_notification_counts_confirmed_admins(sqlite_s
         sent_count = await NotificationService.notify_admins_bank_receipts_imported(
             sqlite_session,
             [receipt.id, matched.id],
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     assert sent_count == 1
@@ -1284,6 +1285,7 @@ async def test_email_lead_import_notification_counts_confirmed_admins(sqlite_ses
         sent_count = await NotificationService.notify_admins_email_leads_imported(
             sqlite_session,
             [order.id],
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     assert sent_count == 1

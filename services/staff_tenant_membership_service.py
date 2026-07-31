@@ -97,6 +97,22 @@ class StaffTenantMembershipService:
             statement = statement.with_for_update()
         return list((await session.execute(statement)).scalars().all())
 
+    @staticmethod
+    async def get_for_tenant(
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        staff_user_id: int,
+        active_only: bool = False,
+    ) -> TenantMembership | None:
+        statement = select(TenantMembership).where(
+            TenantMembership.tenant_id == int(tenant_id),
+            TenantMembership.staff_user_id == int(staff_user_id),
+        )
+        if active_only:
+            statement = statement.where(TenantMembership.status == "active")
+        return (await session.execute(statement)).scalars().first()
+
     @classmethod
     async def ensure(
         cls,

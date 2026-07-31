@@ -120,6 +120,7 @@ class EmailLeadImportJobService:
                         notified_admins = await NotificationService.notify_admins_email_leads_imported(
                             session,
                             result.created_order_ids,
+                            tenant_scope=tenant_scope,
                         )
                     except Exception:
                         logger.exception(

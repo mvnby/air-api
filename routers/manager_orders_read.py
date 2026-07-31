@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     EXPORT_MANAGER_ORDERS,
     GET_MANAGER_ORDER_DETAIL,
@@ -36,6 +37,7 @@ async def get_manager_orders(
     sort: str = Query("created_at_desc"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await OrderService.get_orders_for_manager(
@@ -43,6 +45,7 @@ async def get_manager_orders(
             customer_segment=segment,
             page=page,
             limit=limit,
+            tenant_scope=tenant_scope,
             status=status,
             search=search,
             overdue_only=overdue_only,
@@ -63,9 +66,11 @@ async def list_manager_stale_order_stages(
     limit: int = Query(100, ge=1, le=100),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await OrderService.list_stale_order_stages(
         session,
+        tenant_scope=tenant_scope,
         older_than_days=older_than_days,
         include_unscheduled=include_unscheduled,
         limit=limit,
@@ -77,9 +82,14 @@ async def export_manager_orders(
     payload: ManagerOrderExportRequest,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderTransferService.export_orders(session, payload)
+        return await OrderTransferService.export_orders(
+            session,
+            payload,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -89,8 +99,13 @@ async def get_manager_order_detail(
     order_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    data = await OrderService.get_order_detail_for_manager(session, order_id)
+    data = await OrderService.get_order_detail_for_manager(
+        session,
+        order_id,
+        tenant_scope=tenant_scope,
+    )
     if not data:
         raise HTTPException(status_code=404, detail="Order not found")
     return data

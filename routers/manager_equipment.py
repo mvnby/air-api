@@ -55,6 +55,7 @@ async def list_manager_equipment(
     attention: Optional[str] = Query(None),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.list_equipment(
@@ -66,6 +67,7 @@ async def list_manager_equipment(
             include_archived=include_archived,
             q=q,
             attention=attention,
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -93,11 +95,13 @@ async def create_manager_equipment(
     payload: ManagerEquipmentCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.create_equipment(
             session=session,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -126,12 +130,14 @@ async def create_manager_equipment_from_order(
     payload: ManagerEquipmentFromOrderPayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await EquipmentService.create_equipment_from_order(
             session=session,
             order_id=order_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -182,11 +188,13 @@ async def get_manager_equipment(
     history_limit: int = Query(10, ge=0, le=100),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     data = await EquipmentService.get_equipment_detail(
         session=session,
         equipment_id=equipment_id,
         history_limit=history_limit,
+        tenant_scope=tenant_scope,
     )
     if data is None:
         raise manager_http_error(
@@ -203,12 +211,14 @@ async def patch_manager_equipment(
     payload: ManagerEquipmentUpdatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.update_equipment(
             session=session,
             equipment_id=equipment_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -237,12 +247,14 @@ async def create_manager_equipment_component(
     payload: ManagerEquipmentComponentCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.create_component(
             session=session,
             equipment_id=equipment_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -271,6 +283,7 @@ async def patch_manager_equipment_component(
     payload: ManagerEquipmentComponentUpdatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.update_component(
@@ -278,6 +291,7 @@ async def patch_manager_equipment_component(
             equipment_id=equipment_id,
             component_id=component_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -306,12 +320,14 @@ async def list_manager_equipment_history(
     limit: int = Query(20, ge=1, le=100),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     data = await EquipmentService.list_history(
         session=session,
         equipment_id=equipment_id,
         page=page,
         limit=limit,
+        tenant_scope=tenant_scope,
     )
     if data is None:
         raise manager_http_error(
@@ -333,12 +349,14 @@ async def create_manager_equipment_history(
     payload: ManagerEquipmentServiceHistoryCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.add_history(
             session=session,
             equipment_id=equipment_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(
@@ -367,12 +385,14 @@ async def create_manager_equipment_history_from_repair_order(
     payload: ManagerEquipmentHistoryFromRepairOrderPayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await EquipmentService.add_history_from_repair_order(
             session=session,
             equipment_id=equipment_id,
             payload=payload.model_dump(exclude_unset=True),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise manager_http_error(

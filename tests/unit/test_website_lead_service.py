@@ -37,7 +37,7 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(
         captured["tenant_scope"] = tenant_scope
         return {"id": 33, "status": "new", "created_at": created_at}
 
-    async def fake_recipients(_session):
+    async def fake_recipients(_session, *, tenant_scope):
         return [1001, 1002]
 
     async def fake_send_message(admin_id, text):

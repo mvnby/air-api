@@ -66,7 +66,12 @@ class WebsiteOrderService:
             tenant_scope=tenant_scope,
         )
 
-        await WebsiteOrderService._notify_admins(session, order, payload)
+        await WebsiteOrderService._notify_admins(
+            session,
+            order,
+            payload,
+            tenant_scope=tenant_scope,
+        )
 
         return OrderResponse(
             id=order.id,
@@ -76,8 +81,17 @@ class WebsiteOrderService:
         )
 
     @staticmethod
-    async def _notify_admins(session: AsyncSession, order: Order, payload: OrderPayload) -> None:
-        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+    async def _notify_admins(
+        session: AsyncSession,
+        order: Order,
+        payload: OrderPayload,
+        *,
+        tenant_scope: TenantScope,
+    ) -> None:
+        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
         if not admin_ids:
             return
 

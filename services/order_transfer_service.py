@@ -48,6 +48,7 @@ from schemas import (
     ManagerOrderTransferWorkStage,
 )
 from services.order_service import OrderService
+from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
     TenantScope,
     tenant_or_legacy_owner_scope_clause,
@@ -268,14 +269,24 @@ class OrderTransferService:
         )
 
     @staticmethod
-    async def export_orders(session: AsyncSession, payload: ManagerOrderExportRequest) -> ManagerOrderTransferPackage:
+    async def export_orders(
+        session: AsyncSession,
+        payload: ManagerOrderExportRequest,
+        *,
+        tenant_scope: TenantScope,
+    ) -> ManagerOrderTransferPackage:
         order_ids = list(dict.fromkeys(int(order_id) for order_id in payload.order_ids if int(order_id) > 0))
         if not order_ids:
             raise ValueError("No orders selected")
 
         stmt = (
             select(Order)
-            .where(Order.id.in_(order_ids))
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                Order.id.in_(order_ids),
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
+            )
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),

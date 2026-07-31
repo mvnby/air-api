@@ -30,6 +30,10 @@ from services.staff_task_notification_event_service import (
     StaffTaskNotificationEventService,
 )
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 
 @pytest.fixture
 async def sqlite_order_session(tmp_path: Path):
@@ -105,20 +109,20 @@ async def test_service_lists_cancels_and_deletes_stale_work_stages(sqlite_order_
     for stage in (stale_stage, unscheduled_stage, upcoming_stage, completed_stage):
         await sqlite_order_session.refresh(stage)
 
-    result = await OrderService.list_stale_order_stages(sqlite_order_session, older_than_days=7)
+    result = await OrderService.list_stale_order_stages(sqlite_order_session, older_than_days=7, tenant_scope=TEST_TENANT_SCOPE)
     names = {item["name"] for item in result["items"]}
 
     assert result["total"] == 2
     assert names == {"Старый выезд", "Без даты"}
     assert result["items"][0]["customer_name"] == "Иван"
 
-    canceled = await OrderService.cancel_order_stage_direct(sqlite_order_session, stale_stage.id)
+    canceled = await OrderService.cancel_order_stage_direct(sqlite_order_session, stale_stage.id, tenant_scope=TEST_TENANT_SCOPE)
     assert canceled["status"] == "canceled"
 
-    after_cancel = await OrderService.list_stale_order_stages(sqlite_order_session, older_than_days=7)
+    after_cancel = await OrderService.list_stale_order_stages(sqlite_order_session, older_than_days=7, tenant_scope=TEST_TENANT_SCOPE)
     assert {item["name"] for item in after_cancel["items"]} == {"Без даты"}
 
-    deleted = await OrderService.delete_order_stage_direct(sqlite_order_session, unscheduled_stage.id)
+    deleted = await OrderService.delete_order_stage_direct(sqlite_order_session, unscheduled_stage.id, tenant_scope=TEST_TENANT_SCOPE)
     assert deleted == {"ok": True, "id": unscheduled_stage.id}
     assert await sqlite_order_session.get(OrderWorkStage, unscheduled_stage.id) is None
 
@@ -139,6 +143,7 @@ async def test_service_validates_work_stage_status_and_order(sqlite_order_sessio
         sqlite_order_session,
         int(order.id),
         OrderWorkStageCreatePayload(name="Монтаж", status="in_progress"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert created["work_stages"][0]["status"] == "in_progress"
 
@@ -151,6 +156,7 @@ async def test_service_validates_work_stage_status_and_order(sqlite_order_sessio
             int(order.id),
             int(stage.id),
             OrderWorkStageUpdatePayload(status="waiting_for_magic"),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     with pytest.raises(ValueError, match="Order not found"):
@@ -158,6 +164,7 @@ async def test_service_validates_work_stage_status_and_order(sqlite_order_sessio
             sqlite_order_session,
             999999,
             OrderWorkStageCreatePayload(name="Невозможный заказ"),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
 
@@ -215,11 +222,13 @@ async def test_order_stage_mutations_enqueue_staff_notifications(
             installer_id=int(installer.id),
             start_time=start_time,
         ),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     stage = (await sqlite_order_session.execute(select(OrderWorkStage))).scalar_one()
     ensure_assignable.assert_awaited_once_with(
         sqlite_order_session,
         int(installer.id),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assigned.assert_awaited_once()
 
@@ -228,6 +237,7 @@ async def test_order_stage_mutations_enqueue_staff_notifications(
         int(order.id),
         int(stage.id),
         OrderWorkStageUpdatePayload(start_time=start_time + timedelta(hours=1)),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     rescheduled.assert_awaited_once()
 
@@ -236,6 +246,7 @@ async def test_order_stage_mutations_enqueue_staff_notifications(
         int(order.id),
         int(stage.id),
         OrderWorkStageUpdatePayload(status="canceled"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     canceled.assert_awaited_once()
 
@@ -296,6 +307,7 @@ async def test_calendar_completed_stages_keep_their_own_titles(sqlite_order_sess
         sqlite_order_session,
         event_time - timedelta(hours=1),
         event_time + timedelta(hours=3),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     by_id = {event.id: event for event in events}
 
@@ -432,15 +444,15 @@ async def test_service_get_orders_for_manager_segment_and_search(db):
     db.add(Order(customer_id=c2.id, status=OrderStatus.NEGOTIATION, comment="note 2"))
     await db.commit()
 
-    b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20)
+    b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
     assert len(b2c["items"]) == 1
     assert b2c["items"][0]["customer"]["name"] == "Alice"
 
-    b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20, search="999000111")
+    b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20, search="999000111", tenant_scope=TEST_TENANT_SCOPE)
     assert len(b2b["items"]) == 1
     assert b2b["items"][0]["customer"]["name"] == "Acme LLC"
 
-    all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20)
+    all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
     assert {item["customer"]["name"] for item in all_orders["items"]} == {"Alice", "Acme LLC"}
 
 
@@ -461,12 +473,12 @@ async def test_service_get_orders_for_manager_title_and_labels(db):
     )
     await db.commit()
 
-    by_title = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, search="Дубровно")
+    by_title = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, search="Дубровно", tenant_scope=TEST_TENANT_SCOPE)
     assert len(by_title["items"]) == 1
     assert by_title["items"][0]["title"] == "Монтаж магазина в Дубровно"
     assert by_title["items"][0]["manager_labels"] == ["срочно", "уточнить оплату"]
 
-    by_label = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, search="оплату")
+    by_label = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, search="оплату", tenant_scope=TEST_TENANT_SCOPE)
     assert len(by_label["items"]) == 1
 
 
@@ -475,14 +487,14 @@ async def test_service_get_orders_for_manager_b2c_includes_legacy_without_custom
     db.add(Order(customer_id=None, status=OrderStatus.NEGOTIATION, comment="legacy"))
     await db.commit()
 
-    b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20)
+    b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
     assert len(b2c["items"]) == 1
     assert b2c["items"][0]["customer"] is None
 
-    b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20)
+    b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
     assert len(b2b["items"]) == 0
 
-    all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20)
+    all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
     assert len(all_orders["items"]) == 1
     assert all_orders["items"][0]["customer"] is None
 
@@ -511,6 +523,7 @@ async def test_service_auto_execution_on_payment_moves_order_to_work(db):
         db,
         int(order.id),
         PaymentCreatePayload(amount=500, type="postpayment"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await db.refresh(order)
 
@@ -543,6 +556,7 @@ async def test_service_auto_close_on_payment_closes_execution_order(db):
         db,
         int(order.id),
         PaymentCreatePayload(amount=420, type="postpayment"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await db.refresh(order)
 
@@ -577,6 +591,7 @@ async def test_service_auto_close_on_payment_waits_for_payment_execution_status(
         db,
         int(order.id),
         PaymentCreatePayload(amount=420, type="postpayment"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     await db.refresh(order)
 
@@ -598,7 +613,7 @@ async def test_service_get_orders_for_manager_overdue_filter(db):
     db.add(Order(customer_id=customer.id, status=OrderStatus.NEGOTIATION, next_followup_date=datetime.now() + timedelta(days=1)))
     await db.commit()
 
-    result = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, overdue_only=True)
+    result = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, overdue_only=True, tenant_scope=TEST_TENANT_SCOPE)
     assert len(result["items"]) == 1
 
 
@@ -626,7 +641,7 @@ async def test_service_update_order_for_manager_line_sync(db):
         services=[{"service_id": service.id, "title": "Srv", "quantity": 1, "price": 200}],
     )
 
-    data = await OrderService.update_order_for_manager(db, order.id, payload)
+    data = await OrderService.update_order_for_manager(db, order.id, payload, tenant_scope=TEST_TENANT_SCOPE)
     assert data is not None
     assert data["status"] == "negotiation"
     assert len(data["product_lines"]) == 1
@@ -652,7 +667,7 @@ async def test_service_update_order_for_manager_title_and_labels(db):
         manager_labels=[" срочно ", "Срочно", "", "ждём оплату"],
     )
 
-    data = await OrderService.update_order_for_manager(db, order.id, payload)
+    data = await OrderService.update_order_for_manager(db, order.id, payload, tenant_scope=TEST_TENANT_SCOPE)
     assert data is not None
     assert data["title"] == "Монтаж магазина"
     assert data["manager_labels"] == ["срочно", "ждём оплату"]
@@ -661,6 +676,7 @@ async def test_service_update_order_for_manager_title_and_labels(db):
         db,
         order.id,
         ManagerOrderUpdatePayload(title="", manager_labels=[]),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert cleared is not None
     assert cleared["title"] is None
@@ -692,6 +708,7 @@ async def test_service_non_repair_update_has_no_repair_side_effects(db):
         db,
         order.id,
         ManagerOrderUpdatePayload(comment="Обычная заявка без ремонта"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert data is not None
@@ -713,13 +730,14 @@ async def test_service_update_order_for_manager_validation(db):
     await db.refresh(order)
 
     with pytest.raises(ValueError):
-        await OrderService.update_order_for_manager(db, order.id, ManagerOrderUpdatePayload(status="bad_status"))
+        await OrderService.update_order_for_manager(db, order.id, ManagerOrderUpdatePayload(status="bad_status"), tenant_scope=TEST_TENANT_SCOPE)
 
     with pytest.raises(ValueError, match="Invalid negotiation_status"):
         await OrderService.update_order_for_manager(
             db,
             order.id,
             ManagerOrderUpdatePayload(negotiation_status="waiting_for_magic"),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     with pytest.raises(ValueError):
@@ -727,6 +745,7 @@ async def test_service_update_order_for_manager_validation(db):
             db,
             order.id,
             ManagerOrderUpdatePayload(products=[{"product_id": 1, "quantity": 1, "price": -1}]),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     with pytest.raises(ValueError, match="Product not found"):
@@ -734,6 +753,7 @@ async def test_service_update_order_for_manager_validation(db):
             db,
             order.id,
             ManagerOrderUpdatePayload(products=[{"product_id": 999999, "quantity": 1, "price": 100}]),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     product = Product(title="Validation Product", slug="validation-product", price=100)
@@ -749,6 +769,7 @@ async def test_service_update_order_for_manager_validation(db):
             db,
             order.id,
             ManagerOrderUpdatePayload(products=[{"product_id": product.id, "quantity": 1, "price": 100, "cost": -1}]),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     with pytest.raises(ValueError, match="Service not found"):
@@ -756,6 +777,7 @@ async def test_service_update_order_for_manager_validation(db):
             db,
             order.id,
             ManagerOrderUpdatePayload(services=[{"service_id": 999999, "title": "Bad", "quantity": 1, "price": 100}]),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     with pytest.raises(ValueError, match="Service cost cannot be negative"):
@@ -765,6 +787,7 @@ async def test_service_update_order_for_manager_validation(db):
             ManagerOrderUpdatePayload(
                 services=[{"service_id": service.id, "title": service.title, "quantity": 1, "price": 100, "cost": -1}]
             ),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
 
@@ -784,6 +807,7 @@ async def test_service_update_order_lost_archives_customer_in_same_flow(db):
         db,
         order.id,
         ManagerOrderUpdatePayload(status="closed", closing_result="lost"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert updated is not None
@@ -845,7 +869,7 @@ async def test_service_delete_order_cleans_proposals_and_detaches_audit_rows(sql
     db.add(email)
     await db.commit()
 
-    assert await OrderService.delete_order(db, order.id) is True
+    assert await OrderService.delete_order(db, order.id, tenant_scope=TEST_TENANT_SCOPE) is True
 
     assert await db.get(Order, order.id) is None
     assert (await db.execute(select(OrderProposal).where(OrderProposal.id == proposal.id))).scalar_one_or_none() is None

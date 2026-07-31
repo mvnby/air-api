@@ -19,6 +19,7 @@ from models import (
     OrderWorkStage,
     ServiceAttachment,
 )
+from models.tenancy import TenantScope
 from services.service_attachment_presenter import legacy_attachment_source_key
 from services.private_attachment_storage_service import StoredPrivateObject
 from scripts.migrate_service_attachments import (
@@ -34,6 +35,13 @@ from scripts.migrate_service_attachments import (
     migrate_attachments,
     migrate_equipment_links,
     migrate_legacy_coverages,
+)
+
+
+TEST_TENANT_SCOPE = TenantScope(
+    tenant_id=1,
+    storefront_id=1,
+    is_system=True,
 )
 
 
@@ -297,6 +305,7 @@ async def test_private_copy_rejects_corrupt_storage_readback(migration_session, 
         order_id=17,
         stats=stats,
         storage=CorruptReadbackStorage(),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert stats.attachments_verified == 1
@@ -374,9 +383,17 @@ async def test_execute_uses_advisory_lock_and_fails_closed_on_partial_result(mon
     async def no_op_migration(session, **kwargs):
         return None
 
+    async def resolve_tenant_scope(session):
+        return TEST_TENANT_SCOPE
+
     monkeypatch.setattr(orchestrator, "engine", FakeEngine())
     monkeypatch.setattr(orchestrator, "async_session_maker", lambda: SessionContext())
     monkeypatch.setattr(orchestrator, "get_private_attachment_storage", lambda: FakeStorage())
+    monkeypatch.setattr(
+        orchestrator.SystemTenantScopeResolver,
+        "resolve",
+        resolve_tenant_scope,
+    )
     monkeypatch.setattr(orchestrator, "migrate_attachments", partial_attachment_migration)
     monkeypatch.setattr(orchestrator, "migrate_equipment_links", no_op_migration)
     monkeypatch.setattr(orchestrator, "migrate_legacy_coverages", no_op_migration)

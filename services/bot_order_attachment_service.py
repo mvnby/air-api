@@ -6,10 +6,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from models import (
+    Customer,
+    Order,
+    OrderInstaller,
+    OrderStatus,
+    OrderWorkStage,
+    StaffUser,
+    TenantMembership,
+)
+from models.tenancy import TenantScope
 from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
+from services.tenant_entity_access_service import TenantEntityAccessService
+from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
 
 
 class BotOrderAttachmentService:
@@ -161,10 +172,21 @@ class BotOrderAttachmentService:
         }
 
     @classmethod
-    async def list_recent_orders(cls, session: AsyncSession, *, limit: int = 5) -> list[dict[str, Any]]:
+    async def list_recent_orders(
+        cls,
+        session: AsyncSession,
+        *,
+        limit: int = 5,
+        tenant_scope: TenantScope,
+    ) -> list[dict[str, Any]]:
         stmt = (
             select(Order)
-            .where(Order.status.in_(list(cls.ACTIVE_STATUSES)))
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                Order.status.in_(list(cls.ACTIVE_STATUSES)),
+                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
+            )
             .options(selectinload(Order.customer))
             .order_by(Order.updated_at.desc(), Order.created_at.desc(), Order.id.desc())
             .limit(max(1, min(limit, 10)))
@@ -180,7 +202,15 @@ class BotOrderAttachmentService:
         *,
         telegram_user_id: int | str | None,
         can_attach_any: bool = False,
+        tenant_scope: TenantScope,
     ) -> bool:
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
+        if order is None:
+            return False
         if can_attach_any:
             return True
 
@@ -195,6 +225,14 @@ class BotOrderAttachmentService:
             select(StaffUser)
             .where(StaffUser.telegram_id == normalized_telegram_id)
             .where(StaffUser.status == StaffUserService.STATUS_ACTIVE)
+            .join(
+                TenantMembership,
+                TenantMembership.staff_user_id == StaffUser.id,
+            )
+            .where(
+                TenantMembership.tenant_id == tenant_scope.tenant_id,
+                TenantMembership.status == "active",
+            )
             .order_by(StaffUser.id.asc())
         )
         staff = staff_result.scalars().first()
@@ -232,10 +270,15 @@ class BotOrderAttachmentService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
         content: bytes | None = None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
-        stmt = select(Order).where(Order.id == order_id).options(selectinload(Order.customer))
-        result = await session.execute(stmt)
-        order = result.scalars().first()
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(selectinload(Order.customer),),
+            for_update=True,
+        )
         if not order:
             return None
 
@@ -270,6 +313,7 @@ class BotOrderAttachmentService:
                     "chat_id": telegram_chat_id,
                     "message_id": telegram_message_id,
                 },
+                tenant_scope=tenant_scope,
             )
             storage_meta = {
                 "storage_provider": "private_service_attachment",

@@ -958,7 +958,11 @@ const createEquipmentHistory = async () => {
 
 const loadContractTemplates = async () => {
   try {
-    const res = await ManagerDocsService.getDocTemplates('contract');
+    const res = await ManagerDocsService.getDocTemplates(
+      'contract',
+      undefined,
+      customerId.value,
+    );
     contractTemplates.value = res.items;
   } catch (e) {
     console.warn('Failed to load contract templates', e);

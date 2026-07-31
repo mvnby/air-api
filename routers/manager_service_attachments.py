@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     DELETE_MANAGER_SERVICE_ATTACHMENT,
     GET_MANAGER_SERVICE_ATTACHMENT_ACCESS,
@@ -50,8 +51,13 @@ async def list_manager_order_attachments(
     order_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    data = await ServiceAttachmentService.list_order_attachments(session, order_id=order_id)
+    data = await ServiceAttachmentService.list_order_attachments(
+        session,
+        order_id=order_id,
+        tenant_scope=tenant_scope,
+    )
     if data is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return data
@@ -66,8 +72,13 @@ async def list_manager_equipment_attachments(
     equipment_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    data = await ServiceAttachmentService.list_equipment_attachments(session, equipment_id=equipment_id)
+    data = await ServiceAttachmentService.list_equipment_attachments(
+        session,
+        equipment_id=equipment_id,
+        tenant_scope=tenant_scope,
+    )
     if data is None:
         raise HTTPException(status_code=404, detail="Equipment not found")
     return data
@@ -90,6 +101,7 @@ async def upload_manager_order_attachment(
     service_history_id: int | None = Form(None),
     username: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         content = await _read_upload_limited(file)
@@ -106,6 +118,7 @@ async def upload_manager_order_attachment(
             component_id=component_id,
             service_history_id=service_history_id,
             created_by=username,
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -121,6 +134,7 @@ async def patch_manager_service_attachment(
     payload: ManagerServiceAttachmentUpdatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await ServiceAttachmentService.update_attachment(
@@ -128,6 +142,7 @@ async def patch_manager_service_attachment(
             attachment_id=attachment_id,
             order_id=payload.order_id,
             payload=payload.model_dump(exclude_unset=True, exclude={"order_id"}),
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -146,11 +161,13 @@ async def delete_manager_service_attachment(
     order_id: int | None = Query(None),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     if not await ServiceAttachmentService.archive_attachment(
         session,
         attachment_id=attachment_id,
         order_id=order_id,
+        tenant_scope=tenant_scope,
     ):
         raise HTTPException(status_code=404, detail="Attachment not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -167,6 +184,7 @@ async def get_manager_service_attachment_access(
     download: bool = Query(False),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         data = await ServiceAttachmentService.get_access(
@@ -174,6 +192,7 @@ async def get_manager_service_attachment_access(
             attachment_id=attachment_id,
             variant=variant,
             download=download,
+            tenant_scope=tenant_scope,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import LeadSource, Order, OrderStatus
+from models import Customer, LeadSource, Order, OrderStatus
 from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
     InstallationEstimateLeadResponse,
@@ -33,11 +33,9 @@ from services.communications.installation_activation_fence import (
 from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
 )
+from services.tenant_entity_access_service import TenantEntityAccessService
 from services.order_service import OrderService
-from services.tenant_scope_service import (
-    TenantScope,
-    tenant_or_fully_legacy_scope_clause,
-)
+from services.tenant_scope_service import TenantScope
 from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
     get_private_attachment_storage,
@@ -264,6 +262,7 @@ class InstallationEstimateLeadService:
                     storage=selected_storage,
                     created_storage_keys=created_storage_keys,
                     commit=False,
+                    tenant_scope=tenant_scope,
                 )
 
             await IntegrationOutboxService.enqueue(
@@ -336,9 +335,11 @@ class InstallationEstimateLeadService:
     ) -> Order | None:
         return await session.scalar(
             select(Order)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(
                 Order.source_fingerprint == fingerprint,
-                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
             )
             .limit(1)
         )

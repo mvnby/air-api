@@ -8,6 +8,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
 from models import (
+    Customer,
     CustomerEquipment,
     EquipmentComponent,
     Order,
@@ -17,7 +18,9 @@ from models import (
     OrderWorkStage,
     Product,
     StaffUser,
+    TenantMembership,
 )
+from models.tenancy import TenantScope
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.equipment_service import EquipmentService
@@ -25,6 +28,8 @@ from services.order_service import OrderService
 from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
+from services.tenant_entity_access_service import TenantEntityAccessService
+from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
 
 
 class BotWarrantyNameplateService:
@@ -79,7 +84,13 @@ class BotWarrantyNameplateService:
         }
 
     @classmethod
-    async def _legacy_installer_id(cls, session: AsyncSession, telegram_user_id: int | str | None) -> Optional[int]:
+    async def _legacy_installer_id(
+        cls,
+        session: AsyncSession,
+        telegram_user_id: int | str | None,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[int]:
         try:
             normalized_telegram_id = int(telegram_user_id) if telegram_user_id is not None else 0
         except (TypeError, ValueError):
@@ -91,6 +102,14 @@ class BotWarrantyNameplateService:
             select(StaffUser)
             .where(StaffUser.telegram_id == normalized_telegram_id)
             .where(StaffUser.status == StaffUserService.STATUS_ACTIVE)
+            .join(
+                TenantMembership,
+                TenantMembership.staff_user_id == StaffUser.id,
+            )
+            .where(
+                TenantMembership.tenant_id == tenant_scope.tenant_id,
+                TenantMembership.status == "active",
+            )
             .order_by(StaffUser.id.asc())
             .limit(1)
         )
@@ -123,13 +142,20 @@ class BotWarrantyNameplateService:
         can_attach_any: bool = False,
         limit: int = 5,
         now: Optional[datetime] = None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any]:
         base_filters = [
             Order.status == OrderStatus.EXECUTION,
             Order.workflow_type.in_(sorted(cls.ORDER_WORKFLOWS)),
+            tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            TenantEntityAccessService.order_customer_clause(tenant_scope),
         ]
         if not can_attach_any:
-            installer_id = await cls._legacy_installer_id(session, telegram_user_id)
+            installer_id = await cls._legacy_installer_id(
+                session,
+                telegram_user_id,
+                tenant_scope=tenant_scope,
+            )
             if not installer_id:
                 return {"items": [], "scope": "today"}
             base_filters.append(cls._permission_filters(installer_id))
@@ -138,6 +164,7 @@ class BotWarrantyNameplateService:
         start, end = cls._today_bounds(now)
         today_stmt = (
             select(Order)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(*base_filters)
             .where(Order.installation_date >= start)
             .where(Order.installation_date <= end)
@@ -152,6 +179,7 @@ class BotWarrantyNameplateService:
 
         fallback_stmt = (
             select(Order)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(*base_filters)
             .options(selectinload(Order.customer))
             .order_by(Order.installation_date.desc().nullslast(), Order.updated_at.desc(), Order.id.desc())
@@ -168,9 +196,13 @@ class BotWarrantyNameplateService:
         *,
         telegram_user_id: int | str | None,
         can_attach_any: bool = False,
+        tenant_scope: TenantScope,
     ) -> bool:
-        result = await session.execute(select(Order).where(Order.id == order_id).limit(1))
-        order = result.scalars().first()
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not cls._is_installation_order(order):
             return False
         if can_attach_any:
@@ -179,6 +211,7 @@ class BotWarrantyNameplateService:
             session,
             order_id,
             telegram_user_id=telegram_user_id,
+            tenant_scope=tenant_scope,
         )
 
     @classmethod
@@ -227,19 +260,24 @@ class BotWarrantyNameplateService:
         return {"applied": applied, "conflicts": conflicts, "skipped": skipped}
 
     @classmethod
-    async def _load_order(cls, session: AsyncSession, order_id: int) -> Optional[Order]:
-        result = await session.execute(
-            select(Order)
-            .where(Order.id == order_id)
-            .options(
+    async def _load_order(
+        cls,
+        session: AsyncSession,
+        order_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Order]:
+        return await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(
                 selectinload(Order.customer),
                 selectinload(Order.customer_branch),
                 selectinload(Order.proposals),
                 selectinload(Order.product_links).selectinload(OrderProductLink.product).selectinload(Product.brand),
-            )
-            .limit(1)
+            ),
         )
-        return result.scalars().first()
 
     @classmethod
     async def _existing_equipment_for_order(cls, session: AsyncSession, order_id: int) -> list[CustomerEquipment]:
@@ -264,7 +302,13 @@ class BotWarrantyNameplateService:
         return list(result.scalars().all())
 
     @classmethod
-    async def _ensure_equipment_for_order(cls, session: AsyncSession, order: Order) -> list[CustomerEquipment]:
+    async def _ensure_equipment_for_order(
+        cls,
+        session: AsyncSession,
+        order: Order,
+        *,
+        tenant_scope: TenantScope,
+    ) -> list[CustomerEquipment]:
         order_id = int(order.id or 0)
         equipment = await cls._existing_equipment_for_order(session, order_id)
         if equipment:
@@ -279,6 +323,7 @@ class BotWarrantyNameplateService:
                     "warranty_start_date": order.installation_date,
                     "include_component_placeholders": True,
                 },
+                tenant_scope=tenant_scope,
             )
         except ValueError:
             if order.customer_id is None:
@@ -342,10 +387,15 @@ class BotWarrantyNameplateService:
         order_id: int,
         unit_type: str,
         extracted: dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
         if unit_type not in cls.UNIT_TYPES:
             raise ValueError("Неизвестный тип блока")
-        order = await cls._load_order(session, order_id)
+        order = await cls._load_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not cls._is_installation_order(order):
             return None
         equipment = await cls._existing_equipment_for_order(session, order_id)
@@ -386,6 +436,7 @@ class BotWarrantyNameplateService:
         telegram_message_id: int | None,
         can_attach_any: bool = False,
         file_content: bytes | None = None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
         if unit_type not in cls.UNIT_TYPES:
             raise ValueError("Неизвестный тип блока")
@@ -394,14 +445,23 @@ class BotWarrantyNameplateService:
             order_id,
             telegram_user_id=telegram_user_id,
             can_attach_any=can_attach_any,
+            tenant_scope=tenant_scope,
         )
         if not allowed:
             return None
-        order = await cls._load_order(session, order_id)
+        order = await cls._load_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not order:
             return None
 
-        equipment = await cls._ensure_equipment_for_order(session, order)
+        equipment = await cls._ensure_equipment_for_order(
+            session,
+            order,
+            tenant_scope=tenant_scope,
+        )
         if not equipment:
             raise ValueError("Не удалось создать карточку оборудования для заказа")
         components = await cls._components_for_equipment(session, [int(item.id or 0) for item in equipment])
@@ -477,6 +537,7 @@ class BotWarrantyNameplateService:
                     "message_id": telegram_message_id,
                     "source_meta": {"purpose": "warranty_nameplate", "unit_type": unit_type},
                 },
+                tenant_scope=tenant_scope,
             )
             storage_meta = {
                 "storage_provider": "private_service_attachment",

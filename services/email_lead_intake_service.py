@@ -11,13 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
-from models import LeadSource, Order, OrderStatus
+from models import Customer, LeadSource, Order, OrderStatus
 from services.bank_email_parser_service import BankEmailParserService
 from services.order_service import OrderService
-from services.tenant_scope_service import (
-    TenantScope,
-    tenant_or_fully_legacy_scope_clause,
-)
+from services.tenant_entity_access_service import TenantEntityAccessService
+from services.tenant_scope_service import TenantScope
 
 
 @dataclass
@@ -204,9 +202,11 @@ class EmailLeadIntakeService:
             predicates.append(cast(Order.technical_meta, String).ilike(f"%{message_id}%"))
         result = await session.execute(
             select(Order)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(
                 Order.lead_source == LeadSource.EMAIL,
-                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
                 or_(*predicates),
             )
             .order_by(Order.created_at.desc())

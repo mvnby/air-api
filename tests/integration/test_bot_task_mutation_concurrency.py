@@ -90,6 +90,7 @@ async def test_postgres_duplicate_bot_task_mutations_change_each_value_once(
                 telegram_id=987654321,
                 stage_id=status_stage.id,
                 status=OrderStageStatus.IN_PROGRESS,
+                tenant_scope=tenant_scope,
             )
             return result.changed
 
@@ -105,6 +106,7 @@ async def test_postgres_duplicate_bot_task_mutations_change_each_value_once(
                 telegram_id=987654321,
                 stage_id=report_stage.id,
                 report="Один и тот же отчет",
+                tenant_scope=tenant_scope,
             )
             return result.changed
 

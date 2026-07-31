@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import GET_MANAGER_LEADS
 from schemas import LeadListResponse
 from services.lead_service import LeadService
@@ -25,12 +26,14 @@ async def get_manager_leads(
     sort: str = Query("created_at_desc"),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await LeadService.list_leads(
             session=session,
             page=page,
             limit=limit,
+            tenant_scope=tenant_scope,
             status=status,
             source=source,
             search=search,

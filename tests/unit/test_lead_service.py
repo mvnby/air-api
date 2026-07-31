@@ -8,6 +8,10 @@ from schemas import LeadCreatePayload, LeadLossPayload, LeadQualifyPayload, Lead
 from services.lead_service import LeadService
 from services.tenant_scope_service import TenantScope
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 
 @pytest.mark.asyncio
 async def test_create_lead_with_inn_sets_b2b(db, tenant_scope):
@@ -198,6 +202,7 @@ async def test_update_lead_rejects_terminal_status_shortcut(db, tenant_scope):
             db,
             lead_id=lead_data["id"],
             payload=LeadUpdatePayload(status="qualified"),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     lead = await db.get(Lead, lead_data["id"])
@@ -223,6 +228,7 @@ async def test_mark_lost_rejects_non_loss_status(db, tenant_scope):
             db,
             lead_id=lead_data["id"],
             payload=LeadLossPayload(status="qualified"),
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
     lead = await db.get(Lead, lead_data["id"])
@@ -335,6 +341,7 @@ async def test_mark_lost_and_archive_old_leads(db, tenant_scope):
         db,
         lead_id=created["id"],
         payload=LeadLossPayload(status="lost", loss_reason="no_product"),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert updated is not None
     assert updated["status"] == "lost"
@@ -353,6 +360,6 @@ async def test_mark_lost_and_archive_old_leads(db, tenant_scope):
     assert refreshed is not None
     assert refreshed.archived_at is not None
 
-    listed = await LeadService.list_leads(db, page=1, limit=20)
+    listed = await LeadService.list_leads(db, page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
     ids = [item["id"] for item in listed["items"]]
     assert created["id"] not in ids

@@ -1,13 +1,15 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import EquipmentServiceEventType, EquipmentServiceHistory, Order
+from models import Customer, EquipmentServiceEventType, EquipmentServiceHistory, Order
+from models.tenancy import TenantScope
 from services.equipment_service import EquipmentService
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 class EquipmentHistoryService:
@@ -18,17 +20,40 @@ class EquipmentHistoryService:
         equipment_id: int,
         page: int,
         limit: int,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        if not await EquipmentService._get_equipment(session, equipment_id):
+        if not await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        ):
             return None
 
+        history_scope = or_(
+            EquipmentServiceHistory.order_id.is_(None),
+            and_(
+                TenantEntityAccessService.order_clause(tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
+            ),
+        )
         count_result = await session.execute(
-            select(func.count(EquipmentServiceHistory.id)).where(EquipmentServiceHistory.equipment_id == equipment_id)
+            select(func.count(EquipmentServiceHistory.id))
+            .outerjoin(Order, Order.id == EquipmentServiceHistory.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                EquipmentServiceHistory.equipment_id == equipment_id,
+                history_scope,
+            )
         )
         total = int(count_result.scalar() or 0)
         result = await session.execute(
             select(EquipmentServiceHistory)
-            .where(EquipmentServiceHistory.equipment_id == equipment_id)
+            .outerjoin(Order, Order.id == EquipmentServiceHistory.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                EquipmentServiceHistory.equipment_id == equipment_id,
+                history_scope,
+            )
             .options(selectinload(EquipmentServiceHistory.order))
             .order_by(EquipmentServiceHistory.event_date.desc(), EquipmentServiceHistory.id.desc())
             .offset((page - 1) * limit)
@@ -65,8 +90,13 @@ class EquipmentHistoryService:
         *,
         equipment_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
+        equipment = await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
         if not equipment:
             return None
 
@@ -76,6 +106,7 @@ class EquipmentHistoryService:
                 session,
                 equipment=equipment,
                 order_id=int(order_id),
+                tenant_scope=tenant_scope,
             )
 
         event_type = EquipmentService._normalize_event_type(payload.get("event_type"))
@@ -186,14 +217,20 @@ class EquipmentHistoryService:
         *,
         equipment_id: int,
         payload: Dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        equipment = await EquipmentService._get_equipment(session, equipment_id)
+        equipment = await EquipmentService._get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
         if not equipment:
             return None
         order = await EquipmentService._validate_order_link(
             session,
             equipment=equipment,
             order_id=int(payload["order_id"]),
+            tenant_scope=tenant_scope,
         )
         order_id = int(order.id)
         await EquipmentService._lock_order_for_history_sync(session, order_id=order_id)

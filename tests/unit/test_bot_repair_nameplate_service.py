@@ -20,6 +20,7 @@ from models import (
     Product,
     ServiceAttachment,
     StaffUser,
+    TenantMembership,
 )
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_defect_act_service import BotDefectActService
@@ -28,6 +29,10 @@ from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.defect_act_ai_service import DefectActAIService
 from services.private_attachment_storage_service import StoredPrivateObject
+
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
 
 class FakePrivateAttachmentStorage:
@@ -185,6 +190,7 @@ async def test_lists_active_repair_orders_for_manager(sqlite_repair_nameplate_se
         sqlite_repair_nameplate_session,
         telegram_user_id=777,
         can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert {item["id"] for item in orders} == {
@@ -212,14 +218,29 @@ async def test_executor_sees_only_assigned_repair_orders(sqlite_repair_nameplate
     sqlite_repair_nameplate_session.add(legacy_assigned)
     sqlite_repair_nameplate_session.add(other)
     await sqlite_repair_nameplate_session.flush()
-    sqlite_repair_nameplate_session.add(OrderWorkStage(order_id=assigned.id, installer_id=10, name="Диагностика"))
-    sqlite_repair_nameplate_session.add(OrderInstaller(order_id=legacy_assigned.id, installer_id=10))
+    sqlite_repair_nameplate_session.add_all(
+        [
+            TenantMembership(
+                tenant_id=TEST_TENANT_SCOPE.tenant_id,
+                staff_user_id=int(staff.id or 0),
+                role="installer",
+                status="active",
+            ),
+            OrderWorkStage(
+                order_id=assigned.id,
+                installer_id=10,
+                name="Диагностика",
+            ),
+            OrderInstaller(order_id=legacy_assigned.id, installer_id=10),
+        ]
+    )
     await sqlite_repair_nameplate_session.commit()
 
     orders = await BotRepairNameplateService.list_repair_orders(
         sqlite_repair_nameplate_session,
         telegram_user_id=777,
         can_attach_any=False,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert {item["id"] for item in orders} == {assigned.id, legacy_assigned.id}
@@ -262,6 +283,7 @@ async def test_apply_to_order_merges_without_overwriting_existing_repair_meta(sq
         telegram_chat_id=100,
         telegram_message_id=55,
         can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -313,6 +335,7 @@ async def test_apply_to_order_stores_repair_nameplate_content(
         telegram_message_id=55,
         can_attach_any=True,
         file_content=b"nameplate-content",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -376,6 +399,7 @@ async def test_apply_to_order_preserves_new_attachment_when_order_already_has_te
         telegram_message_id=56,
         can_attach_any=True,
         file_content=b"second-nameplate-content",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -436,6 +460,7 @@ async def test_apply_to_order_updates_existing_repair_nameplate_attachment_url(
         telegram_message_id=56,
         can_attach_any=True,
         file_content=b"updated-nameplate-content",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -469,6 +494,7 @@ async def test_apply_to_order_accepts_negotiation_repair_order(sqlite_repair_nam
         telegram_chat_id=100,
         telegram_message_id=55,
         can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -495,6 +521,7 @@ async def test_apply_to_order_rejects_non_repair_order(sqlite_repair_nameplate_s
         telegram_chat_id=100,
         telegram_message_id=55,
         can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is None
@@ -531,6 +558,7 @@ async def test_build_diagnostic_comment_draft_uses_ai_and_previews_changes(sqlit
         sqlite_repair_nameplate_session,
         order_id=int(order.id),
         comment="подключили шланги, утечку устранили, компрессор не качает",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert draft is not None
@@ -555,6 +583,7 @@ async def test_build_diagnostic_preset_draft_is_deterministic_and_compact(sqlite
         sqlite_repair_nameplate_session,
         order_id=int(order.id),
         fault_type="compressor_short_circuit",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert draft is not None
@@ -604,6 +633,7 @@ async def test_apply_diagnostic_comment_updates_repair_meta_and_keeps_history(sq
         telegram_chat_id=100,
         telegram_message_id=55,
         can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -644,6 +674,7 @@ async def test_warranty_nameplate_lists_today_installations_first(sqlite_repair_
         telegram_user_id=777,
         can_attach_any=True,
         now=datetime(2026, 6, 18, 10, 0, 0),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result["scope"] == "today"
@@ -666,6 +697,7 @@ async def test_warranty_nameplate_falls_back_to_execution_installations(sqlite_r
         telegram_user_id=777,
         can_attach_any=True,
         now=datetime(2026, 6, 18, 10, 0, 0),
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result["scope"] == "execution"
@@ -719,6 +751,7 @@ async def test_warranty_nameplate_creates_order_equipment_and_updates_selected_c
         telegram_chat_id=100,
         telegram_message_id=55,
         can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None

@@ -4,11 +4,11 @@ import logging
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
-
 from models import OrderStageStatus, OrderWorkStage
+from models.tenancy import TenantScope
 from services.bot_access_service import BotAccessService
 from services.notification_service import NotificationService
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +41,18 @@ class BotTaskMutationService:
         *,
         telegram_id: int,
         stage_id: int,
+        tenant_scope: TenantScope,
     ) -> OrderWorkStage:
         context = await BotAccessService.get_context(session, telegram_id)
         if not context.is_staff or not context.legacy_installer_id:
             raise BotTaskMutationAccessDeniedError("Staff task access is required")
 
-        result = await session.execute(
-            select(OrderWorkStage)
-            .where(OrderWorkStage.id == stage_id)
-            .with_for_update()
+        stage = await TenantEntityAccessService.get_order_stage(
+            session,
+            stage_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
         )
-        stage = result.scalars().first()
         if not stage or stage.installer_id != context.legacy_installer_id:
             raise BotTaskMutationAccessDeniedError(
                 "Task was not found or is assigned to another executor"
@@ -66,6 +67,7 @@ class BotTaskMutationService:
         telegram_id: int,
         stage_id: int,
         status: OrderStageStatus,
+        tenant_scope: TenantScope,
     ) -> BotTaskStatusMutationResult:
         if status not in {OrderStageStatus.IN_PROGRESS, OrderStageStatus.COMPLETED}:
             raise ValueError("Bot may only accept or complete a task")
@@ -74,6 +76,7 @@ class BotTaskMutationService:
             session,
             telegram_id=telegram_id,
             stage_id=stage_id,
+            tenant_scope=tenant_scope,
         )
         current_status = OrderStageStatus(stage.status)
         if current_status == status:
@@ -96,6 +99,7 @@ class BotTaskMutationService:
             await NotificationService.notify_admins_work_stage_status_changed(
                 session,
                 stage_id,
+                tenant_scope=tenant_scope,
             )
         except Exception:
             logger.exception("BOT_TASK_STATUS_NOTIFY_FAILED stage_id=%s", stage_id)
@@ -113,6 +117,7 @@ class BotTaskMutationService:
         telegram_id: int,
         stage_id: int,
         report: str,
+        tenant_scope: TenantScope,
     ) -> BotTaskReportMutationResult:
         normalized_report = report.strip()
         if not normalized_report:
@@ -122,6 +127,7 @@ class BotTaskMutationService:
             session,
             telegram_id=telegram_id,
             stage_id=stage_id,
+            tenant_scope=tenant_scope,
         )
         if (stage.installer_report or "").strip() == normalized_report:
             return BotTaskReportMutationResult(stage_id=stage_id, changed=False)

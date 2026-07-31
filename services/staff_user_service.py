@@ -514,8 +514,21 @@ class StaffUserService:
         *,
         search: Optional[str] = None,
         limit: int = 100,
+        tenant_scope: TenantScope,
     ) -> list[StaffUser]:
-        stmt = select(StaffUser).where(StaffUser.status == cls.STATUS_ACTIVE).order_by(StaffUser.display_name.asc())
+        stmt = (
+            select(StaffUser)
+            .join(
+                TenantMembership,
+                TenantMembership.staff_user_id == StaffUser.id,
+            )
+            .where(
+                StaffUser.status == cls.STATUS_ACTIVE,
+                TenantMembership.tenant_id == tenant_scope.tenant_id,
+                TenantMembership.status == "active",
+            )
+            .order_by(StaffUser.display_name.asc())
+        )
         result = await session.execute(stmt)
         users = list(result.scalars().all())
 
@@ -532,24 +545,42 @@ class StaffUserService:
         return filtered
 
     @classmethod
-    async def get_active_owner_admin_telegram_recipient_ids(cls, session: AsyncSession) -> list[int]:
+    async def get_active_owner_admin_telegram_recipient_ids(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> list[int]:
         try:
             stmt = (
-                select(StaffUser)
-                .where(StaffUser.status == cls.STATUS_ACTIVE)
-                .where(StaffUser.telegram_id.is_not(None))
+                select(StaffUser, TenantMembership)
+                .join(
+                    TenantMembership,
+                    TenantMembership.staff_user_id == StaffUser.id,
+                )
+                .where(
+                    StaffUser.status == cls.STATUS_ACTIVE,
+                    StaffUser.telegram_id.is_not(None),
+                    TenantMembership.tenant_id == tenant_scope.tenant_id,
+                    TenantMembership.status == "active",
+                )
                 .order_by(StaffUser.id.asc())
             )
             result = await session.execute(stmt)
-            users = list(result.scalars().all())
+            rows = list(result.all())
         except Exception:
-            logger.debug("STAFF_RECIPIENTS_DB_LOOKUP_FAILED using legacy ADMIN_IDS fallback", exc_info=True)
-            return settings.admin_list
+            logger.debug(
+                "STAFF_RECIPIENTS_DB_LOOKUP_FAILED tenant_id=%s",
+                tenant_scope.tenant_id,
+                exc_info=True,
+            )
+            return settings.admin_list if tenant_scope.is_system else []
 
         recipient_ids: list[int] = []
         seen: set[int] = set()
-        for user in users:
-            if not cls.can_receive_admin_notifications(user):
+        for user, membership in rows:
+            membership_role = cls.normalize_primary_role(membership.role)
+            if membership_role not in cls.OWNER_ADMIN_ROLES:
                 continue
             telegram_id = int(user.telegram_id)
             if telegram_id in seen:
@@ -557,7 +588,9 @@ class StaffUserService:
             seen.add(telegram_id)
             recipient_ids.append(telegram_id)
 
-        return recipient_ids or settings.admin_list
+        if recipient_ids:
+            return recipient_ids
+        return settings.admin_list if tenant_scope.is_system else []
 
     @classmethod
     async def is_active_owner_admin_telegram_user(

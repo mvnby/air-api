@@ -24,6 +24,10 @@ from services.private_attachment_storage_service import StoredPrivateObject
 from services.order_service import OrderService
 from services.service_attachment_service import ServiceAttachmentService
 
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
 
 def _png_bytes() -> bytes:
     output = io.BytesIO()
@@ -171,10 +175,11 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     manager_attachments = await ServiceAttachmentService.list_order_attachments(
         installation_estimate_session,
         order_id=created.order_id,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert manager_attachments is not None
     assert manager_attachments["total"] == 1
-    inbox = await OrderService.get_leads_inbox(installation_estimate_session)
+    inbox = await OrderService.get_leads_inbox(installation_estimate_session, tenant_scope=TEST_TENANT_SCOPE)
     assert inbox.items[0].attachment_count == 1
     assert (
         await installation_estimate_session.scalar(

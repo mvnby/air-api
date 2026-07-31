@@ -10,7 +10,14 @@ from typing import Iterable
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, Order, OrderStageStatus, OrderWorkStage
+from models import (
+    Customer,
+    Order,
+    OrderStageStatus,
+    OrderWorkStage,
+    TenantMembership,
+)
+from models.tenancy import TenantScope
 from services.bot_task_service import BotTaskService
 from services.communications.outbox_service import IntegrationOutboxService
 from services.communications.staff_task_contracts import (
@@ -20,6 +27,10 @@ from services.communications.staff_task_contracts import (
     StaffTaskNotificationPayloadV1,
 )
 from services.staff_user_service import StaffUserService
+from services.tenant_scope_service import (
+    tenant_or_fully_legacy_scope_clause,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 
 class StaffTaskNotificationEventService:
@@ -55,6 +66,7 @@ class StaffTaskNotificationEventService:
         installer_id: int | None,
         event_kind: StaffTaskEventKind,
         identity: list[object],
+        tenant_scope: TenantScope,
         change_fields: Iterable[StaffTaskChangeField] = (),
         reminder_offset_minutes: int | None = None,
     ) -> bool:
@@ -71,10 +83,22 @@ class StaffTaskNotificationEventService:
             or staff_user.telegram_id is None
         ):
             return False
+        membership = (
+            await session.execute(
+                select(TenantMembership).where(
+                    TenantMembership.tenant_id == tenant_scope.tenant_id,
+                    TenantMembership.staff_user_id == int(staff_user.id),
+                    TenantMembership.status == "active",
+                )
+            )
+        ).scalars().first()
+        if membership is None:
+            return False
         order_row = (
             await session.execute(
                 select(Order.customer_id, Order.delivery_address).where(
-                    Order.id == int(stage.order_id)
+                    Order.id == int(stage.order_id),
+                    tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
                 )
             )
         ).one_or_none()
@@ -85,10 +109,16 @@ class StaffTaskNotificationEventService:
             customer_row = (
                 await session.execute(
                     select(Customer.name, Customer.phone).where(
-                        Customer.id == int(order_row.customer_id)
+                        Customer.id == int(order_row.customer_id),
+                        tenant_or_legacy_owner_scope_clause(
+                            Customer,
+                            tenant_scope,
+                        ),
                     )
                 )
             ).one_or_none()
+            if customer_row is None:
+                return False
         payload = StaffTaskNotificationPayloadV1(
             event_kind=event_kind,
             staff_user_id=int(staff_user.id),
@@ -113,7 +143,12 @@ class StaffTaskNotificationEventService:
             payload=payload,
             idempotency_key=cls._idempotency_key(
                 event_kind,
-                [int(stage.id), int(staff_user.id), *identity],
+                [
+                    tenant_scope.tenant_id,
+                    int(stage.id),
+                    int(staff_user.id),
+                    *identity,
+                ],
             ),
             priority=cls.PRIORITY,
             max_attempts=cls.MAX_ATTEMPTS,
@@ -127,6 +162,7 @@ class StaffTaskNotificationEventService:
         *,
         stage: OrderWorkStage,
         previous_installer_id: int | None,
+        tenant_scope: TenantScope,
     ) -> bool:
         return await cls._enqueue(
             session,
@@ -134,6 +170,7 @@ class StaffTaskNotificationEventService:
             installer_id=stage.installer_id,
             event_kind="assigned",
             identity=[previous_installer_id, stage.installer_id],
+            tenant_scope=tenant_scope,
             change_fields=("assignee",),
         )
 
@@ -145,6 +182,7 @@ class StaffTaskNotificationEventService:
         stage: OrderWorkStage,
         change_fields: Iterable[StaffTaskChangeField],
         previous_values: list[object],
+        tenant_scope: TenantScope,
     ) -> bool:
         normalized_fields = tuple(dict.fromkeys(change_fields))
         if not normalized_fields:
@@ -155,6 +193,7 @@ class StaffTaskNotificationEventService:
             installer_id=stage.installer_id,
             event_kind="rescheduled",
             identity=[*previous_values, stage.start_time, stage.end_time, normalized_fields],
+            tenant_scope=tenant_scope,
             change_fields=normalized_fields,
         )
 
@@ -165,6 +204,7 @@ class StaffTaskNotificationEventService:
         *,
         stage: OrderWorkStage,
         previous_status: object,
+        tenant_scope: TenantScope,
     ) -> bool:
         return await cls._enqueue(
             session,
@@ -172,6 +212,7 @@ class StaffTaskNotificationEventService:
             installer_id=stage.installer_id,
             event_kind="canceled",
             identity=[str(previous_status), cls._status_text(stage)],
+            tenant_scope=tenant_scope,
         )
 
     @classmethod
@@ -182,17 +223,24 @@ class StaffTaskNotificationEventService:
         order_id: int,
         previous_address: str | None,
         current_address: str | None,
+        tenant_scope: TenantScope,
     ) -> int:
         if (previous_address or "").strip() == (current_address or "").strip():
             return 0
         stages = list(
             (
                 await session.execute(
-                    select(OrderWorkStage).where(
+                    select(OrderWorkStage)
+                    .join(Order, Order.id == OrderWorkStage.order_id)
+                    .where(
                         OrderWorkStage.order_id == order_id,
                         OrderWorkStage.installer_id.is_not(None),
                         OrderWorkStage.status.notin_(
                             [OrderStageStatus.CANCELED, OrderStageStatus.COMPLETED]
+                        ),
+                        tenant_or_fully_legacy_scope_clause(
+                            Order,
+                            tenant_scope,
                         ),
                     )
                 )
@@ -206,6 +254,7 @@ class StaffTaskNotificationEventService:
                     stage=stage,
                     change_fields=("address",),
                     previous_values=[previous_address, current_address],
+                    tenant_scope=tenant_scope,
                 )
             )
         return created
@@ -218,6 +267,7 @@ class StaffTaskNotificationEventService:
         now: datetime | None = None,
         offset_minutes: int = 120,
         scan_window_minutes: int = 10,
+        tenant_scope: TenantScope,
     ) -> int:
         current = now or datetime.now()
         target_from = current + timedelta(minutes=max(1, int(offset_minutes)))
@@ -227,12 +277,18 @@ class StaffTaskNotificationEventService:
         stages = list(
             (
                 await session.execute(
-                    select(OrderWorkStage).where(
+                    select(OrderWorkStage)
+                    .join(Order, Order.id == OrderWorkStage.order_id)
+                    .where(
                         OrderWorkStage.start_time >= target_from,
                         OrderWorkStage.start_time < target_to,
                         OrderWorkStage.installer_id.is_not(None),
                         OrderWorkStage.status.notin_(
                             [OrderStageStatus.CANCELED, OrderStageStatus.COMPLETED]
+                        ),
+                        tenant_or_fully_legacy_scope_clause(
+                            Order,
+                            tenant_scope,
                         ),
                     )
                 )
@@ -247,6 +303,7 @@ class StaffTaskNotificationEventService:
                     installer_id=stage.installer_id,
                     event_kind="departure_reminder",
                     identity=[stage.start_time, int(offset_minutes)],
+                    tenant_scope=tenant_scope,
                     reminder_offset_minutes=int(offset_minutes),
                 )
             )

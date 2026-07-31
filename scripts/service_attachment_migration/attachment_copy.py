@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import Order, OrderAttachmentLink, OrderWorkStage, ServiceAttachment
+from models.tenancy import TenantScope
 from services.private_attachment_storage_service import PrivateAttachmentStorage
 from services.service_attachment_service import ServiceAttachmentService
+from services.tenant_scope_service import tenant_or_fully_legacy_scope_clause
 
 from .legacy_sources import (
     AttachmentDownloadError,
@@ -82,11 +84,18 @@ async def migrate_attachments(
     order_id: int | None,
     stats: MigrationStats,
     storage: PrivateAttachmentStorage | None = None,
+    tenant_scope: TenantScope,
 ) -> None:
-    order_stmt = select(Order).order_by(Order.id.asc())
+    order_stmt = (
+        select(Order)
+        .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
+        .order_by(Order.id.asc())
+    )
     stage_stmt = (
         select(OrderWorkStage)
+        .join(Order, Order.id == OrderWorkStage.order_id)
         .where(OrderWorkStage.installer_report.is_not(None))
+        .where(tenant_or_fully_legacy_scope_clause(Order, tenant_scope))
         .order_by(OrderWorkStage.id.asc())
     )
     if order_id is not None:
@@ -160,6 +169,7 @@ async def migrate_attachments(
                         },
                         storage=storage,
                         commit=False,
+                        tenant_scope=tenant_scope,
                     )
                     attachment = await session.get(ServiceAttachment, int(created["id"]))
                     if not attachment or not attachment.storage_key or storage is None:

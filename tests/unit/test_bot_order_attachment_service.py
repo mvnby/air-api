@@ -6,9 +6,23 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Customer, Order, OrderAttachmentLink, OrderInstaller, OrderStatus, OrderWorkStage, ServiceAttachment, StaffUser
+from models import (
+    Customer,
+    Order,
+    OrderAttachmentLink,
+    OrderInstaller,
+    OrderStatus,
+    OrderWorkStage,
+    ServiceAttachment,
+    StaffUser,
+    TenantMembership,
+)
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.private_attachment_storage_service import StoredPrivateObject
+
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
 
 class FakePrivateAttachmentStorage:
@@ -76,6 +90,7 @@ async def test_stores_file_id_in_order_meta_and_comment(sqlite_order_attachment_
         telegram_user_id=777,
         telegram_chat_id=100,
         telegram_message_id=55,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -124,6 +139,7 @@ async def test_stores_attachment_content_in_private_history(
         telegram_chat_id=100,
         telegram_message_id=55,
         content=b"image-content",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -159,8 +175,8 @@ async def test_does_not_duplicate_same_file(sqlite_order_attachment_session):
         "telegram_chat_id": 100,
         "telegram_message_id": 55,
     }
-    first = await BotOrderAttachmentService.attach_to_order(sqlite_order_attachment_session, int(order.id), **kwargs)
-    second = await BotOrderAttachmentService.attach_to_order(sqlite_order_attachment_session, int(order.id), **kwargs)
+    first = await BotOrderAttachmentService.attach_to_order(sqlite_order_attachment_session, int(order.id), **kwargs, tenant_scope=TEST_TENANT_SCOPE)
+    second = await BotOrderAttachmentService.attach_to_order(sqlite_order_attachment_session, int(order.id), **kwargs, tenant_scope=TEST_TENANT_SCOPE)
 
     assert first["already_attached"] is False
     assert second["already_attached"] is True
@@ -212,6 +228,7 @@ async def test_updates_existing_attachment_with_stored_content(
         telegram_chat_id=100,
         telegram_message_id=55,
         content=b"image-content",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert result is not None
@@ -236,7 +253,7 @@ async def test_lists_recent_active_orders(sqlite_order_attachment_session):
     sqlite_order_attachment_session.add(closed)
     await sqlite_order_attachment_session.commit()
 
-    orders = await BotOrderAttachmentService.list_recent_orders(sqlite_order_attachment_session)
+    orders = await BotOrderAttachmentService.list_recent_orders(sqlite_order_attachment_session, tenant_scope=TEST_TENANT_SCOPE)
 
     assert [item["id"] for item in orders] == [active.id]
 
@@ -257,18 +274,34 @@ async def test_executor_can_attach_only_assigned_order(sqlite_order_attachment_s
     sqlite_order_attachment_session.add(assigned)
     sqlite_order_attachment_session.add(other)
     await sqlite_order_attachment_session.flush()
-    sqlite_order_attachment_session.add(OrderWorkStage(order_id=assigned.id, installer_id=10, name="Монтаж"))
+    sqlite_order_attachment_session.add_all(
+        [
+            TenantMembership(
+                tenant_id=TEST_TENANT_SCOPE.tenant_id,
+                staff_user_id=int(staff.id or 0),
+                role="installer",
+                status="active",
+            ),
+            OrderWorkStage(
+                order_id=assigned.id,
+                installer_id=10,
+                name="Монтаж",
+            ),
+        ]
+    )
     await sqlite_order_attachment_session.commit()
 
     assert await BotOrderAttachmentService.can_attach_to_order(
         sqlite_order_attachment_session,
         int(assigned.id),
         telegram_user_id=777,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     assert not await BotOrderAttachmentService.can_attach_to_order(
         sqlite_order_attachment_session,
         int(other.id),
         telegram_user_id=777,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
 
@@ -286,21 +319,36 @@ async def test_executor_can_attach_legacy_installer_order(sqlite_order_attachmen
     sqlite_order_attachment_session.add(staff)
     sqlite_order_attachment_session.add(order)
     await sqlite_order_attachment_session.flush()
-    sqlite_order_attachment_session.add(OrderInstaller(order_id=order.id, installer_id=10))
+    sqlite_order_attachment_session.add_all(
+        [
+            TenantMembership(
+                tenant_id=TEST_TENANT_SCOPE.tenant_id,
+                staff_user_id=int(staff.id or 0),
+                role="installer",
+                status="active",
+            ),
+            OrderInstaller(order_id=order.id, installer_id=10),
+        ]
+    )
     await sqlite_order_attachment_session.commit()
 
     assert await BotOrderAttachmentService.can_attach_to_order(
         sqlite_order_attachment_session,
         int(order.id),
         telegram_user_id=777,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
 
 @pytest.mark.asyncio
-async def test_manager_can_attach_any_order(sqlite_order_attachment_session):
+async def test_manager_can_attach_any_existing_order(sqlite_order_attachment_session):
+    order = Order(title="Менеджерский заказ")
+    sqlite_order_attachment_session.add(order)
+    await sqlite_order_attachment_session.commit()
     assert await BotOrderAttachmentService.can_attach_to_order(
         sqlite_order_attachment_session,
-        999,
+        int(order.id),
         telegram_user_id=None,
         can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
     )

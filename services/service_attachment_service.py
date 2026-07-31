@@ -16,12 +16,14 @@ from sqlmodel import func, select
 
 from core.config import settings
 from models import (
+    Customer,
     CustomerEquipment,
     EquipmentAttachmentLink,
     Order,
     OrderAttachmentLink,
     ServiceAttachment,
 )
+from models.tenancy import TenantScope
 from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
     extension_for,
@@ -35,6 +37,11 @@ from services.service_attachment_presenter import (
     legacy_attachment_items,
 )
 from services.service_attachment_link_service import ServiceAttachmentLinkService
+from services.tenant_entity_access_service import TenantEntityAccessService
+from services.tenant_scope_service import (
+    tenant_or_fully_legacy_scope_clause,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 class ServiceAttachmentService:
     CATEGORIES = {
@@ -119,12 +126,17 @@ class ServiceAttachmentService:
         storage: PrivateAttachmentStorage | None = None,
         created_storage_keys: set[str] | None = None,
         commit: bool = True,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any]:
         if not content:
             raise ValueError("Attachment is empty")
         if len(content) > int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES):
             raise ValueError("Attachment exceeds the configured size limit")
-        order = await session.get(Order, order_id)
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not order:
             raise ValueError("Order not found")
         context = await ServiceAttachmentLinkService.validate_order_context(
@@ -348,6 +360,7 @@ class ServiceAttachmentService:
         session: AsyncSession,
         *,
         order_ids: list[int],
+        tenant_scope: TenantScope,
     ) -> dict[int, int]:
         normalized_ids = sorted(
             {int(order_id) for order_id in order_ids if int(order_id) > 0}
@@ -357,6 +370,8 @@ class ServiceAttachmentService:
         rows = (
             await session.execute(
                 select(OrderAttachmentLink.order_id, func.count(OrderAttachmentLink.id))
+                .join(Order, Order.id == OrderAttachmentLink.order_id)
+                .outerjoin(Customer, Customer.id == Order.customer_id)
                 .join(
                     ServiceAttachment,
                     ServiceAttachment.id == OrderAttachmentLink.attachment_id,
@@ -365,6 +380,8 @@ class ServiceAttachmentService:
                     OrderAttachmentLink.order_id.in_(normalized_ids),
                     OrderAttachmentLink.archived_at.is_(None),
                     ServiceAttachment.archived_at.is_(None),
+                    tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                    TenantEntityAccessService.order_customer_clause(tenant_scope),
                 )
                 .group_by(OrderAttachmentLink.order_id)
             )
@@ -372,8 +389,18 @@ class ServiceAttachmentService:
         return {int(order_id): int(count) for order_id, count in rows}
 
     @classmethod
-    async def list_order_attachments(cls, session: AsyncSession, *, order_id: int) -> dict[str, Any] | None:
-        order = await session.get(Order, order_id)
+    async def list_order_attachments(
+        cls,
+        session: AsyncSession,
+        *,
+        order_id: int,
+        tenant_scope: TenantScope,
+    ) -> dict[str, Any] | None:
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not order:
             return None
         result = await session.execute(
@@ -434,8 +461,13 @@ class ServiceAttachmentService:
         session: AsyncSession,
         *,
         equipment_id: int,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
-        equipment = await session.get(CustomerEquipment, equipment_id)
+        equipment = await TenantEntityAccessService.get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
         if not equipment:
             return None
         result = await session.execute(
@@ -461,7 +493,20 @@ class ServiceAttachmentService:
         return {"items": items, "total": len(items)}
 
     @classmethod
-    async def order_attachment_count(cls, session: AsyncSession, *, order: Order) -> int:
+    async def order_attachment_count(
+        cls,
+        session: AsyncSession,
+        *,
+        order: Order,
+        tenant_scope: TenantScope,
+    ) -> int:
+        owned_order = await TenantEntityAccessService.get_order(
+            session,
+            int(order.id or 0),
+            tenant_scope=tenant_scope,
+        )
+        if owned_order is None:
+            return 0
         db_count = await session.scalar(
             select(func.count(OrderAttachmentLink.id))
             .join(ServiceAttachment, ServiceAttachment.id == OrderAttachmentLink.attachment_id)
@@ -499,12 +544,26 @@ class ServiceAttachmentService:
         attachment_id: int,
         order_id: int | None,
         payload: dict[str, Any],
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
         attachment = await session.get(ServiceAttachment, attachment_id)
         if not attachment or attachment.archived_at is not None:
             return None
+        if "transcript" in payload and not await cls._all_active_links_belong_to_scope(
+            session,
+            attachment_id=attachment_id,
+            tenant_scope=tenant_scope,
+        ):
+            return None
         link = None
         if order_id is not None:
+            order = await TenantEntityAccessService.get_order(
+                session,
+                order_id,
+                tenant_scope=tenant_scope,
+            )
+            if order is None:
+                return None
             link_result = await session.execute(
                 select(OrderAttachmentLink).where(
                     OrderAttachmentLink.order_id == order_id,
@@ -515,6 +574,12 @@ class ServiceAttachmentService:
             link = link_result.scalars().first()
             if not link:
                 raise ValueError("Attachment does not belong to this order")
+        elif not await cls._all_active_links_belong_to_scope(
+            session,
+            attachment_id=attachment_id,
+            tenant_scope=tenant_scope,
+        ):
+            return None
         if "category" in payload:
             if not link:
                 raise ValueError("order_id is required to change attachment category")
@@ -531,8 +596,7 @@ class ServiceAttachmentService:
         if {"equipment_id", "component_id", "service_history_id"}.intersection(payload):
             if order_id is None:
                 raise ValueError("order_id is required to change equipment link")
-            order = await session.get(Order, order_id)
-            if not order or link is None:
+            if link is None:
                 raise ValueError("Order or attachment link not found")
             await ServiceAttachmentLinkService.replace_equipment_link(
                 session,
@@ -592,16 +656,130 @@ class ServiceAttachmentService:
         return active_equipment_link is not None
 
     @staticmethod
+    async def _has_active_link_for_scope(
+        session: AsyncSession,
+        *,
+        attachment_id: int,
+        tenant_scope: TenantScope,
+    ) -> bool:
+        active_order_link = await session.scalar(
+            select(OrderAttachmentLink.id)
+            .join(Order, Order.id == OrderAttachmentLink.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                OrderAttachmentLink.attachment_id == attachment_id,
+                OrderAttachmentLink.archived_at.is_(None),
+                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                TenantEntityAccessService.order_customer_clause(tenant_scope),
+            )
+            .limit(1)
+        )
+        if active_order_link is not None:
+            return True
+        active_equipment_link = await session.scalar(
+            select(EquipmentAttachmentLink.id)
+            .join(
+                CustomerEquipment,
+                CustomerEquipment.id == EquipmentAttachmentLink.equipment_id,
+            )
+            .join(Customer, Customer.id == CustomerEquipment.customer_id)
+            .where(
+                EquipmentAttachmentLink.attachment_id == attachment_id,
+                EquipmentAttachmentLink.archived_at.is_(None),
+                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            )
+            .limit(1)
+        )
+        return active_equipment_link is not None
+
+    @staticmethod
+    async def _all_active_links_belong_to_scope(
+        session: AsyncSession,
+        *,
+        attachment_id: int,
+        tenant_scope: TenantScope,
+    ) -> bool:
+        all_order_link_ids = set(
+            (
+                await session.execute(
+                    select(OrderAttachmentLink.id).where(
+                        OrderAttachmentLink.attachment_id == attachment_id,
+                        OrderAttachmentLink.archived_at.is_(None),
+                    )
+                )
+            ).scalars().all()
+        )
+        scoped_order_link_ids = set(
+            (
+                await session.execute(
+                    select(OrderAttachmentLink.id)
+                    .join(Order, Order.id == OrderAttachmentLink.order_id)
+                    .outerjoin(Customer, Customer.id == Order.customer_id)
+                    .where(
+                        OrderAttachmentLink.attachment_id == attachment_id,
+                        OrderAttachmentLink.archived_at.is_(None),
+                        tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+                        TenantEntityAccessService.order_customer_clause(
+                            tenant_scope
+                        ),
+                    )
+                )
+            ).scalars().all()
+        )
+        all_equipment_link_ids = set(
+            (
+                await session.execute(
+                    select(EquipmentAttachmentLink.id).where(
+                        EquipmentAttachmentLink.attachment_id == attachment_id,
+                        EquipmentAttachmentLink.archived_at.is_(None),
+                    )
+                )
+            ).scalars().all()
+        )
+        scoped_equipment_link_ids = set(
+            (
+                await session.execute(
+                    select(EquipmentAttachmentLink.id)
+                    .join(
+                        CustomerEquipment,
+                        CustomerEquipment.id == EquipmentAttachmentLink.equipment_id,
+                    )
+                    .join(Customer, Customer.id == CustomerEquipment.customer_id)
+                    .where(
+                        EquipmentAttachmentLink.attachment_id == attachment_id,
+                        EquipmentAttachmentLink.archived_at.is_(None),
+                        tenant_or_legacy_owner_scope_clause(
+                            Customer,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalars().all()
+        )
+        return bool(all_order_link_ids or all_equipment_link_ids) and (
+            all_order_link_ids == scoped_order_link_ids
+            and all_equipment_link_ids == scoped_equipment_link_ids
+        )
+
+    @staticmethod
     async def archive_attachment(
         session: AsyncSession,
         *,
         attachment_id: int,
         order_id: int | None = None,
+        tenant_scope: TenantScope,
     ) -> bool:
         attachment = await session.get(ServiceAttachment, attachment_id)
         if not attachment or attachment.archived_at is not None:
             return False
         if order_id is not None:
+            order = await TenantEntityAccessService.get_order(
+                session,
+                order_id,
+                tenant_scope=tenant_scope,
+            )
+            if order is None:
+                return False
             link_result = await session.execute(
                 select(OrderAttachmentLink).where(
                     OrderAttachmentLink.order_id == order_id,
@@ -624,6 +802,12 @@ class ServiceAttachmentService:
                 equipment_link.archived_at = datetime.now()
                 session.add(equipment_link)
         else:
+            if not await ServiceAttachmentService._all_active_links_belong_to_scope(
+                session,
+                attachment_id=attachment_id,
+                tenant_scope=tenant_scope,
+            ):
+                return False
             order_links_result = await session.execute(
                 select(OrderAttachmentLink).where(
                     OrderAttachmentLink.attachment_id == attachment_id,
@@ -680,11 +864,16 @@ class ServiceAttachmentService:
         variant: str,
         download: bool,
         storage: PrivateAttachmentStorage | None = None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
         attachment = await session.get(ServiceAttachment, attachment_id)
         if not attachment or attachment.archived_at is not None:
             return None
-        if not await cls._has_active_link(session, attachment_id=attachment_id):
+        if not await cls._has_active_link_for_scope(
+            session,
+            attachment_id=attachment_id,
+            tenant_scope=tenant_scope,
+        ):
             return None
         normalized_variant = "preview" if variant == "preview" and attachment.preview_storage_key else "original"
         storage_key = attachment.preview_storage_key if normalized_variant == "preview" else attachment.storage_key

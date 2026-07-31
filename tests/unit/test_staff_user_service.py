@@ -11,8 +11,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from core.config import settings
-from models import Installer, StaffUser
+from models import Installer, StaffUser, TenantMembership
 from services.staff_user_service import StaffUserService
+
+from models.tenancy import TenantScope
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
 
 @pytest.fixture
@@ -109,17 +113,31 @@ async def test_find_active_executors_by_role_excludes_inactive_and_blocked(sqlit
     installer = Installer(name="Active Legacy", is_active=True)
     sqlite_staff_session.add(installer)
     await sqlite_staff_session.flush()
-    sqlite_staff_session.add(
-        StaffUser(display_name="Active Installer", status="active", roles=["installer"], legacy_installer_id=installer.id)
+    active_installer = StaffUser(
+        display_name="Active Installer",
+        status="active",
+        roles=["installer"],
+        legacy_installer_id=installer.id,
     )
+    sqlite_staff_session.add(active_installer)
     sqlite_staff_session.add(StaffUser(display_name="Inactive Installer", status="inactive", roles=["installer"]))
     sqlite_staff_session.add(StaffUser(display_name="Blocked Installer", status="blocked", roles=["installer"]))
     sqlite_staff_session.add(StaffUser(display_name="Active Admin", status="active", roles=["admin"]))
+    await sqlite_staff_session.flush()
+    sqlite_staff_session.add(
+        TenantMembership(
+            tenant_id=TEST_TENANT_SCOPE.tenant_id,
+            staff_user_id=int(active_installer.id or 0),
+            role="installer",
+            status="active",
+        )
+    )
     await sqlite_staff_session.commit()
 
     users = await StaffUserService.find_active_executors_by_role(
         sqlite_staff_session,
         StaffUserService.ROLE_INSTALLER,
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert [user.display_name for user in users] == ["Active Installer"]
@@ -130,16 +148,86 @@ async def test_admin_recipients_use_active_db_owner_admin_before_legacy_fallback
     monkeypatch.setattr(settings, "ADMIN_IDS", "999", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
 
-    sqlite_staff_session.add(StaffUser(display_name="Owner", status="active", roles=["owner"], telegram_id=101))
-    sqlite_staff_session.add(StaffUser(display_name="Admin", status="active", roles=["admin"], telegram_id=202))
-    sqlite_staff_session.add(StaffUser(display_name="Manager", status="active", roles=["manager"], telegram_id=505))
-    sqlite_staff_session.add(StaffUser(display_name="Blocked", status="blocked", roles=["admin"], telegram_id=303))
-    sqlite_staff_session.add(StaffUser(display_name="Installer", status="active", roles=["installer"], telegram_id=404))
+    staff_rows = [
+        StaffUser(display_name="Owner", status="active", roles=["owner"], telegram_id=101),
+        StaffUser(display_name="Admin", status="active", roles=["admin"], telegram_id=202),
+        StaffUser(display_name="Manager", status="active", roles=["manager"], telegram_id=505),
+        StaffUser(display_name="Blocked", status="blocked", roles=["admin"], telegram_id=303),
+        StaffUser(display_name="Installer", status="active", roles=["installer"], telegram_id=404),
+    ]
+    sqlite_staff_session.add_all(staff_rows)
+    await sqlite_staff_session.flush()
+    for staff, role in zip(
+        staff_rows,
+        ("owner", "admin", "manager", "admin", "installer"),
+        strict=True,
+    ):
+        sqlite_staff_session.add(
+            TenantMembership(
+                tenant_id=TEST_TENANT_SCOPE.tenant_id,
+                staff_user_id=int(staff.id or 0),
+                role=role,
+                status="active",
+            )
+        )
     await sqlite_staff_session.commit()
 
-    recipients = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(sqlite_staff_session)
+    recipients = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(sqlite_staff_session, tenant_scope=TEST_TENANT_SCOPE)
 
     assert recipients == [101, 202, 505]
+
+
+@pytest.mark.asyncio
+async def test_admin_recipients_do_not_cross_tenant_memberships(
+    sqlite_staff_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "999", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
+    scope_b = TenantScope(tenant_id=2, storefront_id=2, is_system=False)
+    owner_a = StaffUser(
+        display_name="Owner A",
+        status="active",
+        roles=["owner"],
+        telegram_id=101,
+    )
+    owner_b = StaffUser(
+        display_name="Owner B",
+        status="active",
+        roles=["owner"],
+        telegram_id=202,
+    )
+    sqlite_staff_session.add_all([owner_a, owner_b])
+    await sqlite_staff_session.flush()
+    sqlite_staff_session.add_all(
+        [
+            TenantMembership(
+                tenant_id=TEST_TENANT_SCOPE.tenant_id,
+                staff_user_id=int(owner_a.id or 0),
+                role="owner",
+                status="active",
+            ),
+            TenantMembership(
+                tenant_id=scope_b.tenant_id,
+                staff_user_id=int(owner_b.id or 0),
+                role="owner",
+                status="active",
+            ),
+        ]
+    )
+    await sqlite_staff_session.commit()
+
+    recipients_a = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+        sqlite_staff_session,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    recipients_b = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+        sqlite_staff_session,
+        tenant_scope=scope_b,
+    )
+
+    assert recipients_a == [101]
+    assert recipients_b == [202]
 
 
 @pytest.mark.asyncio
@@ -196,10 +284,25 @@ async def test_admin_recipients_fall_back_to_legacy_admin_ids_when_db_has_none(s
     monkeypatch.setattr(settings, "ADMIN_IDS", "901,902", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 903, raising=False)
 
-    sqlite_staff_session.add(StaffUser(display_name="Installer", status="active", roles=["installer"], telegram_id=404))
+    installer = StaffUser(
+        display_name="Installer",
+        status="active",
+        roles=["installer"],
+        telegram_id=404,
+    )
+    sqlite_staff_session.add(installer)
+    await sqlite_staff_session.flush()
+    sqlite_staff_session.add(
+        TenantMembership(
+            tenant_id=TEST_TENANT_SCOPE.tenant_id,
+            staff_user_id=int(installer.id or 0),
+            role="installer",
+            status="active",
+        )
+    )
     await sqlite_staff_session.commit()
 
-    recipients = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(sqlite_staff_session)
+    recipients = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(sqlite_staff_session, tenant_scope=TEST_TENANT_SCOPE)
 
     assert recipients == [901, 902, 903]
 

@@ -61,6 +61,7 @@ class WebsiteLeadService:
             session=session,
             lead_id=int(lead_data["id"]),
             payload=payload,
+            tenant_scope=tenant_scope,
         )
         return PublicContactLeadResponse(
             lead_id=int(lead_data["id"]),
@@ -74,8 +75,12 @@ class WebsiteLeadService:
         session: AsyncSession,
         lead_id: int,
         payload: PublicContactLeadPayload,
+        tenant_scope: TenantScope,
     ) -> None:
-        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
         if not admin_ids:
             return
 
@@ -147,6 +152,7 @@ class WebsiteLeadService:
                     payload=payload,
                     now=now,
                     is_repeat=True,
+                    tenant_scope=tenant_scope,
                 )
             return ProductAvailabilityLeadResponse(
                 lead_id=int(order.id or 0),
@@ -183,6 +189,7 @@ class WebsiteLeadService:
             payload=payload,
             now=now,
             is_repeat=False,
+            tenant_scope=tenant_scope,
         )
 
         return ProductAvailabilityLeadResponse(
@@ -292,8 +299,12 @@ class WebsiteLeadService:
         payload: ProductAvailabilityLeadPayload,
         now: datetime,
         is_repeat: bool,
+        tenant_scope: TenantScope,
     ) -> None:
-        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(session)
+        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
         if not admin_ids:
             return
 
