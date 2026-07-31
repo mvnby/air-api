@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "test:ui-logic": "node scripts/audit-native-dialogs.mjs && node scripts/run-ui-logic-tests.mjs",
-    "test:components": "vitest run --environment jsdom tests/lead-inbox-attachments.spec.ts tests/order-payments-panel.spec.ts tests/order-website-intake-panel.spec.ts tests/order-planning-panel.spec.ts tests/order-repair-panel.spec.ts tests/order-commercial-lines.spec.ts tests/order-commercial-editor.spec.ts tests/order-proposal-lifecycle.spec.ts tests/order-drawer-form.spec.ts tests/order-drawer-persistence.spec.ts tests/order-document-status.spec.ts tests/order-workspace-navigation.spec.ts tests/order-drawer-actions.spec.ts tests/order-customer-context.spec.ts tests/order-execution-panel.spec.ts tests/order-documents-workspace.spec.ts",
+    "test:components": "vitest run --environment jsdom tests/lead-inbox-attachments.spec.ts tests/order-payments-panel.spec.ts tests/order-website-intake-panel.spec.ts tests/order-planning-panel.spec.ts tests/order-repair-panel.spec.ts tests/order-commercial-lines.spec.ts tests/order-commercial-editor.spec.ts tests/order-proposal-lifecycle.spec.ts tests/order-proposal-workspace.spec.ts tests/order-drawer-form.spec.ts tests/order-drawer-persistence.spec.ts tests/order-document-status.spec.ts tests/order-workspace-navigation.spec.ts tests/order-drawer-actions.spec.ts tests/order-manager-labels.spec.ts tests/order-customer-context.spec.ts tests/order-execution-panel.spec.ts tests/order-documents-workspace.spec.ts",
     "preview": "vite preview",
     "gen:api": "openapi --input ../openapi.json --output ./src/client --client fetch --useUnionTypes"
   },

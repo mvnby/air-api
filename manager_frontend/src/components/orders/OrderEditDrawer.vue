@@ -1,21 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import DealExecutionTab from './DealExecutionTab.vue';
-import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
 import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
-import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
 import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
 import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import OrderRepairPanel from './OrderRepairPanel.vue';
-import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
-import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
 import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
+import OrderManagerLabels from './OrderManagerLabels.vue';
+import OrderProposalWorkspace from './OrderProposalWorkspace.vue';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
@@ -74,64 +72,30 @@ function setToast(message: string, type: 'success' | 'error' = 'success') {
 
 const savedLinesSnapshot = ref('');
 const savedFormSnapshot = ref('');
-const {
-  activeServiceSuggestionIndex,
-  activeSuggestionIndex,
-  addProductLine,
-  addServiceLine,
-  applyEstimateToServices,
-  applyTariffTemplateToLine,
-  buildLinesPayload,
-  createSupplyFromProductLine,
-  currentLinesSnapshot: buildCurrentLinesSnapshot,
-  editingServiceLineIndex,
-  estimateImportMode,
-  estimateOptions,
-  estimateOptionsLoading,
-  estimateSearchQuery,
-  importingEstimate,
-  loadEstimateOptions,
-  loadLines,
-  loadOrderSupplyRequests,
-  margin: marginPreview,
-  onProductInputBlur,
-  onProductInputFocus,
-  onProductQueryInput,
-  onServiceTitleBlur,
-  onServiceTitleFocus,
-  onServiceTitleInput,
-  openSelectedProduct,
-  productLines,
-  productLookupById,
-  productLookupLoading,
-  productOptions,
-  removeProductLine,
-  removeServiceLine,
-  resetLookupState,
-  searchInStock,
-  selectProductForLine,
-  selectServiceTariffForLine,
-  selectedEstimateId,
-  serviceDescriptionMode,
-  serviceLines,
-  serviceTariffLookupLoading,
-  serviceTariffOptions,
-  setDefaultServiceDescriptionMode,
-  setServiceLineDescriptionMode,
-  showEstimateImport,
-  supplyActionLoadingLineId,
-  supplyBadgeForLine,
-  syncProductLookupFromLines,
-  toggleEstimateImport,
-  total: totalPreview,
-  validateLines: validateProposalLines,
-} = useOrderCommercialEditor({
+const commercialEditor = useOrderCommercialEditor({
   order: computed(() => props.order),
   setToast,
   persistDraft: () => persistDraft(),
 });
 const {
-  addManagerLabel,
+  activeServiceSuggestionIndex,
+  applyTariffTemplateToLine,
+  buildLinesPayload,
+  currentLinesSnapshot: buildCurrentLinesSnapshot,
+  loadEstimateOptions,
+  loadLines,
+  loadOrderSupplyRequests,
+  margin: marginPreview,
+  productLines,
+  resetLookupState,
+  serviceLines,
+  serviceTariffOptions,
+  showEstimateImport,
+  syncProductLookupFromLines,
+  total: totalPreview,
+  validateLines: validateProposalLines,
+} = commercialEditor;
+const {
   assessmentDate,
   autoCloseOnPayment,
   autoExecutionOnPayment,
@@ -156,7 +120,6 @@ const {
   isRepairWorkflow,
   localFormError,
   localServerErrors,
-  managerLabelDraft,
   managerLabels,
   measurementRequired,
   measurementResult,
@@ -165,7 +128,6 @@ const {
   newBranchAddress,
   orderTitle,
   payments,
-  removeManagerLabel,
   repairMeta,
   setWorkflowType,
   showProductLinesSection,
@@ -189,30 +151,9 @@ const {
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
 const documentsWorkspaceRef = ref<InstanceType<typeof OrderDocumentsWorkspace> | null>(null);
-const proposalToolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
+const proposalWorkspaceRef = ref<InstanceType<typeof OrderProposalWorkspace> | null>(null);
 
-const showManagerLabelInput = ref(false);
-
-const {
-  activeProposal,
-  activeProposalId,
-  activeProposalLineLabel,
-  activeProposalLocked,
-  activeProposalStatus,
-  archiveProposal,
-  changeActiveProposalStatus,
-  createProposal,
-  duplicateProposal,
-  loadProposalLines,
-  onProposalClick,
-  proposalActionLoading,
-  proposalStatus,
-  proposals: orderProposals,
-  renameProposal,
-  saveCurrentProposalLines,
-  selectProposalForOrder,
-  selectedProposal: selectedOrderProposal,
-} = useOrderProposalLifecycle({
+const proposalLifecycle = useOrderProposalLifecycle({
   order: computed(() => props.order),
   negotiationStatus,
   total: totalPreview,
@@ -229,6 +170,18 @@ const {
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
   onReload: (orderId) => emit('reload', orderId),
 });
+const {
+  activeProposal,
+  activeProposalId,
+  activeProposalLocked,
+  changeActiveProposalStatus,
+  createProposal,
+  duplicateProposal,
+  loadProposalLines,
+  proposalStatus,
+  saveCurrentProposalLines,
+  selectedProposal: selectedOrderProposal,
+} = proposalLifecycle;
 
 const {
   clearDraft,
@@ -451,7 +404,7 @@ const handleWorkspaceNextAction = async () => {
   if (action.command === 'record_proposal_response') {
     openWorkspaceTarget('proposal');
     await nextTick();
-    proposalToolbarRef.value?.openResponse();
+    proposalWorkspaceRef.value?.openResponse();
     return;
   }
   if (action.command === 'create_proposal_variant') return duplicateProposal();
@@ -516,29 +469,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
       />
 
       <div class="p-4 sm:p-6">
-      <div v-if="managerLabels.length || showManagerLabelInput" class="mt-3 flex flex-wrap items-center gap-1.5">
-        <span
-          v-for="label in managerLabels"
-          :key="label"
-          class="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-medium text-teal-800 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-200"
-        >
-          {{ label }}
-          <button type="button" class="rounded-full p-0.5 hover:bg-teal-100 dark:hover:bg-teal-800" :aria-label="'Удалить метку ' + label" @click="removeManagerLabel(label)">
-            <span class="material-icons-round block text-[13px]">close</span>
-          </button>
-        </span>
-        <button v-if="!showManagerLabelInput" type="button" class="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 py-1 text-xs font-medium text-slate-500 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:text-slate-400" @click="showManagerLabelInput = true">
-          <span class="material-icons-round text-[13px]">add</span> Добавить метку
-        </button>
-        <div v-if="showManagerLabelInput" class="flex min-w-[190px] gap-1.5">
-          <input v-model="managerLabelDraft" class="field-input h-8 text-xs" placeholder="Новая метка" @keydown.enter.prevent="addManagerLabel" @keydown.esc.prevent="showManagerLabelInput = false" />
-          <button type="button" class="btn-mini h-8 px-2 text-xs" @click="addManagerLabel">Добавить</button>
-        </div>
-      </div>
-      <button v-else type="button" class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300" @click="showManagerLabelInput = true">
-        <span class="material-icons-round text-[14px]">add</span> Добавить метку
-      </button>
-
+      <OrderManagerLabels v-model="managerLabels" />
       <OrderCustomerContext
         v-if="order"
         v-model:delivery-address="customerDeliveryAddress"
@@ -637,95 +568,18 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
 
 
 
-      <!-- Смета -->
-      <OrderDrawerSection
-        id="order-workspace-proposal"
+      <OrderProposalWorkspace
+        ref="proposalWorkspaceRef"
         v-model:expanded="expandedDrawerSections.proposals"
+        :commercial="commercialEditor"
+        :proposal="proposalLifecycle"
         :title="isRepairWorkflow ? 'Смета ремонта' : 'Предложения'"
-        :summary="activeProposalLineLabel"
-        tone="default"
-        :has-error="Boolean(getFieldError('products') || getFieldError('services'))"
-      >
-        <div class="min-w-0">
-        <OrderProposalToolbar
-          ref="proposalToolbarRef"
-          class="mb-4"
-          :proposals="orderProposals"
-          :active-proposal-id="activeProposal?.id"
-          :loading="proposalActionLoading"
-          @open="onProposalClick"
-          @select="selectProposalForOrder"
-          @create="createProposal"
-          @duplicate="duplicateProposal"
-          @rename="renameProposal"
-          @archive="archiveProposal"
-          @change-status="changeActiveProposalStatus"
-          @send="openProposalSend"
-        />
-
-        <div v-if="activeProposalLocked" class="mb-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-          <span>Эта редакция уже {{ activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Чтобы изменить состав или стоимость, создайте копию либо верните её в черновик.</span>
-          <div class="flex shrink-0 gap-2">
-            <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="duplicateProposal">Создать копию</button>
-            <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="changeActiveProposalStatus('draft')">В черновик</button>
-          </div>
-        </div>
-
-        <fieldset :disabled="activeProposalLocked" :class="activeProposalLocked ? 'opacity-60' : ''">
-
-        <OrderProductLinesEditor
-          v-if="showProductLinesSection"
-          v-model:lines="productLines"
-          v-model:search-in-stock="searchInStock"
-          :product-options="productOptions"
-          :product-lookup-by-id="productLookupById"
-          :product-lookup-loading="productLookupLoading"
-          :active-suggestion-index="activeSuggestionIndex"
-          :supply-action-loading-line-id="supplyActionLoadingLineId"
-          :products-error="getFieldError('products')"
-          :supply-badge-for-line="supplyBadgeForLine"
-          @focus="onProductInputFocus"
-          @input="onProductQueryInput"
-          @blur="onProductInputBlur"
-          @select="selectProductForLine($event.index, $event.option)"
-          @open="openSelectedProduct"
-          @remove="removeProductLine"
-          @add="addProductLine"
-          @supply="createSupplyFromProductLine($event.line, $event.intent)"
-        />
-
-        <OrderServiceLinesEditor
-          v-model:lines="serviceLines"
-          v-model:editing-index="editingServiceLineIndex"
-          v-model:show-estimate-import="showEstimateImport"
-          v-model:selected-estimate-id="selectedEstimateId"
-          v-model:estimate-search-query="estimateSearchQuery"
-          v-model:estimate-import-mode="estimateImportMode"
-          v-model:description-mode="serviceDescriptionMode"
-          :service-options="serviceTariffOptions"
-          :service-lookup-loading="serviceTariffLookupLoading"
-          :active-suggestion-index="activeServiceSuggestionIndex"
-          :services-error="getFieldError('services')"
-          :estimate-options="estimateOptions"
-          :estimate-options-loading="estimateOptionsLoading"
-          :importing-estimate="importingEstimate"
-          :format-service-kind="formatServiceKind"
-          @focus="onServiceTitleFocus"
-          @input="onServiceTitleInput"
-          @blur="onServiceTitleBlur"
-          @select="selectServiceTariffForLine($event.index, $event.option)"
-          @description-mode="setServiceLineDescriptionMode($event.index, $event.mode)"
-          @remove="removeServiceLine"
-          @add="addServiceLine"
-          @toggle-estimate="toggleEstimateImport"
-          @import-estimate="applyEstimateToServices"
-          @load-estimates="loadEstimateOptions"
-          @remember-description-mode="setDefaultServiceDescriptionMode"
-        />
-        </fieldset>
-      </div>
-      </OrderDrawerSection>
-
+        :show-product-lines="showProductLinesSection"
+        :products-error="getFieldError('products')"
+        :services-error="getFieldError('services')"
+        :format-service-kind="formatServiceKind"
+        @send="openProposalSend"
+      />
       <OrderDocumentsWorkspace
         v-if="order"
         ref="documentsWorkspaceRef"
