@@ -26,7 +26,6 @@ import type {
 import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
-  type OrderWorkspaceTarget,
 } from './order-workspace';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { useSmartStickyHeader } from '../../composables/useSmartStickyHeader';
@@ -35,6 +34,7 @@ import { useOrderProposalLifecycle } from '../../composables/useOrderProposalLif
 import { useOrderDrawerForm } from '../../composables/useOrderDrawerForm';
 import { useOrderDrawerPersistence } from '../../composables/useOrderDrawerPersistence';
 import { useOrderDocumentStatus } from '../../composables/useOrderDocumentStatus';
+import { useOrderWorkspaceNavigation } from '../../composables/useOrderWorkspaceNavigation';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -192,8 +192,6 @@ const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
 const documentsWorkspaceRef = ref<InstanceType<typeof OrderDocumentsWorkspace> | null>(null);
 const proposalToolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
-const executionWorkspaceOpen = ref(false);
-const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
 
 const showManagerLabelInput = ref(false);
 
@@ -265,6 +263,23 @@ const {
   order: computed(() => props.order),
   payments,
 });
+
+const {
+  activeWorkspaceTarget,
+  executionWorkspaceOpen,
+  openDocumentsSend,
+  openProposalSend: openProposalDocuments,
+  openWorkspaceTarget,
+  resetWorkspaceNavigation,
+} = useOrderWorkspaceNavigation({
+  status,
+  workflowType,
+  expandedSections: expandedDrawerSections,
+  equipmentPanelRef,
+  documentsWorkspaceRef,
+  setToast,
+});
+const openProposalSend = () => openProposalDocuments(activeProposal.value, orderDocuments.value);
 
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => (
@@ -390,8 +405,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
     initializedOrderId.value = order.id;
     expandedDrawerSections.value = restoreDrawerSections();
     linkedEquipmentOptions.value = [];
-    executionWorkspaceOpen.value = false;
-    activeWorkspaceTarget.value = null;
+    resetWorkspaceNavigation();
     resetOrderEmails();
   }
   hydrateOrder(order);
@@ -451,32 +465,6 @@ watch(
     if (props.modelValue) await initForm(value);
   },
 );
-
-const openProposalSend = async () => {
-  const proposal = activeProposal.value;
-  if (!proposal) return;
-  expandedDrawerSections.value.documents = true;
-  activeWorkspaceTarget.value = 'documents';
-  await nextTick();
-  const offerExists = orderDocuments.value.some((document) => (
-    document.doc_type === 'offer'
-    && (!document.proposal_id || document.proposal_id === proposal.id)
-  ));
-  if (offerExists) documentsWorkspaceRef.value?.openSend();
-  else {
-    documentsWorkspaceRef.value?.openCreate();
-    setToast('Сначала создайте коммерческое предложение для активного варианта', 'error');
-  }
-  document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
-
-const openDocumentsSend = async () => {
-  expandedDrawerSections.value.documents = true;
-  activeWorkspaceTarget.value = 'documents';
-  await nextTick();
-  documentsWorkspaceRef.value?.openSend();
-  document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
 
 const handleWorkspaceNextAction = async () => {
   const action = orderWorkspace.value.nextAction;
@@ -548,47 +536,6 @@ const deleteOrder = async () => {
 };
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
-const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = false) => {
-  const shouldClose = allowToggle && activeWorkspaceTarget.value === target;
-  if (activeWorkspaceTarget.value === 'equipment') equipmentPanelRef.value?.collapse();
-  if (workflowType.value === 'sales_installation' && target !== 'object') {
-    expandedDrawerSections.value.proposals = false;
-    expandedDrawerSections.value.documents = false;
-    expandedDrawerSections.value.payments = false;
-    expandedDrawerSections.value.execution = false;
-    executionWorkspaceOpen.value = false;
-  }
-  if (shouldClose) {
-    activeWorkspaceTarget.value = null;
-    return;
-  }
-  if (target !== 'object') activeWorkspaceTarget.value = target;
-  if (target === 'object') expandedDrawerSections.value.clientDetails = true;
-  if (target === 'planning') {
-    if (workflowType.value === 'sales_installation') expandedDrawerSections.value.proposals = true;
-    if (status.value === 'execution') expandedDrawerSections.value.execution = true;
-    else expandedDrawerSections.value.planningDetails = true;
-  }
-  if (target === 'proposal') expandedDrawerSections.value.proposals = true;
-  if (target === 'documents') {
-    expandedDrawerSections.value.documents = true;
-  }
-  if (target === 'payments') {
-    if (status.value === 'execution') executionWorkspaceOpen.value = true;
-    else expandedDrawerSections.value.payments = true;
-  }
-  await nextTick();
-  if (target === 'equipment') {
-    expandedDrawerSections.value.proposals = true;
-    await equipmentPanelRef.value?.expand();
-    await nextTick();
-  }
-  const elementId = status.value === 'execution' && target === 'payments'
-    ? 'order-workspace-execution-details'
-    : 'order-workspace-' + target;
-  document.getElementById(elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
-
 const discardUnsavedChanges = async () => {
   if (!props.order) return;
   clearDraft();
