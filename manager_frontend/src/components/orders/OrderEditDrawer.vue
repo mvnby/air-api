@@ -17,6 +17,7 @@ import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
 import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
+import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
@@ -34,7 +35,7 @@ import type {
   OutgoingEmailResponse,
 } from '../../client';
 import { ManagerOrdersService, ManagerSettingsService, ManagerMailService } from '../../client';
-import { EXECUTION_STATUS_OPTIONS, formatMoney } from './order-utils';
+import { formatMoney } from './order-utils';
 import {
   buildOrderWorkspaceViewModel,
   normalizeOrderWorkflowType,
@@ -176,13 +177,6 @@ const autoExecutionOnPayment = ref(false);
 const autoCloseOnPayment = ref(false);
 const activeProposalId = ref<number | null>(null);
 const proposalActionLoading = ref(false);
-const executionStatusLabel = computed(() => (
-  EXECUTION_STATUS_OPTIONS.find((option) => option.value === executionStatus.value)?.label || 'Назначить работы'
-));
-
-const setExecutionStatus = (value: string) => {
-  executionStatus.value = value;
-};
 
 const installersList = ref<ManagerInstallerResponse[]>([]);
 
@@ -2186,50 +2180,15 @@ watch(
       </OrderDrawerSection>
 
 
-      <OrderDrawerSection
+      <OrderExecutionPanel
         v-if="status === 'execution'"
-        id="order-workspace-planning"
         v-model:expanded="expandedDrawerSections.execution"
-        :title="workflowType === 'sales_installation' ? 'Монтаж' : 'Работы'"
-        :summary="executionStatusLabel"
-        tone="default"
-      >
-        <label v-if="workflowType === 'sales_installation'" class="field-label">
-          Общий этап заказа
-          <select v-model="executionStatus" class="field-input mt-1">
-            <option v-for="option in EXECUTION_STATUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
-        </label>
-        <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <button
-            v-for="option in EXECUTION_STATUS_OPTIONS"
-            :key="option.value"
-            type="button"
-            class="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition"
-            :class="executionStatus === option.value
-              ? 'border-teal-500 bg-white text-teal-800 shadow-sm'
-              : 'border-teal-100 bg-white/70 text-slate-600 hover:border-teal-300 hover:text-teal-800'"
-            @click="setExecutionStatus(option.value)"
-          >
-            <span class="material-icons-round text-[15px]">{{ option.icon }}</span>
-            <span class="truncate">{{ option.label }}</span>
-          </button>
-        </div>
-        <div class="mt-3 grid gap-2 sm:grid-cols-2">
-          <label class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            <input v-model="executionWithoutPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            <span><strong class="block">Разрешить переходы при наличии долга</strong><span class="mt-0.5 block text-slate-500 dark:text-slate-400">Менеджер сможет продолжать работу без полной оплаты.</span></span>
-          </label>
-          <label class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            <input v-model="autoCloseOnPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
-            <span><strong class="block">Автоматически завершить после полной оплаты</strong><span class="mt-0.5 block text-slate-500 dark:text-slate-400">Сработает, когда долг станет нулевым.</span></span>
-          </label>
-        </div>
-        <label v-if="executionWithoutPayment" class="field-label mt-3">
-          Причина работы при наличии долга
-          <textarea v-model="executionWithoutPaymentReason" class="field-input min-h-[60px]" placeholder="Например: постоянный клиент, оплата по факту..." />
-        </label>
-      </OrderDrawerSection>
+        v-model:execution-status="executionStatus"
+        v-model:execution-without-payment="executionWithoutPayment"
+        v-model:execution-without-payment-reason="executionWithoutPaymentReason"
+        v-model:auto-close-on-payment="autoCloseOnPayment"
+        :workflow-type="workflowType"
+      />
 
       <DealExecutionTab
         v-if="status === 'execution' && order && executionWorkspaceOpen"
