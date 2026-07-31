@@ -20,6 +20,7 @@ from schemas import (
     ManagerStaleWorkStageListResponse,
 )
 from services.order_service import OrderService
+from services.order_projection_service import OrderProjectionService
 from services.order_transfer_service import OrderTransferService
 
 
@@ -40,7 +41,7 @@ async def get_manager_orders(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.get_orders_for_manager(
+        return await OrderProjectionService.get_orders_for_manager(
             session=session,
             customer_segment=segment,
             page=page,
@@ -101,7 +102,7 @@ async def get_manager_order_detail(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    data = await OrderService.get_order_detail_for_manager(
+    data = await OrderProjectionService.get_order_detail_for_manager(
         session,
         order_id,
         tenant_scope=tenant_scope,
