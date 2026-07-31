@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -130,6 +132,41 @@ async def test_execute_backfills_exact_reviewed_batches_and_is_idempotent(db):
     )
     assert no_op_result["updated"] == {"lead": 0, "order": 0}
     assert no_op_result["contract_ready"] is True
+
+
+@pytest.mark.asyncio
+async def test_execute_preserves_business_updated_at_timestamps(db):
+    lead_updated_at = datetime(2024, 2, 3, 4, 5, 6)
+    order_updated_at = datetime(2024, 5, 6, 7, 8, 9)
+    lead = Lead(
+        request_text="Historical lead",
+        updated_at=lead_updated_at,
+    )
+    order = Order(
+        title="Historical order",
+        updated_at=order_updated_at,
+    )
+    db.add_all([lead, order])
+    await db.commit()
+
+    reviewed = await TenantScopeBackfillService.run(
+        db,
+        execute=False,
+        limit_per_table=10,
+    )
+    await TenantScopeBackfillService.run(
+        db,
+        execute=True,
+        limit_per_table=10,
+        expected_tenant_id=1,
+        expected_storefront_id=1,
+        plan_token=reviewed["plan_token"],
+    )
+    await db.refresh(lead)
+    await db.refresh(order)
+
+    assert lead.updated_at == lead_updated_at
+    assert order.updated_at == order_updated_at
 
 
 @pytest.mark.asyncio
