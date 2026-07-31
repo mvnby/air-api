@@ -615,5 +615,9 @@ class BotQuickOrderService:
                         tenant_scope=tenant_scope,
                     ) or order
 
+        # This orchestrator is the outer command boundary. Nested Order/Lead
+        # commands deliberately use SAVEPOINTs when earlier authorization or
+        # idempotency reads have already opened the session transaction.
+        await session.commit()
         order["_bot_order_created"] = order_created
         return order

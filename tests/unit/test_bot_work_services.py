@@ -97,8 +97,14 @@ class _NoRowsResult:
 
 
 class _NoExistingQuickOrderSession:
+    def __init__(self):
+        self.commit_count = 0
+
     async def execute(self, *args, **kwargs):
         return _NoRowsResult()
+
+    async def commit(self):
+        self.commit_count += 1
 
 
 def test_quick_order_fallback_parses_service_phone_address_and_date():
@@ -1476,8 +1482,9 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
         fake_notify,
     )
 
+    session = _NoExistingQuickOrderSession()
     order = await BotQuickOrderService.create_order_from_draft(
-        _NoExistingQuickOrderSession(),
+        session,
         {
             "name": "Иван",
             "phone": "+375291234567",
@@ -1504,6 +1511,7 @@ async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(mo
     assert calls["stage_order_id"] == 42
     assert calls["stage_payload"].name == "Монтаж"
     assert calls["stage_tenant_scope"] == TEST_TENANT_SCOPE
+    assert session.commit_count == 1
     assert calls["notify"] == {
         "order_id": 42,
         "source_label": "Telegram-бот",
@@ -1563,8 +1571,9 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
         fake_notify,
     )
 
+    session = _NoExistingQuickOrderSession()
     order = await BotQuickOrderService.create_order_from_draft(
-        _NoExistingQuickOrderSession(),
+        session,
         {
             "name": "Иван",
             "phone": "+375291234567",
@@ -1591,6 +1600,7 @@ async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(
         "source_label": "Telegram-бот",
         "tenant_scope": TEST_TENANT_SCOPE,
     }
+    assert session.commit_count == 1
 
 
 @pytest.mark.asyncio

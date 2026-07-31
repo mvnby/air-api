@@ -45,9 +45,11 @@ from schemas import (
     ManagerStaleWorkStageItem,
 )
 from services.document_service import DocumentService, OrderDocumentsLockedError
+from services.order_payment_command_service import OrderPaymentCommandService
 from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
 from services.order_transfer_service import OrderTransferService
+from services.order_work_stage_command_service import OrderWorkStageCommandService
 from services.tenant_scope_service import TenantScope
 
 
@@ -89,7 +91,7 @@ async def cancel_manager_order_stage_direct(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.cancel_order_stage_direct(
+        return await OrderWorkStageCommandService.cancel_order_stage_direct(
             session,
             stage_id,
             tenant_scope=tenant_scope,
@@ -115,7 +117,7 @@ async def delete_manager_order_stage_direct(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.delete_order_stage_direct(
+        return await OrderWorkStageCommandService.delete_order_stage_direct(
             session,
             stage_id,
             tenant_scope=tenant_scope,
@@ -424,7 +426,7 @@ async def add_manager_order_payment(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.add_payment(
+        return await OrderPaymentCommandService.add_payment(
             session,
             order_id,
             payload,
@@ -453,7 +455,7 @@ async def delete_manager_order_payment(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.delete_payment(
+        return await OrderPaymentCommandService.delete_payment(
             session,
             order_id,
             payment_id,
@@ -483,7 +485,7 @@ async def create_manager_order_stage(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.add_order_stage(
+        return await OrderWorkStageCommandService.add_order_stage(
             session,
             order_id,
             payload,
@@ -507,7 +509,7 @@ async def update_manager_order_stage(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.update_order_stage(
+        return await OrderWorkStageCommandService.update_order_stage(
             session,
             order_id,
             stage_id,
@@ -531,7 +533,7 @@ async def delete_manager_order_stage(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        return await OrderService.delete_order_stage(
+        return await OrderWorkStageCommandService.delete_order_stage(
             session,
             order_id,
             stage_id,

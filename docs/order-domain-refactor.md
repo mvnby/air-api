@@ -50,9 +50,9 @@ one unit. Add fault-injection tests at the final step of each command.
 
 Deliver R2 as three independently deployable slices:
 
-1. proposal create/update/select commands;
-2. work-stage and payment commands;
-3. order create/update/delete plus Lead qualification.
+1. [x] proposal create/update/select commands;
+2. [x] work-stage and payment commands;
+3. [ ] order create/update/delete plus Lead qualification.
 
 When a command participates in an explicit caller-owned unit of work, its local
 boundary is a SAVEPOINT; ordinary HTTP commands own the root transaction.

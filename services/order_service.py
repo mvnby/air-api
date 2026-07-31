@@ -1851,47 +1851,13 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ):
-        from models import OrderWorkStage
-        from services.staff_task_notification_event_service import (
-            StaffTaskNotificationEventService,
-        )
-        order = await TenantEntityAccessService.get_order(
+        """Compatibility delegate to the transactional work-stage command."""
+        from services.order_work_stage_command_service import OrderWorkStageCommandService
+
+        return await OrderWorkStageCommandService.add_order_stage(
             session,
             order_id,
-            tenant_scope=tenant_scope,
-            for_update=True,
-        )
-        if not order:
-            raise ValueError("Order not found")
-        if payload.installer_id is not None:
-            await OrderService._ensure_assignable_legacy_executor(
-                session,
-                int(payload.installer_id),
-                tenant_scope=tenant_scope,
-            )
-        stage = OrderWorkStage(
-            order_id=order_id,
-            name=payload.name,
-            status=OrderService._normalize_order_stage_status(payload.status),
-            start_time=OrderService._normalize_naive_datetime(payload.start_time),
-            end_time=OrderService._normalize_naive_datetime(payload.end_time),
-            installer_id=payload.installer_id,
-            manager_comment=payload.manager_comment,
-            installer_report=payload.installer_report
-        )
-        session.add(stage)
-        await session.flush()
-        if stage.installer_id is not None:
-            await StaffTaskNotificationEventService.enqueue_assigned(
-                session,
-                stage=stage,
-                previous_installer_id=None,
-                tenant_scope=tenant_scope,
-            )
-        await session.commit()
-        return await OrderService.get_order_detail_for_manager(
-            session,
-            order_id,
+            payload,
             tenant_scope=tenant_scope,
         )
 
@@ -1972,41 +1938,14 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
-        from services.staff_task_notification_event_service import (
-            StaffTaskNotificationEventService,
-        )
-        stage = await TenantEntityAccessService.get_order_stage(
+        """Compatibility delegate to the transactional work-stage command."""
+        from services.order_work_stage_command_service import OrderWorkStageCommandService
+
+        return await OrderWorkStageCommandService.cancel_order_stage_direct(
             session,
             stage_id,
             tenant_scope=tenant_scope,
-            for_update=True,
         )
-        if not stage:
-            raise ValueError("Stage not found")
-        previous_status = stage.status
-        stage.status = OrderStageStatus.CANCELED
-        session.add(stage)
-        if previous_status != OrderStageStatus.CANCELED:
-            await StaffTaskNotificationEventService.enqueue_canceled(
-                session,
-                stage=stage,
-                previous_status=previous_status,
-                tenant_scope=tenant_scope,
-            )
-        await session.commit()
-        await session.refresh(stage)
-        stage = await TenantEntityAccessService.get_order_stage(
-            session,
-            stage_id,
-            tenant_scope=tenant_scope,
-            options=(
-                selectinload(OrderWorkStage.order).selectinload(Order.customer),
-                selectinload(OrderWorkStage.installer),
-            ),
-        )
-        if stage is None:
-            raise ValueError("Stage not found")
-        return OrderService._map_stale_order_stage(stage)
 
     @staticmethod
     async def delete_order_stage_direct(
@@ -2015,17 +1954,14 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
-        stage = await TenantEntityAccessService.get_order_stage(
+        """Compatibility delegate to the transactional work-stage command."""
+        from services.order_work_stage_command_service import OrderWorkStageCommandService
+
+        return await OrderWorkStageCommandService.delete_order_stage_direct(
             session,
             stage_id,
             tenant_scope=tenant_scope,
-            for_update=True,
         )
-        if not stage:
-            raise ValueError("Stage not found")
-        await session.delete(stage)
-        await session.commit()
-        return {"ok": True, "id": stage_id}
 
     @staticmethod
     async def update_order_stage(
@@ -2036,100 +1972,14 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ):
-        from models import OrderWorkStage, Order, OrderStatus, OrderStageStatus
-        from services.staff_task_notification_event_service import (
-            StaffTaskNotificationEventService,
-        )
-        stage = await TenantEntityAccessService.get_order_stage(
-            session,
-            stage_id,
-            tenant_scope=tenant_scope,
-            order_id=order_id,
-            for_update=True,
-        )
-        if not stage:
-            raise ValueError("Stage not found")
-        previous_installer_id = stage.installer_id
-        previous_start_time = stage.start_time
-        previous_end_time = stage.end_time
-        previous_status = stage.status
-        update_data = payload.model_dump(exclude_unset=True)
-        next_installer_id = update_data.get("installer_id", stage.installer_id)
-        if next_installer_id is not None and next_installer_id != stage.installer_id:
-            await OrderService._ensure_assignable_legacy_executor(
-                session,
-                int(next_installer_id),
-                tenant_scope=tenant_scope,
-            )
-        for key, value in update_data.items():
-            if key in ("start_time", "end_time"):
-                value = OrderService._normalize_naive_datetime(value)
-            elif key == "status":
-                value = OrderService._normalize_order_stage_status(value)
-            setattr(stage, key, value)
-            
-        session.add(stage)
-        await session.flush()
+        """Compatibility delegate to the transactional work-stage command."""
+        from services.order_work_stage_command_service import OrderWorkStageCommandService
 
-        if (
-            stage.status == OrderStageStatus.CANCELED
-            and previous_status != OrderStageStatus.CANCELED
-        ):
-            await StaffTaskNotificationEventService.enqueue_canceled(
-                session,
-                stage=stage,
-                previous_status=previous_status,
-                tenant_scope=tenant_scope,
-            )
-        elif stage.installer_id != previous_installer_id and stage.installer_id is not None:
-            await StaffTaskNotificationEventService.enqueue_assigned(
-                session,
-                stage=stage,
-                previous_installer_id=previous_installer_id,
-                tenant_scope=tenant_scope,
-            )
-        elif stage.installer_id is not None:
-            changed_fields = []
-            previous_values = []
-            if stage.start_time != previous_start_time:
-                changed_fields.append("start_time")
-                previous_values.extend([previous_start_time, stage.start_time])
-            if stage.end_time != previous_end_time:
-                changed_fields.append("end_time")
-                previous_values.extend([previous_end_time, stage.end_time])
-            if changed_fields:
-                await StaffTaskNotificationEventService.enqueue_rescheduled(
-                    session,
-                    stage=stage,
-                    change_fields=changed_fields,
-                    previous_values=previous_values,
-                    tenant_scope=tenant_scope,
-                )
-        
-        # Auto-pause logic
-        order = await TenantEntityAccessService.get_order(
+        return await OrderWorkStageCommandService.update_order_stage(
             session,
             order_id,
-            tenant_scope=tenant_scope,
-        )
-        if order:
-            await session.refresh(order, ['work_stages'])
-            all_completed = True
-            for st in order.work_stages:
-                if st.status != OrderStageStatus.COMPLETED and st.status != OrderStageStatus.CANCELED:
-                    all_completed = False
-                    break
-            
-            # If all are completed/canceled and balance > 0 and not closed
-            if all_completed and order.work_stages and order.balance_due > 0 and order.status != OrderStatus.CLOSED:
-                order.is_on_hold = True
-                order.on_hold_reason = "Все запланированные этапы завершены, ожидается оплата или следующий этап"
-                session.add(order)
-                
-        await session.commit()
-        return await OrderService.get_order_detail_for_manager(
-            session,
-            order_id,
+            stage_id,
+            payload,
             tenant_scope=tenant_scope,
         )
 
@@ -2141,21 +1991,13 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ):
-        from models import OrderWorkStage
-        stage = await TenantEntityAccessService.get_order_stage(
-            session,
-            stage_id,
-            tenant_scope=tenant_scope,
-            order_id=order_id,
-            for_update=True,
-        )
-        if not stage:
-            raise ValueError("Stage not found")
-        await session.delete(stage)
-        await session.commit()
-        return await OrderService.get_order_detail_for_manager(
+        """Compatibility delegate to the transactional work-stage command."""
+        from services.order_work_stage_command_service import OrderWorkStageCommandService
+
+        return await OrderWorkStageCommandService.delete_order_stage(
             session,
             order_id,
+            stage_id,
             tenant_scope=tenant_scope,
         )
 
@@ -2932,41 +2774,15 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ):
-        from models import Payment, PaymentType
-        order = await TenantEntityAccessService.get_order(
+        """Compatibility delegate to the transactional payment command."""
+        from services.order_payment_command_service import OrderPaymentCommandService
+
+        return await OrderPaymentCommandService.add_payment(
             session,
             order_id,
+            payload,
             tenant_scope=tenant_scope,
-            for_update=True,
         )
-        if not order:
-            raise ValueError("Order not found")
-        
-        try:
-            ptype = PaymentType(payload.type)
-        except ValueError:
-            raise ValueError(f"Invalid payment type: {payload.type}")
-            
-        currency = OrderService._normalize_payment_currency(payload.currency if hasattr(payload, "currency") else PaymentCurrency.BYN)
-        if currency != PaymentCurrency.BYN and order.target_currency != currency:
-            raise ValueError("Foreign-currency payment requires matching order target currency")
-
-        new_payment = Payment(
-            order_id=order_id,
-            amount=payload.amount,
-            currency=currency,
-            type=ptype,
-            comment=payload.comment,
-        )
-        session.add(new_payment)
-        await session.flush()
-
-        await OrderService._refresh_order_financials(session, order)
-        session.add(order)
-        await session.commit()
-        
-        # Return payments mapped exactly as in get_order_detail_for_manager.
-        return [OrderService._map_payment(p) for p in sorted(order.payments, key=lambda d: d.date, reverse=True)]
 
     @staticmethod
     async def delete_payment(
@@ -2976,96 +2792,15 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ):
-        from models import BankReceipt, Payment
-        order = await TenantEntityAccessService.get_order(
+        """Compatibility delegate to the transactional payment command."""
+        from services.order_payment_command_service import OrderPaymentCommandService
+
+        return await OrderPaymentCommandService.delete_payment(
             session,
             order_id,
+            payment_id,
             tenant_scope=tenant_scope,
-            for_update=True,
         )
-        if not order:
-            raise ValueError("Order not found")
-            
-        payment = await session.get(Payment, payment_id)
-        if not payment or payment.order_id != order_id:
-            raise ValueError("Payment not found on this order")
-
-        bank_receipt_id = int(payment.bank_receipt_id) if payment.bank_receipt_id else None
-        affected_order_ids = {int(order_id)}
-
-        if bank_receipt_id:
-            all_linked_ids = list(
-                (
-                    await session.execute(
-                        select(Payment.id).where(
-                            Payment.bank_receipt_id == bank_receipt_id
-                        )
-                    )
-                ).scalars()
-            )
-            linked_payments_result = await session.execute(
-                select(Payment)
-                .join(Order, Order.id == Payment.order_id)
-                .outerjoin(Customer, Customer.id == Order.customer_id)
-                .where(
-                    Payment.bank_receipt_id == bank_receipt_id,
-                    TenantEntityAccessService.order_clause(tenant_scope),
-                    TenantEntityAccessService.order_customer_clause(
-                        tenant_scope
-                    ),
-                )
-            )
-            linked_payments = list(linked_payments_result.scalars().all())
-            if len(linked_payments) != len(all_linked_ids):
-                raise ValueError("Bank receipt spans a tenant boundary")
-            deleted_payment_ids = [int(item.id or 0) for item in linked_payments if item.id]
-            for linked_payment in linked_payments:
-                if linked_payment.order_id:
-                    affected_order_ids.add(int(linked_payment.order_id))
-                await session.delete(linked_payment)
-
-            receipt = await session.get(BankReceipt, bank_receipt_id)
-            if receipt:
-                meta = dict(receipt.match_meta or {})
-                meta.update(
-                    {
-                        "manual_status": "requires_review",
-                        "manual_reason": "payment_deleted_from_order",
-                        "previous_status": receipt.status,
-                        "previous_matched_order_id": receipt.matched_order_id,
-                        "previous_matched_payment_id": receipt.matched_payment_id,
-                        "previous_matched_payment_ids": deleted_payment_ids or None,
-                    }
-                )
-                receipt.status = "requires_review"
-                receipt.matched_order_id = None
-                receipt.matched_payment_id = None
-                receipt.match_meta = meta
-                session.add(receipt)
-        else:
-            await session.delete(payment)
-        await session.flush()
-
-        for affected_order_id in affected_order_ids:
-            affected_order = await TenantEntityAccessService.get_order(
-                session,
-                affected_order_id,
-                tenant_scope=tenant_scope,
-            )
-            if not affected_order:
-                continue
-            await OrderService._refresh_order_financials(session, affected_order)
-            affected_order.is_paid = affected_order.balance_due <= 0.01
-            session.add(affected_order)
-        await session.commit()
-
-        current_payments_result = await session.execute(
-            select(Payment)
-            .where(Payment.order_id == order_id)
-            .options(selectinload(Payment.bank_receipt))
-            .order_by(Payment.date.desc())
-        )
-        return [OrderService._map_payment(p) for p in current_payments_result.scalars().all()]
 
     # -----------------------------------------------------------------
     # Leads Inbox (Order-based triage)
