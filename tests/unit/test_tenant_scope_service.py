@@ -5,13 +5,14 @@ import pytest
 from sqlmodel import select
 
 from crud.tenancy import TenantScopeRow
-from models import Order
+from models import Customer, CustomerType, Order
 from services.tenant_scope_service import (
     SystemTenantScopeResolver,
     TenantScope,
     TenantScopeResolutionError,
     storefront_or_fully_legacy_scope_clause,
     tenant_or_fully_legacy_scope_clause,
+    tenant_or_legacy_owner_scope_clause,
 )
 
 
@@ -28,6 +29,7 @@ async def test_resolve_system_scope_returns_immutable_server_scope(monkeypatch):
 
     assert scope.tenant_id == 11
     assert scope.storefront_id == 21
+    assert scope.is_system is True
     with pytest.raises(FrozenInstanceError):
         scope.tenant_id = 99  # type: ignore[misc]
     resolver.assert_awaited_once_with(
@@ -157,3 +159,41 @@ async def test_storefront_scope_legacy_clause_requires_exact_or_fully_null_pair(
         "Exact storefront",
         "Fully legacy storefront",
     }
+
+
+@pytest.mark.asyncio
+async def test_non_system_scope_never_claims_legacy_rows(db):
+    foreign_scope = TenantScope(
+        tenant_id=2,
+        storefront_id=2,
+        is_system=False,
+    )
+    legacy_order = Order(title="System legacy order")
+    legacy_customer = Customer(
+        name="System legacy customer",
+        phone="+375290000099",
+        type=CustomerType.individual,
+    )
+    db.add_all([legacy_order, legacy_customer])
+    await db.commit()
+
+    order_matches = (
+        await db.execute(
+            select(Order).where(
+                tenant_or_fully_legacy_scope_clause(Order, foreign_scope)
+            )
+        )
+    ).scalars().all()
+    customer_matches = (
+        await db.execute(
+            select(Customer).where(
+                tenant_or_legacy_owner_scope_clause(
+                    Customer,
+                    foreign_scope,
+                )
+            )
+        )
+    ).scalars().all()
+
+    assert order_matches == []
+    assert customer_matches == []

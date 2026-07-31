@@ -5,8 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
-from models import StaffUser
+from models import StaffUser, TenantMembership
 from services.staff_user_service import StaffUserService
+from services.tenant_scope_service import (
+    SystemTenantScopeResolver,
+    TenantScopeResolutionError,
+)
 
 
 @dataclass
@@ -48,17 +52,37 @@ class BotAccessService:
         if not normalized_telegram_id:
             return context
 
-        result = await session.execute(
-            select(StaffUser)
-            .where(StaffUser.telegram_id == normalized_telegram_id)
-            .order_by(StaffUser.id.asc())
-        )
-        user = result.scalars().first()
-        if user:
+        user = (
+            await session.execute(
+                select(StaffUser)
+                .where(StaffUser.telegram_id == normalized_telegram_id)
+                .order_by(StaffUser.id.asc())
+            )
+        ).scalars().first()
+        if user is not None:
             if not StaffUserService.is_active(user):
                 return context
+            try:
+                tenant_scope = await SystemTenantScopeResolver.resolve(session)
+            except TenantScopeResolutionError:
+                return context
+            membership = (
+                await session.execute(
+                    select(TenantMembership).where(
+                        TenantMembership.staff_user_id == int(user.id or 0),
+                        TenantMembership.tenant_id == tenant_scope.tenant_id,
+                        TenantMembership.status == "active",
+                    )
+                )
+            ).scalars().first()
+            if membership is None:
+                return context
             roles = StaffUserService.normalize_roles(user.roles)
-            primary_role = StaffUserService.primary_role(user)
+            primary_role = StaffUserService.normalize_primary_role(
+                membership.role
+            )
+            if primary_role not in roles:
+                roles.append(primary_role)
             return BotAccessContext(
                 telegram_id=normalized_telegram_id,
                 is_staff=True,

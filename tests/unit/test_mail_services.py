@@ -23,7 +23,11 @@ from services.order_service import OrderService
 from services.tenant_scope_service import TenantScope
 
 
-TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1)
+TEST_TENANT_SCOPE = TenantScope(
+    tenant_id=1,
+    storefront_id=1,
+    is_system=True,
+)
 
 
 SAMPLE_BANK_EMAIL = """

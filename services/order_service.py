@@ -24,7 +24,10 @@ from services.order_proposal_lifecycle import (
     normalize_proposal_status,
     sync_selected_proposal_status,
 )
-from services.tenant_scope_service import TenantScope
+from services.tenant_scope_service import (
+    TenantScope,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1029,11 +1032,24 @@ class OrderService:
         customer = None
         
         if customer_id:
-            customer = await session.get(Customer, customer_id)
+            customer = (
+                await session.execute(
+                    select(Customer).where(
+                        Customer.id == customer_id,
+                        tenant_or_legacy_owner_scope_clause(
+                            Customer,
+                            tenant_scope,
+                        ),
+                    )
+                )
+            ).scalars().first()
             if not customer:
                 raise ValueError(f"Customer with id {customer_id} not found")
         elif len(phone_clean) > 5:
-            stmt = select(Customer).where(Customer.phone == phone_clean)
+            stmt = select(Customer).where(
+                Customer.phone == phone_clean,
+                tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+            )
             result = await session.execute(stmt)
             # Handle potential duplicates gracefully
             try:
@@ -1047,6 +1063,7 @@ class OrderService:
         
         if not customer:
             customer = Customer(
+                tenant_id=tenant_scope.tenant_id,
                 name=customer_name,
                 phone=phone_clean,
                 email=customer_email,
@@ -1067,6 +1084,8 @@ class OrderService:
                 lead_source.value,
             )
         else:
+            if customer.tenant_id is None:
+                customer.tenant_id = tenant_scope.tenant_id
             # Update address if provided
             if customer_address:
                 customer.actual_address = customer_address

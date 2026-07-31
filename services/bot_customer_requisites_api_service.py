@@ -9,9 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import CustomerRequisitesRecognition
+from models.tenancy import TenantScope
 from services.bot_access_service import BotAccessService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 from services.customer_service import CustomerService
+from services.tenant_scope_service import tenant_or_legacy_owner_scope_clause
 
 
 class BotCustomerRequisitesAccessDeniedError(PermissionError):
@@ -50,6 +52,7 @@ class BotCustomerRequisitesApiService:
         telegram_user_id: int,
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
+        tenant_scope: TenantScope,
     ) -> None:
         if telegram_chat_id is None or telegram_message_id is None:
             return
@@ -57,7 +60,7 @@ class BotCustomerRequisitesApiService:
         if bind.dialect.name != "postgresql":
             return
         lock_key = (
-            f"bot-requisites:{source}:{telegram_user_id}:"
+            f"bot-requisites:{tenant_scope.tenant_id}:{source}:{telegram_user_id}:"
             f"{telegram_chat_id}:{telegram_message_id}"
         )
         await session.execute(
@@ -73,6 +76,7 @@ class BotCustomerRequisitesApiService:
         telegram_user_id: int,
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
+        tenant_scope: TenantScope,
     ) -> CustomerRequisitesRecognition | None:
         if telegram_chat_id is None or telegram_message_id is None:
             return None
@@ -84,6 +88,10 @@ class BotCustomerRequisitesApiService:
                     CustomerRequisitesRecognition.telegram_user_id == telegram_user_id,
                     CustomerRequisitesRecognition.telegram_chat_id == telegram_chat_id,
                     CustomerRequisitesRecognition.telegram_message_id == telegram_message_id,
+                    tenant_or_legacy_owner_scope_clause(
+                        CustomerRequisitesRecognition,
+                        tenant_scope,
+                    ),
                 )
                 .limit(1)
             )
@@ -94,10 +102,13 @@ class BotCustomerRequisitesApiService:
         cls,
         session: AsyncSession,
         recognition: CustomerRequisitesRecognition,
+        *,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any]:
         duplicate = await CustomerRequisitesRecognitionService._find_duplicate(
             session,
             (recognition.extracted_json or {}).get("inn"),
+            tenant_scope=tenant_scope,
         )
         return CustomerRequisitesRecognitionService._recognition_response(
             recognition,
@@ -113,6 +124,7 @@ class BotCustomerRequisitesApiService:
         text_value: str,
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any]:
         await cls._require_manager(session, telegram_id)
         source = "telegram_text"
@@ -122,6 +134,7 @@ class BotCustomerRequisitesApiService:
             telegram_user_id=telegram_id,
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
+            tenant_scope=tenant_scope,
         )
         existing = await cls._find_message_recognition(
             session,
@@ -129,14 +142,20 @@ class BotCustomerRequisitesApiService:
             telegram_user_id=telegram_id,
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
+            tenant_scope=tenant_scope,
         )
         if existing:
-            return await cls._existing_response(session, existing)
+            return await cls._existing_response(
+                session,
+                existing,
+                tenant_scope=tenant_scope,
+            )
         try:
             return await CustomerRequisitesRecognitionService.recognize_text(
                 session,
                 text=text_value,
                 source=source,
+                tenant_scope=tenant_scope,
                 telegram_user_id=telegram_id,
                 telegram_chat_id=telegram_chat_id,
                 telegram_message_id=telegram_message_id,
@@ -149,10 +168,15 @@ class BotCustomerRequisitesApiService:
                 telegram_user_id=telegram_id,
                 telegram_chat_id=telegram_chat_id,
                 telegram_message_id=telegram_message_id,
+                tenant_scope=tenant_scope,
             )
             if not existing:
                 raise
-            return await cls._existing_response(session, existing)
+            return await cls._existing_response(
+                session,
+                existing,
+                tenant_scope=tenant_scope,
+            )
 
     @classmethod
     async def recognize_file_for_manager(
@@ -165,6 +189,7 @@ class BotCustomerRequisitesApiService:
         mime_type: str,
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any]:
         await cls._require_manager(session, telegram_id)
         source = "telegram"
@@ -174,6 +199,7 @@ class BotCustomerRequisitesApiService:
             telegram_user_id=telegram_id,
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
+            tenant_scope=tenant_scope,
         )
         existing = await cls._find_message_recognition(
             session,
@@ -181,9 +207,14 @@ class BotCustomerRequisitesApiService:
             telegram_user_id=telegram_id,
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
+            tenant_scope=tenant_scope,
         )
         if existing:
-            return await cls._existing_response(session, existing)
+            return await cls._existing_response(
+                session,
+                existing,
+                tenant_scope=tenant_scope,
+            )
         try:
             return await CustomerRequisitesRecognitionService.recognize_bytes(
                 session,
@@ -191,6 +222,7 @@ class BotCustomerRequisitesApiService:
                 filename=filename,
                 mime_type=mime_type,
                 source=source,
+                tenant_scope=tenant_scope,
                 telegram_user_id=telegram_id,
                 telegram_chat_id=telegram_chat_id,
                 telegram_message_id=telegram_message_id,
@@ -203,10 +235,15 @@ class BotCustomerRequisitesApiService:
                 telegram_user_id=telegram_id,
                 telegram_chat_id=telegram_chat_id,
                 telegram_message_id=telegram_message_id,
+                tenant_scope=tenant_scope,
             )
             if not existing:
                 raise
-            return await cls._existing_response(session, existing)
+            return await cls._existing_response(
+                session,
+                existing,
+                tenant_scope=tenant_scope,
+            )
 
     @classmethod
     async def apply_action_for_manager(
@@ -216,12 +253,19 @@ class BotCustomerRequisitesApiService:
         telegram_id: int,
         recognition_id: int,
         action: str,
+        tenant_scope: TenantScope,
     ) -> BotCustomerRequisitesActionResult:
         await cls._require_manager(session, telegram_id)
         recognition = (
             await session.execute(
                 select(CustomerRequisitesRecognition)
-                .where(CustomerRequisitesRecognition.id == recognition_id)
+                .where(
+                    CustomerRequisitesRecognition.id == recognition_id,
+                    tenant_or_legacy_owner_scope_clause(
+                        CustomerRequisitesRecognition,
+                        tenant_scope,
+                    ),
+                )
                 .with_for_update()
             )
         ).scalars().first()
@@ -240,9 +284,14 @@ class BotCustomerRequisitesApiService:
             customer = await CustomerService.get_for_manager(
                 session=session,
                 customer_id=int(recognition.confirmed_customer_id or 0),
+                tenant_scope=tenant_scope,
             )
             return BotCustomerRequisitesActionResult(
-                recognition=await cls._existing_response(session, recognition),
+                recognition=await cls._existing_response(
+                    session,
+                    recognition,
+                    tenant_scope=tenant_scope,
+                ),
                 customer=customer,
                 changed=False,
             )
@@ -251,7 +300,11 @@ class BotCustomerRequisitesApiService:
             if action != "cancel":
                 raise BotCustomerRequisitesConflictError("Recognition was already cancelled")
             return BotCustomerRequisitesActionResult(
-                recognition=await cls._existing_response(session, recognition),
+                recognition=await cls._existing_response(
+                    session,
+                    recognition,
+                    tenant_scope=tenant_scope,
+                ),
                 customer=None,
                 changed=False,
             )
@@ -260,6 +313,7 @@ class BotCustomerRequisitesApiService:
             cancelled = await CustomerRequisitesRecognitionService.cancel(
                 session,
                 recognition_id=recognition_id,
+                tenant_scope=tenant_scope,
             )
             return BotCustomerRequisitesActionResult(
                 recognition=cancelled,
@@ -271,6 +325,7 @@ class BotCustomerRequisitesApiService:
             session,
             recognition_id=recognition_id,
             action=action,
+            tenant_scope=tenant_scope,
         )
         return BotCustomerRequisitesActionResult(
             recognition=confirmed["recognition"],

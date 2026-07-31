@@ -5,8 +5,7 @@ from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, LEAD_NOT_FOUND
 from core.manager_telemetry import ManagerTelemetryService
-from core.security import get_current_username
-from core.tenant_scope import get_system_tenant_scope
+from core.security import get_current_manager_tenant_scope, get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_LEAD,
     MARK_MANAGER_LEAD_LOST,
@@ -33,7 +32,7 @@ async def create_manager_lead(
     payload: LeadCreatePayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await LeadService.create_lead(
@@ -81,7 +80,7 @@ async def qualify_manager_lead(
     payload: LeadQualifyPayload,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     ManagerTelemetryService.record_qualify_attempt(endpoint=QUALIFY_MANAGER_LEAD, payload=payload)
     try:

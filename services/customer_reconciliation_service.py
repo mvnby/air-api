@@ -10,9 +10,14 @@ from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Customer, Order, OrderDocument, Payment
+from models.tenancy import TenantScope
 from services.documents.base import DOC_NAMES
 from services.google_service import get_google_service
 from services.settings_service import SettingsService
+from services.tenant_scope_service import (
+    tenant_or_fully_legacy_scope_clause,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 
 DELIVERY_DOC_TYPES = {
@@ -347,15 +352,27 @@ class CustomerReconciliationService:
         customer_id: int,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+        customer = (
+            await session.execute(
+                select(Customer).where(
+                    Customer.id == customer_id,
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+            )
+        ).scalars().first()
         if not customer:
             return None
 
         period = cls._period(date_from, date_to)
         query = (
             select(Order)
-            .where(Order.customer_id == customer_id)
+            .where(
+                Order.customer_id == customer_id,
+                tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
+            )
             .options(
                 selectinload(Order.documents),
                 selectinload(Order.payments).selectinload(Payment.bank_receipt),
@@ -456,11 +473,26 @@ class CustomerReconciliationService:
         customer_id: int,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        customer = await session.get(Customer, customer_id)
+        customer = (
+            await session.execute(
+                select(Customer).where(
+                    Customer.id == customer_id,
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+            )
+        ).scalars().first()
         if not customer:
             return None
-        data = await cls.build(session, customer_id, date_from=date_from, date_to=date_to)
+        data = await cls.build(
+            session,
+            customer_id,
+            date_from=date_from,
+            date_to=date_to,
+            tenant_scope=tenant_scope,
+        )
         if data is None:
             return None
         company_requisites = await cls._company_requisites(session)

@@ -19,7 +19,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./manager_cleanup_api
 from core.database import get_session
 from core.config import settings
 from core.app_factory import create_app
-from models import Product, ProductImage
+from models import Product, ProductImage, Storefront, Tenant
 
 
 def _image_bytes() -> bytes:
@@ -47,6 +47,25 @@ async def db(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        tenant = Tenant(
+            slug="mvn",
+            display_name="MVN",
+            kind="operator",
+            status="active",
+            is_system=True,
+        )
+        session.add(tenant)
+        await session.flush()
+        session.add(
+            Storefront(
+                tenant_id=int(tenant.id),
+                slug="main",
+                display_name="MVN",
+                status="active",
+                is_default=True,
+            )
+        )
+        await session.commit()
         yield session
 
     await engine.dispose()

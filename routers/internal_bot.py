@@ -29,7 +29,9 @@ from api_contracts.bot import (
 )
 from core.bot_api_security import require_bot_api_token
 from core.database import get_session
+from core.tenant_scope import get_system_tenant_scope
 from models import OrderStageStatus
+from models.tenancy import TenantScope
 from services.bot_access_service import BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
 from services.bot_customer_requisites_api_service import (
@@ -268,6 +270,7 @@ async def create_internal_bot_quick_order(
 async def recognize_internal_bot_customer_requisites_text(
     payload: BotCustomerRequisitesTextRequest,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotCustomerRequisitesRecognitionResponse:
     try:
         recognition = await BotCustomerRequisitesApiService.recognize_text_for_manager(
@@ -276,6 +279,7 @@ async def recognize_internal_bot_customer_requisites_text(
             text_value=payload.text,
             telegram_chat_id=payload.telegram_chat_id,
             telegram_message_id=payload.telegram_message_id,
+            tenant_scope=tenant_scope,
         )
     except BotCustomerRequisitesAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
@@ -295,6 +299,7 @@ async def recognize_internal_bot_customer_requisites_file(
     telegram_message_id: int | None = Form(default=None),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotCustomerRequisitesRecognitionResponse:
     max_bytes = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES
     content = await file.read(max_bytes + 1)
@@ -313,6 +318,7 @@ async def recognize_internal_bot_customer_requisites_file(
             mime_type=file.content_type or "application/octet-stream",
             telegram_chat_id=telegram_chat_id,
             telegram_message_id=telegram_message_id,
+            tenant_scope=tenant_scope,
         )
     except BotCustomerRequisitesAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
@@ -330,6 +336,7 @@ async def apply_internal_bot_customer_requisites_action(
     payload: BotCustomerRequisitesActionRequest,
     recognition_id: int = Path(ge=1),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotCustomerRequisitesActionResponse:
     try:
         result = await BotCustomerRequisitesApiService.apply_action_for_manager(
@@ -337,6 +344,7 @@ async def apply_internal_bot_customer_requisites_action(
             telegram_id=payload.telegram_id,
             recognition_id=recognition_id,
             action=payload.action,
+            tenant_scope=tenant_scope,
         )
     except BotCustomerRequisitesAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc

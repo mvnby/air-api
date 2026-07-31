@@ -5,8 +5,17 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from models import Installer, Order, OrderStageStatus, OrderStatus, OrderWorkStage, StaffUser
+from models import (
+    Installer,
+    Order,
+    OrderStageStatus,
+    OrderStatus,
+    OrderWorkStage,
+    StaffUser,
+    TenantMembership,
+)
 from services.bot_task_mutation_service import BotTaskMutationService
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 
 @pytest.mark.asyncio
@@ -21,19 +30,33 @@ async def test_postgres_duplicate_bot_task_mutations_change_each_value_once(
         expire_on_commit=False,
     )
     async with session_factory() as setup_session:
+        tenant_scope = await SystemTenantScopeResolver.resolve(setup_session)
         installer = Installer(name="Concurrency installer")
         setup_session.add(installer)
         await setup_session.flush()
+        staff_user = StaffUser(
+            display_name="Concurrency staff",
+            status="active",
+            roles=["installer"],
+            telegram_id=987654321,
+            legacy_installer_id=installer.id,
+        )
+        setup_session.add(staff_user)
+        await setup_session.flush()
         setup_session.add(
-            StaffUser(
-                display_name="Concurrency staff",
+            TenantMembership(
+                tenant_id=tenant_scope.tenant_id,
+                staff_user_id=int(staff_user.id),
+                role="installer",
                 status="active",
-                roles=["installer"],
-                telegram_id=987654321,
-                legacy_installer_id=installer.id,
             )
         )
-        order = Order(status=OrderStatus.EXECUTION, title="Concurrency order")
+        order = Order(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
+            status=OrderStatus.EXECUTION,
+            title="Concurrency order",
+        )
         setup_session.add(order)
         await setup_session.flush()
         status_stage = OrderWorkStage(

@@ -11,7 +11,20 @@ from sqlmodel import SQLModel, select
 
 from core.config import settings
 from crud.product import ProductDAO
-from models import Customer, GlobalConfig, Installer, Lead, Order, OrderInstaller, OrderStatus, OrderWorkStage, StaffUser
+from models import (
+    Customer,
+    GlobalConfig,
+    Installer,
+    Lead,
+    Order,
+    OrderInstaller,
+    OrderStatus,
+    OrderWorkStage,
+    StaffUser,
+    Storefront,
+    Tenant,
+    TenantMembership,
+)
 from models.common import OrderStageStatus
 from services.bot_access_service import BotAccessService
 from services.bot_product_selection_service import BotProductSelectionService
@@ -34,7 +47,11 @@ from api_contracts.bot import (
 )
 
 
-TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1)
+TEST_TENANT_SCOPE = TenantScope(
+    tenant_id=1,
+    storefront_id=1,
+    is_system=True,
+)
 
 
 @pytest.fixture
@@ -45,6 +62,27 @@ async def sqlite_staff_session(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add(
+            Tenant(
+                id=1,
+                slug="mvn",
+                display_name="MVN",
+                kind="operator",
+                status="active",
+                is_system=True,
+            )
+        )
+        session.add(
+            Storefront(
+                id=1,
+                tenant_id=1,
+                slug="main",
+                display_name="MVN",
+                status="active",
+                is_default=True,
+            )
+        )
+        await session.commit()
         yield session
 
     await engine.dispose()
@@ -1000,13 +1038,21 @@ async def test_selection_process_passes_html_fallback_to_rich_sender(monkeypatch
 
 @pytest.mark.asyncio
 async def test_bot_access_context_for_staff_and_non_staff(sqlite_staff_session):
+    user = StaffUser(
+        display_name="Менеджер",
+        status="active",
+        primary_role="manager",
+        roles=["manager"],
+        telegram_id=777,
+    )
+    sqlite_staff_session.add(user)
+    await sqlite_staff_session.flush()
     sqlite_staff_session.add(
-        StaffUser(
-            display_name="Менеджер",
+        TenantMembership(
+            tenant_id=1,
+            staff_user_id=int(user.id),
+            role="manager",
             status="active",
-            primary_role="manager",
-            roles=["manager"],
-            telegram_id=777,
         )
     )
     await sqlite_staff_session.commit()

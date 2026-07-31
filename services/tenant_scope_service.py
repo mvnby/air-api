@@ -22,8 +22,11 @@ def tenant_or_fully_legacy_scope_clause(
     A row with only one provenance field populated is not legacy and must not
     be claimed by another request during the expand/backfill rollout.
     """
+    scoped = entity.tenant_id == tenant_scope.tenant_id
+    if not tenant_scope.is_system:
+        return scoped
     return or_(
-        entity.tenant_id == tenant_scope.tenant_id,
+        scoped,
         and_(
             entity.tenant_id.is_(None),
             entity.storefront_id.is_(None),
@@ -36,16 +39,30 @@ def storefront_or_fully_legacy_scope_clause(
     tenant_scope: TenantScope,
 ):
     """Match the exact storefront pair or a genuinely pre-scope row."""
+    scoped = and_(
+        entity.tenant_id == tenant_scope.tenant_id,
+        entity.storefront_id == tenant_scope.storefront_id,
+    )
+    if not tenant_scope.is_system:
+        return scoped
     return or_(
-        and_(
-            entity.tenant_id == tenant_scope.tenant_id,
-            entity.storefront_id == tenant_scope.storefront_id,
-        ),
+        scoped,
         and_(
             entity.tenant_id.is_(None),
             entity.storefront_id.is_(None),
         ),
     )
+
+
+def tenant_or_legacy_owner_scope_clause(
+    entity: Any,
+    tenant_scope: TenantScope,
+):
+    """Match tenant-owned data and system-owned nullable rollout rows."""
+    scoped = entity.tenant_id == tenant_scope.tenant_id
+    if not tenant_scope.is_system:
+        return scoped
+    return or_(scoped, entity.tenant_id.is_(None))
 
 
 class SystemTenantScopeResolver:
@@ -71,4 +88,5 @@ class SystemTenantScopeResolver:
         return TenantScope(
             tenant_id=candidate.tenant_id,
             storefront_id=candidate.storefront_id,
+            is_system=candidate.is_system,
         )

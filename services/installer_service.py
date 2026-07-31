@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, or_, func
 
 from models import Installer, StaffUser
+from models.tenancy import TenantScope
 from schemas import (
     ManagerInstallerCreatePayload,
     ManagerInstallerUpdatePayload,
@@ -88,6 +89,8 @@ class ManagerInstallerService:
         cls,
         session: AsyncSession,
         payload: ManagerInstallerCreatePayload,
+        *,
+        tenant_scope: TenantScope,
     ) -> ManagerInstallerResponse:
         inst = Installer(
             name=payload.name,
@@ -97,7 +100,11 @@ class ManagerInstallerService:
         )
         session.add(inst)
         await session.flush()
-        await StaffUserService.ensure_for_installer(session, inst)
+        await StaffUserService.ensure_for_installer(
+            session,
+            inst,
+            tenant_scope=tenant_scope,
+        )
         await session.commit()
         await session.refresh(inst)
         staff_user = await StaffUserService.get_by_legacy_installer_id(session, int(inst.id))
@@ -109,6 +116,8 @@ class ManagerInstallerService:
         session: AsyncSession,
         installer_id: int,
         payload: ManagerInstallerUpdatePayload,
+        *,
+        tenant_scope: TenantScope,
     ) -> Optional[ManagerInstallerResponse]:
         res = await session.execute(select(Installer).where(Installer.id == installer_id))
         inst = res.scalar_one_or_none()
@@ -126,7 +135,11 @@ class ManagerInstallerService:
 
         session.add(inst)
         await session.flush()
-        staff_user = await StaffUserService.ensure_for_installer(session, inst)
+        staff_user = await StaffUserService.ensure_for_installer(
+            session,
+            inst,
+            tenant_scope=tenant_scope,
+        )
         if payload.is_active is not None:
             staff_user.status = StaffUserService.STATUS_ACTIVE if payload.is_active else StaffUserService.STATUS_INACTIVE
             session.add(staff_user)

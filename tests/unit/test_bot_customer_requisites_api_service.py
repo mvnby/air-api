@@ -3,21 +3,41 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlmodel import select
 
-from models import Customer, CustomerRequisitesRecognition, StaffUser
+from models import (
+    Customer,
+    CustomerRequisitesRecognition,
+    StaffUser,
+    TenantMembership,
+)
+from models.tenancy import TenantScope
 from services.bot_customer_requisites_api_service import (
     BotCustomerRequisitesAccessDeniedError,
     BotCustomerRequisitesApiService,
 )
 
+TEST_TENANT_SCOPE = TenantScope(
+    tenant_id=1,
+    storefront_id=1,
+    is_system=True,
+)
+
 
 async def _add_manager(db, telegram_id: int) -> None:
+    user = StaffUser(
+        display_name=f"Manager {telegram_id}",
+        status="active",
+        roles=["manager"],
+        primary_role="manager",
+        telegram_id=telegram_id,
+    )
+    db.add(user)
+    await db.flush()
     db.add(
-        StaffUser(
-            display_name=f"Manager {telegram_id}",
+        TenantMembership(
+            tenant_id=1,
+            staff_user_id=int(user.id),
+            role="manager",
             status="active",
-            roles=["manager"],
-            primary_role="manager",
-            telegram_id=telegram_id,
         )
     )
     await db.commit()
@@ -43,6 +63,7 @@ async def test_requisites_text_recognition_reuses_same_telegram_message(db, monk
         "text_value": "ООО Тест, УНП 123456789, банк и расчетный счет",
         "telegram_chat_id": -100,
         "telegram_message_id": 55,
+        "tenant_scope": TEST_TENANT_SCOPE,
     }
     first = await BotCustomerRequisitesApiService.recognize_text_for_manager(db, **kwargs)
     repeated = await BotCustomerRequisitesApiService.recognize_text_for_manager(db, **kwargs)
@@ -80,12 +101,14 @@ async def test_requisites_confirmation_is_idempotent_and_bound_to_owner(db):
         telegram_id=2002,
         recognition_id=int(recognition.id),
         action="create",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     repeated = await BotCustomerRequisitesApiService.apply_action_for_manager(
         db,
         telegram_id=2002,
         recognition_id=int(recognition.id),
         action="create",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert first.changed is True
@@ -100,4 +123,5 @@ async def test_requisites_confirmation_is_idempotent_and_bound_to_owner(db):
             telegram_id=2003,
             recognition_id=int(recognition.id),
             action="create",
+            tenant_scope=TEST_TENANT_SCOPE,
         )

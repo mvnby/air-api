@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     GET_MANAGER_INSTALLERS,
     CREATE_MANAGER_INSTALLER,
@@ -52,13 +53,17 @@ async def list_installers(
 async def create_installer(
     payload: ManagerInstallerCreatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Create a new installer.
     """
     try:
-        return await ManagerInstallerService.create(session=session, payload=payload)
+        return await ManagerInstallerService.create(
+            session=session,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -93,12 +98,17 @@ async def update_installer(
     installer_id: int,
     payload: ManagerInstallerUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Update an existing installer.
     """
-    installer = await ManagerInstallerService.update(session=session, installer_id=installer_id, payload=payload)
+    installer = await ManagerInstallerService.update(
+        session=session,
+        installer_id=installer_id,
+        payload=payload,
+        tenant_scope=tenant_scope,
+    )
     if not installer:
         raise HTTPException(status_code=404, detail="Монтажник не найден")
     return installer

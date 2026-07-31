@@ -9,5 +9,8 @@ export type ManagerAuthStatusResponse = {
     role?: (string | null);
     display_name?: (string | null);
     auth_source?: string;
+    tenant_id: number;
+    storefront_id: number;
+    tenant_membership_id?: (number | null);
 };
 

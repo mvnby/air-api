@@ -7,6 +7,14 @@ from sqlmodel import SQLModel
 
 from models import CustomerRequisitesRecognition
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from models.tenancy import TenantScope
+
+
+TEST_TENANT_SCOPE = TenantScope(
+    tenant_id=1,
+    storefront_id=1,
+    is_system=True,
+)
 
 
 @pytest.fixture
@@ -72,6 +80,7 @@ async def test_recognize_rejects_too_large_file_before_ocr(monkeypatch):
             filename="req.pdf",
             mime_type="application/pdf",
             source="test",
+            tenant_scope=TEST_TENANT_SCOPE,
         )
 
 
@@ -97,6 +106,7 @@ async def test_recognize_text_creates_recognition_without_file(sqlite_session, m
         sqlite_session,
         text="Частное унитарное предприятие «МегаЕвроКлимат»\nУНП 392053942\nР/с BY83 BPSB 3012 3542 9501 1933 0000\nBIC BPSBBY2X",
         source="telegram_text",
+        tenant_scope=TEST_TENANT_SCOPE,
         telegram_user_id=7,
         telegram_chat_id=100,
         telegram_message_id=55,
@@ -111,5 +121,6 @@ async def test_recognize_text_creates_recognition_without_file(sqlite_session, m
 
     stored = await sqlite_session.get(CustomerRequisitesRecognition, result["id"])
     assert stored is not None
+    assert stored.tenant_id == TEST_TENANT_SCOPE.tenant_id
     assert stored.mime_type == "text/plain"
     assert stored.local_file_path is None

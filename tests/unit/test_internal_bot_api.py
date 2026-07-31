@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 from core.config import settings
 from core.database import get_session
+from core.tenant_scope import get_system_tenant_scope
 from main import app
 from services.bot_access_service import BotAccessContext, BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
@@ -27,6 +28,14 @@ from services.bot_task_mutation_service import (
 from services.bot_catalog_operations_api_service import BotCatalogOperationsApiService
 from services.bot_runtime_api_service import BotRuntimeApiService
 from models import OrderStageStatus
+from models.tenancy import TenantScope
+
+
+TEST_TENANT_SCOPE = TenantScope(
+    tenant_id=1,
+    storefront_id=1,
+    is_system=True,
+)
 
 
 async def _request(
@@ -727,6 +736,7 @@ async def test_internal_bot_requisites_text_and_action_do_not_leak_private_field
     monkeypatch.setattr(BotCustomerRequisitesApiService, "recognize_text_for_manager", fake_recognize)
     monkeypatch.setattr(BotCustomerRequisitesApiService, "apply_action_for_manager", fake_action)
     app.dependency_overrides[get_session] = fake_session
+    app.dependency_overrides[get_system_tenant_scope] = lambda: TEST_TENANT_SCOPE
     try:
         recognized = await _request(
             "/api/internal/bot/v1/customers/requisites/recognize-text",
@@ -747,6 +757,7 @@ async def test_internal_bot_requisites_text_and_action_do_not_leak_private_field
         )
     finally:
         app.dependency_overrides.pop(get_session, None)
+        app.dependency_overrides.pop(get_system_tenant_scope, None)
 
     assert recognized.status_code == 200
     assert "raw_text" not in recognized.json()
@@ -769,6 +780,7 @@ async def test_internal_bot_requisites_file_enforces_size_before_service(monkeyp
 
     monkeypatch.setattr(BotCustomerRequisitesApiService, "recognize_file_for_manager", recognize)
     app.dependency_overrides[get_session] = fake_session
+    app.dependency_overrides[get_system_tenant_scope] = lambda: TEST_TENANT_SCOPE
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
@@ -779,6 +791,7 @@ async def test_internal_bot_requisites_file_enforces_size_before_service(monkeyp
             )
     finally:
         app.dependency_overrides.pop(get_session, None)
+        app.dependency_overrides.pop(get_system_tenant_scope, None)
 
     assert response.status_code == 413
     recognize.assert_not_called()

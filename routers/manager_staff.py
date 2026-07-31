@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_owner_username
+from core.security import AuthenticatedUser, require_owner_access
 from routers.manager_operation_ids import CREATE_MANAGER_STAFF, LIST_MANAGER_STAFF, PATCH_MANAGER_STAFF
 from schemas import ManagerStaffCreatePayload, ManagerStaffListResponse, ManagerStaffResponse, ManagerStaffUpdatePayload
 from services.staff_user_service import StaffUserService
@@ -20,19 +20,31 @@ async def list_staff(
     limit: int = Query(100, ge=1, le=100),
     search: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_owner_username),
+    auth: AuthenticatedUser = Depends(require_owner_access),
 ):
-    return await StaffUserService.list_staff(session=session, page=page, limit=limit, search=search)
+    return await StaffUserService.list_staff(
+        session=session,
+        page=page,
+        limit=limit,
+        search=search,
+        tenant_scope=auth.tenant_scope(),
+    )
 
 
 @router.post("", response_model=ManagerStaffResponse, operation_id=CREATE_MANAGER_STAFF)
 async def create_staff(
     payload: ManagerStaffCreatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_owner_username),
+    auth: AuthenticatedUser = Depends(require_owner_access),
 ):
     try:
-        return await StaffUserService.create_staff(session=session, payload=payload)
+        return await StaffUserService.create_staff(
+            session=session,
+            payload=payload,
+            tenant_scope=auth.tenant_scope(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=400, detail="Логин или Telegram ID уже используется") from exc
@@ -46,10 +58,17 @@ async def patch_staff(
     staff_user_id: int,
     payload: ManagerStaffUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_owner_username),
+    auth: AuthenticatedUser = Depends(require_owner_access),
 ):
     try:
-        staff_user = await StaffUserService.update_staff(session=session, staff_user_id=staff_user_id, payload=payload)
+        staff_user = await StaffUserService.update_staff(
+            session=session,
+            staff_user_id=staff_user_id,
+            payload=payload,
+            tenant_scope=auth.tenant_scope(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=400, detail="Логин или Telegram ID уже используется") from exc

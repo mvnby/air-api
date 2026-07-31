@@ -4,6 +4,10 @@ import os
 from sqlalchemy import select
 from core.database import async_session_maker
 from models import Customer, CustomerType
+from services.tenant_scope_service import (
+    SystemTenantScopeResolver,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 CSV_FILE = "контрагенты - main.csv"
 
@@ -13,6 +17,7 @@ async def import_customers():
         return
 
     async with async_session_maker() as session:
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         print(f"Starting import from {CSV_FILE}...")
         
         count_new = 0
@@ -33,7 +38,13 @@ async def import_customers():
 
                     # Deduplication by INN (if present)
                     if inn:
-                        stmt = select(Customer).where(Customer.inn == inn)
+                        stmt = select(Customer).where(
+                            Customer.inn == inn,
+                            tenant_or_legacy_owner_scope_clause(
+                                Customer,
+                                tenant_scope,
+                            ),
+                        )
                         result = await session.execute(stmt)
                         existing = result.scalar_one_or_none()
                         
@@ -56,6 +67,7 @@ async def import_customers():
                     
                     # Create new customer
                     customer = Customer(
+                        tenant_id=tenant_scope.tenant_id,
                         name=name,
                         full_legal_name=name,
                         inn=inn,

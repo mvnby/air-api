@@ -7,12 +7,17 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from models import CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink, OrderStatus
+from models import Customer, CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink, OrderStatus
+from models.tenancy import TenantScope
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
 from services.documents.factory import DocumentFactory
 from services.document_role_service import DocumentRoleService
 from services.document_template_service import DocumentTemplateService
+from services.tenant_scope_service import (
+    tenant_or_fully_legacy_scope_clause,
+    tenant_or_legacy_owner_scope_clause,
+)
 
 
 class DocumentHasDependentsError(ValueError):
@@ -576,11 +581,24 @@ class DocumentService:
     @staticmethod
     async def get_customer_documents(
         session: AsyncSession,
-        customer_id: int
-    ) -> list[OrderDocument]:
+        customer_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[list[OrderDocument]]:
         """Возвращает список всех документов клиента."""
+        customer_exists = (
+            await session.execute(
+                select(Customer.id).where(
+                    Customer.id == customer_id,
+                    tenant_or_legacy_owner_scope_clause(Customer, tenant_scope),
+                )
+            )
+        ).scalar_one_or_none()
+        if customer_exists is None:
+            return None
         query = select(OrderDocument).join(Order).where(
-            Order.customer_id == customer_id
+            Order.customer_id == customer_id,
+            tenant_or_fully_legacy_scope_clause(Order, tenant_scope),
         ).order_by(OrderDocument.date.desc())
 
         result = await session.execute(query)
