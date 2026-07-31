@@ -45,6 +45,7 @@ from schemas import (
     ManagerStaleWorkStageItem,
 )
 from services.document_service import DocumentService, OrderDocumentsLockedError
+from services.order_create_command_service import OrderCreateCommandService
 from services.order_payment_command_service import OrderPaymentCommandService
 from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
@@ -64,7 +65,7 @@ async def create_manager_order(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        data = await OrderService.create_manager_order(
+        data = await OrderCreateCommandService.create_manager_order(
             session=session,
             payload=payload,
             tenant_scope=tenant_scope,

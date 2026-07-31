@@ -48,11 +48,18 @@ handler owns one transaction and returns the post-commit projection. Failure at
 any point must roll back the order, customer changes, links and outbox events as
 one unit. Add fault-injection tests at the final step of each command.
 
-Deliver R2 as three independently deployable slices:
+Deliver R2 as independently deployable slices:
 
 1. [x] proposal create/update/select commands;
 2. [x] work-stage and payment commands;
-3. [ ] order create/update/delete plus Lead qualification.
+3. [x] Manager order creation and Lead create/update/loss/qualification;
+4. [ ] Manager order update;
+5. [ ] order deletion and external document cleanup.
+
+Order deletion stays separate because deleting a Google Drive document is an
+external side effect. A database transaction alone cannot undo that operation;
+the command needs an after-commit cleanup/outbox boundary instead of pretending
+that Drive and PostgreSQL share one transaction.
 
 When a command participates in an explicit caller-owned unit of work, its local
 boundary is a SAVEPOINT; ordinary HTTP commands own the root transaction.

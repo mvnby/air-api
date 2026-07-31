@@ -926,64 +926,12 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        source_enum = LeadSource(payload.source) if payload.source else LeadSource.MANAGER
-        initial_status = (
-            OrderStatus.NEGOTIATION
-            if payload.customer_id or payload.service_type == "maintenance"
-            else OrderStatus.NEW_LEAD
-        )
+        """Compatibility delegate to the transactional create command."""
+        from services.order_create_command_service import OrderCreateCommandService
 
-        order = await OrderService.create_from_website(
-            session=session,
-            customer_name=payload.name or "Новый клиент",
-            customer_phone=payload.phone or "",
-            customer_email=None,
-            customer_address=payload.address,
-            items=[],
-            lead_source=source_enum,
-            initial_status=initial_status,
-            comment=payload.request_text,
-            customer_id=payload.customer_id,
-            customer_type=payload.customer_type,
-            customer_inn=payload.customer_inn,
-            customer_full_legal_name=payload.customer_full_legal_name,
-            tenant_scope=tenant_scope,
-        )
-
-        changed = False
-        default_title = OrderService._build_default_order_title(
-            service_type=payload.service_type,
-            comment=payload.request_text,
-        )
-        if default_title:
-            order.title = default_title
-            changed = True
-
-        if payload.service_type == "maintenance" and payload.target_date:
-            order.installation_date = OrderService._normalize_naive_datetime(payload.target_date)
-            changed = True
-
-        if payload.service_type:
-            order.technical_meta = dict(order.technical_meta or {})
-            order.technical_meta["service_type"] = payload.service_type
-            order.workflow_type = OrderService._workflow_type_from_service_type(payload.service_type, order.workflow_type)
-            flag_modified(order, "technical_meta")
-            changed = True
-
-        if order.workflow_type == "repair":
-            OrderService._ensure_repair_meta_defaults(order)
-            flag_modified(order, "technical_meta")
-            await OrderService._maybe_add_default_repair_diagnostic(session, order)
-            changed = True
-
-        if changed:
-            session.add(order)
-            await session.commit()
-            await session.refresh(order)
-
-        return await OrderService.get_order_detail_for_manager(
+        return await OrderCreateCommandService.create_manager_order(
             session,
-            int(order.id),
+            payload,
             tenant_scope=tenant_scope,
         )
 
