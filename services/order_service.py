@@ -17,6 +17,7 @@ from services.product_area import area_from_specs
 from services.order_proposal_lifecycle import (
     PROPOSAL_STATUS_SENT,
 )
+from services.order_product_link_command import OrderProductLinkCommand
 from services.tenant_scope_service import (
     TenantScope,
     tenant_scope_clause,
@@ -952,7 +953,7 @@ class OrderService:
         customer_bank_name: Optional[str] = None,
         customer_id: Optional[int] = None,
         order_technical_meta: Optional[Dict[str, Any]] = None,
-        product_price_overrides: Optional[Dict[int, int]] = None,
+        product_link_command: Optional[OrderProductLinkCommand] = None,
         commit: bool = True,
     ) -> Order:
         """
@@ -1092,6 +1093,7 @@ class OrderService:
         added_items = []
         installation_services = []  # Collect installation services to add after products
         product_cost_cache: Dict[int, int] = {}
+        link_command = product_link_command or OrderProductLinkCommand.shared_catalog()
         
         for item in items:
             product_id = item.get("product_id")
@@ -1104,12 +1106,6 @@ class OrderService:
                 product = await ProductDAO.get_by_id(session, product_id)
 
             if product:
-                if product_price_overrides is None:
-                    storefront_unit_price = int(product.price)
-                else:
-                    storefront_unit_price = int(
-                        product_price_overrides[int(product.id)]
-                    )
                 # Extract installation fields (Phase: Snapshot Pricing Refactor)
                 with_installation = item.get("with_installation", False)
                 installation_price = int(item.get("installation_price", 0))
@@ -1119,23 +1115,17 @@ class OrderService:
                     product_cost_cache,
                 )
                 
-                link = OrderProductLink(
+                link_mutation = link_command.build(
                     order_id=order.id,
                     proposal_id=proposal.id,
-                    product_id=product.id,
-                    quantity=item["quantity"],
-                    price=storefront_unit_price,
-                    cost=product_cost,
-                    # Save snapshot for history
-                    is_installation_included=with_installation,
-                    installation_price=installation_price if with_installation else 0,
-                    installation_details=item.get("installation_meta") if with_installation else None
+                    product=product,
+                    item=item,
+                    product_cost=product_cost,
                 )
-                session.add(link)
+                session.add(link_mutation.link)
                 
                 # Calculate product total
-                product_total = storefront_unit_price * item["quantity"]
-                total_amount += product_total
+                total_amount += link_mutation.product_total
                 
                 # If installation requested, add to total
                 if with_installation and installation_price > 0:

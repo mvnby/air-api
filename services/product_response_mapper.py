@@ -20,6 +20,7 @@ from services.product_image_processing_contract import (
 )
 from services.product_series_payloads import build_product_series_response
 from services.product_serialization import parse_legacy_images, sanitize_specs
+from services.public_taxonomy_service import PublicTaxonomyService
 
 
 def _is_same_image_url(left: Optional[str], right: Optional[str]) -> bool:
@@ -153,7 +154,7 @@ def map_product_to_response(
 ) -> ProductResponse:
     tags_payload = []
     if product.tags:
-        for tag in product.tags:
+        for tag in PublicTaxonomyService.visible_tags(product.tags):
             group = None
             if tag.group:
                 group = TagGroupResponse(

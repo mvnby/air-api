@@ -56,12 +56,21 @@ The same boundary applies to product detail, siblings, series navigation,
 featured products, brand counts, series pages, merchandising collections,
 filter metadata, spec keys and the legacy public search endpoint.
 
+Public product payloads serialize a tag only when both `Tag.is_public=true`
+and its `TagGroup.is_public=true`. Catalog tag filters and tag-title search use
+the same predicate. Hidden tag slugs are ignored exactly like unknown legacy
+slugs; a legacy brand slug is recognized only through a public brand tag and a
+published `Brand`. These rules are identical for the canonical and secondary
+storefront projections.
+
 Website checkout resolves and share-locks the same storefront price again on
 the server, in deterministic product order, before creating any order rows. A
 missing or disabled offer returns `409 product_not_available`; a valid order
 stores the storefront unit price in `OrderProductLink.price` and records the
-pricing source in the order technical snapshot. Browser-supplied prices remain
-non-authoritative.
+pricing source in the order technical snapshot. Link creation receives the
+locked price through a dedicated immutable command, so the generic order
+orchestrator does not resolve or fall back from storefront pricing.
+Browser-supplied prices remain non-authoritative.
 
 `POST /api/v1/leads/product-availability` applies the same visibility check
 before looking up or creating an Order and before resolving notification

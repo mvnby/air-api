@@ -16,6 +16,7 @@ from schemas import (
 from services.product_series_payloads import build_product_series_response
 from services.product_area import area_from_specs
 from services.product_serialization import sanitize_specs
+from services.public_taxonomy_service import PublicTaxonomyService
 
 
 class ProductSeriesService:
@@ -28,11 +29,13 @@ class ProductSeriesService:
             else:
                 reference_brand_ids = {
                     tag.id for tag in (reference.tags or [])
-                    if tag.group and tag.group.slug == "brand"
+                    if PublicTaxonomyService.is_public_tag(tag)
+                    and tag.group.slug == "brand"
                 }
                 item_brand_ids = {
                     tag.id for tag in (item.tags or [])
-                    if tag.group and tag.group.slug == "brand"
+                    if PublicTaxonomyService.is_public_tag(tag)
+                    and tag.group.slug == "brand"
                 }
                 same_brand = 0 if (reference_brand_ids and item_brand_ids.intersection(reference_brand_ids)) else 1
 
@@ -82,7 +85,9 @@ class ProductSeriesService:
         keys = [
             f"tag:{tag.id}"
             for tag in (product.tags or [])
-            if tag.id and tag.group and tag.group.slug == "series"
+            if tag.id
+            and PublicTaxonomyService.is_public_tag(tag)
+            and tag.group.slug == "series"
         ]
 
         specs = product.specs if isinstance(product.specs, dict) else {}
@@ -108,7 +113,8 @@ class ProductSeriesService:
             series_tag_ids = [
                 tag.id
                 for tag in (product.tags or [])
-                if tag.group and tag.group.slug == "series"
+                if PublicTaxonomyService.is_public_tag(tag)
+                and tag.group.slug == "series"
             ]
             if not series_tag_ids:
                 return []

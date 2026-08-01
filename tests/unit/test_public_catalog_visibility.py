@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.dialects import postgresql
 
+from crud.canonical_public_catalog import CanonicalPublicCatalogDAO
 from crud.product import ProductDAO
 from crud.public_catalog import PublicCatalogDAO
 from models import Product
@@ -105,6 +106,28 @@ async def test_secondary_price_filter_sort_and_pagination_use_offer_column():
 
 
 @pytest.mark.asyncio
+async def test_secondary_q_only_searches_public_taxonomy():
+    session = _CapturingSession()
+
+    rows = await PublicCatalogDAO.get_filtered(
+        session,
+        tenant_scope=TenantScope(
+            tenant_id=7,
+            storefront_id=11,
+            is_canonical_storefront=False,
+        ),
+        search_query="InternalTaxonomyTitle",
+    )
+
+    sql = _postgres_sql(session.statement)
+    assert rows == []
+    assert "tenant_offer.tenant_id = 7" in sql
+    assert "tag.title ILIKE '%%InternalTaxonomyTitle%%'" in sql
+    assert "tag.is_public IS true" in sql
+    assert "tag_group.is_public IS true" in sql
+
+
+@pytest.mark.asyncio
 async def test_visibility_is_negative_across_storefront_a_and_b(monkeypatch):
     product = _product()
     scope_a = TenantScope(tenant_id=2, storefront_id=20, is_canonical_storefront=False)
@@ -172,7 +195,7 @@ async def test_canonical_visibility_requires_published_product(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_canonical_public_search_explicitly_filters_unpublished(monkeypatch):
+async def test_canonical_public_search_uses_canonical_public_dao(monkeypatch):
     captured = {}
 
     async def fake_get_filtered(_session, **kwargs):
@@ -182,7 +205,7 @@ async def test_canonical_public_search_explicitly_filters_unpublished(monkeypatc
     async def fake_metrics(_session, _products):
         return {}
 
-    monkeypatch.setattr(ProductDAO, "get_filtered", fake_get_filtered)
+    monkeypatch.setattr(CanonicalPublicCatalogDAO, "get_filtered", fake_get_filtered)
     monkeypatch.setattr(ProductReadService, "get_supply_metrics_map", fake_metrics)
 
     result = await PublicCatalogService.search(
@@ -198,4 +221,4 @@ async def test_canonical_public_search_explicitly_filters_unpublished(monkeypatc
     )
 
     assert result == []
-    assert captured["is_published"] is True
+    assert captured["search_query"] == "hidden"

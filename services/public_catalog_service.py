@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from api_contracts.public_catalog import PublicProductSearchItemResponse
+from crud.canonical_public_catalog import CanonicalPublicCatalogDAO
 from crud.product import ProductDAO
 from crud.public_catalog import PublicCatalogDAO
-from models import Brand
+from crud.public_taxonomy import PublicTaxonomyDAO
 from models.tenancy import TenantScope
 from schemas import (
     ProductSeriesNavigationItemResponse,
@@ -31,6 +31,7 @@ from services.public_catalog_visibility_service import (
     PublicCatalogVisibilityService,
     PublicProductProjection,
 )
+from services.public_taxonomy_service import PublicTaxonomyService
 from services.tag_logic import is_invalid_brand_name, is_invalid_brand_slug
 
 
@@ -47,21 +48,11 @@ class PublicCatalogService:
         tag_slugs: Optional[list[str]],
         brand_slugs: Optional[list[str]],
     ) -> tuple[dict[int, list[int]] | None, list[str]]:
-        faceted_tag_ids = None
-        resolved_brand_slugs = list(brand_slugs or [])
-        if tag_slugs:
-            brand_rows = (
-                await session.execute(select(Brand.slug).where(Brand.slug.in_(tag_slugs)))
-            ).scalars().all()
-            legacy_brand_slugs = [slug for slug in brand_rows if slug]
-            resolved_brand_slugs.extend(legacy_brand_slugs)
-            brand_slug_set = set(legacy_brand_slugs)
-            facet_slugs = [slug for slug in tag_slugs if slug not in brand_slug_set]
-            faceted_tag_ids = await ProductReadService.resolve_slugs_to_grouped_ids(
-                session,
-                facet_slugs,
-            )
-        return faceted_tag_ids, list(dict.fromkeys(resolved_brand_slugs))
+        return await PublicTaxonomyDAO.resolve_filter_ids(
+            session,
+            tag_slugs=tag_slugs,
+            brand_slugs=brand_slugs,
+        )
 
     @staticmethod
     async def get_catalog_page(
@@ -279,11 +270,10 @@ class PublicCatalogService:
             session,
             tenant_scope,
         ):
-            products = await ProductDAO.get_filtered(
+            products = await CanonicalPublicCatalogDAO.get_filtered(
                 session,
                 is_inverter=is_inverter,
                 search_query=(query or "").strip() or None,
-                is_published=True,
                 limit=max(limit, 1),
                 page=1,
                 sort="recommended",
@@ -448,12 +438,14 @@ class PublicCatalogService:
                 reference_brand_ids = {
                     tag.id
                     for tag in (reference_product.tags or [])
-                    if tag.group and tag.group.slug == "brand"
+                    if PublicTaxonomyService.is_public_tag(tag)
+                    and tag.group.slug == "brand"
                 }
                 product_brand_ids = {
                     tag.id
                     for tag in (product.tags or [])
-                    if tag.group and tag.group.slug == "brand"
+                    if PublicTaxonomyService.is_public_tag(tag)
+                    and tag.group.slug == "brand"
                 }
                 same_brand = (
                     0

@@ -12,6 +12,7 @@ from services.installation_pricing_service import (
     InstallationPricingError,
     InstallationPricingService,
 )
+from services.order_product_link_command import OrderProductLinkCommand
 from services.order_service import OrderService
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.public_write_idempotency_service import PublicWriteIdempotencyService
@@ -106,7 +107,9 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
     assert captured_kwargs["customer_address"] == "г. Минск, ул. Тестовая 10"
     assert captured_kwargs["items"][0]["product_id"] == 7
     assert captured_kwargs["items"][0]["with_installation"] is True
-    assert captured_kwargs["product_price_overrides"] == {7: 3000}
+    product_link_command = captured_kwargs["product_link_command"]
+    assert isinstance(product_link_command, OrderProductLinkCommand)
+    assert dict(product_link_command.unit_prices or {}) == {7: 3000}
     assert captured_kwargs["commit"] is False
     assert captured_kwargs["order_technical_meta"]["public_catalog_pricing"] == {
         "items": [

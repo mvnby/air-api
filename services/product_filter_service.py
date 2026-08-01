@@ -63,6 +63,7 @@ class ProductFilterService:
             select(Tag)
             .join(TagGroup, Tag.group_id == TagGroup.id)
             .where(Tag.is_public == True)
+            .where(TagGroup.is_public == True)
             .where((TagGroup.slug == "expert-badge") | (TagGroup.is_expert_badge == True))
             .order_by(Tag.sort_order, Tag.title)
         )

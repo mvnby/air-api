@@ -13,6 +13,7 @@ from services.installation_pricing_service import (
     InstallationPricingError,
     InstallationPricingService,
 )
+from services.order_product_link_command import OrderProductLinkCommand
 from services.order_service import OrderService
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.public_write_fingerprint_service import PublicWriteFingerprintService
@@ -154,7 +155,9 @@ class WebsiteOrderService:
             customer_bic=payload.customer.bic,
             customer_bank_name=payload.customer.bank_name,
             order_technical_meta=technical_meta or None,
-            product_price_overrides=storefront_prices,
+            product_link_command=OrderProductLinkCommand.storefront_snapshot(
+                storefront_prices
+            ),
             tenant_scope=tenant_scope,
             commit=False,
         )

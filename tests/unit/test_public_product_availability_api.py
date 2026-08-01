@@ -4,7 +4,7 @@ import pytest
 from core.database import get_session
 from core.tenant_scope import get_public_tenant_scope
 from main import app
-from models import Product
+from models import Product, Tag, TagGroup
 from models.tenancy import TenantScope
 from services.feature_resolver_service import FeatureResolverService
 from services.public_catalog_service import PublicCatalogService, PublicProductPage
@@ -26,9 +26,50 @@ def _make_product(product_id: int = 1) -> Product:
     )
 
 
+def _attach_mixed_taxonomy(product: Product) -> None:
+    public_group = TagGroup(
+        id=10,
+        title="Public",
+        slug="public",
+        is_public=True,
+    )
+    hidden_group = TagGroup(
+        id=11,
+        title="Internal group",
+        slug="internal-group",
+        is_public=False,
+    )
+    public_tag = Tag(
+        id=20,
+        group_id=10,
+        title="Visible tag",
+        slug="visible-tag",
+        is_public=True,
+    )
+    hidden_tag = Tag(
+        id=21,
+        group_id=10,
+        title="Internal tag",
+        slug="internal-tag",
+        is_public=False,
+    )
+    hidden_group_tag = Tag(
+        id=22,
+        group_id=11,
+        title="Internal group tag",
+        slug="internal-group-tag",
+        is_public=True,
+    )
+    public_tag.group = public_group
+    hidden_tag.group = public_group
+    hidden_group_tag.group = hidden_group
+    product.tags = [public_tag, hidden_tag, hidden_group_tag]
+
+
 @pytest.mark.asyncio
 async def test_public_catalog_includes_city_availability(monkeypatch):
     product = _make_product()
+    _attach_mixed_taxonomy(product)
 
     async def override_get_session():
         yield object()
@@ -83,11 +124,15 @@ async def test_public_catalog_includes_city_availability(monkeypatch):
     assert payload["items"][0]["vitebsk_qty"] == 0
     assert payload["items"][0]["minsk_qty"] == 3
     assert payload["items"][0]["availability_status"] == "available_2_3_days"
+    assert [tag["slug"] for tag in payload["items"][0]["tags"]] == [
+        "visible-tag"
+    ]
 
 
 @pytest.mark.asyncio
 async def test_public_product_detail_includes_city_availability(monkeypatch):
     product = _make_product(34)
+    _attach_mixed_taxonomy(product)
 
     async def override_get_session():
         yield object()
@@ -140,3 +185,4 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
     assert payload["vitebsk_qty"] == 0
     assert payload["minsk_qty"] == 0
     assert payload["availability_status"] == "check_availability"
+    assert [tag["slug"] for tag in payload["tags"]] == ["visible-tag"]

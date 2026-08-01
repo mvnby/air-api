@@ -1,6 +1,13 @@
 import pytest
 
-from models import Product, ProductImage, ProductImageVariant, ProductSeries
+from models import (
+    Product,
+    ProductImage,
+    ProductImageVariant,
+    ProductSeries,
+    Tag,
+    TagGroup,
+)
 from services.product_image_processing_contract import (
     ProductImageManualQualityStatus,
     ProductImageProcessingStatus,
@@ -44,6 +51,54 @@ def _product_with_variant(
     ]
     product.gallery_images = [source_image]
     return product
+
+
+def test_map_product_to_response_excludes_hidden_tags_and_hidden_groups():
+    product = _product_with_variant()
+    public_group = TagGroup(
+        id=1,
+        title="Public group",
+        slug="public-group",
+        is_public=True,
+    )
+    hidden_group = TagGroup(
+        id=2,
+        title="Internal group",
+        slug="internal-group",
+        is_public=False,
+    )
+    public_tag = Tag(
+        id=10,
+        group_id=1,
+        title="Visible",
+        slug="visible",
+        is_public=True,
+    )
+    hidden_tag = Tag(
+        id=11,
+        group_id=1,
+        title="Internal tag",
+        slug="internal-tag",
+        is_public=False,
+    )
+    tag_in_hidden_group = Tag(
+        id=12,
+        group_id=2,
+        title="Internal group tag",
+        slug="internal-group-tag",
+        is_public=True,
+    )
+    public_tag.group = public_group
+    hidden_tag.group = public_group
+    tag_in_hidden_group.group = hidden_group
+    product.tags = [public_tag, hidden_tag, tag_in_hidden_group]
+
+    payload = map_product_to_response(product)
+
+    assert [tag.slug for tag in payload.tags] == ["visible"]
+    serialized = payload.model_dump_json()
+    assert "Internal tag" not in serialized
+    assert "Internal group" not in serialized
 
 
 def test_map_product_to_response_selects_only_approved_ready_card_and_full_variants():

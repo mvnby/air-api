@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from crud.product import ProductDAO
+from crud.public_taxonomy import PublicTaxonomyDAO
 from models import (
     Brand,
     FeatureSeriesLink,
@@ -125,8 +126,12 @@ class PublicCatalogDAO:
             has_fresh_air=has_fresh_air,
             color=color,
             indoor_types=indoor_types,
-            brand_slugs=brand_slugs,
+            brand_slugs=None,
             is_published=True,
+        )
+        stmt = PublicTaxonomyDAO.apply_published_brand_filter(
+            stmt,
+            brand_slugs,
         )
         if min_price is not None:
             stmt = stmt.where(TenantOffer.price >= min_price)
@@ -138,9 +143,12 @@ class PublicCatalogDAO:
             stmt = stmt.where(Product.series_id.in_(series_ids))
         if product_kinds:
             stmt = stmt.where(Product.product_kind.in_(product_kinds))
-        if search_query:
-            stmt = ProductDAO._apply_smart_search_filter(session, stmt, search_query)
-        stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
+        stmt = PublicTaxonomyDAO.apply_search_filter(
+            session,
+            stmt,
+            search_query,
+        )
+        stmt = PublicTaxonomyDAO.apply_faceted_filters(stmt, faceted_tag_ids)
 
         if sort == "price_asc":
             stmt = stmt.order_by(TenantOffer.price.asc(), Product.id.asc())
@@ -204,16 +212,23 @@ class PublicCatalogDAO:
             has_fresh_air=has_fresh_air,
             color=color,
             indoor_types=indoor_types,
-            brand_slugs=brand_slugs,
+            brand_slugs=None,
             is_published=True,
+        )
+        stmt = PublicTaxonomyDAO.apply_published_brand_filter(
+            stmt,
+            brand_slugs,
         )
         if min_price is not None:
             stmt = stmt.where(TenantOffer.price >= min_price)
         if max_price is not None:
             stmt = stmt.where(TenantOffer.price <= max_price)
-        if search_query:
-            stmt = ProductDAO._apply_smart_search_filter(session, stmt, search_query)
-        stmt = ProductDAO._apply_faceted_filters(stmt, faceted_tag_ids)
+        stmt = PublicTaxonomyDAO.apply_search_filter(
+            session,
+            stmt,
+            search_query,
+        )
+        stmt = PublicTaxonomyDAO.apply_faceted_filters(stmt, faceted_tag_ids)
         return int((await session.execute(stmt)).scalar_one() or 0)
 
     @staticmethod
@@ -283,7 +298,9 @@ class PublicCatalogDAO:
                 int(tag.id)
                 for tag in (product.tags or [])
                 if tag.id is not None
+                and tag.is_public is True
                 and tag.group is not None
+                and tag.group.is_public is True
                 and tag.group.slug == "series"
             ]
             if not series_tag_ids:
@@ -450,6 +467,7 @@ class PublicCatalogDAO:
             .join(TenantOffer, TenantOffer.product_id == Product.id)
             .where(
                 Tag.is_public.is_(True),
+                TagGroup.is_public.is_(True),
                 (TagGroup.slug == "expert-badge")
                 | (TagGroup.is_expert_badge.is_(True)),
                 Product.is_published.is_(True),
