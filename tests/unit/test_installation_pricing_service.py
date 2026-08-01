@@ -235,6 +235,7 @@ async def test_service_only_installation_uses_selected_server_rate_without_bundl
     assert sorted(link.price for link in service_links) == [50, 650]
     assert response.total_amount == 700
     order = await sqlite_checkout_session.get(Order, response.id)
+    assert "public_catalog_pricing" not in order.technical_meta
     assert order.technical_meta["public_installation_pricing"]["pricing_version"] == "installation-v1"
     snapshot = order.technical_meta["public_installation_pricing"]["items"][0]["installation_meta"]
     assert snapshot["pricing_breakdown"]["bundle_discount"] == 0

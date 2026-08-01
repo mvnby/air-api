@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
+from api_contracts.public_catalog import PublicProductSearchResponse
 from core.database import get_session
 from core.security import get_current_username
 from core.tenant_scope import get_public_tenant_scope
@@ -16,7 +17,7 @@ from services.readiness_service import ReadinessService
 router = APIRouter(tags=["api"])
 
 
-@router.get("/products/search")
+@router.get("/products/search", response_model=PublicProductSearchResponse)
 async def search_products(
     q: str = None,
     is_inverter: bool = None,
@@ -30,7 +31,7 @@ async def search_products(
         query=q,
         is_inverter=is_inverter,
     )
-    return {"items": products}
+    return PublicProductSearchResponse(items=products)
 
 
 @router.get("/admin/tags/filterable")

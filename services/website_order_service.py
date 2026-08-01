@@ -38,13 +38,16 @@ class WebsiteOrderService:
             for item in items
             if item.get("product_id") is not None
         }
-        storefront_prices, pricing_source = (
-            await PublicCatalogService.get_checkout_prices(
-                session,
-                tenant_scope=tenant_scope,
-                product_ids=product_ids,
+        storefront_prices: dict[int, int] = {}
+        pricing_source: str | None = None
+        if product_ids:
+            storefront_prices, pricing_source = (
+                await PublicCatalogService.get_checkout_prices(
+                    session,
+                    tenant_scope=tenant_scope,
+                    product_ids=product_ids,
+                )
             )
-        )
         missing_product_ids = sorted(product_ids - storefront_prices.keys())
         if missing_product_ids:
             raise InstallationPricingError(
@@ -52,10 +55,16 @@ class WebsiteOrderService:
                 code="product_not_available",
             )
         items = [
-            {
-                **item,
-                "_storefront_unit_price": storefront_prices[int(item["product_id"])],
-            }
+            (
+                {
+                    **item,
+                    "_storefront_unit_price": storefront_prices[
+                        int(item["product_id"])
+                    ],
+                }
+                if item.get("product_id") is not None
+                else item
+            )
             for item in items
         ]
         pricing_snapshots = [
@@ -75,12 +84,13 @@ class WebsiteOrderService:
                 "source": pricing_source,
             }
             for item in items
+            if item.get("product_id") is not None
         ]
-        technical_meta = {
-            "public_catalog_pricing": {
+        technical_meta = {}
+        if catalog_pricing_snapshots:
+            technical_meta["public_catalog_pricing"] = {
                 "items": catalog_pricing_snapshots,
             }
-        }
         if pricing_snapshots:
             technical_meta["public_installation_pricing"] = {
                 "pricing_version": InstallationPricingService.PRICING_VERSION,

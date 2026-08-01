@@ -8,6 +8,7 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api_contracts.public_catalog import PublicProductSearchItemResponse
 from crud.product import ProductDAO
 from crud.public_catalog import PublicCatalogDAO, PublicCatalogRow
 from models import Brand, Product
@@ -22,6 +23,7 @@ from services.feature_resolver_service import FeatureResolverService
 from services.product_area import area_from_specs
 from services.product_filter_service import ProductFilterService
 from services.product_read_service import ProductReadService
+from services.product_response_mapper import map_product_to_response
 from services.product_series_service import ProductSeriesService
 from services.product_series_payloads import build_product_series_response
 from services.product_serialization import sanitize_specs
@@ -229,25 +231,14 @@ class PublicCatalogService:
         if row is None:
             return None
         projection = PublicCatalogService.project_row(row)
-        candidates = await ProductSeriesService.get_series_siblings(
-            session,
-            projection.product,
-            limit=500,
-        )
-        candidate_ids = [int(item.id) for item in candidates if item.id is not None]
-        visible_rows = await PublicCatalogDAO.get_by_ids(
+        visible_rows = await PublicCatalogDAO.get_series_siblings(
             session,
             tenant_scope=tenant_scope,
-            product_ids=candidate_ids,
+            product=projection.product,
         )
-        projected_by_id = {
-            int(item.product.id): item
-            for item in map(PublicCatalogService.project_row, visible_rows)
-            if item.product.id is not None
-        }
         ordered = PublicCatalogService._sort_series_projections(
             projection,
-            list(projected_by_id.values()),
+            [PublicCatalogService.project_row(row) for row in visible_rows],
         )[:sibling_limit]
         return PublicProductPage(product=projection, siblings=ordered)
 
@@ -302,31 +293,75 @@ class PublicCatalogService:
         query: str | None,
         is_inverter: bool | None,
         limit: int = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> list[PublicProductSearchItemResponse]:
         if await PublicCatalogService.is_canonical_scope(session, tenant_scope):
-            return await ProductReadService.search(
+            products = await ProductDAO.get_filtered(
                 session,
-                query=query,
                 is_inverter=is_inverter,
-                limit=limit,
+                search_query=(query or "").strip() or None,
+                limit=max(limit, 1),
+                page=1,
+                sort="recommended",
+                load_image_variants=True,
             )
-        rows = await PublicCatalogDAO.get_filtered(
+            projections = [
+                PublicCatalogService.project_product(product) for product in products
+            ]
+        else:
+            rows = await PublicCatalogDAO.get_filtered(
+                session,
+                tenant_scope=tenant_scope,
+                is_inverter=is_inverter,
+                search_query=(query or "").strip() or None,
+                limit=max(limit, 1),
+                page=1,
+                sort="recommended",
+                load_image_variants=True,
+            )
+            projections = [PublicCatalogService.project_row(row) for row in rows]
+
+        supply_metrics = await ProductReadService.get_supply_metrics_map(
             session,
-            tenant_scope=tenant_scope,
-            is_inverter=is_inverter,
-            search_query=(query or "").strip() or None,
-            limit=max(limit, 1),
-            page=1,
-            sort="recommended",
+            [projection.product for projection in projections],
         )
-        items: list[dict[str, Any]] = []
-        for row in rows:
-            projection = PublicCatalogService.project_row(row)
-            payload = ProductReadService._to_dict(projection.product)
-            payload["price"] = projection.price
-            payload["old_price"] = projection.old_price
-            items.append(payload)
-        return items[:limit]
+        return [
+            PublicCatalogService._to_public_search_item(
+                projection,
+                supply_metrics.get(int(projection.product.id or 0), {}),
+            )
+            for projection in projections[:limit]
+        ]
+
+    @staticmethod
+    def _to_public_search_item(
+        projection: PublicProductProjection,
+        supply_metrics: dict[str, Any],
+    ) -> PublicProductSearchItemResponse:
+        mapped = map_product_to_response(
+            projection.product,
+            supply_metrics=supply_metrics,
+            pricing=projection.pricing,
+        )
+        return PublicProductSearchItemResponse(
+            id=mapped.id,
+            title=mapped.title,
+            slug=mapped.slug,
+            price=mapped.price,
+            old_price=mapped.old_price,
+            product_kind=mapped.product_kind,
+            is_inverter=mapped.is_inverter,
+            power_cooling=mapped.power_cooling,
+            main_image=mapped.main_image,
+            card_image=mapped.card_image,
+            full_image=mapped.full_image,
+            specs=mapped.specs,
+            vitebsk_qty=mapped.vitebsk_qty,
+            minsk_qty=mapped.minsk_qty,
+            availability_status=mapped.availability_status,
+            public_stock_state=mapped.public_stock_state,
+            delivery_min_days=mapped.delivery_min_days,
+            delivery_max_days=mapped.delivery_max_days,
+        )
 
     @staticmethod
     async def get_checkout_prices(

@@ -365,6 +365,7 @@ async def test_all_public_product_surfaces_share_the_offer_boundary(
     low_offer.series_id = series.id
     low_offer.product_kind = "complete_split_system"
     low_offer.main_image = "/media/products/offer-low.webp"
+    low_offer.source_url = "https://supplier.example/private-source"
     high_offer.brand_id = visible_brand.id
     high_offer.series_id = series.id
     no_offer.brand_id = hidden_brand.id
@@ -468,8 +469,79 @@ async def test_all_public_product_surfaces_share_the_offer_boundary(
         headers=_headers(search_path),
     )
     assert visible_search.status_code == 200, visible_search.text
-    assert visible_search.json()["items"][0]["slug"] == low_offer.slug
-    assert visible_search.json()["items"][0]["price"] == 3000
+    visible_item = visible_search.json()["items"][0]
+    assert visible_item["slug"] == low_offer.slug
+    assert visible_item["price"] == 3000
+    assert {
+        "source_url",
+        "min_cost_byn",
+        "recommended_price_byn",
+        "margin_abs_preview",
+        "margin_pct_preview",
+        "tags",
+    }.isdisjoint(visible_item)
+
+    canonical_search = await async_client.get(
+        search_path,
+        params={"q": "Offer low"},
+    )
+    assert canonical_search.status_code == 200, canonical_search.text
+    canonical_item = next(
+        item
+        for item in canonical_search.json()["items"]
+        if item["slug"] == low_offer.slug
+    )
+    assert set(canonical_item) == set(visible_item)
+
+
+@pytest.mark.asyncio
+async def test_secondary_siblings_are_offer_scoped_before_candidate_selection(
+    async_client,
+    db,
+    monkeypatch,
+):
+    low_offer, high_offer, _, _ = await _seed_catalog(db)
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", _SECRET)
+    brand = Brand(title="Sibling Brand", slug="sibling-brand", is_published=True)
+    db.add(brand)
+    await db.flush()
+    series = ProductSeries(
+        brand_id=int(brand.id),
+        title="Large sibling series",
+        slug="large-sibling-series",
+        is_published=True,
+    )
+    db.add(series)
+    await db.flush()
+    low_offer.brand_id = brand.id
+    low_offer.series_id = series.id
+    high_offer.brand_id = brand.id
+    high_offer.series_id = series.id
+    high_offer.specs = {"area_m2": 999}
+    db.add_all(
+        [
+            Product(
+                title=f"Unoffered sibling {index:03d}",
+                slug=f"unoffered-sibling-{index:03d}",
+                price=100 + index,
+                specs={"area_m2": 1},
+                brand_id=int(brand.id),
+                series_id=int(series.id),
+                is_published=True,
+            )
+            for index in range(500)
+        ]
+    )
+    await db.commit()
+
+    path = f"/api/v1/products/{low_offer.slug}"
+    response = await async_client.get(path, headers=_headers(path))
+
+    assert response.status_code == 200, response.text
+    assert [item["slug"] for item in response.json()["series_siblings"]] == [
+        high_offer.slug
+    ]
+    assert response.json()["series_siblings"][0]["price"] == 7000
 
 
 @pytest.mark.asyncio

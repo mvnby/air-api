@@ -259,6 +259,45 @@ class PublicCatalogDAO:
         return PublicCatalogDAO._rows(await session.execute(stmt))
 
     @staticmethod
+    async def get_series_siblings(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        product: Product,
+        load_image_variants: bool = False,
+    ) -> list[PublicCatalogRow]:
+        """Select sibling candidates inside the storefront offer boundary."""
+        stmt = PublicCatalogDAO._select_products(
+            tenant_scope,
+            load_image_variants=load_image_variants,
+        ).where(Product.id != product.id)
+
+        if product.series_id:
+            stmt = stmt.where(Product.series_id == product.series_id)
+        else:
+            series_tag_ids = [
+                int(tag.id)
+                for tag in (product.tags or [])
+                if tag.id is not None
+                and tag.group is not None
+                and tag.group.slug == "series"
+            ]
+            if not series_tag_ids:
+                return []
+            series_product_ids = (
+                select(ProductTagLink.product_id)
+                .where(ProductTagLink.tag_id.in_(series_tag_ids))
+                .distinct()
+                .subquery()
+            )
+            stmt = stmt.join(
+                series_product_ids,
+                Product.id == series_product_ids.c.product_id,
+            )
+
+        return PublicCatalogDAO._rows(await session.execute(stmt))
+
+    @staticmethod
     async def get_all(
         session: AsyncSession,
         *,
@@ -375,10 +414,13 @@ class PublicCatalogDAO:
             return {}
         rows = (
             await session.execute(
-                select(Product.id, Product.price).where(
+                select(Product.id, Product.price)
+                .where(
                     Product.id.in_(product_ids),
                     Product.is_published.is_(True),
-                ).with_for_update(of=Product)
+                )
+                .order_by(Product.id.asc())
+                .with_for_update(read=True, of=Product)
             )
         ).all()
         return {int(product_id): int(price) for product_id, price in rows}
@@ -402,7 +444,8 @@ class PublicCatalogDAO:
                     Product.is_published.is_(True),
                     *PublicCatalogDAO._visible_offer_conditions(tenant_scope),
                 )
-                .with_for_update(of=(Product, TenantOffer))
+                .order_by(Product.id.asc())
+                .with_for_update(read=True, of=(Product, TenantOffer))
             )
         ).all()
         return {int(product_id): int(price) for product_id, price in rows}

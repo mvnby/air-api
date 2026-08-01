@@ -208,6 +208,7 @@ async def test_public_product_search_returns_items_from_smart_search(async_clien
         slug=f"{marker.lower()}-smart-search-product",
         price=1234,
         specs={"area_m2": 25},
+        source_url="https://supplier.example/private-source",
         is_inverter=True,
         is_published=True,
     )
@@ -219,7 +220,35 @@ async def test_public_product_search_returns_items_from_smart_search(async_clien
 
     assert response.status_code == 200, response.text
     items = response.json()["items"]
-    assert any(item["id"] == product.id for item in items)
+    item = next(item for item in items if item["id"] == product.id)
+    assert set(item) == {
+        "id",
+        "title",
+        "slug",
+        "price",
+        "old_price",
+        "product_kind",
+        "is_inverter",
+        "power_cooling",
+        "main_image",
+        "card_image",
+        "full_image",
+        "specs",
+        "vitebsk_qty",
+        "minsk_qty",
+        "availability_status",
+        "public_stock_state",
+        "delivery_min_days",
+        "delivery_max_days",
+    }
+    assert {
+        "source_url",
+        "min_cost_byn",
+        "recommended_price_byn",
+        "margin_abs_preview",
+        "margin_pct_preview",
+        "tags",
+    }.isdisjoint(item)
 
 
 @pytest.mark.asyncio
