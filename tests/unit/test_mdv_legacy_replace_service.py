@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
 from models import (
     Brand,
@@ -18,6 +18,7 @@ from models import (
     TagGroup,
 )
 from services.mdv_legacy_replace_service import MdvLegacyReplaceService
+from services.product_manager_service import ProductManagerService
 
 
 @pytest.fixture
@@ -94,3 +95,58 @@ async def test_mdv_legacy_replace_preview_splits_deletable_and_order_linked(sqli
     assert report["deletable_count"] == 1
     assert report["keep_for_update_count"] == 1
     assert {item["slug"] for item in report["samples"]} == {"mdv-old-cassette", "mdv-old-multi"}
+
+
+@pytest.mark.asyncio
+async def test_mdv_legacy_replace_failure_rolls_back_entire_batch(
+    sqlite_session,
+    monkeypatch,
+):
+    brand = Brand(title="MDV rollback", slug="mdv")
+    sqlite_session.add(brand)
+    await sqlite_session.flush()
+    products = [
+        Product(
+            title=f"MDV rollback {index}",
+            slug=f"mdv-rollback-{index}",
+            price=100,
+            brand_id=brand.id,
+            specs={"__mdv_catalog": "semi"},
+        )
+        for index in (1, 2)
+    ]
+    sqlite_session.add_all(products)
+    await sqlite_session.commit()
+    product_ids = [int(product.id) for product in products]
+
+    original_stage_delete = ProductManagerService.stage_delete_for_manager
+    staged_ids: list[int] = []
+
+    async def fail_second_delete(session, product_id):
+        staged_ids.append(product_id)
+        if len(staged_ids) == 2:
+            raise RuntimeError("simulated second product failure")
+        return await original_stage_delete(session, product_id)
+
+    monkeypatch.setattr(
+        ProductManagerService,
+        "stage_delete_for_manager",
+        fail_second_delete,
+    )
+
+    with pytest.raises(RuntimeError, match="simulated second product failure"):
+        await MdvLegacyReplaceService.execute(
+            sqlite_session,
+            catalogs=["semi"],
+        )
+    await sqlite_session.rollback()
+
+    remaining_ids = set(
+        (
+            await sqlite_session.execute(
+                select(Product.id).where(Product.id.in_(product_ids))
+            )
+        ).scalars().all()
+    )
+    assert staged_ids == product_ids
+    assert remaining_ids == set(product_ids)

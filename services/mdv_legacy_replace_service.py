@@ -88,6 +88,9 @@ class MdvLegacyReplaceService:
 
         deleted = 0
         archived = 0
+        deleted_ids: list[int] = []
+        deleted_slugs: list[str] = []
+        deleted_brand_slugs: list[str] = []
         archived_ids: list[int] = []
         samples: list[dict[str, Any]] = []
         by_catalog: Counter[str] = Counter()
@@ -108,18 +111,30 @@ class MdvLegacyReplaceService:
                 archived_ids.append(product.id)
                 action = "keep_for_update"
             else:
-                await ProductManagerService.delete_for_manager(session, product.id)
+                deletion = await ProductManagerService.stage_delete_for_manager(
+                    session,
+                    product.id,
+                )
+                if deletion is None:
+                    continue
                 deleted += 1
+                deleted_ids.append(deletion.product_id)
+                if deletion.slug:
+                    deleted_slugs.append(deletion.slug)
+                deleted_brand_slugs.extend(deletion.brand_slugs)
                 action = "delete"
 
             if len(samples) < 20:
                 samples.append(MdvLegacyReplaceService._sample(product, catalog, action))
 
-        if archived_ids:
+        affected_ids = [*deleted_ids, *archived_ids]
+        if affected_ids:
             await CatalogRevisionService.stage_invalidation(
                 session,
                 reason="mdv_legacy_replace",
-                product_ids=archived_ids,
+                product_ids=affected_ids,
+                slugs=deleted_slugs,
+                brand_slugs=deleted_brand_slugs,
             )
             await session.commit()
 

@@ -1,6 +1,7 @@
 """Manager-facing product service operations."""
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,13 @@ PRODUCT_DELETE_TENANT_OFFER_MESSAGE = (
     "Отключите предложения вместо удаления товара."
 )
 PRODUCT_DELETE_FAILED_MESSAGE = "Не удалось удалить товар. Повторите попытку."
+
+
+@dataclass(frozen=True)
+class StagedProductDeletion:
+    product_id: int
+    slug: str | None
+    brand_slugs: tuple[str, ...]
 
 
 class ProductManagerService:
@@ -326,7 +334,12 @@ class ProductManagerService:
         ]
 
     @staticmethod
-    async def delete_for_manager(session: AsyncSession, product_id: int) -> bool:
+    async def stage_delete_for_manager(
+        session: AsyncSession,
+        product_id: int,
+    ) -> StagedProductDeletion | None:
+        """Stage a validated product deletion without committing the transaction."""
+
         from models.order import OrderProductLink
         from models.product import ProductAttachment, ProductImage, ProductTagLink
         from models.supplier import ProductLocalStock, ProductSupplierMapping
@@ -337,7 +350,7 @@ class ProductManagerService:
         # closes the race between the offer preflight and product deletion.
         product = await session.get(Product, product_id, with_for_update=True)
         if not product:
-            return False
+            return None
         product_slug = product.slug
         brand_slugs = await CatalogRevisionService.get_product_brand_slugs(
             session,
@@ -383,12 +396,26 @@ class ProductManagerService:
         )
         
         await session.delete(product)
+        return StagedProductDeletion(
+            product_id=product_id,
+            slug=product_slug,
+            brand_slugs=brand_slugs,
+        )
+
+    @staticmethod
+    async def delete_for_manager(session: AsyncSession, product_id: int) -> bool:
+        deletion = await ProductManagerService.stage_delete_for_manager(
+            session,
+            product_id,
+        )
+        if deletion is None:
+            return False
         await CatalogRevisionService.stage_invalidation(
             session,
             reason="product_delete",
-            product_ids=[product_id],
-            slugs=[product_slug] if product_slug else None,
-            brand_slugs=brand_slugs,
+            product_ids=[deletion.product_id],
+            slugs=[deletion.slug] if deletion.slug else None,
+            brand_slugs=deletion.brand_slugs,
         )
         await session.commit()
         return True
