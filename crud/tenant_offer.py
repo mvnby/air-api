@@ -4,12 +4,28 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Product, TenantAuditEvent, TenantOffer
+from models import Product, Storefront, TenantAuditEvent, TenantOffer
 from models.tenancy import TenantScope
 from services.tenant_scope_service import storefront_scope_clause
 
 
 class TenantOfferDAO:
+    @staticmethod
+    async def lock_scope_storefront(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Storefront | None:
+        result = await session.execute(
+            select(Storefront)
+            .where(
+                Storefront.id == tenant_scope.storefront_id,
+                Storefront.tenant_id == tenant_scope.tenant_id,
+            )
+            .with_for_update(of=Storefront)
+        )
+        return result.scalar_one_or_none()
+
     @staticmethod
     async def lock_product(
         session: AsyncSession,
