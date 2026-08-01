@@ -131,10 +131,11 @@ class FeatureLibraryService:
                     sort_order=feature.sort_order,
                 )
             )
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="feature_create",
+            reason="feature_create",
         )
+        await session.commit()
         return await FeatureLibraryService.get_feature(session, int(feature.id))
 
     @staticmethod
@@ -169,10 +170,11 @@ class FeatureLibraryService:
             previous_scope_type=previous_scope_type,
             previous_brand_id=previous_brand_id,
         )
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="feature_update",
+            reason="feature_update",
         )
+        await session.commit()
         return await FeatureLibraryService.get_feature(session, feature_id)
 
     @staticmethod
@@ -182,10 +184,11 @@ class FeatureLibraryService:
         feature.archived_at = datetime.now()
         feature.updated_at = datetime.now()
         session.add(feature)
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="feature_archive",
+            reason="feature_archive",
         )
+        await session.commit()
         return await FeatureLibraryService.get_feature(session, feature_id)
 
     @staticmethod

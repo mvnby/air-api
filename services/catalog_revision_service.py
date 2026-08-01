@@ -1,12 +1,29 @@
 import logging
+from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from crud.catalog_revision import CatalogRevisionDAO, CatalogRevisionSnapshot
+from core.config import settings
+from crud.catalog_revision import (
+    CatalogInvalidationTargetSnapshot,
+    CatalogRevisionDAO,
+    CatalogRevisionSnapshot,
+)
 from models import Brand, Product
-from services.catalog_purge_service import cloudflare_catalog_purge_service
+from models.tenancy import TenantScope
+from services.catalog_invalidation_contracts import (
+    CatalogCacheInvalidationRequestedV1,
+    catalog_cache_key,
+)
+from services.catalog_invalidation_event_service import (
+    CatalogInvalidationEventService,
+)
+from services.catalog_purge_service import (
+    build_catalog_purge_paths,
+    normalize_catalog_origin,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +41,30 @@ class CatalogRevisionService:
     async def get_current(session: AsyncSession) -> dict[str, Any]:
         row = await CatalogRevisionDAO.get_current(session)
         return CatalogRevisionService._serialize(row)
+
+    @staticmethod
+    async def get_contextual(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> dict[str, Any]:
+        global_snapshot = await CatalogRevisionDAO.get_current(session)
+        storefront_snapshot = await CatalogRevisionDAO.get_storefront_current(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        return {
+            "revision": global_snapshot.revision,
+            "storefront_revision": storefront_snapshot.revision,
+            "cache_key": catalog_cache_key(
+                global_revision=global_snapshot.revision,
+                storefront_revision=storefront_snapshot.revision,
+            ),
+            "updated_at": CatalogRevisionService._latest_updated_at(
+                global_snapshot.updated_at,
+                storefront_snapshot.updated_at,
+            ),
+        }
 
     @staticmethod
     def _serialize_static_rebuild_status(row: Any) -> dict[str, Any]:
@@ -111,13 +152,16 @@ class CatalogRevisionService:
         return CatalogRevisionService._serialize(row)
 
     @staticmethod
-    async def bump_commit_and_purge(
+    async def stage_invalidation(
         session: AsyncSession,
-        scope: str,
+        reason: str,
         product_ids: Optional[Iterable[int]] = None,
         slugs: Optional[Iterable[str]] = None,
         brand_slugs: Optional[Iterable[str]] = None,
+        tenant_scope: TenantScope | None = None,
     ) -> dict[str, Any]:
+        """Stage revision changes and outbox events in the caller transaction."""
+
         product_id_values = CatalogRevisionService._normalize_ints(product_ids)
         product_slug_values = CatalogRevisionService._normalize_strings(slugs)
         explicit_brand_slug_values = CatalogRevisionService._normalize_strings(brand_slugs)
@@ -132,32 +176,152 @@ class CatalogRevisionService:
         purge_brand_slugs = CatalogRevisionService._dedupe_strings(
             [*explicit_brand_slug_values, *resolved_brand_slug_values]
         )
-
-        revision = await CatalogRevisionService.bump(
-            session,
-            scope=scope,
-            product_ids=product_id_values,
-            slugs=purge_product_slugs,
+        paths = build_catalog_purge_paths(
+            product_slugs=purge_product_slugs,
             brand_slugs=purge_brand_slugs,
         )
-        await session.commit()
 
-        try:
-            await cloudflare_catalog_purge_service.purge_after_revision(
-                scope=scope,
-                revision=int(revision["revision"]),
-                product_slugs=purge_product_slugs,
+        if tenant_scope is None:
+            global_revision = await CatalogRevisionService.bump(
+                session,
+                scope=reason,
+                product_ids=product_id_values,
+                slugs=purge_product_slugs,
                 brand_slugs=purge_brand_slugs,
             )
-        except Exception as exc:
-            logger.warning(
-                "Catalog purge failed after committed revision scope=%s revision=%s error=%s",
-                scope,
-                revision["revision"],
-                exc,
+            global_snapshot = CatalogRevisionSnapshot(
+                revision=int(global_revision["revision"]),
+                updated_at=global_revision["updated_at"],
             )
+            targets = await CatalogRevisionDAO.list_invalidation_targets(session)
+            for target in targets:
+                target_scope = TenantScope(
+                    tenant_id=target.tenant_id,
+                    storefront_id=target.storefront_id,
+                    is_system=target.is_system,
+                )
+                storefront_snapshot = (
+                    await CatalogRevisionDAO.get_storefront_current(
+                        session,
+                        tenant_scope=target_scope,
+                    )
+                )
+                await CatalogRevisionService._enqueue_invalidation(
+                    session,
+                    invalidation_scope="global",
+                    reason=reason,
+                    target=target,
+                    paths=paths,
+                    global_snapshot=global_snapshot,
+                    storefront_snapshot=storefront_snapshot,
+                )
+            if not targets:
+                logger.warning(
+                    "Global catalog invalidation staged without an active storefront "
+                    "reason=%s revision=%s",
+                    reason,
+                    global_snapshot.revision,
+                )
+            return CatalogRevisionService._serialize(global_snapshot)
 
-        return revision
+        targets = await CatalogRevisionDAO.list_invalidation_targets(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        if len(targets) != 1:
+            raise ValueError("Catalog invalidation storefront scope is unavailable")
+        global_snapshot = await CatalogRevisionDAO.get_current(session)
+        storefront_snapshot = await CatalogRevisionDAO.bump_storefront(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        await CatalogRevisionService._enqueue_invalidation(
+            session,
+            invalidation_scope="storefront",
+            reason=reason,
+            target=targets[0],
+            paths=paths,
+            global_snapshot=global_snapshot,
+            storefront_snapshot=storefront_snapshot,
+        )
+        return {
+            "revision": global_snapshot.revision,
+            "storefront_revision": storefront_snapshot.revision,
+            "cache_key": catalog_cache_key(
+                global_revision=global_snapshot.revision,
+                storefront_revision=storefront_snapshot.revision,
+            ),
+            "updated_at": CatalogRevisionService._latest_updated_at(
+                global_snapshot.updated_at,
+                storefront_snapshot.updated_at,
+            ),
+        }
+
+    @staticmethod
+    async def _enqueue_invalidation(
+        session: AsyncSession,
+        *,
+        invalidation_scope: str,
+        reason: str,
+        target: CatalogInvalidationTargetSnapshot,
+        paths: tuple[str, ...],
+        global_snapshot: CatalogRevisionSnapshot,
+        storefront_snapshot: CatalogRevisionSnapshot,
+    ) -> None:
+        cache_key = catalog_cache_key(
+            global_revision=global_snapshot.revision,
+            storefront_revision=storefront_snapshot.revision,
+        )
+        payload = CatalogCacheInvalidationRequestedV1(
+            scope=invalidation_scope,
+            tenant_id=target.tenant_id,
+            storefront_id=target.storefront_id,
+            origins=CatalogRevisionService._origins_for_target(target),
+            paths=list(paths),
+            global_revision=global_snapshot.revision,
+            storefront_revision=storefront_snapshot.revision,
+            cache_key=cache_key,
+            reason=reason,
+        )
+        await CatalogInvalidationEventService.enqueue_requested(
+            session,
+            idempotency_key=(
+                f"catalog:{target.tenant_id}:{target.storefront_id}:"
+                f"{invalidation_scope}:{cache_key}"
+            ),
+            payload=payload,
+            priority=40,
+            max_attempts=12,
+        )
+
+    @staticmethod
+    def _origins_for_target(
+        target: CatalogInvalidationTargetSnapshot,
+    ) -> list[str]:
+        origins: list[str] = []
+        if target.is_system and target.is_default:
+            origins.append(normalize_catalog_origin(settings.PUBLIC_SITE_URL))
+        origins.extend(
+            normalize_catalog_origin(f"https://{hostname}")
+            for hostname in target.hostnames
+        )
+        normalized = sorted(set(origins), key=str.casefold)
+        if (target.is_system and target.is_default) or target.hostnames:
+            if not normalized:
+                raise ValueError(
+                    "Routable storefront catalog invalidation has no origin"
+                )
+        return normalized
+
+    @staticmethod
+    def _latest_updated_at(*values: datetime) -> datetime:
+        normalized: list[datetime] = []
+        for value in values:
+            if value.tzinfo is None or value.utcoffset() is None:
+                normalized.append(value.replace(tzinfo=timezone.utc))
+            else:
+                normalized.append(value.astimezone(timezone.utc))
+        return max(normalized)
 
     @staticmethod
     async def get_product_purge_targets(

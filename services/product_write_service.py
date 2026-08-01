@@ -121,12 +121,13 @@ class ProductWriteService:
             explicit_brand_id=payload.get("brand_id"),
             explicit_brand_override="brand_id" in payload,
         )
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_create",
+            reason="product_create",
             product_ids=[product.id],
             slugs=[product.slug],
         )
+        await session.commit()
         return {"message": "Product created", "id": product.id}
 
     @staticmethod
@@ -244,12 +245,13 @@ class ProductWriteService:
             explicit_brand_id=payload.get("brand_id"),
             explicit_brand_override="brand_id" in payload,
         )
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_duplicate",
+            reason="product_duplicate",
             product_ids=[product.id],
             slugs=[product.slug],
         )
+        await session.commit()
         return {"message": "Product duplicated", "id": product.id}
 
     @staticmethod
@@ -274,12 +276,13 @@ class ProductWriteService:
         )
         product.main_image = ImageService.get_web_path(db_path)
         session.add(product)
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_media",
+            reason="product_media",
             product_ids=[product.id],
             slugs=[product.slug],
         )
+        await session.commit()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
@@ -354,13 +357,14 @@ class ProductWriteService:
             explicit_brand_id=explicit_brand_id,
             explicit_brand_override=explicit_brand_override,
         )
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_update",
+            reason="product_update",
             product_ids=[product.id],
             slugs=[product.slug],
             brand_slugs=previous_brand_slugs,
         )
+        await session.commit()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod
@@ -382,12 +386,13 @@ class ProductWriteService:
                     updated_slugs.append(product.slug)
 
         if updated_count > 0:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="product_price_bulk_round",
+                reason="product_price_bulk_round",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
+            await session.commit()
 
         return {"message": "Prices rounded", "updated_count": updated_count}
 
@@ -421,12 +426,13 @@ class ProductWriteService:
                     updated_slugs.append(product.slug)
 
         if updated_count > 0:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="product_price_bulk_rrc",
+                reason="product_price_bulk_rrc",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
+            await session.commit()
 
         processed_count = len(products)
         unchanged_count = processed_count - updated_count - skipped_count
@@ -468,12 +474,13 @@ class ProductWriteService:
             created_ids.append(product_image.id)
 
         if created_ids:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="product_gallery",
+                reason="product_gallery",
                 product_ids=[product.id],
                 slugs=[product.slug],
             )
+            await session.commit()
         else:
             await session.commit()
         return created_ids
@@ -501,12 +508,13 @@ class ProductWriteService:
                 product.tags = [tag for tag in product.tags if tag.id not in tag_ids]
 
         if products:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="product_tags",
+                reason="product_tags",
                 product_ids=[product.id for product in products if product.id is not None],
                 slugs=[product.slug for product in products if product.slug],
             )
+            await session.commit()
         else:
             await session.commit()
         return len(products)

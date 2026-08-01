@@ -72,11 +72,12 @@ class ManagerSpecsService:
                 updated_product_ids.append(int(product.id))
 
         if updated_product_ids:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="manager_specs_bulk_update",
+                reason="manager_specs_bulk_update",
                 product_ids=updated_product_ids,
             )
+            await session.commit()
         else:
             await session.commit()
         return {

@@ -116,11 +116,12 @@ class MdvLegacyReplaceService:
                 samples.append(MdvLegacyReplaceService._sample(product, catalog, action))
 
         if archived_ids:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="mdv_legacy_replace",
+                reason="mdv_legacy_replace",
                 product_ids=archived_ids,
             )
+            await session.commit()
 
         return {
             "enabled": True,

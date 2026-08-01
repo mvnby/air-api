@@ -2121,6 +2121,56 @@
         ],
         "summary": "Get Catalog Revision",
         "operationId": "get_catalog_revision",
+        "parameters": [
+          {
+            "name": "X-MVN-Storefront-Host",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Host"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Timestamp"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Signature"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2128,6 +2178,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CatalogRevisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -25613,6 +25673,14 @@
             "type": "integer",
             "title": "Revision"
           },
+          "storefront_revision": {
+            "type": "integer",
+            "title": "Storefront Revision"
+          },
+          "cache_key": {
+            "type": "string",
+            "title": "Cache Key"
+          },
           "updated_at": {
             "type": "string",
             "format": "date-time",
@@ -25622,6 +25690,8 @@
         "type": "object",
         "required": [
           "revision",
+          "storefront_revision",
+          "cache_key",
           "updated_at"
         ],
         "title": "CatalogRevisionResponse"

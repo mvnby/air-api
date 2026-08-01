@@ -30,6 +30,7 @@ from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
+from .catalog_revision import StorefrontCatalogRevision
 from .content import Article, GlobalConfig
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
 from .communication_runtime import CommunicationRuntimeState
@@ -188,6 +189,7 @@ __all__ = [
     "Service",
     "ServiceAttachment",
     "StaffUser",
+    "StorefrontCatalogRevision",
     "Tag",
     "TagGroup",
     "Tenant",

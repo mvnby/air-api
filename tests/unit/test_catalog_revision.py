@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
 os.environ.setdefault("BOT_TOKEN", "test-token")
 os.environ.setdefault("SECRET_KEY", "test-secret")
@@ -15,7 +15,7 @@ os.environ.setdefault("ADMIN_USERNAME", "admin")
 os.environ.setdefault("ADMIN_PASSWORD", "password")
 
 from core.database import get_session
-from models import Product
+from models import IntegrationOutboxEvent, Product, Storefront, Tenant
 from routers.api_catalog_revision import router as catalog_revision_router
 from routers.api_products import router as api_products_router
 from services.catalog_revision_service import CatalogRevisionService
@@ -33,6 +33,27 @@ async def sqlite_session(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        tenant = Tenant(
+            id=1,
+            slug="mvn",
+            display_name="MVN",
+            kind="operator",
+            status="active",
+            is_system=True,
+        )
+        session.add(tenant)
+        await session.flush()
+        session.add(
+            Storefront(
+                id=1,
+                tenant_id=1,
+                slug="main",
+                display_name="MVN",
+                status="active",
+                is_default=True,
+            )
+        )
+        await session.commit()
         yield session
 
     await engine.dispose()
@@ -58,13 +79,30 @@ async def test_public_revision_endpoint_shape_and_reads_do_not_bump(sqlite_sessi
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         first = await client.get("/api/v1/catalog/revision")
         second = await client.get("/api/v1/catalog/revision")
+        conditional = await client.get(
+            "/api/v1/catalog/revision",
+            headers={"If-None-Match": 'W/"catalog-g0-s0"'},
+        )
 
     assert first.status_code == 200
     first_payload = first.json()
     second_payload = second.json()
-    assert set(first_payload) == {"revision", "updated_at"}
+    assert set(first_payload) == {
+        "revision",
+        "storefront_revision",
+        "cache_key",
+        "updated_at",
+    }
     assert first_payload["revision"] == 0
+    assert first_payload["storefront_revision"] == 0
+    assert first_payload["cache_key"] == "g0-s0"
     assert first_payload == second_payload
+    assert first.headers["X-Catalog-Revision"] == "0"
+    assert first.headers["X-Storefront-Catalog-Revision"] == "0"
+    assert first.headers["ETag"] == 'W/"catalog-g0-s0"'
+    assert first.headers["Cache-Control"] == "private, no-cache, max-age=0"
+    assert first.headers["Vary"] == "X-MVN-Storefront-Host"
+    assert conditional.status_code == 200
 
     before_manager_read = await CatalogRevisionService.get_current(sqlite_session)
     brands = await ManagerBrandService.list_brands(sqlite_session)
@@ -198,7 +236,10 @@ async def test_product_update_rolls_back_when_revision_bump_fails(sqlite_session
 
 
 @pytest.mark.asyncio
-async def test_product_update_purges_after_commit_and_ignores_purge_failure(sqlite_session, monkeypatch):
+async def test_product_update_stages_durable_invalidation_without_network(
+    sqlite_session,
+    monkeypatch,
+):
     product = Product(
         title="Post Commit Purge Product",
         slug="post-commit-purge-product",
@@ -212,19 +253,14 @@ async def test_product_update_purges_after_commit_and_ignores_purge_failure(sqli
     await sqlite_session.refresh(product)
 
     before = await CatalogRevisionService.get_current(sqlite_session)
-    purge_calls = []
+    purge_calls: list[dict] = []
 
     async def fail_purge(**kwargs):
-        purge_calls.append(
-            {
-                **kwargs,
-                "in_transaction": sqlite_session.in_transaction(),
-            }
-        )
+        purge_calls.append(kwargs)
         raise RuntimeError("cloudflare is temporarily unavailable")
 
     monkeypatch.setattr(
-        "services.catalog_revision_service.cloudflare_catalog_purge_service.purge_after_revision",
+        "services.catalog_purge_service.CloudflareCatalogPurgeService.purge_urls",
         fail_purge,
     )
 
@@ -237,15 +273,19 @@ async def test_product_update_purges_after_commit_and_ignores_purge_failure(sqli
 
     assert result == {"message": "Product updated", "id": product.id}
     assert after["revision"] == before["revision"] + 1
-    assert len(purge_calls) == 1
-    assert purge_calls[0]["scope"] == "product_update"
-    assert purge_calls[0]["revision"] == after["revision"]
-    assert purge_calls[0]["product_slugs"] == ("post-commit-purge-product",)
-    assert purge_calls[0]["in_transaction"] is False
+    assert purge_calls == []
+    event = (
+        await sqlite_session.execute(select(IntegrationOutboxEvent))
+    ).scalar_one()
+    assert event.status == "pending"
+    assert event.payload["scope"] == "global"
+    assert event.payload["reason"] == "product_update"
+    assert event.payload["global_revision"] == after["revision"]
+    assert "/product/post-commit-purge-product/" in event.payload["paths"]
 
 
 @pytest.mark.asyncio
-async def test_product_price_update_resolves_product_slug_for_purge(sqlite_session, monkeypatch):
+async def test_product_price_update_resolves_product_slug_for_outbox(sqlite_session):
     product = Product(
         title="Price Purge Product",
         slug="price-purge-product",
@@ -258,22 +298,14 @@ async def test_product_price_update_resolves_product_slug_for_purge(sqlite_sessi
     await sqlite_session.commit()
     await sqlite_session.refresh(product)
 
-    purge_calls = []
-
-    async def record_purge(**kwargs):
-        purge_calls.append(kwargs)
-
-    monkeypatch.setattr(
-        "services.catalog_revision_service.cloudflare_catalog_purge_service.purge_after_revision",
-        record_purge,
-    )
-
     updated = await ProductService.update_price(sqlite_session, product.id, 1300)
 
     assert updated is True
-    assert len(purge_calls) == 1
-    assert purge_calls[0]["scope"] == "product_price"
-    assert purge_calls[0]["product_slugs"] == ("price-purge-product",)
+    event = (
+        await sqlite_session.execute(select(IntegrationOutboxEvent))
+    ).scalar_one()
+    assert event.payload["reason"] == "product_price"
+    assert "/product/price-purge-product/" in event.payload["paths"]
 
 
 @pytest.mark.asyncio

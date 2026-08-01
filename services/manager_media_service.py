@@ -759,11 +759,12 @@ class ManagerMediaService:
             await ManagerMediaService.sync_legacy_images(session, target_product.id)
             updated_products += 1
 
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_series_gallery_apply",
+            reason="product_series_gallery_apply",
             product_ids=[source_product.id, *(product.id for product in target_products)],
         )
+        await session.commit()
 
         deleted_files_count = 0
         if delete_unreferenced:

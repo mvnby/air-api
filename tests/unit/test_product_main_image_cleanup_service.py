@@ -290,16 +290,11 @@ async def test_approval_updates_main_image_and_preserves_original_metadata(
     purge_calls = []
 
     async def fail_purge(**kwargs):
-        purge_calls.append(
-            {
-                **kwargs,
-                "in_transaction": sqlite_session.in_transaction(),
-            }
-        )
+        purge_calls.append(kwargs)
         raise RuntimeError("cloudflare is temporarily unavailable")
 
     monkeypatch.setattr(
-        "services.catalog_revision_service.cloudflare_catalog_purge_service.purge_after_revision",
+        "services.catalog_purge_service.CloudflareCatalogPurgeService.purge_urls",
         fail_purge,
     )
 
@@ -320,17 +315,12 @@ async def test_approval_updates_main_image_and_preserves_original_metadata(
     assert item.approved_at is not None
     after_revision = await CatalogRevisionService.get_current(sqlite_session)
     assert after_revision["revision"] == before_revision["revision"] + 1
-    assert len(purge_calls) == 1
-    assert purge_calls[0]["scope"] == "product_main_image_cleanup_approval"
-    assert purge_calls[0]["revision"] == after_revision["revision"]
-    assert purge_calls[0]["product_slugs"] == ("cleanup-product-11",)
-    assert purge_calls[0]["in_transaction"] is False
+    assert purge_calls == []
 
 
 @pytest.mark.asyncio
 async def test_rejection_does_not_change_public_main_image(
     sqlite_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
 ):
     original_url = "/media/products/shared/reject-original.png"
     product = await _make_product(sqlite_session, 21, main_image=original_url)
@@ -344,16 +334,6 @@ async def test_rejection_does_not_change_public_main_image(
     await sqlite_session.commit()
     await sqlite_session.refresh(item)
     before_revision = await CatalogRevisionService.get_current(sqlite_session)
-    purge_calls = []
-
-    async def record_purge(**kwargs):
-        purge_calls.append(kwargs)
-
-    monkeypatch.setattr(
-        "services.catalog_revision_service.cloudflare_catalog_purge_service.purge_after_revision",
-        record_purge,
-    )
-
     result = await ProductMainImageCleanupService.reject_items(
         sqlite_session,
         item_ids=[item.id],
@@ -368,7 +348,6 @@ async def test_rejection_does_not_change_public_main_image(
     assert item.reject_reason == "bad crop"
     after_revision = await CatalogRevisionService.get_current(sqlite_session)
     assert after_revision == before_revision
-    assert purge_calls == []
 
 
 @pytest.mark.asyncio

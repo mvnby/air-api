@@ -383,13 +383,14 @@ class ProductManagerService:
         )
         
         await session.delete(product)
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_delete",
+            reason="product_delete",
             product_ids=[product_id],
             slugs=[product_slug] if product_slug else None,
             brand_slugs=brand_slugs,
         )
+        await session.commit()
         return True
 
     @staticmethod

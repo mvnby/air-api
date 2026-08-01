@@ -605,11 +605,12 @@ async def seed_lg24_series_content(
                     kept.append(series.title)
 
     if execute and (updated or linked):
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="lg24_series_content_seed",
+            reason="lg24_series_content_seed",
             brand_slugs=["lg"],
         )
+        await session.commit()
     elif execute:
         await session.commit()
     else:

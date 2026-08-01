@@ -23,11 +23,12 @@ class ProductService(ProductReadService, ProductWriteService, ProductManagerServ
     ) -> bool:
         updated = await ProductDAO.update_price(session, product_id, new_price, commit=False)
         if updated:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="product_price",
+                reason="product_price",
                 product_ids=[product_id],
             )
+            await session.commit()
         return updated
 
     @staticmethod

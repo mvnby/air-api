@@ -22,10 +22,15 @@ current scope. Disabling an offer always unpublishes it. There is intentionally
 no hard-delete endpoint; obsolete offers move to `disabled` so their history is
 retained.
 
-The offer mutation and its `TenantAuditEvent` are committed in one transaction.
-An audit write failure rolls the offer mutation back. Audit records include the
-actor, request correlation ID and field-level before/after values. No Manager
-endpoint mutates or deletes audit rows.
+The offer mutation, its `TenantAuditEvent`, exact storefront revision and
+durable cache-invalidation event are committed in one transaction. A failure
+in any one of them rolls the entire command back. Cloudflare is never called
+from that transaction. An identical offer upsert creates no audit event,
+revision or invalidation. The delivery contract is documented in
+[`catalog-cache-invalidation.md`](catalog-cache-invalidation.md).
+
+Audit records include the actor, request correlation ID and field-level
+before/after values. No Manager endpoint mutates or deletes audit rows.
 The audit stores both an immutable staff-user identifier when one exists and a
 username snapshot; legacy system-admin commands may have only the snapshot.
 

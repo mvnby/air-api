@@ -85,11 +85,12 @@ class TclFeatureCanaryService:
             )
 
         if execute and self.actions:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 self.session,
-                scope="tcl_2026_feature_canary",
+                reason="tcl_2026_feature_canary",
                 brand_slugs=[self.manifest["catalog"]["brand_slug"]],
             )
+            await self.session.commit()
         return report
 
     async def _load_inventory(self) -> None:

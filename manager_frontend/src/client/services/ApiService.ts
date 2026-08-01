@@ -135,13 +135,28 @@ export class ApiService {
     }
     /**
      * Get Catalog Revision
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns CatalogRevisionResponse Successful Response
      * @throws ApiError
      */
-    public static getCatalogRevision(): CancelablePromise<CatalogRevisionResponse> {
+    public static getCatalogRevision(
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
+    ): CancelablePromise<CatalogRevisionResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/catalog/revision',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
