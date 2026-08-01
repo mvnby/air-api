@@ -123,7 +123,10 @@ async def test_supplier_contacts_and_warehouses_crud_defaults(db):
 
 
 @pytest.mark.asyncio
-async def test_create_supply_request_from_order_lines_selects_available_min_cost_offer(db):
+async def test_create_supply_request_from_order_lines_selects_available_min_cost_offer(
+    db,
+    tenant_scope,
+):
     _product, supplier_a, _supplier_b, order, order_line = await _seed_supplier_product(db)
     await SupplierProfileService.create_warehouse(
         db,
@@ -139,6 +142,7 @@ async def test_create_supply_request_from_order_lines_selects_available_min_cost
     result = await SupplyRequestService.create_from_order_lines(
         db,
         {"order_product_link_ids": [order_line.id], "intent": "order"},
+        tenant_scope=tenant_scope,
         created_by="pytest",
     )
 
@@ -206,11 +210,12 @@ async def test_create_stock_request_and_generate_messages(db):
 
 
 @pytest.mark.asyncio
-async def test_supply_status_transitions_and_partial_receipt(db):
+async def test_supply_status_transitions_and_partial_receipt(db, tenant_scope):
     _product, supplier_a, _supplier_b, _order, order_line = await _seed_supplier_product(db)
     result = await SupplyRequestService.create_from_order_lines(
         db,
         {"order_product_link_ids": [order_line.id], "intent": "order"},
+        tenant_scope=tenant_scope,
     )
     request = result["items"][0]
     line = request["lines"][0]
