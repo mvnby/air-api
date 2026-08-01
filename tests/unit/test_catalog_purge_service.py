@@ -253,3 +253,82 @@ async def test_live_purge_reports_partial_failure_and_continues_later_batches():
     assert len(posted_batches) == 3
     assert result.errors == ("Cloudflare purge error codes: 1015",)
     assert "sensitive detail" not in " ".join(result.errors)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "json_error", "expected_failed_batches", "expected_error"),
+    [
+        ({"success": True}, None, 0, None),
+        (
+            {
+                "success": False,
+                "errors": [{"code": 1000, "message": "sensitive detail"}],
+            },
+            None,
+            1,
+            "Cloudflare purge error codes: 1000",
+        ),
+        (
+            None,
+            ValueError("malformed response"),
+            1,
+            "Cloudflare purge returned invalid JSON",
+        ),
+        ({}, None, 1, "Cloudflare purge response did not confirm success"),
+    ],
+    ids=(
+        "explicit-success",
+        "explicit-error",
+        "malformed-json",
+        "missing-success",
+    ),
+)
+async def test_live_purge_requires_explicit_cloudflare_success(
+    payload,
+    json_error,
+    expected_failed_batches,
+    expected_error,
+):
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            if json_error is not None:
+                raise json_error
+            return payload
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, *, headers, json):
+            return FakeResponse()
+
+    config = CloudflarePurgeConfig(
+        zone_id="zone-123",
+        api_token="secret-token",
+        enabled=True,
+        dry_run=False,
+        min_interval_seconds=0,
+    )
+
+    result = await CloudflareCatalogPurgeService().purge_urls(
+        scope="global:test",
+        revision=11,
+        urls=("https://mvn.by/catalog/",),
+        config=config,
+        http_client_factory=FakeClient,
+    )
+
+    assert result.mode == "live"
+    assert result.attempted_batches == 1
+    assert result.failed_batches == expected_failed_batches
+    assert result.errors == (() if expected_error is None else (expected_error,))
+    assert "sensitive detail" not in " ".join(result.errors)

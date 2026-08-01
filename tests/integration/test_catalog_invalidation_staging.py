@@ -188,6 +188,57 @@ async def test_scoped_invalidation_changes_only_exact_storefront_revision(
 
 
 @pytest.mark.asyncio
+async def test_equal_revision_tokens_are_namespaced_by_storefront_identity(
+    db_engine,
+):
+    assert db_engine.dialect.name == "postgresql"
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        second_scope = await _seed_second_storefront(
+            session,
+            with_domain=False,
+        )
+        scopes = (
+            TenantScope(
+                tenant_id=1,
+                storefront_id=1,
+                is_system=True,
+            ),
+            second_scope,
+        )
+        staged = []
+        for index, scope in enumerate(scopes, start=1):
+            staged.append(
+                await CatalogRevisionService.stage_invalidation(
+                    session,
+                    reason=f"storefront_collision_test_{index}",
+                    tenant_scope=scope,
+                    slugs=[f"storefront-model-{index}"],
+                )
+            )
+            await session.commit()
+
+        events = (
+            await session.execute(
+                select(IntegrationOutboxEvent)
+                .where(
+                    IntegrationOutboxEvent.event_type
+                    == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+                )
+                .order_by(IntegrationOutboxEvent.aggregate_id.asc())
+            )
+        ).scalars().all()
+
+    assert [item["cache_key"] for item in staged] == ["g0-s1", "g0-s1"]
+    assert [event.aggregate_id for event in events] == ["1:1", "2:2"]
+    assert [event.idempotency_key for event in events] == [
+        "catalog:1:1:storefront:g0-s1",
+        "catalog:2:2:storefront:g0-s1",
+    ]
+    assert len({event.deduplication_key for event in events}) == 2
+
+
+@pytest.mark.asyncio
 async def test_catalog_mutation_revision_and_outbox_roll_back_atomically(
     db_engine,
 ):

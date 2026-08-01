@@ -473,15 +473,20 @@ def _normalize_zone_hostname(raw_value: str) -> str:
 
 def _parse_cloudflare_response(response: Any) -> tuple[bool, str]:
     status_code = int(getattr(response, "status_code", 0) or 0)
+
     try:
         payload = response.json()
     except Exception:
-        payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
+        if 200 <= status_code < 300:
+            return False, "Cloudflare purge returned invalid JSON"
+        return False, f"Cloudflare purge HTTP {status_code}"
 
-    success = 200 <= status_code < 300 and bool(payload.get("success", True))
-    if success:
+    if not isinstance(payload, dict):
+        if 200 <= status_code < 300:
+            return False, "Cloudflare purge returned invalid JSON object"
+        return False, f"Cloudflare purge HTTP {status_code}"
+
+    if 200 <= status_code < 300 and payload.get("success") is True:
         return True, ""
 
     errors = payload.get("errors") if isinstance(payload, dict) else None
@@ -495,6 +500,9 @@ def _parse_cloudflare_response(response: Any) -> tuple[bool, str]:
         if codes:
             return False, "Cloudflare purge error codes: " + ",".join(codes)
         return False, "Cloudflare purge request was rejected"
+
+    if 200 <= status_code < 300:
+        return False, "Cloudflare purge response did not confirm success"
 
     return False, f"Cloudflare purge HTTP {status_code}"
 
