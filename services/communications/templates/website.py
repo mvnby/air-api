@@ -8,6 +8,10 @@ from services.communications.contracts import (
     InstallationEstimateLeadCreatedPayloadV1,
     PublicContactLeadCreatedPayloadV1,
     PublicOrderCreatedPayloadV1,
+    TenantWebsiteAvailabilityRequestedPayloadV1,
+    TenantWebsiteCheckoutCreatedPayloadV1,
+    TenantWebsiteContactLeadCreatedPayloadV1,
+    TenantWebsiteRepairDiagnosticCreatedPayloadV1,
 )
 
 
@@ -133,6 +137,28 @@ def render_website_contact_lead_v1(
     return _ensure_telegram_length("\n".join(lines))
 
 
+def render_tenant_website_checkout_v1(
+    context: TenantWebsiteCheckoutCreatedPayloadV1 | Mapping[str, Any],
+) -> str:
+    payload = (
+        context
+        if isinstance(context, TenantWebsiteCheckoutCreatedPayloadV1)
+        else TenantWebsiteCheckoutCreatedPayloadV1.model_validate(context)
+    )
+    return render_website_order_v1(payload)
+
+
+def render_tenant_website_contact_v1(
+    context: TenantWebsiteContactLeadCreatedPayloadV1 | Mapping[str, Any],
+) -> str:
+    payload = (
+        context
+        if isinstance(context, TenantWebsiteContactLeadCreatedPayloadV1)
+        else TenantWebsiteContactLeadCreatedPayloadV1.model_validate(context)
+    )
+    return render_website_contact_lead_v1(payload)
+
+
 def render_installation_estimate_lead_v1(
     context: InstallationEstimateLeadCreatedPayloadV1 | Mapping[str, Any],
 ) -> str:
@@ -163,4 +189,54 @@ def render_installation_estimate_lead_v1(
             "Статус: ожидает предварительной оценки",
         ]
     )
+    return _ensure_telegram_length("\n".join(lines))
+
+
+def render_tenant_website_availability_v1(
+    context: TenantWebsiteAvailabilityRequestedPayloadV1 | Mapping[str, Any],
+) -> str:
+    payload = (
+        context
+        if isinstance(context, TenantWebsiteAvailabilityRequestedPayloadV1)
+        else TenantWebsiteAvailabilityRequestedPayloadV1.model_validate(context)
+    )
+    heading = (
+        "🔔 <b>ПОВТОРНЫЙ ЗАПРОС НА ПОСТУПЛЕНИЕ</b>"
+        if payload.is_repeat
+        else "🔔 <b>ЗАПРОС НА ПОСТУПЛЕНИЕ С САЙТА</b>"
+    )
+    lines = [
+        heading,
+        f"🆔 Заявка #{payload.order_id}",
+        f"📦 {_escape_bounded(payload.product_title, max_length=180)}",
+        f"🔗 /product/{_escape_bounded(payload.product_slug, max_length=200)}",
+        f"📱 {_escape_bounded(payload.phone, max_length=80)}",
+    ]
+    if payload.name:
+        lines.insert(
+            4,
+            f"👤 {_escape_bounded(payload.name, max_length=160)}",
+        )
+    return _ensure_telegram_length("\n".join(lines))
+
+
+def render_tenant_website_repair_v1(
+    context: TenantWebsiteRepairDiagnosticCreatedPayloadV1 | Mapping[str, Any],
+) -> str:
+    payload = (
+        context
+        if isinstance(context, TenantWebsiteRepairDiagnosticCreatedPayloadV1)
+        else TenantWebsiteRepairDiagnosticCreatedPayloadV1.model_validate(context)
+    )
+    lines = [
+        f"<b>ЗАЯВКА НА РЕМОНТ С САЙТА #{payload.order_id}</b>",
+        f"Клиент: {_escape_bounded(payload.name, max_length=160)}",
+        f"Телефон: {_escape_bounded(payload.phone, max_length=80)}",
+        f"Симптом: {_escape_bounded(payload.symptom_label, max_length=180)}",
+    ]
+    if payload.address:
+        lines.append(
+            f"Адрес/район: {_escape_bounded(payload.address, max_length=300)}"
+        )
+    lines.append(f"Фото: {payload.photo_count}")
     return _ensure_telegram_length("\n".join(lines))

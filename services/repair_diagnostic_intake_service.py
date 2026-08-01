@@ -7,6 +7,9 @@ from typing import Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import LeadSource, Order, OrderStatus
+from services.communications.tenant_website_event_service import (
+    TenantWebsiteEventService,
+)
 from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
     VariantScopedPrivateAttachmentStorage,
@@ -61,7 +64,6 @@ class RepairDiagnosticIntakeService:
         list[RepairDiagnosticIncomingFile],
         bool,
     ]:
-        created_order: Order | None = None
         key_hash = PublicWriteIdempotencyService.key_hash(idempotency_key)
         selected_storage = storage or get_private_attachment_storage()
         attempt_storage = VariantScopedPrivateAttachmentStorage(
@@ -73,7 +75,6 @@ class RepairDiagnosticIntakeService:
         )
 
         async def create() -> PublicWriteCommandResponse[RepairDiagnosticLeadResponse]:
-            nonlocal created_order
             created_order = await RepairDiagnosticIntakeService._create_mutation(
                 session,
                 payload=payload,
@@ -112,15 +113,6 @@ class RepairDiagnosticIntakeService:
             operation=create,
         )
 
-        if not outcome.replayed and created_order is not None:
-            photos = OrderService._get_repair_meta(created_order).get("photos", {})
-            await RepairDiagnosticService._notify_admins(
-                session,
-                created_order,
-                payload,
-                photos,
-                tenant_scope=tenant_scope,
-            )
         nameplate_files = (uploads.get("nameplate") or [])[:1]
         return outcome.value, nameplate_files, outcome.replayed
 
@@ -198,6 +190,15 @@ class RepairDiagnosticIntakeService:
             order_id=int(order.id or 0),
             tenant_scope=tenant_scope,
             key_hash=key_hash,
+        )
+        await TenantWebsiteEventService.enqueue_repair_diagnostic(
+            session,
+            order=order,
+            request=payload,
+            photo_count=sum(len(items) for items in photos.values()),
+            symptom_label=SYMPTOM_LABELS[payload.symptom],
+            tenant_scope=tenant_scope,
+            request_key_hash=key_hash,
         )
         return order
 

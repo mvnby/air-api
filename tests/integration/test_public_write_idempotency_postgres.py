@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
 from models import (
+    IntegrationOutboxEvent,
     Lead,
     Order,
     OrderAttachmentLink,
@@ -27,6 +28,13 @@ from schemas_installation_estimate import InstallationEstimateLeadPayload
 from services.installation_estimate_lead_service import (
     InstallationEstimateIncomingFile,
     InstallationEstimateLeadService,
+)
+from services.communications.tenant_website_events import (
+    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    TENANT_WEBSITE_AVAILABILITY_REQUESTED_EVENT,
+    TENANT_WEBSITE_CHECKOUT_CREATED_EVENT,
+    TENANT_WEBSITE_CONTACT_LEAD_CREATED_EVENT,
+    TENANT_WEBSITE_REPAIR_DIAGNOSTIC_CREATED_EVENT,
 )
 from services.private_attachment_storage_service import StoredPrivateObject
 from services.public_write_idempotency_service import (
@@ -58,6 +66,13 @@ COMMAND_NAMES = {
     "availability": "public_product_availability_lead_v1",
     "installation": "public_installation_estimate_lead_v1",
     "repair": "public_repair_diagnostic_lead_v1",
+}
+COMMUNICATION_EVENT_TYPES = {
+    "checkout": TENANT_WEBSITE_CHECKOUT_CREATED_EVENT,
+    "contact": TENANT_WEBSITE_CONTACT_LEAD_CREATED_EVENT,
+    "availability": TENANT_WEBSITE_AVAILABILITY_REQUESTED_EVENT,
+    "installation": INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    "repair": TENANT_WEBSITE_REPAIR_DIAGNOSTIC_CREATED_EVENT,
 }
 
 
@@ -245,6 +260,22 @@ async def _entity_count(session: AsyncSession, family: str) -> int:
     return int(await session.scalar(select(func.count(entity.id))) or 0)
 
 
+async def _communication_event_count(
+    session: AsyncSession,
+    family: str,
+    *,
+    aggregate_id: int | None = None,
+) -> int:
+    statement = select(func.count(IntegrationOutboxEvent.event_id)).where(
+        IntegrationOutboxEvent.event_type == COMMUNICATION_EVENT_TYPES[family]
+    )
+    if aggregate_id is not None:
+        statement = statement.where(
+            IntegrationOutboxEvent.aggregate_id == str(aggregate_id)
+        )
+    return int(await session.scalar(statement) or 0)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("family", FAMILIES)
 async def test_public_write_family_full_idempotency_matrix(
@@ -300,6 +331,10 @@ async def test_public_write_family_full_idempotency_matrix(
     initial_storage_calls = len(storage.save_calls)
     async with factory() as before_concurrency:
         entity_count_before_concurrency = await _entity_count(
+            before_concurrency,
+            family,
+        )
+        communication_count_before = await _communication_event_count(
             before_concurrency,
             family,
         )
@@ -422,6 +457,10 @@ async def test_public_write_family_full_idempotency_matrix(
         assert all(receipt.response_status == 200 for receipt in receipts)
         assert all(receipt.resource_id is not None for receipt in receipts)
         assert all(receipt.expires_at > receipt.created_at for receipt in receipts)
+        assert (
+            await _communication_event_count(verification, family)
+            == communication_count_before + 5
+        )
 
 
 @pytest.mark.asyncio
@@ -495,11 +534,17 @@ async def test_repair_commit_applied_but_ack_lost_replays_without_deleting_binar
             )
             .where(OrderAttachmentLink.order_id == replay.order_id)
         )
+        communication_event_count = await _communication_event_count(
+            verification,
+            "repair",
+            aggregate_id=replay.order_id,
+        )
     assert receipt is not None
     assert receipt.completed_at is not None
     assert order is not None
     assert attachment is not None
     assert attachment.storage_key == durable_key
+    assert communication_event_count == 1
 
 
 @pytest.mark.asyncio

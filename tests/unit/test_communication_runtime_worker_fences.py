@@ -33,6 +33,10 @@ from services.communications.template_registry import (
     PUBLIC_CONTACT_LEAD_CREATED_EVENT,
     PUBLIC_ORDER_CREATED_EVENT,
 )
+from tests.unit.tenant_website_test_support import (
+    add_tenant_members,
+    ensure_tenant_website_scope,
+)
 
 ALL_SCOPE = CommunicationProcessingScope.all(
     control_revision=0,
@@ -63,6 +67,7 @@ async def seed_delivery(
 ) -> str:
     now = datetime.now(timezone.utc)
     async with session_factory() as session:
+        await ensure_tenant_website_scope(session)
         recipient_role = (
             "owner"
             if template_key == INSTALLATION_ESTIMATE_TEMPLATE_KEY
@@ -75,8 +80,11 @@ async def seed_delivery(
             primary_role=recipient_role,
             telegram_id=telegram_id,
         )
-        session.add(owner)
-        await session.flush()
+        if template_key == INSTALLATION_ESTIMATE_TEMPLATE_KEY:
+            await add_tenant_members(session, owner)
+        else:
+            session.add(owner)
+            await session.flush()
         assert owner.id is not None
         delivery_id = f"{sequence:032x}"
         event_id = f"{sequence + 1000:032x}"
@@ -112,6 +120,8 @@ async def seed_delivery(
                 template_version=1,
                 render_context=render_context
                 or InstallationEstimateLeadCreatedPayloadV1(
+                    tenant_id=1,
+                    storefront_id=1,
                     order_id=sequence,
                     status="new_lead",
                     name=f"Lead {sequence}",

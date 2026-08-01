@@ -19,7 +19,7 @@ from services.defect_act_ai_service import (
     DefectActAIProviderError,
     DefectActAIService,
 )
-from services.customer_requisites_recognition_service import OcrProviderError
+from services.google_vision_error_policy import OcrProviderError
 from services.order_service import OrderService
 from services.repair_diagnostic_attachment_service import (
     PrivateOrderAttachmentSource,
@@ -345,9 +345,17 @@ class RepairDiagnosticAiService:
                     "Repair diagnostic OCR infrastructure failure",
                 ) from exc
             raise _RepairDiagnosticAiTerminalError(
-                status="skipped",
+                status=(
+                    "skipped"
+                    if exc.code == "not_configured"
+                    else "failed"
+                ),
                 code=code,
-                message="OCR provider is not configured",
+                message=(
+                    "OCR provider is not configured"
+                    if exc.code == "not_configured"
+                    else "OCR provider rejected the request"
+                ),
             ) from exc
         except ValueError as exc:
             repair_meta["nameplate_recognition_status"] = "failed"

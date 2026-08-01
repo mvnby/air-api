@@ -106,6 +106,8 @@ def _insert_queued_delivery(connection, sequence: int) -> str:
             "template_key": INSTALLATION_ESTIMATE_TEMPLATE_KEY,
             "render_context": json.dumps(
                 InstallationEstimateLeadCreatedPayloadV1(
+                    tenant_id=1,
+                    storefront_id=1,
                     order_id=sequence,
                     status="new_lead",
                     name=f"Lead {sequence}",
@@ -148,6 +150,8 @@ def _insert_running_delivery(connection, sequence: int) -> str:
             "template_key": INSTALLATION_ESTIMATE_TEMPLATE_KEY,
             "render_context": json.dumps(
                 InstallationEstimateLeadCreatedPayloadV1(
+                    tenant_id=1,
+                    storefront_id=1,
                     order_id=sequence,
                     status="new_lead",
                     name=f"Lead {sequence}",

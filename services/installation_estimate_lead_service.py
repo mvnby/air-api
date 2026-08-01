@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import io
 import secrets
-import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, UnidentifiedImageError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.public_upload_limits import PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
+from core.public_image_validation import (
+    PUBLIC_IMAGE_FORMAT_BY_MIME,
+    validate_public_image,
+)
 from models import Customer, LeadSource, Order, OrderStatus
 from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
@@ -67,11 +67,7 @@ PHOTO_CATEGORIES = {
     "facade": ("installation_facade", "Фасад"),
     "power_supply": ("installation_power", "Электропитание"),
 }
-ALLOWED_IMAGE_MIME_TYPES = {
-    "image/jpeg": "JPEG",
-    "image/png": "PNG",
-    "image/webp": "WEBP",
-}
+ALLOWED_IMAGE_MIME_TYPES = PUBLIC_IMAGE_FORMAT_BY_MIME
 MAX_FILES_PER_CATEGORY = 5
 MAX_FILES_TOTAL = 15
 MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -281,6 +277,8 @@ class InstallationEstimateLeadService:
                 aggregate_type="order",
                 aggregate_id=int(order.id or 0),
                 payload=InstallationEstimateLeadCreatedPayloadV1(
+                    tenant_id=tenant_scope.tenant_id,
+                    storefront_id=tenant_scope.storefront_id,
                     order_id=int(order.id or 0),
                     status="new_lead",
                     name=payload.name,
@@ -422,36 +420,9 @@ class InstallationEstimateLeadService:
         content_type: str,
         content: bytes,
     ) -> None:
-        if content_type not in ALLOWED_IMAGE_MIME_TYPES:
-            raise ValueError(
-                f"{filename}: поддерживаются только JPEG, PNG и WebP"
-            )
-        if not content:
-            raise ValueError(f"{filename}: файл пуст")
-        if len(content) > MAX_FILE_BYTES:
-            raise ValueError(
-                f"{filename}: размер не должен превышать "
-                f"{MAX_FILE_BYTES // (1024 * 1024)} МБ"
-            )
-
-        def verify() -> str:
-            with warnings.catch_warnings():
-                warnings.simplefilter("error", Image.DecompressionBombWarning)
-                with Image.open(io.BytesIO(content)) as image:
-                    image.verify()
-                    return str(image.format or "").upper()
-
-        try:
-            detected_format = await asyncio.to_thread(verify)
-        except (
-            UnidentifiedImageError,
-            OSError,
-            ValueError,
-            Image.DecompressionBombError,
-            Image.DecompressionBombWarning,
-        ) as exc:
-            raise ValueError(f"{filename}: файл не является корректным изображением") from exc
-        if detected_format != ALLOWED_IMAGE_MIME_TYPES[content_type]:
-            raise ValueError(
-                f"{filename}: содержимое файла не соответствует типу {content_type}"
-            )
+        await validate_public_image(
+            filename=filename,
+            content_type=content_type,
+            content=content,
+            max_bytes=MAX_FILE_BYTES,
+        )

@@ -1,8 +1,10 @@
 import hashlib
+import io
 import json
 from dataclasses import dataclass, field
 
 import pytest
+from PIL import Image
 from sqlmodel import select
 
 from models import (
@@ -14,6 +16,12 @@ from models import (
 )
 from services.private_attachment_storage_service import StoredPrivateObject
 from services.repair_diagnostic_intake_service import RepairDiagnosticIntakeService
+
+
+def _image_bytes(image_format: str) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (2, 2), color="white").save(buffer, format=image_format)
+    return buffer.getvalue()
 
 
 @dataclass
@@ -83,13 +91,15 @@ async def test_public_repair_diagnostic_creates_private_structured_order(
             "address": "Витебск, Билево",
         },
     }
+    nameplate_content = _image_bytes("JPEG")
+    indoor_content = _image_bytes("PNG")
 
     response = await async_client.post(
         "/api/v1/leads/repair-diagnostic",
         files=[
             ("payload", (None, json.dumps(payload), "application/json")),
-            ("nameplate", ("nameplate.jpg", b"nameplate-content", "image/jpeg")),
-            ("indoor_unit", ("indoor.webp", b"indoor-content", "image/webp")),
+            ("nameplate", ("nameplate.jpg", nameplate_content, "image/jpeg")),
+            ("indoor_unit", ("indoor.png", indoor_content, "image/png")),
         ],
     )
 
@@ -127,9 +137,9 @@ async def test_public_repair_diagnostic_creates_private_structured_order(
         "uploaded_at",
     }
     assert nameplate_ref["content_hash"] == hashlib.sha256(
-        b"nameplate-content"
+        nameplate_content
     ).hexdigest()
-    assert repair_meta["photos"]["indoor_unit"][0]["content_type"] == "image/webp"
+    assert repair_meta["photos"]["indoor_unit"][0]["content_type"] == "image/png"
     assert "Фото шильдика" not in repair_meta["missing_data"]
     assert "Фото внутреннего блока целиком" not in repair_meta["missing_data"]
     assert "Фото места протечки" in repair_meta["missing_data"]

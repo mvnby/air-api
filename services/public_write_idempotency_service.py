@@ -19,6 +19,9 @@ from core.public_write_key import (
 )
 from crud.public_write_idempotency import PublicWriteIdempotencyDAO
 from models import PublicWriteIdempotency
+from services.communications.installation_activation_fence import (
+    WebsiteCommunicationEnqueueFenceBusy,
+)
 from services.tenant_scope_service import TenantScope
 
 
@@ -122,6 +125,10 @@ class PublicWriteIdempotencyService:
             )
         except Exception as exc:
             await session.rollback()
+            if isinstance(exc, WebsiteCommunicationEnqueueFenceBusy):
+                raise PublicWriteIdempotencyUnavailable(
+                    "Website communication activation fence is temporarily busy"
+                ) from exc
             if cls._is_lock_timeout(exc):
                 raise PublicWriteIdempotencyUnavailable(
                     "Idempotency serialization is temporarily busy"

@@ -19,7 +19,6 @@ from models import (
     OrderStatus,
     ServiceAttachment,
 )
-from services.bot_service import BotService
 from services.private_attachment_storage_service import StoredPrivateObject
 from services.repair_diagnostic_ai_job_service import (
     REPAIR_DIAGNOSTIC_AI_REQUESTED_EVENT,
@@ -34,7 +33,6 @@ from services.repair_diagnostic_service import (
     RepairDiagnosticService,
 )
 from services.service_attachment_service import ServiceAttachmentService
-from services.staff_user_service import StaffUserService
 from services.tenant_scope_service import TenantScope
 
 
@@ -367,9 +365,12 @@ async def test_existing_binary_reuse_stays_private_and_manager_tenant_scoped(
 
 @pytest.mark.asyncio
 async def test_repair_diagnostic_aggregate_upload_boundary(monkeypatch):
+    async def accept_photo(**_kwargs):
+        return None
+
     monkeypatch.setattr(
         "services.repair_diagnostic_service._validate_photo",
-        lambda **_kwargs: None,
+        accept_photo,
     )
     first = SizedFakeUpload(b"a" * (MAX_PAYLOAD_BYTES // 2))
     exact = SizedFakeUpload(b"b" * (MAX_PAYLOAD_BYTES // 2))
@@ -418,57 +419,3 @@ def test_repair_payload_rejects_oversized_json_before_decoding(monkeypatch):
     with pytest.raises(ValueError, match="too large"):
         RepairDiagnosticService.parse_payload("x" * (20 * 1024 * 1024))
     assert decoder_called is False
-
-
-@pytest.mark.asyncio
-async def test_repair_notification_escapes_contact_fields(
-    monkeypatch,
-    caplog,
-    tenant_scope,
-):
-    payload = RepairDiagnosticLeadPayload.model_validate(
-        {
-            "scenario": "repair",
-            "symptom": "not_cooling",
-            "client_checks": [],
-            "contact": {
-                "name": "Анна <admin>",
-                "phone": "+375291112233",
-                "address": "Витебск & <центр>",
-            },
-        }
-    )
-    sent_messages = []
-
-    async def fake_recipients(_session, *, tenant_scope):
-        return [101, 202]
-
-    async def fake_send_message(admin_id, text):
-        sent_messages.append((admin_id, text))
-        return admin_id == 101
-
-    monkeypatch.setattr(
-        StaffUserService,
-        "get_active_owner_admin_telegram_recipient_ids",
-        fake_recipients,
-    )
-    monkeypatch.setattr(BotService, "send_message", fake_send_message)
-
-    with caplog.at_level("WARNING"):
-        await RepairDiagnosticService._notify_admins(
-            object(),
-            SimpleNamespace(id=42),
-            payload,
-            {},
-            tenant_scope=tenant_scope,
-        )
-
-    sent_text = sent_messages[0][1]
-    assert "Анна &lt;admin&gt;" in sent_text
-    assert "Витебск &amp; &lt;центр&gt;" in sent_text
-    assert "<admin>" not in sent_text
-    assert len(sent_text) <= BotService.MAX_MESSAGE_LENGTH
-    assert (
-        "REPAIR_DIAGNOSTIC_NOTIFY_DELIVERY_FAILED order_id=42 admin_id=202"
-        in caplog.text
-    )

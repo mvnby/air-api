@@ -30,6 +30,7 @@ from models import (
     StaffUser,
     Storefront,
     Tenant,
+    TenantMembership,
 )
 from services.communications.delivery_worker import CommunicationDeliveryWorker
 from services.communications.dispatcher import CommunicationOutboxDispatcher
@@ -157,6 +158,18 @@ async def test_installation_estimate_public_intake_is_materialized_and_sent_once
             ),
         ]
         session.add_all([tenant, storefront, *recipients])
+        await session.flush()
+        session.add_all(
+            [
+                TenantMembership(
+                    tenant_id=1,
+                    staff_user_id=int(recipient.id or 0),
+                    role="owner",
+                    status="active",
+                )
+                for recipient in recipients
+            ]
+        )
         await session.commit()
 
     form = {

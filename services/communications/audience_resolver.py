@@ -11,6 +11,7 @@ from services.communications.recipient_directory import (
     InstallationEstimateOwnerRecipientDirectory,
     ManagementRecipientDirectory,
     OperationsCanaryRecipientDirectory,
+    TenantWebsiteManagementRecipientDirectory,
 )
 from services.communications.staff_task_contracts import (
     StaffTaskNotificationPayloadV1,
@@ -33,6 +34,12 @@ class CommunicationAudienceResolver:
         if plan.audience == "installation_estimate_owners":
             return await InstallationEstimateOwnerRecipientDirectory.list_telegram(
                 session
+            )
+        if plan.audience == "tenant_website_management":
+            return await TenantWebsiteManagementRecipientDirectory.list_telegram(
+                session,
+                tenant_id=int(plan.render_context["tenant_id"]),
+                storefront_id=int(plan.render_context["storefront_id"]),
             )
         if plan.audience == "operations_canary":
             payload = TelegramCanaryRequestedPayloadV1.model_validate(

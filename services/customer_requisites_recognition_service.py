@@ -10,8 +10,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
+from google.auth.exceptions import TransportError as GoogleAuthTransportError
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from httplib2 import HttpLib2Error
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -26,18 +29,14 @@ from core.input_validation import (
 from models import Customer, CustomerRequisitesRecognition, CustomerType
 from models.tenancy import TenantScope
 from services.customer_service import CustomerService
+from services.google_vision_error_policy import (
+    OcrProviderError,
+    google_vision_http_error,
+    google_vision_rpc_error,
+)
 from services.tenant_scope_service import tenant_scope_clause
 
 logger = logging.getLogger(__name__)
-
-
-class OcrProviderError(ValueError):
-    """Typed OCR infrastructure/configuration failure."""
-
-    def __init__(self, message: str, *, retryable: bool, code: str) -> None:
-        self.retryable = bool(retryable)
-        self.code = str(code)[:100]
-        super().__init__(str(message)[:500])
 
 
 class CustomerRequisitesRecognitionService:
@@ -115,7 +114,6 @@ class CustomerRequisitesRecognitionService:
 
     @classmethod
     def _vision_text_from_image_bytes_sync(cls, content: bytes) -> str:
-        vision = cls._get_vision_client()
         encoded = base64.b64encode(content).decode("ascii")
         body = {
             "requests": [
@@ -126,15 +124,33 @@ class CustomerRequisitesRecognitionService:
                 }
             ]
         }
-        response = vision.images().annotate(body=body).execute()
-        item = (response.get("responses") or [{}])[0]
-        if item.get("error"):
+        try:
+            vision = cls._get_vision_client()
+            response = vision.images().annotate(body=body).execute()
+        except OcrProviderError:
+            raise
+        except HttpError as exc:
+            raise cls._vision_http_error(exc) from exc
+        except (
+            GoogleAuthTransportError,
+            HttpLib2Error,
+            ConnectionError,
+            OSError,
+            TimeoutError,
+        ) as exc:
             raise OcrProviderError(
-                "Google Vision rejected the OCR request",
+                "Google Vision is temporarily unavailable",
                 retryable=True,
-                code="upstream_error",
-            )
+                code="network_error",
+            ) from exc
+        item = (response.get("responses") or [{}])[0]
+        error = item.get("error")
+        if isinstance(error, dict) and error:
+            raise cls._vision_rpc_error(error)
         return str((item.get("fullTextAnnotation") or {}).get("text") or "").strip()
+
+    _vision_http_error = staticmethod(google_vision_http_error)
+    _vision_rpc_error = staticmethod(google_vision_rpc_error)
 
     @classmethod
     async def extract_ocr_text(cls, content: bytes, *, mime_type: Optional[str], filename: Optional[str] = None) -> str:

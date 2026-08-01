@@ -330,7 +330,10 @@ class CommunicationDeliveryWorker:
                     # Exact audiences never fall back to management or legacy
                     # recipients when their current routing contract is unsafe.
                     return False
-                if plan.audience == "installation_estimate_owners":
+                if plan.audience in {
+                    "installation_estimate_owners",
+                    "tenant_website_management",
+                }:
                     deliveries = list(
                         (
                             await session.execute(

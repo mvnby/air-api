@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 from typing import Any, Dict, List, Optional
 
 from core.public_upload_limits import PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
-from models import Order
-from services.bot_service import BotService
+from core.public_image_validation import (
+    PUBLIC_IMAGE_FORMAT_BY_MIME,
+    validate_public_image,
+)
 from services.order_service import OrderService
 from services.repair_diagnostic_contracts import (
     CLIENT_CHECK_LABELS,
@@ -24,13 +25,9 @@ from services.repair_diagnostic_contracts import (
     RepairDiagnosticLeadResponse,
     parse_repair_diagnostic_payload,
 )
-from services.tenant_scope_service import TenantScope
-from services.staff_user_service import StaffUserService
-
-logger = logging.getLogger(__name__)
 
 
-ALLOWED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_IMAGE_MIME_TYPES = frozenset(PUBLIC_IMAGE_FORMAT_BY_MIME)
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 MAX_FILES_PER_FIELD = 5
 MAX_PAYLOAD_BYTES = PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
@@ -76,7 +73,11 @@ class RepairDiagnosticService:
                         "Общий размер фотографий не должен превышать "
                         f"{MAX_PAYLOAD_BYTES // (1024 * 1024)} МБ"
                     )
-                _validate_photo(content=content, content_type=content_type, label=PHOTO_LABELS[field])
+                await _validate_photo(
+                    content=content,
+                    content_type=content_type,
+                    label=PHOTO_LABELS[field],
+                )
                 uploads[field].append(
                     RepairDiagnosticIncomingFile(
                         filename=filename,
@@ -192,51 +193,6 @@ class RepairDiagnosticService:
             missing.append("Адрес или район")
         return missing
 
-    @staticmethod
-    async def _notify_admins(
-        session,
-        order: Order,
-        payload: RepairDiagnosticLeadPayload,
-        photos: Dict[str, List[Dict[str, Any]]],
-        *,
-        tenant_scope: TenantScope,
-    ) -> None:
-        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
-            session,
-            tenant_scope=tenant_scope,
-        )
-        if not admin_ids:
-            return
-        photo_count = sum(len(items) for items in photos.values())
-        message_lines = [
-            f"<b>ЗАЯВКА НА РЕМОНТ С САЙТА #{order.id}</b>",
-            f"Клиент: {BotService.escape_html(payload.contact.name, max_length=160)}",
-            f"Телефон: {BotService.escape_html(payload.contact.phone, max_length=80)}",
-            f"Симптом: {BotService.escape_html(SYMPTOM_LABELS[payload.symptom], max_length=180)}",
-        ]
-        if payload.contact.address:
-            message_lines.append(
-                f"Адрес/район: {BotService.escape_html(payload.contact.address, max_length=300)}"
-            )
-        message_lines.append(f"Фото: {photo_count}")
-        admin_text = "\n".join(message_lines)
-        for admin_id in admin_ids:
-            try:
-                delivered = await BotService.send_message(admin_id, admin_text)
-                if not delivered:
-                    logger.warning(
-                        "REPAIR_DIAGNOSTIC_NOTIFY_DELIVERY_FAILED order_id=%s admin_id=%s",
-                        order.id,
-                        admin_id,
-                    )
-            except Exception:
-                logger.exception(
-                    "REPAIR_DIAGNOSTIC_NOTIFY_SEND_FAILED order_id=%s admin_id=%s",
-                    order.id,
-                    admin_id,
-                )
-
-
 def _normalize_content_type(value: Optional[str]) -> str:
     return str(value or "").split(";")[0].strip().lower()
 
@@ -253,13 +209,18 @@ def _clean_filename(filename: Optional[str], content_type: Optional[str]) -> str
     return f"repair-photo.{extension}"
 
 
-def _validate_photo(*, content: bytes, content_type: str, label: str) -> None:
-    if not content:
-        raise ValueError(f"{label}: файл пустой")
-    if len(content) > MAX_PHOTO_BYTES:
-        raise ValueError(f"{label}: файл больше 10 МБ")
-    if content_type not in ALLOWED_IMAGE_MIME_TYPES:
-        raise ValueError(f"{label}: поддерживаются только JPG, PNG и WEBP")
+async def _validate_photo(
+    *,
+    content: bytes,
+    content_type: str,
+    label: str,
+) -> None:
+    await validate_public_image(
+        filename=label,
+        content_type=content_type,
+        content=content,
+        max_bytes=MAX_PHOTO_BYTES,
+    )
 
 
 def _clean_nested_dict(raw: Any) -> Dict[str, Any]:

@@ -25,6 +25,7 @@ class _ReconciliationClaim:
     name: str
     lease_token: str
     cursor: str | None
+    database_now: datetime
 
 
 class PrivateAttachmentOrphanReconciler:
@@ -43,7 +44,9 @@ class PrivateAttachmentOrphanReconciler:
         worker_id: str | None = None,
     ) -> int:
         selected_storage = storage or get_private_attachment_storage()
-        orphan_cutoff_reference = now or datetime.now(timezone.utc)
+        # Kept only as a compatibility input for existing callers; application
+        # clock values must never influence deletion eligibility.
+        del now
         bounded_limit = max(1, min(int(limit), 1000))
         normalized_worker = str(
             worker_id or f"{socket.gethostname()}:{os.getpid()}"
@@ -60,8 +63,7 @@ class PrivateAttachmentOrphanReconciler:
         try:
             page = await selected_storage.list_reconciliation_page(
                 variant_prefixes=cls.VARIANT_PREFIXES,
-                older_than=orphan_cutoff_reference
-                - timedelta(hours=cls.GRACE_HOURS),
+                older_than=claim.database_now - timedelta(hours=cls.GRACE_HOURS),
                 cursor=claim.cursor,
                 limit=bounded_limit,
             )
@@ -145,6 +147,7 @@ class PrivateAttachmentOrphanReconciler:
             name=name,
             lease_token=lease_token,
             cursor=row.cursor,
+            database_now=now,
         )
 
     @staticmethod

@@ -24,6 +24,8 @@ class FakeInventoryStorage:
     keys: set[str] = field(default_factory=set)
     deleted: list[str] = field(default_factory=list)
     page_calls: list[tuple[str | None, int]] = field(default_factory=list)
+    older_than_calls: list[datetime] = field(default_factory=list)
+    modified_at_by_key: dict[str, datetime] = field(default_factory=dict)
     fail_delete_once: bool = False
 
     async def list_reconciliation_page(
@@ -36,13 +38,28 @@ class FakeInventoryStorage:
     ):
         del variant_prefixes
         self.page_calls.append((cursor, limit))
-        remaining = [key for key in sorted(self.keys) if not cursor or key > cursor]
+        self.older_than_calls.append(older_than)
+        remaining = [
+            key
+            for key in sorted(self.keys)
+            if (not cursor or key > cursor)
+            and self.modified_at_by_key.get(
+                key,
+                older_than - timedelta(seconds=1),
+            )
+            <= older_than
+        ]
         examined_keys = remaining[:limit]
         wrapped = len(remaining) <= limit
-        old = older_than - timedelta(seconds=1)
         return PrivateStoragePage(
             candidates=tuple(
-                PrivateStorageCandidate(storage_key=key, modified_at=old)
+                PrivateStorageCandidate(
+                    storage_key=key,
+                    modified_at=self.modified_at_by_key.get(
+                        key,
+                        older_than - timedelta(seconds=1),
+                    ),
+                )
                 for key in examined_keys
             ),
             next_cursor=None if wrapped else examined_keys[-1],
@@ -169,8 +186,8 @@ async def test_reconciler_lease_uses_database_clock_not_cutoff_clock(orphan_fact
         deleted = await PrivateAttachmentOrphanReconciler.process_batch(
             contender,
             storage=storage,
-            # This only controls the orphan-age cutoff. It must not expire the
-            # durable lease when an application host clock is skewed.
+            # Compatibility caller clocks must affect neither the durable
+            # lease nor orphan-age eligibility.
             now=datetime.now(timezone.utc) + timedelta(days=365),
             limit=1,
             worker_id="skewed-contender",
@@ -178,3 +195,42 @@ async def test_reconciler_lease_uses_database_clock_not_cutoff_clock(orphan_fact
 
     assert deleted == 0
     assert storage.page_calls == []
+
+
+@pytest.mark.asyncio
+async def test_reconciler_cutoff_uses_claim_database_clock_and_keeps_fresh_upload(
+    orphan_factory,
+    monkeypatch,
+):
+    database_now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    stale = _key(0, family="repair")
+    fresh_in_flight = _key(1, family="repair")
+    storage = FakeInventoryStorage(
+        keys={stale, fresh_in_flight},
+        modified_at_by_key={
+            stale: database_now - timedelta(hours=25),
+            fresh_in_flight: database_now - timedelta(minutes=1),
+        },
+    )
+
+    async def fixed_database_now(_session):
+        return database_now
+
+    monkeypatch.setattr(
+        PrivateAttachmentOrphanReconciler,
+        "_database_now",
+        fixed_database_now,
+    )
+    async with orphan_factory() as session:
+        deleted = await PrivateAttachmentOrphanReconciler.process_batch(
+            session,
+            storage=storage,
+            now=database_now + timedelta(days=365),
+            limit=10,
+            worker_id="skewed-app-clock",
+        )
+
+    assert deleted == 1
+    assert storage.deleted == [stale]
+    assert fresh_in_flight in storage.keys
+    assert storage.older_than_calls == [database_now - timedelta(hours=24)]
