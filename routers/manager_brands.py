@@ -18,6 +18,7 @@ from routers.manager_operation_ids import (
     APPLY_MANAGER_SERIES_GALLERY_TO_PRODUCTS,
     UPDATE_MANAGER_BRAND,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerActionMessageResponse,
     ManagerBrandCreatePayload,
@@ -42,6 +43,7 @@ router = APIRouter(
     prefix="/api/manager/brands",
     tags=["manager brands"],
     dependencies=[Depends(get_current_username)],
+    route_class=ManagerPermissionRoute,
 )
 
 

@@ -25,12 +25,14 @@ from routers.manager_operation_ids import (
     REPLACE_MANAGER_PRODUCT_COLLECTION_PLACEMENTS,
     UPDATE_MANAGER_PRODUCT_COLLECTION,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from services.manager_product_collection_service import ManagerProductCollectionService
 
 
 router = APIRouter(
     prefix="/api/manager/product-collections",
     tags=["manager product collections"],
+    route_class=ManagerPermissionRoute,
 )
 
 

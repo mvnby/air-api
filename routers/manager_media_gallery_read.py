@@ -10,6 +10,7 @@ from routers.manager_operation_ids import (
     GET_IMAGE_VARIANT_CANDIDATES,
     REUSE_SEARCH,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     CommonGalleryImageResponse,
     ManagerMediaReuseSearchItemResponse,
@@ -19,7 +20,11 @@ from services.manager_media_service import ManagerMediaService
 from services.product_image_variant_service import ProductImageVariantService
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get(

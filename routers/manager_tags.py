@@ -23,8 +23,13 @@ from routers.manager_operation_ids import (
     UPDATE_MANAGER_TAG,
     DELETE_MANAGER_TAG,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 
-router = APIRouter(prefix="/api/manager/tags", tags=["manager tags"])
+router = APIRouter(
+    prefix="/api/manager/tags",
+    tags=["manager tags"],
+    route_class=ManagerPermissionRoute,
+)
 
 @router.get(
     "/groups",

@@ -8,6 +8,7 @@ from routers.manager_operation_ids import (
     PREVIEW_MDV_CATALOG_IMPORT,
     START_MDV_CATALOG_IMPORT_JOB,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     CatalogImportJobStartResponse,
     MdvCatalogImportPayload,
@@ -19,7 +20,11 @@ from services.mdv_catalog_preview_service import MdvCatalogPreviewService
 from services.mdv_legacy_replace_service import MdvLegacyReplaceService
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.post(

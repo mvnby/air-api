@@ -10,6 +10,7 @@ from routers.manager_operation_ids import (
     GET_MANAGER_YANDEX_BUSINESS_PRICE_LIST,
     GET_MANAGER_YANDEX_BUSINESS_QUALITY_REPORT,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from services.yandex_business_price_list_service import YandexBusinessPriceListService
 
 
@@ -17,6 +18,7 @@ router = APIRouter(
     prefix="/api/manager/yandex-business",
     tags=["manager/yandex-business"],
     dependencies=[Depends(get_current_username)],
+    route_class=ManagerPermissionRoute,
 )
 
 

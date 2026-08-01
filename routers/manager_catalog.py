@@ -25,6 +25,7 @@ from routers.manager_operation_ids import (
     IMPORT_ONLINER,
     START_CATALOG_IMPORT_JOB,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     BulkRoundRequest,
     BulkProductIdsRequest,
@@ -53,7 +54,11 @@ from routers import manager_customers
 _importer = ImporterService()
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get(

@@ -6,11 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.security import get_current_username
 from routers.manager_operation_ids import GET_MANAGER_CATALOG_QUALITY_REPORT
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import ManagerCatalogQualityReportResponse
 from services.catalog_quality_service import CatalogQualityService
 
 
-router = APIRouter(prefix="/api/manager/catalog-quality", tags=["manager catalog quality"])
+router = APIRouter(
+    prefix="/api/manager/catalog-quality",
+    tags=["manager catalog quality"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get(

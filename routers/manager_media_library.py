@@ -17,6 +17,7 @@ from routers.manager_operation_ids import (
     UPLOAD_MEDIA_ASSET_FROM_URL,
     UPLOAD_MEDIA_ASSETS,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerActionMessageResponse,
     ManagerBackgroundRemovalConfigResponse,
@@ -39,7 +40,11 @@ from services.product_image_processing_provider import (
 )
 
 
-router = APIRouter(prefix="/api/manager/media/assets", tags=["manager media"])
+router = APIRouter(
+    prefix="/api/manager/media/assets",
+    tags=["manager media"],
+    route_class=ManagerPermissionRoute,
+)
 MAX_UPLOAD_IMAGE_BYTES = 20 * 1024 * 1024
 
 

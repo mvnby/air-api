@@ -2,7 +2,11 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from core.security import get_current_owner_username
+from core.security import (
+    AuthenticatedUser,
+    get_current_owner_username,
+    require_system_owner_access,
+)
 from routers.manager_backups import router as manager_backups_router
 from services.backup_service import BackupConfigurationError
 from services.google_oauth_credentials import GoogleTokenRefreshError
@@ -13,6 +17,14 @@ async def backups_client():
     app = FastAPI()
     app.include_router(manager_backups_router)
     app.dependency_overrides[get_current_owner_username] = lambda: "admin"
+    app.dependency_overrides[require_system_owner_access] = lambda: AuthenticatedUser(
+        username="admin",
+        auth_source="legacy",
+        role="owner",
+        tenant_id=1,
+        storefront_id=1,
+        is_system_tenant=True,
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

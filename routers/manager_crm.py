@@ -3,10 +3,15 @@ from fastapi import APIRouter, Depends, Query
 from core.manager_telemetry import ManagerTelemetryService
 from core.security import get_current_username
 from routers.manager_operation_ids import GET_MANAGER_CRM_HEALTH_REPORT
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import ManagerCrmHealthReportResponse
 
 
-router = APIRouter(prefix="/api/manager/crm", tags=["manager-crm"])
+router = APIRouter(
+    prefix="/api/manager/crm",
+    tags=["manager-crm"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get(
@@ -19,4 +24,3 @@ async def get_manager_crm_health_report(
     _user: str = Depends(get_current_username),
 ):
     return ManagerTelemetryService.get_report(hours=hours)
-

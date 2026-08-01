@@ -13,6 +13,7 @@ from routers.manager_operation_ids import (
     SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     AddressSuggestResponse,
     FxRateResponse,
@@ -31,6 +32,7 @@ router = APIRouter(
     prefix="/api/manager/settings",
     tags=["manager/settings"],
     dependencies=[Depends(get_current_username)],
+    route_class=ManagerPermissionRoute,
 )
 
 

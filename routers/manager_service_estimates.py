@@ -11,6 +11,7 @@ from routers.manager_operation_ids import (
     GET_MANAGER_SERVICE_ESTIMATE_ORDER_LINES,
     LIST_MANAGER_SERVICE_ESTIMATES,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerActionMessageResponse,
     ManagerInstallEstimateCalculatePayload,
@@ -29,6 +30,7 @@ router = APIRouter(
     prefix="/api/manager/service-estimates",
     tags=["manager/service-estimates"],
     dependencies=[Depends(get_current_username)],
+    route_class=ManagerPermissionRoute,
 )
 
 

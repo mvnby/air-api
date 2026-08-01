@@ -11,6 +11,7 @@ from routers.manager_operation_ids import (
     LIST_MANAGER_REPAIR_COMPLAINT_PRESETS,
     UPDATE_MANAGER_REPAIR_COMPLAINT_PRESET,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerActionMessageResponse,
     ManagerRepairActAiDraftPayload,
@@ -31,6 +32,7 @@ router = APIRouter(
     prefix="/api/manager/repair-complaints",
     tags=["manager/repair-complaints"],
     dependencies=[Depends(get_current_username)],
+    route_class=ManagerPermissionRoute,
 )
 
 

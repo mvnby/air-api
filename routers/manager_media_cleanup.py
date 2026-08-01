@@ -12,6 +12,7 @@ from routers.manager_operation_ids import (
     REJECT_MAIN_IMAGE_CLEANUP_ITEMS,
     SKIP_MAIN_IMAGE_CLEANUP_ITEMS,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ProductMainImageCleanupApprovePayload,
     ProductMainImageCleanupBatchCreatePayload,
@@ -26,7 +27,11 @@ from schemas import (
 from services.product_main_image_cleanup_service import ProductMainImageCleanupService
 
 
-router = APIRouter(prefix="/api/manager/main-image-cleanup", tags=["manager"])
+router = APIRouter(
+    prefix="/api/manager/main-image-cleanup",
+    tags=["manager"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.post(
