@@ -19,6 +19,7 @@ from schemas import (
     ManagerWarrantyPolicyPayload,
     ManagerWarrantyPolicyResponse,
 )
+from services.warranty_coverage_service import WarrantyCoverageService
 from services.warranty_service import WarrantyService
 
 
@@ -103,7 +104,7 @@ async def list_manager_equipment_warranty_coverages(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    coverages = await WarrantyService.list_coverages(
+    coverages = await WarrantyCoverageService.list_coverages(
         session,
         equipment_id=equipment_id,
         tenant_scope=tenant_scope,
@@ -126,7 +127,7 @@ async def decide_manager_warranty_coverage(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        data = await WarrantyService.record_decision(
+        data = await WarrantyCoverageService.record_decision(
             session,
             coverage_id=coverage_id,
             action=payload.action,

@@ -21,6 +21,7 @@ from models import (
     WarrantyPolicy,
 )
 from models.tenancy import TenantScope
+from services.warranty_coverage_service import WarrantyCoverageService
 from services.warranty_service import WarrantyService
 from services.warranty_maintenance_service import WarrantyMaintenanceService
 from services.equipment_warranty_bridge_service import EquipmentWarrantyBridgeService
@@ -334,7 +335,7 @@ async def test_manager_restore_uses_latest_verified_late_maintenance(warranty_se
     warranty_session.add_all([coverage, event])
     await warranty_session.flush()
 
-    restored = await WarrantyService.record_decision(
+    restored = await WarrantyCoverageService.record_decision(
         warranty_session,
         coverage_id=int(coverage.id),
         action="restored",
