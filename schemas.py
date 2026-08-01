@@ -1,6 +1,6 @@
 from typing import Annotated, List, Optional, Any, Dict, Literal
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, computed_field
-from datetime import date, datetime
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from datetime import datetime
 from enum import Enum
 from core.input_validation import (
     validate_optional_bic,
@@ -9,7 +9,6 @@ from core.input_validation import (
     validate_optional_phone,
     validate_optional_unp,
     validate_public_manual_url,
-    validate_required_phone,
 )
 from models import EquipmentServiceEventType, PaymentCurrency
 from schemas_public_checkout import (
@@ -27,8 +26,89 @@ from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
     InstallationEstimateLeadResponse,
 )
+from schemas_common import Meta
+from schemas_manager_installers import (
+    ManagerInstallerBase,
+    ManagerInstallerCreatePayload,
+    ManagerInstallerListResponse,
+    ManagerInstallerResponse,
+    ManagerInstallerUpdatePayload,
+)
+from schemas_manager_leads import (
+    LeadCreatePayload,
+    LeadListResponse,
+    LeadLossPayload,
+    LeadQualifyPayload,
+    LeadQualifyResponse,
+    LeadResponse,
+    LeadUpdatePayload,
+    ProductAvailabilityLeadPayload,
+    ProductAvailabilityLeadResponse,
+)
+from schemas_manager_orders import (
+    CalendarEventResponse,
+    CalendarEventType,
+    ManagerCustomerDocumentItem,
+    ManagerCustomerDocumentListResponse,
+    ManagerCustomerReconciliationBasisDocument,
+    ManagerCustomerReconciliationDocumentItem,
+    ManagerCustomerReconciliationDocumentResponse,
+    ManagerCustomerReconciliationPaymentItem,
+    ManagerCustomerReconciliationResponse,
+    ManagerOrderCreatePayload,
+    ManagerOrderDetailResponse,
+    ManagerOrderDocumentGeneratePayload,
+    ManagerOrderDocumentItem,
+    ManagerOrderDocumentListResponse,
+    ManagerOrderDocumentResponse,
+    ManagerOrderExportRequest,
+    ManagerOrderListItemResponse,
+    ManagerOrderListResponse,
+    ManagerOrderProductLinePayload,
+    ManagerOrderServiceLinePayload,
+    ManagerOrderUpdatePayload,
+    ManagerStaleWorkStageItem,
+    ManagerStaleWorkStageListResponse,
+    OrderCustomerBranchBrief,
+    OrderCustomerBrief,
+    OrderCustomerContractBrief,
+    OrderProductLineResponse,
+    OrderProductLogisticsComponent,
+    OrderProposalCreatePayload,
+    OrderProposalListResponse,
+    OrderProposalResponse,
+    OrderProposalUpdatePayload,
+    OrderServiceLineResponse,
+    OrderWorkStageCreatePayload,
+    OrderWorkStageResponse,
+    OrderWorkStageUpdatePayload,
+    PaymentBankReceiptResponse,
+    PaymentCreatePayload,
+    PaymentResponse,
+    ProductLogisticsComponentTemplate,
+)
+from schemas_manager_order_transfer import (
+    ManagerOrderImportCommitRequest,
+    ManagerOrderImportCommitResponse,
+    ManagerOrderImportCustomerMatch,
+    ManagerOrderImportPreviewRequest,
+    ManagerOrderImportPreviewResponse,
+    ManagerOrderImportProductMatch,
+    ManagerOrderTransferCustomer,
+    ManagerOrderTransferCustomerBranch,
+    ManagerOrderTransferOrder,
+    ManagerOrderTransferPackage,
+    ManagerOrderTransferPayment,
+    ManagerOrderTransferProductLine,
+    ManagerOrderTransferProductRef,
+    ManagerOrderTransferProposal,
+    ManagerOrderTransferServiceLine,
+    ManagerOrderTransferServiceRef,
+    ManagerOrderTransferWorkStage,
+)
 
 # --- SHARED ---
+
 
 class FxRateResponse(BaseModel):
     usd_byn: Optional[float] = None
@@ -44,13 +124,6 @@ class AddressSuggestionItem(BaseModel):
 
 class AddressSuggestResponse(BaseModel):
     items: List[AddressSuggestionItem] = []
-
-class Meta(BaseModel):
-    total: int
-    page: int
-    limit: int
-    pages: int
-
 
 class ManagerMediaAssetResponse(BaseModel):
     id: int
@@ -543,71 +616,6 @@ class PublicSeriesPageResponse(BaseModel):
     products: List[ProductResponse] = Field(default_factory=list)
     related_series: List[PublicRelatedSeriesResponse] = Field(default_factory=list)
 
-# --- ORDERS ---
-
-class CalendarEventType(str, Enum):
-    MEASUREMENT = "measurement"
-    INSTALLATION = "installation"
-    WORK_STAGE = "work_stage"
-
-class CalendarEventResponse(BaseModel):
-    id: str  # Unique ID for the event (e.g. "123-assessment")
-    order_id: int
-    type: CalendarEventType
-    date: datetime
-    status: str
-    customer_name: Optional[str] = None
-    address: Optional[str] = None
-
-    # FullCalendar fields
-    title: str
-    start: datetime
-    allDay: bool = True
-    color: str
-
-
-class ProductAvailabilityLeadPayload(BaseModel):
-    product_id: int
-    phone: str
-    name: Optional[str] = None
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, value: str) -> str:
-        return validate_required_phone(value)
-
-
-class ProductAvailabilityLeadResponse(BaseModel):
-    lead_id: int
-    status: str
-    created_at: datetime
-
-
-# --- INSTALLERS ---
-
-class ManagerInstallerBase(BaseModel):
-    name: str
-    is_active: bool = True
-    default_rate: Optional[float] = None
-    telegram_id: Optional[int] = None
-
-class ManagerInstallerCreatePayload(ManagerInstallerBase):
-    pass
-
-class ManagerInstallerUpdatePayload(BaseModel):
-    name: Optional[str] = None
-    is_active: Optional[bool] = None
-    default_rate: Optional[float] = None
-    telegram_id: Optional[int] = None
-
-class ManagerInstallerResponse(ManagerInstallerBase):
-    id: int
-
-class ManagerInstallerListResponse(BaseModel):
-    items: List[ManagerInstallerResponse]
-    meta: Meta
-
-
 # --- STAFF USERS ---
 
 class ManagerStaffBase(BaseModel):
@@ -665,777 +673,7 @@ class TelegramLoginPayload(BaseModel):
     hash: str
 
 
-# --- ORDERS ---
-
-class OrderCustomerBrief(BaseModel):
-    id: int
-    type: str
-    name: str
-    phone: str
-    email: Optional[str] = None
-    full_legal_name: Optional[str] = None
-    inn: Optional[str] = None
-    legal_address: Optional[str] = None
-    bank_name: Optional[str] = None
-    bic: Optional[str] = None
-    iban: Optional[str] = None
-    signer_position: Optional[str] = None
-    signer_name: Optional[str] = None
-    acting_basis: Optional[str] = None
-
-
-class OrderCustomerBranchBrief(BaseModel):
-    id: int
-    name: Optional[str] = None
-    delivery_address: str
-    contact_name: Optional[str] = None
-    contact_phone: Optional[str] = None
-    is_default: bool = False
-
-
-class OrderCustomerContractBrief(BaseModel):
-    id: int
-    customer_id: int
-    number: str
-    valid_from: datetime
-    valid_until: datetime
-    status: str
-    document_role_type: Optional[str] = None
-    edit_url: Optional[str] = None
-
-
-LOGISTICS_COMPONENT_KINDS = {"indoor", "outdoor", "accessory", "other"}
-
-
-class OrderProductLogisticsComponent(BaseModel):
-    title: str
-    country: Optional[str] = None
-    unit: str = "шт."
-    quantity_per_parent: int = 1
-    unit_price: float = 0.0
-    kind: Optional[str] = None
-
-    @field_validator("title")
-    @classmethod
-    def validate_title(cls, value: str) -> str:
-        cleaned = " ".join(str(value or "").split())
-        if not cleaned:
-            raise ValueError("component title is required")
-        return cleaned
-
-    @field_validator("country", mode="before")
-    @classmethod
-    def normalize_country(cls, value: Optional[str]) -> Optional[str]:
-        cleaned = " ".join(str(value or "").split())
-        return cleaned or None
-
-    @field_validator("unit")
-    @classmethod
-    def normalize_unit(cls, value: str) -> str:
-        return " ".join(str(value or "").split()) or "шт."
-
-    @field_validator("quantity_per_parent")
-    @classmethod
-    def validate_quantity_per_parent(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("quantity_per_parent must be greater than zero")
-        return value
-
-    @field_validator("unit_price")
-    @classmethod
-    def validate_unit_price(cls, value: float) -> float:
-        if value < 0:
-            raise ValueError("unit_price must be >= 0")
-        return value
-
-    @field_validator("kind")
-    @classmethod
-    def validate_kind(cls, value: Optional[str]) -> Optional[str]:
-        cleaned = " ".join(str(value or "").split())
-        if not cleaned:
-            return None
-        if cleaned not in LOGISTICS_COMPONENT_KINDS:
-            raise ValueError("invalid logistics component kind")
-        return cleaned
-
-
-class ProductLogisticsComponentTemplate(BaseModel):
-    title: str
-    country: Optional[str] = None
-    unit: str = "шт."
-    quantity_per_parent: int = 1
-    price_weight: float = 1.0
-    kind: Optional[str] = None
-
-
-class OrderProductLineResponse(BaseModel):
-    id: int
-    proposal_id: Optional[int] = None
-    product_id: Optional[int] = None
-    product_title: str
-    quantity: int
-    price: int
-    cost: int
-    is_installation_included: bool
-    installation_price: int
-    line_total: int
-    product_country: Optional[str] = None
-    product_logistics_components: List[ProductLogisticsComponentTemplate] = Field(default_factory=list)
-    logistics_components: List[OrderProductLogisticsComponent] = Field(default_factory=list)
-
-
-class OrderServiceLineResponse(BaseModel):
-    id: int
-    proposal_id: Optional[int] = None
-    service_id: Optional[int] = None
-    service_title: str
-    service_category: Optional[str] = None
-    quantity: int
-    price: int
-    cost: int
-    line_total: int
-
-
-class ManagerOrderListItemResponse(BaseModel):
-    id: int
-    status: str
-    lead_source: Optional[str] = None
-    title: Optional[str] = None
-    workflow_type: str = "sales_installation"
-    repair_meta: Dict[str, Any] = Field(default_factory=dict)
-    manager_labels: List[str] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-    status_changed_at: Optional[datetime] = None
-    next_followup_date: Optional[datetime] = None
-    measurement_date: Optional[datetime] = None
-    installation_date: Optional[datetime] = None
-    total_amount: float
-    total_cost: float
-    margin: float
-    is_paid: bool
-    comment: Optional[str] = None
-    delivery_address: Optional[str] = None
-    customer: Optional[OrderCustomerBrief] = None
-    customer_branch: Optional[OrderCustomerBranchBrief] = None
-    customer_contract_id: Optional[int] = None
-    customer_contract: Optional[OrderCustomerContractBrief] = None
-    document_role_type: Optional[str] = None
-    effective_document_role_type: str = "seller_buyer"
-    additional_conditions: Optional[str] = None
-    installer_id: Optional[int] = None
-    installer: Optional[ManagerInstallerResponse] = None
-    # New fields
-    equipment_status: str = "pending"
-    standard_install_kit_issued: bool = False
-
-    # Target Currency
-    target_currency: Optional[PaymentCurrency] = None
-    target_currency_amount: Optional[float] = None
-    target_currency_payments: Optional[float] = None
-
-    closing_result: Optional[str] = None
-    reject_reason: Optional[str] = None
-    is_on_hold: bool = False
-    on_hold_reason: Optional[str] = None
-    measurement_required: bool = False
-    measurer_id: Optional[int] = None
-    measurement_result: Optional[str] = None
-    proposal_status: str = "draft"
-    proposal_sent_at: Optional[datetime] = None
-    negotiation_status: str = "awaiting_offer"
-    negotiation_status_changed_at: Optional[datetime] = None
-    execution_without_payment: bool = False
-    execution_without_payment_reason: Optional[str] = None
-    auto_execution_on_payment: bool = False
-    auto_close_on_payment: bool = False
-    execution_status: str = "needs_schedule"
-    execution_status_changed_at: Optional[datetime] = None
-
-    @computed_field
-    @property
-    def needs_attention(self) -> bool:
-        if self.measurement_date and not self.measurement_result:
-            return self.measurement_date.timestamp() < datetime.now().timestamp()
-        return False
-
-    @computed_field
-    @property
-    def awaiting_measurement(self) -> bool:
-        if self.measurement_required and self.measurement_date:
-            return self.measurement_date.timestamp() > datetime.now().timestamp()
-        return False
-
-    @computed_field
-    @property
-    def client_thinking(self) -> bool:
-        return self.proposal_status == "sent"
-
-    @computed_field
-    @property
-    def ready_for_execution(self) -> bool:
-        return self.status == "execution" or self.proposal_status == "approved"
-
-    # Financials
-    total_payments: float = 0.0
-    balance_due: float = 0.0
-
-
-class ManagerOrderDocumentItem(BaseModel):
-    id: int
-    proposal_id: Optional[int] = None
-    base_document_id: Optional[int] = None
-    base_customer_contract_id: Optional[int] = None
-    scope_customer_branch_id: Optional[int] = None
-    scope_title: Optional[str] = None
-    scope_address: Optional[str] = None
-    scope_meta: Dict[str, Any] = Field(default_factory=dict)
-    base_document_type: Optional[str] = None
-    base_document_type_label: Optional[str] = None
-    base_document_number: Optional[str] = None
-    base_document_date: Optional[datetime] = None
-    doc_type: str
-    number: str
-    date: datetime
-    edit_url: Optional[str] = None
-    is_downloadable: bool = True
-
-
-class ManagerOrderDocumentListResponse(BaseModel):
-    items: List[ManagerOrderDocumentItem]
-
-
-class ManagerCustomerDocumentItem(BaseModel):
-    id: int
-    order_id: int
-    proposal_id: Optional[int] = None
-    base_document_id: Optional[int] = None
-    base_customer_contract_id: Optional[int] = None
-    scope_customer_branch_id: Optional[int] = None
-    scope_title: Optional[str] = None
-    scope_address: Optional[str] = None
-    scope_meta: Dict[str, Any] = Field(default_factory=dict)
-    base_document_type: Optional[str] = None
-    base_document_type_label: Optional[str] = None
-    base_document_number: Optional[str] = None
-    base_document_date: Optional[datetime] = None
-    doc_type: str
-    number: str
-    date: datetime
-    edit_url: Optional[str] = None
-    is_downloadable: bool = True
-
-
-class ManagerCustomerDocumentListResponse(BaseModel):
-    items: List[ManagerCustomerDocumentItem]
-
-
-class ManagerCustomerReconciliationBasisDocument(BaseModel):
-    id: int
-    doc_type: str
-    doc_type_label: str
-    number: str
-    date: datetime
-    edit_url: Optional[str] = None
-
-
-class ManagerCustomerReconciliationDocumentItem(BaseModel):
-    order_id: int
-    order_title: str
-    date: datetime
-    amount: float
-    basis: str
-    delivery_address: Optional[str] = None
-    documents: List[ManagerCustomerReconciliationBasisDocument] = Field(default_factory=list)
-
-
-class ManagerCustomerReconciliationPaymentItem(BaseModel):
-    payment_id: int
-    order_id: int
-    order_title: str
-    date: datetime
-    amount: float
-    allocated_amount: Optional[float] = None
-    currency: PaymentCurrency
-    payment_type: str
-    comment: Optional[str] = None
-    bank_receipt_id: Optional[int] = None
-    payer_name: Optional[str] = None
-    payer_unp: Optional[str] = None
-    payer_account: Optional[str] = None
-    our_account: Optional[str] = None
-    payment_document_number: Optional[str] = None
-    payment_document_raw: Optional[str] = None
-    payment_purpose: Optional[str] = None
-
-
-class ManagerCustomerReconciliationResponse(BaseModel):
-    customer_id: int
-    date_from: date
-    date_to: date
-    opening_balance: float = 0.0
-    documents_total: float = 0.0
-    payments_total: float = 0.0
-    closing_balance: float = 0.0
-    documents: List[ManagerCustomerReconciliationDocumentItem] = Field(default_factory=list)
-    payments: List[ManagerCustomerReconciliationPaymentItem] = Field(default_factory=list)
-
-
-class ManagerCustomerReconciliationDocumentResponse(BaseModel):
-    file_id: str
-    edit_url: str
-    title: str
-
-
-class PaymentCreatePayload(BaseModel):
-    amount: float = Field(gt=0)
-    currency: PaymentCurrency = PaymentCurrency.BYN
-    type: str # prepayment or postpayment
-    comment: Optional[str] = None
-
-
-class PaymentBankReceiptResponse(BaseModel):
-    id: int
-    status: str
-    received_at: Optional[datetime] = None
-    amount: float
-    currency: PaymentCurrency
-    payer_name: Optional[str] = None
-    payer_unp: Optional[str] = None
-    payer_account: Optional[str] = None
-    payment_document_raw: Optional[str] = None
-    payment_document_number: Optional[str] = None
-    payment_purpose: Optional[str] = None
-
-
-class PaymentResponse(BaseModel):
-    id: int
-    amount: float
-    currency: PaymentCurrency
-    date: datetime
-    type: str
-    comment: Optional[str] = None
-    created_at: datetime
-    bank_receipt_id: Optional[int] = None
-    bank_receipt: Optional[PaymentBankReceiptResponse] = None
-
-
-
-class OrderWorkStageCreatePayload(BaseModel):
-    name: str
-    status: Optional[str] = "planned"
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    installer_id: Optional[int] = None
-    manager_comment: Optional[str] = None
-    installer_report: Optional[str] = None
-
-
-class OrderWorkStageUpdatePayload(BaseModel):
-    name: Optional[str] = None
-    status: Optional[str] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    installer_id: Optional[int] = None
-    manager_comment: Optional[str] = None
-    installer_report: Optional[str] = None
-
-
-class OrderWorkStageResponse(BaseModel):
-    id: int
-    order_id: int
-    name: str
-    status: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    installer_id: Optional[int] = None
-    manager_comment: Optional[str] = None
-    installer_report: Optional[str] = None
-    installer: Optional[ManagerInstallerResponse] = None
-
-
-class ManagerStaleWorkStageItem(BaseModel):
-    id: int
-    order_id: int
-    order_status: str
-    order_title: Optional[str] = None
-    name: str
-    status: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    installer_id: Optional[int] = None
-    installer_name: Optional[str] = None
-    customer_name: Optional[str] = None
-    customer_phone: Optional[str] = None
-    address: Optional[str] = None
-    manager_comment: Optional[str] = None
-    installer_report: Optional[str] = None
-
-
-class ManagerStaleWorkStageListResponse(BaseModel):
-    items: List[ManagerStaleWorkStageItem]
-    total: int
-
-
-class OrderProposalResponse(BaseModel):
-    id: int
-    order_id: int
-    name: str
-    status: str = "draft"
-    is_selected: bool = False
-    is_archived: bool = False
-    sort_order: int = 0
-    total_amount: float = 0.0
-    total_cost: float = 0.0
-    margin: float = 0.0
-    product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
-    service_lines: List[OrderServiceLineResponse] = Field(default_factory=list)
-
-
-class OrderProposalCreatePayload(BaseModel):
-    name: Optional[str] = None
-    duplicate_from_proposal_id: Optional[int] = None
-
-
-class OrderProposalUpdatePayload(BaseModel):
-    name: Optional[str] = None
-    status: Optional[str] = None
-    sort_order: Optional[int] = None
-    is_archived: Optional[bool] = None
-
-
-class OrderProposalListResponse(BaseModel):
-    items: List[OrderProposalResponse]
-
-
-
-class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
-    attachment_count: int = 0
-    linked_equipment_count: int = 0
-    product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
-    service_lines: List[OrderServiceLineResponse] = Field(default_factory=list)
-    proposals: List[OrderProposalResponse] = Field(default_factory=list)
-    documents: List[ManagerOrderDocumentItem] = Field(default_factory=list)
-    payments: List[PaymentResponse] = Field(default_factory=list)
-    work_stages: List[OrderWorkStageResponse] = Field(default_factory=list)
-
-
-class ManagerOrderListResponse(BaseModel):
-    items: List[ManagerOrderListItemResponse]
-    meta: Meta
-
-
-class ManagerOrderProductLinePayload(BaseModel):
-    link_id: Optional[int] = None
-    proposal_id: Optional[int] = None
-    product_id: int
-    quantity: int
-    price: int
-    cost: Optional[int] = None
-    logistics_components: Optional[List[OrderProductLogisticsComponent]] = None
-
-
-class ManagerOrderServiceLinePayload(BaseModel):
-    link_id: Optional[int] = None
-    proposal_id: Optional[int] = None
-    service_id: Optional[int] = None
-    title: str
-    quantity: int
-    price: int
-    cost: Optional[int] = None
-
-
-class ManagerOrderUpdatePayload(BaseModel):
-    status: Optional[str] = None
-    title: Optional[str] = None
-    workflow_type: Optional[str] = None
-    repair_meta: Optional[Dict[str, Any]] = None
-    manager_labels: Optional[List[str]] = None
-    next_followup_date: Optional[datetime] = None
-    measurement_date: Optional[datetime] = None
-    installation_date: Optional[datetime] = None
-    comment: Optional[str] = None
-    no_answer_at: Optional[str] = None
-
-    # Negotiation
-    measurement_required: Optional[bool] = None
-    measurer_id: Optional[int] = None
-    measurement_result: Optional[str] = None
-    additional_conditions: Optional[str] = None
-    proposal_status: Optional[str] = None
-    proposal_sent_at: Optional[datetime] = None
-    negotiation_status: Optional[str] = None
-    execution_without_payment: Optional[bool] = None
-    execution_without_payment_reason: Optional[str] = None
-    auto_execution_on_payment: Optional[bool] = None
-    auto_close_on_payment: Optional[bool] = None
-    execution_status: Optional[str] = None
-
-    is_paid: Optional[bool] = None
-    # Closing
-    closing_result: Optional[str] = None
-    reject_reason: Optional[str] = None
-    # On Hold
-    is_on_hold: Optional[bool] = None
-    on_hold_reason: Optional[str] = None
-
-    # Target Currency
-    target_currency: Optional[PaymentCurrency] = None
-    target_currency_amount: Optional[float] = None
-
-    # Equipment
-    equipment_status: Optional[str] = None
-    standard_install_kit_issued: Optional[bool] = None
-
-    # Customer Details
-    customer_id: Optional[int] = None
-    customer_branch_id: Optional[int] = None
-    customer_contract_id: Optional[int] = None
-    document_role_type: Optional[str] = None
-    customer_type: Optional[str] = None
-    customer_name: Optional[str] = None
-    customer_phone: Optional[str] = None
-    customer_email: Optional[str] = None
-    customer_inn: Optional[str] = None
-    customer_full_legal_name: Optional[str] = None
-    customer_legal_address: Optional[str] = None
-    customer_bank_name: Optional[str] = None
-    customer_bic: Optional[str] = None
-    customer_iban: Optional[str] = None
-    customer_delivery_address: Optional[str] = None
-    confirm_critical_customer_changes: Optional[bool] = None
-
-    # Qualification Meta fields
-    object_type: Optional[str] = None
-    service_type: Optional[str] = None
-    equipment_class: Optional[str] = None
-    marketing_source: Optional[str] = None
-
-    installer_id: Optional[int] = None
-    products: Optional[List[ManagerOrderProductLinePayload]] = None
-    services: Optional[List[ManagerOrderServiceLinePayload]] = None
-
-
-class ManagerOrderCreatePayload(BaseModel):
-    customer_id: Optional[int] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    source: str
-    request_text: str
-    service_type: Optional[str] = None
-    customer_type: str = "individual"
-    customer_inn: Optional[str] = None
-    customer_full_legal_name: Optional[str] = None
-    target_date: Optional[datetime] = None
-    address: Optional[str] = None
-
-
-class ManagerOrderExportRequest(BaseModel):
-    order_ids: List[int] = Field(default_factory=list, min_length=1, max_length=100)
-    include_payments: bool = True
-    include_work_stages: bool = True
-
-
-class ManagerOrderTransferCustomer(BaseModel):
-    source_id: Optional[int] = None
-    type: str = "individual"
-    name: str
-    phone: str = ""
-    email: Optional[str] = None
-    full_legal_name: Optional[str] = None
-    inn: Optional[str] = None
-    legal_address: Optional[str] = None
-    actual_address: Optional[str] = None
-    bank_name: Optional[str] = None
-    bic: Optional[str] = None
-    iban: Optional[str] = None
-
-
-class ManagerOrderTransferCustomerBranch(BaseModel):
-    source_id: Optional[int] = None
-    name: Optional[str] = None
-    delivery_address: str
-    contact_name: Optional[str] = None
-    contact_phone: Optional[str] = None
-    is_default: bool = False
-
-
-class ManagerOrderTransferProductRef(BaseModel):
-    source_id: Optional[int] = None
-    title: str
-    slug: Optional[str] = None
-    source_url: Optional[str] = None
-
-
-class ManagerOrderTransferServiceRef(BaseModel):
-    source_id: Optional[int] = None
-    title: str
-    slug: Optional[str] = None
-
-
-class ManagerOrderTransferProductLine(BaseModel):
-    source_id: Optional[int] = None
-    product: ManagerOrderTransferProductRef
-    quantity: int
-    price: int
-    cost: int = 0
-    is_installation_included: bool = False
-    installation_price: int = 0
-    installation_details: Optional[Dict[str, Any]] = None
-    logistics_components: Optional[List[OrderProductLogisticsComponent]] = None
-
-
-class ManagerOrderTransferServiceLine(BaseModel):
-    source_id: Optional[int] = None
-    service: Optional[ManagerOrderTransferServiceRef] = None
-    title: str
-    quantity: int
-    price: int
-    cost: int = 0
-
-
-class ManagerOrderTransferProposal(BaseModel):
-    source_id: Optional[int] = None
-    name: str = "Основное"
-    status: str = "draft"
-    is_selected: bool = False
-    is_archived: bool = False
-    sort_order: int = 0
-    product_lines: List[ManagerOrderTransferProductLine] = Field(default_factory=list)
-    service_lines: List[ManagerOrderTransferServiceLine] = Field(default_factory=list)
-
-
-class ManagerOrderTransferPayment(BaseModel):
-    source_id: Optional[int] = None
-    amount: float
-    currency: PaymentCurrency = PaymentCurrency.BYN
-    date: datetime
-    type: str = "prepayment"
-    comment: Optional[str] = None
-
-
-class ManagerOrderTransferWorkStage(BaseModel):
-    source_id: Optional[int] = None
-    name: str
-    status: str = "planned"
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    installer_name: Optional[str] = None
-    manager_comment: Optional[str] = None
-    installer_report: Optional[str] = None
-
-
-class ManagerOrderTransferOrder(BaseModel):
-    source_id: Optional[int] = None
-    status: str = "negotiation"
-    lead_source: Optional[str] = "manager"
-    title: Optional[str] = None
-    workflow_type: str = "sales_installation"
-    repair_meta: Dict[str, Any] = Field(default_factory=dict)
-    manager_labels: List[str] = Field(default_factory=list)
-    created_at: Optional[datetime] = None
-    next_followup_date: Optional[datetime] = None
-    measurement_date: Optional[datetime] = None
-    installation_date: Optional[datetime] = None
-    comment: Optional[str] = None
-    delivery_address: Optional[str] = None
-    document_role_type: Optional[str] = None
-    additional_conditions: Optional[str] = None
-    closing_result: Optional[str] = None
-    reject_reason: Optional[str] = None
-    is_on_hold: bool = False
-    on_hold_reason: Optional[str] = None
-    measurement_required: bool = False
-    measurement_result: Optional[str] = None
-    proposal_status: str = "draft"
-    proposal_sent_at: Optional[datetime] = None
-    negotiation_status: str = "awaiting_offer"
-    negotiation_status_changed_at: Optional[datetime] = None
-    execution_without_payment: bool = False
-    execution_without_payment_reason: Optional[str] = None
-    auto_execution_on_payment: bool = False
-    auto_close_on_payment: bool = False
-    execution_status: str = "needs_schedule"
-    execution_status_changed_at: Optional[datetime] = None
-    equipment_status: str = "pending"
-    standard_install_kit_issued: bool = False
-    target_currency: Optional[PaymentCurrency] = None
-    target_currency_amount: Optional[float] = None
-    customer: Optional[ManagerOrderTransferCustomer] = None
-    customer_branch: Optional[ManagerOrderTransferCustomerBranch] = None
-    proposals: List[ManagerOrderTransferProposal] = Field(default_factory=list)
-    payments: List[ManagerOrderTransferPayment] = Field(default_factory=list)
-    work_stages: List[ManagerOrderTransferWorkStage] = Field(default_factory=list)
-
-
-class ManagerOrderTransferPackage(BaseModel):
-    version: int = 1
-    exported_at: datetime
-    source: str = "manager"
-    orders: List[ManagerOrderTransferOrder] = Field(default_factory=list)
-
-
-class ManagerOrderImportPreviewRequest(BaseModel):
-    package: ManagerOrderTransferPackage
-
-
-class ManagerOrderImportCommitRequest(BaseModel):
-    package: ManagerOrderTransferPackage
-
-
-class ManagerOrderImportProductMatch(BaseModel):
-    source_order_id: Optional[int] = None
-    product_title: str
-    product_slug: Optional[str] = None
-    matched_product_id: Optional[int] = None
-    matched_product_title: Optional[str] = None
-    status: str
-    reason: Optional[str] = None
-
-
-class ManagerOrderImportCustomerMatch(BaseModel):
-    source_order_id: Optional[int] = None
-    customer_name: Optional[str] = None
-    matched_customer_id: Optional[int] = None
-    matched_customer_name: Optional[str] = None
-    status: str
-    reason: Optional[str] = None
-
-
-class ManagerOrderImportPreviewResponse(BaseModel):
-    orders_count: int
-    products_total: int
-    products_matched: int
-    products_missing: int
-    customers: List[ManagerOrderImportCustomerMatch] = Field(default_factory=list)
-    products: List[ManagerOrderImportProductMatch] = Field(default_factory=list)
-    can_import: bool
-    warnings: List[str] = Field(default_factory=list)
-
-
-class ManagerOrderImportCommitResponse(BaseModel):
-    created_order_ids: List[int] = Field(default_factory=list)
-    created_count: int
-    skipped_payments: int = 0
-    warnings: List[str] = Field(default_factory=list)
-
-
-class ManagerOrderDocumentResponse(BaseModel):
-    doc_id: int
-    proposal_id: Optional[int] = None
-    base_document_id: Optional[int] = None
-    base_customer_contract_id: Optional[int] = None
-    scope_customer_branch_id: Optional[int] = None
-    scope_title: Optional[str] = None
-    scope_address: Optional[str] = None
-    scope_meta: Dict[str, Any] = Field(default_factory=dict)
-    doc_type: str
-    edit_url: str
-
-
-class ManagerOrderDocumentGeneratePayload(BaseModel):
-    additional_conditions: Optional[str] = None
-
+# --- DOCUMENT TEMPLATES ---
 
 class DocumentTemplateItem(BaseModel):
     id: str
@@ -1506,145 +744,7 @@ class DocumentTemplateUpdatePayload(BaseModel):
 
 
 
-class LeadResponse(BaseModel):
-    id: int
-    status: str
-    source: str
-    segment_hint: str
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    inn: Optional[str] = None
-    company_name: Optional[str] = None
-    request_text: str
-    source_message_id: Optional[str] = None
-    source_fingerprint: Optional[str] = None
-    loss_reason: Optional[str] = None
-    next_followup_date: Optional[datetime] = None
-    archived_at: Optional[datetime] = None
-    converted_order_id: Optional[int] = None
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
-
-class LeadListResponse(BaseModel):
-    items: List[LeadResponse]
-    meta: Meta
-
-
-class LeadCreatePayload(BaseModel):
-    source: str = "manager"
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    inn: Optional[str] = None
-    company_name: Optional[str] = None
-    segment_hint: Optional[str] = None
-    request_text: str
-    source_message_id: Optional[str] = None
-    source_fingerprint: Optional[str] = None
-    next_followup_date: Optional[datetime] = None
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_phone(value)
-
-    @field_validator("email")
-    @classmethod
-    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_email(value)
-
-    @field_validator("inn")
-    @classmethod
-    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_unp(value)
-
-
-class LeadUpdatePayload(BaseModel):
-    status: Optional[str] = None
-    source: Optional[str] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    inn: Optional[str] = None
-    company_name: Optional[str] = None
-    segment_hint: Optional[str] = None
-    request_text: Optional[str] = None
-    source_message_id: Optional[str] = None
-    source_fingerprint: Optional[str] = None
-    loss_reason: Optional[str] = None
-    next_followup_date: Optional[datetime] = None
-    archived_at: Optional[datetime] = None
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_phone(value)
-
-    @field_validator("email")
-    @classmethod
-    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_email(value)
-
-    @field_validator("inn")
-    @classmethod
-    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_unp(value)
-
-
-class LeadQualifyPayload(BaseModel):
-    customer_id: Optional[int] = None
-    customer_branch_id: Optional[int] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    inn: Optional[str] = None
-    full_legal_name: Optional[str] = None
-    legal_address: Optional[str] = None
-    iban: Optional[str] = None
-    bic: Optional[str] = None
-    bank_name: Optional[str] = None
-    delivery_address: Optional[str] = None
-    customer_type: Optional[str] = None
-    order_comment: Optional[str] = None
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_phone(value)
-
-    @field_validator("email")
-    @classmethod
-    def _validate_email(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_email(value)
-
-    @field_validator("inn")
-    @classmethod
-    def _validate_inn(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_unp(value)
-
-    @field_validator("iban")
-    @classmethod
-    def _validate_iban(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_iban(value)
-
-    @field_validator("bic")
-    @classmethod
-    def _validate_bic(cls, value: Optional[str]) -> Optional[str]:
-        return validate_optional_bic(value)
-
-
-class LeadLossPayload(BaseModel):
-    status: str = "lost"
-    loss_reason: Optional[str] = None
-
-
-class LeadQualifyResponse(BaseModel):
-    lead: LeadResponse
-    customer_id: int
-    order_id: int
-
+# --- MANAGER AUTH ---
 
 class ManagerAuthStatusResponse(BaseModel):
     username: str
