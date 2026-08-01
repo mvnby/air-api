@@ -162,7 +162,7 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     )
 
     assert created.replayed is False
-    assert replayed.replayed is False
+    assert replayed.replayed is True
     assert replayed.order_id == created.order_id
     assert replayed.attachment_count == 1
     assert first_save_count > 0
@@ -294,8 +294,8 @@ async def test_installation_estimate_idempotency_is_isolated_by_storefront(
     assert first.replayed is False
     assert second.replayed is False
     assert first.order_id != second.order_id
-    assert first_replay.replayed is False
-    assert second_replay.replayed is False
+    assert first_replay.replayed is True
+    assert second_replay.replayed is True
     assert first_replay.order_id == first.order_id
     assert second_replay.order_id == second.order_id
 

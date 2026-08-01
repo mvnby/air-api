@@ -338,6 +338,8 @@ class InstallationEstimateLeadService:
                     "installation_estimate_temporarily_unavailable"
                 ) from exc
             raise
+        if outcome.replayed and not outcome.value.replayed:
+            return outcome.value.model_copy(update={"replayed": True})
         return outcome.value
 
     @staticmethod

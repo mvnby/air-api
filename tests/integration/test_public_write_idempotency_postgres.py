@@ -234,6 +234,12 @@ def _resource_id(family: str, response) -> int:
     return response.order_id
 
 
+def _semantic_response(response) -> dict:
+    data = response.model_dump(mode="json")
+    data.pop("replayed", None)
+    return data
+
+
 async def _entity_count(session: AsyncSession, family: str) -> int:
     entity = Lead if family == "contact" else Order
     return int(await session.scalar(select(func.count(entity.id))) or 0)
@@ -308,7 +314,9 @@ async def test_public_write_family_full_idempotency_matrix(
         )
 
     first, second = await asyncio.gather(concurrent_call(1), concurrent_call(2))
-    assert first.model_dump(mode="json") == second.model_dump(mode="json")
+    assert _semantic_response(first) == _semantic_response(second)
+    if family == "installation":
+        assert {first.replayed, second.replayed} == {False, True}
     assert _resource_id(family, first) == _resource_id(family, second)
     concurrent_media_writes = len(storage.save_calls) - initial_storage_calls
     if family in {"installation", "repair"}:
@@ -327,7 +335,9 @@ async def test_public_write_family_full_idempotency_matrix(
         f"{family}-concurrent-request-0001",
         100,
     )
-    assert replay.model_dump(mode="json") == first.model_dump(mode="json")
+    assert _semantic_response(replay) == _semantic_response(first)
+    if family == "installation":
+        assert replay.replayed is True
     assert len(storage.save_calls) == replay_calls
 
     conflict_key = f"{family}-conflict-request-0001"
