@@ -51,6 +51,7 @@ def signed_headers(
     secret: str = PRIMARY_SECRET,
     timestamp: int | None = None,
     idempotency_key: str | None | object = _DEFAULT_KEY,
+    signature_version: str = "v2",
 ) -> dict[str, str]:
     signed_at = int(time.time()) if timestamp is None else timestamp
     normalized_method = method.upper()
@@ -65,12 +66,18 @@ def signed_headers(
         if isinstance(idempotency_key, str) and idempotency_key
         else ""
     )
-    headers = {
-        "Host": api_hostname,
-        "X-MVN-Storefront-Key-Id": key_id,
-        "X-MVN-Storefront-Host": storefront_hostname,
-        "X-MVN-Storefront-Timestamp": str(signed_at),
-        "X-MVN-Storefront-Signature": StorefrontContextSignatureService.sign(
+    if signature_version == "v1":
+        signature = StorefrontContextSignatureService.sign_legacy_v1_read(
+            secret=secret,
+            timestamp=signed_at,
+            method=method,
+            path_and_query=target,
+            api_hostname=api_hostname,
+            storefront_hostname=storefront_hostname,
+            body_sha256=StorefrontContextSignatureService.body_sha256(body),
+        )
+    else:
+        signature = StorefrontContextSignatureService.sign(
             secret=secret,
             timestamp=signed_at,
             method=method,
@@ -79,7 +86,13 @@ def signed_headers(
             storefront_hostname=storefront_hostname,
             body_sha256=StorefrontContextSignatureService.body_sha256(body),
             idempotency_key_sha256=idempotency_digest,
-        ),
+        )
+    headers = {
+        "Host": api_hostname,
+        "X-MVN-Storefront-Key-Id": key_id,
+        "X-MVN-Storefront-Host": storefront_hostname,
+        "X-MVN-Storefront-Timestamp": str(signed_at),
+        "X-MVN-Storefront-Signature": signature,
     }
     if isinstance(idempotency_key, str) and idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
@@ -93,6 +106,7 @@ def configure_signing_settings(monkeypatch) -> None:
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID": "",
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET": "",
         "STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS": False,
+        "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS": False,
         "STOREFRONT_CONTEXT_API_HOSTS": "api.mvn.by,localhost",
     }
     for name, value in values.items():

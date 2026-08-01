@@ -109,7 +109,7 @@ async def test_forged_or_tampered_envelope_fails_closed(gateway_app, case):
     if case == "api_host":
         headers["Host"] = "localhost"
     if case == "signature":
-        headers["X-MVN-Storefront-Signature"] = "v1=" + "0" * 64
+        headers["X-MVN-Storefront-Signature"] = "v2=" + "0" * 64
     if case == "idempotency_key":
         headers["Idempotency-Key"] = "gateway-request-tampered-0002"
 
@@ -169,6 +169,47 @@ async def test_signed_read_rejects_smuggled_idempotency_key(gateway_app):
     )
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_legacy_v1_read_is_rejected_by_default_and_allowed_by_flag(
+    gateway_app,
+    monkeypatch,
+):
+    headers = signed_headers(method="GET", signature_version="v1")
+
+    rejected = await gateway_request(gateway_app, "GET", headers=headers)
+    assert rejected.status_code == 401
+
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS",
+        True,
+    )
+    accepted = await gateway_request(gateway_app, "GET", headers=headers)
+    assert accepted.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_legacy_v1_write_is_rejected_even_with_read_rollback_flag(
+    gateway_app,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS",
+        True,
+    )
+    headers = signed_headers()
+    v2_signature = headers["X-MVN-Storefront-Signature"]
+    headers["X-MVN-Storefront-Signature"] = (
+        "v1=" + v2_signature.split("=", 1)[1]
+    )
+
+    response = await gateway_request(gateway_app, "POST", headers=headers)
+
+    assert response.status_code == 401
+    assert gateway_app.state.session_calls == 0
 
 
 @pytest.mark.asyncio

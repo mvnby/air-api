@@ -10,8 +10,9 @@ from services.storefront_context_service import StorefrontContextService
 
 _BODY_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _IDEMPOTENCY_KEY_SHA256_PATTERN = re.compile(r"^(?:[0-9a-f]{64})?$")
-_SIGNATURE_PATTERN = re.compile(r"^v1=[0-9a-f]{64}$")
+_SIGNATURE_PATTERN = re.compile(r"^(?:v1|v2)=[0-9a-f]{64}$")
 _HTTP_METHOD_PATTERN = re.compile(r"^[A-Z][A-Z0-9!#$%&'*+.^_`|~-]*$")
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 class InvalidStorefrontContextSignature(ValueError):
@@ -21,7 +22,8 @@ class InvalidStorefrontContextSignature(ValueError):
 class StorefrontContextSignatureService:
     """Create and verify the trusted storefront request envelope."""
 
-    VERSION = "v1"
+    VERSION = "v2"
+    LEGACY_READ_VERSION = "v1"
     EMPTY_BODY_SHA256 = sha256(b"").hexdigest()
 
     @staticmethod
@@ -102,6 +104,38 @@ class StorefrontContextSignatureService:
         )
 
     @classmethod
+    def legacy_v1_read_canonical_message(
+        cls,
+        *,
+        timestamp: int,
+        method: str,
+        path_and_query: str | bytes,
+        api_hostname: str,
+        storefront_hostname: str,
+        body_sha256: str,
+    ) -> bytes:
+        """Build the historical seven-field envelope for read-only rollback."""
+
+        normalized_method = str(method or "").strip().upper()
+        if normalized_method not in _READ_METHODS:
+            raise InvalidStorefrontContextSignature(
+                "Legacy storefront signatures are read-only"
+            )
+        v2_message = cls.canonical_message(
+            timestamp=timestamp,
+            method=normalized_method,
+            path_and_query=path_and_query,
+            api_hostname=api_hostname,
+            storefront_hostname=storefront_hostname,
+            body_sha256=body_sha256,
+            idempotency_key_sha256="",
+        )
+        fields = v2_message.split(b"\n")
+        return b"\n".join(
+            (cls.LEGACY_READ_VERSION.encode("ascii"), *fields[1:7])
+        )
+
+    @classmethod
     def sign(
         cls,
         *,
@@ -135,6 +169,37 @@ class StorefrontContextSignatureService:
         return f"{cls.VERSION}={digest}"
 
     @classmethod
+    def sign_legacy_v1_read(
+        cls,
+        *,
+        secret: str,
+        timestamp: int,
+        method: str,
+        path_and_query: str | bytes,
+        api_hostname: str,
+        storefront_hostname: str,
+        body_sha256: str,
+    ) -> str:
+        normalized_secret = str(secret or "")
+        if len(normalized_secret.encode("utf-8")) < 32:
+            raise InvalidStorefrontContextSignature(
+                "Storefront context signing secret is not configured securely"
+            )
+        digest = hmac.new(
+            normalized_secret.encode("utf-8"),
+            cls.legacy_v1_read_canonical_message(
+                timestamp=timestamp,
+                method=method,
+                path_and_query=path_and_query,
+                api_hostname=api_hostname,
+                storefront_hostname=storefront_hostname,
+                body_sha256=body_sha256,
+            ),
+            sha256,
+        ).hexdigest()
+        return f"{cls.LEGACY_READ_VERSION}={digest}"
+
+    @classmethod
     def verify(
         cls,
         *,
@@ -149,6 +214,7 @@ class StorefrontContextSignatureService:
         signature: str,
         max_age_seconds: int,
         now: int | None = None,
+        allow_legacy_v1_read_requests: bool = False,
     ) -> str:
         normalized_secret = str(secret or "")
         if len(normalized_secret.encode("utf-8")) < 32:
@@ -176,16 +242,40 @@ class StorefrontContextSignatureService:
         normalized_storefront_hostname = (
             StorefrontContextService.normalize_hostname(storefront_hostname)
         )
-        expected = cls.sign(
-            secret=normalized_secret,
-            timestamp=signed_timestamp,
-            method=method,
-            path_and_query=path_and_query,
-            api_hostname=api_hostname,
-            storefront_hostname=normalized_storefront_hostname,
-            body_sha256=body_sha256,
-            idempotency_key_sha256=idempotency_key_sha256,
-        )
+        version = normalized_signature.split("=", 1)[0]
+        if version == cls.LEGACY_READ_VERSION:
+            if not allow_legacy_v1_read_requests:
+                raise InvalidStorefrontContextSignature(
+                    "Legacy storefront signatures are disabled"
+                )
+            if str(method or "").strip().upper() not in _READ_METHODS:
+                raise InvalidStorefrontContextSignature(
+                    "Legacy storefront signatures are read-only"
+                )
+            if idempotency_key_sha256:
+                raise InvalidStorefrontContextSignature(
+                    "Legacy storefront signatures cannot bind idempotency keys"
+                )
+            expected = cls.sign_legacy_v1_read(
+                secret=normalized_secret,
+                timestamp=signed_timestamp,
+                method=method,
+                path_and_query=path_and_query,
+                api_hostname=api_hostname,
+                storefront_hostname=normalized_storefront_hostname,
+                body_sha256=body_sha256,
+            )
+        else:
+            expected = cls.sign(
+                secret=normalized_secret,
+                timestamp=signed_timestamp,
+                method=method,
+                path_and_query=path_and_query,
+                api_hostname=api_hostname,
+                storefront_hostname=normalized_storefront_hostname,
+                body_sha256=body_sha256,
+                idempotency_key_sha256=idempotency_key_sha256,
+            )
         if not hmac.compare_digest(expected, normalized_signature):
             raise InvalidStorefrontContextSignature(
                 "Storefront context signature is invalid"

@@ -2496,10 +2496,44 @@
             }
           },
           "400": {
-            "description": "Invalid idempotency key"
+            "description": "Invalid Content-Length or idempotency key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Idempotency key reused with different content"
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "503": {
             "description": "Request can be retried after a short delay",
@@ -2508,6 +2542,13 @@
                 "description": "Delay in seconds before retrying the same command",
                 "schema": {
                   "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -2566,10 +2607,44 @@
             }
           },
           "400": {
-            "description": "Invalid image or upload limits exceeded"
+            "description": "Invalid Content-Length, image, idempotency key, or upload limits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Idempotency key reused with different content"
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "503": {
             "description": "Request can be retried after a short delay",
@@ -2578,6 +2653,13 @@
                 "description": "Delay in seconds before retrying the same command",
                 "schema": {
                   "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -2643,10 +2725,44 @@
             }
           },
           "400": {
-            "description": "Invalid idempotency key"
+            "description": "Invalid Content-Length or idempotency key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Idempotency key reused with different content"
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "503": {
             "description": "Request can be retried after a short delay",
@@ -2655,6 +2771,13 @@
                 "description": "Delay in seconds before retrying the same command",
                 "schema": {
                   "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -2720,10 +2843,44 @@
             }
           },
           "400": {
-            "description": "Invalid form data or idempotency key"
+            "description": "Invalid Content-Length, form data, idempotency key, or upload limits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Idempotency key reused with different content"
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "503": {
             "description": "Request can be retried after a short delay",
@@ -2732,6 +2889,13 @@
                 "description": "Delay in seconds before retrying the same command",
                 "schema": {
                   "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -2798,7 +2962,24 @@
             }
           },
           "400": {
-            "description": "Invalid idempotency key"
+            "description": "Invalid Content-Length or idempotency key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "409": {
             "description": "Installation pricing conflict or Idempotency-Key reused with different content.",
@@ -2818,6 +2999,16 @@
               }
             }
           },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
           "503": {
             "description": "Request can be retried after a short delay",
             "headers": {
@@ -2825,6 +3016,13 @@
                 "description": "Delay in seconds before retrying the same command",
                 "schema": {
                   "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -51921,6 +52119,19 @@
           "detail"
         ],
         "title": "PublicWriteIdempotencyErrorResponse"
+      },
+      "PublicWriteRequestErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "PublicWriteRequestErrorResponse"
       },
       "RepairDiagnosticLeadResponse": {
         "properties": {

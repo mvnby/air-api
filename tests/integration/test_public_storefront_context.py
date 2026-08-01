@@ -109,6 +109,11 @@ def _configure_signing(monkeypatch) -> None:
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET",
         "",
     )
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS",
+        False,
+    )
 
 
 @pytest.mark.asyncio
@@ -413,6 +418,30 @@ async def test_signed_context_rejects_body_tamper_without_creating_lead(
     assert response.status_code == 401
     leads = (await db.execute(select(Lead))).scalars().all()
     assert leads == []
+
+
+@pytest.mark.asyncio
+async def test_signed_write_rejects_protocol_version_downgrade(
+    async_client,
+    db,
+    monkeypatch,
+):
+    await _seed_secondary_storefront(db)
+    _configure_signing(monkeypatch)
+    body = _json_body(_payload())
+    headers = _headers(body=body)
+    signature = headers["X-MVN-Storefront-Signature"]
+    assert signature.startswith("v2=")
+    headers["X-MVN-Storefront-Signature"] = "v1=" + signature.split("=", 1)[1]
+
+    response = await async_client.post(
+        _PATH,
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 401
+    assert (await db.execute(select(Lead))).scalars().all() == []
 
 
 @pytest.mark.asyncio

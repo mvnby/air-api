@@ -192,7 +192,7 @@ async def test_untrusted_request_fails_before_parser_or_dependencies(
     else:
         headers = signed_headers(body=body, target=b"/api/v1/validated")
         if case == "forged_malformed":
-            headers["X-MVN-Storefront-Signature"] = "v1=" + "0" * 64
+            headers["X-MVN-Storefront-Signature"] = "v2=" + "0" * 64
         elif case == "unknown":
             headers["X-MVN-Storefront-Nonce"] = "unsupported"
         elif case == "duplicate":

@@ -409,10 +409,16 @@ async def test_public_write_family_full_idempotency_matrix(
         retry_storage_paths = storage.save_calls[retry_storage_start:]
         assert failed_storage_paths
         assert set(failed_storage_paths).issubset(set(storage.delete_calls))
-        if family == "installation":
-            assert set(retry_storage_paths).isdisjoint(failed_storage_paths)
-        else:
-            assert set(retry_storage_paths) == set(failed_storage_paths)
+        assert set(retry_storage_paths).isdisjoint(failed_storage_paths)
+        assert set(retry_storage_paths).isdisjoint(storage.delete_calls)
+        assert set(retry_storage_paths).issubset(storage.objects)
+        if family == "repair":
+            expected_prefix = (
+                f"public-repair-write/{first_scope.tenant_id}/"
+                f"{first_scope.storefront_id}/"
+            )
+            assert all(path.startswith(expected_prefix) for path in failed_storage_paths)
+            assert all(path.startswith(expected_prefix) for path in retry_storage_paths)
 
     async with factory() as verification:
         receipts = list(

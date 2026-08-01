@@ -28,6 +28,7 @@ class StorefrontEnvelopeAuthConfig:
     previous_secret: str = field(default="", repr=False)
     allowed_api_hosts: tuple[str, ...] = ()
     max_age_seconds: int = 300
+    allow_legacy_v1_read_requests: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,5 +231,8 @@ def authenticate_storefront_envelope(
         idempotency_key_sha256=idempotency_key_sha256,
         signature=signature,
         max_age_seconds=config.max_age_seconds,
+        allow_legacy_v1_read_requests=(
+            config.allow_legacy_v1_read_requests
+        ),
     )
     return VerifiedStorefrontEnvelope(hostname=hostname)

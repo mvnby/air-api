@@ -131,6 +131,10 @@ class Settings(BaseSettings):
     STOREFRONT_CONTEXT_MAX_AGE_SECONDS: int = 300
     STOREFRONT_CONTEXT_MAX_BODY_BYTES: int = 20 * 1024 * 1024
     STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS: bool = False
+    # Emergency rollback compatibility for the historical seven-field v1
+    # envelope. It is accepted for GET/HEAD/OPTIONS only and stays off by
+    # default; all writes require the eight-field v2 envelope.
+    STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS: bool = False
     # Comma-separated upstream API host allowlist. Blank keeps the safe
     # environment-specific defaults used by production and local smoke tests.
     STOREFRONT_CONTEXT_API_HOSTS: str = ""
@@ -234,6 +238,10 @@ class Settings(BaseSettings):
         if self.STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS and not primary_id:
             raise ValueError(
                 "Signed storefront requests cannot be required without a primary signing key"
+            )
+        if self.STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS and not primary_id:
+            raise ValueError(
+                "Legacy storefront v1 reads require a configured primary signing key"
             )
         return self
 

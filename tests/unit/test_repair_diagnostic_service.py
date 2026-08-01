@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,9 @@ from services.repair_diagnostic_ai_job_service import (
     RepairDiagnosticAiJobService,
 )
 from services.staff_user_service import StaffUserService
+from services.repair_diagnostic_storage_service import (
+    RepairDiagnosticStorageService,
+)
 
 
 class FakeRepairDiagnosticStorage:
@@ -34,13 +38,14 @@ class FakeRepairDiagnosticStorage:
 
     async def save_media(self, **kwargs):
         self.save_calls.append(kwargs)
+        namespace = kwargs["namespace"]
         variant_type = kwargs["variant_type"]
         extension = kwargs["extension"]
         return StoredGeneralMediaObject(
-            url=f"/media/orders/42/repair-diagnostic/{variant_type}/hash.{extension}",
+            url=f"/media/{namespace}/{variant_type}/hash.{extension}",
             content_hash="c" * 64,
             storage_provider="local",
-            path=f"media/orders/42/repair-diagnostic/{variant_type}/hash.{extension}",
+            path=f"media/{namespace}/{variant_type}/hash.{extension}",
             size_bytes=len(kwargs["content"]),
         )
 
@@ -148,9 +153,10 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     assert replay_response == response
     assert len(storage.save_calls) == 2
     assert all(
-        call["namespace"].startswith("public-write/1/1/repair-diagnostic/")
+        call["namespace"].startswith("public-repair-write/1/1/")
         for call in storage.save_calls
     )
+    assert len({call["namespace"] for call in storage.save_calls}) == 1
 
     order = await sqlite_repair_diagnostic_session.get(Order, response.order_id)
     assert order is not None
@@ -252,6 +258,45 @@ async def test_repair_diagnostic_aggregate_upload_boundary(monkeypatch):
         await RepairDiagnosticService.collect_uploads(
             {"nameplate": [first], "indoor_unit": [overflow]}
         )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_same_key_rollback_cannot_delete_committed_successor():
+    storage = FakeRepairDiagnosticStorage()
+    key_hash = "d" * 64
+    successor_saved = asyncio.Event()
+
+    async def attempt(*, fail: bool) -> str:
+        namespace = RepairDiagnosticStorageService.new_attempt_namespace(
+            tenant_id=1,
+            storefront_id=1,
+            key_hash=key_hash,
+        )
+        saved = await storage.save_media(
+            content=b"same-content",
+            namespace=namespace,
+            variant_type="nameplate-0",
+            extension="jpg",
+            content_type="image/jpeg",
+        )
+        if fail:
+            await successor_saved.wait()
+            await RepairDiagnosticIntakeService._cleanup_failed_uploads(
+                storage=storage,
+                paths={saved.path},
+            )
+        else:
+            successor_saved.set()
+        return saved.path
+
+    failed_path, committed_path = await asyncio.gather(
+        attempt(fail=True),
+        attempt(fail=False),
+    )
+
+    assert failed_path != committed_path
+    assert storage.delete_calls == [failed_path]
+    assert committed_path not in storage.delete_calls
 
 
 @pytest.mark.asyncio

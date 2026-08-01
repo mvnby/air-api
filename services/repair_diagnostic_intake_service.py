@@ -30,6 +30,9 @@ from services.repair_diagnostic_service import (
     RepairDiagnosticLeadResponse,
     RepairDiagnosticService,
 )
+from services.repair_diagnostic_storage_service import (
+    RepairDiagnosticStorageService,
+)
 from services.tenant_scope_service import TenantScope
 
 
@@ -54,11 +57,10 @@ class RepairDiagnosticIntakeService:
         created_paths: set[str] = set()
         created_order: Order | None = None
         key_hash = PublicWriteIdempotencyService.key_hash(idempotency_key)
-        storage_namespace = (
-            "public-write/"
-            f"{tenant_scope.tenant_id}/{tenant_scope.storefront_id}/"
-            "repair-diagnostic/"
-            f"{key_hash}"
+        storage_namespace = RepairDiagnosticStorageService.new_attempt_namespace(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
+            key_hash=key_hash,
         )
 
         async def create() -> PublicWriteCommandResponse[RepairDiagnosticLeadResponse]:

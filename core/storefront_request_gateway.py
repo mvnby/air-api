@@ -191,6 +191,9 @@ class StorefrontRequestGatewayMiddleware:
                     ),
                     allowed_api_hosts=settings.storefront_context_api_hosts,
                     max_age_seconds=settings.STOREFRONT_CONTEXT_MAX_AGE_SECONDS,
+                    allow_legacy_v1_read_requests=(
+                        settings.STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS
+                    ),
                 ),
             )
         except (TypeError, ValueError):

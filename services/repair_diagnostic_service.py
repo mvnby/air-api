@@ -11,20 +11,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy.orm.attributes import flag_modified
-from sqlmodel import select
-
-from core.database import async_session_maker
 from core.input_validation import validate_required_phone
 from core.public_upload_limits import PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
 from models import Order
-from schemas import ManagerRepairActAiDraftPayload
-from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_service import BotService
-from services.defect_act_ai_service import DefectActAIService
 from services.general_media_storage_service import (
     GeneralMediaStorage,
-    get_general_media_storage,
 )
 from services.order_service import OrderService
 from services.tenant_scope_service import TenantScope
@@ -253,72 +245,6 @@ class RepairDiagnosticService:
         return uploads
 
     @staticmethod
-    async def run_ai_pre_diagnosis(
-        *,
-        order_id: int,
-        tenant_id: int,
-        payload_data: Dict[str, Any] | None = None,
-        nameplate_files: List[RepairDiagnosticIncomingFile] | None = None,
-    ) -> None:
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Order).where(
-                    Order.id == order_id,
-                    Order.tenant_id == tenant_id,
-                ).limit(1)
-            )
-            order = result.scalars().first()
-            if not order:
-                return
-            repair_meta = OrderService._get_repair_meta(order)
-            if repair_meta.get("ai_pre_diagnosis_status") in {
-                "completed",
-                "failed",
-                "skipped",
-            }:
-                return
-            payload = RepairDiagnosticLeadPayload.model_validate(
-                payload_data
-                if payload_data is not None
-                else RepairDiagnosticService._payload_from_repair_meta(repair_meta)
-            )
-            durable_nameplate_files = (
-                nameplate_files
-                if nameplate_files is not None
-                else await RepairDiagnosticService._load_durable_nameplate_files(
-                    repair_meta
-                )
-            )
-            try:
-                await RepairDiagnosticService._apply_nameplate_recognition(
-                    repair_meta,
-                    durable_nameplate_files,
-                )
-                ai_meta = await RepairDiagnosticService._build_ai_meta(payload, repair_meta)
-                if ai_meta:
-                    repair_meta.update(ai_meta)
-                repair_meta["ai_pre_diagnosis_status"] = "completed"
-                repair_meta["ai_pre_diagnosis_updated_at"] = datetime.now().isoformat(timespec="seconds")
-            except ValueError as exc:
-                status = "skipped" if "TOKEN is not configured" in str(exc) else "failed"
-                repair_meta["ai_pre_diagnosis_status"] = status
-                repair_meta["ai_pre_diagnosis_error"] = str(exc)[:300]
-                logger.info("Repair pre-diagnosis %s for order %s: %s", status, order_id, exc)
-            except Exception as exc:  # pragma: no cover - defensive background guard
-                repair_meta["ai_pre_diagnosis_status"] = "failed"
-                repair_meta["ai_pre_diagnosis_error"] = str(exc)[:300]
-                logger.exception("Repair pre-diagnosis failed for order %s", order_id)
-
-            OrderService._set_repair_meta(
-                order,
-                repair_meta,
-                default_status=OrderService.REPAIR_DEFAULT_STATUS,
-            )
-            flag_modified(order, "technical_meta")
-            session.add(order)
-            await session.commit()
-
-    @staticmethod
     def _payload_from_repair_meta(repair_meta: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "scenario": "repair",
@@ -329,32 +255,6 @@ class RepairDiagnosticService:
             "client_comment": repair_meta.get("client_comment") or None,
             "contact": repair_meta.get("contact") or {},
         }
-
-    @staticmethod
-    async def _load_durable_nameplate_files(
-        repair_meta: Dict[str, Any],
-    ) -> List[RepairDiagnosticIncomingFile]:
-        photos = repair_meta.get("photos")
-        nameplates = photos.get("nameplate") if isinstance(photos, dict) else None
-        if not isinstance(nameplates, list) or not nameplates:
-            return []
-        item = nameplates[0] if isinstance(nameplates[0], dict) else {}
-        path = str(item.get("storage_path") or "")
-        if not path:
-            return []
-        try:
-            content = await get_general_media_storage().read_media(path)
-        except Exception:
-            logger.exception("REPAIR_DIAGNOSTIC_DURABLE_NAMEPLATE_READ_FAILED")
-            return []
-        return [
-            RepairDiagnosticIncomingFile(
-                filename=str(item.get("filename") or "nameplate"),
-                content_type=str(item.get("content_type") or "") or None,
-                content=content,
-                content_hash=str(item.get("content_hash") or ""),
-            )
-        ]
 
     @staticmethod
     async def _store_uploads(
@@ -483,68 +383,6 @@ class RepairDiagnosticService:
         if not payload.contact.address:
             missing.append("Адрес или район")
         return missing
-
-    @staticmethod
-    async def _apply_nameplate_recognition(
-        repair_meta: Dict[str, Any],
-        nameplate_files: List[RepairDiagnosticIncomingFile],
-    ) -> None:
-        if not nameplate_files:
-            repair_meta["nameplate_recognition_status"] = "missing_photo"
-            return
-        file = nameplate_files[0]
-        try:
-            recognized = await BotRepairNameplateService.recognize_bytes(
-                content=file.content,
-                filename=file.filename,
-                mime_type=file.content_type,
-            )
-        except Exception as exc:
-            repair_meta["nameplate_recognition_status"] = "failed"
-            repair_meta["nameplate_recognition_error"] = str(exc)[:300]
-            return
-
-        extracted = recognized.get("extracted") if isinstance(recognized, dict) else {}
-        if not isinstance(extracted, dict):
-            extracted = {}
-        merge = BotRepairNameplateService.preview_merge(repair_meta, extracted)
-        if merge["applied"]:
-            repair_meta.update(merge["applied"])
-        repair_meta["nameplate_recognition_status"] = "recognized"
-        repair_meta["nameplate_recognition"] = {
-            "filename": file.filename,
-            "extracted": extracted,
-            "validation_flags": recognized.get("validation_flags") or {},
-            "applied_fields": list(merge["applied"].keys()),
-            "conflicts": merge["conflicts"],
-        }
-
-    @staticmethod
-    async def _build_ai_meta(
-        payload: RepairDiagnosticLeadPayload,
-        repair_meta: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        diagnostic_context = RepairDiagnosticService._build_order_comment(
-            payload,
-            {field: [] for field in PHOTO_FIELDS},
-        )
-        return await DefectActAIService.generate_repair_meta(
-            ManagerRepairActAiDraftPayload(
-                defect_type=SYMPTOM_FAULT_TYPE[payload.symptom],
-                defect_label=SYMPTOM_LABELS[payload.symptom],
-                allow_assumptions=False,
-                polish_existing=False,
-                equipment_name=repair_meta.get("equipment_name"),
-                equipment_brand=repair_meta.get("equipment_brand"),
-                equipment_model=repair_meta.get("equipment_model"),
-                equipment_power=repair_meta.get("equipment_power"),
-                customer_complaint=repair_meta.get("customer_complaint"),
-                complaint_official=repair_meta.get("complaint_official"),
-                likely_diagnosis=repair_meta.get("likely_diagnosis"),
-                extra_context=diagnostic_context,
-                current_meta=repair_meta,
-            )
-        )
 
     @staticmethod
     async def _notify_admins(

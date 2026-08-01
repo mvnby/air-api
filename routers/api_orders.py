@@ -14,7 +14,10 @@ from schemas import (
     OrderResponse,
     PublicOrderPricingErrorResponse,
 )
-from schemas_public_checkout import PublicWriteIdempotencyErrorResponse
+from schemas_public_checkout import (
+    PublicWriteIdempotencyErrorResponse,
+    PublicWriteRequestErrorResponse,
+)
 from services.installation_pricing_service import InstallationPricingError
 from services.website_order_service import WebsiteOrderService
 from services.tenant_scope_service import TenantScope
@@ -29,6 +32,7 @@ router = APIRouter(
 )
 
 _IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
     "description": "Request can be retried after a short delay",
     "headers": {
         "Retry-After": {
@@ -44,7 +48,14 @@ _IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
     response_model=OrderResponse,
     operation_id="create_order",
     responses={
-        400: {"description": "Invalid idempotency key"},
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid Content-Length or idempotency key",
+        },
+        401: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid or unsupported storefront signature envelope",
+        },
         409: {
             "model": (
                 PublicOrderPricingErrorResponse
@@ -54,6 +65,10 @@ _IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
                 "Installation pricing conflict or Idempotency-Key reused with "
                 "different content."
             ),
+        },
+        413: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Storefront request body exceeds the configured limit",
         },
         503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },

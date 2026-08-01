@@ -42,6 +42,10 @@ from services.public_write_idempotency_service import (
     PublicWriteIdempotencyUnavailable,
 )
 from services.tenant_scope_service import TenantScope
+from schemas_public_checkout import (
+    PublicWriteIdempotencyErrorResponse,
+    PublicWriteRequestErrorResponse,
+)
 
 router = APIRouter(
     tags=["api"],
@@ -49,6 +53,7 @@ router = APIRouter(
 )
 
 _IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
     "description": "Request can be retried after a short delay",
     "headers": {
         "Retry-After": {
@@ -56,6 +61,19 @@ _IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
             "schema": {"type": "string"},
         }
     },
+}
+
+_STOREFRONT_AUTH_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
+    "description": "Invalid or unsupported storefront signature envelope",
+}
+_BODY_TOO_LARGE_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
+    "description": "Storefront request body exceeds the configured limit",
+}
+_IDEMPOTENCY_CONFLICT_RESPONSE = {
+    "model": PublicWriteIdempotencyErrorResponse,
+    "description": "Idempotency key reused with different content",
 }
 
 
@@ -92,8 +110,13 @@ async def installation_estimate_form_payload(
     response_model=PublicContactLeadResponse,
     operation_id="create_public_contact_lead",
     responses={
-        400: {"description": "Invalid idempotency key"},
-        409: {"description": "Idempotency key reused with different content"},
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid Content-Length or idempotency key",
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
         503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },
 )
@@ -125,8 +148,15 @@ async def create_public_contact_lead(
     response_model=InstallationEstimateLeadResponse,
     operation_id="create_installation_estimate_lead",
     responses={
-        400: {"description": "Invalid image or upload limits exceeded"},
-        409: {"description": "Idempotency key reused with different content"},
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": (
+                "Invalid Content-Length, image, idempotency key, or upload limits"
+            ),
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
         503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },
 )
@@ -184,8 +214,13 @@ async def create_installation_estimate_lead(
     response_model=ProductAvailabilityLeadResponse,
     operation_id="create_product_availability_lead",
     responses={
-        400: {"description": "Invalid idempotency key"},
-        409: {"description": "Idempotency key reused with different content"},
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid Content-Length or idempotency key",
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
         503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },
 )
@@ -219,8 +254,15 @@ async def create_product_availability_lead(
     response_model=RepairDiagnosticLeadResponse,
     operation_id="create_repair_diagnostic_lead",
     responses={
-        400: {"description": "Invalid form data or idempotency key"},
-        409: {"description": "Idempotency key reused with different content"},
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": (
+                "Invalid Content-Length, form data, idempotency key, or upload limits"
+            ),
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
         503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },
 )

@@ -21,7 +21,7 @@ The trusted runtime sends exactly one value for each header:
   `orsha.mvn.by`;
 - `X-MVN-Storefront-Timestamp`: canonical Unix seconds (`0` or a decimal value
   with no sign, whitespace or leading zeroes);
-- `X-MVN-Storefront-Signature`: `v1=<64 lowercase SHA-256 hex characters>`.
+- `X-MVN-Storefront-Signature`: `v2=<64 lowercase SHA-256 hex characters>`.
 
 Every signed protected write also sends exactly one canonical
 `Idempotency-Key`. Signed reads must not send that header. Duplicate,
@@ -37,12 +37,12 @@ These infrastructure credentials are deliberately omitted from the generated
 OpenAPI/browser client; this document is the signing contract for trusted
 server runtimes.
 
-## Canonical v1 message
+## Canonical v2 message
 
 The signature is HMAC-SHA256 over these eight fields in this exact order:
 
 ```text
-v1
+v2
 <timestamp>
 <HTTP method>
 <raw path and optional raw query>
@@ -54,6 +54,15 @@ v1
 
 There is one ASCII LF byte (`0x0a`) between fields and no trailing newline.
 The complete byte sequence is signed with the UTF-8 secret.
+
+`v2` is the only version accepted for writes. The historical seven-field `v1`
+message did not bind `Idempotency-Key` and is therefore never accepted for
+`POST`, `PUT`, `PATCH` or `DELETE`. An emergency compatibility verifier for
+`GET`, `HEAD` and `OPTIONS` exists behind
+`STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS=false`; when enabled it accepts the
+historical seven fields ending at the body digest. The flag requires a complete
+primary signing-key pair. It stays false during normal operation and cannot
+weaken write authentication.
 
 Canonicalization rules:
 
@@ -112,6 +121,8 @@ Keys exist only in runtime secret configuration:
   `STOREFRONT_CONTEXT_SIGNING_SECRET` are the primary pair;
 - `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID` and
   `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET` are the optional rotation pair;
+- `STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS` is a default-off, read-only
+  rollback switch; it never permits a v1 write;
 - every secret contains at least 32 UTF-8 bytes;
 - key IDs are a case-sensitive allowlist and are never supplied by the
   database or a public payload.
@@ -197,18 +208,32 @@ with a useful message.
 
 Repair intake persists one deduplicated `repair.diagnostic_ai_requested.v1`
 job in the same transaction as the order and receipt. The HA scheduler leases
-and recovers that durable job; an API-process crash after commit cannot leave
-the order permanently pending, and a retry does not enqueue a second job.
+and recovers that durable job. A token-fenced heartbeat renews a live lease,
+and the final Order update locks and verifies the same unexpired event lease in
+the transaction that saves the result. A stale replica therefore cannot write
+an AI result after another replica reclaims the event. Provider, OCR and media
+storage infrastructure failures propagate to the outbox retry/backoff path;
+terminal configuration/business outcomes are recorded explicitly. Exhausting
+all attempts atomically marks the event dead and the Order diagnosis failed.
+An API-process crash after commit cannot leave the order permanently pending,
+and a retry does not enqueue a second job.
 Installation attachment objects use variants scoped by both the idempotency-key
 hash and a per-attempt nonce. Immediate rollback compensation therefore cannot
 delete a concurrent request's binary, including a successor using the same key.
 A separate inventory reconciler deletes only unreferenced
 `public-installation-*` variants older than 24 hours.
+Repair uploads use the same ownership rule in a distinct
+`public-repair-write/<tenant>/<storefront>/<key-hash>-<attempt-nonce>`
+namespace. Rollback deletes only the current attempt's exact paths. A bounded
+local/S3 inventory reconciler considers objects only after 24 hours, performs a
+targeted candidate-path lookup against repair Order metadata, and deletes only
+paths that are still unreferenced. A crashed attempt is eventually collected;
+a committed current object is retained.
 
 Exact `mvn-web` signer delta: generate and retain the submission key first,
 send it as the sole `Idempotency-Key` header, SHA-256 the exact canonical key
 string, and append that 64-character lowercase digest after the body digest in
-the v1 message. For `GET`/`HEAD`/`OPTIONS`, omit the header and append an empty
+the v2 message. For `GET`/`HEAD`/`OPTIONS`, omit the header and append an empty
 final field. The browser never supplies signing headers. A same-origin proxy
 may receive the app's submission key, but it must validate one canonical value,
 remove any raw inbound `Idempotency-Key`, set exactly one outbound value, and
@@ -240,7 +265,7 @@ const idempotencyKeySha256 = canonicalKey === null
   ? ""
   : createHash("sha256").update(canonicalKey, "ascii").digest("hex");
 const canonicalMessage = [
-  "v1",
+  "v2",
   String(timestamp),
   method,
   rawPathAndQuery,
@@ -256,7 +281,7 @@ if (canonicalKey !== null) outboundHeaders.set("Idempotency-Key", canonicalKey);
 
 The eighth array element is mandatory even when empty. There is no newline
 after it. Sign the resulting UTF-8 bytes with the existing HMAC-SHA256 secret
-and keep the existing `v1=<lowercase hex>` wire format.
+and send the `v2=<lowercase hex>` wire format.
 
 ## Resolution and compatibility
 
@@ -311,24 +336,38 @@ feed; an app-level route inventory test rejects any new unclassified route.
 
 ## Production canary and rollback
 
-Before enabling a second storefront:
+The 2026-08-01 read-only production preflight verified that both active API
+containers had every storefront signing, previous-key and require-signed
+variable absent. The deployed `mvn-web` host served static files and had no
+Node/runtime/container signing process. There was therefore no live signed v1
+traffic to preserve when introducing v2.
+
+Use this rolling order:
 
 1. Keep `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=false`.
-2. Configure the API primary key pair and allowed upstream API host on both HA
-   runtimes; configure the same pair only in the trusted storefront server.
-3. Create the second `Storefront` and active primary `StorefrontDomain` through
+2. Deploy the backend that verifies v2 while canonical unsigned traffic remains
+   allowed. Keep `STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS=false` unless an
+   emergency read-only rollback requires it.
+3. Configure the API primary key pair and allowed upstream API host on both HA
+   runtimes with the require-signed switch still false; configure the same pair
+   only in the trusted storefront server.
+4. Deploy the storefront/proxy v2 signer. Create the second `Storefront` and
+   active primary `StorefrontDomain` through
    the reviewed tenant setup path. Do not put test domains in migrations.
-4. Call `GET /api/v1/storefront/context` through the proxy and verify its public
+5. Call `GET /api/v1/storefront/context` through the proxy and verify its public
    identity and no-store headers.
-5. Run one signed catalog query, one Lead and one Order canary. Verify exact
+6. Run one signed catalog query, one Lead and one Order canary. Verify exact
    persisted `tenant_id/storefront_id` and Manager visibility.
-6. Tamper with query, body, host and signature; each request must return `401`
+7. Tamper with protocol version, idempotency key, query, body, host and
+   signature; each request must return `401`
    and create no row.
-7. Keep canonical unsigned `mvn.by` smoke checks green. Turn on
-   `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS` only after canonical traffic is
-   also server-signed.
+8. Keep canonical unsigned `mvn.by` smoke checks green. Only after canonical
+   traffic is server-signed should you turn on
+   `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS`.
 
 Rollback is configuration-first: remove second-storefront routing, disable the
 require-signed switch, and clear the primary/previous key pairs if the trusted
 proxy is suspected. Canonical unsigned `mvn/main` remains available while the
-switch is false. No schema rollback is required.
+switch is false. If only signed reads need temporary compatibility, enable the
+legacy-v1-read flag without allowing any v1 write. No schema rollback is
+required.
