@@ -78,8 +78,15 @@ def test_postgresql_migration_defines_append_only_audit_triggers() -> None:
         f"CREATE TRIGGER {{BACKLOG_TRIGGER}}", 1
     )[0]
 
-    assert "BEFORE UPDATE OR DELETE ON communication_website_canary_run" in source
-    assert "TG_OP = 'INSERT'" not in canary_function
+    assert (
+        "BEFORE INSERT OR UPDATE OR DELETE ON communication_website_canary_run"
+        in source
+    )
+    assert "TG_OP = 'INSERT'" in canary_function
+    assert "NEW.state IS DISTINCT FROM 'armed'" in canary_function
+    assert "NEW.terminal_outcome IS NOT NULL" in canary_function
+    assert "NEW.terminal_control_revision IS NOT NULL" in canary_function
+    assert "USING ERRCODE = '23514'" in canary_function
     assert "OLD.state IS DISTINCT FROM 'armed'" in canary_function
     assert "NEW.state IS DISTINCT FROM 'terminal'" in canary_function
     assert "NEW.created_at IS DISTINCT FROM OLD.created_at" in canary_function
@@ -143,6 +150,26 @@ def test_website_canary_migration_upgrades_and_forces_off_on_downgrade() -> None
             "canary_recipient_key",
         } & runtime_columns
 
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="communication_website_canary_run_immutable",
+        ):
+            connection.execute(
+                sa.text(
+                    "INSERT INTO communication_website_canary_run ("
+                    "run_id, event_id, event_type, tenant_id, storefront_id, "
+                    "recipient_key, armed_control_revision, state, "
+                    "terminal_outcome, terminal_control_revision, created_at, "
+                    "finished_at) VALUES ("
+                    ":run_id, :event_id, 'tenant.website.contact_lead.created', "
+                    "7, 9, 'staff:12', 5, 'terminal', 'dead', 6, :now, :now)"
+                ),
+                {
+                    "run_id": run_id,
+                    "event_id": event_id,
+                    "now": now,
+                },
+            )
         connection.execute(
             sa.text(
                 "INSERT INTO communication_website_canary_run ("

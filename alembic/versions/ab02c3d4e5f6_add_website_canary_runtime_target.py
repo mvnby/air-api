@@ -31,6 +31,16 @@ def _create_postgresql_immutability_triggers() -> None:
             CREATE OR REPLACE FUNCTION {CANARY_FUNCTION}()
             RETURNS trigger AS $function$
             BEGIN
+                IF TG_OP = 'INSERT' THEN
+                    IF NEW.state IS DISTINCT FROM 'armed'
+                       OR NEW.terminal_outcome IS NOT NULL
+                       OR NEW.terminal_control_revision IS NOT NULL
+                       OR NEW.finished_at IS NOT NULL THEN
+                        RAISE EXCEPTION 'communication_website_canary_run_immutable'
+                            USING ERRCODE = '23514';
+                    END IF;
+                    RETURN NEW;
+                END IF;
                 IF TG_OP = 'DELETE' THEN
                     RAISE EXCEPTION 'communication_website_canary_run_immutable'
                         USING ERRCODE = '23514';
@@ -58,7 +68,7 @@ def _create_postgresql_immutability_triggers() -> None:
         sa.text(
             f"""
             CREATE TRIGGER {CANARY_TRIGGER}
-            BEFORE UPDATE OR DELETE ON communication_website_canary_run
+            BEFORE INSERT OR UPDATE OR DELETE ON communication_website_canary_run
             FOR EACH ROW EXECUTE FUNCTION {CANARY_FUNCTION}()
             """
         )
@@ -110,6 +120,23 @@ def _create_postgresql_immutability_triggers() -> None:
 
 
 def _create_sqlite_immutability_triggers() -> None:
+    op.execute(
+        sa.text(
+            f"""
+            CREATE TRIGGER {CANARY_TRIGGER}_insert
+            BEFORE INSERT ON communication_website_canary_run
+            FOR EACH ROW WHEN NOT (
+                NEW.state = 'armed'
+                AND NEW.terminal_outcome IS NULL
+                AND NEW.terminal_control_revision IS NULL
+                AND NEW.finished_at IS NULL
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'communication_website_canary_run_immutable');
+            END
+            """
+        )
+    )
     op.execute(
         sa.text(
             f"""
@@ -220,6 +247,7 @@ def _drop_immutability_triggers() -> None:
         )
         op.execute(sa.text(f"DROP FUNCTION {BACKLOG_FUNCTION}()"))
     elif dialect == "sqlite":
+        op.execute(sa.text(f"DROP TRIGGER {CANARY_TRIGGER}_insert"))
         op.execute(sa.text(f"DROP TRIGGER {CANARY_TRIGGER}_update"))
         op.execute(sa.text(f"DROP TRIGGER {CANARY_TRIGGER}_delete"))
         op.execute(sa.text(f"DROP TRIGGER {BACKLOG_TRIGGER}_update"))
