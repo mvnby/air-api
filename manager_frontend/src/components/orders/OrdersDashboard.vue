@@ -22,7 +22,6 @@ import {
 import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import { managerSession, requireManagerSessionRecovery } from '../../services/manager-session';
-import ManagerSessionRecoveryModal from '../manager/ManagerSessionRecoveryModal.vue';
 import OrdersImportPreviewModal from './OrdersImportPreviewModal.vue';
 import { useOrdersDashboardModel } from './useOrdersDashboardModel';
 import {
@@ -31,7 +30,6 @@ import {
   runOptimisticOrderTransition,
 } from './order-transition';
 
-const props = defineProps<{ reloadPage?: () => void }>();
 const { recoveryRequired } = managerSession;
 
 const toast = ref('');
@@ -655,8 +653,6 @@ watch(drawerOpen, (isOpen) => {
       @deleted="handleOrderDeleted"
       @reload="reloadOrder"
     />
-
-    <ManagerSessionRecoveryModal :reload-page="props.reloadPage" />
 
     <OrdersImportPreviewModal
       v-if="importModalOpen && importPreview"

@@ -236,29 +236,49 @@ export const installManagerStorefrontHeaderResolver = (
 };
 
 type FetchHost = { fetch: typeof fetch };
+type ManagerUnauthorizedContext = Readonly<{
+  url: string;
+  response: Response;
+}>;
+type ManagerUnauthorizedCallback = (
+  context: ManagerUnauthorizedContext,
+) => unknown | PromiseLike<unknown>;
 const installedFetchHosts = new WeakSet<object>();
 
 export const installManagerStorefrontFetchScope = (
   host: FetchHost = window,
+  onUnauthorized?: ManagerUnauthorizedCallback,
 ): void => {
   if (installedFetchHosts.has(host)) return;
   const originalFetch = host.fetch.bind(host);
-  host.fetch = (input, init) => {
+  host.fetch = async (input, init) => {
     const url = typeof input === 'string'
       ? input
       : input instanceof URL
         ? input.href
         : input.url;
+    const isManagerRequest = isManagerApiRequest(url);
     const scopedHeaders = getManagerStorefrontRequestHeaders(url);
-    if (!Object.keys(scopedHeaders).length) return originalFetch(input, init);
-
-    const headers = new Headers(
-      init?.headers ?? (input instanceof Request ? input.headers : undefined),
-    );
-    for (const [name, value] of Object.entries(scopedHeaders)) {
-      if (!headers.has(name)) headers.set(name, value);
+    let requestInit = init;
+    if (Object.keys(scopedHeaders).length) {
+      const headers = new Headers(
+        init?.headers ?? (input instanceof Request ? input.headers : undefined),
+      );
+      for (const [name, value] of Object.entries(scopedHeaders)) {
+        if (!headers.has(name)) headers.set(name, value);
+      }
+      requestInit = { ...init, headers };
     }
-    return originalFetch(input, { ...init, headers });
+
+    const response = await originalFetch(input, requestInit);
+    if (isManagerRequest && response.status === 401 && onUnauthorized) {
+      try {
+        void Promise.resolve(onUnauthorized({ url, response })).catch(() => undefined);
+      } catch {
+        // Session recovery must never replace the original HTTP response.
+      }
+    }
+    return response;
   };
   installedFetchHosts.add(host);
 };

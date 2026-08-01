@@ -5,8 +5,11 @@ import {
   installManagerStorefrontFetchScope,
   installManagerStorefrontHeaderResolver,
 } from './services/manager-storefront-selection'
+import { recoverManagerSessionFromUnauthorized } from './services/manager-session'
 
 installManagerStorefrontHeaderResolver()
-installManagerStorefrontFetchScope()
+installManagerStorefrontFetchScope(window, () => {
+  recoverManagerSessionFromUnauthorized()
+})
 const app = createApp(App)
 app.mount('#app')

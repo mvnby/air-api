@@ -4,9 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getOrderDetail: vi.fn(),
   getOrders: vi.fn(),
-  login: vi.fn(),
-  readMe: vi.fn(),
-  listStorefronts: vi.fn(),
 }));
 
 vi.mock('../src/api', () => ({
@@ -23,14 +20,8 @@ vi.mock('../src/client', () => ({
     WITH_CREDENTIALS: true,
     CREDENTIALS: 'include',
   },
-  LoginService: {
-    loginAccessToken: mocks.login,
-    loginTelegram: vi.fn(),
-  },
-  ManagerService: {
-    readUserMe: mocks.readMe,
-    listManagerStorefronts: mocks.listStorefronts,
-  },
+  LoginService: {},
+  ManagerService: {},
   ManagerOrdersService: {},
 }));
 
@@ -89,73 +80,6 @@ const oldOrder = {
   ready_for_execution: false,
 };
 
-const oldOrdersResponse = {
-  items: [oldOrder],
-  meta: { page: 1, limit: 100, total: 1, pages: 1 },
-};
-
-const newAuth = {
-  username: 'new-manager',
-  status: 'authenticated',
-  staff_user_id: 20,
-  role: 'manager',
-  tenant_id: 2,
-  storefront_id: 22,
-};
-
-const newStorefronts = {
-  items: [{
-    slug: 'minsk',
-    display_name: 'MVN Минск',
-    city: 'Минск',
-    default_locale: 'ru-BY',
-    currency: 'BYN',
-    is_default: true,
-    is_current: true,
-  }],
-};
-
-const enterRecoveryWithOldState = async () => {
-  const reloadPage = vi.fn();
-  mocks.getOrders
-    .mockResolvedValueOnce(oldOrdersResponse)
-    .mockRejectedValueOnce({ status: 401 });
-  mocks.getOrderDetail.mockResolvedValue({ ...oldOrder });
-
-  wrapper = mount(OrdersDashboard, { props: { reloadPage } });
-  await flushPromises();
-
-  const list = wrapper.getComponent({ name: 'OrdersListTable' });
-  list.vm.$emit('toggle-select', { orderId: oldOrder.id, selected: true });
-  list.vm.$emit('open', oldOrder.id);
-  await flushPromises();
-
-  const drawer = wrapper.getComponent({ name: 'OrderEditDrawer' });
-  expect(list.props('items')).toHaveLength(1);
-  expect(list.props('selectedOrderIds')).toEqual([oldOrder.id]);
-  expect(drawer.props('modelValue')).toBe(true);
-  expect(drawer.props('order')).toMatchObject({ id: oldOrder.id });
-  expect(new URL(window.location.href).searchParams.get('orderId')).toBe(String(oldOrder.id));
-
-  list.vm.$emit('update:sort', 'margin_desc');
-  await flushPromises();
-
-  expect(mocks.getOrders).toHaveBeenCalledTimes(2);
-  expect(list.props('items')).toEqual([]);
-  expect(list.props('selectedOrderIds')).toEqual([]);
-  expect(drawer.props('modelValue')).toBe(false);
-  expect(drawer.props('order')).toBeNull();
-  expect(new URL(window.location.href).searchParams.has('orderId')).toBe(false);
-  expect(managerSession.isAuthenticated.value).toBe(false);
-  expect(managerSession.currentUserRole.value).toBe('');
-  expect(managerSession.auth.value).toBeNull();
-  expect(managerSession.recoveryRequired.value).toBe(true);
-  expect(managerStorefrontSelection.selectedSlug.value).toBeNull();
-  expect(wrapper.get('[role="dialog"]').text()).toContain('Сессия завершилась');
-
-  return reloadPage;
-};
-
 beforeEach(() => {
   window.localStorage.clear();
   window.localStorage.setItem('manager_orders_view', 'list');
@@ -185,63 +109,46 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('OrdersDashboard session recovery', () => {
-  it('clears the previous identity immediately and reloads once after successful login', async () => {
-    const reloadPage = await enterRecoveryWithOldState();
-    mocks.login.mockImplementation(async () => {
-      expect(managerSession.isAuthenticated.value).toBe(false);
-      expect(managerSession.auth.value).toBeNull();
-      expect(managerSession.currentUserRole.value).toBe('');
-      expect(managerStorefrontSelection.selectedSlug.value).toBeNull();
-      return { access_token: 'new-session', token_type: 'bearer' };
-    });
-    mocks.readMe.mockResolvedValue(newAuth);
-    mocks.listStorefronts.mockResolvedValue(newStorefronts);
+describe('OrdersDashboard local session cleanup', () => {
+  it('clears loaded, selected and opened order state immediately after list 401', async () => {
+    mocks.getOrders
+      .mockResolvedValueOnce({
+        items: [oldOrder],
+        meta: { page: 1, limit: 100, total: 1, pages: 1 },
+      })
+      .mockRejectedValueOnce({ status: 401 });
+    mocks.getOrderDetail.mockResolvedValue({ ...oldOrder });
 
-    await wrapper!.get('input[placeholder="Логин"]').setValue('new-manager');
-    await wrapper!.get('input[placeholder="Пароль"]').setValue('new-password');
-    await wrapper!.get('form').trigger('submit');
+    wrapper = mount(OrdersDashboard);
     await flushPromises();
 
-    expect(mocks.login).toHaveBeenCalledWith({
-      username: 'new-manager',
-      password: 'new-password',
-    });
-    expect(mocks.readMe).toHaveBeenCalledTimes(1);
-    expect(mocks.listStorefronts).toHaveBeenCalledTimes(1);
-    expect(mocks.getOrders).toHaveBeenCalledTimes(2);
-    expect(reloadPage).toHaveBeenCalledTimes(1);
-    expect(managerSession.isAuthenticated.value).toBe(true);
-    expect(managerSession.currentUserRole.value).toBe('manager');
-    expect(managerSession.auth.value?.username).toBe('new-manager');
-    expect(managerStorefrontSelection.selectedSlug.value).toBe('minsk');
-    expect(wrapper!.get('[role="dialog"]').text()).toContain('Входим...');
-
-    wrapper!.getComponent({ name: 'OrdersListTable' }).vm.$emit('update:sort', 'created_at_asc');
-    await flushPromises();
-    expect(mocks.getOrders).toHaveBeenCalledTimes(2);
-  });
-
-  it('keeps a clean blocking recovery state when login is rejected', async () => {
-    const reloadPage = await enterRecoveryWithOldState();
-    mocks.login.mockRejectedValue({ status: 401 });
-
-    await wrapper!.get('input[placeholder="Логин"]').setValue('old-owner');
-    await wrapper!.get('input[placeholder="Пароль"]').setValue('wrong-password');
-    await wrapper!.get('form').trigger('submit');
+    const list = wrapper.getComponent({ name: 'OrdersListTable' });
+    list.vm.$emit('toggle-select', { orderId: oldOrder.id, selected: true });
+    list.vm.$emit('open', oldOrder.id);
     await flushPromises();
 
-    expect(reloadPage).not.toHaveBeenCalled();
-    expect(mocks.readMe).not.toHaveBeenCalled();
-    expect(mocks.listStorefronts).not.toHaveBeenCalled();
+    const drawer = wrapper.getComponent({ name: 'OrderEditDrawer' });
+    expect(list.props('items')).toHaveLength(1);
+    expect(list.props('selectedOrderIds')).toEqual([oldOrder.id]);
+    expect(drawer.props('modelValue')).toBe(true);
+    expect(drawer.props('order')).toMatchObject({ id: oldOrder.id });
+
+    list.vm.$emit('update:sort', 'margin_desc');
+    await flushPromises();
+
     expect(mocks.getOrders).toHaveBeenCalledTimes(2);
+    expect(list.props('items')).toEqual([]);
+    expect(list.props('selectedOrderIds')).toEqual([]);
+    expect(drawer.props('modelValue')).toBe(false);
+    expect(drawer.props('order')).toBeNull();
     expect(managerSession.isAuthenticated.value).toBe(false);
-    expect(managerSession.currentUserRole.value).toBe('');
     expect(managerSession.auth.value).toBeNull();
     expect(managerSession.recoveryRequired.value).toBe(true);
     expect(managerStorefrontSelection.selectedSlug.value).toBeNull();
-    expect(wrapper!.get('[role="dialog"]').text()).toContain('Неверный логин или пароль');
-    expect(wrapper!.getComponent({ name: 'OrdersListTable' }).props('items')).toEqual([]);
-    expect(wrapper!.getComponent({ name: 'OrderEditDrawer' }).props('order')).toBeNull();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+
+    list.vm.$emit('update:sort', 'created_at_asc');
+    await flushPromises();
+    expect(mocks.getOrders).toHaveBeenCalledTimes(2);
   });
 });

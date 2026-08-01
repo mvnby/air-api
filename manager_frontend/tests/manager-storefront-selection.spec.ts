@@ -137,6 +137,23 @@ describe('manager storefront request scope', () => {
     expect(fetchMock.mock.calls[3]).toEqual(['/api/internal/bot/v1/events', undefined]);
     expect(fetchMock.mock.calls[4]).toEqual(['/api/manager/media/worker/jobs/claim', undefined]);
   });
+
+  it('reports Manager 401 responses but ignores dedicated worker and public 401 responses', async () => {
+    const onUnauthorized = vi.fn();
+    const fetchMock = vi.fn().mockImplementation(async () => new Response('', { status: 401 }));
+    const host = { fetch: fetchMock as unknown as typeof fetch };
+    installManagerStorefrontFetchScope(host, onUnauthorized);
+
+    await host.fetch('/api/manager/orders/7');
+    await host.fetch('/api/manager/media/worker/jobs/claim');
+    await host.fetch('/api/v1/products');
+
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized.mock.calls[0]?.[0]).toMatchObject({
+      url: '/api/manager/orders/7',
+      response: expect.objectContaining({ status: 401 }),
+    });
+  });
 });
 
 describe('ManagerStorefrontSelection', () => {

@@ -27,9 +27,22 @@ export const clearManagerSession = (): void => {
   managerSession.recoveryRequired.value = false;
 };
 
-export const requireManagerSessionRecovery = (): void => {
-  clearManagerSession();
+export const requireManagerSessionRecovery = (): boolean => {
+  if (managerSession.recoveryRequired.value) return false;
+  managerStorefrontSelection.prepareAuthentication();
+  managerSession.isAuthenticated.value = false;
+  managerSession.currentUserRole.value = '';
+  managerSession.auth.value = null;
+  managerSession.bootstrapping.value = false;
   managerSession.recoveryRequired.value = true;
+  return true;
+};
+
+export const recoverManagerSessionFromUnauthorized = (): boolean => {
+  if (!managerSession.isAuthenticated.value && !managerSession.recoveryRequired.value) {
+    return false;
+  }
+  return requireManagerSessionRecovery();
 };
 
 export const bootstrapManagerSession = async (

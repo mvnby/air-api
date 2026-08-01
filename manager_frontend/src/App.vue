@@ -5,6 +5,8 @@ import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './client';
 import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
+import ManagerLoginModal from './components/manager/ManagerLoginModal.vue';
+import ManagerSessionRecoveryModal from './components/manager/ManagerSessionRecoveryModal.vue';
 import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
 import { confirmDialog } from './services/ui-feedback';
 import {
@@ -49,6 +51,7 @@ const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQua
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
 
+const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, currentUserRole, recoveryRequired } = managerSession;
 const showLoginModal = ref(false);
 const loginUsername = ref('');
@@ -279,6 +282,7 @@ const fetchWebRebuildStatus = async () => {
   }
 };
 const handleLogin = async () => {
+  if (recoveryRequired.value) return;
   loginLoading.value = true;
   loginError.value = '';
   try {
@@ -296,6 +300,7 @@ const handleLogin = async () => {
 };
 
 const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
+  if (recoveryRequired.value) return;
   telegramLoginLoading.value = true;
   loginError.value = '';
   try {
@@ -312,7 +317,7 @@ const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
 };
 
 const renderTelegramLogin = async () => {
-  if (!telegramLoginBotUsername || !showLoginModal.value) return;
+  if (!telegramLoginBotUsername || !showLoginModal.value || recoveryRequired.value) return;
   await nextTick();
   const container = telegramLoginContainer.value;
   if (!container) return;
@@ -404,10 +409,24 @@ onBeforeUnmount(() => {
 });
 
 watch(showLoginModal, (visible) => {
-  if (visible) {
+  if (visible && !recoveryRequired.value) {
     void renderTelegramLogin();
   }
 });
+
+watch(recoveryRequired, (required) => {
+  if (!required) return;
+  leadsCount.value = 0;
+  webRebuildStatus.value = null;
+  rebuildLoading.value = false;
+  showLoginModal.value = false;
+  loginError.value = '';
+  loginPassword.value = '';
+  isMobileNavOpen.value = false;
+  toast.value = '';
+  if (telegramLoginContainer.value) telegramLoginContainer.value.innerHTML = '';
+  delete window[telegramCallbackName];
+}, { flush: 'sync' });
 
 watch(expandedNavSections, (value) => {
   window.localStorage.setItem(NAV_SECTIONS_STORAGE_KEY, JSON.stringify(value));
@@ -420,60 +439,28 @@ watch(currentPath, () => {
 </script>
 
 <template>
-  <div v-if="showLoginModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl">
-      <div class="flex justify-center mb-6">
-        <div class="w-12 h-12 bg-teal-600 rounded-xl flex items-center justify-center">
-          <Package class="w-6 h-6 text-white" />
-        </div>
-      </div>
-      <h2 class="text-2xl font-bold mb-6 text-center text-gray-900">Вход в менеджер</h2>
-      <form @submit.prevent="handleLogin" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Логин</label>
-          <input
-            v-model="loginUsername"
-            type="text"
-            required
-            class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            placeholder="Введите логин"
-          />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
-          <input
-            v-model="loginPassword"
-            type="password"
-            required
-            class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            placeholder="Введите пароль"
-          />
-        </div>
-        <div v-if="loginError" class="text-red-600 text-sm">{{ loginError }}</div>
-        <button
-          type="submit"
-          :disabled="loginLoading"
-          class="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-        >
-          {{ loginLoading ? 'Входим...' : 'Войти' }}
-        </button>
-        <div v-if="telegramLoginBotUsername" class="pt-2">
-          <div class="mb-3 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-gray-400">
-            <span class="h-px flex-1 bg-gray-200" />
-            <span>или</span>
-            <span class="h-px flex-1 bg-gray-200" />
-          </div>
-          <div
-            ref="telegramLoginContainer"
-            class="flex min-h-[44px] justify-center"
-            :class="telegramLoginLoading ? 'pointer-events-none opacity-60' : ''"
-          />
-        </div>
-      </form>
-    </div>
-  </div>
+  <ManagerLoginModal
+    v-if="showLoginModal && !recoveryRequired"
+    v-model:username="loginUsername"
+    v-model:password="loginPassword"
+    :loading="loginLoading"
+    :error="loginError"
+    :telegram-enabled="Boolean(telegramLoginBotUsername)"
+    :telegram-loading="telegramLoginLoading"
+    @submit="handleLogin"
+  >
+    <template #telegram>
+      <div ref="telegramLoginContainer" />
+    </template>
+  </ManagerLoginModal>
 
-  <div v-if="isAuthenticated || recoveryRequired" class="manager-root min-h-screen flex">
+  <ManagerSessionRecoveryModal :reload-page="props.reloadPage" />
+
+  <div
+    v-if="isAuthenticated && !recoveryRequired"
+    data-testid="manager-root"
+    class="manager-root min-h-screen flex"
+  >
     <button
       class="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow md:hidden"
       @click="toggleMobileNav"
@@ -547,6 +534,7 @@ watch(currentPath, () => {
             <span class="flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ item.label }}</span>
             <span
               v-if="item.path === '/manager/leads' && leadsCount > 0"
+              data-testid="manager-leads-count"
               class="inline-flex items-center justify-center font-bold bg-red-500 text-white shrink-0"
               :class="isDesktopNavCollapsed ? 'md:absolute md:top-1 md:right-1 h-3 w-3 rounded-full text-[0px]' : 'min-w-[20px] h-5 px-1 rounded-full text-[11px]'"
             >
