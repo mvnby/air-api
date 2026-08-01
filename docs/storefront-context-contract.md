@@ -1,99 +1,203 @@
-# Trusted public storefront context
+# Trusted public storefront request contract
 
-## Purpose
+## Purpose and trust boundary
 
-Public Lead and Order provenance must come from the storefront serving the
-request, never from a browser-provided tenant or storefront ID. The canonical
-MVN website keeps working without extra headers. A second storefront is enabled
-only through a short-lived context signed by its trusted SSR or edge proxy.
+Public catalog reads, Lead creation and checkout must get their storefront from
+the server runtime that served the website. Browser-provided tenant or
+storefront IDs, `Origin`, `X-Forwarded-Host` and unsigned storefront headers are
+never authority.
 
-## Request envelope
+The canonical MVN website may temporarily call the ordinary API host without a
+signature. A non-canonical storefront is accepted only through a complete
+short-lived HMAC envelope produced by its trusted SSR or same-origin proxy.
 
-The trusted runtime sends all three headers:
+## Required signed headers
 
-- `X-MVN-Storefront-Host`: normalized public hostname, for example
+The trusted runtime sends exactly one value for each header:
+
+- `X-MVN-Storefront-Key-Id`: configured runtime key ID, for example
+  `mvn-web-2026-08`;
+- `X-MVN-Storefront-Host`: the public storefront hostname, for example
   `orsha.mvn.by`;
-- `X-MVN-Storefront-Timestamp`: Unix timestamp in seconds;
-- `X-MVN-Storefront-Signature`: `v1=<lowercase sha256 hex>`.
+- `X-MVN-Storefront-Timestamp`: canonical Unix seconds (`0` or a decimal value
+  with no sign, whitespace or leading zeroes);
+- `X-MVN-Storefront-Signature`: `v1=<64 lowercase SHA-256 hex characters>`.
 
-The HMAC-SHA256 input is UTF-8 text with no trailing newline:
+Any incomplete set, duplicate value, unknown `X-MVN-Storefront-*` header,
+unknown key ID or malformed value returns `401`. The browser-facing proxy must
+strip all incoming headers with that prefix before creating its own envelope.
+Incomplete, duplicate and unknown sets are rejected at the outer ASGI boundary
+without reading or parsing the request body.
+These infrastructure credentials are deliberately omitted from the generated
+OpenAPI/browser client; this document is the signing contract for trusted
+server runtimes.
+
+## Canonical v1 message
+
+The signature is HMAC-SHA256 over these seven fields in this exact order:
 
 ```text
 v1
 <timestamp>
-<UPPERCASE HTTP method>
-<request path beginning with />
-<lowercase IDNA hostname without port or trailing dot>
+<HTTP method>
+<raw path and optional raw query>
+<upstream API hostname>
+<storefront hostname>
+<lowercase SHA-256 hex of the exact request body>
 ```
 
-The signing key is `STOREFRONT_CONTEXT_SIGNING_SECRET` and must contain at
-least 32 bytes. The API accepts a timestamp no more than
-`STOREFRONT_CONTEXT_MAX_AGE_SECONDS` in the past or future; the allowed range
-for that setting is 30–900 seconds.
+There is one ASCII LF byte (`0x0a`) between fields and no trailing newline.
+The complete byte sequence is signed with the UTF-8 secret.
 
-Signatures are bound to method, path and hostname. Query parameters and request
-bodies are deliberately excluded: this envelope selects public provenance; it
-does not replace endpoint validation, idempotency or authentication.
+Canonicalization rules:
 
-## Fail-closed behaviour
+1. `timestamp` is canonical base-10 Unix seconds.
+2. The HTTP method is uppercased as ASCII.
+3. The target starts with `/`. Append `?` and the raw query bytes only when the
+   query is non-empty. Do not decode, reorder or re-encode query parameters.
+   The fragment is never present. CR or LF is invalid.
+4. The upstream API hostname comes from the actual HTTP `Host`/`:authority`
+   received by air-api. It is lowercased, converted to IDNA ASCII and stripped
+   of a port and trailing dot. It must also be in
+   `STOREFRONT_CONTEXT_API_HOSTS` (the production default includes
+   `api.mvn.by` and loopback smoke-check hosts).
+5. The storefront hostname uses the same lowercase IDNA/no-port/no-trailing-dot
+   normalization.
+6. Hash the exact transmitted body bytes, before JSON/form parsing. The empty
+   body digest is
+   `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 
-- no context headers: resolve canonical active `mvn/main` exactly as before;
-- incomplete, malformed, expired or forged envelope: `401`;
-- envelope supplied while signing is not configured securely: `401`;
-- valid signature for an unknown, disabled or non-public hostname: `404`;
-- valid context: resolve the active `StorefrontDomain -> Storefront -> Tenant`
-  relation and pass the resulting immutable `TenantScope` to the command.
+For a structurally complete envelope, air-api reads the exact bounded body,
+checks the API host, key ID, timestamp, raw target, storefront host, digest and
+HMAC, and only then calls FastAPI. The verified normalized storefront hostname
+is carried inward as an immutable ASGI scope marker; route dependencies never
+re-authenticate from raw headers. The body is replayed unchanged for JSON or
+multipart parsing. This buffer is hard-limited by
+`STOREFRONT_CONTEXT_MAX_BODY_BYTES` (20 MiB by default, matching the current API
+ingress limit); an oversized signed request returns `413` without reaching the
+endpoint. A valid signature with malformed JSON can therefore return `422`,
+while a partial or forged envelope with the same bytes returns `401` before the
+parser or database dependency runs.
+
+Changing method, raw path, raw query, upstream API host, storefront host or any
+body byte invalidates the signature.
+
+## Runtime keyring and rotation
+
+Keys exist only in runtime secret configuration:
+
+- `STOREFRONT_CONTEXT_SIGNING_KEY_ID` and
+  `STOREFRONT_CONTEXT_SIGNING_SECRET` are the primary pair;
+- `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID` and
+  `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET` are the optional rotation pair;
+- every secret contains at least 32 UTF-8 bytes;
+- key IDs are a case-sensitive allowlist and are never supplied by the
+  database or a public payload.
+
+The API selects one allowed key by ID and compares the HMAC in constant time.
+The previous key is accepted only while a complete primary pair is configured.
+Clearing the primary pair disables every signed request, including a request
+using a stale previous key.
+
+Zero-downtime rotation:
+
+1. Add the new pair as primary and keep the old pair as previous.
+2. Deploy air-api, then switch each trusted storefront runtime to the new key.
+3. Run read, Lead and Order canaries with the new key.
+4. Wait longer than `STOREFRONT_CONTEXT_MAX_AGE_SECONDS`.
+5. Remove the previous pair.
+
+Never reuse `SECRET_KEY`, bot credentials or a Cloudflare token.
+
+The current primary/previous slots form one MVN-operated platform keyring: a
+holder can sign for any active storefront domain. It is therefore suitable only
+for runtimes controlled by MVN. Before an external tenant controls its own
+runtime, introduce per-runtime credentials bound to an explicit storefront-host
+allowlist or keep signing in the centrally managed MVN edge.
+
+## Replay boundary
+
+`STOREFRONT_CONTEXT_MAX_AGE_SECONDS` is constrained to 30–900 seconds. Requests
+outside the past/future window fail closed. The body digest prevents changing a
+captured request.
+
+There is deliberately no in-memory nonce cache: it would allow replay against
+another HA replica. Until a shared PostgreSQL/Redis nonce ledger is introduced,
+an identical captured request can be replayed within the accepted time window.
+Every public write therefore still needs its domain idempotency contract. Keep
+the window short, use TLS, never log the envelope, and do not treat this HMAC as
+user authentication.
+
+## Resolution and compatibility
+
+- No signing headers, an allowed ordinary API host and
+  `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=false`: resolve only canonical
+  active `mvn/main`; `Host`, `Origin` or forwarded browser headers cannot select
+  another storefront.
+- No signing headers on an unapproved/non-API host: `401`.
+- `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=true`: every protected public
+  storefront request must be signed, including canonical MVN traffic.
+- Invalid, stale or forged envelope: `401`.
+- Valid signature for an unknown, disabled or non-public
+  `StorefrontDomain -> Storefront -> Tenant` relation: `404`.
+- Valid relation: pass its immutable `TenantScope` to the public command.
+
+For protected `/api/v1/**` routes, unsigned API-host validation and the
+require-signed switch also run at the outer ASGI boundary. A wrong `Host` or an
+unsigned request while the switch is enabled therefore returns `401` before
+body parsing. Canonical unsigned requests remain unbuffered when the switch is
+off, preserving ordinary browser CORS behavior.
+
+Every response to a request containing any `X-MVN-Storefront-*` header is
+forced to `Cache-Control: private, no-store`, `CDN-Cache-Control: no-store` and
+`Vary: X-MVN-Storefront-Host`. This is applied at the final ASGI response
+boundary, so it also covers rejected oversized bodies (`413`), FastAPI body
+validation (`422`), route misses (`404`) and invalid/partial envelopes (`401`).
+Existing `Vary` values are preserved and de-duplicated. Unhandled errors are
+given the same headers explicitly by the global exception handler because
+Starlette's outer error middleware creates that response outside the user
+middleware chain. Shared caching belongs behind the trusted storefront runtime
+and must be keyed by storefront.
+
+The signing envelope is a server-to-server contract for trusted SSR or a
+same-origin website proxy. Browsers must not receive credentials or send these
+headers directly, and CORS preflight is not an authentication or signing
+boundary. In air-api the signed-gateway/private-response middleware wraps CORS,
+session and routing middleware; CORS behavior therefore remains unchanged while
+all storefront-marked responses remain non-cacheable by shared intermediaries.
 
 Neither `tenant_id` nor `storefront_id` is accepted from public payloads. The
-public `GET /api/v1/storefront/context` projection exposes slugs, branding
-identity, domain, city, locale and currency, but no internal IDs.
+public context DTO exposes only public slugs and display attributes.
 
-## Proxy boundary
+## Protected public surfaces
 
-The browser must not know the signing secret. A non-canonical storefront sends
-browser writes to a same-origin server route; that trusted route strips any
-incoming `X-MVN-Storefront-*` headers, signs the API target itself and forwards
-the request. Direct client-controlled headers are not authority.
+The gateway is attached to storefront context, catalog/revision/spec/filter,
+content/config/collection reads, public Lead adapters and public Order checkout.
+It is not attached to Manager, internal bot, system or health/readiness
+boundaries. The only intentionally open `/api/v1` routes are the exact `GET`
+endpoints for EGR proxy, bank proxy, address suggestions and Yandex Business
+feed; an app-level route inventory test rejects any new unclassified route.
 
-The same rule applies to server-rendered catalog and configuration reads. Edge
-or SSR logs must not record the secret or the complete signature envelope.
-Every successfully signed API response is marked `Cache-Control: private,
-no-store` and `CDN-Cache-Control: no-store`; shared caching belongs behind the
-same-origin storefront runtime and must be keyed by storefront identity.
+## Production canary and rollback
 
-The current key is platform-wide and is suitable only for MVN-owned runtimes.
-Do not distribute it to an external tenant. Before an external white-label
-runtime is operated outside MVN-controlled infrastructure, replace this key
-with a per-runtime credential/key ID or keep signing in one centrally managed
-edge boundary.
+Before enabling a second storefront:
 
-## Rotation without downtime
+1. Keep `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=false`.
+2. Configure the API primary key pair and allowed upstream API host on both HA
+   runtimes; configure the same pair only in the trusted storefront server.
+3. Create the second `Storefront` and active primary `StorefrontDomain` through
+   the reviewed tenant setup path. Do not put test domains in migrations.
+4. Call `GET /api/v1/storefront/context` through the proxy and verify its public
+   identity and no-store headers.
+5. Run one signed catalog query, one Lead and one Order canary. Verify exact
+   persisted `tenant_id/storefront_id` and Manager visibility.
+6. Tamper with query, body, host and signature; each request must return `401`
+   and create no row.
+7. Keep canonical unsigned `mvn.by` smoke checks green. Turn on
+   `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS` only after canonical traffic is
+   also server-signed.
 
-1. Generate a new random secret of at least 32 bytes.
-2. Deploy the API with the new value in
-   `STOREFRONT_CONTEXT_SIGNING_SECRET` and the old value in
-   `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET`.
-3. Switch every trusted storefront runtime to the new primary secret.
-4. Verify both Lead and Order canaries and wait longer than the maximum
-   signature lifetime.
-5. Clear `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET` from the API.
-
-The previous key is accepted only while a non-empty primary key is configured.
-Clearing the primary key is the fail-closed kill switch and disables signed
-context even if a stale previous-key variable remains in the environment.
-
-Never reuse `SECRET_KEY`, bot credentials or a Cloudflare token for this
-contract.
-
-## Canary gate
-
-Before enabling traffic for a second storefront:
-
-1. create its `Storefront` and primary active `StorefrontDomain`;
-2. call `GET /api/v1/storefront/context` with a valid signed envelope and check
-   the expected slug, hostname, city, locale and currency;
-3. create one test Lead and one test Order through the same trusted proxy;
-4. verify their persisted `tenant_id/storefront_id` pair and Manager visibility;
-5. repeat each mutation with a forged signature and verify `401` with no row;
-6. test rollback by removing the new domain from routing while keeping
-   canonical `mvn/main` healthy.
+Rollback is configuration-first: remove second-storefront routing, disable the
+require-signed switch, and clear the primary/previous key pairs if the trusted
+proxy is suspected. Canonical unsigned `mvn/main` remains available while the
+switch is false. No schema rollback is required.

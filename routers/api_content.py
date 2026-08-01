@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from core.database import get_session
+from core.tenant_scope import verify_public_storefront_request
 from schemas import (
     ArticleResponse,
     PublicBrandDetailResponse,
@@ -17,7 +18,10 @@ from services.content_api_service import ContentApiService
 from services.installation_service import InstallationService
 from services.public_series_page_service import PublicSeriesPageService
 
-router = APIRouter(tags=["api"])
+router = APIRouter(
+    tags=["api"],
+    dependencies=[Depends(verify_public_storefront_request)],
+)
 
 
 @router.get("/v1/content/articles", response_model=List[ArticleResponse])

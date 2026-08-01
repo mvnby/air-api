@@ -3,10 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_contracts.product_collections import PublicProductCollectionPlacementResponse
 from core.database import get_session
+from core.tenant_scope import verify_public_storefront_request
 from services.product_collection_resolver import ProductCollectionResolver
 
 
-router = APIRouter(tags=["api"])
+router = APIRouter(
+    tags=["api"],
+    dependencies=[Depends(verify_public_storefront_request)],
+)
 
 
 @router.get(

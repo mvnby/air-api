@@ -4,13 +4,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.tenant_scope import get_public_tenant_scope
+from core.tenant_scope import (
+    get_public_tenant_scope,
+    verify_public_storefront_request,
+)
 from schemas import OrderPayload, OrderResponse, PublicOrderPricingErrorResponse
 from services.installation_pricing_service import InstallationPricingError
 from services.website_order_service import WebsiteOrderService
 from services.tenant_scope_service import TenantScope
 
-router = APIRouter(tags=["api"])
+router = APIRouter(
+    tags=["api"],
+    dependencies=[Depends(verify_public_storefront_request)],
+)
 
 
 @router.post(

@@ -13,6 +13,11 @@ from core.logger import logger
 from core.manager_error_codes import INTERNAL_ERROR, VALIDATION_ERROR, resolve_manager_error_message
 from core.manager_telemetry import ManagerTelemetryService
 from core.request_context import RequestContextMiddleware
+from core.storefront_request_gateway import StorefrontRequestGatewayMiddleware
+from core.storefront_request_envelope import (
+    private_storefront_response_headers,
+    storefront_signing_header_state,
+)
 
 
 def _is_manager_api_path(path: str) -> bool:
@@ -24,6 +29,18 @@ def _public_error_response() -> JSONResponse:
         status_code=500,
         content={"message": INTERNAL_SERVER_ERROR_MESSAGE},
     )
+
+
+def _apply_storefront_private_headers(
+    request: Request,
+    response: JSONResponse,
+) -> JSONResponse:
+    has_storefront_headers, _ = storefront_signing_header_state(
+        request.scope.get("headers", ())
+    )
+    if has_storefront_headers:
+        response.headers.update(private_storefront_response_headers())
+    return response
 
 
 def _manager_error_response(*, status_code: int, message: str, error_code: str, field_errors: dict[str, str] | None = None) -> JSONResponse:
@@ -101,13 +118,19 @@ async def global_exception_handler(request: Request, exc: Exception):
             status_code=500,
             error_code=INTERNAL_ERROR,
         )
-        return _manager_error_response(
-            status_code=500,
-            message=resolve_manager_error_message(INTERNAL_ERROR, INTERNAL_SERVER_ERROR_MESSAGE),
-            error_code=INTERNAL_ERROR,
+        return _apply_storefront_private_headers(
+            request,
+            _manager_error_response(
+                status_code=500,
+                message=resolve_manager_error_message(
+                    INTERNAL_ERROR,
+                    INTERNAL_SERVER_ERROR_MESSAGE,
+                ),
+                error_code=INTERNAL_ERROR,
+            ),
         )
 
-    return _public_error_response()
+    return _apply_storefront_private_headers(request, _public_error_response())
 
 
 def configure_http(app: FastAPI) -> None:
@@ -127,6 +150,10 @@ def configure_http(app: FastAPI) -> None:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    app.add_middleware(
+        StorefrontRequestGatewayMiddleware,
+        max_body_bytes=settings.STOREFRONT_CONTEXT_MAX_BODY_BYTES,
     )
     # Added last so it is the outermost user middleware and also covers CORS
     # preflight/short-circuit responses.

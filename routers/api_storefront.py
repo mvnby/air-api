@@ -2,13 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.tenant_scope import get_public_tenant_scope
+from core.tenant_scope import (
+    get_public_tenant_scope,
+    verify_public_storefront_request,
+)
 from models.tenancy import TenantScope
 from schemas_tenancy import PublicStorefrontContextResponse
 from services.storefront_context_service import StorefrontContextService
 
 
-router = APIRouter(tags=["api"])
+router = APIRouter(
+    tags=["api"],
+    dependencies=[Depends(verify_public_storefront_request)],
+)
 
 
 @router.get(

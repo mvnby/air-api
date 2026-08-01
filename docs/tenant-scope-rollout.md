@@ -44,18 +44,20 @@ membership role is authoritative; a role stored in an old token is ignored.
 Until the Manager UI has an explicit tenant switcher, zero or more than one
 active membership candidate fails closed with `403`.
 
-Canonical MVN fallback remains available for compatibility. A second
-storefront now uses the signed server-to-server contract documented in
+Canonical MVN fallback remains available for compatibility on the approved API
+host. A second storefront now uses the signed server-to-server contract
+documented in
 [`storefront-context-contract.md`](storefront-context-contract.md). Public Lead
-and Order endpoints accept only that complete short-lived envelope when
-selecting a non-canonical storefront; internal IDs and unsigned host headers
-remain untrusted.
+and Order endpoints, checkout, public context and storefront-facing read APIs
+accept only that complete method/path/query/API-host/storefront-host/body-bound
+envelope when selecting a non-canonical storefront; internal IDs and unsigned
+host headers remain untrusted.
 
 Before a second storefront receives traffic, the remaining consumers must use
 the same boundary:
 
-- storefront catalog/config requests must pass through its trusted proxy or
-  signed server runtime;
+- storefront catalog/config requests pass through its trusted proxy or signed
+  server runtime; tenant-aware projections are enabled independently;
 - Manager needs an explicit, server-validated membership selector before one
   user may actively work in more than one tenant;
 - scheduled integrations need a tenant-bound server configuration.
