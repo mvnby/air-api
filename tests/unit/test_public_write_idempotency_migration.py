@@ -59,7 +59,7 @@ def test_public_write_idempotency_migration_is_single_head() -> None:
 
     assert script.get_heads() == [REVISION]
     assert revision is not None
-    assert revision.down_revision == "d0a1b2c3e4f6"
+    assert revision.down_revision == "e1f2a3b4c5d6"
 
 
 def test_public_write_idempotency_upgrade_and_downgrade() -> None:

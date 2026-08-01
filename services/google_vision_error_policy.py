@@ -31,11 +31,11 @@ def google_vision_status_contract(status: int) -> tuple[str, bool]:
         return "credentials_rejected", False
     if status == 429:
         return "rate_limited", True
-    if status >= 500:
+    if 500 <= status <= 599:
         return "upstream_error", True
-    if status >= 400:
+    if 400 <= status <= 499:
         return "request_rejected", False
-    return "upstream_error", True
+    return "unclassified_response", False
 
 
 def google_vision_http_error(error: HttpError) -> OcrProviderError:
@@ -60,12 +60,14 @@ def google_vision_rpc_error(error: dict[str, Any]) -> OcrProviderError:
         status = 0
     terminal_codes = {
         "INVALID_ARGUMENT": "invalid_argument",
+        "FAILED_PRECONDITION": "failed_precondition",
         "UNAUTHENTICATED": "credentials_rejected",
         "PERMISSION_DENIED": "credentials_rejected",
     }
     retryable_codes = {
         "RESOURCE_EXHAUSTED": "rate_limited",
         "DEADLINE_EXCEEDED": "upstream_error",
+        "ABORTED": "upstream_error",
         "INTERNAL": "upstream_error",
         "UNAVAILABLE": "upstream_error",
     }
@@ -73,14 +75,22 @@ def google_vision_rpc_error(error: dict[str, Any]) -> OcrProviderError:
         code, retryable = terminal_codes[rpc_status], False
     elif rpc_status in retryable_codes:
         code, retryable = retryable_codes[rpc_status], True
-    elif status in {3, 7, 16}:
-        code = "invalid_argument" if status == 3 else "credentials_rejected"
+    elif not rpc_status and status in {3, 7, 9, 16}:
+        if status == 3:
+            code = "invalid_argument"
+        elif status == 9:
+            code = "failed_precondition"
+        else:
+            code = "credentials_rejected"
         retryable = False
-    elif status in {4, 8, 13, 14}:
+    elif not rpc_status and status in {4, 8, 10, 13, 14}:
         code = "rate_limited" if status == 8 else "upstream_error"
         retryable = True
     else:
-        code, retryable = google_vision_status_contract(status)
+        # Unknown names, conflicting encodings, missing fields, and malformed
+        # canonical statuses are terminal. Retrying is reserved exclusively
+        # for the explicit transient allowlists above.
+        code, retryable = "unclassified_response", False
     return OcrProviderError(
         "Google Vision rejected the OCR request",
         retryable=retryable,

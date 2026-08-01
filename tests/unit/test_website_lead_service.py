@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from httpx import ASGITransport, AsyncClient
@@ -20,6 +20,10 @@ from services.communications.tenant_website_event_service import (
 )
 from services.lead_service import LeadService
 from services.order_service import OrderService
+from services.product_availability_serialization import (
+    ProductAvailabilitySerialization,
+    ProductAvailabilitySerializationClaim,
+)
 from services.public_write_idempotency_service import PublicWriteIdempotencyService
 from services.website_lead_service import WebsiteLeadService
 
@@ -30,6 +34,26 @@ async def _execute_once(session, *, operation, **_kwargs):
     if commit is not None:
         await commit()
     return SimpleNamespace(value=result.value, replayed=False)
+
+
+@pytest.fixture
+def availability_serialization_claim(monkeypatch):
+    database_now = datetime.now(timezone.utc)
+    steps = []
+
+    async def acquire(_session, *, tenant_scope, product_id, phone):
+        steps.append("lock")
+        return ProductAvailabilitySerializationClaim(
+            identity=ProductAvailabilitySerialization.build_identity(
+                tenant_scope=tenant_scope,
+                product_id=product_id,
+                phone=phone,
+            ),
+            database_now=database_now,
+        )
+
+    monkeypatch.setattr(ProductAvailabilitySerialization, "acquire", acquire)
+    return {"database_now": database_now, "steps": steps}
 
 
 @pytest.mark.asyncio
@@ -109,6 +133,7 @@ async def test_public_contact_lead_endpoint_uses_dedicated_lead_contract(
 async def test_create_product_availability_request_enqueues_with_single_commit(
     monkeypatch,
     tenant_scope,
+    availability_serialization_claim,
 ):
     product = Product(
         id=7,
@@ -131,10 +156,16 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
     enqueued = []
 
     async def fake_get_by_id(_session, product_id):
+        availability_serialization_claim["steps"].append("product")
         assert product_id == product.id
         return product
 
-    async def fake_find_recent(*args, **kwargs):
+    async def fake_find_recent(**kwargs):
+        availability_serialization_claim["steps"].append("find")
+        assert kwargs["normalized_phone"] == "375291112233"
+        assert kwargs["now"] == availability_serialization_claim[
+            "database_now"
+        ].replace(tzinfo=None)
         return None
 
     async def fake_create_from_website(**kwargs):
@@ -175,9 +206,21 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
 
     assert response.lead_id == 91
     assert response.status == "new_lead"
+    assert order.created_at == availability_serialization_claim[
+        "database_now"
+    ].replace(tzinfo=None)
     assert order.technical_meta["availability_product_id"] == product.id
     assert "availability_last_requested_at" in order.technical_meta
-    assert "availability_last_notified_at" in order.technical_meta
+    assert order.technical_meta["availability_last_notified_at"] == (
+        availability_serialization_claim["database_now"]
+        .replace(tzinfo=None)
+        .isoformat()
+    )
+    assert availability_serialization_claim["steps"][:3] == [
+        "lock",
+        "product",
+        "find",
+    ]
     assert fake_session.commit_calls == 1
     assert len(enqueued) == 1
     assert enqueued[0]["order"] is order
@@ -190,6 +233,7 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
 async def test_create_product_availability_request_reuses_recent_duplicate_without_notify(
     monkeypatch,
     tenant_scope,
+    availability_serialization_claim,
 ):
     product = Product(
         id=7,
@@ -265,6 +309,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
 async def test_create_product_availability_request_reuses_duplicate_and_notifies_after_cooldown(
     monkeypatch,
     tenant_scope,
+    availability_serialization_claim,
 ):
     product = Product(
         id=7,

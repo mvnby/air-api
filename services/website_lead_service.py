@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
+from core.input_validation import normalize_phone_digits
 from crud.product import ProductDAO
 from models import LeadSource, Order, OrderStatus, Product
 from schemas import (
@@ -21,6 +22,9 @@ from services.communications.tenant_website_event_service import (
 )
 from services.lead_service import LeadService
 from services.order_service import OrderService
+from services.product_availability_serialization import (
+    ProductAvailabilitySerialization,
+)
 from services.public_write_fingerprint_service import PublicWriteFingerprintService
 from services.public_write_idempotency_service import (
     PublicWriteCommandResponse,
@@ -160,16 +164,25 @@ class WebsiteLeadService:
         tenant_scope: TenantScope,
         request_key_hash: str,
     ) -> ProductAvailabilityLeadResponse:
+        claim = await ProductAvailabilitySerialization.acquire(
+            session,
+            tenant_scope=tenant_scope,
+            product_id=payload.product_id,
+            phone=payload.phone,
+        )
         product = await ProductDAO.get_by_id(session, payload.product_id)
         if not product or not product.is_published:
             raise LookupError(f"Product with id={payload.product_id} not found")
 
-        now = datetime.now()
+        # Order timestamps are historically stored as naive UTC. The source is
+        # nevertheless the authoritative database clock sampled after the
+        # transaction-level lock was acquired.
+        now = claim.database_now.replace(tzinfo=None)
         existing_order = await WebsiteLeadService._find_recent_product_availability_order(
             session=session,
             tenant_scope=tenant_scope,
             product_id=product.id,
-            phone=payload.phone,
+            normalized_phone=claim.identity.normalized_phone,
             now=now,
         )
 
@@ -227,6 +240,8 @@ class WebsiteLeadService:
             tenant_scope=tenant_scope,
             commit=False,
         )
+        order.created_at = now
+        order.updated_at = now
         WebsiteLeadService._set_order_meta(
             order,
             product_id=product.id,
@@ -271,7 +286,7 @@ class WebsiteLeadService:
         session: AsyncSession,
         tenant_scope: TenantScope,
         product_id: int,
-        phone: str,
+        normalized_phone: str,
         now: datetime,
     ) -> Order | None:
         cutoff = now - timedelta(days=WebsiteLeadService.PRODUCT_AVAILABILITY_LOOKBACK_DAYS)
@@ -287,13 +302,12 @@ class WebsiteLeadService:
         )
         result = await session.execute(stmt)
         orders = list(result.scalars().all())
-        normalized_phone = LeadService._normalize_phone_digits(phone)
         for order in orders:
             meta = order.technical_meta or {}
             if meta.get("availability_product_id") != product_id:
                 continue
             customer_phone = order.customer.phone if order.customer else None
-            if LeadService._normalize_phone_digits(customer_phone) == normalized_phone:
+            if normalize_phone_digits(customer_phone or "") == normalized_phone:
                 return order
         return None
 

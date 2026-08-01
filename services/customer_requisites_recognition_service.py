@@ -143,10 +143,19 @@ class CustomerRequisitesRecognitionService:
                 retryable=True,
                 code="network_error",
             ) from exc
-        item = (response.get("responses") or [{}])[0]
-        error = item.get("error")
-        if isinstance(error, dict) and error:
-            raise cls._vision_rpc_error(error)
+        if not isinstance(response, dict):
+            raise cls._vision_rpc_error({})
+        responses = response.get("responses")
+        if (
+            not isinstance(responses, list)
+            or not responses
+            or not isinstance(responses[0], dict)
+        ):
+            raise cls._vision_rpc_error({})
+        item = responses[0]
+        if "error" in item:
+            error = item.get("error")
+            raise cls._vision_rpc_error(error if isinstance(error, dict) else {})
         return str((item.get("fullTextAnnotation") or {}).get("text") or "").strip()
 
     _vision_http_error = staticmethod(google_vision_http_error)

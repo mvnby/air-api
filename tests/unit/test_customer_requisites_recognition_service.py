@@ -81,6 +81,7 @@ def test_google_vision_http_error_has_typed_retry_contract(
     ("rpc_status", "status", "code", "retryable"),
     [
         ("INVALID_ARGUMENT", 400, "invalid_argument", False),
+        ("FAILED_PRECONDITION", 400, "failed_precondition", False),
         ("UNAUTHENTICATED", 401, "credentials_rejected", False),
         ("PERMISSION_DENIED", 403, "credentials_rejected", False),
         ("RESOURCE_EXHAUSTED", 429, "rate_limited", True),
@@ -108,6 +109,7 @@ def test_google_vision_rpc_error_has_typed_retry_contract(
     [
         (3, "invalid_argument", False),
         (7, "credentials_rejected", False),
+        (9, "failed_precondition", False),
         (16, "credentials_rejected", False),
         (8, "rate_limited", True),
         (14, "upstream_error", True),
@@ -125,6 +127,49 @@ def test_google_vision_numeric_rpc_code_has_typed_retry_contract(
     assert mapped.status == status
     assert mapped.code == code
     assert mapped.retryable is retryable
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        {},
+        {"status": "FUTURE_CANONICAL_STATUS", "code": 14},
+        {"status": [], "code": "not-a-number"},
+    ],
+)
+def test_google_vision_malformed_rpc_status_fails_closed(error):
+    mapped = CustomerRequisitesRecognitionService._vision_rpc_error(error)
+
+    assert mapped.code == "unclassified_response"
+    assert mapped.retryable is False
+
+
+def test_google_vision_non_mapping_error_payload_fails_closed(monkeypatch):
+    class Request:
+        def execute(self):
+            return {"responses": [{"error": "malformed"}]}
+
+    class Images:
+        def annotate(self, **_kwargs):
+            return Request()
+
+    class Vision:
+        def images(self):
+            return Images()
+
+    monkeypatch.setattr(
+        CustomerRequisitesRecognitionService,
+        "_get_vision_client",
+        lambda: Vision(),
+    )
+
+    with pytest.raises(OcrProviderError) as captured:
+        CustomerRequisitesRecognitionService._vision_text_from_image_bytes_sync(
+            b"image"
+        )
+
+    assert captured.value.code == "unclassified_response"
+    assert captured.value.retryable is False
 
 
 def test_google_vision_execute_network_failure_is_retryable(monkeypatch):
