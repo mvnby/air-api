@@ -125,6 +125,41 @@ async def _make_product(session: AsyncSession, idx: int = 1) -> Product:
     return product
 
 
+async def _seed_catalog_target(session: AsyncSession) -> None:
+    session.add(
+        Tenant(
+            id=1,
+            slug="system",
+            display_name="System",
+            status="active",
+            is_system=True,
+        )
+    )
+    await session.flush()
+    session.add(
+        Storefront(
+            id=1,
+            tenant_id=1,
+            slug="main",
+            display_name="Main",
+            status="active",
+            is_default=True,
+        )
+    )
+    await session.commit()
+
+
+async def _catalog_invalidation_events(session: AsyncSession):
+    return (
+        await session.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
+
+
 def _write_source_image(tmp_path: Path, name: str, content: bytes | None = None) -> str:
     source_dir = tmp_path / "media/products/shared"
     source_dir.mkdir(parents=True, exist_ok=True)
@@ -297,7 +332,7 @@ async def test_repeated_set_main_image_does_not_repeat_revision_or_outbox(
 
 
 @pytest.mark.asyncio
-async def test_delete_shared_image_keeps_file_until_last_image_and_variant_reference(
+async def test_delete_shared_image_defers_file_cleanup_after_last_reference(
     sqlite_session,
     tmp_path: Path,
     monkeypatch,
@@ -324,7 +359,7 @@ async def test_delete_shared_image_keeps_file_until_last_image_and_variant_refer
     assert shared_path.exists()
 
     await ManagerMediaService.delete_gallery_image(sqlite_session, second_image.id)
-    assert not shared_path.exists()
+    assert shared_path.exists()
 
 
 @pytest.mark.asyncio
@@ -530,6 +565,7 @@ async def test_reprocess_local_image_creates_card_variant_without_mutating_curre
     monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
+    await _seed_catalog_target(sqlite_session)
     product = await _make_product(sqlite_session)
     source_dir = tmp_path / "media/products/shared"
     source_dir.mkdir(parents=True, exist_ok=True)
@@ -558,6 +594,11 @@ async def test_reprocess_local_image_creates_card_variant_without_mutating_curre
     assert product.main_image == source_url
     assert product.images == [source_url]
     assert image.url == source_url
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = await _catalog_invalidation_events(sqlite_session)
+    assert revision.revision == 1
+    assert len(events) == 1
+    assert events[0].payload["reason"] == "product_media_variant_reprocess"
 
 
 @pytest.mark.asyncio
@@ -600,6 +641,7 @@ async def test_reprocess_configured_remote_original_creates_card_variant(
 async def test_reprocess_failed_source_records_error_without_mutating_originals(
     sqlite_session,
 ):
+    await _seed_catalog_target(sqlite_session)
     product = await _make_product(sqlite_session)
     product.main_image = "https://example.com/current.jpg"
     image = ProductImage(product_id=product.id, url="https://example.com/source.jpg")
@@ -619,6 +661,11 @@ async def test_reprocess_failed_source_records_error_without_mutating_originals(
     assert result["processing_error"] == "Source image is not available in local media storage"
     assert product.main_image == "https://example.com/current.jpg"
     assert image.url == "https://example.com/source.jpg"
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = await _catalog_invalidation_events(sqlite_session)
+    assert revision.revision == 1
+    assert len(events) == 1
+    assert events[0].payload["reason"] == "product_media_variant_reprocess"
 
 
 @pytest.mark.asyncio
@@ -667,6 +714,7 @@ async def test_process_missing_variants_respects_bounded_batch(
     monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
+    await _seed_catalog_target(sqlite_session)
     product = await _make_product(sqlite_session, 51)
     images = []
     for idx in range(3):
@@ -696,6 +744,11 @@ async def test_process_missing_variants_respects_bounded_batch(
     assert {row.processing_status for row in variant_rows} == {
         ProductImageProcessingStatus.READY.value
     }
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = await _catalog_invalidation_events(sqlite_session)
+    assert revision.revision == 1
+    assert len(events) == 1
+    assert events[0].payload["reason"] == "product_media_variant_batch"
 
 
 @pytest.mark.asyncio
@@ -756,6 +809,7 @@ async def test_idempotent_rerun_does_not_duplicate_ready_variant(
     monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
+    await _seed_catalog_target(sqlite_session)
     product = await _make_product(sqlite_session, 71)
     source_url = _write_source_image(tmp_path, "idempotent.webp")
     image = ProductImage(product_id=product.id, url=source_url)
@@ -790,6 +844,10 @@ async def test_idempotent_rerun_does_not_duplicate_ready_variant(
     assert second["total_candidates"] == 0
     assert len(variants) == 1
     assert variants[0].processing_status == ProductImageProcessingStatus.READY.value
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = await _catalog_invalidation_events(sqlite_session)
+    assert revision.revision == 1
+    assert len(events) == 1
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ from sqlmodel import select, update
 
 from models import Product, ProductImage, ProductImageVariant, ProductSeries
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.manager_media_storage_service import ManagerMediaStorageOperations
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
@@ -48,7 +49,6 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         if not image:
             raise ValueError("Image not found")
 
-        image_url = image.url
         product = await session.get(Product, image.product_id)
         if product and product.main_image == image.url:
             statement = update(Product).where(Product.id == product.id).values(main_image=None)
@@ -59,7 +59,6 @@ class ManagerMediaService(ManagerMediaStorageOperations):
                 select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
             )
         ).scalars().all()
-        variant_urls = [variant.url for variant in variant_rows if variant.url]
         for variant in variant_rows:
             await session.delete(variant)
 
@@ -74,9 +73,6 @@ class ManagerMediaService(ManagerMediaStorageOperations):
             changed=True,
             product_ids=[image.product_id],
         )
-        await ManagerMediaService.remove_file_if_unreferenced(session, image_url)
-        for variant_url in variant_urls:
-            await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
         return {"message": "Image deleted"}
 
     @staticmethod
@@ -285,7 +281,10 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         skip_existing: bool,
         set_main: bool,
         commit: bool = True,
+        mutation_batch: CatalogMutationBatch | None = None,
     ) -> dict:
+        if not commit and mutation_batch is None:
+            raise ValueError("commit=False requires a caller-owned mutation_batch")
         if not product_ids:
             raise ValueError("product_ids is required")
         if not source_urls:
@@ -347,6 +346,12 @@ class ManagerMediaService(ManagerMediaStorageOperations):
             await CatalogInvalidationCommitService.commit_registered_global_mutation(
                 session,
                 producer="manager_media.bulk_add_gallery_images",
+                changed=changed,
+                product_ids=unique_product_ids,
+            )
+        else:
+            assert mutation_batch is not None
+            mutation_batch.record(
                 changed=changed,
                 product_ids=unique_product_ids,
             )
@@ -427,9 +432,6 @@ class ManagerMediaService(ManagerMediaStorageOperations):
             product_ids=unique_product_ids,
         )
 
-        for url in unique_urls:
-            await ManagerMediaService.remove_file_if_unreferenced(session, url)
-
         return {
             "message": "Bulk delete completed",
             "products_count": len(unique_product_ids),
@@ -444,6 +446,11 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         dry_run: bool = False,
         delete_unreferenced: bool = False,
     ) -> dict:
+        if delete_unreferenced:
+            raise RuntimeError(
+                "Physical media cleanup is deferred; retry without delete_unreferenced"
+            )
+
         source_product = await session.get(Product, product_id)
         if not source_product:
             raise LookupError("Product not found")
@@ -484,7 +491,6 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         preserved_installation_links = 0
         replaced_links = 0
         obsolete_urls: list[str] = []
-        obsolete_variant_urls: list[str] = []
 
         target_rows_by_product_id: dict[int, list[ProductImage]] = {}
         for target_product in target_products:
@@ -500,18 +506,6 @@ class ManagerMediaService(ManagerMediaStorageOperations):
             replaced_links += len(old_gallery_rows)
             obsolete_urls.extend(row.url for row in old_gallery_rows if row.url and row.url not in source_urls)
             preserved_installation_links += len({row.url for row in target_rows if row.is_installation_photo})
-
-            old_gallery_ids = [row.id for row in old_gallery_rows if row.id is not None]
-            if old_gallery_ids:
-                variant_urls = (
-                    await session.execute(
-                        select(ProductImageVariant.url).where(
-                            ProductImageVariant.product_image_id.in_(old_gallery_ids),
-                            ProductImageVariant.url != None,  # noqa: E711
-                        )
-                    )
-                ).scalars().all()
-                obsolete_variant_urls.extend(url for url in variant_urls if url)
 
         obsolete_urls = list(dict.fromkeys(obsolete_urls))
 
@@ -594,12 +588,9 @@ class ManagerMediaService(ManagerMediaStorageOperations):
             product_ids=[source_product.id, *(product.id for product in target_products)],
         )
 
+        # Physical object deletion is intentionally deferred to a future durable
+        # GC. Request paths must never race a concurrent content-addressed writer.
         deleted_files_count = 0
-        if delete_unreferenced:
-            for url in dict.fromkeys([*obsolete_urls, *obsolete_variant_urls]):
-                deleted = await ManagerMediaService.remove_file_if_unreferenced(session, url)
-                if deleted:
-                    deleted_files_count += 1
 
         return {
             "message": "Series gallery applied",

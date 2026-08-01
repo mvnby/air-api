@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from sqlmodel import select
 
-from models import Brand, Product, ProductTagLink, Tag, TagGroup
+from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
 from services.brand_series_service import extract_series_name
 from services.brand_series_service import sync_product_brand_series
 
@@ -162,3 +162,99 @@ async def test_sync_product_brand_series_works_without_loaded_tag_group(db):
         tags=[tag_without_group_loaded],
     )
     assert changed is True
+
+
+@pytest.mark.asyncio
+async def test_sync_product_brand_series_reports_brand_title_self_heal_once(db):
+    brand_group = TagGroup(title="Brand", slug="brand", allow_multiple=False)
+    brand = Brand(title="", slug="self-heal-brand")
+    db.add_all([brand_group, brand])
+    await db.flush()
+    brand_tag = Tag(
+        title="Self Heal Brand",
+        slug="self-heal-brand",
+        group_id=brand_group.id,
+        is_public=True,
+        is_filter=True,
+    )
+    product = Product(
+        title="Self Heal Product",
+        slug="self-heal-product",
+        price=1000,
+        brand_id=brand.id,
+        specs={"brand": "Self Heal Brand"},
+    )
+    db.add_all([brand_tag, product])
+    await db.flush()
+    db.add(ProductTagLink(product_id=product.id, tag_id=brand_tag.id))
+    await db.commit()
+
+    first_changed = await sync_product_brand_series(
+        db,
+        product=product,
+        specs=product.specs,
+        title=product.title,
+        allow_series_tag_fallback=False,
+        allow_series_title_fallback=False,
+    )
+    await db.commit()
+    second_changed = await sync_product_brand_series(
+        db,
+        product=product,
+        specs=product.specs,
+        title=product.title,
+        allow_series_tag_fallback=False,
+        allow_series_title_fallback=False,
+    )
+
+    await db.refresh(brand)
+    assert first_changed is True
+    assert second_changed is False
+    assert brand.title == "Self Heal Brand"
+
+
+@pytest.mark.asyncio
+async def test_sync_product_brand_series_reports_orphan_series_attachment_once(db):
+    brand_group = TagGroup(title="Brand", slug="brand", allow_multiple=False)
+    brand = Brand(title="Series Heal Brand", slug="series-heal-brand")
+    orphan = ProductSeries(title="Orphan Line", slug="orphan-line", brand_id=None)
+    db.add_all([brand_group, brand, orphan])
+    await db.flush()
+    brand_tag = Tag(
+        title=brand.title,
+        slug=brand.slug,
+        group_id=brand_group.id,
+        is_public=True,
+        is_filter=True,
+    )
+    product = Product(
+        title="Series Heal Product",
+        slug="series-heal-product",
+        price=1000,
+        brand_id=brand.id,
+        series_id=orphan.id,
+        specs={"brand": brand.title, "series": orphan.title},
+    )
+    db.add_all([brand_tag, product])
+    await db.flush()
+    db.add(ProductTagLink(product_id=product.id, tag_id=brand_tag.id))
+    await db.commit()
+
+    first_changed = await sync_product_brand_series(
+        db,
+        product=product,
+        specs=product.specs,
+        title=product.title,
+    )
+    await db.commit()
+    second_changed = await sync_product_brand_series(
+        db,
+        product=product,
+        specs=product.specs,
+        title=product.title,
+    )
+
+    await db.refresh(orphan)
+    assert first_changed is True
+    assert second_changed is False
+    assert orphan.brand_id == brand.id

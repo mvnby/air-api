@@ -8959,7 +8959,7 @@
           "manager"
         ],
         "summary": "Delete Gallery Image",
-        "description": "Delete an image link; physical file is deleted only if unreferenced globally.",
+        "description": "Delete only the DB link; physical objects are retained for deferred GC.",
         "operationId": "delete_image",
         "security": [
           {
@@ -9400,11 +9400,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Delete physical files that become unreferenced",
+              "description": "Rejected with 409 because physical media cleanup is deferred",
               "default": false,
               "title": "Delete Unreferenced"
             },
-            "description": "Delete physical files that become unreferenced"
+            "description": "Rejected with 409 because physical media cleanup is deferred"
           }
         ],
         "responses": {
@@ -9640,7 +9640,7 @@
           "manager"
         ],
         "summary": "Cleanup Media",
-        "description": "Delete orphaned media files not referenced in DB.",
+        "description": "Report orphan candidates; physical deletion is currently disabled.",
         "operationId": "cleanup_media",
         "security": [
           {

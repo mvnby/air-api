@@ -11,6 +11,7 @@ from sqlmodel import select
 
 from crud.catalog_revision import CatalogRevisionDAO
 from models import (
+    Brand,
     ImportMediaCache,
     IntegrationOutboxEvent,
     Product,
@@ -188,6 +189,35 @@ async def test_importer_saves_manuals_and_reuses_image_cache_on_update(sqlite_se
     assert len(events_after_first) == 1
     assert len(events_after_second) == 1
     assert events_after_second[0].payload["reason"] == "product_import"
+
+    brand = (
+        await sqlite_session.execute(select(Brand).where(Brand.slug == "lg"))
+    ).scalar_one()
+    brand.title = ""
+    sqlite_session.add(brand)
+    await sqlite_session.commit()
+
+    third = await service.import_product(
+        "https://example.com/product/lg-test-import",
+        update_existing=True,
+        collect_related=False,
+    )
+    revision_after_self_heal = await CatalogRevisionDAO.get_current(sqlite_session)
+    events_after_self_heal = (
+        await sqlite_session.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
+    await sqlite_session.refresh(brand)
+    assert third["product"].id == first["product"].id
+    assert brand.title == "LG"
+    assert revision_after_self_heal.revision == 2
+    assert len(events_after_self_heal) == 2
+    assert events_after_self_heal[-1].payload["reason"] == "product_import"
+    assert image_calls["count"] == 1
 
     product = (await sqlite_session.execute(select(Product).where(Product.slug == "lg-test-import"))).scalar_one()
     assert product.main_image

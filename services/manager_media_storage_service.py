@@ -11,7 +11,6 @@ from typing import List
 import httpx
 from duckduckgo_search import DDGS
 from PIL import Image, ImageOps
-from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -334,41 +333,6 @@ class ManagerMediaStorageOperations:
         session.add(product)
         return True
 
-    @staticmethod
-    async def remove_file_if_unreferenced(session: AsyncSession, url: str) -> bool:
-        """Delete a physical file only after every public DB reference is gone."""
-
-        gallery_refs = (
-            await session.execute(
-                select(func.count()).select_from(ProductImage).where(ProductImage.url == url)
-            )
-        ).scalar_one()
-        main_refs = (
-            await session.execute(
-                select(func.count()).select_from(Product).where(Product.main_image == url)
-            )
-        ).scalar_one()
-        variant_refs = (
-            await session.execute(
-                select(func.count())
-                .select_from(ProductImageVariant)
-                .where(ProductImageVariant.url == url)
-            )
-        ).scalar_one()
-
-        if gallery_refs > 0 or main_refs > 0 or variant_refs > 0:
-            return False
-        if not url.startswith("/media/"):
-            return False
-
-        path = url.lstrip("/")
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-                return True
-            except Exception as exc:
-                logger.error("Failed to delete unreferenced file %s: %s", url, exc)
-        return False
 
     @staticmethod
     def local_media_path_for_url(url: str) -> Path | None:
@@ -423,7 +387,12 @@ class ManagerMediaStorageOperations:
 
     @staticmethod
     async def cleanup_media(session: AsyncSession, *, dry_run: bool = False) -> dict:
-        """Delete orphaned product media files not referenced in DB."""
+        """Report orphan candidates; physical GC is disabled until coordinated."""
+
+        if not dry_run:
+            raise RuntimeError(
+                "Physical media GC is deferred until writer synchronization is available"
+            )
 
         known_urls = set(
             (
@@ -460,14 +429,12 @@ class ManagerMediaStorageOperations:
                 if db_path_abs in known_urls or db_path_rel in known_urls:
                     continue
                 size = os.path.getsize(full_path)
-                if not dry_run:
-                    os.remove(full_path)
                 deleted_count += 1
                 reclaimed_bytes += size
                 report.append(db_path_abs)
 
         return {
-            "dry_run": dry_run,
+            "dry_run": True,
             "deleted_count": deleted_count,
             "reclaimed_bytes": reclaimed_bytes,
             "files": report[:50],

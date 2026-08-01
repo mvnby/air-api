@@ -183,6 +183,20 @@ runtime writes should go through `ImageService`,
 5. Keep local media mounted until the owner explicitly approves final cutover and
    cleanup.
 
+### Deferred physical garbage collection
+
+Manager write requests delete database links only. They never unlink local or
+content-addressed objects: a reference check followed by an immediate unlink can
+race a concurrent upload that is about to attach the same hash. The Manager
+cleanup endpoint is report-only; execute mode returns a conflict until a durable
+GC exists with a grace period, final reference recheck, and writer/collector
+synchronization. Until then, physical cleanup is an explicit offline maintenance
+operation performed only in a reviewed quiescent window.
+
+The legacy `delete_unreferenced=true` apply-to-series option is rejected with
+HTTP 409 before any database mutation. Callers must use the default database-only
+operation.
+
 ## Issue 428 Rollout Decision
 
 Recommendation: approve a bounded manual smoke first, then switch

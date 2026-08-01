@@ -1328,26 +1328,17 @@ const applyGalleryToSeries = async () => {
             : '';
         const proceed = await confirmDialog({
             title: 'Применить галерею ко всей серии?',
-            description: `Товаров будет обновлено: ${preview.updated_products}.\nИзображений в новой галерее: ${preview.images_applied}.\nСсылок будет заменено: ${preview.replaced_links}.\nМонтажные фото будут сохранены: ${preview.preserved_installation_links}.${obsoleteList}`,
+            description: `Товаров будет обновлено: ${preview.updated_products}.\nИзображений в новой галерее: ${preview.images_applied}.\nСсылок будет заменено: ${preview.replaced_links}.\nМонтажные фото будут сохранены: ${preview.preserved_installation_links}.\nФизические файлы останутся до безопасной отложенной очистки.${obsoleteList}`,
             confirmText: 'Применить галерею',
             variant: 'warning',
         });
         if (!proceed) return;
 
-        const deleteUnreferenced = (preview.obsolete_urls?.length || 0) > 0
-            ? await confirmDialog({
-                title: 'Удалить неиспользуемые файлы?',
-                description: 'Будут удалены физические файлы, на которые после отвязки не останется ссылок.',
-                confirmText: 'Удалить файлы',
-                variant: 'danger',
-            })
-            : false;
-        const result = await api.applyGalleryToSeries(selectedProduct.value.id, false, deleteUnreferenced);
+        const result = await api.applyGalleryToSeries(selectedProduct.value.id, false, false);
         await loadProducts();
         refreshSelectedProduct();
         productGallerySettingsOpen.value = false;
-        const cleanupText = deleteUnreferenced ? `, файлов удалено: ${result.deleted_files_count}` : '';
-        setToast(`Галерея применена к серии: ${result.updated_products} товаров${cleanupText}`);
+        setToast(`Галерея применена к серии: ${result.updated_products} товаров`);
     } catch (e) {
         setToast(`Ошибка применения к серии: ${getApiErrorMessage(e)}`);
         console.error(e);
@@ -1388,9 +1379,9 @@ const addToGallery = async (url: string) => {
 const triggerCleanup = async () => {
     cleanupLoading.value = true;
     try {
-        const res = await api.cleanupMedia(false);
+        const res = await api.cleanupMedia(true);
         cleanupStats.value = res;
-        setToast('Очистка завершена');
+        setToast('Отчёт по неиспользуемым медиа готов');
     } catch (e) {
         setToast(`Ошибка очистки: ${getApiErrorMessage(e)}`);
     } finally {
@@ -2196,12 +2187,12 @@ watchDebounced(
   <!-- Cleanup Modal -->
   <div v-if="showCleanupModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl">
-          <h2 class="text-xl font-bold mb-4">Очистка неиспользуемых медиа</h2>
-          <p class="mb-4 text-gray-600">Сканирование файлов, не связанных с базой данных, и их удаление.</p>
+          <h2 class="text-xl font-bold mb-4">Проверка неиспользуемых медиа</h2>
+          <p class="mb-4 text-gray-600">Отчёт о файлах без связей в базе. Файлы не удаляются автоматически.</p>
           
           <div v-if="cleanupStats" class="bg-gray-50 p-4 rounded-lg mb-4 text-sm">
-              <p>Удалено: {{ cleanupStats.deleted_count }} файлов</p>
-              <p>Освобождено: {{ (cleanupStats.reclaimed_bytes / 1024 / 1024).toFixed(2) }} MB</p>
+              <p>Найдено: {{ cleanupStats.deleted_count }} файлов</p>
+              <p>Можно освободить: {{ (cleanupStats.reclaimed_bytes / 1024 / 1024).toFixed(2) }} MB</p>
               <ul class="mt-2 list-disc list-inside text-gray-500 h-32 overflow-y-auto">
                   <li v-for="f in cleanupStats.files" :key="f">{{ f }}</li>
               </ul>
@@ -2209,8 +2200,8 @@ watchDebounced(
           
           <div class="flex justify-end gap-2">
               <button @click="showCleanupModal = false" class="px-4 py-2 text-gray-500 hover:text-gray-700">Закрыть</button>
-              <button @click="triggerCleanup" :disabled="cleanupLoading" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
-                  {{ cleanupLoading ? 'Очистка...' : 'Запустить' }}
+              <button @click="triggerCleanup" :disabled="cleanupLoading" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">
+                  {{ cleanupLoading ? 'Проверка...' : 'Проверить' }}
               </button>
           </div>
       </div>

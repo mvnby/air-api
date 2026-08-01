@@ -2,15 +2,40 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping
+from typing import Iterable, Mapping
 
 
 @dataclass(frozen=True, slots=True)
 class GlobalCatalogMutationContract:
     producer: str
     reason: str
+
+
+@dataclass(slots=True)
+class CatalogMutationBatch:
+    """Accumulate nested writes for one caller-owned invalidation boundary."""
+
+    changed: bool = False
+    product_ids: set[int] = field(default_factory=set)
+    slugs: set[str] = field(default_factory=set)
+    brand_slugs: set[str] = field(default_factory=set)
+
+    def record(
+        self,
+        *,
+        changed: bool,
+        product_ids: Iterable[int | None] = (),
+        slugs: Iterable[str | None] = (),
+        brand_slugs: Iterable[str | None] = (),
+    ) -> None:
+        if not changed:
+            return
+        self.changed = True
+        self.product_ids.update(int(value) for value in product_ids if value is not None)
+        self.slugs.update(str(value) for value in slugs if value)
+        self.brand_slugs.update(str(value) for value in brand_slugs if value)
 
 
 def _contract(producer: str, reason: str) -> GlobalCatalogMutationContract:
@@ -47,11 +72,27 @@ FEATURE_DELETE_GLOBAL_MUTATION_PRODUCERS = frozenset(
     }
 )
 
+PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS = frozenset(
+    {
+        "product_image_variant.reprocess_variant",
+        "product_image_variant.process_missing_variants",
+        "yandex_feed_image.backfill",
+    }
+)
+
+MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS = frozenset(
+    {
+        "manager_brand.apply_series_gallery_to_products",
+    }
+)
+
 PUBLIC_CATALOG_MUTATION_PRODUCERS = frozenset(
     {
         *IMPORTER_GLOBAL_MUTATION_PRODUCERS,
         *MANAGER_MEDIA_GLOBAL_MUTATION_PRODUCERS,
         *FEATURE_DELETE_GLOBAL_MUTATION_PRODUCERS,
+        *PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS,
+        *MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS,
     }
 )
 
@@ -114,6 +155,18 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
                 "feature_assignment.delete_target_link.brand",
                 "feature_assignment.delete_target_link.series",
             }
+        ),
+        "ProductImageVariantService.reprocess_variant": frozenset(
+            {"product_image_variant.reprocess_variant"}
+        ),
+        "ProductImageVariantService.process_missing_variants": frozenset(
+            {"product_image_variant.process_missing_variants"}
+        ),
+        "YandexFeedImageService.backfill": frozenset(
+            {"yandex_feed_image.backfill"}
+        ),
+        "ManagerBrandService.apply_series_gallery_to_products": frozenset(
+            {"manager_brand.apply_series_gallery_to_products"}
         ),
     }
 )
@@ -183,6 +236,22 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
         "feature_assignment.delete_target_link.series": _contract(
             "feature_assignment.delete_target_link.series",
             "feature_series_link_delete",
+        ),
+        "product_image_variant.reprocess_variant": _contract(
+            "product_image_variant.reprocess_variant",
+            "product_media_variant_reprocess",
+        ),
+        "product_image_variant.process_missing_variants": _contract(
+            "product_image_variant.process_missing_variants",
+            "product_media_variant_batch",
+        ),
+        "yandex_feed_image.backfill": _contract(
+            "yandex_feed_image.backfill",
+            "product_media_yandex_feed_backfill",
+        ),
+        "manager_brand.apply_series_gallery_to_products": _contract(
+            "manager_brand.apply_series_gallery_to_products",
+            "brand_series_gallery_apply",
         ),
     }
 )

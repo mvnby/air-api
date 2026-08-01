@@ -389,7 +389,7 @@ async def ensure_brand(
     *,
     title: str,
     slug: Optional[str] = None,
-) -> Brand:
+) -> tuple[Brand, bool]:
     normalized_title = _to_text(title)
     if not normalized_title:
         raise ValueError("Brand title is required")
@@ -404,12 +404,13 @@ async def ensure_brand(
             existing.title = normalized_title
             session.add(existing)
             await session.flush()
-        return existing
+            return existing, True
+        return existing, False
 
     brand = Brand(title=normalized_title, slug=brand_slug, is_published=True)
     session.add(brand)
     await session.flush()
-    return brand
+    return brand, True
 
 
 async def ensure_series(
@@ -417,7 +418,7 @@ async def ensure_series(
     *,
     title: str,
     brand_id: Optional[int],
-) -> ProductSeries:
+) -> tuple[ProductSeries, bool]:
     normalized_title = _to_text(title)
     if not normalized_title:
         raise ValueError("Series title is required")
@@ -436,7 +437,7 @@ async def ensure_series(
             )
         ).scalar_one_or_none()
         if existing:
-            return existing
+            return existing, False
 
         orphan = (
             await session.execute(
@@ -450,7 +451,7 @@ async def ensure_series(
             orphan.brand_id = brand_id
             session.add(orphan)
             await session.flush()
-            return orphan
+            return orphan, True
     else:
         existing = (
             await session.execute(
@@ -461,7 +462,7 @@ async def ensure_series(
             )
         ).scalar_one_or_none()
         if existing:
-            return existing
+            return existing, False
 
     series = ProductSeries(
         title=normalized_title,
@@ -471,7 +472,7 @@ async def ensure_series(
     )
     session.add(series)
     await session.flush()
-    return series
+    return series, True
 
 
 async def sync_product_brand_series(
@@ -545,7 +546,12 @@ async def sync_product_brand_series(
             generated = slugify(brand_name, lowercase=True)
             brand_slug = generated or None
         if brand_slug:
-            brand = await ensure_brand(session, title=brand_name, slug=brand_slug)
+            brand, brand_changed = await ensure_brand(
+                session,
+                title=brand_name,
+                slug=brand_slug,
+            )
+            changed = changed or brand_changed
             if product.brand_id != brand.id:
                 product.brand_id = brand.id
                 changed = True
@@ -568,7 +574,12 @@ async def sync_product_brand_series(
         brand_name=brand_name if allow_series_title_fallback else None,
     )
     if series_name:
-        series = await ensure_series(session, title=series_name, brand_id=product.brand_id)
+        series, series_changed = await ensure_series(
+            session,
+            title=series_name,
+            brand_id=product.brand_id,
+        )
+        changed = changed or series_changed
         if product.series_id != series.id:
             product.series_id = series.id
             changed = True
