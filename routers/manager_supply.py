@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, PRODUCT_NOT_FOUND
-from core.security import get_current_username
+from core.security import AuthenticatedUser, get_current_username, require_manager_access
 from routers.manager_operation_ids import (
     ANALYZE_SUPPLIER_SOURCE,
     BULK_CREATE_SUPPLIER_MAPPINGS,
@@ -811,10 +811,15 @@ async def create_supply_request(
 async def create_supply_request_from_order_lines(
     payload: SupplyRequestFromOrderLinesPayload,
     session: AsyncSession = Depends(get_session),
-    user: str = Depends(get_current_username),
+    auth: AuthenticatedUser = Depends(require_manager_access),
 ):
     try:
-        return await SupplyRequestService.create_from_order_lines(session, payload.model_dump(), created_by=user)
+        return await SupplyRequestService.create_from_order_lines(
+            session,
+            payload.model_dump(),
+            tenant_scope=auth.tenant_scope(),
+            created_by=auth.username,
+        )
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,

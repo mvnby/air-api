@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
+from crud.supply_request import SupplyRequestDAO
 from models.order import OrderProductLink
 from models.product import Product
 from models.supplier import (
@@ -21,6 +22,7 @@ from models.supplier import (
     SupplyRequest,
     SupplyRequestLine,
 )
+from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 
@@ -413,16 +415,21 @@ class SupplyRequestService:
         return {"items": [await SupplyRequestService.get_request(session, request.id)]}
 
     @staticmethod
-    async def create_from_order_lines(session: AsyncSession, payload: dict, *, created_by: str | None = None) -> dict:
+    async def create_from_order_lines(
+        session: AsyncSession,
+        payload: dict,
+        *,
+        tenant_scope: TenantScope,
+        created_by: str | None = None,
+    ) -> dict:
         line_ids = [int(value) for value in payload.get("order_product_link_ids") or []]
         if not line_ids:
             raise ValueError("Order product lines are required")
-        result = await session.execute(
-            select(OrderProductLink)
-            .where(OrderProductLink.id.in_(line_ids))
-            .options(selectinload(OrderProductLink.product))
+        links = await SupplyRequestDAO.get_order_product_links_for_storefront(
+            session,
+            order_product_link_ids=line_ids,
+            tenant_scope=tenant_scope,
         )
-        links = list(result.scalars().all())
         if len(links) != len(set(line_ids)):
             raise ValueError("Some order product lines were not found")
 
