@@ -47,6 +47,7 @@ from .service_asset import (
 )
 from .staff import StaffUser
 from .tenancy import Storefront, StorefrontDomain, Tenant, TenantMembership
+from .tenant_commerce import TenantAuditEvent, TenantOffer
 from .order import (
     BankReceipt,
     Installer,
@@ -190,7 +191,9 @@ __all__ = [
     "Tag",
     "TagGroup",
     "Tenant",
+    "TenantAuditEvent",
     "TenantMembership",
+    "TenantOffer",
     "Storefront",
     "StorefrontDomain",
     "Payment",

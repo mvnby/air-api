@@ -16,7 +16,9 @@ import models  # noqa: F401 - registers SQLModel tables for metadata assertions
 REVISION = "f6b2a4d8e1c3"
 PROVENANCE_BOUNDARY_REVISION = "a7c8d9e0f1b2"
 CUSTOMER_SCOPE_REVISION = "b8d9e0f1a2c3"
-HEAD_REVISION = "c9e0f1a2b3d4"
+CONTRACT_REVISION = "c9e0f1a2b3d4"
+STOREFRONT_IDEMPOTENCY_REVISION = "d0f1a2b3c4d5"
+HEAD_REVISION = "d0a1b2c3e4f6"
 MIGRATION_PATH = Path("alembic/versions/f6b2a4d8e1c3_add_lead_order_tenant_provenance_expand.py")
 
 
@@ -79,6 +81,14 @@ def test_lead_order_tenant_provenance_expand_is_in_single_head_chain():
     assert revision.down_revision == "e9a1b2c3d4e5"
     assert (
         script.get_revision(HEAD_REVISION).down_revision
+        == STOREFRONT_IDEMPOTENCY_REVISION
+    )
+    assert (
+        script.get_revision(STOREFRONT_IDEMPOTENCY_REVISION).down_revision
+        == CONTRACT_REVISION
+    )
+    assert (
+        script.get_revision(CONTRACT_REVISION).down_revision
         == CUSTOMER_SCOPE_REVISION
     )
     assert (

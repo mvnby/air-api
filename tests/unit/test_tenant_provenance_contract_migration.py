@@ -204,7 +204,7 @@ def test_tenant_provenance_contract_is_the_single_alembic_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == ["d0f1a2b3c4d5"]
+    assert script.get_heads() == ["d0a1b2c3e4f6"]
     assert revision is not None
     assert revision.down_revision == "b8d9e0f1a2c3"
 
