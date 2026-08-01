@@ -10,7 +10,8 @@ from alembic.script import ScriptDirectory
 
 
 REVISION = "b8d9e0f1a2c3"
-HEAD_REVISION = "c9e0f1a2b3d4"
+CONTRACT_REVISION = "c9e0f1a2b3d4"
+HEAD_REVISION = "d0f1a2b3c4d5"
 MIGRATION_PATH = Path(
     "alembic/versions/b8d9e0f1a2c3_add_customer_manager_tenant_scope.py"
 )
@@ -88,7 +89,8 @@ def _create_legacy_schema(connection) -> None:
 def test_customer_manager_tenant_scope_is_single_alembic_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     assert script.get_current_head() == HEAD_REVISION
-    assert script.get_revision(HEAD_REVISION).down_revision == REVISION
+    assert script.get_revision(CONTRACT_REVISION).down_revision == REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == CONTRACT_REVISION
 
 
 def test_customer_manager_tenant_scope_migration_is_additive_and_guarded():
