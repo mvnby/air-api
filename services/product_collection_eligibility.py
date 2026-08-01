@@ -26,6 +26,7 @@ class ProductCollectionEligibility:
         surface_key: str,
         slot_key: str,
         supply_metrics: dict[str, Any],
+        price_override: int | None = None,
     ) -> ProductEligibilityResult:
         failures: list[tuple[str, str]] = []
         if not product.is_published:
@@ -43,7 +44,8 @@ class ProductCollectionEligibility:
                     "Для главной разрешены только готовые бытовые сплит-системы.",
                 )
             )
-        if int(product.price or 0) <= 0:
+        public_price = product.price if price_override is None else price_override
+        if int(public_price or 0) <= 0:
             failures.append(("missing_price", "Не задана корректная публичная цена."))
         if (surface_key, slot_key) != YANDEX_BUSINESS_PLACEMENT:
             if not str(product.main_image or "").strip():

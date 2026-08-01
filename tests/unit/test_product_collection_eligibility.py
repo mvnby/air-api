@@ -61,3 +61,25 @@ def test_yandex_business_does_not_require_card_only_fields():
         supply_metrics={},
     )
     assert result.is_eligible
+
+
+def test_secondary_collection_eligibility_uses_offer_price_override():
+    product = Product(
+        title="Split",
+        slug="split",
+        product_kind="complete_split_system",
+        price=0,
+        main_image="/media/split.webp",
+        specs={"area_m2": 25},
+        is_published=True,
+    )
+
+    result = ProductCollectionEligibility.evaluate(
+        product,
+        surface_key="home",
+        slot_key="featured_products",
+        supply_metrics={"availability_status": "in_stock_now"},
+        price_override=2400,
+    )
+
+    assert result.is_eligible

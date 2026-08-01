@@ -267,3 +267,39 @@ def test_map_product_to_response_hides_unpublished_series():
     payload = map_product_to_response(product)
 
     assert payload.series is None
+
+
+def test_map_product_to_response_projects_offer_prices_without_mutating_product():
+    product = Product(
+        id=1,
+        title="Shared product",
+        slug="shared-product",
+        price=9000,
+        old_price=9500,
+        specs={"area_m2": 25},
+        is_published=True,
+    )
+    sibling = Product(
+        id=2,
+        title="Shared sibling",
+        slug="shared-sibling",
+        price=10000,
+        old_price=10500,
+        specs={"area_m2": 35},
+        is_published=True,
+    )
+
+    payload = map_product_to_response(
+        product,
+        series_siblings=[sibling],
+        pricing=(3000, 3500),
+        sibling_pricing={2: (4000, 4500)},
+    )
+
+    assert (payload.price, payload.old_price) == (3000, 3500)
+    assert (
+        payload.series_siblings[0].price,
+        payload.series_siblings[0].old_price,
+    ) == (4000, 4500)
+    assert (product.price, product.old_price) == (9000, 9500)
+    assert (sibling.price, sibling.old_price) == (10000, 10500)

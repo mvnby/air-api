@@ -5,24 +5,33 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
+from api_contracts.public_catalog import PublicProductSearchResponse
 from core.database import get_session
 from core.security import get_current_username
+from core.tenant_scope import get_public_tenant_scope
+from models.tenancy import TenantScope
 from services.admin_api_service import AdminApiService
-from services.product_service import ProductService
+from services.public_catalog_service import PublicCatalogService
 from services.readiness_service import ReadinessService
 
 router = APIRouter(tags=["api"])
 
 
-@router.get("/products/search")
+@router.get("/products/search", response_model=PublicProductSearchResponse)
 async def search_products(
     q: str = None,
     is_inverter: bool = None,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """Search products with fuzzy matching."""
-    products = await ProductService.search(session, query=q, is_inverter=is_inverter)
-    return {"items": products}
+    products = await PublicCatalogService.search(
+        session,
+        tenant_scope=tenant_scope,
+        query=q,
+        is_inverter=is_inverter,
+    )
+    return PublicProductSearchResponse(items=products)
 
 
 @router.get("/admin/tags/filterable")

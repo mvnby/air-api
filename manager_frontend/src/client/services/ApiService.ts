@@ -21,6 +21,7 @@ import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { PublicContactLeadPayload } from '../models/PublicContactLeadPayload';
 import type { PublicContactLeadResponse } from '../models/PublicContactLeadResponse';
 import type { PublicProductCollectionPlacementResponse } from '../models/PublicProductCollectionPlacementResponse';
+import type { PublicProductSearchResponse } from '../models/PublicProductSearchResponse';
 import type { PublicSeriesPageResponse } from '../models/PublicSeriesPageResponse';
 import type { PublicStorefrontContextResponse } from '../models/PublicStorefrontContextResponse';
 import type { RepairDiagnosticLeadResponse } from '../models/RepairDiagnosticLeadResponse';
@@ -36,13 +37,13 @@ export class ApiService {
      * Search products with fuzzy matching.
      * @param q
      * @param isInverter
-     * @returns any Successful Response
+     * @returns PublicProductSearchResponse Successful Response
      * @throws ApiError
      */
     public static searchProductsApiProductsSearchGet(
         q?: string,
         isInverter?: boolean,
-    ): CancelablePromise<any> {
+    ): CancelablePromise<PublicProductSearchResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/products/search',

@@ -41,13 +41,14 @@ class ProductCollectionRuleMatcher:
         *,
         rule_config: dict[str, Any],
         supply_metrics: dict[str, Any],
+        price_override: int | None = None,
     ) -> bool:
         specs = product.specs or {}
         product_kinds = set(rule_config.get("product_kinds") or [])
         if product_kinds and product.product_kind not in product_kinds:
             return False
 
-        price = int(product.price or 0)
+        price = int(product.price if price_override is None else price_override)
         if rule_config.get("min_price") is not None and price < int(rule_config["min_price"]):
             return False
         if rule_config.get("max_price") is not None and price > int(rule_config["max_price"]):

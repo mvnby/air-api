@@ -29,6 +29,7 @@ async def test_resolve_system_scope_returns_immutable_server_scope(monkeypatch):
     assert scope.tenant_id == 11
     assert scope.storefront_id == 21
     assert scope.is_system is True
+    assert scope.is_canonical_storefront is True
     with pytest.raises(FrozenInstanceError):
         scope.tenant_id = 99  # type: ignore[misc]
     resolver.assert_awaited_once_with(

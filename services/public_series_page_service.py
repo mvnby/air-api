@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from crud.product import ProductDAO
+from crud.public_catalog import PublicCatalogDAO
 from models import Brand, FeatureSeriesLink, Product, ProductSeries
+from models.tenancy import TenantScope
 from schemas import (
     ProductBrandResponse,
     PublicRelatedSeriesResponse,
@@ -16,6 +17,8 @@ from services.feature_resolver_service import FeatureResolverService
 from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
 from services.product_series_payloads import build_product_series_response
+from services.public_catalog_service import PublicCatalogService
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 
 
 class PublicSeriesPageService:
@@ -27,6 +30,7 @@ class PublicSeriesPageService:
         *,
         brand_slug: str,
         series_slug: str,
+        tenant_scope: TenantScope,
     ) -> PublicSeriesPageResponse | None:
         row = (
             await session.execute(
@@ -49,11 +53,21 @@ class PublicSeriesPageService:
             return None
 
         series, brand = row
-        products = await ProductDAO.get_published_by_series_id(
+        projections = await PublicCatalogService.get_products_by_series_id(
             session,
-            int(series.id),
+            tenant_scope=tenant_scope,
+            series_id=int(series.id),
             load_image_variants=True,
         )
+        if (
+            not projections
+            and not await PublicCatalogVisibilityService.is_canonical_scope(
+                session,
+                tenant_scope,
+            )
+        ):
+            return None
+        products = [projection.product for projection in projections]
         supply_metrics = await ProductReadService.get_supply_metrics_map(session, products)
         await FeatureResolverService.resolve_for_products(session, products)
 
@@ -71,15 +85,17 @@ class PublicSeriesPageService:
             series=series_payload,
             products=[
                 map_product_to_response(
-                    product,
-                    supply_metrics=supply_metrics.get(int(product.id)),
+                    projection.product,
+                    supply_metrics=supply_metrics.get(int(projection.product.id)),
+                    pricing=projection.pricing,
                 )
-                for product in products
+                for projection in projections
             ],
             related_series=await PublicSeriesPageService._get_related_series(
                 session,
                 brand_id=int(brand.id),
                 current_series_id=int(series.id),
+                tenant_scope=tenant_scope,
             ),
         )
 
@@ -89,7 +105,29 @@ class PublicSeriesPageService:
         *,
         brand_id: int,
         current_series_id: int,
+        tenant_scope: TenantScope,
     ) -> list[PublicRelatedSeriesResponse]:
+        if not await PublicCatalogVisibilityService.is_canonical_scope(
+            session,
+            tenant_scope,
+        ):
+            rows = await PublicCatalogDAO.list_related_series(
+                session,
+                tenant_scope=tenant_scope,
+                brand_id=brand_id,
+                current_series_id=current_series_id,
+                limit=PublicSeriesPageService.RELATED_LIMIT,
+            )
+            return [
+                PublicRelatedSeriesResponse(
+                    title=related.title,
+                    slug=related.slug,
+                    short_description=related.short_description,
+                    hero_image=related.hero_image,
+                    products_count=products_count,
+                )
+                for related, products_count in rows
+            ]
         rows = list(
             (
                 await session.execute(

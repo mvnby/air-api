@@ -1,6 +1,6 @@
 """Helpers to map Product domain models into public API DTOs."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from core.input_validation import validate_public_manual_url
 from models import Product
@@ -148,6 +148,8 @@ def map_product_to_response(
     product: Product,
     series_siblings: Optional[List[Product]] = None,
     supply_metrics: Optional[Dict[str, Any]] = None,
+    pricing: tuple[int, int | None] | None = None,
+    sibling_pricing: Mapping[int, tuple[int, int | None]] | None = None,
 ) -> ProductResponse:
     tags_payload = []
     if product.tags:
@@ -193,19 +195,26 @@ def map_product_to_response(
                 )
             )
 
-    siblings_payload = [
-        ProductSiblingResponse(
-            id=item.id,
-            title=item.title,
-            slug=item.slug,
-            price=item.price,
-            old_price=item.old_price,
-            specs=sanitize_specs(item.specs),
-            is_inverter=item.is_inverter,
-            main_image=item.main_image,
+    siblings_payload = []
+    for item in series_siblings or []:
+        item_pricing = (sibling_pricing or {}).get(int(item.id or 0))
+        item_price, item_old_price = (
+            item_pricing
+            if item_pricing is not None
+            else (item.price, item.old_price)
         )
-        for item in (series_siblings or [])
-    ]
+        siblings_payload.append(
+            ProductSiblingResponse(
+                id=item.id,
+                title=item.title,
+                slug=item.slug,
+                price=item_price,
+                old_price=item_old_price,
+                specs=sanitize_specs(item.specs),
+                is_inverter=item.is_inverter,
+                main_image=item.main_image,
+            )
+        )
 
     series = product.series if product.series_id else None
     series_payload = build_product_series_response(series)
@@ -233,12 +242,14 @@ def map_product_to_response(
         availability_status
     )
 
+    public_price, public_old_price = pricing or (product.price, product.old_price)
+
     return ProductResponse(
         id=product.id,
         title=product.title,
         slug=product.slug,
-        price=product.price,
-        old_price=product.old_price,
+        price=public_price,
+        old_price=public_old_price,
         product_kind=product.product_kind,
         is_inverter=product.is_inverter,
         power_cooling=product.power_cooling,

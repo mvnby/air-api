@@ -42,15 +42,28 @@ username snapshot; legacy system-admin commands may have only the snapshot.
 - status is `active` or `disabled`;
 - audit records carry the same tenant/storefront consistency constraint.
 
-## Deliberate release boundary
+## Public catalog projection
 
-This foundation does not change public catalog output. Until the next release,
-public product endpoints continue using the existing MVN price and visibility.
-The public cutover must join active, published offers inside the catalog SQL
-query before filtering, sorting and pagination. Applying prices after
-pagination would produce incorrect result sets and is prohibited.
+The canonical `mvn/main` storefront intentionally keeps the historical shared
+`Product.price` behaviour, but it can expose only published products. Every
+other trusted storefront is deny-by-default and reads only a globally
+published Product with an exact `(tenant_id, storefront_id)` offer where
+`status=active` and `is_published=true`.
 
-For non-default storefronts the future public projection will be
-deny-by-default: a product without an active, published offer is not visible.
-The canonical `mvn/main` compatibility policy must be made explicit and tested
-before that projection is enabled.
+Offer price is joined in SQL before price filtering, sorting, counting and
+pagination. It is not overlaid after a shared catalog page has been selected.
+The same boundary applies to product detail, siblings, series navigation,
+featured products, brand counts, series pages, merchandising collections,
+filter metadata, spec keys and the legacy public search endpoint.
+
+Website checkout resolves and share-locks the same storefront price again on
+the server, in deterministic product order, before creating any order rows. A
+missing or disabled offer returns `409 product_not_available`; a valid order
+stores the storefront unit price in `OrderProductLink.price` and records the
+pricing source in the order technical snapshot. Browser-supplied prices remain
+non-authoritative.
+
+`POST /api/v1/leads/product-availability` applies the same visibility check
+before looking up or creating an Order and before resolving notification
+recipients. A foreign, disabled or missing offer returns the same neutral `404`
+as a missing Product and has no persistence or notification side effects.

@@ -8,7 +8,6 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
 from core.input_validation import normalize_phone_digits
-from crud.product import ProductDAO
 from models import LeadSource, Order, OrderStatus, Product
 from schemas import (
     LeadCreatePayload,
@@ -25,6 +24,7 @@ from services.order_service import OrderService
 from services.product_availability_serialization import (
     ProductAvailabilitySerialization,
 )
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.public_write_fingerprint_service import PublicWriteFingerprintService
 from services.public_write_idempotency_service import (
     PublicWriteCommandResponse,
@@ -170,9 +170,14 @@ class WebsiteLeadService:
             product_id=payload.product_id,
             phone=payload.phone,
         )
-        product = await ProductDAO.get_by_id(session, payload.product_id)
-        if not product or not product.is_published:
-            raise LookupError(f"Product with id={payload.product_id} not found")
+        projection = await PublicCatalogVisibilityService.get_visible_product_by_id(
+            session,
+            tenant_scope=tenant_scope,
+            product_id=payload.product_id,
+        )
+        if projection is None:
+            raise LookupError("Product not found")
+        product = projection.product
 
         # Order timestamps are historically stored as naive UTC. The source is
         # nevertheless the authoritative database clock sampled after the
