@@ -29,6 +29,7 @@ from routers import manager_service_attachments
 from routers import manager_staff
 from routers import manager_tariffs
 from routers import manager_tags
+from routers import manager_tenant_offers
 from routers import manager_supply
 from routers import manager_yandex_business
 from routers import manager_warranties
@@ -67,3 +68,4 @@ router.include_router(manager_supply.router)
 router.include_router(manager_yandex_business.router)
 router.include_router(manager_warranties.router)
 router.include_router(manager_product_collections.router)
+router.include_router(manager_tenant_offers.router)

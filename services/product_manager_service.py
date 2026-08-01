@@ -1,5 +1,6 @@
 """Manager-facing product service operations."""
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,15 @@ from services.product_supply_metrics_service import ProductSupplyMetricsService
 # matches (for example, products without specs.area_m2 rely on the title fallback).
 # ---------------------------------------------------------------------------
 from models.product_constants import BTU_MAPPING
+
+
+logger = logging.getLogger(__name__)
+
+PRODUCT_DELETE_TENANT_OFFER_MESSAGE = (
+    "Товар используется в предложениях витрин. "
+    "Отключите предложения вместо удаления товара."
+)
+PRODUCT_DELETE_FAILED_MESSAGE = "Не удалось удалить товар. Повторите попытку."
 
 
 class ProductManagerService:
@@ -320,9 +330,12 @@ class ProductManagerService:
         from models.order import OrderProductLink
         from models.product import ProductAttachment, ProductImage, ProductTagLink
         from models.supplier import ProductLocalStock, ProductSupplierMapping
+        from models.tenant_commerce import TenantOffer
         import sqlalchemy as sa
         
-        product = await session.get(Product, product_id)
+        # TenantOffer upserts lock Product first. Taking the same lock here
+        # closes the race between the offer preflight and product deletion.
+        product = await session.get(Product, product_id, with_for_update=True)
         if not product:
             return False
         product_slug = product.slug
@@ -330,6 +343,14 @@ class ProductManagerService:
             session,
             [product_id],
         )
+
+        offer_check = await session.execute(
+            select(TenantOffer.id)
+            .where(TenantOffer.product_id == product_id)
+            .limit(1)
+        )
+        if offer_check.scalar_one_or_none() is not None:
+            raise ValueError(PRODUCT_DELETE_TENANT_OFFER_MESSAGE)
             
         # Check if product is used in any orders
         link_check = await session.execute(
@@ -385,9 +406,18 @@ class ProductManagerService:
                     errors.append({"product_id": product_id, "message": "Товар не найден"})
             except ValueError as exc:
                 errors.append({"product_id": product_id, "message": str(exc)})
-            except Exception as exc:
+            except Exception:
                 await session.rollback()
-                errors.append({"product_id": product_id, "message": str(exc)})
+                logger.exception(
+                    "Unexpected product deletion failure product_id=%s",
+                    product_id,
+                )
+                errors.append(
+                    {
+                        "product_id": product_id,
+                        "message": PRODUCT_DELETE_FAILED_MESSAGE,
+                    }
+                )
 
         failed_count = len(errors)
         return {
