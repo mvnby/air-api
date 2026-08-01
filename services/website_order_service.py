@@ -9,8 +9,12 @@ from schemas import OrderPayload, OrderResponse
 from services.communications.tenant_website_event_service import (
     TenantWebsiteEventService,
 )
-from services.installation_pricing_service import InstallationPricingService
+from services.installation_pricing_service import (
+    InstallationPricingError,
+    InstallationPricingService,
+)
 from services.order_service import OrderService
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.public_write_fingerprint_service import PublicWriteFingerprintService
 from services.public_write_idempotency_service import (
     PublicWriteCommandResponse,
@@ -77,7 +81,31 @@ class WebsiteOrderService:
             len(payload.items),
             len([item for item in payload.items if item.with_installation]),
         )
-        items = await InstallationPricingService.price_public_items(session, payload.items)
+        product_ids = {
+            int(item.product_id)
+            for item in payload.items
+            if item.product_id is not None
+        }
+        storefront_prices: dict[int, int] = {}
+        pricing_source: str | None = None
+        if product_ids:
+            storefront_prices, pricing_source = (
+                await PublicCatalogVisibilityService.get_checkout_prices(
+                    session,
+                    tenant_scope=tenant_scope,
+                    product_ids=product_ids,
+                )
+            )
+        missing_product_ids = sorted(product_ids - storefront_prices.keys())
+        if missing_product_ids:
+            raise InstallationPricingError(
+                f"Товар #{missing_product_ids[0]} недоступен для этой витрины",
+                code="product_not_available",
+            )
+        items = await InstallationPricingService.price_public_items(
+            session,
+            payload.items,
+        )
         pricing_snapshots = [
             {
                 "item_index": index,
@@ -88,6 +116,25 @@ class WebsiteOrderService:
             for index, item in enumerate(items)
             if item["with_installation"]
         ]
+        catalog_pricing_snapshots = [
+            {
+                "product_id": int(item["product_id"]),
+                "unit_price": storefront_prices[int(item["product_id"])],
+                "source": pricing_source,
+            }
+            for item in items
+            if item.get("product_id") is not None
+        ]
+        technical_meta = {}
+        if catalog_pricing_snapshots:
+            technical_meta["public_catalog_pricing"] = {
+                "items": catalog_pricing_snapshots,
+            }
+        if pricing_snapshots:
+            technical_meta["public_installation_pricing"] = {
+                "pricing_version": InstallationPricingService.PRICING_VERSION,
+                "items": pricing_snapshots,
+            }
 
         order = await OrderService.create_from_website(
             session=session,
@@ -106,12 +153,8 @@ class WebsiteOrderService:
             customer_iban=payload.customer.iban,
             customer_bic=payload.customer.bic,
             customer_bank_name=payload.customer.bank_name,
-            order_technical_meta={
-                "public_installation_pricing": {
-                    "pricing_version": InstallationPricingService.PRICING_VERSION,
-                    "items": pricing_snapshots,
-                }
-            } if pricing_snapshots else None,
+            order_technical_meta=technical_meta or None,
+            product_price_overrides=storefront_prices,
             tenant_scope=tenant_scope,
             commit=False,
         )
