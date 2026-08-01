@@ -18,6 +18,7 @@ from sqlmodel import select
 from models import (
     Customer,
     CustomerEquipment,
+    EquipmentWarrantyCoverage,
     Lead,
     Order,
     OrderDocument,
@@ -159,6 +160,32 @@ class TenantEntityAccessService:
         if for_update:
             statement = statement.with_for_update(
                 of=(CustomerEquipment, Customer)
+            )
+        return (await session.execute(statement)).scalars().first()
+
+    @staticmethod
+    async def get_warranty_coverage(
+        session: AsyncSession,
+        coverage_id: int,
+        *,
+        tenant_scope: TenantScope,
+        for_update: bool = False,
+    ) -> EquipmentWarrantyCoverage | None:
+        statement = (
+            select(EquipmentWarrantyCoverage)
+            .join(
+                CustomerEquipment,
+                CustomerEquipment.id == EquipmentWarrantyCoverage.equipment_id,
+            )
+            .join(Customer, Customer.id == CustomerEquipment.customer_id)
+            .where(
+                EquipmentWarrantyCoverage.id == int(coverage_id),
+                tenant_scope_clause(Customer, tenant_scope),
+            )
+        )
+        if for_update:
+            statement = statement.with_for_update(
+                of=(EquipmentWarrantyCoverage, CustomerEquipment, Customer)
             )
         return (await session.execute(statement)).scalars().first()
 

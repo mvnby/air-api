@@ -20,6 +20,8 @@ from models import (
     Supplier,
     WarrantyPolicy,
 )
+from models.tenancy import TenantScope
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 class WarrantyService:
@@ -608,7 +610,20 @@ class WarrantyService:
         }
 
     @classmethod
-    async def list_coverages(cls, session: AsyncSession, *, equipment_id: int) -> list[dict[str, Any]]:
+    async def list_coverages(
+        cls,
+        session: AsyncSession,
+        *,
+        equipment_id: int,
+        tenant_scope: TenantScope,
+    ) -> list[dict[str, Any]] | None:
+        equipment = await TenantEntityAccessService.get_equipment(
+            session,
+            equipment_id,
+            tenant_scope=tenant_scope,
+        )
+        if equipment is None:
+            return None
         result = await session.execute(
             select(EquipmentWarrantyCoverage)
             .where(EquipmentWarrantyCoverage.equipment_id == equipment_id)
@@ -636,16 +651,40 @@ class WarrantyService:
         action: str,
         reason: str,
         decided_by: str,
+        tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
+        coverage = await TenantEntityAccessService.get_warranty_coverage(
+            session,
+            coverage_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
+        if coverage is None:
+            return None
+        return await cls._record_decision(
+            session,
+            coverage=coverage,
+            action=action,
+            reason=reason,
+            decided_by=decided_by,
+        )
+
+    @classmethod
+    async def _record_decision(
+        cls,
+        session: AsyncSession,
+        *,
+        coverage: EquipmentWarrantyCoverage,
+        action: str,
+        reason: str,
+        decided_by: str,
+    ) -> dict[str, Any]:
         normalized_action = str(action or "").strip().lower()
         if normalized_action not in cls.DECISIONS:
             raise ValueError("Warranty decision must be voided or restored")
         cleaned_reason = " ".join(str(reason or "").split())
         if not cleaned_reason:
             raise ValueError("Warranty decision reason is required")
-        coverage = await session.get(EquipmentWarrantyCoverage, coverage_id)
-        if not coverage:
-            return None
         coverage.decision_status = normalized_action
         coverage.decision_reason = cleaned_reason
         coverage.decided_at = datetime.now()
@@ -654,7 +693,7 @@ class WarrantyService:
         session.add(coverage)
         session.add(
             EquipmentWarrantyDecision(
-                coverage_id=coverage_id,
+                coverage_id=int(coverage.id or 0),
                 action=normalized_action,
                 reason=cleaned_reason,
                 decided_by=decided_by,
