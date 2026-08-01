@@ -16,6 +16,7 @@ from services.document_role_service import DocumentRoleService
 from services.document_template_service import DocumentTemplateService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
+    storefront_scope_clause,
     tenant_scope_clause,
 )
 
@@ -653,7 +654,7 @@ class DocumentService:
             return None
         query = select(OrderDocument).join(Order).where(
             Order.customer_id == customer_id,
-            tenant_scope_clause(Order, tenant_scope),
+            storefront_scope_clause(Order, tenant_scope),
         ).order_by(OrderDocument.date.desc())
 
         result = await session.execute(query)

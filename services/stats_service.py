@@ -9,6 +9,7 @@ from models.common import OrderStatus
 from models.tenancy import TenantScope
 from schemas import DashboardBankReceiptReviewItem, DashboardContractExpiry, DashboardStatsResponse, DashboardTouchpoint
 from services.tenant_scope_service import (
+    storefront_scope_clause,
     tenant_scope_clause,
 )
 
@@ -21,7 +22,7 @@ class StatsService:
     ) -> DashboardStatsResponse:
         now = datetime.now()
         start_of_month = datetime(now.year, now.month, 1)
-        order_scope = tenant_scope_clause(Order, tenant_scope)
+        order_scope = storefront_scope_clause(Order, tenant_scope)
         order_customer_scope = or_(
             Order.customer_id.is_(None),
             tenant_scope_clause(Customer, tenant_scope),

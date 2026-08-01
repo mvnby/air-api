@@ -22,6 +22,7 @@ from models import (
 from schemas import Meta
 from services.tenant_scope_service import (
     TenantScope,
+    storefront_scope_clause,
     tenant_scope_clause,
 )
 from services.tenant_entity_access_service import TenantEntityAccessService
@@ -347,15 +348,12 @@ class LeadService:
         *,
         tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
-        result = await session.execute(
-            select(Lead)
-            .where(
-                Lead.id == lead_id,
-                tenant_scope_clause(Lead, tenant_scope),
-            )
-            .with_for_update()
+        lead = await TenantEntityAccessService.get_lead(
+            session,
+            lead_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
         )
-        lead = result.scalars().first()
         if not lead:
             return None
         if lead.tenant_id is None:
@@ -371,7 +369,7 @@ class LeadService:
                 await session.execute(
                     select(Order).where(
                         Order.id == int(lead.converted_order_id),
-                        tenant_scope_clause(
+                        storefront_scope_clause(
                             Order,
                             tenant_scope,
                         ),

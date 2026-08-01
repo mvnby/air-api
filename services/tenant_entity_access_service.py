@@ -25,6 +25,7 @@ from models import (
 )
 from models.tenancy import TenantScope
 from services.tenant_scope_service import (
+    storefront_scope_clause,
     tenant_scope_clause,
 )
 
@@ -34,11 +35,11 @@ class TenantEntityAccessService:
 
     @staticmethod
     def order_clause(tenant_scope: TenantScope):
-        return tenant_scope_clause(Order, tenant_scope)
+        return storefront_scope_clause(Order, tenant_scope)
 
     @staticmethod
     def lead_clause(tenant_scope: TenantScope):
-        return tenant_scope_clause(Lead, tenant_scope)
+        return storefront_scope_clause(Lead, tenant_scope)
 
     @staticmethod
     def order_customer_clause(tenant_scope: TenantScope):
