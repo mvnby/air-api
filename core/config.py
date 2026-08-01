@@ -115,6 +115,35 @@ class Settings(BaseSettings):
     STATIC_DIR: str = "static"
     UPLOAD_DIR: str = "static/uploads"
     PUBLIC_SITE_URL: str = "https://mvn.by"
+    # Optional shared secret for a trusted storefront SSR/proxy. When unset,
+    # public writes keep using the canonical MVN storefront; a request that
+    # tries to select another storefront still fails closed.
+    STOREFRONT_CONTEXT_SIGNING_SECRET: str = ""
+    STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET: str = ""
+    STOREFRONT_CONTEXT_MAX_AGE_SECONDS: int = 300
+
+    @field_validator(
+        "STOREFRONT_CONTEXT_SIGNING_SECRET",
+        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET",
+    )
+    @classmethod
+    def _validate_storefront_context_secret(cls, value: str) -> str:
+        normalized = str(value or "")
+        if normalized and len(normalized.encode("utf-8")) < 32:
+            raise ValueError(
+                "STOREFRONT_CONTEXT_SIGNING_SECRET must contain at least 32 bytes"
+            )
+        return normalized
+
+    @field_validator("STOREFRONT_CONTEXT_MAX_AGE_SECONDS")
+    @classmethod
+    def _validate_storefront_context_max_age(cls, value: int) -> int:
+        normalized = int(value)
+        if normalized < 30 or normalized > 900:
+            raise ValueError(
+                "STOREFRONT_CONTEXT_MAX_AGE_SECONDS must be between 30 and 900"
+            )
+        return normalized
 
     # Product media storage. Default stays local so CI/deploy do not require
     # R2/S3 secrets unless PRODUCT_MEDIA_STORAGE_PROVIDER is changed.

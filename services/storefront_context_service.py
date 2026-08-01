@@ -28,6 +28,7 @@ class StorefrontContext:
     city: str | None
     default_locale: str
     currency: str
+    tenant_is_system: bool = False
 
 
 class StorefrontContextService:
@@ -73,6 +74,23 @@ class StorefrontContextService:
     ) -> StorefrontContext | None:
         hostname = cls.normalize_hostname(raw_host)
         row = await TenancyDAO.get_active_storefront_by_hostname(session, hostname)
+        if row is None:
+            return None
+        return StorefrontContext(**asdict(row))
+
+    @classmethod
+    async def resolve_by_scope(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        storefront_id: int,
+    ) -> StorefrontContext | None:
+        row = await TenancyDAO.get_active_storefront_by_scope(
+            session,
+            tenant_id=tenant_id,
+            storefront_id=storefront_id,
+        )
         if row is None:
             return None
         return StorefrontContext(**asdict(row))

@@ -20,6 +20,7 @@ class StorefrontContextRow:
     city: str | None
     default_locale: str
     currency: str
+    tenant_is_system: bool = False
 
 
 @dataclass(frozen=True)
@@ -144,4 +145,44 @@ class TenancyDAO:
             city=storefront.city,
             default_locale=storefront.default_locale,
             currency=storefront.currency,
+            tenant_is_system=bool(tenant.is_system),
+        )
+
+    @staticmethod
+    async def get_active_storefront_by_scope(
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        storefront_id: int,
+    ) -> StorefrontContextRow | None:
+        statement = (
+            select(Tenant, Storefront, StorefrontDomain)
+            .join(Storefront, Storefront.tenant_id == Tenant.id)
+            .join(StorefrontDomain, StorefrontDomain.storefront_id == Storefront.id)
+            .where(
+                Tenant.id == tenant_id,
+                Tenant.status == "active",
+                Storefront.id == storefront_id,
+                Storefront.status == "active",
+                StorefrontDomain.status == "active",
+                StorefrontDomain.is_primary.is_(True),
+            )
+        )
+        row = (await session.execute(statement)).first()
+        if row is None:
+            return None
+
+        tenant, storefront, domain = row
+        return StorefrontContextRow(
+            tenant_id=int(tenant.id),
+            tenant_slug=tenant.slug,
+            tenant_kind=tenant.kind,
+            storefront_id=int(storefront.id),
+            storefront_slug=storefront.slug,
+            storefront_name=storefront.display_name,
+            hostname=domain.hostname,
+            city=storefront.city,
+            default_locale=storefront.default_locale,
+            currency=storefront.currency,
+            tenant_is_system=bool(tenant.is_system),
         )

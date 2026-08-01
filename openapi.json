@@ -2456,15 +2456,65 @@
         ],
         "summary": "Create Public Contact Lead",
         "operationId": "create_public_contact_lead",
+        "parameters": [
+          {
+            "name": "X-MVN-Storefront-Host",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Host"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Timestamp"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Signature"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PublicContactLeadPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2509,6 +2559,54 @@
               "maxLength": 128,
               "pattern": "^[A-Za-z0-9._:-]+$",
               "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Host",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Host"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Timestamp"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Signature"
             }
           }
         ],
@@ -2563,15 +2661,65 @@
         ],
         "summary": "Create Product Availability Lead",
         "operationId": "create_product_availability_lead",
+        "parameters": [
+          {
+            "name": "X-MVN-Storefront-Host",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Host"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Timestamp"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Signature"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProductAvailabilityLeadPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2605,15 +2753,65 @@
         ],
         "summary": "Create Repair Diagnostic Lead",
         "operationId": "create_repair_diagnostic_lead",
+        "parameters": [
+          {
+            "name": "X-MVN-Storefront-Host",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Host"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Timestamp"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Signature"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_create_repair_diagnostic_lead"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2648,15 +2846,65 @@
         "summary": "Create Order",
         "description": "Create a new order from website.\nAccepts customer information and cart items.",
         "operationId": "create_order",
+        "parameters": [
+          {
+            "name": "X-MVN-Storefront-Host",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Host"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Timestamp"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Signature"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OrderPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -3740,6 +3988,88 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicProductCollectionPlacementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/storefront/context": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Public Storefront Context",
+        "operationId": "get_public_storefront_context",
+        "parameters": [
+          {
+            "name": "X-MVN-Storefront-Host",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Host"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Timestamp"
+            }
+          },
+          {
+            "name": "X-MVN-Storefront-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Mvn-Storefront-Signature"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicStorefrontContextResponse"
                 }
               }
             }
@@ -51036,6 +51366,60 @@
           "series"
         ],
         "title": "PublicSeriesPageResponse"
+      },
+      "PublicStorefrontContextResponse": {
+        "properties": {
+          "tenant_slug": {
+            "type": "string",
+            "title": "Tenant Slug"
+          },
+          "tenant_kind": {
+            "type": "string",
+            "title": "Tenant Kind"
+          },
+          "storefront_slug": {
+            "type": "string",
+            "title": "Storefront Slug"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "default_locale": {
+            "type": "string",
+            "title": "Default Locale"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_slug",
+          "tenant_kind",
+          "storefront_slug",
+          "display_name",
+          "hostname",
+          "default_locale",
+          "currency"
+        ],
+        "title": "PublicStorefrontContextResponse"
       },
       "RepairDiagnosticLeadResponse": {
         "properties": {
