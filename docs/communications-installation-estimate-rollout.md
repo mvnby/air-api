@@ -102,6 +102,15 @@ data, tokens, connection strings, or raw database errors. Do not continue until
 all five entries have `remaining_candidate_count=0`, no retain disposition,
 and the manifest reports `activation_safe=true`.
 
+Each `--execute` UUID creates a durable PII-free operation audit before the
+mutation transaction. The audit stores the canonical five-entry manifest and
+its SHA-256 plus aggregate per-type counts only. Event mutations and a
+`succeeded` outcome commit atomically. A blocked or failed execution first
+rolls back every event/delivery mutation, then durably records the fixed failure
+outcome. Replaying the same UUID and exact manifest resumes a stranded
+`started` operation or returns its terminal result; the same UUID with any
+manifest difference is rejected. Audit rows cannot be deleted or rewritten.
+
 The later activation command re-acquires the exclusive website enqueue fence
 and re-queries the complete five-type backlog in the same transaction. A stale
 manifest report cannot authorize activation.
@@ -164,6 +173,12 @@ Dispatcher selection, materialization, delivery claim, lease recovery,
 recipient revalidation, and the final provider-boundary lock all carry the same
 exact event and recipient scope. A control revision change or any event,
 tenant, storefront, template, or recipient drift stops before provider I/O.
+At the provider boundary the same transaction locks the owned delivery and
+attempt, runtime/run, event, storefront, selected staff user, and exact tenant
+membership. It rechecks active owner/admin membership and the current Telegram
+destination before recording `provider_started_at`. A concurrent role revoke,
+staff disable, or destination change therefore commits either before the
+boundary (the delivery is canceled with no provider call) or after it.
 
 After status reports a terminal `sent`, `dead`, `canceled`, or
 `ambiguous` outcome, finalize it:
@@ -173,9 +188,14 @@ After status reports a terminal `sent`, `dead`, `canceled`, or
 ```
 
 Finalization locks the runtime row, immutable run, event, inbox, delivery, and
-attempt evidence in one transaction. It records the terminal outcome and an off
-revision, then clears only the active runtime reference. Replaying the exact
-active arm is idempotent; reusing a completed run ID or event is rejected.
+attempt evidence in one transaction. It recomputes the deterministic delivery
+ID and render-context fingerprint, verifies the full immutable delivery
+snapshot and current locked recipient directory, and rejects contradictory
+attempt journals. Any ambiguous attempt takes priority over a nominal sent
+row. It then records the terminal outcome and an off revision and clears only
+the active runtime reference. Replaying the exact active arm is idempotent;
+reusing a completed run ID or event is rejected. The canary-run audit itself is
+database append-only: only one armed-to-terminal transition is permitted.
 
 ## Emergency off and ambiguity
 

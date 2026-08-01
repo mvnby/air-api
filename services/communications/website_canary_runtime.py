@@ -21,7 +21,7 @@ class WebsiteCanaryRuntimeError(RuntimeError):
 
 
 class WebsiteCanaryRuntimeStore:
-    """Persist one exact website canary without copying its target to runtime."""
+    """Drive the DB-enforced single armed-to-terminal canary transition."""
 
     @staticmethod
     def target_from_run(run: CommunicationWebsiteCanaryRun) -> WebsiteCanaryTarget:

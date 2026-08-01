@@ -10,6 +10,7 @@ from sqlmodel import SQLModel, select
 from models import (
     CommunicationDelivery,
     CommunicationDeliveryAttempt,
+    CommunicationWebsiteBacklogOperation,
     IntegrationOutboxEvent,
 )
 from scripts import reconcile_website_communication_backlog as backlog_cli
@@ -24,6 +25,10 @@ from services.communications.tenant_website_events import (
 from services.communications.website_backlog_reconciliation import (
     WebsiteBacklogManifestItem,
     WebsiteCommunicationBacklogReconciliation,
+)
+from services.communications.website_backlog_operation import (
+    WebsiteBacklogOperationManifestMismatch,
+    WebsiteBacklogOperationRunner,
 )
 
 
@@ -80,6 +85,11 @@ def _event(sequence: int, event_type: str, created_at: datetime):
         created_at=created_at,
         updated_at=created_at,
     )
+
+
+class _HeldRuntimeLock:
+    async def is_held(self) -> bool:
+        return True
 
 
 def test_execute_manifest_requires_each_of_the_five_allowlisted_types():
@@ -203,17 +213,17 @@ async def test_terminal_no_send_closes_ambiguous_attempt_without_resend(
     async with backlog_manifest_session_factory() as session:
         session.add_all([event, delivery, attempt])
         await session.commit()
-        report = await WebsiteCommunicationBacklogReconciliation.reconcile_manifest(
-            session,
-            manifest=_manifest(
-                cutoff=cutoff,
-                counts={event_type: 1},
-            ),
-            operation_id="22222222-2222-4222-8222-222222222222",
-            execute=True,
-            now=now,
-        )
-        await session.commit()
+    report = await WebsiteBacklogOperationRunner.execute_manifest(
+        backlog_manifest_session_factory,
+        manifest=_manifest(
+            cutoff=cutoff,
+            counts={event_type: 1},
+        ),
+        operation_id="22222222-2222-4222-8222-222222222222",
+        runtime_lock=_HeldRuntimeLock(),
+        app_role="primary",
+        now=now,
+    )
 
     assert report.activation_safe is True
     type_report = next(
@@ -239,7 +249,217 @@ async def test_terminal_no_send_closes_ambiguous_attempt_without_resend(
                 )
             ).scalars()
         )
+        operation = await session.get(
+            CommunicationWebsiteBacklogOperation,
+            "22222222-2222-4222-8222-222222222222",
+        )
     assert stored_event is not None and stored_event.status == "dead"
     assert stored_delivery is not None and stored_delivery.status == "canceled"
     assert [item.outcome for item in attempts] == ["retry", "canceled"]
     assert attempts[0].ambiguous is True
+    assert operation is not None and operation.state == "succeeded"
+    assert operation.outcome_code == "succeeded"
+    assert len(operation.aggregate_counts["event_types"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_zero_and_retain_manifest_is_audited_and_replays_idempotently(
+    backlog_manifest_session_factory,
+    monkeypatch,
+):
+    async def skip_postgres_preflight(cls, session, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        InstallationEstimateBacklogReconciliation,
+        "_assert_execution_preflight",
+        classmethod(skip_postgres_preflight),
+    )
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    operation_id = "33333333-3333-4333-8333-333333333333"
+    manifest = _manifest(
+        cutoff=now - timedelta(days=1),
+        retain={TENANT_WEBSITE_EVENT_TYPES[0]},
+    )
+
+    first = await WebsiteBacklogOperationRunner.execute_manifest(
+        backlog_manifest_session_factory,
+        manifest=manifest,
+        operation_id=operation_id,
+        runtime_lock=_HeldRuntimeLock(),
+        app_role="primary",
+        now=now,
+    )
+    replay = await WebsiteBacklogOperationRunner.execute_manifest(
+        backlog_manifest_session_factory,
+        manifest=manifest,
+        operation_id=operation_id,
+        runtime_lock=_HeldRuntimeLock(),
+        app_role="primary",
+        now=now + timedelta(minutes=1),
+    )
+
+    assert first.to_dict() == replay.to_dict()
+    assert first.activation_safe is False
+    async with backlog_manifest_session_factory() as session:
+        operation = await session.get(
+            CommunicationWebsiteBacklogOperation,
+            operation_id,
+        )
+        assert operation is not None and operation.state == "succeeded"
+        assert len(operation.manifest_summary["event_types"]) == 5
+        assert len(operation.aggregate_counts["event_types"]) == 5
+
+    changed = tuple(
+        WebsiteBacklogManifestItem(
+            event_type=item.event_type,
+            cutoff=item.cutoff,
+            expected_count=item.expected_count,
+            disposition="terminal_no_send",
+        )
+        for item in manifest
+    )
+    with pytest.raises(
+        WebsiteBacklogOperationManifestMismatch,
+        match="website_backlog_operation_manifest_mismatch",
+    ):
+        await WebsiteBacklogOperationRunner.execute_manifest(
+            backlog_manifest_session_factory,
+            manifest=changed,
+            operation_id=operation_id,
+            runtime_lock=_HeldRuntimeLock(),
+            app_role="primary",
+            now=now,
+        )
+
+
+@pytest.mark.asyncio
+async def test_blocked_operation_is_durable_without_event_mutation(
+    backlog_manifest_session_factory,
+    monkeypatch,
+):
+    async def skip_postgres_preflight(cls, session, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        InstallationEstimateBacklogReconciliation,
+        "_assert_execution_preflight",
+        classmethod(skip_postgres_preflight),
+    )
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    event_type = TENANT_WEBSITE_EVENT_TYPES[0]
+    event = _event(71, event_type, now - timedelta(days=3))
+    event.status = "pending"
+    operation_id = "44444444-4444-4444-8444-444444444444"
+    async with backlog_manifest_session_factory() as session:
+        session.add(event)
+        await session.commit()
+
+    with pytest.raises(
+        InstallationEstimateBacklogExecutionBlocked,
+        match="website_backlog_expected_count_changed",
+    ):
+        await WebsiteBacklogOperationRunner.execute_manifest(
+            backlog_manifest_session_factory,
+            manifest=_manifest(cutoff=now - timedelta(days=1)),
+            operation_id=operation_id,
+            runtime_lock=_HeldRuntimeLock(),
+            app_role="primary",
+            now=now,
+        )
+
+    async with backlog_manifest_session_factory() as session:
+        stored_event = await session.get(IntegrationOutboxEvent, event.event_id)
+        operation = await session.get(
+            CommunicationWebsiteBacklogOperation,
+            operation_id,
+        )
+        assert stored_event is not None and stored_event.status == "pending"
+        assert operation is not None and operation.state == "blocked"
+        assert operation.outcome_code == "website_backlog_expected_count_changed"
+        assert len(operation.aggregate_counts["event_types"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_started_operation_can_resume_after_a_process_crash(
+    backlog_manifest_session_factory,
+    monkeypatch,
+):
+    async def skip_postgres_preflight(cls, session, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        InstallationEstimateBacklogReconciliation,
+        "_assert_execution_preflight",
+        classmethod(skip_postgres_preflight),
+    )
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    manifest = _manifest(cutoff=now - timedelta(days=1))
+    operation_id = "55555555-5555-4555-8555-555555555555"
+    _, summary, fingerprint = WebsiteBacklogOperationRunner.canonical_manifest(
+        manifest
+    )
+    async with backlog_manifest_session_factory() as session:
+        session.add(
+            CommunicationWebsiteBacklogOperation(
+                operation_id=operation_id,
+                manifest_fingerprint=fingerprint,
+                manifest_summary=summary,
+                state="started",
+                created_at=now - timedelta(minutes=1),
+            )
+        )
+        await session.commit()
+
+    report = await WebsiteBacklogOperationRunner.execute_manifest(
+        backlog_manifest_session_factory,
+        manifest=manifest,
+        operation_id=operation_id,
+        runtime_lock=_HeldRuntimeLock(),
+        app_role="primary",
+        now=now,
+    )
+
+    assert report.activation_safe is True
+    async with backlog_manifest_session_factory() as session:
+        operation = await session.get(
+            CommunicationWebsiteBacklogOperation,
+            operation_id,
+        )
+        assert operation is not None and operation.state == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_unexpected_failure_is_durable_without_partial_mutation(
+    backlog_manifest_session_factory,
+    monkeypatch,
+):
+    async def fail_after_operation_lock(cls, session, **kwargs):
+        raise RuntimeError("simulated reconciliation failure")
+
+    monkeypatch.setattr(
+        WebsiteCommunicationBacklogReconciliation,
+        "reconcile_manifest",
+        classmethod(fail_after_operation_lock),
+    )
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    operation_id = "66666666-6666-4666-8666-666666666666"
+
+    with pytest.raises(RuntimeError, match="simulated reconciliation failure"):
+        await WebsiteBacklogOperationRunner.execute_manifest(
+            backlog_manifest_session_factory,
+            manifest=_manifest(cutoff=now - timedelta(days=1)),
+            operation_id=operation_id,
+            runtime_lock=_HeldRuntimeLock(),
+            app_role="primary",
+            now=now,
+        )
+
+    async with backlog_manifest_session_factory() as session:
+        operation = await session.get(
+            CommunicationWebsiteBacklogOperation,
+            operation_id,
+        )
+        assert operation is not None and operation.state == "failed"
+        assert operation.outcome_code == "website_backlog_operation_failed"
+        assert len(operation.aggregate_counts["event_types"]) == 5

@@ -141,12 +141,12 @@ async def run_command(
 ) -> dict[str, Any]:
     from core.config import settings
     from core.database import async_session_maker
-    from services.communications.backlog_reconciliation import (
-        InstallationEstimateBacklogExecutionBlocked,
-    )
     from services.communications.runtime_config import CommunicationRuntimeConfig
     from services.communications.website_backlog_reconciliation import (
         WebsiteCommunicationBacklogReconciliation,
+    )
+    from services.communications.website_backlog_operation import (
+        WebsiteBacklogOperationRunner,
     )
     from services.runtime_lock_service import RuntimeLockService
 
@@ -159,30 +159,30 @@ async def run_command(
             config.lock_name,
             required=True,
         )
-        if not runtime_lock.acquired or runtime_lock.connection is None:
-            raise InstallationEstimateBacklogExecutionBlocked(
-                "communications_runtime_lock_unavailable"
-            )
     try:
+        if execute:
+            return (
+                await WebsiteBacklogOperationRunner.execute_manifest(
+                    effective_session_factory,
+                    manifest=tuple(manifest),
+                    operation_id=operation_id,
+                    runtime_lock=runtime_lock,
+                    app_role=settings.APP_ROLE,
+                    now=now,
+                )
+            ).to_dict()
         async with effective_session_factory() as session:
             try:
                 report = await WebsiteCommunicationBacklogReconciliation.reconcile_manifest(
                     session,
                     manifest=tuple(manifest),
                     operation_id=operation_id,
-                    execute=execute,
+                    execute=False,
                     now=now,
                     runtime_lock=runtime_lock,
                     app_role=settings.APP_ROLE,
                 )
-                if execute:
-                    if runtime_lock is None or not await runtime_lock.is_held():
-                        raise InstallationEstimateBacklogExecutionBlocked(
-                            "communications_runtime_lock_lost"
-                        )
-                    await session.commit()
-                else:
-                    await session.rollback()
+                await session.rollback()
                 return report.to_dict()
             except Exception:
                 await session.rollback()

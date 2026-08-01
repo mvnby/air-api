@@ -5,6 +5,9 @@ import pytest
 from models import CommunicationDelivery, CommunicationDeliveryAttempt
 from services.communications.delivery_service import CommunicationDeliveryService
 from services.communications.delivery_worker import CommunicationDeliveryWorker
+from services.communications.provider_boundary_authorization import (
+    WebsiteCanaryProviderBoundaryRejected,
+)
 from services.communications.providers.base import ProviderDeliveryResult
 from tests.unit.test_communication_delivery_worker import (
     ALL_SCOPE,
@@ -272,3 +275,48 @@ async def test_boundary_control_rejection_exhausts_without_ambiguity(
         assert attempt.provider_started_at is None
         assert attempt.ambiguous is False
         assert attempt.error_code == "runtime_control_fenced_before_provider"
+
+
+@pytest.mark.asyncio
+async def test_recipient_revoked_after_early_check_cancels_before_provider(
+    worker_session_factory,
+):
+    _, delivery_id = await _seed_delivery(
+        worker_session_factory,
+        sequence=95,
+        telegram_id=950095,
+    )
+    provider = RecordingProvider(
+        worker_session_factory,
+        {"950095": ProviderDeliveryResult.sent("must-not-send")},
+    )
+
+    async def revoked_at_boundary(_session, _claim, _delivery):
+        raise WebsiteCanaryProviderBoundaryRejected(
+            "website_canary_provider_boundary_rejected"
+        )
+
+    worker = CommunicationDeliveryWorker(
+        session_factory=worker_session_factory,
+        scope=ALL_SCOPE,
+        provider=provider,
+        worker_id="recipient-revoked-race-worker",
+        lease_seconds=60,
+        provider_boundary_authorizer=revoked_at_boundary,
+    )
+
+    outcome = await worker.run_once()
+
+    assert outcome.outcome == "canceled"
+    assert provider.calls == []
+    async with worker_session_factory() as session:
+        delivery = await session.get(CommunicationDelivery, delivery_id)
+        attempt = await session.get(
+            CommunicationDeliveryAttempt,
+            (delivery_id, 1),
+        )
+        assert delivery is not None and delivery.status == "canceled"
+        assert attempt is not None and attempt.outcome == "canceled"
+        assert attempt.provider_started_at is None
+        assert attempt.ambiguous is False
+        assert attempt.error_code == "recipient_inactive"

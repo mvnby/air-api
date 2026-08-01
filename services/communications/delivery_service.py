@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
@@ -255,8 +255,12 @@ class CommunicationDeliveryService:
         lease_token: str,
         lease_seconds: int = 90,
         now: datetime | None = None,
+        authorization_check: (
+            Callable[[AsyncSession, CommunicationDelivery], Awaitable[None]]
+            | None
+        ) = None,
     ) -> datetime:
-        """Durably cross the provider-call boundary under the exact lease."""
+        """Authorize and cross the boundary under delivery and attempt locks."""
 
         delivery, started_at = await cls._lock_owned_delivery(
             session,
@@ -265,10 +269,20 @@ class CommunicationDeliveryService:
             lease_token=lease_token,
             now=now,
         )
+
+        async def authorize_locked_delivery() -> None:
+            if authorization_check is not None:
+                await authorization_check(session, delivery)
+
         await CommunicationDeliveryAttemptService.mark_provider_started(
             session,
             delivery=delivery,
             started_at=started_at,
+            authorization_check=(
+                authorize_locked_delivery
+                if authorization_check is not None
+                else None
+            ),
         )
         lease_expires_at = started_at + timedelta(
             seconds=cls._normalize_lease_seconds(lease_seconds)

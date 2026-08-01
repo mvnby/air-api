@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, JSON, SQLModel
 
 
 def utc_now() -> datetime:
@@ -22,7 +22,7 @@ def utc_now() -> datetime:
 
 
 class CommunicationWebsiteCanaryRun(SQLModel, table=True):
-    """Immutable target plus durable terminal outcome for one website canary."""
+    """Database-append-only target and one-way terminal canary outcome."""
 
     __tablename__ = "communication_website_canary_run"
     __table_args__ = (
@@ -98,6 +98,62 @@ class CommunicationWebsiteCanaryRun(SQLModel, table=True):
     terminal_control_revision: Optional[int] = Field(
         default=None,
         sa_column=Column(BigInteger, nullable=True),
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    finished_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+
+
+class CommunicationWebsiteBacklogOperation(SQLModel, table=True):
+    """PII-free append-only audit for one exact five-type reconciliation."""
+
+    __tablename__ = "communication_website_backlog_operation"
+    __table_args__ = (
+        CheckConstraint(
+            "length(operation_id) = 36",
+            name="ck_communication_website_backlog_operation_id_valid",
+        ),
+        CheckConstraint(
+            "length(manifest_fingerprint) = 64",
+            name="ck_communication_website_backlog_manifest_fingerprint_valid",
+        ),
+        CheckConstraint(
+            "(state = 'started' AND outcome_code IS NULL "
+            "AND aggregate_counts IS NULL AND finished_at IS NULL) OR "
+            "(state IN ('succeeded', 'blocked', 'failed') "
+            "AND outcome_code IS NOT NULL "
+            "AND length(trim(outcome_code)) > 0 "
+            "AND aggregate_counts IS NOT NULL AND finished_at IS NOT NULL)",
+            name="ck_communication_website_backlog_operation_lifecycle_valid",
+        ),
+        Index(
+            "ix_communication_website_backlog_operation_state_created",
+            "state",
+            "created_at",
+        ),
+    )
+
+    operation_id: str = Field(sa_column=Column(String(36), primary_key=True))
+    manifest_fingerprint: str = Field(
+        sa_column=Column(String(64), nullable=False)
+    )
+    manifest_summary: dict = Field(sa_column=Column(JSON, nullable=False))
+    state: str = Field(
+        default="started",
+        sa_column=Column(String(16), nullable=False),
+    )
+    outcome_code: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(100), nullable=True),
+    )
+    aggregate_counts: Optional[dict] = Field(
+        default=None,
+        sa_column=Column(JSON(none_as_null=True), nullable=True),
     )
     created_at: datetime = Field(
         default_factory=utc_now,

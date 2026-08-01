@@ -35,6 +35,7 @@ from .content import Article, GlobalConfig
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
 from .communication_runtime import (
     CommunicationRuntimeState,
+    CommunicationWebsiteBacklogOperation,
     CommunicationWebsiteCanaryRun,
 )
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
@@ -130,6 +131,7 @@ __all__ = [
     "CommunicationDelivery",
     "CommunicationDeliveryAttempt",
     "CommunicationRuntimeState",
+    "CommunicationWebsiteBacklogOperation",
     "CommunicationWebsiteCanaryRun",
     "ConsumerInbox",
     "Customer",

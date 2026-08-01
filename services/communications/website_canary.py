@@ -27,18 +27,19 @@ from services.communications.runtime_state import (
     CommunicationRuntimeStateService,
     CommunicationRuntimeStatus,
 )
-from services.communications.template_registry import (
-    CONSUMER_NAME,
-    WebsiteTemplateRegistry,
+from services.communications.template_registry import CONSUMER_NAME
+from services.communications.website_canary_evidence import (
+    WebsiteCanaryEvidence,
+    WebsiteCanaryEvidenceRejected,
+    classify_website_canary_evidence,
+    load_target_event,
+    load_website_canary_evidence,
 )
 from services.communications.website_canary_runtime import (
     WebsiteCanaryRuntimeError,
     WebsiteCanaryRuntimeStore,
 )
-from services.communications.website_canary_target import (
-    WebsiteCanaryScopeMismatch,
-    WebsiteCanaryTarget,
-)
+from services.communications.website_canary_target import WebsiteCanaryTarget
 
 
 TerminalOutcome = Literal["sent", "dead", "canceled", "ambiguous", "aborted"]
@@ -72,12 +73,7 @@ class WebsiteCanarySnapshot:
         return asdict(self)
 
 
-@dataclass(frozen=True)
-class _CanaryEvidence:
-    event: IntegrationOutboxEvent
-    delivery: CommunicationDelivery | None
-    latest_attempt: CommunicationDeliveryAttempt | None
-    ambiguous_attempt_count: int
+_CanaryEvidence = WebsiteCanaryEvidence
 
 
 class TenantWebsiteCommunicationsCanary:
@@ -174,28 +170,14 @@ class TenantWebsiteCommunicationsCanary:
         target: WebsiteCanaryTarget,
         lock: bool,
     ) -> IntegrationOutboxEvent:
-        event = await session.get(
-            IntegrationOutboxEvent,
-            target.event_id,
-            populate_existing=lock,
-            with_for_update=(lock and session.get_bind().dialect.name == "postgresql"),
-        )
-        if event is None:
-            raise WebsiteCanaryControlRejected("website_canary_event_not_found")
         try:
-            plan = WebsiteTemplateRegistry.plan(event)
-            WebsiteTemplateRegistry.render(plan)
-            target.assert_event_plan(
-                event_id=event.event_id,
-                event_type=event.event_type,
-                template_key=plan.template_key,
-                audience=plan.audience,
-                render_context=plan.render_context,
+            event, _plan = await load_target_event(
+                session,
+                target=target,
+                lock=lock,
             )
-        except (ValueError, WebsiteCanaryScopeMismatch):
-            raise WebsiteCanaryControlRejected(
-                "website_canary_event_scope_invalid"
-            ) from None
+        except WebsiteCanaryEvidenceRejected as error:
+            raise WebsiteCanaryControlRejected(error.error_code) from None
         return event
 
     @classmethod
@@ -539,57 +521,14 @@ class TenantWebsiteCommunicationsCanary:
         target: WebsiteCanaryTarget,
         lock: bool,
     ) -> _CanaryEvidence:
-        event = await cls._event_for_target(session, target=target, lock=lock)
-        inbox = await session.get(
-            ConsumerInbox,
-            (CONSUMER_NAME, target.event_id),
-            populate_existing=lock,
-            with_for_update=(lock and session.get_bind().dialect.name == "postgresql"),
-        )
-        delivery_query = select(CommunicationDelivery).where(
-            CommunicationDelivery.event_id == target.event_id
-        )
-        if lock and session.get_bind().dialect.name == "postgresql":
-            delivery_query = delivery_query.with_for_update()
-        deliveries = list((await session.execute(delivery_query)).scalars())
-        if len(deliveries) > 1:
-            raise WebsiteCanaryControlRejected(
-                "website_canary_delivery_scope_invalid"
+        try:
+            return await load_website_canary_evidence(
+                session,
+                target=target,
+                lock=lock,
             )
-        delivery = deliveries[0] if deliveries else None
-        if delivery is not None and (
-            delivery.recipient_key != target.recipient_key
-            or delivery.template_key != target.template_key
-        ):
-            raise WebsiteCanaryControlRejected(
-                "website_canary_delivery_scope_invalid"
-            )
-        if (inbox is None) != (delivery is None) and event.status == "published":
-            raise WebsiteCanaryControlRejected(
-                "website_canary_materialization_inconsistent"
-            )
-
-        attempts: list[CommunicationDeliveryAttempt] = []
-        if delivery is not None:
-            attempt_query = (
-                select(CommunicationDeliveryAttempt)
-                .where(
-                    CommunicationDeliveryAttempt.delivery_id
-                    == delivery.delivery_id
-                )
-                .order_by(CommunicationDeliveryAttempt.attempt_no.asc())
-            )
-            if lock and session.get_bind().dialect.name == "postgresql":
-                attempt_query = attempt_query.with_for_update()
-            attempts = list((await session.execute(attempt_query)).scalars())
-        return _CanaryEvidence(
-            event=event,
-            delivery=delivery,
-            latest_attempt=attempts[-1] if attempts else None,
-            ambiguous_attempt_count=sum(
-                1 for attempt in attempts if attempt.ambiguous
-            ),
-        )
+        except WebsiteCanaryEvidenceRejected as error:
+            raise WebsiteCanaryControlRejected(error.error_code) from None
 
     @staticmethod
     def _classify(
@@ -598,32 +537,7 @@ class TenantWebsiteCommunicationsCanary:
         Literal["pending", "ambiguous", "terminal"],
         TerminalOutcome | None,
     ]:
-        event = evidence.event
-        delivery = evidence.delivery
-        latest_attempt = evidence.latest_attempt
-        if (
-            delivery is not None
-            and delivery.status == "sent"
-            and delivery.provider_message_id
-        ):
-            return "terminal", "sent"
-        if evidence.ambiguous_attempt_count:
-            # Claim selection permanently excludes any ambiguous history, so
-            # this is a terminal manual-reconciliation outcome even if an
-            # older row still says retry.
-            return "terminal", "ambiguous"
-        if delivery is not None and delivery.status == "dead":
-            return "terminal", "dead"
-        if delivery is not None and delivery.status == "canceled":
-            return "terminal", "canceled"
-        if event.status == "dead" and delivery is None:
-            return "terminal", "dead"
-        if (
-            latest_attempt is not None
-            and latest_attempt.outcome == "running"
-        ):
-            return "pending", None
-        return "pending", None
+        return classify_website_canary_evidence(evidence)
 
     @classmethod
     def _snapshot(
@@ -636,8 +550,9 @@ class TenantWebsiteCommunicationsCanary:
         evidence: _CanaryEvidence,
         recorded_outcome: str | None = None,
     ) -> WebsiteCanarySnapshot:
+        evidence_lifecycle, evidence_outcome = cls._classify(evidence)
         if recorded_outcome is None:
-            lifecycle, terminal_outcome = cls._classify(evidence)
+            lifecycle, terminal_outcome = evidence_lifecycle, evidence_outcome
         else:
             if recorded_outcome not in {
                 "sent",
@@ -649,8 +564,14 @@ class TenantWebsiteCommunicationsCanary:
                 raise WebsiteCanaryControlRejected(
                     "website_canary_terminal_outcome_invalid"
                 )
-            lifecycle = "terminal"
-            terminal_outcome = recorded_outcome
+            if recorded_outcome != "aborted" and (
+                evidence_lifecycle != "terminal"
+                or evidence_outcome != recorded_outcome
+            ):
+                raise WebsiteCanaryControlRejected(
+                    "website_canary_terminal_audit_mismatch"
+                )
+            lifecycle, terminal_outcome = "terminal", recorded_outcome
         delivery = evidence.delivery
         return WebsiteCanarySnapshot(
             mode=mode,

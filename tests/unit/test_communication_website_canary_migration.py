@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 import sqlalchemy as sa
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.config import Config
@@ -63,6 +65,38 @@ def test_website_canary_migration_is_the_additive_single_head() -> None:
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
 
+def test_postgresql_migration_defines_append_only_audit_triggers() -> None:
+    source = MIGRATION_PATH.read_text()
+    canary_function = source.split(
+        f"CREATE OR REPLACE FUNCTION {{CANARY_FUNCTION}}()", 1
+    )[1].split(
+        f"CREATE TRIGGER {{CANARY_TRIGGER}}", 1
+    )[0]
+    backlog_function = source.split(
+        f"CREATE OR REPLACE FUNCTION {{BACKLOG_FUNCTION}}()", 1
+    )[1].split(
+        f"CREATE TRIGGER {{BACKLOG_TRIGGER}}", 1
+    )[0]
+
+    assert "BEFORE UPDATE OR DELETE ON communication_website_canary_run" in source
+    assert "TG_OP = 'INSERT'" not in canary_function
+    assert "OLD.state IS DISTINCT FROM 'armed'" in canary_function
+    assert "NEW.state IS DISTINCT FROM 'terminal'" in canary_function
+    assert "NEW.created_at IS DISTINCT FROM OLD.created_at" in canary_function
+    assert (
+        "BEFORE INSERT OR UPDATE OR DELETE ON communication_website_backlog_operation"
+        in source
+    )
+    assert "TG_OP = 'INSERT'" in backlog_function
+    assert "NEW.state IS DISTINCT FROM 'started'" in backlog_function
+    assert "NEW.outcome_code IS NOT NULL" in backlog_function
+    assert "OLD.state IS DISTINCT FROM 'started'" in backlog_function
+    assert (
+        "NEW.manifest_summary::text IS DISTINCT FROM "
+        "OLD.manifest_summary::text" in backlog_function
+    )
+
+
 def test_website_canary_migration_upgrades_and_forces_off_on_downgrade() -> None:
     engine = sa.create_engine("sqlite:///:memory:")
     migration = _load_migration()
@@ -92,6 +126,10 @@ def test_website_canary_migration_upgrades_and_forces_off_on_downgrade() -> None
 
         inspector = sa.inspect(connection)
         assert "communication_website_canary_run" in inspector.get_table_names()
+        assert (
+            "communication_website_backlog_operation"
+            in inspector.get_table_names()
+        )
         runtime_columns = {
             column["name"]
             for column in inspector.get_columns("communication_runtime_state")
@@ -116,6 +154,120 @@ def test_website_canary_migration_upgrades_and_forces_off_on_downgrade() -> None
             ),
             {"run_id": run_id, "event_id": event_id, "now": now},
         )
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="communication_website_canary_run_immutable",
+        ):
+            connection.execute(
+                sa.text(
+                    "UPDATE communication_website_canary_run "
+                    "SET recipient_key='staff:13' WHERE run_id=:run_id"
+                ),
+                {"run_id": run_id},
+            )
+        connection.execute(
+            sa.text(
+                "UPDATE communication_website_canary_run SET "
+                "state='terminal', terminal_outcome='dead', "
+                "terminal_control_revision=6, finished_at=:now "
+                "WHERE run_id=:run_id"
+            ),
+            {"run_id": run_id, "now": now},
+        )
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="communication_website_canary_run_immutable",
+        ):
+            connection.execute(
+                sa.text(
+                    "UPDATE communication_website_canary_run "
+                    "SET terminal_outcome='sent' WHERE run_id=:run_id"
+                ),
+                {"run_id": run_id},
+            )
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="communication_website_canary_run_immutable",
+        ):
+            connection.execute(
+                sa.text(
+                    "DELETE FROM communication_website_canary_run "
+                    "WHERE run_id=:run_id"
+                ),
+                {"run_id": run_id},
+            )
+
+        operation_id = "22222222-2222-4222-8222-222222222222"
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="communication_website_backlog_operation_immutable",
+        ):
+            connection.execute(
+                sa.text(
+                    "INSERT INTO communication_website_backlog_operation ("
+                    "operation_id, manifest_fingerprint, manifest_summary, "
+                    "state, outcome_code, aggregate_counts, created_at, finished_at"
+                    ") VALUES (:operation_id, :fingerprint, :manifest, "
+                    "'failed', 'forged', :counts, :now, :now)"
+                ),
+                {
+                    "operation_id": "33333333-3333-4333-8333-333333333333",
+                    "fingerprint": "c" * 64,
+                    "manifest": json.dumps({"event_types": []}),
+                    "counts": json.dumps({"event_types": []}),
+                    "now": now,
+                },
+            )
+        connection.execute(
+            sa.text(
+                "INSERT INTO communication_website_backlog_operation ("
+                "operation_id, manifest_fingerprint, manifest_summary, state, "
+                "created_at) VALUES (:operation_id, :fingerprint, :manifest, "
+                "'started', :now)"
+            ),
+            {
+                "operation_id": operation_id,
+                "fingerprint": "a" * 64,
+                "manifest": json.dumps({"event_types": []}),
+                "now": now,
+            },
+        )
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="communication_website_backlog_operation_immutable",
+        ):
+            connection.execute(
+                sa.text(
+                    "UPDATE communication_website_backlog_operation SET "
+                    "manifest_fingerprint=:fingerprint "
+                    "WHERE operation_id=:operation_id"
+                ),
+                {"fingerprint": "b" * 64, "operation_id": operation_id},
+            )
+        connection.execute(
+            sa.text(
+                "UPDATE communication_website_backlog_operation SET "
+                "state='blocked', outcome_code='expected_count_changed', "
+                "aggregate_counts=:counts, finished_at=:now "
+                "WHERE operation_id=:operation_id"
+            ),
+            {
+                "counts": json.dumps({"event_types": []}),
+                "now": now,
+                "operation_id": operation_id,
+            },
+        )
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="communication_website_backlog_operation_immutable",
+        ):
+            connection.execute(
+                sa.text(
+                    "DELETE FROM communication_website_backlog_operation "
+                    "WHERE operation_id=:operation_id"
+                ),
+                {"operation_id": operation_id},
+            )
         connection.execute(
             sa.text(
                 "UPDATE communication_runtime_state SET "
@@ -137,6 +289,10 @@ def test_website_canary_migration_upgrades_and_forces_off_on_downgrade() -> None
         assert tuple(row) == ("off", None, 6)
         inspector = sa.inspect(connection)
         assert "communication_website_canary_run" not in inspector.get_table_names()
+        assert (
+            "communication_website_backlog_operation"
+            not in inspector.get_table_names()
+        )
         downgraded_columns = {
             column["name"]
             for column in inspector.get_columns("communication_runtime_state")

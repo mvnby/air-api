@@ -283,13 +283,16 @@ async def test_runtime_run_is_immutable_idempotent_and_terminally_audited(
             channel="telegram",
         )
         assert control.website_canary_target == target
+        event = await session.get(IntegrationOutboxEvent, target.event_id)
+        assert event is not None
+        event.status = "dead"
         await WebsiteCanaryRuntimeStore.complete_locked(
             session,
             state=state,
             run_id=run_id,
             expected_control_revision=first_revision,
             target=target,
-            terminal_outcome="sent",
+            terminal_outcome="dead",
             now=now,
         )
         await session.commit()
@@ -300,7 +303,7 @@ async def test_runtime_run_is_immutable_idempotent_and_terminally_audited(
         assert state is not None and state.mode == CommunicationRuntimeMode.OFF.value
         assert state.website_canary_run_id is None
         assert run is not None and run.state == "terminal"
-        assert run.terminal_outcome == "sent"
+        assert run.terminal_outcome == "dead"
         assert run.event_id == target.event_id
         assert run.recipient_key == target.recipient_key
 
@@ -311,7 +314,7 @@ async def test_runtime_run_is_immutable_idempotent_and_terminally_audited(
         )
         assert replay.mode == "completed"
         assert replay.runtime_mode == CommunicationRuntimeMode.OFF.value
-        assert replay.terminal_outcome == "sent"
+        assert replay.terminal_outcome == "dead"
 
 
 @pytest.mark.asyncio

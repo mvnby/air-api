@@ -163,6 +163,9 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
     website_canary_run = SQLModel.metadata.tables[
         "communication_website_canary_run"
     ]
+    website_backlog_operation = SQLModel.metadata.tables[
+        "communication_website_backlog_operation"
+    ]
 
     assert [column.name for column in runtime.primary_key.columns] == ["channel"]
     assert runtime.c.mode.nullable is False
@@ -215,6 +218,26 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
         "rendered_message",
         "template_key",
     } & set(website_canary_run.c.keys())
+
+    assert [
+        column.name for column in website_backlog_operation.primary_key.columns
+    ] == ["operation_id"]
+    assert website_backlog_operation.c.manifest_fingerprint.type.length == 64
+    assert website_backlog_operation.c.aggregate_counts.type.none_as_null is True
+    assert any(
+        isinstance(constraint, CheckConstraint)
+        and constraint.name
+        == "ck_communication_website_backlog_operation_lifecycle_valid"
+        for constraint in website_backlog_operation.constraints
+    )
+    assert not {
+        "event_id",
+        "delivery_id",
+        "payload",
+        "destination",
+        "render_context",
+        "recipient_key",
+    } & set(website_backlog_operation.c.keys())
 
     assert [column.name for column in inbox.primary_key.columns] == [
         "consumer_name",

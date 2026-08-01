@@ -14,6 +14,9 @@ from services.communications.delivery_worker import (
 from services.communications.dispatcher import CommunicationOutboxDispatcher
 from services.communications.providers.base import CommunicationDeliveryProvider
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.provider_boundary_authorization import (
+    authorize_website_provider_boundary,
+)
 from services.communications.runtime_config import (
     CommunicationRuntimeConfig,
     CommunicationRuntimeError,
@@ -99,6 +102,14 @@ class CommunicationRuntimePipeline:
                     channel=self._config.channel,
                     instance_id=self._config.instance_id,
                     scope=scope,
+                )
+            ),
+            provider_boundary_authorizer=lambda session, claim, delivery: (
+                authorize_website_provider_boundary(
+                    session,
+                    scope=scope,
+                    claim=claim,
+                    delivery=delivery,
                 )
             ),
             db_operation_timeout_seconds=self._config.db_probe_timeout_seconds,
