@@ -9,23 +9,35 @@ from services.general_media_storage_service import StoredGeneralMediaObject
 class FakeRepairDiagnosticStorage:
     provider_name = "local"
 
+    def __init__(self):
+        self.objects = {}
+
     async def save_media(self, **kwargs):
         variant_type = kwargs["variant_type"]
         extension = kwargs["extension"]
-        return StoredGeneralMediaObject(
+        stored = StoredGeneralMediaObject(
             url=f"/media/orders/1/repair-diagnostic/{variant_type}/hash.{extension}",
             content_hash="a" * 64,
             storage_provider="local",
             path=f"media/orders/1/repair-diagnostic/{variant_type}/hash.{extension}",
             size_bytes=len(kwargs["content"]),
         )
+        self.objects[stored.path] = kwargs["content"]
+        return stored
+
+    async def delete_media(self, path):
+        self.objects.pop(path, None)
+
+    async def read_media(self, path):
+        return self.objects[path]
 
 
 @pytest.mark.asyncio
 async def test_public_repair_diagnostic_creates_structured_repair_order(async_client, db, monkeypatch):
+    storage = FakeRepairDiagnosticStorage()
     monkeypatch.setattr(
-        "services.repair_diagnostic_service.get_general_media_storage",
-        lambda: FakeRepairDiagnosticStorage(),
+        "services.repair_diagnostic_intake_service.get_general_media_storage",
+        lambda: storage,
     )
     payload = {
         "scenario": "repair",
@@ -81,7 +93,9 @@ async def test_public_repair_diagnostic_creates_structured_repair_order(async_cl
     assert repair_meta["symptom_details"]["drainage_exit"] == "unknown"
     assert repair_meta["contact"]["address"] == "Витебск, Билево"
     assert repair_meta["ai_pre_diagnosis_status"] == "pending"
-    assert repair_meta["photos"]["nameplate"][0]["url"].endswith("/nameplate/hash.jpg")
+    assert repair_meta["photos"]["nameplate"][0]["url"].endswith(
+        "/nameplate-0/hash.jpg"
+    )
     assert repair_meta["photos"]["indoor_unit"][0]["content_type"] == "image/webp"
     assert "Фото шильдика" not in repair_meta["missing_data"]
     assert "Фото внутреннего блока целиком" not in repair_meta["missing_data"]

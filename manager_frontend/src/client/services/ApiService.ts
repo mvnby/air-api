@@ -315,7 +315,7 @@ export class ApiService {
                 400: `Invalid idempotency key`,
                 409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
-                428: `Signed write requires Idempotency-Key`,
+                503: `Request can be retried after a short delay`,
             },
         });
     }
@@ -369,7 +369,7 @@ export class ApiService {
                 400: `Invalid idempotency key`,
                 409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
-                428: `Signed write requires Idempotency-Key`,
+                503: `Request can be retried after a short delay`,
             },
         });
     }
@@ -396,7 +396,7 @@ export class ApiService {
                 400: `Invalid form data or idempotency key`,
                 409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
-                428: `Signed write requires Idempotency-Key`,
+                503: `Request can be retried after a short delay`,
             },
         });
     }
@@ -423,9 +423,9 @@ export class ApiService {
             mediaType: 'application/json',
             errors: {
                 400: `Invalid idempotency key`,
-                409: `The selected installation quote conflicts with current tariffs.`,
+                409: `Installation pricing conflict or Idempotency-Key reused with different content.`,
                 422: `Validation Error`,
-                428: `Signed write requires Idempotency-Key`,
+                503: `Request can be retried after a short delay`,
             },
         });
     }

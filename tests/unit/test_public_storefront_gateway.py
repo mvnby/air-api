@@ -72,7 +72,16 @@ async def test_signed_gateway_preserves_multipart_body_for_upload_parser(gateway
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "case",
-    ["signature", "stale", "method", "path", "query", "body", "api_host"],
+    [
+        "signature",
+        "stale",
+        "method",
+        "path",
+        "query",
+        "body",
+        "api_host",
+        "idempotency_key",
+    ],
 )
 async def test_forged_or_tampered_envelope_fails_closed(gateway_app, case):
     body = b'{"name":"Orsha"}'
@@ -101,12 +110,62 @@ async def test_forged_or_tampered_envelope_fails_closed(gateway_app, case):
         headers["Host"] = "localhost"
     if case == "signature":
         headers["X-MVN-Storefront-Signature"] = "v1=" + "0" * 64
+    if case == "idempotency_key":
+        headers["Idempotency-Key"] = "gateway-request-tampered-0002"
 
     response = await gateway_request(
         gateway_app,
         "POST",
         content=request_body,
         headers=headers,
+    )
+
+    assert response.status_code == 401
+    assert gateway_app.state.session_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["missing", "duplicate", "combined", "whitespace"])
+async def test_signed_write_rejects_ambiguous_idempotency_key(gateway_app, case):
+    headers = signed_headers()
+    if case == "missing":
+        headers.pop("Idempotency-Key")
+    elif case == "duplicate":
+        headers = list(headers.items())
+        headers.append(("Idempotency-Key", "gateway-request-duplicate-0002"))
+    elif case == "combined":
+        headers["Idempotency-Key"] = (
+            "gateway-request-0001,gateway-request-duplicate-0002"
+        )
+    else:
+        headers["Idempotency-Key"] = " gateway-request-0001"
+
+    response = await gateway_request(gateway_app, "POST", headers=headers)
+
+    assert response.status_code == 401
+    assert gateway_app.state.session_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_signed_read_uses_empty_idempotency_binding(gateway_app):
+    response = await gateway_request(
+        gateway_app,
+        "GET",
+        headers=signed_headers(method="GET"),
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_signed_read_rejects_smuggled_idempotency_key(gateway_app):
+    response = await gateway_request(
+        gateway_app,
+        "GET",
+        headers=signed_headers(
+            method="GET",
+            idempotency_key="gateway-read-smuggled-0001",
+        ),
     )
 
     assert response.status_code == 401

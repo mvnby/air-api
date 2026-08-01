@@ -349,6 +349,7 @@ async def test_installation_estimate_rolls_back_db_and_private_objects(
     tenant_scope,
 ):
     storage = FakePrivateStorage()
+    original_enqueue = IntegrationOutboxService.enqueue
 
     async def fail_enqueue(*args, **kwargs):
         raise RuntimeError("outbox unavailable")
@@ -376,6 +377,21 @@ async def test_installation_estimate_rolls_back_db_and_private_objects(
         == 0
     )
     assert storage.objects == {}
+    failed_keys = set(storage.save_calls)
+
+    monkeypatch.setattr(IntegrationOutboxService, "enqueue", original_enqueue)
+    await InstallationEstimateLeadService.create_lead(
+        installation_estimate_session,
+        tenant_scope=tenant_scope,
+        payload=_payload(),
+        uploads=[_upload()],
+        idempotency_key="estimate-request-0003",
+        storage=storage,
+    )
+    successful_keys = set(storage.save_calls) - failed_keys
+    assert successful_keys
+    assert failed_keys.isdisjoint(successful_keys)
+    assert successful_keys.issubset(storage.objects)
 
 
 @pytest.mark.asyncio

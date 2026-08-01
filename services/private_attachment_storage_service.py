@@ -7,6 +7,7 @@ import hashlib
 import mimetypes
 import secrets
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit
@@ -18,6 +19,12 @@ class StoredPrivateObject:
     storage_key: str
     content_hash: str
     size_bytes: int
+
+
+@dataclass(frozen=True)
+class PrivateStorageCandidate:
+    storage_key: str
+    modified_at: datetime
 
 
 class PrivateAttachmentStorage(Protocol):
@@ -38,6 +45,14 @@ class PrivateAttachmentStorage(Protocol):
     async def exists(self, storage_key: str) -> bool: ...
 
     async def delete(self, storage_key: str) -> None: ...
+
+    async def list_variant_candidates(
+        self,
+        *,
+        variant_prefix: str,
+        older_than: datetime,
+        limit: int,
+    ) -> list[PrivateStorageCandidate]: ...
 
     async def verify_writable(self) -> None: ...
 
@@ -84,6 +99,78 @@ def _deterministic_key(*, prefix: str, content_hash: str, variant: str, extensio
     parts = [part for part in str(prefix or "").replace("\\", "/").split("/") if part]
     safe_prefix = [_safe_segment(part) for part in parts]
     return "/".join([*safe_prefix, digest[:2], digest[2:4], digest, f"{_safe_segment(variant)}.{_safe_extension(extension)}"])
+
+
+class VariantScopedPrivateAttachmentStorage:
+    """Prefix write variants while preserving the underlying storage identity."""
+
+    def __init__(
+        self,
+        storage: PrivateAttachmentStorage,
+        *,
+        variant_scope: str,
+    ) -> None:
+        normalized_scope = _safe_segment(variant_scope)
+        if normalized_scope != variant_scope or len(normalized_scope) > 128:
+            raise ValueError("Invalid private attachment variant scope")
+        self.storage = storage
+        self.variant_scope = normalized_scope
+        self.provider_name = storage.provider_name
+
+    async def save(
+        self,
+        *,
+        content: bytes,
+        content_hash: str,
+        extension: str,
+        content_type: str,
+        variant: str,
+    ) -> StoredPrivateObject:
+        return await self.storage.save(
+            content=content,
+            content_hash=content_hash,
+            extension=extension,
+            content_type=content_type,
+            variant=f"{self.variant_scope}-{variant}",
+        )
+
+    async def read(self, storage_key: str) -> bytes:
+        return await self.storage.read(storage_key)
+
+    async def exists(self, storage_key: str) -> bool:
+        return await self.storage.exists(storage_key)
+
+    async def delete(self, storage_key: str) -> None:
+        await self.storage.delete(storage_key)
+
+    async def list_variant_candidates(
+        self,
+        *,
+        variant_prefix: str,
+        older_than: datetime,
+        limit: int,
+    ) -> list[PrivateStorageCandidate]:
+        return await self.storage.list_variant_candidates(
+            variant_prefix=variant_prefix,
+            older_than=older_than,
+            limit=limit,
+        )
+
+    async def verify_writable(self) -> None:
+        await self.storage.verify_writable()
+
+    async def presign(
+        self,
+        storage_key: str,
+        *,
+        expires_seconds: int,
+        download_name: str | None = None,
+    ) -> str | None:
+        return await self.storage.presign(
+            storage_key,
+            expires_seconds=expires_seconds,
+            download_name=download_name,
+        )
 
 
 class LocalPrivateAttachmentStorage:
@@ -136,8 +223,45 @@ class LocalPrivateAttachmentStorage:
 
     async def delete(self, storage_key: str) -> None:
         path = self._path(storage_key)
-        if path.is_file():
+        try:
             await asyncio.to_thread(path.unlink)
+        except FileNotFoundError:
+            pass
+
+    async def list_variant_candidates(
+        self,
+        *,
+        variant_prefix: str,
+        older_than: datetime,
+        limit: int,
+    ) -> list[PrivateStorageCandidate]:
+        cutoff = older_than.astimezone(timezone.utc)
+
+        def collect() -> list[PrivateStorageCandidate]:
+            candidates: list[PrivateStorageCandidate] = []
+            for path in self.base_dir.rglob("*"):
+                if not path.is_file() or not path.name.startswith(variant_prefix):
+                    continue
+                modified_at = datetime.fromtimestamp(
+                    path.stat().st_mtime,
+                    tz=timezone.utc,
+                )
+                if modified_at <= cutoff:
+                    candidates.append(
+                        PrivateStorageCandidate(
+                            storage_key=str(path.relative_to(self.base_dir)).replace(
+                                "\\",
+                                "/",
+                            ),
+                            modified_at=modified_at,
+                        )
+                    )
+            return sorted(
+                candidates,
+                key=lambda item: (item.modified_at, item.storage_key),
+            )[: max(1, int(limit))]
+
+        return await asyncio.to_thread(collect)
 
     async def verify_writable(self) -> None:
         content = f"mvn-private-storage-{secrets.token_hex(16)}".encode()
@@ -278,6 +402,55 @@ class S3PrivateAttachmentStorage:
             Bucket=self.bucket,
             Key=storage_key,
         )
+
+    async def list_variant_candidates(
+        self,
+        *,
+        variant_prefix: str,
+        older_than: datetime,
+        limit: int,
+    ) -> list[PrivateStorageCandidate]:
+        cutoff = older_than.astimezone(timezone.utc)
+        requested_limit = max(1, int(limit))
+        candidates: list[PrivateStorageCandidate] = []
+        continuation_token: str | None = None
+        while len(candidates) < requested_limit:
+            kwargs: dict[str, Any] = {
+                "Bucket": self.bucket,
+                "Prefix": self.key_prefix,
+                "MaxKeys": min(1000, requested_limit),
+            }
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+            response = await asyncio.to_thread(
+                self._get_client().list_objects_v2,
+                **kwargs,
+            )
+            for item in response.get("Contents") or []:
+                storage_key = str(item.get("Key") or "")
+                filename = storage_key.rsplit("/", 1)[-1]
+                modified_at = item.get("LastModified")
+                if (
+                    storage_key
+                    and filename.startswith(variant_prefix)
+                    and isinstance(modified_at, datetime)
+                    and modified_at.astimezone(timezone.utc) <= cutoff
+                ):
+                    candidates.append(
+                        PrivateStorageCandidate(
+                            storage_key=storage_key,
+                            modified_at=modified_at.astimezone(timezone.utc),
+                        )
+                    )
+                    if len(candidates) >= requested_limit:
+                        break
+            continuation_token = response.get("NextContinuationToken")
+            if not continuation_token:
+                break
+        return sorted(
+            candidates,
+            key=lambda item: (item.modified_at, item.storage_key),
+        )[:requested_limit]
 
     async def verify_writable(self) -> None:
         content = f"mvn-private-storage-{secrets.token_hex(16)}".encode()

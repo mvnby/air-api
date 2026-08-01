@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from core.config import settings
 from core.database import get_session
+from core.public_write_key import public_write_idempotency_key_sha256
 from core.storefront_request_gateway import StorefrontRequestGatewayMiddleware
 from core.tenant_scope import (
     get_public_tenant_scope,
@@ -31,6 +32,8 @@ PRIMARY_SECRET = "primary-storefront-secret-at-least-32-bytes"
 PREVIOUS_KEY_ID = "mvn-web-previous"
 PREVIOUS_SECRET = "previous-storefront-secret-at-least-32-bytes"
 STOREFRONT_HOST = "orsha.internal.mvn.by"
+DEFAULT_IDEMPOTENCY_KEY = "gateway-request-0001"
+_DEFAULT_KEY = object()
 
 
 class ValidatedPayload(BaseModel):
@@ -47,9 +50,22 @@ def signed_headers(
     key_id: str = PRIMARY_KEY_ID,
     secret: str = PRIMARY_SECRET,
     timestamp: int | None = None,
+    idempotency_key: str | None | object = _DEFAULT_KEY,
 ) -> dict[str, str]:
     signed_at = int(time.time()) if timestamp is None else timestamp
-    return {
+    normalized_method = method.upper()
+    if idempotency_key is _DEFAULT_KEY:
+        idempotency_key = (
+            None
+            if normalized_method in {"GET", "HEAD", "OPTIONS"}
+            else DEFAULT_IDEMPOTENCY_KEY
+        )
+    idempotency_digest = (
+        public_write_idempotency_key_sha256(idempotency_key)
+        if isinstance(idempotency_key, str) and idempotency_key
+        else ""
+    )
+    headers = {
         "Host": api_hostname,
         "X-MVN-Storefront-Key-Id": key_id,
         "X-MVN-Storefront-Host": storefront_hostname,
@@ -62,8 +78,12 @@ def signed_headers(
             api_hostname=api_hostname,
             storefront_hostname=storefront_hostname,
             body_sha256=StorefrontContextSignatureService.body_sha256(body),
+            idempotency_key_sha256=idempotency_digest,
         ),
     }
+    if isinstance(idempotency_key, str) and idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+    return headers
 
 
 def configure_signing_settings(monkeypatch) -> None:

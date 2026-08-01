@@ -23,6 +23,11 @@ The trusted runtime sends exactly one value for each header:
   with no sign, whitespace or leading zeroes);
 - `X-MVN-Storefront-Signature`: `v1=<64 lowercase SHA-256 hex characters>`.
 
+Every signed protected write also sends exactly one canonical
+`Idempotency-Key`. Signed reads must not send that header. Duplicate,
+comma-combined, whitespace-padded or otherwise non-canonical values fail at the
+outer gateway.
+
 Any incomplete set, duplicate value, unknown `X-MVN-Storefront-*` header,
 unknown key ID or malformed value returns `401`. The browser-facing proxy must
 strip all incoming headers with that prefix before creating its own envelope.
@@ -34,7 +39,7 @@ server runtimes.
 
 ## Canonical v1 message
 
-The signature is HMAC-SHA256 over these seven fields in this exact order:
+The signature is HMAC-SHA256 over these eight fields in this exact order:
 
 ```text
 v1
@@ -44,6 +49,7 @@ v1
 <upstream API hostname>
 <storefront hostname>
 <lowercase SHA-256 hex of the exact request body>
+<lowercase SHA-256 hex of the canonical Idempotency-Key, or empty for reads>
 ```
 
 There is one ASCII LF byte (`0x0a`) between fields and no trailing newline.
@@ -66,6 +72,10 @@ Canonicalization rules:
 6. Hash the exact transmitted body bytes, before JSON/form parsing. The empty
    body digest is
    `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+7. For a protected write, validate the exact `Idempotency-Key` value and append
+   its lowercase SHA-256 digest. For `GET`, `HEAD` and `OPTIONS`, append an
+   empty eighth field and omit the header. A captured body/signature cannot be
+   paired with a new key.
 
 For a structurally complete envelope, air-api reads the exact bounded body,
 checks the API host, key ID, timestamp, raw target, storefront host, digest and
@@ -79,14 +89,20 @@ endpoint. A valid signature with malformed JSON can therefore return `422`,
 while a partial or forged envelope with the same bytes returns `401` before the
 parser or database dependency runs.
 
+Unsigned canonical protected writes use the same 20 MiB ceiling without
+buffering: a canonical `Content-Length` is checked first, then an outer receive
+wrapper counts streamed chunks and raises `413` before FastAPI parsing or
+dependencies. Reads, intentionally open routes and CORS preflight keep their
+existing path.
+
 Installation-estimate and repair-diagnostic attachments also enforce an
 18 MiB aggregate file-content limit inside the API. This protects direct
 canonical traffic that does not pass through the signed-body buffer and leaves
 approximately 2 MiB for multipart boundaries and form fields under the default
 20 MiB gateway envelope. Each image remains independently limited to 10 MiB.
 
-Changing method, raw path, raw query, upstream API host, storefront host or any
-body byte invalidates the signature.
+Changing method, raw path, raw query, upstream API host, storefront host, any
+body byte or the idempotency key invalidates the signature.
 
 ## Runtime keyring and rotation
 
@@ -124,15 +140,16 @@ allowlist or keep signing in the centrally managed MVN edge.
 ## Replay boundary
 
 `STOREFRONT_CONTEXT_MAX_AGE_SECONDS` is constrained to 30–900 seconds. Requests
-outside the past/future window fail closed. The body digest prevents changing a
-captured request.
+outside the past/future window fail closed. The body and idempotency-key digests
+prevent changing a captured write.
 
 There is deliberately no in-memory nonce cache: it would allow replay against
 another HA replica. Until a shared PostgreSQL/Redis nonce ledger is introduced,
 an identical captured request can be replayed within the accepted time window.
-Every public write therefore still needs its domain idempotency contract. Keep
-the window short, use TLS, never log the envelope, and do not treat this HMAC as
-user authentication.
+Its signed idempotency key is immutable, so the domain receipt replays the
+original result instead of creating another resource. Keep the window short,
+use TLS, never log the envelope, and do not treat this HMAC as user
+authentication.
 
 ## Public write idempotency
 
@@ -151,9 +168,17 @@ boundary therefore does not change the fingerprint.
 The receipt and business mutation commit in one PostgreSQL transaction. A
 concurrent request on another replica waits at the unique insert, then either
 replays the original successful status/body or takes ownership after a failed
-transaction. Reusing a key with different logical content returns `409`.
+transaction. The wait is bounded by a 3-second PostgreSQL `lock_timeout`; a
+busy request returns `503` with `Retry-After: 1`. Reusing a key with different
+logical content returns `409`.
 
-Signed storefront writes without `Idempotency-Key` return `428`. During the
+Successful receipts are retained for at least 30 days. `expires_at` is indexed
+and the scheduler deletes expired rows in bounded, lock-safe hourly batches. Once
+cleanup removes a receipt, the same key may create a new command; clients must
+not assume replay protection beyond the documented 30-day horizon.
+
+Signed storefront writes without a bound `Idempotency-Key` fail HMAC
+authentication with `401` before parsing or mutation. During the
 canonical MVN transition only, an unsigned request accepted under
 `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=false` receives an ephemeral
 server-generated key. This fallback preserves legacy availability but cannot
@@ -169,6 +194,69 @@ The coordinated `mvn-web` release must also lower installation's current
 30 MiB client aggregate to 18 MiB and add the same 18 MiB aggregate check to
 repair. The API limit is authoritative; browser checks exist only to fail early
 with a useful message.
+
+Repair intake persists one deduplicated `repair.diagnostic_ai_requested.v1`
+job in the same transaction as the order and receipt. The HA scheduler leases
+and recovers that durable job; an API-process crash after commit cannot leave
+the order permanently pending, and a retry does not enqueue a second job.
+Installation attachment objects use variants scoped by both the idempotency-key
+hash and a per-attempt nonce. Immediate rollback compensation therefore cannot
+delete a concurrent request's binary, including a successor using the same key.
+A separate inventory reconciler deletes only unreferenced
+`public-installation-*` variants older than 24 hours.
+
+Exact `mvn-web` signer delta: generate and retain the submission key first,
+send it as the sole `Idempotency-Key` header, SHA-256 the exact canonical key
+string, and append that 64-character lowercase digest after the body digest in
+the v1 message. For `GET`/`HEAD`/`OPTIONS`, omit the header and append an empty
+final field. The browser never supplies signing headers. A same-origin proxy
+may receive the app's submission key, but it must validate one canonical value,
+remove any raw inbound `Idempotency-Key`, set exactly one outbound value, and
+sign that value. A proxy-generated key must be retained across retries rather
+than regenerated per attempt.
+
+Reference delta for a Node/TypeScript signer (after rejecting duplicate raw
+headers and normalizing the method, target and hosts exactly as above):
+
+```ts
+const readMethod = method === "GET" || method === "HEAD" || method === "OPTIONS";
+let canonicalKey: string | null = null;
+if (readMethod) {
+  if (submissionKey !== undefined) {
+    throw new Error("Idempotency-Key is forbidden on signed reads");
+  }
+} else {
+  if (
+    typeof submissionKey !== "string" ||
+    submissionKey.length < 16 ||
+    submissionKey.length > 128 ||
+    !/^[A-Za-z0-9._:-]+$/.test(submissionKey)
+  ) {
+    throw new Error("Invalid Idempotency-Key");
+  }
+  canonicalKey = submissionKey;
+}
+const idempotencyKeySha256 = canonicalKey === null
+  ? ""
+  : createHash("sha256").update(canonicalKey, "ascii").digest("hex");
+const canonicalMessage = [
+  "v1",
+  String(timestamp),
+  method,
+  rawPathAndQuery,
+  apiHostname,
+  storefrontHostname,
+  bodySha256,
+  idempotencyKeySha256,
+].join("\n");
+
+outboundHeaders.delete("Idempotency-Key");
+if (canonicalKey !== null) outboundHeaders.set("Idempotency-Key", canonicalKey);
+```
+
+The eighth array element is mandatory even when empty. There is no newline
+after it. Sign the resulting UTF-8 bytes with the existing HMAC-SHA256 secret
+and keep the existing `v1=<lowercase hex>` wire format.
 
 ## Resolution and compatibility
 
@@ -187,8 +275,9 @@ with a useful message.
 For protected `/api/v1/**` routes, unsigned API-host validation and the
 require-signed switch also run at the outer ASGI boundary. A wrong `Host` or an
 unsigned request while the switch is enabled therefore returns `401` before
-body parsing. Canonical unsigned requests remain unbuffered when the switch is
-off, preserving ordinary browser CORS behavior.
+body parsing. Canonical unsigned writes remain unbuffered but stream-counted
+when the switch is off, preserving ordinary browser CORS behavior while
+enforcing the same outer body ceiling.
 
 Every response to a request containing any `X-MVN-Storefront-*` header is
 forced to `Cache-Control: private, no-store`, `CDN-Cache-Control: no-store` and

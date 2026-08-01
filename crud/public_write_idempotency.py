@@ -28,6 +28,7 @@ class PublicWriteIdempotencyDAO:
         command_name: str,
         key_hash: str,
         request_fingerprint: str,
+        expires_at: datetime,
     ) -> PublicWriteIdempotency | None:
         values = {
             "tenant_id": tenant_scope.tenant_id,
@@ -36,6 +37,7 @@ class PublicWriteIdempotencyDAO:
             "key_hash": key_hash,
             "request_fingerprint": request_fingerprint,
             "created_at": datetime.now(timezone.utc),
+            "expires_at": expires_at,
         }
         dialect_name = session.get_bind().dialect.name
         if dialect_name == "postgresql":

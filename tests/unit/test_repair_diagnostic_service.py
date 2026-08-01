@@ -1,12 +1,13 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
-from models import LeadSource, Order, OrderStatus
+from models import IntegrationOutboxEvent, LeadSource, Order, OrderStatus
 from services.bot_service import BotService
 from services.general_media_storage_service import StoredGeneralMediaObject
 from services.repair_diagnostic_service import (
@@ -17,6 +18,10 @@ from services.repair_diagnostic_service import (
     RepairDiagnosticService,
 )
 from services.repair_diagnostic_intake_service import RepairDiagnosticIntakeService
+from services.repair_diagnostic_ai_job_service import (
+    REPAIR_DIAGNOSTIC_AI_REQUESTED_EVENT,
+    RepairDiagnosticAiJobService,
+)
 from services.staff_user_service import StaffUserService
 
 
@@ -41,6 +46,9 @@ class FakeRepairDiagnosticStorage:
 
     async def delete_media(self, path):
         self.delete_calls.append(path)
+
+    async def read_media(self, path):
+        return path.encode()
 
 
 class SizedFakeUpload:
@@ -165,6 +173,59 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     assert repair_meta["ai_pre_diagnosis_status"] == "pending"
     assert repair_meta["preliminary_fault_type"] == "refrigerant_leak"
     assert "Фото шильдика" not in repair_meta["missing_data"]
+
+    events = list(
+        (
+            await sqlite_repair_diagnostic_session.execute(
+                select(IntegrationOutboxEvent).where(
+                    IntegrationOutboxEvent.event_type
+                    == REPAIR_DIAGNOSTIC_AI_REQUESTED_EVENT
+                )
+            )
+        ).scalars()
+    )
+    assert len(events) == 1
+    assert events[0].status == "pending"
+    assert events[0].payload == {
+        "order_id": response.order_id,
+        "tenant_id": tenant_scope.tenant_id,
+        "storefront_id": tenant_scope.storefront_id,
+    }
+    assert events[0].idempotency_key is not None
+    assert events[0].idempotency_key.startswith("repair-diagnostic-ai:")
+    assert payload.contact.phone not in events[0].idempotency_key
+
+    # Simulate a worker/process crash after the durable claim committed.
+    events[0].status = "processing"
+    events[0].worker_id = "crashed-worker"
+    events[0].lease_token = "expired-lease"
+    events[0].lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    events[0].attempts = 1
+    sqlite_repair_diagnostic_session.add(events[0])
+    await sqlite_repair_diagnostic_session.commit()
+
+    runner_calls = []
+
+    async def runner(**kwargs):
+        runner_calls.append(kwargs)
+
+    worker_factory = sessionmaker(
+        bind=sqlite_repair_diagnostic_session.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    processed = await RepairDiagnosticAiJobService.process_batch(
+        worker_id="unit-repair-ai",
+        session_factory=worker_factory,
+        runner=runner,
+    )
+    assert processed == 1
+    assert runner_calls == [
+        {"order_id": response.order_id, "tenant_id": tenant_scope.tenant_id}
+    ]
+    await sqlite_repair_diagnostic_session.refresh(events[0])
+    assert events[0].status == "published"
+    assert events[0].attempts == 2
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import Column, DateTime, ForeignKeyConstraint, Index, JSON, String, UniqueConstraint
@@ -9,6 +9,10 @@ from sqlmodel import Field, SQLModel
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _default_expiry() -> datetime:
+    return _utc_now() + timedelta(days=30)
 
 
 class PublicWriteIdempotency(SQLModel, table=True):
@@ -32,6 +36,10 @@ class PublicWriteIdempotency(SQLModel, table=True):
             "tenant_id",
             "storefront_id",
             "created_at",
+        ),
+        Index(
+            "ix_public_write_idempotency_expires_at",
+            "expires_at",
         ),
         ForeignKeyConstraint(
             ["storefront_id", "tenant_id"],
@@ -63,4 +71,8 @@ class PublicWriteIdempotency(SQLModel, table=True):
     completed_at: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    expires_at: datetime = Field(
+        default_factory=_default_expiry,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
     )

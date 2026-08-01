@@ -2501,8 +2501,16 @@
           "409": {
             "description": "Idempotency key reused with different content"
           },
-          "428": {
-            "description": "Signed write requires Idempotency-Key"
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2564,7 +2572,15 @@
             "description": "Idempotency key reused with different content"
           },
           "503": {
-            "description": "Request can be retried after a short delay"
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2632,8 +2648,16 @@
           "409": {
             "description": "Idempotency key reused with different content"
           },
-          "428": {
-            "description": "Signed write requires Idempotency-Key"
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2701,8 +2725,16 @@
           "409": {
             "description": "Idempotency key reused with different content"
           },
-          "428": {
-            "description": "Signed write requires Idempotency-Key"
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2769,17 +2801,33 @@
             "description": "Invalid idempotency key"
           },
           "409": {
-            "description": "The selected installation quote conflicts with current tariffs.",
+            "description": "Installation pricing conflict or Idempotency-Key reused with different content.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublicOrderPricingErrorResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PublicOrderPricingErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                    }
+                  ],
+                  "title": "Response 409 Create Order"
                 }
               }
             }
           },
-          "428": {
-            "description": "Signed write requires Idempotency-Key"
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -51860,6 +51908,19 @@
           "currency"
         ],
         "title": "PublicStorefrontContextResponse"
+      },
+      "PublicWriteIdempotencyErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "PublicWriteIdempotencyErrorResponse"
       },
       "RepairDiagnosticLeadResponse": {
         "properties": {

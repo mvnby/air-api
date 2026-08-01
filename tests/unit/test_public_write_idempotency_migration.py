@@ -77,14 +77,17 @@ def test_public_write_idempotency_upgrade_and_downgrade() -> None:
         index["name"] for index in inspector.get_indexes(
             "public_write_idempotency"
         )
-    } == {"ix_public_write_idempotency_scope_created_at"}
+    } == {
+        "ix_public_write_idempotency_expires_at",
+        "ix_public_write_idempotency_scope_created_at",
+    }
 
     insert_receipt = text(
         "INSERT INTO public_write_idempotency "
         "(tenant_id, storefront_id, command_name, key_hash, "
-        "request_fingerprint, created_at) "
+        "request_fingerprint, created_at, expires_at) "
         "VALUES (:tenant_id, :storefront_id, :command_name, :key_hash, "
-        ":request_fingerprint, CURRENT_TIMESTAMP)"
+        ":request_fingerprint, CURRENT_TIMESTAMP, '2026-09-01 00:00:00')"
     )
     values = {
         "tenant_id": 1,

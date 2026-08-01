@@ -37,6 +37,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.ForeignKeyConstraint(
             ["storefront_id", "tenant_id"],
@@ -53,6 +54,12 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
+        "ix_public_write_idempotency_expires_at",
+        "public_write_idempotency",
+        ["expires_at"],
+        unique=False,
+    )
+    op.create_index(
         "ix_public_write_idempotency_scope_created_at",
         "public_write_idempotency",
         ["tenant_id", "storefront_id", "created_at"],
@@ -61,6 +68,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_public_write_idempotency_expires_at",
+        table_name="public_write_idempotency",
+    )
     op.drop_index(
         "ix_public_write_idempotency_scope_created_at",
         table_name="public_write_idempotency",

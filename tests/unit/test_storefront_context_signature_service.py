@@ -9,6 +9,7 @@ from services.storefront_context_signature_service import (
 _SECRET = "test-storefront-secret-at-least-32-bytes"
 _BODY = b'{"name":"Orsha"}'
 _BODY_SHA256 = StorefrontContextSignatureService.body_sha256(_BODY)
+_IDEMPOTENCY_KEY_SHA256 = "a" * 64
 
 
 def _signature(*, timestamp: int = 1_700_000_000) -> str:
@@ -20,6 +21,7 @@ def _signature(*, timestamp: int = 1_700_000_000) -> str:
         api_hostname="API.MVN.BY:443",
         storefront_hostname="CITY.MVN.BY:443",
         body_sha256=_BODY_SHA256,
+        idempotency_key_sha256=_IDEMPOTENCY_KEY_SHA256,
     )
 
 
@@ -31,6 +33,7 @@ def test_canonical_message_has_exact_v1_field_order_and_no_trailing_newline():
         api_hostname="API.MVN.BY:443",
         storefront_hostname="CITY.MVN.BY.",
         body_sha256=_BODY_SHA256,
+        idempotency_key_sha256=_IDEMPOTENCY_KEY_SHA256,
     )
 
     assert message == (
@@ -39,7 +42,10 @@ def test_canonical_message_has_exact_v1_field_order_and_no_trailing_newline():
         b"POST\n"
         b"/api/v1/leads/contact?b=2&a=%2F\n"
         b"api.mvn.by\n"
-        b"city.mvn.by\n" + _BODY_SHA256.encode("ascii")
+        b"city.mvn.by\n"
+        + _BODY_SHA256.encode("ascii")
+        + b"\n"
+        + _IDEMPOTENCY_KEY_SHA256.encode("ascii")
     )
     assert not message.endswith(b"\n")
 
@@ -55,6 +61,7 @@ def test_signature_round_trip_returns_normalized_storefront_hostname():
         api_hostname="api.mvn.by",
         storefront_hostname="city.mvn.by",
         body_sha256=_BODY_SHA256,
+        idempotency_key_sha256=_IDEMPOTENCY_KEY_SHA256,
         signature=signature,
         max_age_seconds=300,
         now=1_700_000_100,
@@ -72,6 +79,7 @@ def test_signature_round_trip_returns_normalized_storefront_hostname():
         ("api_hostname", "other-api.mvn.by"),
         ("storefront_hostname", "other.mvn.by"),
         ("body_sha256", StorefrontContextSignatureService.body_sha256(b"tampered")),
+        ("idempotency_key_sha256", "b" * 64),
         ("signature", "v1=" + "0" * 64),
     ],
 )
@@ -84,6 +92,7 @@ def test_signature_rejects_tampered_request(field, value):
         "api_hostname": "api.mvn.by",
         "storefront_hostname": "city.mvn.by",
         "body_sha256": _BODY_SHA256,
+        "idempotency_key_sha256": _IDEMPOTENCY_KEY_SHA256,
         "signature": _signature(),
         "max_age_seconds": 300,
         "now": 1_700_000_100,
@@ -111,6 +120,7 @@ def test_signature_rejects_timestamp_outside_past_or_future_window(now):
             api_hostname="api.mvn.by",
             storefront_hostname="city.mvn.by",
             body_sha256=_BODY_SHA256,
+            idempotency_key_sha256=_IDEMPOTENCY_KEY_SHA256,
             signature=StorefrontContextSignatureService.sign(
                 secret=_SECRET,
                 timestamp=1_700_000_000,
@@ -119,6 +129,7 @@ def test_signature_rejects_timestamp_outside_past_or_future_window(now):
                 api_hostname="api.mvn.by",
                 storefront_hostname="city.mvn.by",
                 body_sha256=_BODY_SHA256,
+                idempotency_key_sha256=_IDEMPOTENCY_KEY_SHA256,
             ),
             max_age_seconds=300,
             now=now,
@@ -148,6 +159,7 @@ def test_signature_rejects_noncanonical_signature_format(signature):
             api_hostname="api.mvn.by",
             storefront_hostname="city.mvn.by",
             body_sha256=_BODY_SHA256,
+            idempotency_key_sha256=_IDEMPOTENCY_KEY_SHA256,
             signature=signature,
             max_age_seconds=300,
             now=1_700_000_100,
@@ -174,4 +186,5 @@ def test_signature_rejects_missing_secret():
             api_hostname="api.mvn.by",
             storefront_hostname="city.mvn.by",
             body_sha256=_BODY_SHA256,
+            idempotency_key_sha256=_IDEMPOTENCY_KEY_SHA256,
         )

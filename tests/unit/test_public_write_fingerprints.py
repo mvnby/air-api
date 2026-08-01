@@ -3,6 +3,7 @@ import hashlib
 import pytest
 from fastapi import HTTPException
 from pydantic import BaseModel
+from sqlalchemy.exc import DBAPIError
 
 from core.public_write_idempotency import get_public_write_idempotency_key
 from core.tenant_scope import VerifiedPublicStorefrontRequest
@@ -88,14 +89,14 @@ def test_key_is_bounded_and_only_its_digest_is_persistable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_signed_write_requires_client_idempotency_key() -> None:
+async def test_signed_write_dependency_fails_closed_without_bound_key() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await get_public_write_idempotency_key(
             idempotency_key=None,
             verified=VerifiedPublicStorefrontRequest(signed=True),
         )
 
-    assert exc_info.value.status_code == 428
+    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -107,3 +108,18 @@ async def test_unsigned_canonical_transition_uses_non_pii_ephemeral_key() -> Non
 
     assert key.startswith("legacy:")
     assert len(key) == 39
+
+
+def test_only_postgres_lock_timeout_maps_to_retryable_unavailable() -> None:
+    class LockTimeout(Exception):
+        sqlstate = "55P03"
+
+    class Deadlock(Exception):
+        sqlstate = "40P01"
+
+    assert PublicWriteIdempotencyService._is_lock_timeout(
+        DBAPIError("insert", {}, LockTimeout(), False)
+    )
+    assert not PublicWriteIdempotencyService._is_lock_timeout(
+        DBAPIError("insert", {}, Deadlock(), False)
+    )

@@ -22,9 +22,23 @@ from services.product_image_processing_contract import ProductImageVariantType
 class FakeS3Client:
     def __init__(self):
         self.calls = []
+        self.objects = {}
 
     def put_object(self, **kwargs):
         self.calls.append(kwargs)
+        self.objects[kwargs["Key"]] = kwargs["Body"]
+
+    def get_object(self, **kwargs):
+        content = self.objects[kwargs["Key"]]
+
+        class Body:
+            def read(self):
+                return content
+
+        return {"Body": Body()}
+
+    def delete_object(self, **kwargs):
+        self.objects.pop(kwargs["Key"], None)
 
 
 def test_local_storage_builds_existing_fallback_url(tmp_path: Path):
@@ -170,6 +184,9 @@ async def test_general_s3_storage_uses_namespace_and_variant_keys():
             },
         }
     ]
+    assert await storage.read_media(stored.path) == content
+    await storage.delete_media(stored.path)
+    assert stored.path not in fake_client.objects
 
 
 @pytest.mark.asyncio

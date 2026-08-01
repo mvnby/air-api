@@ -5,6 +5,7 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
+from core.public_write_key import public_write_idempotency_key_sha256
 from models import Lead, Order, Product
 from models.tenancy import Storefront, StorefrontDomain, TenantScope
 from services.catalog_revision_service import CatalogRevisionService
@@ -50,7 +51,9 @@ def _headers(
     signature: str | None = None,
 ) -> dict[str, str]:
     timestamp = int(time.time())
-    return {
+    is_read = method.upper() in {"GET", "HEAD", "OPTIONS"}
+    idempotency_key = None if is_read else "storefront-context-request-0001"
+    headers = {
         "Host": "test",
         "X-MVN-Storefront-Key-Id": _KEY_ID,
         "X-MVN-Storefront-Host": "orsha.internal.mvn.by",
@@ -64,8 +67,16 @@ def _headers(
             api_hostname="test",
             storefront_hostname="orsha.internal.mvn.by",
             body_sha256=StorefrontContextSignatureService.body_sha256(body),
+            idempotency_key_sha256=(
+                ""
+                if idempotency_key is None
+                else public_write_idempotency_key_sha256(idempotency_key)
+            ),
         ),
     }
+    if idempotency_key is not None:
+        headers["Idempotency-Key"] = idempotency_key
+    return headers
 
 
 def _payload() -> dict[str, str]:

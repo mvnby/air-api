@@ -36,6 +36,83 @@ async def test_complete_envelope_above_bounded_buffer_is_413(gateway_app):
 
 
 @pytest.mark.asyncio
+async def test_unsigned_content_length_overflow_is_413_before_parser(gateway_app):
+    body = b"x" * (1024 * 1024 + 1)
+
+    response = await gateway_request(
+        gateway_app,
+        "POST",
+        "/api/v1/validated",
+        content=body,
+        headers={"Host": "api.mvn.by", "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert gateway_app.state.session_calls == 0
+    assert gateway_app.state.validated_endpoint_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_unsigned_chunked_overflow_is_413_before_parser(gateway_app):
+    chunks = [b"x" * (700 * 1024), b"y" * (400 * 1024)]
+    messages = [
+        {"type": "http.request", "body": chunks[0], "more_body": True},
+        {"type": "http.request", "body": chunks[1], "more_body": False},
+    ]
+    sent = []
+
+    async def receive():
+        return messages.pop(0)
+
+    async def send(message):
+        sent.append(message)
+
+    await gateway_app(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "https",
+            "path": "/api/v1/validated",
+            "raw_path": b"/api/v1/validated",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [
+                (b"host", b"api.mvn.by"),
+                (b"content-type", b"application/json"),
+            ],
+            "client": ("127.0.0.1", 1234),
+            "server": ("api.mvn.by", 443),
+        },
+        receive,
+        send,
+    )
+
+    response_start = next(
+        message for message in sent if message["type"] == "http.response.start"
+    )
+    assert response_start["status"] == 413
+    assert gateway_app.state.session_calls == 0
+    assert gateway_app.state.validated_endpoint_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_unsigned_read_keeps_existing_unbuffered_path(gateway_app):
+    response = await gateway_request(
+        gateway_app,
+        "GET",
+        headers={
+            "Host": "api.mvn.by",
+            "Idempotency-Key": "legacy-client-global-header-0001",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["storefront_id"] == 1
+
+
+@pytest.mark.asyncio
 async def test_valid_envelope_reaches_body_parser_and_keeps_422_private(gateway_app):
     body = b'{"name":'
     headers = signed_headers(body=body, target=b"/api/v1/validated")

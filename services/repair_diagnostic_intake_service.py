@@ -19,6 +19,9 @@ from services.public_write_idempotency_service import (
     PublicWriteCommandResponse,
     PublicWriteIdempotencyService,
 )
+from services.repair_diagnostic_ai_job_service import (
+    RepairDiagnosticAiJobService,
+)
 from services.repair_diagnostic_service import (
     PHOTO_FIELDS,
     SYMPTOM_LABELS,
@@ -50,11 +53,12 @@ class RepairDiagnosticIntakeService:
         storage = get_general_media_storage()
         created_paths: set[str] = set()
         created_order: Order | None = None
+        key_hash = PublicWriteIdempotencyService.key_hash(idempotency_key)
         storage_namespace = (
             "public-write/"
             f"{tenant_scope.tenant_id}/{tenant_scope.storefront_id}/"
             "repair-diagnostic/"
-            f"{PublicWriteIdempotencyService.key_hash(idempotency_key)}"
+            f"{key_hash}"
         )
 
         async def create() -> PublicWriteCommandResponse[RepairDiagnosticLeadResponse]:
@@ -67,6 +71,7 @@ class RepairDiagnosticIntakeService:
                 storage=storage,
                 created_paths=created_paths,
                 storage_namespace=storage_namespace,
+                key_hash=key_hash,
             )
             repair_meta = OrderService._get_repair_meta(created_order)
             response = RepairDiagnosticLeadResponse(
@@ -149,6 +154,7 @@ class RepairDiagnosticIntakeService:
         storage: GeneralMediaStorage,
         created_paths: set[str],
         storage_namespace: str,
+        key_hash: str,
     ) -> Order:
         order = await OrderService.create_from_website(
             session=session,
@@ -185,6 +191,12 @@ class RepairDiagnosticIntakeService:
         await OrderService._maybe_add_default_repair_diagnostic(session, order)
         session.add(order)
         await session.flush()
+        await RepairDiagnosticAiJobService.enqueue(
+            session,
+            order_id=int(order.id or 0),
+            tenant_scope=tenant_scope,
+            key_hash=key_hash,
+        )
         return order
 
     @staticmethod

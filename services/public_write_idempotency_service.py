@@ -1,16 +1,22 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.public_write_key import (
+    IDEMPOTENCY_KEY_MAX_LENGTH,
+    IDEMPOTENCY_KEY_MIN_LENGTH,
+    normalize_public_write_idempotency_key,
+    public_write_idempotency_key_sha256,
+)
 from crud.public_write_idempotency import PublicWriteIdempotencyDAO
 from models import PublicWriteIdempotency
 from services.tenant_scope_service import TenantScope
@@ -18,10 +24,7 @@ from services.tenant_scope_service import TenantScope
 
 ResponseT = TypeVar("ResponseT", bound=BaseModel)
 
-IDEMPOTENCY_KEY_MIN_LENGTH = 16
-IDEMPOTENCY_KEY_MAX_LENGTH = 128
 IDEMPOTENCY_RESPONSE_MAX_BYTES = 16 * 1024
-_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]+$")
 
 
 class PublicWriteIdempotencyConflict(ValueError):
@@ -48,26 +51,16 @@ class PublicWriteCommandOutcome(Generic[ResponseT]):
 
 
 class PublicWriteIdempotencyService:
+    RETENTION_DAYS = 30
+    LOCK_TIMEOUT_MILLISECONDS = 3000
+
     @staticmethod
     def normalize_key(value: str) -> str:
-        key = str(value or "").strip()
-        if not (
-            IDEMPOTENCY_KEY_MIN_LENGTH <= len(key) <= IDEMPOTENCY_KEY_MAX_LENGTH
-        ):
-            raise ValueError(
-                "Idempotency-Key must contain between "
-                f"{IDEMPOTENCY_KEY_MIN_LENGTH} and "
-                f"{IDEMPOTENCY_KEY_MAX_LENGTH} characters"
-            )
-        if not _KEY_PATTERN.fullmatch(key):
-            raise ValueError("Idempotency-Key contains unsupported characters")
-        return key
+        return normalize_public_write_idempotency_key(value)
 
     @staticmethod
     def key_hash(value: str) -> str:
-        return hashlib.sha256(
-            PublicWriteIdempotencyService.normalize_key(value).encode("utf-8")
-        ).hexdigest()
+        return public_write_idempotency_key_sha256(value)
 
     @classmethod
     async def execute(
@@ -86,12 +79,21 @@ class PublicWriteIdempotencyService:
         key_hash = cls.key_hash(idempotency_key)
 
         try:
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SET LOCAL lock_timeout = "
+                        f"'{cls.LOCK_TIMEOUT_MILLISECONDS}ms'"
+                    )
+                )
             claimed = await PublicWriteIdempotencyDAO.claim(
                 session,
                 tenant_scope=tenant_scope,
                 command_name=normalized_command,
                 key_hash=key_hash,
                 request_fingerprint=normalized_fingerprint,
+                expires_at=datetime.now(timezone.utc)
+                + timedelta(days=cls.RETENTION_DAYS),
             )
             if claimed is None:
                 existing = await PublicWriteIdempotencyDAO.get_by_scope_key(
@@ -118,8 +120,12 @@ class PublicWriteIdempotencyService:
                 status_code=result.status_code,
                 replayed=False,
             )
-        except Exception:
+        except Exception as exc:
             await session.rollback()
+            if cls._is_lock_timeout(exc):
+                raise PublicWriteIdempotencyUnavailable(
+                    "Idempotency serialization is temporarily busy"
+                ) from exc
             raise
 
     @staticmethod
@@ -187,3 +193,15 @@ class PublicWriteIdempotencyService:
         if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
             raise ValueError("Request fingerprint must be SHA-256")
         return digest
+
+    @staticmethod
+    def _is_lock_timeout(exc: Exception) -> bool:
+        if not isinstance(exc, DBAPIError):
+            return False
+        original = getattr(exc, "orig", None)
+        sqlstate = getattr(original, "sqlstate", None) or getattr(
+            original,
+            "pgcode",
+            None,
+        )
+        return sqlstate == "55P03"

@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import io
 import logging
+import secrets
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ from services.order_service import OrderService
 from services.tenant_scope_service import TenantScope, storefront_scope_clause
 from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
+    VariantScopedPrivateAttachmentStorage,
     get_private_attachment_storage,
 )
 from services.public_write_fingerprint_service import (
@@ -186,8 +188,17 @@ class InstallationEstimateLeadService:
         storage: PrivateAttachmentStorage | None = None,
     ) -> InstallationEstimateLeadResponse:
         fingerprint = cls.source_fingerprint(idempotency_key)
+        storage_variant_scope = (
+            "public-installation-"
+            f"{PublicWriteIdempotencyService.key_hash(idempotency_key)}-"
+            f"{secrets.token_hex(8)}"
+        )
         payload_hash = cls.request_hash(payload=payload, uploads=uploads)
         selected_storage = storage or get_private_attachment_storage()
+        attempt_storage = VariantScopedPrivateAttachmentStorage(
+            selected_storage,
+            variant_scope=storage_variant_scope,
+        )
         created_storage_keys: set[str] = set()
         received_at = datetime.now(timezone.utc)
         category_counts = {
@@ -263,7 +274,7 @@ class InstallationEstimateLeadService:
                         "request_fingerprint": fingerprint,
                         "received_at": received_at.isoformat(),
                     },
-                    storage=selected_storage,
+                    storage=attempt_storage,
                     created_storage_keys=created_storage_keys,
                     commit=False,
                     tenant_scope=tenant_scope,

@@ -24,6 +24,7 @@ from services.bot_service import BotService
 from services.defect_act_ai_service import DefectActAIService
 from services.general_media_storage_service import (
     GeneralMediaStorage,
+    get_general_media_storage,
 )
 from services.order_service import OrderService
 from services.tenant_scope_service import TenantScope
@@ -256,8 +257,8 @@ class RepairDiagnosticService:
         *,
         order_id: int,
         tenant_id: int,
-        payload_data: Dict[str, Any],
-        nameplate_files: List[RepairDiagnosticIncomingFile],
+        payload_data: Dict[str, Any] | None = None,
+        nameplate_files: List[RepairDiagnosticIncomingFile] | None = None,
     ) -> None:
         async with async_session_maker() as session:
             result = await session.execute(
@@ -269,10 +270,30 @@ class RepairDiagnosticService:
             order = result.scalars().first()
             if not order:
                 return
-            payload = RepairDiagnosticLeadPayload.model_validate(payload_data)
             repair_meta = OrderService._get_repair_meta(order)
+            if repair_meta.get("ai_pre_diagnosis_status") in {
+                "completed",
+                "failed",
+                "skipped",
+            }:
+                return
+            payload = RepairDiagnosticLeadPayload.model_validate(
+                payload_data
+                if payload_data is not None
+                else RepairDiagnosticService._payload_from_repair_meta(repair_meta)
+            )
+            durable_nameplate_files = (
+                nameplate_files
+                if nameplate_files is not None
+                else await RepairDiagnosticService._load_durable_nameplate_files(
+                    repair_meta
+                )
+            )
             try:
-                await RepairDiagnosticService._apply_nameplate_recognition(repair_meta, nameplate_files)
+                await RepairDiagnosticService._apply_nameplate_recognition(
+                    repair_meta,
+                    durable_nameplate_files,
+                )
                 ai_meta = await RepairDiagnosticService._build_ai_meta(payload, repair_meta)
                 if ai_meta:
                     repair_meta.update(ai_meta)
@@ -296,6 +317,44 @@ class RepairDiagnosticService:
             flag_modified(order, "technical_meta")
             session.add(order)
             await session.commit()
+
+    @staticmethod
+    def _payload_from_repair_meta(repair_meta: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "scenario": "repair",
+            "symptom": repair_meta.get("symptom"),
+            "problem_timing": repair_meta.get("problem_timing"),
+            "symptom_details": repair_meta.get("symptom_details") or {},
+            "client_checks": repair_meta.get("client_checks") or [],
+            "client_comment": repair_meta.get("client_comment") or None,
+            "contact": repair_meta.get("contact") or {},
+        }
+
+    @staticmethod
+    async def _load_durable_nameplate_files(
+        repair_meta: Dict[str, Any],
+    ) -> List[RepairDiagnosticIncomingFile]:
+        photos = repair_meta.get("photos")
+        nameplates = photos.get("nameplate") if isinstance(photos, dict) else None
+        if not isinstance(nameplates, list) or not nameplates:
+            return []
+        item = nameplates[0] if isinstance(nameplates[0], dict) else {}
+        path = str(item.get("storage_path") or "")
+        if not path:
+            return []
+        try:
+            content = await get_general_media_storage().read_media(path)
+        except Exception:
+            logger.exception("REPAIR_DIAGNOSTIC_DURABLE_NAMEPLATE_READ_FAILED")
+            return []
+        return [
+            RepairDiagnosticIncomingFile(
+                filename=str(item.get("filename") or "nameplate"),
+                content_type=str(item.get("content_type") or "") or None,
+                content=content,
+                content_hash=str(item.get("content_hash") or ""),
+            )
+        ]
 
     @staticmethod
     async def _store_uploads(

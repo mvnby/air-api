@@ -9,16 +9,34 @@ from core.tenant_scope import (
     get_public_tenant_scope,
     verify_public_storefront_request,
 )
-from schemas import OrderPayload, OrderResponse, PublicOrderPricingErrorResponse
+from schemas import (
+    OrderPayload,
+    OrderResponse,
+    PublicOrderPricingErrorResponse,
+)
+from schemas_public_checkout import PublicWriteIdempotencyErrorResponse
 from services.installation_pricing_service import InstallationPricingError
 from services.website_order_service import WebsiteOrderService
 from services.tenant_scope_service import TenantScope
-from services.public_write_idempotency_service import PublicWriteIdempotencyConflict
+from services.public_write_idempotency_service import (
+    PublicWriteIdempotencyConflict,
+    PublicWriteIdempotencyUnavailable,
+)
 
 router = APIRouter(
     tags=["api"],
     dependencies=[Depends(verify_public_storefront_request)],
 )
+
+_IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
+    "description": "Request can be retried after a short delay",
+    "headers": {
+        "Retry-After": {
+            "description": "Delay in seconds before retrying the same command",
+            "schema": {"type": "string"},
+        }
+    },
+}
 
 
 @router.post(
@@ -28,10 +46,16 @@ router = APIRouter(
     responses={
         400: {"description": "Invalid idempotency key"},
         409: {
-            "model": PublicOrderPricingErrorResponse,
-            "description": "The selected installation quote conflicts with current tariffs.",
+            "model": (
+                PublicOrderPricingErrorResponse
+                | PublicWriteIdempotencyErrorResponse
+            ),
+            "description": (
+                "Installation pricing conflict or Idempotency-Key reused with "
+                "different content."
+            ),
         },
-        428: {"description": "Signed write requires Idempotency-Key"},
+        503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },
 )
 async def create_order(
@@ -53,6 +77,12 @@ async def create_order(
         )
     except PublicWriteIdempotencyConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PublicWriteIdempotencyUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Приём заказа временно занят. Повторите отправку.",
+            headers={"Retry-After": "1"},
+        ) from exc
     except InstallationPricingError as exc:
         raise HTTPException(
             status_code=409,

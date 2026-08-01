@@ -32,8 +32,8 @@ async def get_public_write_idempotency_key(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     if verified.signed:
         raise HTTPException(
-            status_code=status.HTTP_428_PRECONDITION_REQUIRED,
-            detail="Idempotency-Key is required for storefront writes",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid storefront context",
         )
     return f"legacy:{secrets.token_hex(16)}"
 

@@ -9,6 +9,7 @@ from services.storefront_context_service import StorefrontContextService
 
 
 _BODY_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_IDEMPOTENCY_KEY_SHA256_PATTERN = re.compile(r"^(?:[0-9a-f]{64})?$")
 _SIGNATURE_PATTERN = re.compile(r"^v1=[0-9a-f]{64}$")
 _HTTP_METHOD_PATTERN = re.compile(r"^[A-Z][A-Z0-9!#$%&'*+.^_`|~-]*$")
 
@@ -51,6 +52,7 @@ class StorefrontContextSignatureService:
         api_hostname: str,
         storefront_hostname: str,
         body_sha256: str,
+        idempotency_key_sha256: str,
     ) -> bytes:
         normalized_method = str(method or "").strip().upper()
         if not _HTTP_METHOD_PATTERN.fullmatch(normalized_method):
@@ -78,6 +80,13 @@ class StorefrontContextSignatureService:
             raise InvalidStorefrontContextSignature(
                 "Storefront context body digest is invalid"
             )
+        normalized_idempotency_key_sha256 = str(idempotency_key_sha256 or "")
+        if not _IDEMPOTENCY_KEY_SHA256_PATTERN.fullmatch(
+            normalized_idempotency_key_sha256
+        ):
+            raise InvalidStorefrontContextSignature(
+                "Storefront context idempotency key digest is invalid"
+            )
 
         return b"\n".join(
             (
@@ -88,6 +97,7 @@ class StorefrontContextSignatureService:
                 normalized_api_hostname.encode("ascii"),
                 normalized_storefront_hostname.encode("ascii"),
                 normalized_body_sha256.encode("ascii"),
+                normalized_idempotency_key_sha256.encode("ascii"),
             )
         )
 
@@ -102,6 +112,7 @@ class StorefrontContextSignatureService:
         api_hostname: str,
         storefront_hostname: str,
         body_sha256: str,
+        idempotency_key_sha256: str,
     ) -> str:
         normalized_secret = str(secret or "")
         if len(normalized_secret.encode("utf-8")) < 32:
@@ -117,6 +128,7 @@ class StorefrontContextSignatureService:
                 api_hostname=api_hostname,
                 storefront_hostname=storefront_hostname,
                 body_sha256=body_sha256,
+                idempotency_key_sha256=idempotency_key_sha256,
             ),
             sha256,
         ).hexdigest()
@@ -133,6 +145,7 @@ class StorefrontContextSignatureService:
         api_hostname: str,
         storefront_hostname: str,
         body_sha256: str,
+        idempotency_key_sha256: str,
         signature: str,
         max_age_seconds: int,
         now: int | None = None,
@@ -171,6 +184,7 @@ class StorefrontContextSignatureService:
             api_hostname=api_hostname,
             storefront_hostname=normalized_storefront_hostname,
             body_sha256=body_sha256,
+            idempotency_key_sha256=idempotency_key_sha256,
         )
         if not hmac.compare_digest(expected, normalized_signature):
             raise InvalidStorefrontContextSignature(
