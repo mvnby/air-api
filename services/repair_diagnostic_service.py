@@ -2,99 +2,38 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
 import logging
-import mimetypes
-from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
-from core.input_validation import validate_required_phone
 from core.public_upload_limits import PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
 from models import Order
 from services.bot_service import BotService
-from services.general_media_storage_service import (
-    GeneralMediaStorage,
-)
 from services.order_service import OrderService
+from services.repair_diagnostic_contracts import (
+    CLIENT_CHECK_LABELS,
+    PHOTO_FIELD_ORDER,
+    PHOTO_FIELDS,
+    PHOTO_LABELS,
+    SYMPTOM_DETAIL_LABELS,
+    SYMPTOM_FAULT_TYPE,
+    SYMPTOM_LABELS,
+    TIMING_LABELS,
+    RepairDiagnosticIncomingFile,
+    RepairDiagnosticLeadPayload,
+    RepairDiagnosticLeadResponse,
+    parse_repair_diagnostic_payload,
+)
 from services.tenant_scope_service import TenantScope
 from services.staff_user_service import StaffUserService
 
 logger = logging.getLogger(__name__)
 
 
-SYMPTOM_LABELS = {
-    "not_cooling": "Не охлаждает / слабо охлаждает",
-    "water_leak": "Течет вода из внутреннего блока",
-    "not_turning_on": "Не включается",
-    "turns_off": "Сам выключается",
-    "noise_vibration": "Шумит или вибрирует",
-    "bad_smell": "Появился неприятный запах",
-    "error_code": "На дисплее ошибка",
-    "other": "Другая проблема",
-}
-
-TIMING_LABELS = {
-    "immediately": "Сразу после включения",
-    "after_minutes": "Через несколько минут работы",
-    "after_hours": "Через несколько часов",
-    "constantly": "Постоянно",
-    "periodically": "Периодически",
-    "after_service": "После обслуживания / ремонта / переноса",
-    "unknown": "Не знаю",
-}
-
-CLIENT_CHECK_LABELS = {
-    "filters_cleaned": "Чистили фильтры",
-    "power_restarted": "Перезагружали питание",
-    "remote_batteries_changed": "Меняли батарейки в пульте",
-    "drainage_checked": "Проверяли дренаж",
-    "master_visited": "Уже приезжал мастер",
-    "nothing_checked": "Ничего не проверяли",
-}
-
-SYMPTOM_DETAIL_LABELS = {
-    "leak_timing": "Вода течет",
-    "recently_cleaned": "Кондиционер недавно чистили",
-    "drainage_exit": "Куда выведен дренаж",
-    "leak_place": "Где капает вода",
-    "indoor_fan_works": "Вентилятор внутреннего блока работает",
-    "outdoor_unit_starts": "Наружный блок запускается",
-    "freezing_seen": "Есть обмерзание",
-    "cooled_before": "Раньше охлаждал нормально",
-    "has_indication": "Есть индикация на блоке",
-    "remote_response": "Реагирует на пульт",
-    "power_checked": "Питание / автомат проверяли",
-    "voltage_surge": "Был скачок напряжения",
-    "error_code": "Код ошибки",
-}
-
-PHOTO_LABELS = {
-    "nameplate": "Фото шильдика кондиционера",
-    "indoor_unit": "Фото внутреннего блока целиком",
-    "outdoor_unit": "Фото наружного блока",
-    "error_display": "Фото ошибки на дисплее",
-    "leak_place": "Фото места протечки",
-}
-
-PHOTO_FIELDS = set(PHOTO_LABELS)
 ALLOWED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 MAX_FILES_PER_FIELD = 5
 MAX_PAYLOAD_BYTES = PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
-
-SYMPTOM_FAULT_TYPE = {
-    "not_cooling": "refrigerant_leak",
-    "water_leak": "drainage_failure",
-    "not_turning_on": "control_board_failure",
-    "turns_off": "control_board_failure",
-    "noise_vibration": "fan_motor_failure",
-    "bad_smell": "contamination",
-    "error_code": "unknown_fault",
-    "other": "unknown_fault",
-}
 
 PRELIMINARY_DIAGNOSIS_HINTS = {
     "not_cooling": "Возможны загрязнение теплообменников, недостаток хладагента или нарушение работы наружного блока.",
@@ -108,114 +47,18 @@ PRELIMINARY_DIAGNOSIS_HINTS = {
 }
 
 
-class RepairDiagnosticContact(BaseModel):
-    name: str = Field(..., min_length=1, max_length=120)
-    phone: str = Field(..., min_length=3, max_length=80)
-    address: Optional[str] = Field(default=None, max_length=300)
-
-    @field_validator("name", "address", mode="before")
-    @classmethod
-    def _clean_optional_text(cls, value: Any) -> Any:
-        if value is None:
-            return None
-        return " ".join(str(value).split())
-
-    @field_validator("phone")
-    @classmethod
-    def _validate_phone(cls, value: str) -> str:
-        return validate_required_phone(value)
-
-
-class RepairDiagnosticLeadPayload(BaseModel):
-    scenario: str = "repair"
-    symptom: str
-    problem_timing: Optional[str] = None
-    symptom_details: Dict[str, Any] = Field(default_factory=dict)
-    client_checks: List[str] = Field(default_factory=list)
-    client_comment: Optional[str] = Field(default=None, max_length=2000)
-    contact: RepairDiagnosticContact
-
-    @field_validator("scenario")
-    @classmethod
-    def _validate_scenario(cls, value: str) -> str:
-        if value != "repair":
-            raise ValueError("scenario must be repair")
-        return value
-
-    @field_validator("symptom")
-    @classmethod
-    def _validate_symptom(cls, value: str) -> str:
-        if value not in SYMPTOM_LABELS:
-            allowed = ", ".join(SYMPTOM_LABELS)
-            raise ValueError(f"Invalid symptom. Allowed: {allowed}")
-        return value
-
-    @field_validator("problem_timing")
-    @classmethod
-    def _validate_timing(cls, value: Optional[str]) -> Optional[str]:
-        if not value:
-            return None
-        if value not in TIMING_LABELS:
-            allowed = ", ".join(TIMING_LABELS)
-            raise ValueError(f"Invalid problem_timing. Allowed: {allowed}")
-        return value
-
-    @field_validator("client_checks")
-    @classmethod
-    def _validate_checks(cls, value: List[str]) -> List[str]:
-        cleaned: List[str] = []
-        seen: set[str] = set()
-        for item in value or []:
-            if item not in CLIENT_CHECK_LABELS or item in seen:
-                continue
-            seen.add(item)
-            cleaned.append(item)
-        return cleaned
-
-    @field_validator("client_comment", mode="before")
-    @classmethod
-    def _clean_comment(cls, value: Any) -> Optional[str]:
-        text = " ".join(str(value or "").split())
-        return text or None
-
-
-class RepairDiagnosticLeadResponse(BaseModel):
-    order_id: int
-    status: str
-    created_at: datetime
-    ai_pre_diagnosis_status: str = "pending"
-
-
-@dataclass(frozen=True)
-class RepairDiagnosticIncomingFile:
-    filename: str
-    content_type: Optional[str]
-    content: bytes
-    content_hash: str = ""
-
-    def __post_init__(self) -> None:
-        if not self.content_hash:
-            object.__setattr__(
-                self,
-                "content_hash",
-                hashlib.sha256(self.content).hexdigest(),
-            )
-
-
 class RepairDiagnosticService:
     """Creates repair order leads and stores preliminary diagnostic metadata."""
 
     @staticmethod
     def parse_payload(raw_payload: str) -> RepairDiagnosticLeadPayload:
-        try:
-            return RepairDiagnosticLeadPayload.model_validate_json(raw_payload)
-        except ValueError:
-            data = json.loads(raw_payload)
-            return RepairDiagnosticLeadPayload.model_validate(data)
+        return parse_repair_diagnostic_payload(raw_payload)
 
     @staticmethod
     async def collect_uploads(raw_groups: Dict[str, Any]) -> Dict[str, List[RepairDiagnosticIncomingFile]]:
-        uploads: Dict[str, List[RepairDiagnosticIncomingFile]] = {field: [] for field in PHOTO_FIELDS}
+        uploads: Dict[str, List[RepairDiagnosticIncomingFile]] = {
+            field: [] for field in PHOTO_FIELD_ORDER
+        }
         total_bytes = 0
         for field, raw_files in raw_groups.items():
             if field not in PHOTO_FIELDS:
@@ -255,41 +98,6 @@ class RepairDiagnosticService:
             "client_comment": repair_meta.get("client_comment") or None,
             "contact": repair_meta.get("contact") or {},
         }
-
-    @staticmethod
-    async def _store_uploads(
-        *,
-        uploads: Dict[str, List[RepairDiagnosticIncomingFile]],
-        storage: GeneralMediaStorage,
-        created_paths: set[str],
-        storage_namespace: str,
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        stored: Dict[str, List[Dict[str, Any]]] = {field: [] for field in PHOTO_FIELDS}
-        uploaded_at = datetime.now().isoformat(timespec="seconds")
-        for field, files in uploads.items():
-            for position, file in enumerate(files):
-                extension = _extension_for_file(file.filename, file.content_type)
-                saved = await storage.save_media(
-                    content=file.content,
-                    namespace=storage_namespace,
-                    variant_type=f"{field}-{position}",
-                    extension=extension,
-                    content_type=file.content_type,
-                )
-                created_paths.add(saved.path)
-                stored[field].append(
-                    {
-                        "filename": file.filename,
-                        "content_type": file.content_type,
-                        "url": saved.url,
-                        "storage_provider": saved.storage_provider,
-                        "storage_path": saved.path,
-                        "content_hash": saved.content_hash,
-                        "size_bytes": saved.size_bytes,
-                        "uploaded_at": uploaded_at,
-                    }
-                )
-        return stored
 
     @staticmethod
     def _build_repair_meta(
@@ -437,18 +245,12 @@ def _clean_filename(filename: Optional[str], content_type: Optional[str]) -> str
     raw = str(filename or "").replace("\\", "/").split("/")[-1].strip()
     if raw:
         return raw[:160]
-    extension = _extension_for_file("", content_type)
+    extension = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+    }.get(str(content_type or ""), "jpg")
     return f"repair-photo.{extension}"
-
-
-def _extension_for_file(filename: str, content_type: Optional[str]) -> str:
-    lower = str(filename or "").lower()
-    if "." in lower:
-        extension = lower.rsplit(".", 1)[-1].strip()
-        if extension in {"jpg", "jpeg", "png", "webp"}:
-            return "jpg" if extension == "jpeg" else extension
-    guessed = mimetypes.guess_extension(content_type or "") or ".jpg"
-    return guessed.lower().lstrip(".").replace("jpeg", "jpg") or "jpg"
 
 
 def _validate_photo(*, content: bytes, content_type: str, label: str) -> None:

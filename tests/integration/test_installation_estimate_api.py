@@ -20,6 +20,7 @@ def _png_bytes() -> bytes:
 
 class FakePrivateStorage:
     provider_name = "local"
+    inventory_id = "installation-api-private"
 
     def __init__(self):
         self.objects: dict[str, bytes] = {}
@@ -172,4 +173,4 @@ async def test_activation_fence_returns_retryable_503_and_rolls_back_intake(
     }
     assert await db.scalar(select(func.count(Order.id))) == 0
     assert await db.scalar(select(func.count(ServiceAttachment.id))) == 0
-    assert storage.objects == {}
+    assert storage.objects

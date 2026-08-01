@@ -47,6 +47,7 @@ from .service_asset import (
     WarrantyPolicy,
 )
 from .staff import StaffUser
+from .storage_maintenance import StorageReconciliationCursor
 from .tenancy import Storefront, StorefrontDomain, Tenant, TenantMembership
 from .tenant_commerce import TenantAuditEvent, TenantOffer
 from .order import (
@@ -200,6 +201,7 @@ __all__ = [
     "TenantOffer",
     "Storefront",
     "StorefrontDomain",
+    "StorageReconciliationCursor",
     "Payment",
     "PaymentType",
     "Supplier",

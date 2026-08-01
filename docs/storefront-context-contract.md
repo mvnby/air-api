@@ -209,26 +209,48 @@ with a useful message.
 Repair intake persists one deduplicated `repair.diagnostic_ai_requested.v1`
 job in the same transaction as the order and receipt. The HA scheduler leases
 and recovers that durable job. A token-fenced heartbeat renews a live lease,
-and the final Order update locks and verifies the same unexpired event lease in
-the transaction that saves the result. A stale replica therefore cannot write
-an AI result after another replica reclaims the event. Provider, OCR and media
-storage infrastructure failures propagate to the outbox retry/backoff path;
-terminal configuration/business outcomes are recorded explicitly. Exhausting
-all attempts atomically marks the event dead and the Order diagnosis failed.
-An API-process crash after commit cannot leave the order permanently pending,
-and a retry does not enqueue a second job.
-Installation attachment objects use variants scoped by both the idempotency-key
-hash and a per-attempt nonce. Immediate rollback compensation therefore cannot
-delete a concurrent request's binary, including a successor using the same key.
-A separate inventory reconciler deletes only unreferenced
-`public-installation-*` variants older than 24 hours.
-Repair uploads use the same ownership rule in a distinct
-`public-repair-write/<tenant>/<storefront>/<key-hash>-<attempt-nonce>`
-namespace. Rollback deletes only the current attempt's exact paths. A bounded
-local/S3 inventory reconciler considers objects only after 24 hours, performs a
-targeted candidate-path lookup against repair Order metadata, and deletes only
-paths that are still unreferenced. A crashed attempt is eventually collected;
-a committed current object is retained.
+then releases the database session before private-object reads, OCR, or the LLM
+call. The final transaction locks and verifies the same live event lease first,
+then reloads and locks the tenant-scoped Order. It applies only AI-owned fields
+whose values have not changed since the immutable snapshot, preserving
+concurrent Manager edits and every non-AI metadata field. A terminal latest
+state is never overwritten by a stale result. A stale replica therefore cannot
+write after another replica reclaims the event.
+
+The provider payload contains only the selected symptom and timing, validated
+conditional answers, validated check labels, and recognized equipment fields.
+It excludes the customer's name, phone, address, and free comment. DeepSeek
+failures use a typed retry contract: network errors, `429`, and `5xx` retry;
+permanent `4xx` responses such as `401`/`403` terminate the job. Exhausting all
+attempts atomically marks the event dead and the Order diagnosis failed. An
+API-process crash after commit cannot leave the order permanently pending, and
+a retry does not enqueue a second job.
+
+The repair `payload` form field is capped at 16 KiB before JSON decoding and is
+validated with a strict per-symptom allowlist derived from the storefront
+question config. Unknown fields, wrong conditional keys or option values,
+duplicate checks, incompatible `nothing_checked`, excessive counts, and an
+invalid or overlong error code are rejected before database or provider work.
+
+Installation and repair photos are private `ServiceAttachment` objects linked
+to their Order and exposed to Manager only through tenant-scoped attachment
+APIs. Repair Order metadata stores only the attachment ID and technical file
+facts; it contains no public URL, bucket, provider, or storage key. Repair AI
+may read a nameplate only when the active Order link category, attachment
+source, exact source purpose, tenant, storefront, and Order all match.
+
+Both intake families write variants scoped by tenant, storefront, the
+idempotency-key hash, and a per-attempt nonce (`public-installation-*` and
+`public-repair-*`). They deliberately do not delete objects immediately after
+an exception: the transaction may already have committed while its
+acknowledgement was lost, so compensation could destroy a valid attachment.
+Instead, one durable HA-safe inventory reconciler scans local or S3 storage in
+bounded pages, examines at most the configured limit, and deletes only objects
+that are still unreferenced after a 24-hour grace period. Its cursor and lease
+are stored in PostgreSQL, lease comparisons and advancement use the database
+clock, and cursor advancement occurs only after the whole page succeeds.
+Deletion is idempotent, so a crash retries the same page safely; reaching the
+end wraps the cursor for the next inventory pass.
 
 Exact `mvn-web` signer delta: generate and retain the submission key first,
 send it as the sole `Idempotency-Key` header, SHA-256 the exact canonical key

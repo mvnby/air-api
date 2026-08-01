@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import logging
+import secrets
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import LeadSource, Order, OrderStatus
-from services.general_media_storage_service import (
-    GeneralMediaStorage,
-    get_general_media_storage,
+from services.private_attachment_storage_service import (
+    PrivateAttachmentStorage,
+    VariantScopedPrivateAttachmentStorage,
+    get_private_attachment_storage,
 )
 from services.order_service import OrderService
 from services.public_write_fingerprint_service import (
@@ -23,20 +25,25 @@ from services.repair_diagnostic_ai_job_service import (
     RepairDiagnosticAiJobService,
 )
 from services.repair_diagnostic_service import (
-    PHOTO_FIELDS,
+    PHOTO_FIELD_ORDER,
+    PHOTO_LABELS,
     SYMPTOM_LABELS,
     RepairDiagnosticIncomingFile,
     RepairDiagnosticLeadPayload,
     RepairDiagnosticLeadResponse,
     RepairDiagnosticService,
 )
-from services.repair_diagnostic_storage_service import (
-    RepairDiagnosticStorageService,
-)
+from services.service_attachment_service import ServiceAttachmentService
 from services.tenant_scope_service import TenantScope
 
 
-logger = logging.getLogger(__name__)
+_PRIVATE_ATTACHMENT_CATEGORIES = {
+    "nameplate": "nameplate",
+    "indoor_unit": "defect",
+    "outdoor_unit": "defect",
+    "error_display": "defect",
+    "leak_place": "defect",
+}
 
 
 class RepairDiagnosticIntakeService:
@@ -48,19 +55,21 @@ class RepairDiagnosticIntakeService:
         payload: RepairDiagnosticLeadPayload,
         uploads: Dict[str, List[RepairDiagnosticIncomingFile]],
         idempotency_key: str,
+        storage: PrivateAttachmentStorage | None = None,
     ) -> tuple[
         RepairDiagnosticLeadResponse,
         list[RepairDiagnosticIncomingFile],
         bool,
     ]:
-        storage = get_general_media_storage()
-        created_paths: set[str] = set()
         created_order: Order | None = None
         key_hash = PublicWriteIdempotencyService.key_hash(idempotency_key)
-        storage_namespace = RepairDiagnosticStorageService.new_attempt_namespace(
-            tenant_id=tenant_scope.tenant_id,
-            storefront_id=tenant_scope.storefront_id,
-            key_hash=key_hash,
+        selected_storage = storage or get_private_attachment_storage()
+        attempt_storage = VariantScopedPrivateAttachmentStorage(
+            selected_storage,
+            variant_scope=(
+                f"public-repair-{tenant_scope.tenant_id}-"
+                f"{tenant_scope.storefront_id}-{key_hash}-{secrets.token_hex(8)}"
+            ),
         )
 
         async def create() -> PublicWriteCommandResponse[RepairDiagnosticLeadResponse]:
@@ -70,9 +79,7 @@ class RepairDiagnosticIntakeService:
                 payload=payload,
                 uploads=uploads,
                 tenant_scope=tenant_scope,
-                storage=storage,
-                created_paths=created_paths,
-                storage_namespace=storage_namespace,
+                storage=attempt_storage,
                 key_hash=key_hash,
             )
             repair_meta = OrderService._get_repair_meta(created_order)
@@ -92,25 +99,18 @@ class RepairDiagnosticIntakeService:
                 resource_id=response.order_id,
             )
 
-        try:
-            outcome = await PublicWriteIdempotencyService.execute(
-                session,
-                tenant_scope=tenant_scope,
-                command_name="public_repair_diagnostic_lead_v1",
-                idempotency_key=idempotency_key,
-                request_fingerprint=RepairDiagnosticIntakeService.request_fingerprint(
-                    payload=payload,
-                    uploads=uploads,
-                ),
-                response_model=RepairDiagnosticLeadResponse,
-                operation=create,
-            )
-        except Exception:
-            await RepairDiagnosticIntakeService._cleanup_failed_uploads(
-                storage=storage,
-                paths=created_paths,
-            )
-            raise
+        outcome = await PublicWriteIdempotencyService.execute(
+            session,
+            tenant_scope=tenant_scope,
+            command_name="public_repair_diagnostic_lead_v1",
+            idempotency_key=idempotency_key,
+            request_fingerprint=RepairDiagnosticIntakeService.request_fingerprint(
+                payload=payload,
+                uploads=uploads,
+            ),
+            response_model=RepairDiagnosticLeadResponse,
+            operation=create,
+        )
 
         if not outcome.replayed and created_order is not None:
             photos = OrderService._get_repair_meta(created_order).get("photos", {})
@@ -138,7 +138,7 @@ class RepairDiagnosticIntakeService:
                 content_type=item.content_type or "",
                 size_bytes=len(item.content),
             )
-            for field in sorted(PHOTO_FIELDS)
+            for field in PHOTO_FIELD_ORDER
             for position, item in enumerate(uploads.get(field) or [])
         ]
         return PublicWriteFingerprintService.for_multipart(
@@ -153,9 +153,7 @@ class RepairDiagnosticIntakeService:
         tenant_scope: TenantScope,
         payload: RepairDiagnosticLeadPayload,
         uploads: Dict[str, List[RepairDiagnosticIncomingFile]],
-        storage: GeneralMediaStorage,
-        created_paths: set[str],
-        storage_namespace: str,
+        storage: PrivateAttachmentStorage,
         key_hash: str,
     ) -> Order:
         order = await OrderService.create_from_website(
@@ -175,11 +173,13 @@ class RepairDiagnosticIntakeService:
         order.title = f"Ремонт кондиционера: {SYMPTOM_LABELS[payload.symptom]}"
         order.delivery_address = payload.contact.address
 
-        photos = await RepairDiagnosticService._store_uploads(
+        photos = await RepairDiagnosticIntakeService._store_private_uploads(
+            session,
+            order_id=int(order.id or 0),
+            tenant_scope=tenant_scope,
             uploads=uploads,
             storage=storage,
-            created_paths=created_paths,
-            storage_namespace=storage_namespace,
+            key_hash=key_hash,
         )
         repair_meta = RepairDiagnosticService._build_repair_meta(payload, photos)
         meta = dict(order.technical_meta or {})
@@ -202,13 +202,51 @@ class RepairDiagnosticIntakeService:
         return order
 
     @staticmethod
-    async def _cleanup_failed_uploads(
+    async def _store_private_uploads(
+        session: AsyncSession,
         *,
-        storage: GeneralMediaStorage,
-        paths: set[str],
-    ) -> None:
-        for path in sorted(paths):
-            try:
-                await storage.delete_media(path)
-            except Exception:
-                logger.exception("REPAIR_DIAGNOSTIC_STORAGE_COMPENSATION_FAILED")
+        order_id: int,
+        tenant_scope: TenantScope,
+        uploads: Dict[str, List[RepairDiagnosticIncomingFile]],
+        storage: PrivateAttachmentStorage,
+        key_hash: str,
+    ) -> Dict[str, List[dict]]:
+        stored: Dict[str, List[dict]] = {
+            field: [] for field in PHOTO_FIELD_ORDER
+        }
+        uploaded_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for field in PHOTO_FIELD_ORDER:
+            for position, file in enumerate(uploads.get(field) or []):
+                item = await ServiceAttachmentService.create_and_link_order_attachment(
+                    session,
+                    order_id=order_id,
+                    content=file.content,
+                    filename=file.filename,
+                    mime_type=file.content_type,
+                    category=_PRIVATE_ATTACHMENT_CATEGORIES[field],
+                    caption=PHOTO_LABELS[field],
+                    source="website_repair_diagnostic",
+                    created_by="public_website",
+                    source_meta={
+                        "intake": "repair_diagnostic",
+                        "photo_category": field,
+                        "purpose": f"repair_diagnostic_{field}",
+                        "position": position,
+                        "request_key_hash": key_hash,
+                        "received_at": uploaded_at,
+                    },
+                    storage=storage,
+                    commit=False,
+                    tenant_scope=tenant_scope,
+                )
+                stored[field].append(
+                    {
+                        "attachment_id": int(item["id"]),
+                        "filename": str(item["filename"]),
+                        "content_type": str(item["mime_type"]),
+                        "content_hash": file.content_hash,
+                        "size_bytes": int(item["size_bytes"]),
+                        "uploaded_at": uploaded_at,
+                    }
+                )
+        return stored

@@ -7,7 +7,6 @@ import hashlib
 import mimetypes
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote
@@ -22,12 +21,6 @@ class StoredGeneralMediaObject:
     storage_provider: str
     path: str
     size_bytes: int
-
-
-@dataclass(frozen=True)
-class GeneralMediaCandidate:
-    path: str
-    modified_at: datetime
 
 
 class GeneralMediaStorage(Protocol):
@@ -60,15 +53,6 @@ class GeneralMediaStorage(Protocol):
 
     async def read_media(self, path: str) -> bytes:
         """Read a previously returned storage path."""
-
-    async def list_namespace_candidates(
-        self,
-        *,
-        namespace_prefix: str,
-        older_than: datetime,
-        limit: int,
-    ) -> list[GeneralMediaCandidate]:
-        """List old objects below an exact storage namespace prefix."""
 
 
 class LocalGeneralMediaStorage:
@@ -149,44 +133,6 @@ class LocalGeneralMediaStorage:
         if target != base and base not in target.parents:
             raise ValueError("Invalid general media storage path")
         return await asyncio.to_thread(target.read_bytes)
-
-    async def list_namespace_candidates(
-        self,
-        *,
-        namespace_prefix: str,
-        older_than: datetime,
-        limit: int,
-    ) -> list[GeneralMediaCandidate]:
-        prefix_root = self.base_dir.joinpath(
-            *_safe_path_parts(namespace_prefix)
-        )
-        cutoff = older_than.astimezone(timezone.utc)
-        requested_limit = max(1, int(limit))
-
-        def collect() -> list[GeneralMediaCandidate]:
-            if not prefix_root.is_dir():
-                return []
-            candidates: list[GeneralMediaCandidate] = []
-            for path in prefix_root.rglob("*"):
-                if not path.is_file():
-                    continue
-                modified_at = datetime.fromtimestamp(
-                    path.stat().st_mtime,
-                    tz=timezone.utc,
-                )
-                if modified_at <= cutoff:
-                    candidates.append(
-                        GeneralMediaCandidate(
-                            path=str(path).replace(os.sep, "/"),
-                            modified_at=modified_at,
-                        )
-                    )
-            return sorted(
-                candidates,
-                key=lambda item: (item.modified_at, item.path),
-            )[:requested_limit]
-
-        return await asyncio.to_thread(collect)
 
 
 class S3CompatibleGeneralMediaStorage:
@@ -313,58 +259,6 @@ class S3CompatibleGeneralMediaStorage:
             Key=key,
         )
         return await asyncio.to_thread(response["Body"].read)
-
-    async def list_namespace_candidates(
-        self,
-        *,
-        namespace_prefix: str,
-        older_than: datetime,
-        limit: int,
-    ) -> list[GeneralMediaCandidate]:
-        requested_limit = max(1, int(limit))
-        cutoff = older_than.astimezone(timezone.utc)
-        prefix_parts = [
-            *(_safe_path_parts(self.key_prefix) if self.key_prefix else []),
-            *_safe_path_parts(namespace_prefix),
-        ]
-        object_prefix = "/".join(prefix_parts).rstrip("/") + "/"
-        candidates: list[GeneralMediaCandidate] = []
-        continuation_token: str | None = None
-        while len(candidates) < requested_limit:
-            kwargs: dict[str, Any] = {
-                "Bucket": self.bucket,
-                "Prefix": object_prefix,
-                "MaxKeys": min(1000, requested_limit),
-            }
-            if continuation_token:
-                kwargs["ContinuationToken"] = continuation_token
-            response = await asyncio.to_thread(
-                self._get_client().list_objects_v2,
-                **kwargs,
-            )
-            for item in response.get("Contents") or []:
-                path = str(item.get("Key") or "")
-                modified_at = item.get("LastModified")
-                if (
-                    path.startswith(object_prefix)
-                    and isinstance(modified_at, datetime)
-                    and modified_at.astimezone(timezone.utc) <= cutoff
-                ):
-                    candidates.append(
-                        GeneralMediaCandidate(
-                            path=path,
-                            modified_at=modified_at.astimezone(timezone.utc),
-                        )
-                    )
-                    if len(candidates) >= requested_limit:
-                        break
-            continuation_token = response.get("NextContinuationToken")
-            if not continuation_token:
-                break
-        return sorted(
-            candidates,
-            key=lambda item: (item.modified_at, item.path),
-        )[:requested_limit]
 
     def _get_client(self) -> Any:
         if self._client_override is not None:

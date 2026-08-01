@@ -39,6 +39,7 @@ def _png_bytes() -> bytes:
 
 class FakePrivateStorage:
     provider_name = "local"
+    inventory_id = "installation-unit-private"
 
     def __init__(self):
         self.objects: dict[str, bytes] = {}
@@ -343,7 +344,7 @@ async def test_installation_estimate_same_storefront_still_rejects_key_reuse(
 
 
 @pytest.mark.asyncio
-async def test_installation_estimate_rolls_back_db_and_private_objects(
+async def test_installation_estimate_rolls_back_db_and_leaves_binary_for_gc(
     installation_estimate_session,
     monkeypatch,
     tenant_scope,
@@ -376,8 +377,9 @@ async def test_installation_estimate_rolls_back_db_and_private_objects(
         )
         == 0
     )
-    assert storage.objects == {}
     failed_keys = set(storage.save_calls)
+    assert failed_keys
+    assert failed_keys.issubset(storage.objects)
 
     monkeypatch.setattr(IntegrationOutboxService, "enqueue", original_enqueue)
     await InstallationEstimateLeadService.create_lead(
@@ -391,6 +393,7 @@ async def test_installation_estimate_rolls_back_db_and_private_objects(
     successful_keys = set(storage.save_calls) - failed_keys
     assert successful_keys
     assert failed_keys.isdisjoint(successful_keys)
+    assert failed_keys.issubset(storage.objects)
     assert successful_keys.issubset(storage.objects)
 
 

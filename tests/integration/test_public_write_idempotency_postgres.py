@@ -12,6 +12,7 @@ from sqlmodel import select
 from models import (
     Lead,
     Order,
+    OrderAttachmentLink,
     Product,
     PublicWriteIdempotency,
     ServiceAttachment,
@@ -23,7 +24,6 @@ from schemas import (
     PublicContactLeadPayload,
 )
 from schemas_installation_estimate import InstallationEstimateLeadPayload
-from services.general_media_storage_service import StoredGeneralMediaObject
 from services.installation_estimate_lead_service import (
     InstallationEstimateIncomingFile,
     InstallationEstimateLeadService,
@@ -62,36 +62,9 @@ COMMAND_NAMES = {
 
 
 @dataclass
-class FakeGeneralStorage:
-    provider_name: str = "test"
-    objects: dict[str, bytes] = field(default_factory=dict)
-    save_calls: list[str] = field(default_factory=list)
-    delete_calls: list[str] = field(default_factory=list)
-
-    async def save_media(self, **kwargs):
-        digest = hashlib.sha256(kwargs["content"]).hexdigest()
-        path = (
-            f"{kwargs['namespace']}/{kwargs['variant_type']}/"
-            f"{digest}.{kwargs['extension']}"
-        )
-        self.save_calls.append(path)
-        self.objects[path] = kwargs["content"]
-        return StoredGeneralMediaObject(
-            url=f"/media/{path}",
-            content_hash=digest,
-            storage_provider=self.provider_name,
-            path=path,
-            size_bytes=len(kwargs["content"]),
-        )
-
-    async def delete_media(self, path: str):
-        self.delete_calls.append(path)
-        self.objects.pop(path, None)
-
-
-@dataclass
 class FakePrivateStorage:
     provider_name: str = "test"
+    inventory_id: str = "public-write-test-private"
     objects: dict[str, bytes] = field(default_factory=dict)
     save_calls: list[str] = field(default_factory=list)
     delete_calls: list[str] = field(default_factory=list)
@@ -136,6 +109,13 @@ class BarrierPrivateStorage(FakePrivateStorage):
         return stored
 
 
+class CommitAckLostSession(AsyncSession):
+    async def commit(self):
+        await super().commit()
+        if self.info.pop("raise_after_commit", False):
+            raise ConnectionError("database commit acknowledgement lost")
+
+
 def _phone(variant: int) -> str:
     return f"+37529{variant:07d}"
 
@@ -152,7 +132,6 @@ async def _invoke(
     key: str,
     variant: int,
     product_id: int,
-    general_storage: FakeGeneralStorage,
     private_storage: FakePrivateStorage,
 ):
     if family == "checkout":
@@ -241,6 +220,7 @@ async def _invoke(
                 ]
             },
             idempotency_key=key,
+            storage=private_storage,
         )
         return response
     raise AssertionError(f"Unknown family: {family}")
@@ -272,12 +252,7 @@ async def test_public_write_family_full_idempotency_matrix(
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    general_storage = FakeGeneralStorage()
     private_storage = FakePrivateStorage()
-    monkeypatch.setattr(
-        "services.repair_diagnostic_intake_service.get_general_media_storage",
-        lambda: general_storage,
-    )
     async with factory() as setup:
         setup.add(
             Storefront(
@@ -312,11 +287,10 @@ async def test_public_write_family_full_idempotency_matrix(
                 key=key,
                 variant=variant,
                 product_id=product_id,
-                general_storage=general_storage,
                 private_storage=private_storage,
             )
 
-    storage = general_storage if family == "repair" else private_storage
+    storage = private_storage
     initial_storage_calls = len(storage.save_calls)
     async with factory() as before_concurrency:
         entity_count_before_concurrency = await _entity_count(
@@ -408,17 +382,18 @@ async def test_public_write_family_full_idempotency_matrix(
     if family in {"installation", "repair"}:
         retry_storage_paths = storage.save_calls[retry_storage_start:]
         assert failed_storage_paths
-        assert set(failed_storage_paths).issubset(set(storage.delete_calls))
+        assert set(failed_storage_paths).isdisjoint(storage.delete_calls)
+        assert set(failed_storage_paths).issubset(storage.objects)
         assert set(retry_storage_paths).isdisjoint(failed_storage_paths)
         assert set(retry_storage_paths).isdisjoint(storage.delete_calls)
         assert set(retry_storage_paths).issubset(storage.objects)
         if family == "repair":
-            expected_prefix = (
-                f"public-repair-write/{first_scope.tenant_id}/"
-                f"{first_scope.storefront_id}/"
+            expected_variant = (
+                f"public-repair-{first_scope.tenant_id}-"
+                f"{first_scope.storefront_id}-"
             )
-            assert all(path.startswith(expected_prefix) for path in failed_storage_paths)
-            assert all(path.startswith(expected_prefix) for path in retry_storage_paths)
+            assert all(expected_variant in path for path in failed_storage_paths)
+            assert all(expected_variant in path for path in retry_storage_paths)
 
     async with factory() as verification:
         receipts = list(
@@ -440,6 +415,84 @@ async def test_public_write_family_full_idempotency_matrix(
 
 
 @pytest.mark.asyncio
+async def test_repair_commit_applied_but_ack_lost_replays_without_deleting_binary(
+    db_engine,
+):
+    assert db_engine.dialect.name == "postgresql"
+    ack_lost_factory = sessionmaker(
+        bind=db_engine,
+        class_=CommitAckLostSession,
+        expire_on_commit=False,
+    )
+    normal_factory = sessionmaker(
+        bind=db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    storage = FakePrivateStorage()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    key = "repair-commit-applied-ack-lost-0001"
+
+    async with ack_lost_factory() as session:
+        session.info["raise_after_commit"] = True
+        with pytest.raises(
+            ConnectionError,
+            match="commit acknowledgement lost",
+        ):
+            await _invoke(
+                "repair",
+                session,
+                scope=scope,
+                key=key,
+                variant=777,
+                product_id=0,
+                private_storage=storage,
+            )
+
+    assert len(storage.save_calls) == 1
+    assert storage.delete_calls == []
+    durable_key = storage.save_calls[0]
+    assert durable_key in storage.objects
+
+    async with normal_factory() as retry_session:
+        replay = await _invoke(
+            "repair",
+            retry_session,
+            scope=scope,
+            key=key,
+            variant=777,
+            product_id=0,
+            private_storage=storage,
+        )
+
+    assert replay.order_id > 0
+    assert len(storage.save_calls) == 1
+    assert storage.delete_calls == []
+    async with normal_factory() as verification:
+        receipt = await verification.scalar(
+            select(PublicWriteIdempotency).where(
+                PublicWriteIdempotency.command_name == COMMAND_NAMES["repair"],
+                PublicWriteIdempotency.key_hash
+                == PublicWriteIdempotencyService.key_hash(key),
+            )
+        )
+        order = await verification.get(Order, replay.order_id)
+        attachment = await verification.scalar(
+            select(ServiceAttachment)
+            .join(
+                OrderAttachmentLink,
+                OrderAttachmentLink.attachment_id == ServiceAttachment.id,
+            )
+            .where(OrderAttachmentLink.order_id == replay.order_id)
+        )
+    assert receipt is not None
+    assert receipt.completed_at is not None
+    assert order is not None
+    assert attachment is not None
+    assert attachment.storage_key == durable_key
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("family", FAMILIES)
 async def test_public_write_family_returns_unavailable_on_bounded_lock_wait(
     db_engine,
@@ -452,12 +505,7 @@ async def test_public_write_family_returns_unavailable_on_bounded_lock_wait(
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    general_storage = FakeGeneralStorage()
     private_storage = FakePrivateStorage()
-    monkeypatch.setattr(
-        "services.repair_diagnostic_intake_service.get_general_media_storage",
-        lambda: general_storage,
-    )
     monkeypatch.setattr(PublicWriteIdempotencyService, "LOCK_TIMEOUT_MILLISECONDS", 100)
     async with factory() as setup:
         product = Product(
@@ -492,7 +540,6 @@ async def test_public_write_family_returns_unavailable_on_bounded_lock_wait(
                     key=key,
                     variant=900,
                     product_id=product_id,
-                    general_storage=general_storage,
                     private_storage=private_storage,
                 )
         await holder.rollback()
@@ -567,7 +614,7 @@ async def test_installation_rollback_cannot_delete_concurrent_success_binary(
     assert isinstance(rollback_result, RuntimeError)
     assert success_result.order_id > 0
     assert len(set(storage.save_calls)) == 2
-    assert len(storage.delete_calls) == 1
+    assert storage.delete_calls == []
     async with factory() as verification:
         attachments = list(
             (await verification.execute(select(ServiceAttachment))).scalars()
@@ -575,4 +622,4 @@ async def test_installation_rollback_cannot_delete_concurrent_success_binary(
         assert len(attachments) == 1
         successful_key = attachments[0].storage_key
         assert successful_key in storage.objects
-        assert successful_key not in storage.delete_calls
+        assert len(storage.objects) == 2

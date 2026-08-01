@@ -31,6 +31,15 @@ from services.tenant_scope_service import tenant_scope_clause
 logger = logging.getLogger(__name__)
 
 
+class OcrProviderError(ValueError):
+    """Typed OCR infrastructure/configuration failure."""
+
+    def __init__(self, message: str, *, retryable: bool, code: str) -> None:
+        self.retryable = bool(retryable)
+        self.code = str(code)[:100]
+        super().__init__(str(message)[:500])
+
+
 class CustomerRequisitesRecognitionService:
     STATUS_RECOGNIZED = "recognized"
     STATUS_CONFIRMED = "confirmed"
@@ -86,11 +95,22 @@ class CustomerRequisitesRecognitionService:
     def _get_vision_client(cls):
         credentials_file = str(settings.GOOGLE_VISION_CREDENTIALS_FILE or "").strip()
         if not credentials_file:
-            raise ValueError("GOOGLE_VISION_CREDENTIALS_FILE is not configured")
-        creds = service_account.Credentials.from_service_account_file(
-            credentials_file,
-            scopes=["https://www.googleapis.com/auth/cloud-vision"],
-        )
+            raise OcrProviderError(
+                "GOOGLE_VISION_CREDENTIALS_FILE is not configured",
+                retryable=False,
+                code="not_configured",
+            )
+        try:
+            creds = service_account.Credentials.from_service_account_file(
+                credentials_file,
+                scopes=["https://www.googleapis.com/auth/cloud-vision"],
+            )
+        except (OSError, ValueError) as exc:
+            raise OcrProviderError(
+                "Google Vision credentials are invalid",
+                retryable=False,
+                code="credentials_invalid",
+            ) from exc
         return build("vision", "v1", credentials=creds, cache_discovery=False)
 
     @classmethod
@@ -109,7 +129,11 @@ class CustomerRequisitesRecognitionService:
         response = vision.images().annotate(body=body).execute()
         item = (response.get("responses") or [{}])[0]
         if item.get("error"):
-            raise ValueError(f"Google Vision error: {item['error'].get('message') or item['error']}")
+            raise OcrProviderError(
+                "Google Vision rejected the OCR request",
+                retryable=True,
+                code="upstream_error",
+            )
         return str((item.get("fullTextAnnotation") or {}).get("text") or "").strip()
 
     @classmethod
@@ -146,7 +170,11 @@ class CustomerRequisitesRecognitionService:
         try:
             from pdf2image import convert_from_bytes
         except ImportError as exc:
-            raise ValueError("PDF OCR requires pdf2image dependency") from exc
+            raise OcrProviderError(
+                "PDF OCR requires pdf2image dependency",
+                retryable=False,
+                code="not_configured",
+            ) from exc
 
         images = convert_from_bytes(
             content,

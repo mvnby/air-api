@@ -1,4 +1,4 @@
-"""Add tenant/storefront-scoped public write idempotency receipts.
+"""Add public-write receipts and private-storage reconciliation state.
 
 Revision ID: aa91c2d4e6f8
 Revises: e1f2a3b4c5d6
@@ -65,9 +65,26 @@ def upgrade() -> None:
         ["tenant_id", "storefront_id", "created_at"],
         unique=False,
     )
+    op.create_table(
+        "storage_reconciliation_cursor",
+        sa.Column("name", sa.String(length=160), nullable=False),
+        sa.Column("storage_provider", sa.String(length=32), nullable=False),
+        sa.Column("cursor", sa.String(length=1024), nullable=True),
+        sa.Column("lease_owner", sa.String(length=128), nullable=True),
+        sa.Column("lease_token", sa.String(length=64), nullable=True),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("name"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_table("storage_reconciliation_cursor")
     op.drop_index(
         "ix_public_write_idempotency_expires_at",
         table_name="public_write_idempotency",

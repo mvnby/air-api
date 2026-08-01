@@ -1,16 +1,31 @@
-import asyncio
+import hashlib
+import json
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import IntegrationOutboxEvent, LeadSource, Order, OrderStatus
+from models import (
+    IntegrationOutboxEvent,
+    LeadSource,
+    Order,
+    OrderAttachmentLink,
+    OrderStatus,
+    ServiceAttachment,
+)
 from services.bot_service import BotService
-from services.general_media_storage_service import StoredGeneralMediaObject
+from services.private_attachment_storage_service import StoredPrivateObject
+from services.repair_diagnostic_ai_job_service import (
+    REPAIR_DIAGNOSTIC_AI_REQUESTED_EVENT,
+    RepairDiagnosticAiJobService,
+)
+from services.repair_diagnostic_intake_service import RepairDiagnosticIntakeService
 from services.repair_diagnostic_service import (
     MAX_PAYLOAD_BYTES,
     MAX_PHOTO_BYTES,
@@ -18,42 +33,47 @@ from services.repair_diagnostic_service import (
     RepairDiagnosticLeadPayload,
     RepairDiagnosticService,
 )
-from services.repair_diagnostic_intake_service import RepairDiagnosticIntakeService
-from services.repair_diagnostic_ai_job_service import (
-    REPAIR_DIAGNOSTIC_AI_REQUESTED_EVENT,
-    RepairDiagnosticAiJobService,
-)
+from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
-from services.repair_diagnostic_storage_service import (
-    RepairDiagnosticStorageService,
-)
+from services.tenant_scope_service import TenantScope
 
 
-class FakeRepairDiagnosticStorage:
-    provider_name = "local"
+@dataclass
+class FakePrivateStorage:
+    provider_name: str = "local"
+    inventory_id: str = "repair-unit-private"
+    objects: dict[str, bytes] = field(default_factory=dict)
+    save_calls: list[str] = field(default_factory=list)
+    delete_calls: list[str] = field(default_factory=list)
 
-    def __init__(self):
-        self.save_calls = []
-        self.delete_calls = []
-
-    async def save_media(self, **kwargs):
-        self.save_calls.append(kwargs)
-        namespace = kwargs["namespace"]
-        variant_type = kwargs["variant_type"]
-        extension = kwargs["extension"]
-        return StoredGeneralMediaObject(
-            url=f"/media/{namespace}/{variant_type}/hash.{extension}",
-            content_hash="c" * 64,
-            storage_provider="local",
-            path=f"media/{namespace}/{variant_type}/hash.{extension}",
-            size_bytes=len(kwargs["content"]),
+    async def save(self, *, content, content_hash, extension, content_type, variant):
+        del content_type
+        key = f"private/{content_hash}/{variant}.{extension}"
+        self.save_calls.append(key)
+        self.objects[key] = content
+        return StoredPrivateObject(
+            provider=self.provider_name,
+            storage_key=key,
+            content_hash=content_hash,
+            size_bytes=len(content),
         )
 
-    async def delete_media(self, path):
-        self.delete_calls.append(path)
+    async def read(self, storage_key):
+        return self.objects[storage_key]
 
-    async def read_media(self, path):
-        return path.encode()
+    async def exists(self, storage_key):
+        return storage_key in self.objects
+
+    async def delete(self, storage_key):
+        self.delete_calls.append(storage_key)
+        self.objects.pop(storage_key, None)
+
+    async def verify_writable(self):
+        return None
+
+    async def presign(self, storage_key, *, expires_seconds, download_name=None):
+        del storage_key, expires_seconds, download_name
+        return None
 
 
 class SizedFakeUpload:
@@ -71,29 +91,25 @@ class SizedFakeUpload:
 
 @pytest.fixture
 async def sqlite_repair_diagnostic_session(tmp_path: Path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'repair_diagnostic.db'}")
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'repair_diagnostic.db'}"
+    )
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
-    session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
     async with session_factory() as session:
         yield session
 
     await engine.dispose()
 
 
-@pytest.mark.asyncio
-async def test_repair_diagnostic_service_creates_repair_order_with_structured_meta(
-    sqlite_repair_diagnostic_session,
-    monkeypatch,
-    tenant_scope,
-):
-    storage = FakeRepairDiagnosticStorage()
-    monkeypatch.setattr(
-        "services.repair_diagnostic_intake_service.get_general_media_storage",
-        lambda: storage,
-    )
-    payload = RepairDiagnosticLeadPayload.model_validate(
+def _payload(*, name: str = "Анна", phone: str = "+375291112233"):
+    return RepairDiagnosticLeadPayload.model_validate(
         {
             "scenario": "repair",
             "symptom": "not_cooling",
@@ -107,18 +123,21 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
             "client_checks": ["filters_cleaned", "power_restarted"],
             "client_comment": "Стал хуже холодить после жары",
             "contact": {
-                "name": "Анна",
-                "phone": "+375291112233",
+                "name": name,
+                "phone": phone,
                 "address": "Витебск, центр",
             },
         }
     )
-    uploads = {
+
+
+def _uploads(content: bytes = b"nameplate-content"):
+    return {
         "nameplate": [
             RepairDiagnosticIncomingFile(
                 filename="nameplate.jpg",
                 content_type="image/jpeg",
-                content=b"nameplate-content",
+                content=content,
             )
         ],
         "indoor_unit": [
@@ -130,33 +149,42 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
         ],
     }
 
+
+@pytest.mark.asyncio
+async def test_repair_diagnostic_creates_private_manager_attachments_and_replays(
+    sqlite_repair_diagnostic_session,
+    tenant_scope,
+):
+    storage = FakePrivateStorage()
+    payload = _payload()
+    uploads = _uploads()
+
     response, nameplate_files, replayed = await RepairDiagnosticIntakeService.create_lead(
         sqlite_repair_diagnostic_session,
         payload=payload,
         uploads=uploads,
         tenant_scope=tenant_scope,
         idempotency_key="repair-request-unit-0001",
+        storage=storage,
+    )
+    replay_response, _, replayed_again = await RepairDiagnosticIntakeService.create_lead(
+        sqlite_repair_diagnostic_session,
+        payload=payload,
+        uploads=uploads,
+        tenant_scope=tenant_scope,
+        idempotency_key="repair-request-unit-0001",
+        storage=storage,
     )
 
     assert response.status == "new_lead"
     assert response.ai_pre_diagnosis_status == "pending"
     assert len(nameplate_files) == 1
     assert replayed is False
-    replay_response, _, replayed = await RepairDiagnosticIntakeService.create_lead(
-        sqlite_repair_diagnostic_session,
-        payload=payload,
-        uploads=uploads,
-        tenant_scope=tenant_scope,
-        idempotency_key="repair-request-unit-0001",
-    )
-    assert replayed is True
+    assert replayed_again is True
     assert replay_response == response
     assert len(storage.save_calls) == 2
-    assert all(
-        call["namespace"].startswith("public-repair-write/1/1/")
-        for call in storage.save_calls
-    )
-    assert len({call["namespace"] for call in storage.save_calls}) == 1
+    assert all("public-repair-1-1-" in key for key in storage.save_calls)
+    assert storage.delete_calls == []
 
     order = await sqlite_repair_diagnostic_session.get(Order, response.order_id)
     assert order is not None
@@ -168,17 +196,61 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     assert order.delivery_address == "Витебск, центр"
     assert order.title == "Ремонт кондиционера: Не охлаждает / слабо охлаждает"
 
-    meta = order.technical_meta
-    assert meta["service_type"] == "repair"
-    repair_meta = meta["repair"]
+    repair_meta = order.technical_meta["repair"]
+    photo_ref = repair_meta["photos"]["nameplate"][0]
     assert repair_meta["scenario"] == "repair"
-    assert repair_meta["symptom"] == "not_cooling"
     assert repair_meta["symptom_details"]["outdoor_unit_starts"] == "unknown"
     assert repair_meta["client_checks"] == ["filters_cleaned", "power_restarted"]
-    assert repair_meta["photos"]["nameplate"][0]["content_hash"] == "c" * 64
+    assert photo_ref["content_hash"] == hashlib.sha256(
+        b"nameplate-content"
+    ).hexdigest()
+    assert set(photo_ref) == {
+        "attachment_id",
+        "filename",
+        "content_type",
+        "content_hash",
+        "size_bytes",
+        "uploaded_at",
+    }
     assert repair_meta["ai_pre_diagnosis_status"] == "pending"
     assert repair_meta["preliminary_fault_type"] == "refrigerant_leak"
     assert "Фото шильдика" not in repair_meta["missing_data"]
+
+    attachments = list(
+        (
+            await sqlite_repair_diagnostic_session.execute(
+                select(ServiceAttachment).order_by(ServiceAttachment.id)
+            )
+        ).scalars()
+    )
+    links = list(
+        (
+            await sqlite_repair_diagnostic_session.execute(
+                select(OrderAttachmentLink).order_by(OrderAttachmentLink.id)
+            )
+        ).scalars()
+    )
+    assert len(attachments) == len(links) == 2
+    assert attachments[0].source == "website_repair_diagnostic"
+    assert attachments[0].source_meta["intake"] == "repair_diagnostic"
+    assert attachments[0].source_meta["photo_category"] == "nameplate"
+    assert attachments[0].source_meta["purpose"] == "repair_diagnostic_nameplate"
+    assert links[0].category == "nameplate"
+    assert links[1].category == "defect"
+
+    manager_view = await ServiceAttachmentService.list_order_attachments(
+        sqlite_repair_diagnostic_session,
+        order_id=response.order_id,
+        tenant_scope=tenant_scope,
+    )
+    foreign_view = await ServiceAttachmentService.list_order_attachments(
+        sqlite_repair_diagnostic_session,
+        order_id=response.order_id,
+        tenant_scope=TenantScope(tenant_id=999, storefront_id=999),
+    )
+    assert manager_view is not None
+    assert manager_view["total"] == 2
+    assert foreign_view is None
 
     events = list(
         (
@@ -201,7 +273,6 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     assert events[0].idempotency_key.startswith("repair-diagnostic-ai:")
     assert payload.contact.phone not in events[0].idempotency_key
 
-    # Simulate a worker/process crash after the durable claim committed.
     events[0].status = "processing"
     events[0].worker_id = "crashed-worker"
     events[0].lease_token = "expired-lease"
@@ -235,6 +306,66 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
 
 
 @pytest.mark.asyncio
+async def test_existing_binary_reuse_stays_private_and_manager_tenant_scoped(
+    sqlite_repair_diagnostic_session,
+):
+    storage = FakePrivateStorage()
+    content = b"shared-private-nameplate"
+    first_scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    second_scope = TenantScope(tenant_id=2, storefront_id=2)
+    first, _, _ = await RepairDiagnosticIntakeService.create_lead(
+        sqlite_repair_diagnostic_session,
+        tenant_scope=first_scope,
+        payload=_payload(name="First", phone="+375291110001"),
+        uploads={"nameplate": _uploads(content)["nameplate"]},
+        idempotency_key="repair-binary-reuse-first-0001",
+        storage=storage,
+    )
+    second, _, _ = await RepairDiagnosticIntakeService.create_lead(
+        sqlite_repair_diagnostic_session,
+        tenant_scope=second_scope,
+        payload=_payload(name="Second", phone="+375291110002"),
+        uploads={"nameplate": _uploads(content)["nameplate"]},
+        idempotency_key="repair-binary-reuse-second-0001",
+        storage=storage,
+    )
+
+    attachments = list(
+        (
+            await sqlite_repair_diagnostic_session.execute(
+                select(ServiceAttachment).order_by(ServiceAttachment.id)
+            )
+        ).scalars()
+    )
+    assert len(storage.save_calls) == 1
+    assert len(attachments) == 2
+    assert attachments[0].storage_key == attachments[1].storage_key
+    assert attachments[0].storage_key in storage.objects
+    assert (
+        await ServiceAttachmentService.list_order_attachments(
+            sqlite_repair_diagnostic_session,
+            order_id=first.order_id,
+            tenant_scope=first_scope,
+        )
+    )["total"] == 1
+    assert (
+        await ServiceAttachmentService.list_order_attachments(
+            sqlite_repair_diagnostic_session,
+            order_id=first.order_id,
+            tenant_scope=second_scope,
+        )
+        is None
+    )
+    assert (
+        await ServiceAttachmentService.list_order_attachments(
+            sqlite_repair_diagnostic_session,
+            order_id=second.order_id,
+            tenant_scope=second_scope,
+        )
+    )["total"] == 1
+
+
+@pytest.mark.asyncio
 async def test_repair_diagnostic_aggregate_upload_boundary(monkeypatch):
     monkeypatch.setattr(
         "services.repair_diagnostic_service._validate_photo",
@@ -247,9 +378,7 @@ async def test_repair_diagnostic_aggregate_upload_boundary(monkeypatch):
         {"nameplate": [first], "indoor_unit": [exact]}
     )
     assert sum(
-        len(item.content)
-        for group in uploads.values()
-        for item in group
+        len(item.content) for group in uploads.values() for item in group
     ) == MAX_PAYLOAD_BYTES
     assert first.read_sizes == [MAX_PHOTO_BYTES + 1]
 
@@ -260,43 +389,35 @@ async def test_repair_diagnostic_aggregate_upload_boundary(monkeypatch):
         )
 
 
-@pytest.mark.asyncio
-async def test_concurrent_same_key_rollback_cannot_delete_committed_successor():
-    storage = FakeRepairDiagnosticStorage()
-    key_hash = "d" * 64
-    successor_saved = asyncio.Event()
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"unexpected": "field"},
+        {"symptom_details": {"leak_place": "wall"}},
+        {"symptom_details": {"indoor_fan_works": "maybe"}},
+        {"client_checks": ["filters_cleaned", "filters_cleaned"]},
+        {"client_checks": ["nothing_checked", "filters_cleaned"]},
+    ],
+)
+def test_repair_payload_rejects_unknown_or_invalid_fields(patch):
+    data = _payload().model_dump()
+    data.update(patch)
+    with pytest.raises(ValidationError):
+        RepairDiagnosticLeadPayload.model_validate(data)
 
-    async def attempt(*, fail: bool) -> str:
-        namespace = RepairDiagnosticStorageService.new_attempt_namespace(
-            tenant_id=1,
-            storefront_id=1,
-            key_hash=key_hash,
-        )
-        saved = await storage.save_media(
-            content=b"same-content",
-            namespace=namespace,
-            variant_type="nameplate-0",
-            extension="jpg",
-            content_type="image/jpeg",
-        )
-        if fail:
-            await successor_saved.wait()
-            await RepairDiagnosticIntakeService._cleanup_failed_uploads(
-                storage=storage,
-                paths={saved.path},
-            )
-        else:
-            successor_saved.set()
-        return saved.path
 
-    failed_path, committed_path = await asyncio.gather(
-        attempt(fail=True),
-        attempt(fail=False),
-    )
+def test_repair_payload_rejects_oversized_json_before_decoding(monkeypatch):
+    decoder_called = False
 
-    assert failed_path != committed_path
-    assert storage.delete_calls == [failed_path]
-    assert committed_path not in storage.delete_calls
+    def must_not_decode(_raw):
+        nonlocal decoder_called
+        decoder_called = True
+        raise AssertionError("oversized payload reached JSON decoder")
+
+    monkeypatch.setattr(json, "loads", must_not_decode)
+    with pytest.raises(ValueError, match="too large"):
+        RepairDiagnosticService.parse_payload("x" * (20 * 1024 * 1024))
+    assert decoder_called is False
 
 
 @pytest.mark.asyncio
@@ -347,4 +468,7 @@ async def test_repair_notification_escapes_contact_fields(
     assert "Витебск &amp; &lt;центр&gt;" in sent_text
     assert "<admin>" not in sent_text
     assert len(sent_text) <= BotService.MAX_MESSAGE_LENGTH
-    assert "REPAIR_DIAGNOSTIC_NOTIFY_DELIVERY_FAILED order_id=42 admin_id=202" in caplog.text
+    assert (
+        "REPAIR_DIAGNOSTIC_NOTIFY_DELIVERY_FAILED order_id=42 admin_id=202"
+        in caplog.text
+    )

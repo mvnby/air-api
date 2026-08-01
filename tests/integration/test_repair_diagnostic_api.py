@@ -1,69 +1,68 @@
-import asyncio
+import hashlib
 import json
+from dataclasses import dataclass, field
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
-from models import LeadSource, Order, OrderStatus
-from core.database import get_session
-from services.general_media_storage_service import StoredGeneralMediaObject
+from models import (
+    LeadSource,
+    Order,
+    OrderAttachmentLink,
+    OrderStatus,
+    ServiceAttachment,
+)
+from services.private_attachment_storage_service import StoredPrivateObject
 from services.repair_diagnostic_intake_service import RepairDiagnosticIntakeService
 
 
-class FakeRepairDiagnosticStorage:
-    provider_name = "local"
+@dataclass
+class FakePrivateStorage:
+    provider_name: str = "local"
+    inventory_id: str = "repair-api-private"
+    objects: dict[str, bytes] = field(default_factory=dict)
+    save_calls: list[str] = field(default_factory=list)
+    delete_calls: list[str] = field(default_factory=list)
 
-    def __init__(self):
-        self.objects = {}
-
-    async def save_media(self, **kwargs):
-        namespace = kwargs["namespace"]
-        variant_type = kwargs["variant_type"]
-        extension = kwargs["extension"]
-        stored = StoredGeneralMediaObject(
-            url=f"/media/{namespace}/{variant_type}/hash.{extension}",
-            content_hash="a" * 64,
-            storage_provider="local",
-            path=f"media/{namespace}/{variant_type}/hash.{extension}",
-            size_bytes=len(kwargs["content"]),
+    async def save(self, *, content, content_hash, extension, content_type, variant):
+        del content_type
+        key = f"private/{content_hash}/{variant}.{extension}"
+        self.save_calls.append(key)
+        self.objects[key] = content
+        return StoredPrivateObject(
+            provider=self.provider_name,
+            storage_key=key,
+            content_hash=content_hash,
+            size_bytes=len(content),
         )
-        self.objects[stored.path] = kwargs["content"]
-        return stored
 
-    async def delete_media(self, path):
-        self.objects.pop(path, None)
+    async def read(self, storage_key):
+        return self.objects[storage_key]
 
-    async def read_media(self, path):
-        return self.objects[path]
+    async def exists(self, storage_key):
+        return storage_key in self.objects
 
+    async def delete(self, storage_key):
+        self.delete_calls.append(storage_key)
+        self.objects.pop(storage_key, None)
 
-class CoordinatedRepairStorage(FakeRepairDiagnosticStorage):
-    def __init__(self):
-        super().__init__()
-        self.first_saved = asyncio.Event()
-        self.allow_delete = asyncio.Event()
-        self.deleted = []
+    async def verify_writable(self):
+        return None
 
-    async def save_media(self, **kwargs):
-        stored = await super().save_media(**kwargs)
-        if len(self.objects) == 1:
-            self.first_saved.set()
-        return stored
-
-    async def delete_media(self, path):
-        await self.allow_delete.wait()
-        self.deleted.append(path)
-        await super().delete_media(path)
+    async def presign(self, storage_key, *, expires_seconds, download_name=None):
+        del storage_key, expires_seconds, download_name
+        return None
 
 
 @pytest.mark.asyncio
-async def test_public_repair_diagnostic_creates_structured_repair_order(async_client, db, monkeypatch):
-    storage = FakeRepairDiagnosticStorage()
+async def test_public_repair_diagnostic_creates_private_structured_order(
+    async_client,
+    db,
+    monkeypatch,
+):
+    storage = FakePrivateStorage()
     monkeypatch.setattr(
-        "services.repair_diagnostic_intake_service.get_general_media_storage",
+        "services.repair_diagnostic_intake_service.get_private_attachment_storage",
         lambda: storage,
     )
     payload = {
@@ -109,9 +108,7 @@ async def test_public_repair_diagnostic_creates_structured_repair_order(async_cl
     assert order.title == "Ремонт кондиционера: Течет вода из внутреннего блока"
     assert "предварительной диагностикой" in order.comment
 
-    meta = order.technical_meta
-    assert meta["service_type"] == "repair"
-    repair_meta = meta["repair"]
+    repair_meta = order.technical_meta["repair"]
     assert repair_meta["scenario"] == "repair"
     assert repair_meta["repair_status"] == "new"
     assert repair_meta["symptom"] == "water_leak"
@@ -120,120 +117,63 @@ async def test_public_repair_diagnostic_creates_structured_repair_order(async_cl
     assert repair_meta["symptom_details"]["drainage_exit"] == "unknown"
     assert repair_meta["contact"]["address"] == "Витебск, Билево"
     assert repair_meta["ai_pre_diagnosis_status"] == "pending"
-    assert repair_meta["photos"]["nameplate"][0]["url"].endswith(
-        "/nameplate-0/hash.jpg"
-    )
+    nameplate_ref = repair_meta["photos"]["nameplate"][0]
+    assert set(nameplate_ref) == {
+        "attachment_id",
+        "filename",
+        "content_type",
+        "content_hash",
+        "size_bytes",
+        "uploaded_at",
+    }
+    assert nameplate_ref["content_hash"] == hashlib.sha256(
+        b"nameplate-content"
+    ).hexdigest()
     assert repair_meta["photos"]["indoor_unit"][0]["content_type"] == "image/webp"
     assert "Фото шильдика" not in repair_meta["missing_data"]
     assert "Фото внутреннего блока целиком" not in repair_meta["missing_data"]
     assert "Фото места протечки" in repair_meta["missing_data"]
+    assert storage.delete_calls == []
+
+    attachments = list(
+        (await db.execute(select(ServiceAttachment).order_by(ServiceAttachment.id))).scalars()
+    )
+    links = list(
+        (await db.execute(select(OrderAttachmentLink).order_by(OrderAttachmentLink.id))).scalars()
+    )
+    assert len(attachments) == len(links) == 2
+    assert attachments[0].source == "website_repair_diagnostic"
+    assert attachments[0].storage_key in storage.objects
+    assert links[0].category == "nameplate"
 
 
 @pytest.mark.asyncio
-async def test_same_key_failed_attempt_cleanup_cannot_delete_committed_successor(
-    db_engine,
+async def test_public_repair_rejects_20_mib_payload_before_mutation(
+    async_client,
     monkeypatch,
 ):
-    from main import app
+    intake_called = False
 
-    storage = CoordinatedRepairStorage()
-    monkeypatch.setattr(
-        "services.repair_diagnostic_intake_service.get_general_media_storage",
-        lambda: storage,
-    )
-    original_mutation = RepairDiagnosticIntakeService._create_mutation
-    first_may_fail = asyncio.Event()
-    mutation_calls = 0
-
-    async def controlled_mutation(*args, **kwargs):
-        nonlocal mutation_calls
-        mutation_calls += 1
-        attempt = mutation_calls
-        order = await original_mutation(*args, **kwargs)
-        if attempt == 1:
-            await first_may_fail.wait()
-            raise RuntimeError("forced first-attempt rollback")
-        return order
-
-    async def no_notification(*_args, **_kwargs):
-        return None
+    async def must_not_create(*_args, **_kwargs):
+        nonlocal intake_called
+        intake_called = True
+        raise AssertionError("oversized payload reached database mutation")
 
     monkeypatch.setattr(
         RepairDiagnosticIntakeService,
-        "_create_mutation",
-        controlled_mutation,
+        "create_lead",
+        must_not_create,
     )
-    monkeypatch.setattr(
-        "services.repair_diagnostic_service.RepairDiagnosticService._notify_admins",
-        no_notification,
-    )
-    request_factory = sessionmaker(
-        bind=db_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
+    response = await async_client.post(
+        "/api/v1/leads/repair-diagnostic",
+        headers={"Idempotency-Key": "repair-oversized-payload-0001"},
+        files=[
+            (
+                "payload",
+                (None, "x" * (20 * 1024 * 1024), "application/json"),
+            )
+        ],
     )
 
-    async def request_session():
-        async with request_factory() as session:
-            yield session
-
-    prior_overrides = dict(app.dependency_overrides)
-    app.dependency_overrides[get_session] = request_session
-    payload = {
-        "scenario": "repair",
-        "symptom": "not_cooling",
-        "client_checks": [],
-        "contact": {
-            "name": "Concurrent repair",
-            "phone": "+375291112244",
-        },
-    }
-    files = [
-        ("payload", (None, json.dumps(payload), "application/json")),
-        ("nameplate", ("nameplate.jpg", b"same-photo", "image/jpeg")),
-    ]
-    headers = {"Idempotency-Key": "repair-concurrent-rollback-0001"}
-    transport = ASGITransport(app=app, raise_app_exceptions=False)
-    try:
-        async with AsyncClient(
-            transport=transport,
-            base_url="http://test",
-        ) as client:
-            failed_task = asyncio.create_task(
-                client.post(
-                    "/api/v1/leads/repair-diagnostic",
-                    files=files,
-                    headers=headers,
-                )
-            )
-            await storage.first_saved.wait()
-            successor_task = asyncio.create_task(
-                client.post(
-                    "/api/v1/leads/repair-diagnostic",
-                    files=files,
-                    headers=headers,
-                )
-            )
-            first_may_fail.set()
-            successor_response = await asyncio.wait_for(
-                successor_task,
-                timeout=10,
-            )
-            storage.allow_delete.set()
-            failed_response = await asyncio.wait_for(failed_task, timeout=10)
-    finally:
-        storage.allow_delete.set()
-        app.dependency_overrides.clear()
-        app.dependency_overrides.update(prior_overrides)
-
-    assert failed_response.status_code == 500
-    assert successor_response.status_code == 200
-    assert len(storage.deleted) == 1
-    async with request_factory() as session:
-        orders = list((await session.execute(select(Order))).scalars())
-    assert len(orders) == 1
-    committed_path = orders[0].technical_meta["repair"]["photos"]["nameplate"][0][
-        "storage_path"
-    ]
-    assert committed_path in storage.objects
-    assert storage.deleted[0] != committed_path
+    assert response.status_code in {400, 413}
+    assert intake_called is False

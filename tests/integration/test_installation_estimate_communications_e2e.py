@@ -50,6 +50,7 @@ def _png_bytes() -> bytes:
 
 class FakePrivateStorage:
     provider_name = "local"
+    inventory_id = "installation-e2e-private"
 
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}

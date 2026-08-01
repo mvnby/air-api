@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import mimetypes
+import os
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -27,8 +28,17 @@ class PrivateStorageCandidate:
     modified_at: datetime
 
 
+@dataclass(frozen=True)
+class PrivateStoragePage:
+    candidates: tuple[PrivateStorageCandidate, ...]
+    next_cursor: str | None
+    examined: int
+    wrapped: bool
+
+
 class PrivateAttachmentStorage(Protocol):
     provider_name: str
+    inventory_id: str
 
     async def save(
         self,
@@ -46,13 +56,14 @@ class PrivateAttachmentStorage(Protocol):
 
     async def delete(self, storage_key: str) -> None: ...
 
-    async def list_variant_candidates(
+    async def list_reconciliation_page(
         self,
         *,
-        variant_prefix: str,
+        variant_prefixes: tuple[str, ...],
         older_than: datetime,
+        cursor: str | None,
         limit: int,
-    ) -> list[PrivateStorageCandidate]: ...
+    ) -> PrivateStoragePage: ...
 
     async def verify_writable(self) -> None: ...
 
@@ -116,6 +127,7 @@ class VariantScopedPrivateAttachmentStorage:
         self.storage = storage
         self.variant_scope = normalized_scope
         self.provider_name = storage.provider_name
+        self.inventory_id = storage.inventory_id
 
     async def save(
         self,
@@ -143,16 +155,18 @@ class VariantScopedPrivateAttachmentStorage:
     async def delete(self, storage_key: str) -> None:
         await self.storage.delete(storage_key)
 
-    async def list_variant_candidates(
+    async def list_reconciliation_page(
         self,
         *,
-        variant_prefix: str,
+        variant_prefixes: tuple[str, ...],
         older_than: datetime,
+        cursor: str | None,
         limit: int,
-    ) -> list[PrivateStorageCandidate]:
-        return await self.storage.list_variant_candidates(
-            variant_prefix=variant_prefix,
+    ) -> PrivateStoragePage:
+        return await self.storage.list_reconciliation_page(
+            variant_prefixes=variant_prefixes,
             older_than=older_than,
+            cursor=cursor,
             limit=limit,
         )
 
@@ -178,6 +192,9 @@ class LocalPrivateAttachmentStorage:
 
     def __init__(self, base_dir: str | Path) -> None:
         self.base_dir = Path(base_dir).expanduser().resolve()
+        self.inventory_id = hashlib.sha256(
+            f"local:{self.base_dir}".encode("utf-8")
+        ).hexdigest()
         self._write_lock = asyncio.Lock()
 
     def _path(self, storage_key: str) -> Path:
@@ -228,38 +245,85 @@ class LocalPrivateAttachmentStorage:
         except FileNotFoundError:
             pass
 
-    async def list_variant_candidates(
+    async def list_reconciliation_page(
         self,
         *,
-        variant_prefix: str,
+        variant_prefixes: tuple[str, ...],
         older_than: datetime,
+        cursor: str | None,
         limit: int,
-    ) -> list[PrivateStorageCandidate]:
+    ) -> PrivateStoragePage:
         cutoff = older_than.astimezone(timezone.utc)
+        requested_limit = max(1, min(int(limit), 1000))
+        normalized_cursor = str(cursor or "")[:1024] or None
+        prefixes = tuple(str(prefix) for prefix in variant_prefixes if prefix)
 
-        def collect() -> list[PrivateStorageCandidate]:
+        def iter_files_after(
+            directory: Path,
+            relative_prefix: str = "",
+        ):
+            try:
+                entries = sorted(
+                    os.scandir(directory),
+                    key=lambda entry: entry.name,
+                )
+            except FileNotFoundError:
+                return
+            for entry in entries:
+                relative_key = (
+                    f"{relative_prefix}/{entry.name}"
+                    if relative_prefix
+                    else entry.name
+                )
+                if entry.is_dir(follow_symlinks=False):
+                    subtree_prefix = f"{relative_key}/"
+                    if (
+                        normalized_cursor
+                        and not normalized_cursor.startswith(subtree_prefix)
+                        and subtree_prefix <= normalized_cursor
+                    ):
+                        continue
+                    yield from iter_files_after(
+                        Path(entry.path),
+                        relative_key,
+                    )
+                elif entry.is_file(follow_symlinks=False) and (
+                    normalized_cursor is None or relative_key > normalized_cursor
+                ):
+                    yield relative_key, entry
+
+        def collect() -> PrivateStoragePage:
             candidates: list[PrivateStorageCandidate] = []
-            for path in self.base_dir.rglob("*"):
-                if not path.is_file() or not path.name.startswith(variant_prefix):
+            examined = 0
+            last_key: str | None = None
+            for storage_key, entry in iter_files_after(self.base_dir):
+                examined += 1
+                last_key = storage_key
+                filename = storage_key.rsplit("/", 1)[-1]
+                if not filename.startswith(prefixes):
+                    if examined >= requested_limit:
+                        break
                     continue
                 modified_at = datetime.fromtimestamp(
-                    path.stat().st_mtime,
+                    entry.stat(follow_symlinks=False).st_mtime,
                     tz=timezone.utc,
                 )
                 if modified_at <= cutoff:
                     candidates.append(
                         PrivateStorageCandidate(
-                            storage_key=str(path.relative_to(self.base_dir)).replace(
-                                "\\",
-                                "/",
-                            ),
+                            storage_key=storage_key,
                             modified_at=modified_at,
                         )
                     )
-            return sorted(
-                candidates,
-                key=lambda item: (item.modified_at, item.storage_key),
-            )[: max(1, int(limit))]
+                if examined >= requested_limit:
+                    break
+            wrapped = examined < requested_limit
+            return PrivateStoragePage(
+                candidates=tuple(candidates),
+                next_cursor=None if wrapped else last_key,
+                examined=examined,
+                wrapped=wrapped,
+            )
 
         return await asyncio.to_thread(collect)
 
@@ -306,6 +370,12 @@ class S3PrivateAttachmentStorage:
         self.secret_access_key = secret_access_key.strip()
         self.region = region.strip() or "auto"
         self.key_prefix = key_prefix.strip(" /")
+        inventory_material = (
+            f"s3:{self.endpoint_url}:{self.bucket}:{self.key_prefix}"
+        )
+        self.inventory_id = hashlib.sha256(
+            inventory_material.encode("utf-8")
+        ).hexdigest()
         self._client_override = client
         self._client: Any | None = None
         missing = [
@@ -403,54 +473,61 @@ class S3PrivateAttachmentStorage:
             Key=storage_key,
         )
 
-    async def list_variant_candidates(
+    async def list_reconciliation_page(
         self,
         *,
-        variant_prefix: str,
+        variant_prefixes: tuple[str, ...],
         older_than: datetime,
+        cursor: str | None,
         limit: int,
-    ) -> list[PrivateStorageCandidate]:
+    ) -> PrivateStoragePage:
         cutoff = older_than.astimezone(timezone.utc)
-        requested_limit = max(1, int(limit))
+        requested_limit = max(1, min(int(limit), 1000))
+        prefixes = tuple(str(prefix) for prefix in variant_prefixes if prefix)
         candidates: list[PrivateStorageCandidate] = []
-        continuation_token: str | None = None
-        while len(candidates) < requested_limit:
-            kwargs: dict[str, Any] = {
-                "Bucket": self.bucket,
-                "Prefix": self.key_prefix,
-                "MaxKeys": min(1000, requested_limit),
-            }
-            if continuation_token:
-                kwargs["ContinuationToken"] = continuation_token
-            response = await asyncio.to_thread(
-                self._get_client().list_objects_v2,
-                **kwargs,
-            )
-            for item in response.get("Contents") or []:
-                storage_key = str(item.get("Key") or "")
-                filename = storage_key.rsplit("/", 1)[-1]
-                modified_at = item.get("LastModified")
-                if (
-                    storage_key
-                    and filename.startswith(variant_prefix)
-                    and isinstance(modified_at, datetime)
-                    and modified_at.astimezone(timezone.utc) <= cutoff
-                ):
-                    candidates.append(
-                        PrivateStorageCandidate(
-                            storage_key=storage_key,
-                            modified_at=modified_at.astimezone(timezone.utc),
-                        )
+        kwargs: dict[str, Any] = {
+            "Bucket": self.bucket,
+            "Prefix": f"{self.key_prefix}/" if self.key_prefix else "",
+            "MaxKeys": requested_limit,
+        }
+        if cursor:
+            kwargs["StartAfter"] = str(cursor)[:1024]
+        response = await asyncio.to_thread(
+            self._get_client().list_objects_v2,
+            **kwargs,
+        )
+        raw_items = list(response.get("Contents") or [])
+        examined_items = raw_items[:requested_limit]
+        for item in examined_items:
+            storage_key = str(item.get("Key") or "")
+            filename = storage_key.rsplit("/", 1)[-1]
+            modified_at = item.get("LastModified")
+            if (
+                storage_key
+                and filename.startswith(prefixes)
+                and isinstance(modified_at, datetime)
+                and modified_at.astimezone(timezone.utc) <= cutoff
+            ):
+                candidates.append(
+                    PrivateStorageCandidate(
+                        storage_key=storage_key,
+                        modified_at=modified_at.astimezone(timezone.utc),
                     )
-                    if len(candidates) >= requested_limit:
-                        break
-            continuation_token = response.get("NextContinuationToken")
-            if not continuation_token:
-                break
-        return sorted(
-            candidates,
-            key=lambda item: (item.modified_at, item.storage_key),
-        )[:requested_limit]
+                )
+        has_more = bool(response.get("IsTruncated")) or len(raw_items) > requested_limit
+        if has_more and not examined_items:
+            raise RuntimeError("Private storage returned an empty truncated page")
+        next_cursor = (
+            str(examined_items[-1].get("Key") or "") or None
+            if has_more
+            else None
+        )
+        return PrivateStoragePage(
+            candidates=tuple(candidates),
+            next_cursor=next_cursor,
+            examined=len(examined_items),
+            wrapped=not has_more,
+        )
 
     async def verify_writable(self) -> None:
         content = f"mvn-private-storage-{secrets.token_hex(16)}".encode()

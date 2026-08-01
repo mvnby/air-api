@@ -177,11 +177,8 @@ class SchedulerService:
         # Enforce the documented public-write replay horizon in bounded batches.
         tasks.append(asyncio.create_task(self._public_write_receipt_retention_loop()))
 
-        # Reconcile crash-left installation objects only after a long grace period.
+        # Reconcile crash-left public private attachments after a long grace.
         tasks.append(asyncio.create_task(self._private_attachment_orphan_loop()))
-
-        # Reconcile crash-left public repair uploads after the same long grace.
-        tasks.append(asyncio.create_task(self._repair_media_orphan_loop()))
 
         # Run bank receipt IMAP import loop
         tasks.append(asyncio.create_task(self._bank_mail_import_loop()))
@@ -479,29 +476,10 @@ class SchedulerService:
                         limit=100,
                     )
                 if deleted:
-                    logger.info("Private installation orphans deleted: %s", deleted)
+                    logger.info("Private public-intake orphans deleted: %s", deleted)
                 await asyncio.sleep(3600)
             except Exception:
                 logger.exception("Private attachment orphan loop error")
-                await asyncio.sleep(300)
-
-    async def _repair_media_orphan_loop(self):
-        from services.repair_diagnostic_storage_service import (
-            RepairDiagnosticStorageService,
-        )
-
-        while True:
-            try:
-                async with async_session_maker() as session:
-                    deleted = await RepairDiagnosticStorageService.reconcile_orphans(
-                        session,
-                        limit=100,
-                    )
-                if deleted:
-                    logger.info("Public repair media orphans deleted: %s", deleted)
-                await asyncio.sleep(3600)
-            except Exception:
-                logger.exception("Public repair media orphan loop error")
                 await asyncio.sleep(300)
 
     async def _bank_mail_import_loop(self):

@@ -10,7 +10,6 @@ from hashlib import sha256
 from typing import Any
 from urllib.parse import quote
 
-from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
 
@@ -39,6 +38,7 @@ from services.service_attachment_presenter import (
 from services.service_attachment_link_service import ServiceAttachmentLinkService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import tenant_scope_clause
+
 
 class ServiceAttachmentService:
     CATEGORIES = {
@@ -121,7 +121,6 @@ class ServiceAttachmentService:
         telegram_meta: dict[str, Any] | None = None,
         source_meta: dict[str, Any] | None = None,
         storage: PrivateAttachmentStorage | None = None,
-        created_storage_keys: set[str] | None = None,
         commit: bool = True,
         tenant_scope: TenantScope,
     ) -> dict[str, Any]:
@@ -245,8 +244,6 @@ class ServiceAttachmentService:
             )
             storage_provider = original.provider
             storage_key = original.storage_key
-            if created_storage_keys is not None:
-                created_storage_keys.add(original.storage_key)
         else:
             storage_provider = reusable_binary.storage_provider
             storage_key = reusable_binary.storage_key
@@ -263,8 +260,6 @@ class ServiceAttachmentService:
                     variant="preview",
                 )
                 preview_key = stored_preview.storage_key
-                if created_storage_keys is not None:
-                    created_storage_keys.add(stored_preview.storage_key)
 
         attachment = ServiceAttachment(
             file_kind=attachment_file_kind(normalized_mime),
@@ -327,30 +322,6 @@ class ServiceAttachmentService:
             component_id=component_id,
             service_history_id=service_history_id,
         )
-
-    @staticmethod
-    async def delete_unreferenced_storage_keys(
-        session: AsyncSession,
-        *,
-        storage: PrivateAttachmentStorage,
-        storage_keys: set[str],
-    ) -> None:
-        """Compensate failed attachment transactions without deleting shared binaries."""
-
-        for storage_key in sorted(storage_keys):
-            referenced = await session.scalar(
-                select(ServiceAttachment.id)
-                .where(
-                    ServiceAttachment.storage_provider == storage.provider_name,
-                    or_(
-                        ServiceAttachment.storage_key == storage_key,
-                        ServiceAttachment.preview_storage_key == storage_key,
-                    ),
-                )
-                .limit(1)
-            )
-            if referenced is None:
-                await storage.delete(storage_key)
 
     @staticmethod
     async def order_attachment_counts(

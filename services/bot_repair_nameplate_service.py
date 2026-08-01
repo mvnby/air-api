@@ -2,14 +2,12 @@ import re
 from datetime import datetime
 from typing import Any, Optional
 
-import httpx
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
-from core.config import settings
 from models import (
     Customer,
     Order,
@@ -22,6 +20,11 @@ from models import (
 from models.tenancy import TenantScope
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from services.deepseek_provider_service import (
+    DefectActAIProviderError,
+    invalid_deepseek_response,
+    request_deepseek_completion,
+)
 from services.order_service import OrderService
 from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
@@ -481,36 +484,20 @@ class BotRepairNameplateService:
 
     @classmethod
     async def extract_nameplate(cls, raw_text: str) -> dict[str, Any]:
-        token = settings.DEEPSEEK_TOKEN.strip()
-        if not token:
-            raise ValueError("DEEPSEEK_TOKEN is not configured")
-
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(
-                settings.DEEPSEEK_API_URL,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json={
-                    "model": settings.DEEPSEEK_MODEL,
-                    "temperature": 0.02,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "Ты аккуратно извлекаешь паспортные данные HVAC оборудования и возвращаешь строгий JSON.",
-                        },
-                        {"role": "user", "content": cls.build_extraction_prompt(raw_text)},
-                    ],
-                },
-            )
-            if response.status_code >= 400:
-                raise ValueError(f"DeepSeek вернул ошибку {response.status_code}: {response.text[:300]}")
-            data = response.json()
-
+        content = await request_deepseek_completion(
+            prompt=cls.build_extraction_prompt(raw_text),
+            system_prompt=(
+                "Ты аккуратно извлекаешь паспортные данные HVAC оборудования "
+                "и возвращаешь строгий JSON."
+            ),
+            temperature=0.02,
+        )
         try:
-            content = str(data["choices"][0]["message"]["content"])
-        except (KeyError, IndexError, TypeError) as exc:
-            raise ValueError("AI response has unexpected format") from exc
-        return CustomerRequisitesRecognitionService._extract_json_object(content)
+            return CustomerRequisitesRecognitionService._extract_json_object(content)
+        except ValueError as exc:
+            raise invalid_deepseek_response(
+                "DeepSeek response does not contain valid nameplate JSON"
+            ) from exc
 
     @classmethod
     def normalize_extracted(cls, raw: dict[str, Any], raw_text: str) -> tuple[dict[str, Any], dict[str, Any]]:

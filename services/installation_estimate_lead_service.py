@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
-import logging
 import secrets
 import warnings
 from dataclasses import dataclass
@@ -52,9 +51,6 @@ from services.public_write_idempotency_service import (
     PublicWriteIdempotencyService,
 )
 from services.service_attachment_service import ServiceAttachmentService
-
-
-logger = logging.getLogger(__name__)
 
 
 InstallationEstimateIdempotencyConflict = PublicWriteIdempotencyConflict
@@ -190,6 +186,7 @@ class InstallationEstimateLeadService:
         fingerprint = cls.source_fingerprint(idempotency_key)
         storage_variant_scope = (
             "public-installation-"
+            f"{tenant_scope.tenant_id}-{tenant_scope.storefront_id}-"
             f"{PublicWriteIdempotencyService.key_hash(idempotency_key)}-"
             f"{secrets.token_hex(8)}"
         )
@@ -199,7 +196,6 @@ class InstallationEstimateLeadService:
             selected_storage,
             variant_scope=storage_variant_scope,
         )
-        created_storage_keys: set[str] = set()
         received_at = datetime.now(timezone.utc)
         category_counts = {
             category: sum(1 for upload in uploads if upload.category == category)
@@ -275,7 +271,6 @@ class InstallationEstimateLeadService:
                         "received_at": received_at.isoformat(),
                     },
                     storage=attempt_storage,
-                    created_storage_keys=created_storage_keys,
                     commit=False,
                     tenant_scope=tenant_scope,
                 )
@@ -335,20 +330,9 @@ class InstallationEstimateLeadService:
                 except IntegrityError:
                     if attempt > 0:
                         raise
-                    await cls._cleanup_failed_uploads(
-                        session,
-                        storage=selected_storage,
-                        storage_keys=created_storage_keys,
-                    )
-                    created_storage_keys.clear()
             else:  # pragma: no cover - loop always returns or raises
                 raise RuntimeError("Installation estimate retry was exhausted")
         except Exception as exc:
-            await cls._cleanup_failed_uploads(
-                session,
-                storage=selected_storage,
-                storage_keys=created_storage_keys,
-            )
             if isinstance(exc, InstallationEventEnqueueFenceBusy):
                 raise InstallationEstimateTemporarilyUnavailable(
                     "installation_estimate_temporarily_unavailable"
@@ -400,27 +384,6 @@ class InstallationEstimateLeadService:
             attachment_count=int(estimate_meta.get("attachment_count") or 0),
             replayed=True,
         )
-
-    @staticmethod
-    async def _cleanup_failed_uploads(
-        session: AsyncSession,
-        *,
-        storage: PrivateAttachmentStorage,
-        storage_keys: set[str],
-    ) -> None:
-        if not storage_keys:
-            return
-        try:
-            await ServiceAttachmentService.delete_unreferenced_storage_keys(
-                session,
-                storage=storage,
-                storage_keys=storage_keys,
-            )
-        except Exception:
-            logger.exception(
-                "INSTALLATION_ESTIMATE_STORAGE_COMPENSATION_FAILED keys=%s",
-                len(storage_keys),
-            )
 
     @staticmethod
     def _build_comment(
