@@ -8,7 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Product, ProductImage, ProductImageVariant, ProductSeries
+from crud.catalog_revision import CatalogRevisionDAO
+from models import (
+    IntegrationOutboxEvent,
+    Product,
+    ProductImage,
+    ProductImageVariant,
+    ProductSeries,
+    Storefront,
+    Tenant,
+)
+from services.catalog_invalidation_contracts import (
+    CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+)
 from services.manager_media_service import ManagerMediaService
 from services.media_storage_service import LocalProductMediaStorage, StoredMediaObject
 from services.product_image_processing_contract import (
@@ -225,6 +237,63 @@ async def test_manager_upload_writes_original_variant_through_configured_storage
     assert len(fake_storage.calls) == 1
     assert fake_storage.calls[0]["variant_type"] == ProductImageVariantType.ORIGINAL.value
     assert fake_storage.calls[0]["extension"] == "webp"
+
+
+@pytest.mark.asyncio
+async def test_repeated_set_main_image_does_not_repeat_revision_or_outbox(
+    sqlite_session,
+):
+    sqlite_session.add(
+        Tenant(
+            id=1,
+            slug="system",
+            display_name="System",
+            status="active",
+            is_system=True,
+        )
+    )
+    await sqlite_session.flush()
+    sqlite_session.add(
+        Storefront(
+            id=1,
+            tenant_id=1,
+            slug="main",
+            display_name="Main",
+            status="active",
+            is_default=True,
+        )
+    )
+    product = Product(
+        title="Revision media product",
+        slug="revision-media-product",
+        price=1000,
+        main_image="/media/products/old.webp",
+    )
+    sqlite_session.add(product)
+    await sqlite_session.flush()
+    image = ProductImage(
+        product_id=product.id,
+        url="/media/products/new.webp",
+    )
+    sqlite_session.add(image)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(image)
+
+    await ManagerMediaService.set_main_image(sqlite_session, image.id)
+    await ManagerMediaService.set_main_image(sqlite_session, image.id)
+
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = (
+        await sqlite_session.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
+    assert revision.revision == 1
+    assert len(events) == 1
+    assert events[0].payload["reason"] == "product_media_set_main"
 
 
 @pytest.mark.asyncio

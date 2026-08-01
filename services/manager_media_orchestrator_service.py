@@ -43,26 +43,22 @@ class ManagerMediaOrchestratorService:
         if not product:
             raise LookupError("Product not found")
 
-        uploaded_images: List[Dict[str, Any]] = []
+        file_payloads: List[bytes] = []
         for file in files:
             try:
                 content = await file.read()
-                should_set_main = bool(
-                    not product.main_image and not is_installation and len(uploaded_images) == 0
-                )
-                result = await ManagerMediaService.save_image_from_bytes(
-                    image_content=content,
-                    product_id=product_id,
-                    session=session,
-                    set_main=should_set_main,
-                    is_installation=is_installation,
-                )
-                uploaded_images.append(result)
-                if should_set_main:
-                    product.main_image = result["url"]
+                if content:
+                    file_payloads.append(content)
             except Exception as exc:
                 logger.error(f"Failed to upload file {file.filename}: {exc}")
-                continue
+
+        uploaded_images = await ManagerMediaService.save_images_from_bytes(
+            file_payloads=file_payloads,
+            product_id=product_id,
+            session=session,
+            set_main_if_missing=not bool(product.main_image),
+            is_installation=is_installation,
+        )
 
         return {"uploaded": len(uploaded_images), "images": uploaded_images}
 

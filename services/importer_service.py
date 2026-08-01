@@ -33,6 +33,9 @@ from services.tag_logic import (
     get_auto_tags,
 )
 from services.brand_series_service import sync_product_brand_series
+from services.catalog_invalidation_commit_service import (
+    CatalogInvalidationCommitService,
+)
 
 logger = logging.getLogger(__name__)
 _CATEGORY_TAG_SLUGS = {"cat-household", "cat-multi", "cat-industrial"}
@@ -100,12 +103,12 @@ async def _ensure_tag_group(
     title: str,
     allow_multiple: bool = True,
     sort_order: int = 0,
-) -> TagGroup:
+) -> tuple[TagGroup, bool]:
     group = (
         await session.execute(select(TagGroup).where(TagGroup.slug == slug))
     ).scalar_one_or_none()
     if group:
-        return group
+        return group, False
 
     group = TagGroup(
         slug=slug,
@@ -116,7 +119,7 @@ async def _ensure_tag_group(
     )
     session.add(group)
     await session.flush()
-    return group
+    return group, True
 
 
 async def _ensure_tag(
@@ -126,7 +129,7 @@ async def _ensure_tag(
     slug: str,
     title: str,
     sort_order: int = 0,
-) -> Tag:
+) -> tuple[Tag, bool]:
     tag = (await session.execute(select(Tag).where(Tag.slug == slug))).scalar_one_or_none()
     if tag:
         changed = False
@@ -145,7 +148,7 @@ async def _ensure_tag(
         if changed:
             session.add(tag)
             await session.flush()
-        return tag
+        return tag, changed
 
     tag = Tag(
         slug=slug,
@@ -157,7 +160,26 @@ async def _ensure_tag(
     )
     session.add(tag)
     await session.flush()
-    return tag
+    return tag, True
+
+
+def _product_public_state(product: Product) -> tuple[object, ...]:
+    return (
+        product.title,
+        product.slug,
+        product.description,
+        product.price,
+        product.is_inverter,
+        product.power_cooling,
+        product.main_image,
+        tuple(product.images or []),
+        product.specs,
+        product.is_published,
+        product.source_url,
+        product.brand_id,
+        product.series_id,
+        tuple(sorted((tag.slug or "") for tag in (product.tags or []))),
+    )
 
 
 class ImporterService:
@@ -275,40 +297,43 @@ class ImporterService:
                 )
 
             # Ensure core filter tags exist for brand/category.
+            catalog_changed = False
             category_slug = detect_category_slug(metrics=metrics, specs=normalized_specs, title=title)
             if category_slug:
                 auto_slugs.append(category_slug)
-                category_group = await _ensure_tag_group(
+                category_group, group_changed = await _ensure_tag_group(
                     session,
                     slug="category",
                     title="Категория",
                     allow_multiple=False,
                     sort_order=20,
                 )
-                await _ensure_tag(
+                _, tag_changed = await _ensure_tag(
                     session,
                     group=category_group,
                     slug=category_slug,
                     title=CATEGORY_TAG_TITLES.get(category_slug, category_slug),
                 )
+                catalog_changed = catalog_changed or group_changed or tag_changed
 
             brand_slug = extract_brand_slug(specs=normalized_specs, title=title)
             brand_title = extract_brand_name(specs=normalized_specs, title=title)
             if brand_slug and brand_title:
                 auto_slugs.append(brand_slug)
-                brand_group = await _ensure_tag_group(
+                brand_group, group_changed = await _ensure_tag_group(
                     session,
                     slug="brand",
                     title="Бренд",
                     allow_multiple=False,
                     sort_order=10,
                 )
-                await _ensure_tag(
+                _, tag_changed = await _ensure_tag(
                     session,
                     group=brand_group,
                     slug=brand_slug,
                     title=brand_title,
                 )
+                catalog_changed = catalog_changed or group_changed or tag_changed
 
             auto_slugs = list(dict.fromkeys(auto_slugs))
 
@@ -335,6 +360,7 @@ class ImporterService:
                     slug = slugify.slugify(t_name)
                     tag = Tag(title=t_name, slug=slug, is_public=True)
                     session.add(tag)
+                    catalog_changed = True
                 
                 if tag not in tag_objects:
                     tag_objects.append(tag)
@@ -365,6 +391,8 @@ class ImporterService:
                 gallery_image_urls = data.get("images", [])
 
             if existing and update_existing:
+                await session.refresh(existing, attribute_names=["tags"])
+                previous_product_state = _product_public_state(existing)
                 # Re-import mode: refresh key business fields, keep photos/slug intact.
                 if data.get("refresh_title_on_update") and data.get("title"):
                     existing.title = data["title"]
@@ -380,7 +408,6 @@ class ImporterService:
                     existing.main_image = local_main_image
 
                 # Preserve manual tags, but append newly inferred auto-tags.
-                await session.refresh(existing, attribute_names=["tags"])
                 merged_tags: dict[str, Tag] = {}
                 for tag in (existing.tags or []):
                     key = getattr(tag, "slug", None) or f"id:{getattr(tag, 'id', None)}"
@@ -393,6 +420,7 @@ class ImporterService:
                 session.add(existing)
                 product = existing
             else:
+                previous_product_state = None
                 product = Product(
                     title=data['title'],
                     slug=slug,
@@ -408,23 +436,31 @@ class ImporterService:
                     source_url=canonical_source_url
                 )
                 session.add(product)
+                catalog_changed = True
 
-            await sync_product_brand_series(
+            brand_series_changed = await sync_product_brand_series(
                 session,
                 product=product,
                 specs=normalized_specs,
                 title=title,
                 tags=tag_objects,
             )
-            await session.commit()
-            await session.refresh(product)
+            catalog_changed = catalog_changed or brand_series_changed
+            await session.flush()
+
+            if previous_product_state is not None:
+                catalog_changed = (
+                    catalog_changed
+                    or previous_product_state != _product_public_state(product)
+                )
 
             if "manuals" in data:
-                await replace_manuals(
+                manuals_changed = await replace_manuals(
                     session,
                     product_id=product.id,
                     manuals=data.get("manuals") or [],
                 )
+                catalog_changed = catalog_changed or manuals_changed
 
             # Persist gallery images into ProductImage
             if gallery_image_urls and product.id:
@@ -452,12 +488,19 @@ class ImporterService:
                             await session.flush()
                             await ProductImageVariantService.ensure_original_variant(session, pi)
                             existing_gallery_urls.add(local_path)
+                            catalog_changed = True
                     except Exception as exc:
                         logger.warning(
                             "Gallery image save failed for %s: %s", img_url, exc
                         )
-            if "manuals" in data or gallery_image_urls:
-                await session.commit()
+            await CatalogInvalidationCommitService.commit_registered_global_mutation(
+                session,
+                producer="importer.import_product",
+                changed=catalog_changed,
+                product_ids=[product.id],
+                slugs=[product.slug],
+            )
+            await session.refresh(product)
 
             return {"product": product, "related_urls": data.get('related_urls', [])}
 

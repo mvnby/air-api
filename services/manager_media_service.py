@@ -1,21 +1,15 @@
 """Service-layer helpers for manager media/search workflows."""
 
 import asyncio
-import os
-from io import BytesIO
-from pathlib import Path
 from typing import List, Set
 
-import httpx
-from core.logger import logger
-from duckduckgo_search import DDGS
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import UnidentifiedImageError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func
 from sqlmodel import select, update
 
 from models import Product, ProductImage, ProductImageVariant, ProductSeries
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.manager_media_storage_service import ManagerMediaStorageOperations
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -25,7 +19,7 @@ from services.product_original_media_service import ProductOriginalMediaService
 from services.product_image_variant_service import ProductImageVariantService
 
 
-class ManagerMediaService:
+class ManagerMediaService(ManagerMediaStorageOperations):
     @staticmethod
     async def set_main_image(session: AsyncSession, image_id: int) -> dict:
         image = await session.get(ProductImage, image_id)
@@ -36,9 +30,16 @@ class ManagerMediaService:
         if not product:
             raise ValueError("Product not found")
 
-        statement = update(Product).where(Product.id == product.id).values(main_image=image.url)
-        await session.execute(statement)
-        await session.commit()
+        changed = product.main_image != image.url
+        if changed:
+            product.main_image = image.url
+            session.add(product)
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_media.set_main_image",
+            changed=changed,
+            product_ids=[product.id],
+        )
         return {"message": "Main image updated", "url": image.url}
 
     @staticmethod
@@ -65,9 +66,14 @@ class ManagerMediaService:
         await session.delete(image)
         await session.flush()
         if product:
-            await ManagerMediaService.sync_legacy_images(session, product.id)
+            await ManagerMediaService._sync_legacy_images(session, product.id)
 
-        await session.commit()
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_media.delete_gallery_image",
+            changed=True,
+            product_ids=[image.product_id],
+        )
         await ManagerMediaService.remove_file_if_unreferenced(session, image_url)
         for variant_url in variant_urls:
             await ManagerMediaService.remove_file_if_unreferenced(session, variant_url)
@@ -108,13 +114,20 @@ class ManagerMediaService:
 
         normalized_mode = mode if mode in {"append", "replace"} else "append"
         if normalized_mode == "append":
-            return await ManagerMediaService.save_image_from_bytes(
+            result, changed = await ManagerMediaService._stage_image_from_bytes(
                 image_content=cropped_content,
                 product_id=product.id,
                 session=session,
                 set_main=set_main and not image.is_installation_photo,
                 is_installation=image.is_installation_photo,
             )
+            await CatalogInvalidationCommitService.commit_registered_global_mutation(
+                session,
+                producer="manager_media.crop_gallery_image",
+                changed=changed,
+                product_ids=[product.id],
+            )
+            return result
 
         old_url = image.url
         was_main = product.main_image == old_url
@@ -144,8 +157,13 @@ class ManagerMediaService:
             product.main_image = original.url
             session.add(product)
 
-        await ManagerMediaService.sync_legacy_images(session, product.id)
-        await session.commit()
+        await ManagerMediaService._sync_legacy_images(session, product.id)
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_media.crop_gallery_image",
+            changed=True,
+            product_ids=[product.id],
+        )
         await session.refresh(image)
 
         return {"id": image.id, "url": image.url}
@@ -181,13 +199,20 @@ class ManagerMediaService:
 
         normalized_mode = mode if mode in {"append", "replace"} else "replace"
         if normalized_mode == "append":
-            return await ManagerMediaService.save_image_from_bytes(
+            result, changed = await ManagerMediaService._stage_image_from_bytes(
                 image_content=processed.content,
                 product_id=product.id,
                 session=session,
                 set_main=set_main and not image.is_installation_photo,
                 is_installation=image.is_installation_photo,
             )
+            await CatalogInvalidationCommitService.commit_registered_global_mutation(
+                session,
+                producer="manager_media.remove_background_gallery_image",
+                changed=changed,
+                product_ids=[product.id],
+            )
+            return result
 
         old_url = image.url
         was_main = product.main_image == old_url
@@ -198,7 +223,6 @@ class ManagerMediaService:
                 select(ProductImageVariant).where(ProductImageVariant.product_image_id == image.id)
             )
         ).scalars().all()
-        variant_urls = [variant.url for variant in variant_rows if variant.url]
         for variant in variant_rows:
             await session.delete(variant)
 
@@ -218,243 +242,16 @@ class ManagerMediaService:
             product.main_image = original.url
             session.add(product)
 
-        await ManagerMediaService.sync_legacy_images(session, product.id)
-        await session.commit()
+        await ManagerMediaService._sync_legacy_images(session, product.id)
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_media.remove_background_gallery_image",
+            changed=True,
+            product_ids=[product.id],
+        )
         await session.refresh(image)
 
         return {"id": image.id, "url": image.url}
-
-    @staticmethod
-    async def search_reuse_products(session: AsyncSession, query: str, limit: int = 10) -> List[dict]:
-        statement = select(Product).where(Product.title.ilike(f"%{query}%")).limit(limit)
-        result = await session.execute(statement)
-        products = result.scalars().all()
-        return [{"id": p.id, "title": p.title, "main_image": p.main_image} for p in products]
-
-    @staticmethod
-    async def reuse_image_link(session: AsyncSession, product_id: int, source_image_url: str) -> dict:
-        product = await session.get(Product, product_id)
-        if not product:
-            raise ValueError("Product not found")
-
-        existing_stmt = select(ProductImage).where(
-            ProductImage.product_id == product_id,
-            ProductImage.url == source_image_url,
-        )
-        existing = (await session.execute(existing_stmt)).scalar_one_or_none()
-        if existing:
-            await ProductImageVariantService.ensure_original_variant(session, existing)
-            await session.commit()
-            return {"message": "Image already linked", "id": existing.id}
-
-        new_image = ProductImage(
-            product_id=product_id,
-            url=source_image_url,
-            is_installation_photo=False,
-        )
-        session.add(new_image)
-        await session.flush()
-        await ProductImageVariantService.ensure_original_variant(session, new_image)
-        await ManagerMediaService.sync_legacy_images(session, product_id)
-        await session.commit()
-        return {"message": "Image linked", "id": new_image.id}
-
-    @staticmethod
-    async def search_images(query: str, max_results: int = 20) -> List[dict]:
-        """
-        Search images in DuckDuckGo and return normalized lightweight payload.
-        Returns empty list on provider errors/rate limits for graceful degradation.
-        """
-        try:
-            results = await asyncio.to_thread(
-                lambda: list(DDGS().images(query, max_results=max_results))
-            )
-        except Exception as exc:
-            if "Ratelimit" in str(exc) or "403" in str(exc):
-                logger.warning(f"DDG Ratelimit hit for query: {query}")
-            else:
-                logger.warning(f"Image search provider error (DDG): {exc}")
-            return []
-
-        images = []
-        for result in results:
-            if result.get("image"):
-                images.append(
-                    {
-                        "image": result.get("image"),
-                        "width": result.get("width"),
-                        "height": result.get("height"),
-                        "thumbnail": result.get("thumbnail"),
-                    }
-                )
-        return images
-
-    @staticmethod
-    async def process_and_save_image(
-        url: str,
-        product_id: int,
-        session: AsyncSession,
-        *,
-        set_main: bool,
-        is_installation: bool = False,
-    ) -> dict:
-        """Download image by URL and persist it to gallery storage."""
-        try:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(url, timeout=10.0)
-                response.raise_for_status()
-                image_content = response.content
-        except Exception as exc:
-            logger.warning(f"Failed to download external image: {exc}")
-            raise ValueError(f"Failed to download image: {exc}") from exc
-
-        return await ManagerMediaService.save_image_from_bytes(
-            image_content=image_content,
-            product_id=product_id,
-            session=session,
-            set_main=set_main,
-            is_installation=is_installation,
-        )
-
-    @staticmethod
-    async def save_image_from_bytes(
-        image_content: bytes,
-        product_id: int,
-        session: AsyncSession,
-        *,
-        set_main: bool,
-        is_installation: bool = False,
-    ) -> dict:
-        """Process bytes, deduplicate storage by hash, and attach ProductImage link."""
-        try:
-            original = await ProductOriginalMediaService.save_shared_original(image_content)
-        except Exception as exc:
-            logger.error(f"Failed to process image: {exc}")
-            raise ValueError("Invalid image file") from exc
-
-        relative_url = original.url
-        existing_stmt = select(ProductImage).where(
-            ProductImage.product_id == product_id,
-            ProductImage.url == relative_url,
-        )
-        existing_result = await session.execute(existing_stmt)
-        existing_link = existing_result.scalar_one_or_none()
-
-        if existing_link is None:
-            new_image = ProductImage(
-                product_id=product_id,
-                url=relative_url,
-                is_installation_photo=is_installation,
-            )
-            session.add(new_image)
-        else:
-            new_image = existing_link
-        await session.flush()
-        await ProductImageVariantService.ensure_original_variant(
-            session,
-            new_image,
-            source_content=original.content,
-            extension="webp",
-            width=original.width,
-            height=original.height,
-        )
-
-        if set_main and not is_installation:
-            statement = update(Product).where(Product.id == product_id).values(main_image=relative_url)
-            await session.execute(statement)
-
-        await ManagerMediaService.sync_legacy_images(session, product_id)
-        await session.commit()
-        await session.refresh(new_image)
-
-        return {"url": relative_url, "id": new_image.id}
-
-    @staticmethod
-    async def sync_legacy_images(session: AsyncSession, product_id: int) -> None:
-        """Sync ProductImage links to legacy Product.images JSON list."""
-        product = await session.get(Product, product_id)
-        if not product:
-            return
-
-        stmt = select(ProductImage).where(ProductImage.product_id == product_id)
-        result = await session.execute(stmt)
-        images = result.scalars().all()
-
-        product.images = [img.url for img in images if not img.is_installation_photo]
-        session.add(product)
-
-    @staticmethod
-    async def remove_file_if_unreferenced(session: AsyncSession, url: str) -> bool:
-        """Delete physical file only when no ProductImage/Product.main_image references remain."""
-        gallery_ref_stmt = select(func.count()).select_from(ProductImage).where(ProductImage.url == url)
-        gallery_refs = (await session.execute(gallery_ref_stmt)).scalar_one()
-
-        main_ref_stmt = select(func.count()).select_from(Product).where(Product.main_image == url)
-        main_refs = (await session.execute(main_ref_stmt)).scalar_one()
-
-        variant_ref_stmt = select(func.count()).select_from(ProductImageVariant).where(
-            ProductImageVariant.url == url
-        )
-        variant_refs = (await session.execute(variant_ref_stmt)).scalar_one()
-
-        if gallery_refs > 0 or main_refs > 0 or variant_refs > 0:
-            return False
-        if not url.startswith("/media/"):
-            return False
-
-        path = url.lstrip("/")
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-                return True
-            except Exception as exc:
-                logger.error(f"Failed to delete unreferenced file {url}: {exc}")
-        return False
-
-    @staticmethod
-    def local_media_path_for_url(url: str) -> Path | None:
-        if not url:
-            return None
-        if url.startswith("/media/"):
-            return Path(url.lstrip("/"))
-        if url.startswith("media/"):
-            return Path(url)
-        return None
-
-    @staticmethod
-    async def load_image_source_content(url: str) -> bytes:
-        source_path = ManagerMediaService.local_media_path_for_url(url)
-        if source_path is not None and source_path.exists():
-            return await asyncio.to_thread(source_path.read_bytes)
-
-        if url.startswith("http://") or url.startswith("https://"):
-            try:
-                async with httpx.AsyncClient(follow_redirects=True) as client:
-                    response = await client.get(url, timeout=15.0)
-                    response.raise_for_status()
-                    return response.content
-            except Exception as exc:
-                logger.error(f"Failed to download source image for crop: {exc}")
-                raise ValueError("Source image is not available") from exc
-
-        raise ValueError("Source image is not available in local media storage")
-
-    @staticmethod
-    def crop_image_bytes(content: bytes, x: int, y: int, width: int, height: int) -> bytes:
-        if not content:
-            raise ValueError("Source image is empty")
-        with Image.open(BytesIO(content)) as source:
-            image = ImageOps.exif_transpose(source)
-            left = max(0, min(int(x), image.width - 1))
-            top = max(0, min(int(y), image.height - 1))
-            right = max(left + 1, min(left + int(width), image.width))
-            bottom = max(top + 1, min(top + int(height), image.height))
-            cropped = image.crop((left, top, right, bottom))
-            if cropped.mode in {"RGBA", "P"}:
-                cropped = cropped.convert("RGB")
-            output = BytesIO()
-            cropped.save(output, format="PNG")
-            return output.getvalue()
 
     @staticmethod
     async def get_common_gallery_urls(
@@ -507,6 +304,7 @@ class ManagerMediaService:
 
         added = 0
         skipped = 0
+        changed = False
         first_url = unique_urls[0]
 
         for product_id in unique_product_ids:
@@ -529,19 +327,29 @@ class ManagerMediaService:
                     await session.flush()
                     await ProductImageVariantService.ensure_original_variant(session, image)
                     added += 1
+                    changed = True
                 else:
                     skipped += 1
 
             if set_main and not is_installation:
                 product = await session.get(Product, product_id)
-                if product:
+                if product and product.main_image != first_url:
                     product.main_image = first_url
                     session.add(product)
+                    changed = True
 
-            await ManagerMediaService.sync_legacy_images(session, product_id)
+            changed = (
+                await ManagerMediaService._sync_legacy_images(session, product_id)
+                or changed
+            )
 
         if commit:
-            await session.commit()
+            await CatalogInvalidationCommitService.commit_registered_global_mutation(
+                session,
+                producer="manager_media.bulk_add_gallery_images",
+                changed=changed,
+                product_ids=unique_product_ids,
+            )
         return {
             "message": "Bulk image add completed",
             "products_count": len(unique_product_ids),
@@ -610,9 +418,14 @@ class ManagerMediaService:
                 product.main_image = None
                 session.add(product)
 
-            await ManagerMediaService.sync_legacy_images(session, product_id)
+            await ManagerMediaService._sync_legacy_images(session, product_id)
 
-        await session.commit()
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_media.bulk_delete_common_gallery_images",
+            changed=deleted_links > 0,
+            product_ids=unique_product_ids,
+        )
 
         for url in unique_urls:
             await ManagerMediaService.remove_file_if_unreferenced(session, url)
@@ -677,7 +490,9 @@ class ManagerMediaService:
         for target_product in target_products:
             target_rows = (
                 await session.execute(
-                    select(ProductImage).where(ProductImage.product_id == target_product.id)
+                    select(ProductImage)
+                    .where(ProductImage.product_id == target_product.id)
+                    .order_by(ProductImage.id)
                 )
             ).scalars().all()
             target_rows_by_product_id[target_product.id] = list(target_rows)
@@ -716,15 +531,27 @@ class ManagerMediaService:
                 "deleted_files_count": 0,
             }
 
+        changed = False
         if series:
-            series.gallery_images = list(dict.fromkeys([*(series.gallery_images or []), *source_urls]))
-            session.add(series)
+            next_series_gallery = list(
+                dict.fromkeys([*(series.gallery_images or []), *source_urls])
+            )
+            if list(series.gallery_images or []) != next_series_gallery:
+                series.gallery_images = next_series_gallery
+                session.add(series)
+                changed = True
 
         for target_product in target_products:
             target_rows = target_rows_by_product_id[target_product.id]
 
             old_gallery_rows = [row for row in target_rows if not row.is_installation_photo]
             installation_urls = {row.url for row in target_rows if row.is_installation_photo}
+            desired_gallery_urls = [url for url in source_urls if url not in installation_urls]
+            if (
+                [row.url for row in old_gallery_rows] == desired_gallery_urls
+                and target_product.main_image == source_product.main_image
+            ):
+                continue
 
             old_gallery_ids = [row.id for row in old_gallery_rows if row.id is not None]
             if old_gallery_ids:
@@ -756,12 +583,14 @@ class ManagerMediaService:
 
             target_product.main_image = source_product.main_image
             session.add(target_product)
-            await ManagerMediaService.sync_legacy_images(session, target_product.id)
+            await ManagerMediaService._sync_legacy_images(session, target_product.id)
             updated_products += 1
+            changed = True
 
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="product_series_gallery_apply",
+            producer="manager_media.apply_gallery_to_series",
+            changed=changed,
             product_ids=[source_product.id, *(product.id for product in target_products)],
         )
 
@@ -810,10 +639,11 @@ class ManagerMediaService:
             raise LookupError(f"Products not found: {missing}")
 
         uploaded = 0
+        changed = False
         for product_id in unique_product_ids:
             for idx, content in enumerate(file_payloads):
                 should_set_main = set_main and idx == 0 and not is_installation
-                await ManagerMediaService.save_image_from_bytes(
+                _, image_changed = await ManagerMediaService._stage_image_from_bytes(
                     image_content=content,
                     product_id=product_id,
                     session=session,
@@ -821,55 +651,18 @@ class ManagerMediaService:
                     is_installation=is_installation,
                 )
                 uploaded += 1
+                changed = changed or image_changed
+
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_media.bulk_upload_local_images",
+            changed=changed,
+            product_ids=unique_product_ids,
+        )
 
         return {
             "message": "Bulk upload completed",
             "products_count": len(unique_product_ids),
             "files_count": len(file_payloads),
             "uploaded_links": uploaded,
-        }
-
-    @staticmethod
-    async def cleanup_media(session: AsyncSession, *, dry_run: bool = False) -> dict:
-        """Delete orphaned product media files not referenced in DB."""
-        stmt_main = select(Product.main_image).where(Product.main_image != None)
-        res_main = await session.execute(stmt_main)
-        known_urls = set(res_main.scalars().all())
-
-        stmt_gallery = select(ProductImage.url)
-        res_gallery = await session.execute(stmt_gallery)
-        known_urls.update(res_gallery.scalars().all())
-
-        stmt_variants = select(ProductImageVariant.url).where(ProductImageVariant.url != None)
-        res_variants = await session.execute(stmt_variants)
-        known_urls.update(res_variants.scalars().all())
-
-        base_dir = os.path.join("media", "products")
-        deleted_count = 0
-        reclaimed_bytes = 0
-
-        if not os.path.exists(base_dir):
-            return {"message": "Media directory not found", "deleted": 0}
-
-        report = []
-        for root, _, files in os.walk(base_dir):
-            for file_name in files:
-                full_path = os.path.join(root, file_name)
-                db_path_rel = os.path.join(root, file_name)
-                db_path_abs = "/" + db_path_rel
-
-                if db_path_abs not in known_urls and db_path_rel not in known_urls:
-                    size = os.path.getsize(full_path)
-                    if not dry_run:
-                        os.remove(full_path)
-
-                    deleted_count += 1
-                    reclaimed_bytes += size
-                    report.append(db_path_abs)
-
-        return {
-            "dry_run": dry_run,
-            "deleted_count": deleted_count,
-            "reclaimed_bytes": reclaimed_bytes,
-            "files": report[:50],
         }
