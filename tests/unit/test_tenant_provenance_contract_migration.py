@@ -204,7 +204,7 @@ def test_tenant_provenance_contract_is_the_single_alembic_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == ["d0f1a2b3c4d5"]
     assert revision is not None
     assert revision.down_revision == "b8d9e0f1a2c3"
 
@@ -340,6 +340,7 @@ def test_contract_model_metadata_matches_database_boundary():
     }
     assert order_indexes["uq_order_source_fingerprint"] == (
         "tenant_id",
+        "storefront_id",
         "source_fingerprint",
     )
     assert lead_indexes["uq_lead_bot_source_fingerprint"] == (

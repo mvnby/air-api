@@ -35,7 +35,7 @@ from services.communications.template_registry import (
 )
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.order_service import OrderService
-from services.tenant_scope_service import TenantScope
+from services.tenant_scope_service import TenantScope, storefront_scope_clause
 from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
     get_private_attachment_storage,
@@ -338,7 +338,7 @@ class InstallationEstimateLeadService:
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(
                 Order.source_fingerprint == fingerprint,
-                TenantEntityAccessService.order_clause(tenant_scope),
+                storefront_scope_clause(Order, tenant_scope),
                 TenantEntityAccessService.order_customer_clause(tenant_scope),
             )
             .limit(1)

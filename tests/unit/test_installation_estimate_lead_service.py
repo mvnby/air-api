@@ -219,6 +219,110 @@ async def test_installation_estimate_rejects_reused_key_with_different_request(
 
 
 @pytest.mark.asyncio
+async def test_installation_estimate_idempotency_is_isolated_by_storefront(
+    installation_estimate_session,
+):
+    storage = FakePrivateStorage()
+    first_storefront = TenantScope(
+        tenant_id=1,
+        storefront_id=1,
+        is_system=True,
+    )
+    second_storefront = TenantScope(
+        tenant_id=1,
+        storefront_id=2,
+        is_system=True,
+    )
+    payload = _payload()
+    uploads = [_upload()]
+    shared_key = "estimate-shared-across-storefronts"
+
+    first = await InstallationEstimateLeadService.create_lead(
+        installation_estimate_session,
+        tenant_scope=first_storefront,
+        payload=payload,
+        uploads=uploads,
+        idempotency_key=shared_key,
+        storage=storage,
+    )
+    second = await InstallationEstimateLeadService.create_lead(
+        installation_estimate_session,
+        tenant_scope=second_storefront,
+        payload=payload,
+        uploads=uploads,
+        idempotency_key=shared_key,
+        storage=storage,
+    )
+    first_replay = await InstallationEstimateLeadService.create_lead(
+        installation_estimate_session,
+        tenant_scope=first_storefront,
+        payload=payload,
+        uploads=uploads,
+        idempotency_key=shared_key,
+        storage=storage,
+    )
+    second_replay = await InstallationEstimateLeadService.create_lead(
+        installation_estimate_session,
+        tenant_scope=second_storefront,
+        payload=payload,
+        uploads=uploads,
+        idempotency_key=shared_key,
+        storage=storage,
+    )
+
+    assert first.replayed is False
+    assert second.replayed is False
+    assert first.order_id != second.order_id
+    assert first_replay.replayed is True
+    assert second_replay.replayed is True
+    assert first_replay.order_id == first.order_id
+    assert second_replay.order_id == second.order_id
+
+    orders = list(
+        (
+            await installation_estimate_session.execute(
+                select(Order).order_by(Order.storefront_id)
+            )
+        ).scalars()
+    )
+    assert [(order.tenant_id, order.storefront_id) for order in orders] == [
+        (1, 1),
+        (1, 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_installation_estimate_same_storefront_still_rejects_key_reuse(
+    installation_estimate_session,
+):
+    storage = FakePrivateStorage()
+    scope = TenantScope(tenant_id=1, storefront_id=2, is_system=True)
+    shared_key = "estimate-conflict-inside-storefront"
+
+    await InstallationEstimateLeadService.create_lead(
+        installation_estimate_session,
+        tenant_scope=scope,
+        payload=_payload(),
+        uploads=[_upload()],
+        idempotency_key=shared_key,
+        storage=storage,
+    )
+
+    with pytest.raises(
+        InstallationEstimateIdempotencyConflict,
+        match="другой заявки",
+    ):
+        await InstallationEstimateLeadService.create_lead(
+            installation_estimate_session,
+            tenant_scope=scope,
+            payload=_payload(description="Другая заявка второго storefront"),
+            uploads=[_upload()],
+            idempotency_key=shared_key,
+            storage=storage,
+        )
+
+
+@pytest.mark.asyncio
 async def test_installation_estimate_rolls_back_db_and_private_objects(
     installation_estimate_session,
     monkeypatch,

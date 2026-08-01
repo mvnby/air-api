@@ -406,6 +406,7 @@ class Order(SQLModel, table=True):
         Index(
             "uq_order_source_fingerprint",
             "tenant_id",
+            "storefront_id",
             "source_fingerprint",
             unique=True,
             postgresql_where=text("source_fingerprint IS NOT NULL"),
