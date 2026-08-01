@@ -8,6 +8,7 @@ from schemas import OrderPayload
 from services.bot_service import BotService
 from services.installation_pricing_service import InstallationPricingService
 from services.order_service import OrderService
+from services.public_catalog_service import PublicCatalogService
 from services.staff_user_service import StaffUserService
 from services.website_order_service import WebsiteOrderService
 
@@ -31,8 +32,23 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
     async def fake_price_items(_session, items):
         return [item.model_dump() for item in items]
 
+    async def fake_checkout_prices(
+        _session,
+        *,
+        tenant_scope,
+        product_ids,
+    ):
+        assert tenant_scope is not None
+        assert product_ids == {7}
+        return {7: 3000}, "shared_product"
+
     monkeypatch.setattr(OrderService, "create_from_website", fake_create_from_website)
     monkeypatch.setattr(InstallationPricingService, "price_public_items", fake_price_items)
+    monkeypatch.setattr(
+        PublicCatalogService,
+        "get_checkout_prices",
+        fake_checkout_prices,
+    )
     monkeypatch.setattr(WebsiteOrderService, "_notify_admins", fake_notify_admins)
 
     payload = OrderPayload.model_validate(
@@ -69,7 +85,17 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
     assert captured_kwargs["initial_status"] == OrderStatus.NEGOTIATION
     assert captured_kwargs["customer_address"] == "г. Минск, ул. Тестовая 10"
     assert captured_kwargs["items"][0]["product_id"] == 7
+    assert captured_kwargs["items"][0]["_storefront_unit_price"] == 3000
     assert captured_kwargs["items"][0]["with_installation"] is True
+    assert captured_kwargs["order_technical_meta"]["public_catalog_pricing"] == {
+        "items": [
+            {
+                "product_id": 7,
+                "unit_price": 3000,
+                "source": "shared_product",
+            }
+        ]
+    }
     assert captured_kwargs["tenant_scope"] == tenant_scope
 
 
@@ -100,8 +126,23 @@ async def test_website_checkout_does_not_attempt_telegram_without_recipients(
     async def fake_price_items(_session, items):
         return [item.model_dump() for item in items]
 
+    async def fake_checkout_prices(
+        _session,
+        *,
+        tenant_scope,
+        product_ids,
+    ):
+        assert tenant_scope is not None
+        assert product_ids == {7}
+        return {7: 100}, "shared_product"
+
     monkeypatch.setattr(OrderService, "create_from_website", fake_create_from_website)
     monkeypatch.setattr(InstallationPricingService, "price_public_items", fake_price_items)
+    monkeypatch.setattr(
+        PublicCatalogService,
+        "get_checkout_prices",
+        fake_checkout_prices,
+    )
     monkeypatch.setattr(
         StaffUserService,
         "get_active_owner_admin_telegram_recipient_ids",

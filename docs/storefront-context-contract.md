@@ -94,6 +94,8 @@ Before enabling traffic for a second storefront:
    the expected slug, hostname, city, locale and currency;
 3. create one test Lead and one test Order through the same trusted proxy;
 4. verify their persisted `tenant_id/storefront_id` pair and Manager visibility;
-5. repeat each mutation with a forged signature and verify `401` with no row;
-6. test rollback by removing the new domain from routing while keeping
+5. verify catalog list/detail/filter responses expose only active published
+   offers and that checkout snapshots the exact same storefront price;
+6. repeat each mutation with a forged signature and verify `401` with no row;
+7. test rollback by removing the new domain from routing while keeping
    canonical `mvn/main` healthy.

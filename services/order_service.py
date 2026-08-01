@@ -1103,6 +1103,9 @@ class OrderService:
                 product = await ProductDAO.get_by_id(session, product_id)
 
             if product:
+                storefront_unit_price = int(
+                    item.get("_storefront_unit_price", product.price)
+                )
                 # Extract installation fields (Phase: Snapshot Pricing Refactor)
                 with_installation = item.get("with_installation", False)
                 installation_price = int(item.get("installation_price", 0))
@@ -1117,7 +1120,7 @@ class OrderService:
                     proposal_id=proposal.id,
                     product_id=product.id,
                     quantity=item["quantity"],
-                    price=product.price,
+                    price=storefront_unit_price,
                     cost=product_cost,
                     # Save snapshot for history
                     is_installation_included=with_installation,
@@ -1127,7 +1130,7 @@ class OrderService:
                 session.add(link)
                 
                 # Calculate product total
-                product_total = product.price * item["quantity"]
+                product_total = storefront_unit_price * item["quantity"]
                 total_amount += product_total
                 
                 # If installation requested, add to total

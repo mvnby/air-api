@@ -6,12 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.product import ProductDAO
 from crud.product_collection import ProductCollectionDAO
+from crud.public_catalog import PublicCatalogDAO
 from models import ProductCollection
+from models.tenancy import TenantScope
 from services.feature_resolver_service import FeatureResolverService
 from services.product_collection_eligibility import ProductCollectionEligibility
 from services.product_collection_rule_matcher import ProductCollectionRuleMatcher
 from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
+from services.public_catalog_service import PublicCatalogService
 
 
 def utc_now() -> datetime:
@@ -40,6 +43,8 @@ class ProductCollectionResolver:
         enforce_publication: bool,
         selection_source: str = "manual",
         visited_collection_ids: set[int] | None = None,
+        tenant_scope: TenantScope | None = None,
+        use_offer_projection: bool | None = None,
     ) -> dict:
         now = utc_now()
         if enforce_publication and (
@@ -58,6 +63,15 @@ class ProductCollectionResolver:
             return ProductCollectionResolver._empty_result(collection)
         visited.add(collection_id)
 
+        if use_offer_projection is None:
+            use_offer_projection = bool(
+                tenant_scope is not None
+                and not await PublicCatalogService.is_canonical_scope(
+                    session,
+                    tenant_scope,
+                )
+            )
+
         item_rows = await ProductCollectionDAO.list_items(session, collection_id)
         manual_rows = (
             item_rows
@@ -67,12 +81,31 @@ class ProductCollectionResolver:
             else []
         )
         product_ids = [int(item.product_id) for item in manual_rows]
-        products = await ProductDAO.get_by_ids(
-            session,
-            product_ids,
-            load_image_variants=True,
-        )
-        product_map = {int(product.id): product for product in products}
+        if use_offer_projection and tenant_scope is not None:
+            scoped_rows = await PublicCatalogDAO.get_by_ids(
+                session,
+                tenant_scope=tenant_scope,
+                product_ids=product_ids,
+                load_image_variants=True,
+            )
+            projections = [
+                PublicCatalogService.project_row(row) for row in scoped_rows
+            ]
+        else:
+            products = await ProductDAO.get_by_ids(
+                session,
+                product_ids,
+                load_image_variants=True,
+            )
+            projections = [
+                PublicCatalogService.project_product(product)
+                for product in products
+            ]
+        product_map = {
+            int(projection.product.id): projection
+            for projection in projections
+        }
+        products = [projection.product for projection in projections]
         if products:
             await FeatureResolverService.resolve_for_products(session, products)
         supply_metrics = await ProductReadService.get_supply_metrics_map(session, products)
@@ -80,8 +113,8 @@ class ProductCollectionResolver:
         selected: list[dict] = []
         excluded: list[dict] = []
         for item in manual_rows:
-            product = product_map.get(int(item.product_id))
-            if product is None:
+            projection = product_map.get(int(item.product_id))
+            if projection is None:
                 excluded.append(
                     {
                         "product_id": int(item.product_id),
@@ -92,12 +125,14 @@ class ProductCollectionResolver:
                     }
                 )
                 continue
+            product = projection.product
             metrics = supply_metrics.get(int(product.id), {})
             eligibility = ProductCollectionEligibility.evaluate(
                 product,
                 surface_key=surface_key,
                 slot_key=slot_key,
                 supply_metrics=metrics,
+                price_override=projection.price,
             )
             if not eligibility.is_eligible:
                 excluded.append(
@@ -117,6 +152,7 @@ class ProductCollectionResolver:
                     "product": map_product_to_response(
                         product,
                         supply_metrics=metrics,
+                        pricing=projection.pricing,
                     ),
                 }
             )
@@ -129,22 +165,43 @@ class ProductCollectionResolver:
             and len(selected) < collection.max_items
             and any(value not in (None, [], "") for value in rule_config.values())
         ):
-            automatic_products = await ProductDAO.get_filtered(
-                session,
-                area_min=rule_config.get("min_area_m2"),
-                area_max=rule_config.get("max_area_m2"),
-                min_price=rule_config.get("min_price"),
-                max_price=rule_config.get("max_price"),
-                is_inverter=rule_config.get("is_inverter"),
-                brand_ids=rule_config.get("brand_ids"),
-                series_ids=rule_config.get("series_ids"),
-                product_kinds=rule_config.get("product_kinds"),
-                is_published=True,
-                sort=collection.sort_mode,
-                page=1,
-                limit=500,
-                load_image_variants=True,
-            )
+            query = {
+                "area_min": rule_config.get("min_area_m2"),
+                "area_max": rule_config.get("max_area_m2"),
+                "min_price": rule_config.get("min_price"),
+                "max_price": rule_config.get("max_price"),
+                "is_inverter": rule_config.get("is_inverter"),
+                "brand_ids": rule_config.get("brand_ids"),
+                "series_ids": rule_config.get("series_ids"),
+                "product_kinds": rule_config.get("product_kinds"),
+                "sort": collection.sort_mode,
+                "page": 1,
+                "limit": 500,
+                "load_image_variants": True,
+            }
+            if use_offer_projection and tenant_scope is not None:
+                automatic_rows = await PublicCatalogDAO.get_filtered(
+                    session,
+                    tenant_scope=tenant_scope,
+                    **query,
+                )
+                automatic_projections = [
+                    PublicCatalogService.project_row(row)
+                    for row in automatic_rows
+                ]
+            else:
+                automatic_products = await ProductDAO.get_filtered(
+                    session,
+                    is_published=True,
+                    **query,
+                )
+                automatic_projections = [
+                    PublicCatalogService.project_product(product)
+                    for product in automatic_products
+                ]
+            automatic_products = [
+                projection.product for projection in automatic_projections
+            ]
             await FeatureResolverService.resolve_for_products(session, automatic_products)
             automatic_metrics = await ProductReadService.get_supply_metrics_map(
                 session,
@@ -154,7 +211,8 @@ class ProductCollectionResolver:
                 int(item["product"].id)
                 for item in selected
             }
-            for candidate_position, product in enumerate(automatic_products):
+            for candidate_position, projection in enumerate(automatic_projections):
+                product = projection.product
                 product_id = int(product.id)
                 if product_id in selected_ids:
                     continue
@@ -163,6 +221,7 @@ class ProductCollectionResolver:
                     product,
                     rule_config=rule_config,
                     supply_metrics=metrics,
+                    price_override=projection.price,
                 ):
                     continue
                 eligibility = ProductCollectionEligibility.evaluate(
@@ -170,6 +229,7 @@ class ProductCollectionResolver:
                     surface_key=surface_key,
                     slot_key=slot_key,
                     supply_metrics=metrics,
+                    price_override=projection.price,
                 )
                 if not eligibility.is_eligible:
                     if len(excluded) < 50:
@@ -194,6 +254,7 @@ class ProductCollectionResolver:
                         "product": map_product_to_response(
                             product,
                             supply_metrics=metrics,
+                            pricing=projection.pricing,
                         ),
                     }
                 )
@@ -216,6 +277,8 @@ class ProductCollectionResolver:
                     enforce_publication=enforce_publication,
                     selection_source="fallback",
                     visited_collection_ids=visited,
+                    tenant_scope=tenant_scope,
+                    use_offer_projection=use_offer_projection,
                 )
                 if not fallback_result["below_min_items"]:
                     return {
@@ -253,7 +316,15 @@ class ProductCollectionResolver:
         *,
         surface_key: str,
         slot_key: str,
+        tenant_scope: TenantScope | None = None,
     ) -> dict:
+        use_offer_projection = bool(
+            tenant_scope is not None
+            and not await PublicCatalogService.is_canonical_scope(
+                session,
+                tenant_scope,
+            )
+        )
         rows = await ProductCollectionDAO.list_placements(
             session,
             surface_key=surface_key,
@@ -271,6 +342,8 @@ class ProductCollectionResolver:
                 surface_key=surface_key,
                 slot_key=slot_key,
                 enforce_publication=True,
+                tenant_scope=tenant_scope,
+                use_offer_projection=use_offer_projection,
             )
             if resolved["below_min_items"]:
                 continue

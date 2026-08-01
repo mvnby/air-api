@@ -98,4 +98,9 @@ async def get_public_tenant_scope(
         tenant_id=context.tenant_id,
         storefront_id=context.storefront_id,
         is_system=context.tenant_is_system,
+        is_canonical_storefront=(
+            context.tenant_is_system
+            and context.tenant_slug == "mvn"
+            and context.storefront_slug == "main"
+        ),
     )

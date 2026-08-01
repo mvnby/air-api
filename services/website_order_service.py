@@ -7,8 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import LeadSource, Order, OrderStatus
 from schemas import OrderPayload, OrderResponse
 from services.bot_service import BotService
-from services.installation_pricing_service import InstallationPricingService
+from services.installation_pricing_service import (
+    InstallationPricingError,
+    InstallationPricingService,
+)
 from services.order_service import OrderService
+from services.public_catalog_service import PublicCatalogService
 from services.staff_user_service import StaffUserService
 from services.tenant_scope_service import TenantScope
 
@@ -29,6 +33,31 @@ class WebsiteOrderService:
             len([item for item in payload.items if item.with_installation]),
         )
         items = await InstallationPricingService.price_public_items(session, payload.items)
+        product_ids = {
+            int(item["product_id"])
+            for item in items
+            if item.get("product_id") is not None
+        }
+        storefront_prices, pricing_source = (
+            await PublicCatalogService.get_checkout_prices(
+                session,
+                tenant_scope=tenant_scope,
+                product_ids=product_ids,
+            )
+        )
+        missing_product_ids = sorted(product_ids - storefront_prices.keys())
+        if missing_product_ids:
+            raise InstallationPricingError(
+                f"Товар #{missing_product_ids[0]} недоступен для этой витрины",
+                code="product_not_available",
+            )
+        items = [
+            {
+                **item,
+                "_storefront_unit_price": storefront_prices[int(item["product_id"])],
+            }
+            for item in items
+        ]
         pricing_snapshots = [
             {
                 "item_index": index,
@@ -39,6 +68,24 @@ class WebsiteOrderService:
             for index, item in enumerate(items)
             if item["with_installation"]
         ]
+        catalog_pricing_snapshots = [
+            {
+                "product_id": int(item["product_id"]),
+                "unit_price": int(item["_storefront_unit_price"]),
+                "source": pricing_source,
+            }
+            for item in items
+        ]
+        technical_meta = {
+            "public_catalog_pricing": {
+                "items": catalog_pricing_snapshots,
+            }
+        }
+        if pricing_snapshots:
+            technical_meta["public_installation_pricing"] = {
+                "pricing_version": InstallationPricingService.PRICING_VERSION,
+                "items": pricing_snapshots,
+            }
 
         order = await OrderService.create_from_website(
             session=session,
@@ -57,12 +104,7 @@ class WebsiteOrderService:
             customer_iban=payload.customer.iban,
             customer_bic=payload.customer.bic,
             customer_bank_name=payload.customer.bank_name,
-            order_technical_meta={
-                "public_installation_pricing": {
-                    "pricing_version": InstallationPricingService.PRICING_VERSION,
-                    "items": pricing_snapshots,
-                }
-            } if pricing_snapshots else None,
+            order_technical_meta=technical_meta,
             tenant_scope=tenant_scope,
         )
 

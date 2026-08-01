@@ -36,16 +36,27 @@ export class ApiService {
      * Search products with fuzzy matching.
      * @param q
      * @param isInverter
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns any Successful Response
      * @throws ApiError
      */
     public static searchProductsApiProductsSearchGet(
         q?: string,
         isInverter?: boolean,
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/products/search',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
             query: {
                 'q': q,
                 'is_inverter': isInverter,
@@ -192,30 +203,56 @@ export class ApiService {
     /**
      * Get Public Brands
      * Get published brands that have at least one published product.
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns PublicBrandResponse Successful Response
      * @throws ApiError
      */
-    public static getPublicBrands(): CancelablePromise<Array<PublicBrandResponse>> {
+    public static getPublicBrands(
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
+    ): CancelablePromise<Array<PublicBrandResponse>> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/content/brands',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
      * Get Public Brand
      * Get a published brand by slug if it has published products.
      * @param slug
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns PublicBrandDetailResponse Successful Response
      * @throws ApiError
      */
     public static getPublicBrand(
         slug: string,
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<PublicBrandDetailResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/content/brands/{slug}',
             path: {
                 'slug': slug,
+            },
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
             },
             errors: {
                 422: `Validation Error`,
@@ -227,12 +264,18 @@ export class ApiService {
      * Get one published series and its public product cards.
      * @param brandSlug
      * @param seriesSlug
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns PublicSeriesPageResponse Successful Response
      * @throws ApiError
      */
     public static getPublicBrandSeries(
         brandSlug: string,
         seriesSlug: string,
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<PublicSeriesPageResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -240,6 +283,11 @@ export class ApiService {
             path: {
                 'brand_slug': brandSlug,
                 'series_slug': seriesSlug,
+            },
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
             },
             errors: {
                 422: `Validation Error`,
@@ -453,13 +501,28 @@ export class ApiService {
     }
     /**
      * Get Public Spec Keys
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns SpecsKeysResponse Successful Response
      * @throws ApiError
      */
-    public static getPublicSpecKeys(): CancelablePromise<SpecsKeysResponse> {
+    public static getPublicSpecKeys(
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
+    ): CancelablePromise<SpecsKeysResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/specs/keys',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
@@ -475,13 +538,28 @@ export class ApiService {
     }
     /**
      * Get Filters Config
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns FiltersConfigResponse Successful Response
      * @throws ApiError
      */
-    public static getFiltersConfig(): CancelablePromise<FiltersConfigResponse> {
+    public static getFiltersConfig(
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
+    ): CancelablePromise<FiltersConfigResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/filters/config',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
@@ -522,6 +600,9 @@ export class ApiService {
      * @param brandSlugs Canonical brand slugs to include
      * @param isInverter
      * @param q Smart search query
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns CatalogResponse Successful Response
      * @throws ApiError
      */
@@ -542,10 +623,18 @@ export class ApiService {
         brandSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<CatalogResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/products',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
             query: {
                 'page': page,
                 'limit': limit,
@@ -587,6 +676,9 @@ export class ApiService {
      * @param brandSlugs Canonical brand slugs to include
      * @param isInverter
      * @param q Smart search query
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns CatalogResponse Successful Response
      * @throws ApiError
      */
@@ -607,10 +699,18 @@ export class ApiService {
         brandSlugs?: (Array<string> | null),
         isInverter?: (boolean | null),
         q?: (string | null),
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<CatalogResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/catalog',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
             query: {
                 'page': page,
                 'limit': limit,
@@ -636,40 +736,81 @@ export class ApiService {
     }
     /**
      * Get Vitebsk Featured Products
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns ProductResponse Successful Response
      * @throws ApiError
      */
-    public static getVitebskFeaturedProducts(): CancelablePromise<Array<ProductResponse>> {
+    public static getVitebskFeaturedProducts(
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
+    ): CancelablePromise<Array<ProductResponse>> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/products/vitebsk-featured',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
      * Get Product Series Navigation
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns ProductSeriesNavigationResponse Successful Response
      * @throws ApiError
      */
-    public static getProductSeriesNavigation(): CancelablePromise<ProductSeriesNavigationResponse> {
+    public static getProductSeriesNavigation(
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
+    ): CancelablePromise<ProductSeriesNavigationResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/product-series/navigation',
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**
      * Get Product By Identifier
      * @param identifier
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns ProductResponse Successful Response
      * @throws ApiError
      */
     public static getProduct(
         identifier: string,
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<ProductResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/products/{identifier}',
             path: {
                 'identifier': identifier,
+            },
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
             },
             errors: {
                 422: `Validation Error`,
@@ -784,12 +925,18 @@ export class ApiService {
      * Get Public Product Collection Placement
      * @param surfaceKey
      * @param slotKey
+     * @param xMvnStorefrontHost
+     * @param xMvnStorefrontTimestamp
+     * @param xMvnStorefrontSignature
      * @returns PublicProductCollectionPlacementResponse Successful Response
      * @throws ApiError
      */
     public static getPublicProductCollectionPlacement(
         surfaceKey: string,
         slotKey: string,
+        xMvnStorefrontHost?: (string | null),
+        xMvnStorefrontTimestamp?: (string | null),
+        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<PublicProductCollectionPlacementResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -797,6 +944,11 @@ export class ApiService {
             path: {
                 'surface_key': surfaceKey,
                 'slot_key': slotKey,
+            },
+            headers: {
+                'X-MVN-Storefront-Host': xMvnStorefrontHost,
+                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
+                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
             },
             errors: {
                 422: `Validation Error`,

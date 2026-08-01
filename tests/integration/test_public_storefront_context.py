@@ -4,7 +4,7 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
-from models import Lead, Order, Product
+from models import Lead, Order, Product, TenantOffer
 from models.tenancy import Storefront, StorefrontDomain
 from services.storefront_context_signature_service import (
     StorefrontContextSignatureService,
@@ -100,6 +100,20 @@ async def test_signed_context_routes_public_order_to_secondary_storefront(
         is_published=True,
     )
     db.add(product)
+    await db.flush()
+    db.add(
+        TenantOffer(
+            tenant_id=1,
+            storefront_id=int(storefront.id),
+            product_id=int(product.id),
+            price=2300,
+            old_price=None,
+            status="active",
+            is_published=True,
+            created_by_username="test",
+            updated_by_username="test",
+        )
+    )
     await db.commit()
     await db.refresh(product)
     monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", _SECRET)
@@ -131,6 +145,7 @@ async def test_signed_context_routes_public_order_to_secondary_storefront(
     order = await db.get(Order, response.json()["id"])
     assert order is not None
     assert (order.tenant_id, order.storefront_id) == (1, storefront.id)
+    assert order.total_amount == 2300
 
 
 @pytest.mark.asyncio
