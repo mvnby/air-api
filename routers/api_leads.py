@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import get_session
-from core.tenant_scope import get_public_tenant_scope
+from core.tenant_scope import (
+    get_public_tenant_scope,
+    verify_public_storefront_request,
+)
 from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
     InstallationEstimateLeadResponse,
@@ -32,7 +35,10 @@ from services.installation_estimate_lead_service import (
 from services.website_lead_service import WebsiteLeadService
 from services.tenant_scope_service import TenantScope
 
-router = APIRouter(tags=["api"])
+router = APIRouter(
+    tags=["api"],
+    dependencies=[Depends(verify_public_storefront_request)],
+)
 
 
 async def installation_estimate_form_payload(

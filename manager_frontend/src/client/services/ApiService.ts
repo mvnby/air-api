@@ -295,26 +295,15 @@ export class ApiService {
     /**
      * Create Public Contact Lead
      * @param requestBody
-     * @param xMvnStorefrontHost
-     * @param xMvnStorefrontTimestamp
-     * @param xMvnStorefrontSignature
      * @returns PublicContactLeadResponse Successful Response
      * @throws ApiError
      */
     public static createPublicContactLead(
         requestBody: PublicContactLeadPayload,
-        xMvnStorefrontHost?: (string | null),
-        xMvnStorefrontTimestamp?: (string | null),
-        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<PublicContactLeadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/leads/contact',
-            headers: {
-                'X-MVN-Storefront-Host': xMvnStorefrontHost,
-                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
-                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
-            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -326,27 +315,18 @@ export class ApiService {
      * Create Installation Estimate Lead
      * @param idempotencyKey
      * @param formData
-     * @param xMvnStorefrontHost
-     * @param xMvnStorefrontTimestamp
-     * @param xMvnStorefrontSignature
      * @returns InstallationEstimateLeadResponse Successful Response
      * @throws ApiError
      */
     public static createInstallationEstimateLead(
         idempotencyKey: string,
         formData: Body_create_installation_estimate_lead,
-        xMvnStorefrontHost?: (string | null),
-        xMvnStorefrontTimestamp?: (string | null),
-        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<InstallationEstimateLeadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/leads/installation-estimate',
             headers: {
                 'Idempotency-Key': idempotencyKey,
-                'X-MVN-Storefront-Host': xMvnStorefrontHost,
-                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
-                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
             },
             formData: formData,
             mediaType: 'multipart/form-data',
@@ -361,26 +341,15 @@ export class ApiService {
     /**
      * Create Product Availability Lead
      * @param requestBody
-     * @param xMvnStorefrontHost
-     * @param xMvnStorefrontTimestamp
-     * @param xMvnStorefrontSignature
      * @returns ProductAvailabilityLeadResponse Successful Response
      * @throws ApiError
      */
     public static createProductAvailabilityLead(
         requestBody: ProductAvailabilityLeadPayload,
-        xMvnStorefrontHost?: (string | null),
-        xMvnStorefrontTimestamp?: (string | null),
-        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<ProductAvailabilityLeadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/leads/product-availability',
-            headers: {
-                'X-MVN-Storefront-Host': xMvnStorefrontHost,
-                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
-                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
-            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -391,26 +360,15 @@ export class ApiService {
     /**
      * Create Repair Diagnostic Lead
      * @param formData
-     * @param xMvnStorefrontHost
-     * @param xMvnStorefrontTimestamp
-     * @param xMvnStorefrontSignature
      * @returns RepairDiagnosticLeadResponse Successful Response
      * @throws ApiError
      */
     public static createRepairDiagnosticLead(
         formData: Body_create_repair_diagnostic_lead,
-        xMvnStorefrontHost?: (string | null),
-        xMvnStorefrontTimestamp?: (string | null),
-        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<RepairDiagnosticLeadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/leads/repair-diagnostic',
-            headers: {
-                'X-MVN-Storefront-Host': xMvnStorefrontHost,
-                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
-                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
-            },
             formData: formData,
             mediaType: 'multipart/form-data',
             errors: {
@@ -423,26 +381,15 @@ export class ApiService {
      * Create a new order from website.
      * Accepts customer information and cart items.
      * @param requestBody
-     * @param xMvnStorefrontHost
-     * @param xMvnStorefrontTimestamp
-     * @param xMvnStorefrontSignature
      * @returns OrderResponse Successful Response
      * @throws ApiError
      */
     public static createOrder(
         requestBody: OrderPayload,
-        xMvnStorefrontHost?: (string | null),
-        xMvnStorefrontTimestamp?: (string | null),
-        xMvnStorefrontSignature?: (string | null),
     ): CancelablePromise<OrderResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/orders',
-            headers: {
-                'X-MVN-Storefront-Host': xMvnStorefrontHost,
-                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
-                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
-            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -805,28 +752,13 @@ export class ApiService {
     }
     /**
      * Get Public Storefront Context
-     * @param xMvnStorefrontHost
-     * @param xMvnStorefrontTimestamp
-     * @param xMvnStorefrontSignature
      * @returns PublicStorefrontContextResponse Successful Response
      * @throws ApiError
      */
-    public static getPublicStorefrontContext(
-        xMvnStorefrontHost?: (string | null),
-        xMvnStorefrontTimestamp?: (string | null),
-        xMvnStorefrontSignature?: (string | null),
-    ): CancelablePromise<PublicStorefrontContextResponse> {
+    public static getPublicStorefrontContext(): CancelablePromise<PublicStorefrontContextResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/storefront/context',
-            headers: {
-                'X-MVN-Storefront-Host': xMvnStorefrontHost,
-                'X-MVN-Storefront-Timestamp': xMvnStorefrontTimestamp,
-                'X-MVN-Storefront-Signature': xMvnStorefrontSignature,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
         });
     }
     /**

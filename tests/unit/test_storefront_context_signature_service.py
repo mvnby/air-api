@@ -7,6 +7,8 @@ from services.storefront_context_signature_service import (
 
 
 _SECRET = "test-storefront-secret-at-least-32-bytes"
+_BODY = b'{"name":"Orsha"}'
+_BODY_SHA256 = StorefrontContextSignatureService.body_sha256(_BODY)
 
 
 def _signature(*, timestamp: int = 1_700_000_000) -> str:
@@ -14,20 +16,45 @@ def _signature(*, timestamp: int = 1_700_000_000) -> str:
         secret=_SECRET,
         timestamp=timestamp,
         method="POST",
-        path="/api/v1/leads/contact",
-        hostname="CITY.MVN.BY:443",
+        path_and_query=b"/api/v1/leads/contact?source=city%20page&tag=a%2Fb",
+        api_hostname="API.MVN.BY:443",
+        storefront_hostname="CITY.MVN.BY:443",
+        body_sha256=_BODY_SHA256,
     )
 
 
-def test_signature_round_trip_returns_normalized_hostname():
+def test_canonical_message_has_exact_v1_field_order_and_no_trailing_newline():
+    message = StorefrontContextSignatureService.canonical_message(
+        timestamp=1_700_000_000,
+        method="post",
+        path_and_query=b"/api/v1/leads/contact?b=2&a=%2F",
+        api_hostname="API.MVN.BY:443",
+        storefront_hostname="CITY.MVN.BY.",
+        body_sha256=_BODY_SHA256,
+    )
+
+    assert message == (
+        b"v1\n"
+        b"1700000000\n"
+        b"POST\n"
+        b"/api/v1/leads/contact?b=2&a=%2F\n"
+        b"api.mvn.by\n"
+        b"city.mvn.by\n" + _BODY_SHA256.encode("ascii")
+    )
+    assert not message.endswith(b"\n")
+
+
+def test_signature_round_trip_returns_normalized_storefront_hostname():
     signature = _signature()
 
     hostname = StorefrontContextSignatureService.verify(
         secret=_SECRET,
         timestamp=1_700_000_000,
         method="post",
-        path="/api/v1/leads/contact",
-        hostname="city.mvn.by",
+        path_and_query=b"/api/v1/leads/contact?source=city%20page&tag=a%2Fb",
+        api_hostname="api.mvn.by",
+        storefront_hostname="city.mvn.by",
+        body_sha256=_BODY_SHA256,
         signature=signature,
         max_age_seconds=300,
         now=1_700_000_100,
@@ -41,18 +68,22 @@ def test_signature_round_trip_returns_normalized_hostname():
     ("field", "value"),
     [
         ("method", "GET"),
-        ("path", "/api/v1/orders"),
-        ("hostname", "other.mvn.by"),
+        ("path_and_query", b"/api/v1/leads/contact?tag=a%2fb&source=city%20page"),
+        ("api_hostname", "other-api.mvn.by"),
+        ("storefront_hostname", "other.mvn.by"),
+        ("body_sha256", StorefrontContextSignatureService.body_sha256(b"tampered")),
         ("signature", "v1=" + "0" * 64),
     ],
 )
-def test_signature_rejects_tampered_request_target(field, value):
+def test_signature_rejects_tampered_request(field, value):
     kwargs = {
         "secret": _SECRET,
         "timestamp": 1_700_000_000,
         "method": "POST",
-        "path": "/api/v1/leads/contact",
-        "hostname": "city.mvn.by",
+        "path_and_query": b"/api/v1/leads/contact?source=city%20page&tag=a%2Fb",
+        "api_hostname": "api.mvn.by",
+        "storefront_hostname": "city.mvn.by",
+        "body_sha256": _BODY_SHA256,
         "signature": _signature(),
         "max_age_seconds": 300,
         "now": 1_700_000_100,
@@ -66,7 +97,8 @@ def test_signature_rejects_tampered_request_target(field, value):
         StorefrontContextSignatureService.verify(**kwargs)
 
 
-def test_signature_rejects_expired_timestamp():
+@pytest.mark.parametrize("now", [1_699_999_699, 1_700_000_301])
+def test_signature_rejects_timestamp_outside_past_or_future_window(now):
     with pytest.raises(
         InvalidStorefrontContextSignature,
         match="has expired",
@@ -75,12 +107,58 @@ def test_signature_rejects_expired_timestamp():
             secret=_SECRET,
             timestamp=1_700_000_000,
             method="POST",
-            path="/api/v1/leads/contact",
-            hostname="city.mvn.by",
-            signature=_signature(),
+            path_and_query="/api/v1/leads/contact",
+            api_hostname="api.mvn.by",
+            storefront_hostname="city.mvn.by",
+            body_sha256=_BODY_SHA256,
+            signature=StorefrontContextSignatureService.sign(
+                secret=_SECRET,
+                timestamp=1_700_000_000,
+                method="POST",
+                path_and_query="/api/v1/leads/contact",
+                api_hostname="api.mvn.by",
+                storefront_hostname="city.mvn.by",
+                body_sha256=_BODY_SHA256,
+            ),
             max_age_seconds=300,
-            now=1_700_000_301,
+            now=now,
         )
+
+
+@pytest.mark.parametrize(
+    "signature",
+    [
+        "",
+        "v2=" + "0" * 64,
+        "v1=" + "A" * 64,
+        "v1=" + "0" * 63,
+        "v1=" + "0" * 65,
+    ],
+)
+def test_signature_rejects_noncanonical_signature_format(signature):
+    with pytest.raises(
+        InvalidStorefrontContextSignature,
+        match="signature is invalid",
+    ):
+        StorefrontContextSignatureService.verify(
+            secret=_SECRET,
+            timestamp=1_700_000_000,
+            method="POST",
+            path_and_query="/api/v1/leads/contact",
+            api_hostname="api.mvn.by",
+            storefront_hostname="city.mvn.by",
+            body_sha256=_BODY_SHA256,
+            signature=signature,
+            max_age_seconds=300,
+            now=1_700_000_100,
+        )
+
+
+def test_request_target_preserves_raw_query_bytes():
+    assert StorefrontContextSignatureService.request_target(
+        raw_path=b"/api/v1/products",
+        query_string=b"brand=midea&brand=gree&q=a%2Fb",
+    ) == b"/api/v1/products?brand=midea&brand=gree&q=a%2Fb"
 
 
 def test_signature_rejects_missing_secret():
@@ -92,29 +170,8 @@ def test_signature_rejects_missing_secret():
             secret="",
             timestamp=1_700_000_000,
             method="POST",
-            path="/api/v1/leads/contact",
-            hostname="city.mvn.by",
+            path_and_query="/api/v1/leads/contact",
+            api_hostname="api.mvn.by",
+            storefront_hostname="city.mvn.by",
+            body_sha256=_BODY_SHA256,
         )
-
-
-def test_verify_any_accepts_previous_secret_during_rotation():
-    signature = StorefrontContextSignatureService.sign(
-        secret=_SECRET,
-        timestamp=1_700_000_000,
-        method="POST",
-        path="/api/v1/leads/contact",
-        hostname="city.mvn.by",
-    )
-
-    hostname = StorefrontContextSignatureService.verify_any(
-        secrets=("new-storefront-secret-at-least-32-bytes", _SECRET),
-        timestamp=1_700_000_000,
-        method="POST",
-        path="/api/v1/leads/contact",
-        hostname="city.mvn.by",
-        signature=signature,
-        max_age_seconds=300,
-        now=1_700_000_100,
-    )
-
-    assert hostname == "city.mvn.by"

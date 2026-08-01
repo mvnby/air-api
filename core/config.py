@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
@@ -10,6 +11,11 @@ from core.runtime_controls import (
 )
 
 load_dotenv()
+
+
+_STOREFRONT_SIGNING_KEY_ID_PATTERN = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+)
 
 
 def _redact_settings_validation_error(error: ValidationError) -> ValidationError:
@@ -115,12 +121,54 @@ class Settings(BaseSettings):
     STATIC_DIR: str = "static"
     UPLOAD_DIR: str = "static/uploads"
     PUBLIC_SITE_URL: str = "https://mvn.by"
-    # Optional shared secret for a trusted storefront SSR/proxy. When unset,
-    # public writes keep using the canonical MVN storefront; a request that
+    # Optional runtime keyring for a trusted storefront SSR/proxy. When unset,
+    # public requests keep using the canonical MVN storefront; a request that
     # tries to select another storefront still fails closed.
+    STOREFRONT_CONTEXT_SIGNING_KEY_ID: str = ""
     STOREFRONT_CONTEXT_SIGNING_SECRET: str = ""
+    STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID: str = ""
     STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET: str = ""
     STOREFRONT_CONTEXT_MAX_AGE_SECONDS: int = 300
+    STOREFRONT_CONTEXT_MAX_BODY_BYTES: int = 20 * 1024 * 1024
+    STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS: bool = False
+    # Comma-separated upstream API host allowlist. Blank keeps the safe
+    # environment-specific defaults used by production and local smoke tests.
+    STOREFRONT_CONTEXT_API_HOSTS: str = ""
+
+    @property
+    def storefront_context_api_hosts(self) -> tuple[str, ...]:
+        configured = tuple(
+            item.strip()
+            for item in self.STOREFRONT_CONTEXT_API_HOSTS.split(",")
+            if item.strip()
+        )
+        if configured:
+            return configured
+        if self.ENVIRONMENT == "production":
+            return ("api.mvn.by", "localhost", "127.0.0.1")
+        return (
+            "api.mvn.by",
+            "localhost",
+            "127.0.0.1",
+            "testserver",
+            "test",
+            "app",
+        )
+
+    @field_validator(
+        "STOREFRONT_CONTEXT_SIGNING_KEY_ID",
+        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID",
+    )
+    @classmethod
+    def _validate_storefront_context_key_id(cls, value: str) -> str:
+        normalized = str(value or "").strip()
+        if normalized and not _STOREFRONT_SIGNING_KEY_ID_PATTERN.fullmatch(
+            normalized
+        ):
+            raise ValueError(
+                "Storefront context signing key ID must use 1-64 ASCII letters, digits, dot, underscore or dash"
+            )
+        return normalized
 
     @field_validator(
         "STOREFRONT_CONTEXT_SIGNING_SECRET",
@@ -144,6 +192,50 @@ class Settings(BaseSettings):
                 "STOREFRONT_CONTEXT_MAX_AGE_SECONDS must be between 30 and 900"
             )
         return normalized
+
+    @field_validator("STOREFRONT_CONTEXT_MAX_BODY_BYTES")
+    @classmethod
+    def _validate_storefront_context_max_body_bytes(cls, value: int) -> int:
+        normalized = int(value)
+        if normalized < 1024 or normalized > 64 * 1024 * 1024:
+            raise ValueError(
+                "STOREFRONT_CONTEXT_MAX_BODY_BYTES must be between 1 KiB and 64 MiB"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_storefront_context_keyring(self):
+        primary_id = bool(self.STOREFRONT_CONTEXT_SIGNING_KEY_ID)
+        primary_secret = bool(self.STOREFRONT_CONTEXT_SIGNING_SECRET)
+        previous_id = bool(self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID)
+        previous_secret = bool(self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET)
+
+        if primary_id != primary_secret:
+            raise ValueError(
+                "STOREFRONT_CONTEXT_SIGNING_KEY_ID and STOREFRONT_CONTEXT_SIGNING_SECRET must be configured together"
+            )
+        if previous_id != previous_secret:
+            raise ValueError(
+                "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID and "
+                "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET must be configured together"
+            )
+        if previous_id and not primary_id:
+            raise ValueError(
+                "Previous storefront signing key requires a configured primary key"
+            )
+        if (
+            previous_id
+            and self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID
+            == self.STOREFRONT_CONTEXT_SIGNING_KEY_ID
+        ):
+            raise ValueError(
+                "Primary and previous storefront signing key IDs must differ"
+            )
+        if self.STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS and not primary_id:
+            raise ValueError(
+                "Signed storefront requests cannot be required without a primary signing key"
+            )
+        return self
 
     # Product media storage. Default stays local so CI/deploy do not require
     # R2/S3 secrets unless PRODUCT_MEDIA_STORAGE_PROVIDER is changed.

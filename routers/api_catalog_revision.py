@@ -4,11 +4,15 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
+from core.tenant_scope import verify_public_storefront_request
 from schemas import CatalogRevisionResponse
 from services.catalog_revision_service import CatalogRevisionService
 
 
-router = APIRouter(tags=["api"])
+router = APIRouter(
+    tags=["api"],
+    dependencies=[Depends(verify_public_storefront_request)],
+)
 
 
 @router.get(

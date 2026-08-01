@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
+from core.tenant_scope import verify_public_storefront_request
 from schemas import (
     CatalogResponse,
     FiltersConfigResponse,
@@ -23,21 +24,37 @@ from services.product_service import ProductService
 from services.feature_resolver_service import FeatureResolverService
 
 router = APIRouter(tags=["api"])
+_PUBLIC_STOREFRONT_DEPENDENCIES = [Depends(verify_public_storefront_request)]
 
 
-@router.get("/v1/specs/keys", response_model=SpecsKeysResponse, operation_id="get_public_spec_keys")
+@router.get(
+    "/v1/specs/keys",
+    response_model=SpecsKeysResponse,
+    operation_id="get_public_spec_keys",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
+)
 async def get_public_spec_keys(session: AsyncSession = Depends(get_session)):
     payload = await ProductService.get_public_spec_keys(session)
     return SpecsKeysResponse(**payload)
 
 
-@router.get("/v1/specs/registry", response_model=SpecRegistryResponse, operation_id="get_public_spec_registry")
+@router.get(
+    "/v1/specs/registry",
+    response_model=SpecRegistryResponse,
+    operation_id="get_public_spec_registry",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
+)
 async def get_public_spec_registry():
     payload = ProductService.get_specs_registry()
     return SpecRegistryResponse(**payload)
 
 
-@router.get("/v1/filters/config", response_model=FiltersConfigResponse, operation_id="get_filters_config")
+@router.get(
+    "/v1/filters/config",
+    response_model=FiltersConfigResponse,
+    operation_id="get_filters_config",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
+)
 async def get_filters_config(session: AsyncSession = Depends(get_session)):
     return await ProductService.get_filters_config(session)
 
@@ -52,8 +69,18 @@ async def generate_product_description(
     return {"description": text}
 
 
-@router.get("/v1/catalog", response_model=CatalogResponse, operation_id="get_products")
-@router.get("/v1/products", response_model=CatalogResponse, operation_id="get_products_v1")
+@router.get(
+    "/v1/catalog",
+    response_model=CatalogResponse,
+    operation_id="get_products",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
+)
+@router.get(
+    "/v1/products",
+    response_model=CatalogResponse,
+    operation_id="get_products_v1",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
+)
 async def get_catalog(
     page: int = 1,
     limit: int = 20,
@@ -122,6 +149,7 @@ async def get_catalog(
     "/v1/products/vitebsk-featured",
     response_model=List[ProductResponse],
     operation_id="get_vitebsk_featured_products",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
 async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_session)):
     products = await CatalogService.get_vitebsk_featured_products(session, limit=6)
@@ -140,12 +168,18 @@ async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_sess
     "/v1/product-series/navigation",
     response_model=ProductSeriesNavigationResponse,
     operation_id="get_product_series_navigation",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
 async def get_product_series_navigation(session: AsyncSession = Depends(get_session)):
     return await ProductService.get_series_navigation(session)
 
 
-@router.get("/v1/products/{identifier}", response_model=ProductResponse, operation_id="get_product")
+@router.get(
+    "/v1/products/{identifier}",
+    response_model=ProductResponse,
+    operation_id="get_product",
+    dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
+)
 async def get_product_by_identifier(identifier: str, session: AsyncSession = Depends(get_session)):
     product = await ProductService.get_public_product_by_identifier(session, identifier)
     if not product:
