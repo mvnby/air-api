@@ -49,11 +49,12 @@ def _create_parent_schema(connection) -> None:
     metadata.create_all(connection)
 
 
-def test_tenant_offer_foundation_is_the_single_alembic_head():
+def test_tenant_offer_foundation_precedes_the_catalog_revision_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == ["e1f2a3b4c5d6"]
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
+    assert script.get_revision("e1f2a3b4c5d6").down_revision == REVISION
 
 
 def test_tenant_offer_foundation_migration_is_additive_and_reversible():

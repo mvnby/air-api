@@ -21,6 +21,9 @@ from schemas_features import (
     FeatureTargetLinkPayload,
     ManagerProductFeatureWorkspaceResponse,
 )
+from services.catalog_invalidation_commit_service import (
+    CatalogInvalidationCommitService,
+)
 from services.catalog_revision_service import CatalogRevisionService
 from services.feature_resolver_service import FeatureResolverService
 from services.feature_scope_policy import FeatureScopePolicy
@@ -120,11 +123,12 @@ class FeatureAssignmentService:
             link.source = "manual"
             link.updated_at = now
             session.add(link)
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_features_update",
+            reason="product_features_update",
             product_ids=[product_id],
         )
+        await session.commit()
         return await FeatureAssignmentService.get_product_workspace(session, product_id)
 
     @staticmethod
@@ -135,15 +139,16 @@ class FeatureAssignmentService:
     ) -> ManagerProductFeatureWorkspaceResponse:
         if await session.get(Product, product_id) is None:
             raise HTTPException(status_code=404, detail="Товар не найден")
-        await session.execute(
+        result = await session.execute(
             delete(FeatureProductLink).where(
                 FeatureProductLink.product_id == product_id,
                 FeatureProductLink.feature_id == feature_id,
             )
         )
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            scope="product_feature_delete",
+            producer="feature_assignment.delete_product_assignment",
+            changed=result.rowcount != 0,
             product_ids=[product_id],
         )
         return await FeatureAssignmentService.get_product_workspace(session, product_id)
@@ -200,11 +205,12 @@ class FeatureAssignmentService:
             link.is_enabled = True
             link.updated_at = now
             session.add(link)
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope="product_feature_suggestions_apply",
+            reason="product_feature_suggestions_apply",
             product_ids=[product_id],
         )
+        await session.commit()
         return await FeatureAssignmentService.get_product_workspace(session, product_id)
 
     @staticmethod
@@ -255,10 +261,11 @@ class FeatureAssignmentService:
         link.source = "manual"
         link.updated_at = datetime.now()
         session.add(link)
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogRevisionService.stage_invalidation(
             session,
-            scope=f"feature_{target_type}_link_update",
+            reason=f"feature_{target_type}_link_update",
         )
+        await session.commit()
 
     @staticmethod
     async def delete_target_link(
@@ -275,15 +282,16 @@ class FeatureAssignmentService:
         if config is None:
             raise ValueError("Unsupported feature target")
         model, target_column = config
-        await session.execute(
+        result = await session.execute(
             delete(model).where(
                 target_column == target_id,
                 model.feature_id == feature_id,
             )
         )
-        await CatalogRevisionService.bump_commit_and_purge(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            scope=f"feature_{target_type}_link_delete",
+            producer=f"feature_assignment.delete_target_link.{target_type}",
+            changed=result.rowcount != 0,
         )
 
     @staticmethod

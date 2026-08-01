@@ -270,14 +270,13 @@ class ProductMainImageCleanupService:
             approved.append(item)
 
         if updated_product_ids:
-            await CatalogRevisionService.bump_commit_and_purge(
+            await CatalogRevisionService.stage_invalidation(
                 session,
-                scope="product_main_image_cleanup_approval",
+                reason="product_main_image_cleanup_approval",
                 product_ids=updated_product_ids,
                 slugs=updated_slugs,
             )
-        else:
-            await session.commit()
+        await session.commit()
         product_lookup = await ProductMainImageCleanupService._product_lookup(session, approved)
         return {
             "updated_count": len(approved),

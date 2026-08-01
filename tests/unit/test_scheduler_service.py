@@ -7,7 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Customer, Order, OrderStatus
+from models import (
+    Customer,
+    IntegrationOutboxEvent,
+    Order,
+    OrderStatus,
+    Product,
+    Storefront,
+    Tenant,
+)
 import services.scheduler_service as scheduler_module
 from services.scheduler_service import SchedulerService
 
@@ -20,6 +28,27 @@ async def sqlite_session(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add(
+            Tenant(
+                id=1,
+                slug="mvn",
+                display_name="MVN",
+                status="active",
+                is_system=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            Storefront(
+                id=1,
+                tenant_id=1,
+                slug="main",
+                display_name="MVN",
+                status="active",
+                is_default=True,
+            )
+        )
+        await session.commit()
         yield session
 
     await engine.dispose()
@@ -133,3 +162,48 @@ async def test_daily_backup_rejects_skipped_result(monkeypatch):
 
     with pytest.raises(RuntimeError, match="skipped or did not complete"):
         await service._run_daily_backup()
+
+
+@pytest.mark.asyncio
+async def test_scheduled_price_change_uses_durable_catalog_invalidation(
+    sqlite_session,
+    monkeypatch,
+):
+    product = Product(
+        title="Scheduled price model",
+        slug="scheduled-price-model",
+        price=1000,
+        source_url="https://supplier.example/model",
+    )
+    sqlite_session.add(product)
+    await sqlite_session.commit()
+    product_id = int(product.id)
+    factory = sessionmaker(
+        bind=sqlite_session.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    monkeypatch.setattr(scheduler_module, "async_session_maker", factory)
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(scheduler_module.asyncio, "sleep", no_sleep)
+    service = SchedulerService()
+
+    async def parse(_url):
+        return {"price": 1250}
+
+    service.parser.parse = parse
+
+    await service.update_all_prices()
+
+    sqlite_session.expire_all()
+    stored_product = await sqlite_session.get(Product, product_id)
+    event = (
+        await sqlite_session.execute(select(IntegrationOutboxEvent))
+    ).scalar_one()
+    assert stored_product is not None
+    assert stored_product.price == 1250
+    assert event.payload["reason"] == "scheduled_product_price_sync"
+    assert "/product/scheduled-price-model/" in event.payload["paths"]

@@ -11,6 +11,7 @@ from core.request_context import current_request_id
 from crud.tenant_offer import TenantOfferDAO
 from models import Product, TenantAuditEvent, TenantOffer
 from models.tenancy import TenantScope
+from services.catalog_revision_service import CatalogRevisionService
 
 
 def utc_now() -> datetime:
@@ -117,6 +118,13 @@ class TenantOfferService:
                         change_set=change_set,
                     ),
                 )
+                await CatalogRevisionService.stage_invalidation(
+                    session,
+                    reason=action.replace(".", "_"),
+                    tenant_scope=tenant_scope,
+                    product_ids=[product_id],
+                    slugs=[product.slug],
+                )
             await session.commit()
             return cls._serialize_offer(offer, product)
         except IntegrityError as exc:
@@ -186,6 +194,13 @@ class TenantOfferService:
                         action="tenant_offer.updated",
                         change_set=change_set,
                     ),
+                )
+                await CatalogRevisionService.stage_invalidation(
+                    session,
+                    reason="tenant_offer_updated",
+                    tenant_scope=tenant_scope,
+                    product_ids=[offer.product_id],
+                    slugs=[product.slug],
                 )
                 await session.commit()
             return cls._serialize_offer(offer, product)

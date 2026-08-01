@@ -26,6 +26,7 @@ from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
     InstallationEstimateLeadResponse,
 )
+from schemas_catalog import CatalogRevisionResponse
 from schemas_common import Meta
 from schemas_manager_installers import (
     ManagerInstallerBase,
@@ -476,11 +477,6 @@ class ProductPriceResponse(BaseModel):
 class CatalogResponse(BaseModel):
     items: List[ProductResponse]
     meta: Meta
-
-
-class CatalogRevisionResponse(BaseModel):
-    revision: int
-    updated_at: datetime
 
 
 class WebRebuildStatusResponse(BaseModel):

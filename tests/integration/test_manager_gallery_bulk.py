@@ -5,7 +5,18 @@ from httpx import AsyncClient
 from sqlmodel import select
 
 from core.config import settings
-from models import Brand, Product, ProductImage, ProductImageVariant, ProductSeries
+from models import (
+    Brand,
+    IntegrationOutboxEvent,
+    Product,
+    ProductImage,
+    ProductImageVariant,
+    ProductSeries,
+)
+from services.catalog_invalidation_contracts import (
+    CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+)
+from services.catalog_revision_service import CatalogRevisionService
 
 
 def _make_product(idx: int) -> Product:
@@ -200,6 +211,7 @@ async def test_series_gallery_can_be_added_to_all_series_products(async_client: 
     ]
     headers = await _auth_headers(async_client)
     endpoint = f"/api/manager/brands/{brand.id}/series/{series.id}/gallery/apply-to-products"
+    before_revision = await CatalogRevisionService.get_current(db)
     response = await async_client.post(endpoint, json={"source_urls": urls}, headers=headers)
 
     assert response.status_code == 200, response.text
@@ -212,15 +224,37 @@ async def test_series_gallery_can_be_added_to_all_series_products(async_client: 
         await db.execute(select(ProductImage).where(ProductImage.url.in_(urls)).order_by(ProductImage.id))
     ).scalars().all()
     assert {row.product_id for row in linked_rows} == {first.id, second.id}
+    after_first_revision = await CatalogRevisionService.get_current(db)
 
     repeated = await async_client.post(endpoint, json={"source_urls": urls}, headers=headers)
     assert repeated.status_code == 200, repeated.text
     assert repeated.json()["added_links"] == 0
     assert repeated.json()["skipped_existing"] == 4
+    after_repeated_revision = await CatalogRevisionService.get_current(db)
+    assert after_first_revision["revision"] == before_revision["revision"] + 1
+    assert after_repeated_revision["revision"] == after_first_revision["revision"]
+
+    events = (
+        await db.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
+    gallery_events = [
+        event
+        for event in events
+        if event.payload.get("reason") == "brand_series_gallery_apply"
+    ]
+    assert len(gallery_events) == 1
 
 
 @pytest.mark.asyncio
-async def test_delete_shared_image_keeps_file_until_last_reference(async_client: AsyncClient, db):
+async def test_delete_shared_image_defers_file_cleanup_after_last_reference(
+    async_client: AsyncClient,
+    db,
+):
     p1 = _make_product(21)
     p2 = _make_product(22)
     db.add_all([p1, p2])
@@ -249,4 +283,5 @@ async def test_delete_shared_image_keeps_file_until_last_reference(async_client:
 
     r2 = await async_client.delete(f"/api/manager/gallery/{img2.id}", headers=headers)
     assert r2.status_code == 200
-    assert not os.path.exists(path)
+    assert os.path.exists(path)
+    os.remove(path)

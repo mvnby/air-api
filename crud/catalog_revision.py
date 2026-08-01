@@ -1,10 +1,21 @@
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Iterable, NamedTuple, Optional
 
+from sqlalchemy import and_
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import GlobalConfig
+from models import (
+    GlobalConfig,
+    Storefront,
+    StorefrontCatalogRevision,
+    StorefrontDomain,
+    Tenant,
+)
+from models.tenancy import TenantScope
 
 
 CATALOG_REVISION_KEY = "catalog_revision"
@@ -30,6 +41,15 @@ class CatalogStaticPublishSnapshot(NamedTuple):
     requested_revision: int
     requested_at: datetime | None
     last_error: str | None
+
+
+@dataclass(frozen=True)
+class CatalogInvalidationTargetSnapshot:
+    tenant_id: int
+    storefront_id: int
+    is_system: bool
+    is_default: bool
+    hostnames: tuple[str, ...]
 
 
 def _parse_revision(value: str | None) -> int:
@@ -59,6 +79,172 @@ def _static_key_description(label: str) -> str:
 
 
 class CatalogRevisionDAO:
+    @staticmethod
+    async def _insert_global_revision_if_missing(
+        session: AsyncSession,
+        *,
+        scope: str,
+        now: datetime,
+    ) -> None:
+        values = {
+            "key": CATALOG_REVISION_KEY,
+            "value": "0",
+            "updated_at": now,
+            "description": _scope_description(scope),
+        }
+        dialect_name = session.get_bind().dialect.name
+        if dialect_name == "postgresql":
+            statement = postgresql_insert(GlobalConfig).values(**values)
+        elif dialect_name == "sqlite":
+            statement = sqlite_insert(GlobalConfig).values(**values)
+        else:
+            raise NotImplementedError(
+                "Global catalog revision upsert is unsupported for "
+                f"{dialect_name!r}"
+            )
+        await session.execute(
+            statement.on_conflict_do_nothing(
+                index_elements=[GlobalConfig.key]
+            )
+        )
+
+    @staticmethod
+    async def _insert_storefront_revision_if_missing(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        now: datetime,
+    ) -> None:
+        values = {
+            "tenant_id": tenant_scope.tenant_id,
+            "storefront_id": tenant_scope.storefront_id,
+            "revision": 0,
+            "updated_at": now,
+        }
+        dialect_name = session.get_bind().dialect.name
+        if dialect_name == "postgresql":
+            statement = postgresql_insert(StorefrontCatalogRevision).values(**values)
+        elif dialect_name == "sqlite":
+            statement = sqlite_insert(StorefrontCatalogRevision).values(**values)
+        else:
+            raise NotImplementedError(
+                "Storefront catalog revision upsert is unsupported for "
+                f"{dialect_name!r}"
+            )
+        await session.execute(
+            statement.on_conflict_do_nothing(
+                index_elements=[
+                    StorefrontCatalogRevision.tenant_id,
+                    StorefrontCatalogRevision.storefront_id,
+                ]
+            )
+        )
+
+    @staticmethod
+    async def get_storefront_current(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> CatalogRevisionSnapshot:
+        row = await session.get(
+            StorefrontCatalogRevision,
+            (tenant_scope.tenant_id, tenant_scope.storefront_id),
+        )
+        if row is None:
+            return CatalogRevisionSnapshot(
+                revision=0,
+                updated_at=CATALOG_REVISION_EPOCH,
+            )
+        return CatalogRevisionSnapshot(
+            revision=max(0, int(row.revision)),
+            updated_at=row.updated_at or CATALOG_REVISION_EPOCH,
+        )
+
+    @staticmethod
+    async def bump_storefront(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> CatalogRevisionSnapshot:
+        now = datetime.now(timezone.utc)
+        await CatalogRevisionDAO._insert_storefront_revision_if_missing(
+            session,
+            tenant_scope=tenant_scope,
+            now=now,
+        )
+        statement = select(StorefrontCatalogRevision).where(
+            StorefrontCatalogRevision.tenant_id == tenant_scope.tenant_id,
+            StorefrontCatalogRevision.storefront_id == tenant_scope.storefront_id,
+        )
+        if session.get_bind().dialect.name == "postgresql":
+            statement = statement.with_for_update()
+        row = (await session.execute(statement)).scalar_one()
+        row.revision = max(0, int(row.revision)) + 1
+        row.updated_at = now
+        session.add(row)
+        await session.flush()
+        return CatalogRevisionSnapshot(
+            revision=row.revision,
+            updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    async def list_invalidation_targets(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope | None = None,
+    ) -> tuple[CatalogInvalidationTargetSnapshot, ...]:
+        statement = (
+            select(Tenant, Storefront, StorefrontDomain)
+            .join(Storefront, Storefront.tenant_id == Tenant.id)
+            .outerjoin(
+                StorefrontDomain,
+                and_(
+                    StorefrontDomain.storefront_id == Storefront.id,
+                    StorefrontDomain.status == "active",
+                ),
+            )
+            .where(
+                Tenant.status == "active",
+                Storefront.status == "active",
+            )
+            .order_by(
+                Tenant.id.asc(),
+                Storefront.id.asc(),
+                StorefrontDomain.is_primary.desc(),
+                StorefrontDomain.id.asc(),
+            )
+        )
+        if tenant_scope is not None:
+            statement = statement.where(
+                Tenant.id == tenant_scope.tenant_id,
+                Storefront.id == tenant_scope.storefront_id,
+            )
+
+        grouped: dict[
+            tuple[int, int],
+            tuple[bool, bool, list[str]],
+        ] = {}
+        for tenant, storefront, domain in (await session.execute(statement)).all():
+            key = (int(tenant.id), int(storefront.id))
+            target = grouped.setdefault(
+                key,
+                (bool(tenant.is_system), bool(storefront.is_default), []),
+            )
+            if domain is not None:
+                target[2].append(str(domain.hostname))
+
+        return tuple(
+            CatalogInvalidationTargetSnapshot(
+                tenant_id=tenant_id,
+                storefront_id=storefront_id,
+                is_system=values[0],
+                is_default=values[1],
+                hostnames=tuple(sorted(set(values[2]), key=str.casefold)),
+            )
+            for (tenant_id, storefront_id), values in grouped.items()
+        )
+
     @staticmethod
     async def _get_global_config_map(
         session: AsyncSession,
@@ -125,19 +311,18 @@ class CatalogRevisionDAO:
         slugs: Optional[Iterable[str]] = None,
         brand_slugs: Optional[Iterable[str]] = None,
     ) -> CatalogRevisionSnapshot:
-        stmt = select(GlobalConfig).where(GlobalConfig.key == CATALOG_REVISION_KEY).with_for_update()
-        row = (await session.execute(stmt)).scalar_one_or_none()
         now = datetime.now()
-
-        if row is None:
-            row = GlobalConfig(
-                key=CATALOG_REVISION_KEY,
-                value="0",
-                updated_at=now,
-                description=_scope_description(scope),
-            )
-            session.add(row)
-            await session.flush()
+        await CatalogRevisionDAO._insert_global_revision_if_missing(
+            session,
+            scope=scope,
+            now=now,
+        )
+        statement = select(GlobalConfig).where(
+            GlobalConfig.key == CATALOG_REVISION_KEY
+        )
+        if session.get_bind().dialect.name == "postgresql":
+            statement = statement.with_for_update()
+        row = (await session.execute(statement)).scalar_one()
 
         revision = _parse_revision(row.value) + 1
         row.value = str(revision)

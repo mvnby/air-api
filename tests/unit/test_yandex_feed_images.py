@@ -8,8 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Product, ProductImage, ProductImageVariant
+from crud.catalog_revision import CatalogRevisionDAO
+from models import (
+    IntegrationOutboxEvent,
+    Product,
+    ProductImage,
+    ProductImageVariant,
+    Storefront,
+    Tenant,
+)
 from services import product_image_processing_provider
+from services.catalog_invalidation_contracts import (
+    CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+)
 from services.media_library_service import MediaLibraryService
 from services.media_storage_service import StoredMediaObject
 from services.product_image_processing_contract import (
@@ -129,6 +140,41 @@ async def _make_product(session: AsyncSession, idx: int) -> Product:
     await session.commit()
     await session.refresh(product)
     return product
+
+
+async def _seed_catalog_target(session: AsyncSession) -> None:
+    session.add(
+        Tenant(
+            id=1,
+            slug="system",
+            display_name="System",
+            status="active",
+            is_system=True,
+        )
+    )
+    await session.flush()
+    session.add(
+        Storefront(
+            id=1,
+            tenant_id=1,
+            slug="main",
+            display_name="Main",
+            status="active",
+            is_default=True,
+        )
+    )
+    await session.commit()
+
+
+async def _catalog_invalidation_events(session: AsyncSession):
+    return (
+        await session.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
 
 
 def _write_source_image(tmp_path: Path, name: str) -> str:
@@ -340,6 +386,7 @@ async def test_yandex_feed_backfill_is_idempotent(
     monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
+    await _seed_catalog_target(sqlite_session)
     product = await _make_product(sqlite_session, 91)
     source_url = _write_source_image(tmp_path, "yandex-feed-source.webp")
     product.main_image = source_url
@@ -370,6 +417,11 @@ async def test_yandex_feed_backfill_is_idempotent(
     assert second["planned"] == 0
     assert second["up_to_date"] == 1
     assert len(storage.calls) == 1
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = await _catalog_invalidation_events(sqlite_session)
+    assert revision.revision == 1
+    assert len(events) == 1
+    assert events[0].payload["reason"] == "product_media_yandex_feed_backfill"
 
 
 @pytest.mark.asyncio
@@ -482,6 +534,7 @@ async def test_yandex_feed_backfill_reports_product_without_source(sqlite_sessio
 async def test_yandex_feed_backfill_records_failed_source_without_picture_url(
     sqlite_session,
 ):
+    await _seed_catalog_target(sqlite_session)
     product = await _make_product(sqlite_session, 93)
     source_url = "/media/products/shared/missing-yandex-source.webp"
     product.main_image = source_url
@@ -508,6 +561,11 @@ async def test_yandex_feed_backfill_records_failed_source_without_picture_url(
     assert result["errors"][0]["product_id"] == product.id
     assert variant.processing_status == ProductImageProcessingStatus.FAILED.value
     assert variant.url is None
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = await _catalog_invalidation_events(sqlite_session)
+    assert revision.revision == 1
+    assert len(events) == 1
+    assert events[0].payload["reason"] == "product_media_yandex_feed_backfill"
 
 
 @pytest.mark.asyncio
@@ -517,6 +575,7 @@ async def test_yandex_feed_backfill_continues_after_source_error(
     monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
+    await _seed_catalog_target(sqlite_session)
     missing = await _make_product(sqlite_session, 95)
     good = await _make_product(sqlite_session, 96)
     missing.main_image = "/media/products/shared/missing-batch-source.webp"
@@ -542,3 +601,7 @@ async def test_yandex_feed_backfill_continues_after_source_error(
     assert len(result["errors"]) == 1
     assert result["errors"][0]["product_id"] == missing.id
     assert result["processed_items"][0]["product_id"] == good.id
+    revision = await CatalogRevisionDAO.get_current(sqlite_session)
+    events = await _catalog_invalidation_events(sqlite_session)
+    assert revision.revision == 1
+    assert len(events) == 1

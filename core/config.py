@@ -398,6 +398,47 @@ class Settings(BaseSettings):
     COMMUNICATIONS_WORKER_PROVIDER_CLOSE_SECONDS: float = 5.0
     COMMUNICATIONS_WORKER_LEASE_SECONDS: int = 90
 
+    # Dedicated durable catalog cache invalidation consumer. It is separate
+    # from the communications dispatcher and remains inert until enabled on
+    # the single-active scheduler runtime.
+    CATALOG_INVALIDATION_WORKER_ENABLED: bool = False
+    CATALOG_INVALIDATION_WORKER_POLL_SECONDS: float = 2.0
+    CATALOG_INVALIDATION_WORKER_LEASE_SECONDS: int = 120
+    CATALOG_INVALIDATION_WORKER_RECOVERY_LIMIT: int = 100
+
+    @field_validator("CATALOG_INVALIDATION_WORKER_POLL_SECONDS")
+    @classmethod
+    def _validate_catalog_invalidation_poll_seconds(cls, value: float) -> float:
+        normalized = float(value)
+        if normalized < 0.1 or normalized > 300:
+            raise ValueError(
+                "CATALOG_INVALIDATION_WORKER_POLL_SECONDS must be between "
+                "0.1 and 300"
+            )
+        return normalized
+
+    @field_validator("CATALOG_INVALIDATION_WORKER_LEASE_SECONDS")
+    @classmethod
+    def _validate_catalog_invalidation_lease_seconds(cls, value: int) -> int:
+        normalized = int(value)
+        if normalized < 30 or normalized > 3600:
+            raise ValueError(
+                "CATALOG_INVALIDATION_WORKER_LEASE_SECONDS must be between "
+                "30 and 3600"
+            )
+        return normalized
+
+    @field_validator("CATALOG_INVALIDATION_WORKER_RECOVERY_LIMIT")
+    @classmethod
+    def _validate_catalog_invalidation_recovery_limit(cls, value: int) -> int:
+        normalized = int(value)
+        if normalized < 1 or normalized > 1000:
+            raise ValueError(
+                "CATALOG_INVALIDATION_WORKER_RECOVERY_LIMIT must be between "
+                "1 and 1000"
+            )
+        return normalized
+
     @field_validator(
         "SCHEDULER_ENABLED",
         "BOT_ENABLED",

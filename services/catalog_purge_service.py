@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_PUBLIC_SITE_URL = "https://mvn.by"
 CLOUDFLARE_API_BASE_URL = "https://api.cloudflare.com/client/v4"
 CLOUDFLARE_PURGE_FILES_LIMIT = 30
-CLOUDFLARE_PURGE_MAX_URLS_PER_EVENT = 120
 CLOUDFLARE_PURGE_MIN_INTERVAL_SECONDS = 0.25
 CLOUDFLARE_PURGE_TIMEOUT_SECONDS = 10.0
 
@@ -50,8 +49,11 @@ class CloudflarePurgeConfig:
     enabled: bool = False
     dry_run: bool = True
     public_site_url: str = DEFAULT_PUBLIC_SITE_URL
+    # A single worker currently owns one Cloudflare zone. Hostnames outside
+    # these suffixes must be routed to a future per-zone worker instead of
+    # being sent to the wrong zone and retried indefinitely.
+    zone_hostnames: tuple[str, ...] = ()
     batch_size: int = CLOUDFLARE_PURGE_FILES_LIMIT
-    max_urls_per_event: int = CLOUDFLARE_PURGE_MAX_URLS_PER_EVENT
     min_interval_seconds: float = CLOUDFLARE_PURGE_MIN_INTERVAL_SECONDS
     timeout_seconds: float = CLOUDFLARE_PURGE_TIMEOUT_SECONDS
 
@@ -67,11 +69,8 @@ class CloudflarePurgeConfig:
                 or os.getenv("WEBSITE_URL", "").strip()
                 or DEFAULT_PUBLIC_SITE_URL
             ),
+            zone_hostnames=_env_csv("CLOUDFLARE_PURGE_ZONE_HOSTNAMES"),
             batch_size=_env_int("CLOUDFLARE_PURGE_BATCH_SIZE", CLOUDFLARE_PURGE_FILES_LIMIT),
-            max_urls_per_event=_env_int(
-                "CLOUDFLARE_PURGE_MAX_URLS_PER_EVENT",
-                CLOUDFLARE_PURGE_MAX_URLS_PER_EVENT,
-            ),
             min_interval_seconds=_env_float(
                 "CLOUDFLARE_PURGE_MIN_INTERVAL_SECONDS",
                 CLOUDFLARE_PURGE_MIN_INTERVAL_SECONDS,
@@ -100,6 +99,55 @@ class CloudflarePurgeConfig:
     def should_call_cloudflare(self) -> bool:
         return self.mode == "live"
 
+    @property
+    def activation_mode(self) -> str:
+        if self.mode != "live":
+            return self.mode
+        try:
+            zone_hostnames = self.effective_zone_hostnames
+        except (CloudflarePurgeConfigurationError, ValueError):
+            return "invalid_config"
+        return "live" if zone_hostnames else "invalid_config"
+
+    @property
+    def effective_zone_hostnames(self) -> tuple[str, ...]:
+        configured = tuple(
+            sorted(
+                {
+                    hostname
+                    for raw_value in self.zone_hostnames
+                    if (hostname := _normalize_zone_hostname(raw_value))
+                }
+            )
+        )
+        if configured:
+            return configured
+        public_hostname = urlsplit(
+            _normalize_public_site_url(self.public_site_url)
+        ).hostname
+        return (public_hostname.casefold(),) if public_hostname else ()
+
+    def ensure_origins_belong_to_zone(self, origins: Iterable[str]) -> None:
+        allowed = self.effective_zone_hostnames
+        if not allowed:
+            raise CloudflarePurgeConfigurationError(
+                "Cloudflare purge zone hostname is not configured"
+            )
+        unsupported: list[str] = []
+        for origin in origins:
+            hostname = urlsplit(_normalize_public_site_url(origin)).hostname
+            normalized = hostname.casefold() if hostname else ""
+            if not normalized or not any(
+                normalized == zone or normalized.endswith(f".{zone}")
+                for zone in allowed
+            ):
+                unsupported.append(normalized or "invalid")
+        if unsupported:
+            raise CloudflarePurgeConfigurationError(
+                "Catalog invalidation origin is outside the configured "
+                "Cloudflare zone"
+            )
+
 
 @dataclass(frozen=True)
 class CloudflarePurgeResult:
@@ -110,6 +158,10 @@ class CloudflarePurgeResult:
     errors: tuple[str, ...] = ()
 
 
+class CloudflarePurgeConfigurationError(RuntimeError):
+    """The configured Cloudflare zone cannot safely serve an event."""
+
+
 def build_catalog_purge_urls(
     public_site_url: str,
     *,
@@ -117,6 +169,20 @@ def build_catalog_purge_urls(
     brand_slugs: Optional[Iterable[str]] = None,
 ) -> tuple[str, ...]:
     base_url = _normalize_public_site_url(public_site_url)
+    return tuple(
+        f"{base_url}{path}"
+        for path in build_catalog_purge_paths(
+            product_slugs=product_slugs,
+            brand_slugs=brand_slugs,
+        )
+    )
+
+
+def build_catalog_purge_paths(
+    *,
+    product_slugs: Optional[Iterable[str]] = None,
+    brand_slugs: Optional[Iterable[str]] = None,
+) -> tuple[str, ...]:
     paths: list[str] = []
 
     for slug in _unique_slugs(product_slugs):
@@ -126,7 +192,37 @@ def build_catalog_purge_urls(
 
     paths.append("/brands/")
     paths.append("/catalog/")
-    return tuple(_dedupe(f"{base_url}{path}" for path in paths))
+    return tuple(_dedupe(paths))
+
+
+def build_catalog_purge_urls_for_targets(
+    origins: Iterable[str],
+    paths: Iterable[str],
+) -> tuple[str, ...]:
+    normalized_origins = tuple(
+        sorted(
+            set(_normalize_public_site_url(origin) for origin in origins),
+            key=str.casefold,
+        )
+    )
+    normalized_paths = tuple(
+        sorted(
+            {
+                str(path or "").strip()
+                for path in paths
+                if str(path or "").strip().startswith("/")
+            }
+        )
+    )
+    return tuple(
+        f"{origin}{path}"
+        for origin in normalized_origins
+        for path in normalized_paths
+    )
+
+
+def normalize_catalog_origin(raw_url: str) -> str:
+    return _normalize_public_site_url(raw_url)
 
 
 class CloudflareCatalogPurgeService:
@@ -150,7 +246,27 @@ class CloudflareCatalogPurgeService:
             product_slugs=product_slugs,
             brand_slugs=brand_slugs,
         )
-        urls = self._cap_urls(urls, purge_config.max_urls_per_event, scope=scope, revision=revision)
+        return await self.purge_urls(
+            scope=scope,
+            revision=revision,
+            urls=urls,
+            config=purge_config,
+            http_client_factory=http_client_factory,
+        )
+
+    async def purge_urls(
+        self,
+        *,
+        scope: str,
+        revision: int,
+        urls: Iterable[str],
+        config: Optional[CloudflarePurgeConfig] = None,
+        http_client_factory: Optional[HttpClientFactory] = None,
+    ) -> CloudflarePurgeResult:
+        purge_config = config or CloudflarePurgeConfig.from_env()
+        normalized_urls = tuple(
+            _dedupe(str(url).strip() for url in urls if str(url).strip())
+        )
 
         if not purge_config.should_call_cloudflare:
             logger.info(
@@ -158,13 +274,16 @@ class CloudflareCatalogPurgeService:
                 purge_config.mode,
                 scope,
                 revision,
-                len(urls),
+                len(normalized_urls),
             )
-            return CloudflarePurgeResult(mode=purge_config.mode, url_count=len(urls))
+            return CloudflarePurgeResult(
+                mode=purge_config.mode,
+                url_count=len(normalized_urls),
+            )
 
         try:
             return await self._purge_live(
-                urls=urls,
+                urls=normalized_urls,
                 scope=scope,
                 revision=revision,
                 config=purge_config,
@@ -172,17 +291,18 @@ class CloudflareCatalogPurgeService:
             )
         except Exception as exc:
             logger.warning(
-                "Cloudflare catalog purge failed after commit scope=%s revision=%s url_count=%s error=%s",
+                "Cloudflare catalog purge failed scope=%s revision=%s "
+                "url_count=%s error_type=%s",
                 scope,
                 revision,
-                len(urls),
-                exc,
+                len(normalized_urls),
+                type(exc).__name__,
             )
             return CloudflarePurgeResult(
                 mode="live",
-                url_count=len(urls),
+                url_count=len(normalized_urls),
                 failed_batches=1,
-                errors=(str(exc),),
+                errors=(f"Cloudflare request failed: {type(exc).__name__}",),
             )
 
     async def _purge_live(
@@ -259,27 +379,6 @@ class CloudflareCatalogPurgeService:
                 await asyncio.sleep(delay)
             self._last_request_at = time.monotonic()
 
-    @staticmethod
-    def _cap_urls(
-        urls: tuple[str, ...],
-        max_urls: int,
-        *,
-        scope: str,
-        revision: int,
-    ) -> tuple[str, ...]:
-        normalized_max = max(1, int(max_urls or CLOUDFLARE_PURGE_MAX_URLS_PER_EVENT))
-        if len(urls) <= normalized_max:
-            return urls
-        logger.warning(
-            "Cloudflare catalog purge URL list capped scope=%s revision=%s url_count=%s max_urls=%s",
-            scope,
-            revision,
-            len(urls),
-            normalized_max,
-        )
-        return urls[:normalized_max]
-
-
 def _normalize_public_site_url(raw_url: str) -> str:
     value = (raw_url or DEFAULT_PUBLIC_SITE_URL).strip()
     if not value:
@@ -340,30 +439,70 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_csv(name: str) -> tuple[str, ...]:
+    return tuple(
+        item.strip()
+        for item in os.getenv(name, "").split(",")
+        if item.strip()
+    )
+
+
+def _normalize_zone_hostname(raw_value: str) -> str:
+    value = str(raw_value or "").strip().casefold().strip(".")
+    if not value:
+        return ""
+    parsed = urlsplit(f"//{value}")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise CloudflarePurgeConfigurationError(
+            "Cloudflare purge zone hostname is invalid"
+        ) from exc
+    if (
+        not parsed.hostname
+        or parsed.hostname != value
+        or port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise CloudflarePurgeConfigurationError(
+            "Cloudflare purge zone hostname is invalid"
+        )
+    return value
+
+
 def _parse_cloudflare_response(response: Any) -> tuple[bool, str]:
     status_code = int(getattr(response, "status_code", 0) or 0)
+
     try:
         payload = response.json()
     except Exception:
-        payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
+        if 200 <= status_code < 300:
+            return False, "Cloudflare purge returned invalid JSON"
+        return False, f"Cloudflare purge HTTP {status_code}"
 
-    success = 200 <= status_code < 300 and bool(payload.get("success", True))
-    if success:
+    if not isinstance(payload, dict):
+        if 200 <= status_code < 300:
+            return False, "Cloudflare purge returned invalid JSON object"
+        return False, f"Cloudflare purge HTTP {status_code}"
+
+    if 200 <= status_code < 300 and payload.get("success") is True:
         return True, ""
 
     errors = payload.get("errors") if isinstance(payload, dict) else None
     if isinstance(errors, list) and errors:
-        messages = []
+        codes = []
         for item in errors[:3]:
             if isinstance(item, dict):
                 code = item.get("code")
-                message = item.get("message") or item.get("error")
-                messages.append(": ".join(str(part) for part in (code, message) if part))
-            else:
-                messages.append(str(item))
-        return False, "; ".join(messages)
+                if code is not None:
+                    codes.append(str(code))
+        if codes:
+            return False, "Cloudflare purge error codes: " + ",".join(codes)
+        return False, "Cloudflare purge request was rejected"
+
+    if 200 <= status_code < 300:
+        return False, "Cloudflare purge response did not confirm success"
 
     return False, f"Cloudflare purge HTTP {status_code}"
 

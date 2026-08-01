@@ -1165,7 +1165,7 @@ export class ManagerService {
     }
     /**
      * Delete Gallery Image
-     * Delete an image link; physical file is deleted only if unreferenced globally.
+     * Delete only the DB link; physical objects are retained for deferred GC.
      * @param imageId
      * @returns ManagerMediaDeleteImageResponse Successful Response
      * @throws ApiError
@@ -1333,7 +1333,7 @@ export class ManagerService {
      * Replace sibling products' non-installation galleries with this product's gallery.
      * @param productId Source product ID
      * @param dryRun Preview changes without applying them
-     * @param deleteUnreferenced Delete physical files that become unreferenced
+     * @param deleteUnreferenced Rejected with 409 because physical media cleanup is deferred
      * @returns ManagerMediaApplySeriesResponse Successful Response
      * @throws ApiError
      */
@@ -1425,7 +1425,7 @@ export class ManagerService {
     }
     /**
      * Cleanup Media
-     * Delete orphaned media files not referenced in DB.
+     * Report orphan candidates; physical deletion is currently disabled.
      * @param dryRun
      * @returns ManagerMediaCleanupResponse Successful Response
      * @throws ApiError

@@ -6,7 +6,8 @@ from sqlmodel import select
 
 from core.config import settings
 from models import Lead, Order, Product
-from models.tenancy import Storefront, StorefrontDomain
+from models.tenancy import Storefront, StorefrontDomain, TenantScope
+from services.catalog_revision_service import CatalogRevisionService
 from services.storefront_context_signature_service import (
     StorefrontContextSignatureService,
 )
@@ -235,6 +236,49 @@ async def test_signed_context_authenticates_public_catalog_raw_query(
     assert response.status_code == 200
     assert response.json()["items"]
     assert response.headers["cache-control"] == "private, no-store"
+
+
+@pytest.mark.asyncio
+async def test_catalog_revision_exposes_exact_signed_storefront_without_ids(
+    async_client,
+    db,
+    monkeypatch,
+):
+    storefront = await _seed_secondary_storefront(db)
+    _configure_signing(monkeypatch)
+    await CatalogRevisionService.stage_invalidation(
+        db,
+        reason="tenant_offer_updated",
+        tenant_scope=TenantScope(
+            tenant_id=1,
+            storefront_id=int(storefront.id),
+            is_system=True,
+        ),
+        slugs=["signed-storefront-product"],
+    )
+    await db.commit()
+    path = "/api/v1/catalog/revision"
+
+    signed = await async_client.get(
+        path,
+        headers=_headers(path=path, method="GET"),
+    )
+    canonical = await async_client.get(path)
+
+    assert signed.status_code == 200
+    assert signed.json()["revision"] == 0
+    assert signed.json()["storefront_revision"] == 1
+    assert signed.json()["cache_key"] == "g0-s1"
+    assert "tenant_id" not in signed.json()
+    assert "storefront_id" not in signed.json()
+    assert signed.headers["X-Catalog-Revision"] == "0"
+    assert signed.headers["X-Storefront-Catalog-Revision"] == "1"
+    assert signed.headers["ETag"] == 'W/"catalog-g0-s1"'
+    assert signed.headers["Cache-Control"] == "private, no-store"
+    assert signed.headers["CDN-Cache-Control"] == "no-store"
+    assert signed.headers["Vary"] == "X-MVN-Storefront-Host"
+    assert canonical.status_code == 200
+    assert canonical.json()["cache_key"] == "g0-s0"
 
 
 @pytest.mark.asyncio

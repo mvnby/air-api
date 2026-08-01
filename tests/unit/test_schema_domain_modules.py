@@ -1,4 +1,5 @@
 import schemas
+from schemas_catalog import CatalogRevisionResponse
 from schemas_common import Meta
 from schemas_manager_installers import ManagerInstallerResponse
 from schemas_manager_leads import LeadQualifyPayload, ProductAvailabilityLeadPayload
@@ -11,6 +12,7 @@ from schemas_manager_orders import (
 
 
 def test_legacy_schema_facade_reexports_domain_contracts():
+    assert schemas.CatalogRevisionResponse is CatalogRevisionResponse
     assert schemas.Meta is Meta
     assert schemas.ManagerInstallerResponse is ManagerInstallerResponse
     assert schemas.LeadQualifyPayload is LeadQualifyPayload

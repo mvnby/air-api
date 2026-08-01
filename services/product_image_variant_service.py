@@ -16,6 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import ProductImage, ProductImageVariant
+from services.catalog_invalidation_commit_service import (
+    CatalogInvalidationCommitService,
+)
+from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.media_storage_service import ProductMediaStorage, get_product_media_storage
 from services.product_image_processing_contract import (
     CATALOG_VARIANT_TYPES,
@@ -201,18 +205,26 @@ class ProductImageVariantService:
         processed: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
         variants: list[dict[str, Any]] = []
+        mutation_batch = CatalogMutationBatch()
         for item in candidates["candidates"]:
             image_id = item["product_image_id"]
             try:
-                result = await ProductImageVariantService.reprocess_variant(
-                    session,
-                    product_image_id=image_id,
-                    variant_type=variant_type,
-                    provider=provider,
-                    storage=storage,
-                    processor=processor,
-                    rembg_model=rembg_model,
-                    commit=False,
+                item_batch = CatalogMutationBatch()
+                async with session.begin_nested():
+                    result = await ProductImageVariantService.reprocess_variant(
+                        session,
+                        product_image_id=image_id,
+                        variant_type=variant_type,
+                        provider=provider,
+                        storage=storage,
+                        processor=processor,
+                        rembg_model=rembg_model,
+                        commit=False,
+                        mutation_batch=item_batch,
+                    )
+                mutation_batch.record(
+                    changed=item_batch.changed,
+                    product_ids=item_batch.product_ids,
                 )
                 variants.append(result)
                 if result.get("processing_status") == ProductImageProcessingStatus.READY.value:
@@ -226,18 +238,30 @@ class ProductImageVariantService:
                         }
                     )
             except Exception as exc:
-                await ProductImageVariantService._record_processing_error(
-                    session,
-                    product_image_id=image_id,
-                    variant_type=variant_type,
-                    provider=provider,
-                    status=ProductImageProcessingStatus.FAILED.value,
-                    stage=ProductImageProcessingStage.VARIANT_GENERATION.value,
-                    error=str(exc),
+                async with session.begin_nested():
+                    error_changed = (
+                        await ProductImageVariantService._record_processing_error(
+                            session,
+                            product_image_id=image_id,
+                            variant_type=variant_type,
+                            provider=provider,
+                            status=ProductImageProcessingStatus.FAILED.value,
+                            stage=ProductImageProcessingStage.VARIANT_GENERATION.value,
+                            error=str(exc),
+                        )
+                    )
+                mutation_batch.record(
+                    changed=error_changed,
+                    product_ids=[item.get("product_id")],
                 )
                 errors.append({"product_image_id": image_id, "error": str(exc)})
 
-        await session.commit()
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="product_image_variant.process_missing_variants",
+            changed=mutation_batch.changed,
+            product_ids=sorted(mutation_batch.product_ids),
+        )
         return {
             "dry_run": False,
             "variant_type": normalize_variant_type(variant_type).value,
@@ -263,7 +287,10 @@ class ProductImageVariantService:
         source_content_override: bytes | None = None,
         force: bool = False,
         commit: bool = True,
+        mutation_batch: CatalogMutationBatch | None = None,
     ) -> dict[str, Any]:
+        if not commit and mutation_batch is None:
+            raise ValueError("commit=False requires a caller-owned mutation_batch")
         normalized_type = normalize_variant_type(variant_type).value
         normalized_provider = normalize_processing_provider(provider).value
         image = await session.get(ProductImage, product_image_id)
@@ -275,15 +302,21 @@ class ProductImageVariantService:
             product_image_id=product_image_id,
             variant_type=normalized_type,
         )
+        before_state = ProductImageVariantService.serialize_variant(variant)
         if image.is_installation_photo and normalized_type in CATALOG_VARIANT_TYPES:
             variant.processing_status = ProductImageProcessingStatus.SKIPPED.value
             variant.processing_stage = ProductImageProcessingStage.QUALITY_MANUAL_APPROVAL.value
             variant.processing_error = "Installation photos are excluded from catalog variants"
             variant.updated_at = datetime.now()
             session.add(variant)
-            if commit:
-                await session.commit()
-            return ProductImageVariantService.serialize_variant(variant)
+            return await ProductImageVariantService._finish_reprocess_mutation(
+                session,
+                variant=variant,
+                before_state=before_state,
+                product_id=image.product_id,
+                commit=commit,
+                mutation_batch=mutation_batch,
+            )
 
         source_url = str(source_url_override or image.url or "").strip()
         try:
@@ -300,9 +333,14 @@ class ProductImageVariantService:
             variant.processing_error = str(exc)
             variant.updated_at = datetime.now()
             session.add(variant)
-            if commit:
-                await session.commit()
-            return ProductImageVariantService.serialize_variant(variant)
+            return await ProductImageVariantService._finish_reprocess_mutation(
+                session,
+                variant=variant,
+                before_state=before_state,
+                product_id=image.product_id,
+                commit=commit,
+                mutation_batch=mutation_batch,
+            )
 
         if source_content is None:
             variant.processing_status = ProductImageProcessingStatus.FAILED.value
@@ -312,9 +350,14 @@ class ProductImageVariantService:
             variant.processing_error = "Source image is not available in local media storage"
             variant.updated_at = datetime.now()
             session.add(variant)
-            if commit:
-                await session.commit()
-            return ProductImageVariantService.serialize_variant(variant)
+            return await ProductImageVariantService._finish_reprocess_mutation(
+                session,
+                variant=variant,
+                before_state=before_state,
+                product_id=image.product_id,
+                commit=commit,
+                mutation_batch=mutation_batch,
+            )
 
         source_content_hash = hashlib.sha256(source_content).hexdigest()
         if (
@@ -327,7 +370,14 @@ class ProductImageVariantService:
             and variant.width == 800
             and variant.height == 800
         ):
-            return ProductImageVariantService.serialize_variant(variant)
+            return await ProductImageVariantService._finish_reprocess_mutation(
+                session,
+                variant=variant,
+                before_state=before_state,
+                product_id=image.product_id,
+                commit=commit,
+                mutation_batch=mutation_batch,
+            )
 
         active_processor = processor or get_product_image_processor(
             normalized_provider,
@@ -367,9 +417,14 @@ class ProductImageVariantService:
             variant.processing_error = str(exc)
             variant.updated_at = datetime.now()
             session.add(variant)
-            if commit:
-                await session.commit()
-            return ProductImageVariantService.serialize_variant(variant)
+            return await ProductImageVariantService._finish_reprocess_mutation(
+                session,
+                variant=variant,
+                before_state=before_state,
+                product_id=image.product_id,
+                commit=commit,
+                mutation_batch=mutation_batch,
+            )
 
         variant.url = stored.url
         variant.storage_provider = stored.storage_provider
@@ -385,9 +440,38 @@ class ProductImageVariantService:
         variant.processed_at = datetime.now()
         variant.updated_at = variant.processed_at
         session.add(variant)
+        return await ProductImageVariantService._finish_reprocess_mutation(
+            session,
+            variant=variant,
+            before_state=before_state,
+            product_id=image.product_id,
+            commit=commit,
+            mutation_batch=mutation_batch,
+        )
+
+    @staticmethod
+    async def _finish_reprocess_mutation(
+        session: AsyncSession,
+        *,
+        variant: ProductImageVariant,
+        before_state: dict[str, Any],
+        product_id: int,
+        commit: bool,
+        mutation_batch: CatalogMutationBatch | None,
+    ) -> dict[str, Any]:
+        payload = ProductImageVariantService.serialize_variant(variant)
+        changed = payload != before_state
         if commit:
-            await session.commit()
-        return ProductImageVariantService.serialize_variant(variant)
+            await CatalogInvalidationCommitService.commit_registered_global_mutation(
+                session,
+                producer="product_image_variant.reprocess_variant",
+                changed=changed,
+                product_ids=[product_id],
+            )
+        else:
+            assert mutation_batch is not None
+            mutation_batch.record(changed=changed, product_ids=[product_id])
+        return payload
 
     @staticmethod
     def serialize_variant(variant: ProductImageVariant) -> dict[str, Any]:
@@ -448,18 +532,20 @@ class ProductImageVariantService:
         status: str,
         stage: str,
         error: str,
-    ) -> None:
+    ) -> bool:
         variant = await ProductImageVariantService._get_or_create_variant(
             session,
             product_image_id=product_image_id,
             variant_type=normalize_variant_type(variant_type).value,
         )
+        before_state = ProductImageVariantService.serialize_variant(variant)
         variant.processing_status = status
         variant.processing_stage = stage
         variant.processing_provider = normalize_processing_provider(provider).value
         variant.processing_error = error
         variant.updated_at = datetime.now()
         session.add(variant)
+        return ProductImageVariantService.serialize_variant(variant) != before_state
 
     @staticmethod
     def _local_media_path_for_url(url: str) -> Path | None:

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from parsers.onliner import OnlinerParser
 from core.logger import logger
 from services.backup_service import backup_service
+from services.catalog_revision_service import CatalogRevisionService
 from services.supplier_sync_service import SupplierSyncService
 
 class SchedulerService:
@@ -60,6 +61,7 @@ class SchedulerService:
                     select(
                         Product.id.label("id"),
                         Product.title.label("title"),
+                        Product.slug.label("slug"),
                         Product.source_url.label("source_url"),
                         Product.price.label("price"),
                     )
@@ -71,6 +73,7 @@ class SchedulerService:
                 stmt = select(
                     Product.id.label("id"),
                     Product.title.label("title"),
+                    Product.slug.label("slug"),
                     Product.source_url.label("source_url"),
                     Product.price.label("price"),
                 ).where(Product.source_url != None)
@@ -92,6 +95,7 @@ class SchedulerService:
                     updates.append(
                         {
                             "id": product["id"],
+                            "slug": product["slug"],
                             "old_price": product["price"],
                             "new_price": new_price,
                         }
@@ -114,6 +118,12 @@ class SchedulerService:
                     session.add(product)
                     updated_count += 1
                 if updated_count:
+                    await CatalogRevisionService.stage_invalidation(
+                        session,
+                        reason="scheduled_product_price_sync",
+                        product_ids=[item["id"] for item in updates],
+                        slugs=[item["slug"] for item in updates],
+                    )
                     await session.commit()
             logger.info(f"Finished price update. {updated_count} products updated.")
         else:
@@ -157,6 +167,9 @@ class SchedulerService:
 
         # Delete external order documents only after their database transaction commits.
         tasks.append(asyncio.create_task(self._order_document_cleanup_loop()))
+
+        # Consume catalog cache invalidations outside producer transactions.
+        tasks.append(asyncio.create_task(self._catalog_invalidation_loop()))
 
         # Run bank receipt IMAP import loop
         tasks.append(asyncio.create_task(self._bank_mail_import_loop()))
@@ -371,6 +384,37 @@ class SchedulerService:
             except Exception:
                 logger.exception("Order document cleanup loop error")
                 await asyncio.sleep(60)
+
+    async def _catalog_invalidation_loop(self):
+        from services.catalog_invalidation_worker import CatalogInvalidationWorker
+
+        worker = CatalogInvalidationWorker(
+            worker_id="scheduler-catalog-invalidation",
+            lease_seconds=settings.CATALOG_INVALIDATION_WORKER_LEASE_SECONDS,
+            recovery_limit=settings.CATALOG_INVALIDATION_WORKER_RECOVERY_LIMIT,
+        )
+        while True:
+            poll_seconds = max(
+                0.1,
+                float(settings.CATALOG_INVALIDATION_WORKER_POLL_SECONDS),
+            )
+            if not settings.CATALOG_INVALIDATION_WORKER_ENABLED:
+                await asyncio.sleep(max(30.0, poll_seconds))
+                continue
+            try:
+                outcome = await worker.run_once()
+                if outcome.outcome == "configuration_blocked":
+                    logger.warning(
+                        "Catalog invalidation worker is blocked by Cloudflare "
+                        "configuration mode=%s",
+                        outcome.configuration_mode,
+                    )
+                    await asyncio.sleep(max(30.0, poll_seconds))
+                elif outcome.outcome == "idle":
+                    await asyncio.sleep(poll_seconds)
+            except Exception:
+                logger.exception("Catalog invalidation worker loop error")
+                await asyncio.sleep(max(5.0, poll_seconds))
 
     async def _bank_mail_import_loop(self):
         while True:

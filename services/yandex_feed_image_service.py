@@ -13,6 +13,10 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import Product, ProductImage, ProductImageVariant
+from services.catalog_invalidation_commit_service import (
+    CatalogInvalidationCommitService,
+)
+from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.media_library_service import MediaLibraryService
 from services.media_storage_service import ProductMediaStorage
 from services.product_image_processing_contract import (
@@ -72,10 +76,12 @@ class YandexFeedImageService:
 
         processed: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
+        mutation_batch = CatalogMutationBatch()
         products_by_id = {int(product.id): product for product in products}
         for item in plan["planned"]:
             product = products_by_id[item["product_id"]]
             try:
+                item_batch = CatalogMutationBatch()
                 async with session.begin_nested():
                     image = cls._main_product_image(product)
                     if image is None:
@@ -86,6 +92,10 @@ class YandexFeedImageService:
                         )
                         session.add(image)
                         await session.flush()
+                        item_batch.record(
+                            changed=True,
+                            product_ids=[product.id],
+                        )
                     source_url = item["source_url"]
                     source_content: bytes | None = None
                     if cls._is_external_source(source_url):
@@ -105,7 +115,12 @@ class YandexFeedImageService:
                         source_content_override=source_content,
                         force=force,
                         commit=False,
+                        mutation_batch=item_batch,
                     )
+                mutation_batch.record(
+                    changed=item_batch.changed,
+                    product_ids=item_batch.product_ids,
+                )
                 if variant["processing_status"] != ProductImageProcessingStatus.READY.value:
                     errors.append(
                         {
@@ -138,7 +153,12 @@ class YandexFeedImageService:
                     }
                 )
 
-        await session.commit()
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="yandex_feed_image.backfill",
+            changed=mutation_batch.changed,
+            product_ids=sorted(mutation_batch.product_ids),
+        )
         return {
             **result,
             "processed": len(processed),

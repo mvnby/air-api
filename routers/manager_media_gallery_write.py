@@ -103,7 +103,7 @@ async def delete_gallery_image(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Delete an image link; physical file is deleted only if unreferenced globally."""
+    """Delete only the DB link; physical objects are retained for deferred GC."""
     try:
         return await ManagerMediaService.delete_gallery_image(session, image_id)
     except ValueError as exc:
@@ -269,7 +269,10 @@ async def bulk_delete_common_gallery_images(
 async def apply_gallery_to_series(
     product_id: int = Query(..., description="Source product ID"),
     dry_run: bool = Query(False, description="Preview changes without applying them"),
-    delete_unreferenced: bool = Query(False, description="Delete physical files that become unreferenced"),
+    delete_unreferenced: bool = Query(
+        False,
+        description="Rejected with 409 because physical media cleanup is deferred",
+    ),
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
@@ -285,6 +288,8 @@ async def apply_gallery_to_series(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post(
@@ -355,6 +360,9 @@ async def cleanup_media(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Delete orphaned media files not referenced in DB."""
+    """Report orphan candidates; physical deletion is currently disabled."""
     logger.info(f"Starting media cleanup (dry_run={dry_run}) by {username}")
-    return await ManagerMediaService.cleanup_media(session, dry_run=dry_run)
+    try:
+        return await ManagerMediaService.cleanup_media(session, dry_run=dry_run)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

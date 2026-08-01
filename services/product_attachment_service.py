@@ -58,8 +58,41 @@ async def replace_manuals(
     *,
     product_id: int,
     manuals: Iterable[Dict[str, Any]] | None,
-) -> None:
+) -> bool:
+    """Replace manual rows and report whether their public state changed."""
+
     normalized = normalize_manuals(manuals)
+    existing = list(
+        (
+            await session.execute(
+                select(ProductAttachment).where(
+                    ProductAttachment.product_id == product_id,
+                    ProductAttachment.kind == "manual",
+                )
+            )
+        ).scalars().all()
+    )
+    existing_state = sorted(
+        (
+            row.kind,
+            row.title,
+            row.url,
+            row.source or "",
+        )
+        for row in existing
+    )
+    requested_state = sorted(
+        (
+            item["kind"],
+            item["title"],
+            item["url"],
+            item["source"],
+        )
+        for item in normalized
+    )
+    if existing_state == requested_state:
+        return False
+
     await session.execute(
         delete(ProductAttachment).where(
             ProductAttachment.product_id == product_id,
@@ -76,6 +109,7 @@ async def replace_manuals(
                 source=item["source"] or None,
             )
         )
+    return True
 
 
 async def list_manuals(session: AsyncSession, *, product_id: int) -> List[ProductAttachment]:

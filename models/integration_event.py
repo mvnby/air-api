@@ -33,6 +33,14 @@ class IntegrationOutboxEvent(SQLModel, table=True):
             "occurred_at",
         ),
         Index(
+            "ix_integration_outbox_event_catalog_claim",
+            "event_type",
+            "status",
+            "available_at",
+            "priority",
+            "occurred_at",
+        ),
+        Index(
             "ix_integration_outbox_event_aggregate",
             "aggregate_type",
             "aggregate_id",

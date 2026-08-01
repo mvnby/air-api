@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from PIL import Image
@@ -8,7 +9,20 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 from sqlmodel import select
 
-from models import ImportMediaCache, Product, ProductAttachment
+from crud.catalog_revision import CatalogRevisionDAO
+from models import (
+    Brand,
+    ImportMediaCache,
+    IntegrationOutboxEvent,
+    Product,
+    ProductAttachment,
+    Storefront,
+    Tenant,
+)
+from services.catalog_invalidation_contracts import (
+    CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+)
+from services.catalog_revision_service import CatalogRevisionService
 from services.importer_service import ImporterService, _should_replace_imported_main_image
 
 
@@ -63,6 +77,28 @@ async def sqlite_session(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_importer_saves_manuals_and_reuses_image_cache_on_update(sqlite_session, monkeypatch):
+    sqlite_session.add(
+        Tenant(
+            id=1,
+            slug="system",
+            display_name="System",
+            status="active",
+            is_system=True,
+        )
+    )
+    await sqlite_session.flush()
+    sqlite_session.add(
+        Storefront(
+            id=1,
+            tenant_id=1,
+            slug="main",
+            display_name="Main",
+            status="active",
+            is_default=True,
+        )
+    )
+    await sqlite_session.commit()
+
     image_calls = {"count": 0}
 
     class _FakeClient:
@@ -122,6 +158,15 @@ async def test_importer_saves_manuals_and_reuses_image_cache_on_update(sqlite_se
         update_existing=False,
         collect_related=False,
     )
+    revision_after_first = await CatalogRevisionDAO.get_current(sqlite_session)
+    events_after_first = (
+        await sqlite_session.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
     second = await service.import_product(
         "https://example.com/product/lg-test-import",
         update_existing=True,
@@ -129,6 +174,49 @@ async def test_importer_saves_manuals_and_reuses_image_cache_on_update(sqlite_se
     )
 
     assert first["product"].id == second["product"].id
+    assert image_calls["count"] == 1
+    revision_after_second = await CatalogRevisionDAO.get_current(sqlite_session)
+    events_after_second = (
+        await sqlite_session.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
+    assert revision_after_first.revision == 1
+    assert revision_after_second.revision == 1
+    assert len(events_after_first) == 1
+    assert len(events_after_second) == 1
+    assert events_after_second[0].payload["reason"] == "product_import"
+
+    brand = (
+        await sqlite_session.execute(select(Brand).where(Brand.slug == "lg"))
+    ).scalar_one()
+    brand.title = ""
+    sqlite_session.add(brand)
+    await sqlite_session.commit()
+
+    third = await service.import_product(
+        "https://example.com/product/lg-test-import",
+        update_existing=True,
+        collect_related=False,
+    )
+    revision_after_self_heal = await CatalogRevisionDAO.get_current(sqlite_session)
+    events_after_self_heal = (
+        await sqlite_session.execute(
+            select(IntegrationOutboxEvent).where(
+                IntegrationOutboxEvent.event_type
+                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+            )
+        )
+    ).scalars().all()
+    await sqlite_session.refresh(brand)
+    assert third["product"].id == first["product"].id
+    assert brand.title == "LG"
+    assert revision_after_self_heal.revision == 2
+    assert len(events_after_self_heal) == 2
+    assert events_after_self_heal[-1].payload["reason"] == "product_import"
     assert image_calls["count"] == 1
 
     product = (await sqlite_session.execute(select(Product).where(Product.slug == "lg-test-import"))).scalar_one()
@@ -203,3 +291,64 @@ async def test_importer_propagates_required_media_errors(sqlite_session, monkeyp
         )
     ).scalar_one_or_none()
     assert product is None
+
+
+@pytest.mark.asyncio
+async def test_importer_rolls_back_product_when_invalidation_staging_fails(
+    tmp_path,
+    monkeypatch,
+):
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'importer_atomicity.db'}",
+        echo=False,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(SQLModel.metadata.create_all)
+    session_factory = sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    class _FakeParser:
+        async def parse(self, url):  # noqa: ARG002
+            return {
+                "title": "Atomic Import",
+                "slug": "atomic-import",
+                "description": "Must roll back",
+                "price": 1500,
+                "main_image": None,
+                "images": [],
+                "save_gallery": False,
+                "categories": [],
+                "specs": {"brand": "LG", "type": "сплит-система"},
+                "metrics": {"area": 25, "is_inverter": True},
+                "related_urls": [],
+            }
+
+    monkeypatch.setattr("services.importer_service.async_session_maker", session_factory)
+    monkeypatch.setattr(
+        CatalogRevisionService,
+        "stage_invalidation",
+        AsyncMock(side_effect=RuntimeError("outbox unavailable")),
+    )
+    service = ImporterService()
+    service.get_parser = lambda url: _FakeParser()  # noqa: ARG005
+
+    with pytest.raises(RuntimeError, match="outbox unavailable"):
+        await service.import_product("https://example.com/atomic-import")
+
+    async with session_factory() as verification_session:
+        assert (
+            await verification_session.execute(
+                select(Product).where(Product.slug == "atomic-import")
+            )
+        ).scalar_one_or_none() is None
+        assert (
+            await CatalogRevisionDAO.get_current(verification_session)
+        ).revision == 0
+        assert (
+            await verification_session.execute(select(IntegrationOutboxEvent))
+        ).scalars().all() == []
+
+    await engine.dispose()

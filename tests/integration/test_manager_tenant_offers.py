@@ -11,6 +11,7 @@ from api_contracts.tenant_offers import POSTGRESQL_INTEGER_MAX
 from core.security import create_access_token
 from crud.tenant_offer import TenantOfferDAO
 from models import (
+    IntegrationOutboxEvent,
     Product,
     StaffUser,
     Storefront,
@@ -18,8 +19,15 @@ from models import (
     TenantAuditEvent,
     TenantMembership,
     TenantOffer,
+    StorefrontCatalogRevision,
 )
 from models.tenancy import TenantScope
+from services.catalog_invalidation_contracts import (
+    CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+)
+from services.catalog_invalidation_event_service import (
+    CatalogInvalidationEventService,
+)
 from services.tenant_offer_service import TenantOfferService
 
 
@@ -427,3 +435,176 @@ async def test_offer_and_audit_roll_back_together_when_audit_write_fails(
         assert stored_offer.price == 1200
         assert stored_offer.updated_by_username == "seed"
         assert audit_rows == []
+
+
+@pytest.mark.asyncio
+async def test_tenant_offer_real_changes_stage_scoped_revision_and_noop_does_not(
+    db_engine,
+):
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    async with factory() as session:
+        product = Product(
+            title="Scoped offer model",
+            slug="scoped-offer-model",
+            price=1000,
+        )
+        session.add(product)
+        await session.commit()
+
+        created = await TenantOfferService.upsert_offer(
+            session,
+            payload={
+                "product_id": int(product.id),
+                "price": 1200,
+                "old_price": 1400,
+                "is_published": True,
+                "status": "active",
+            },
+            tenant_scope=scope,
+            actor_username="offer-revision-test",
+            actor_staff_user_id=None,
+        )
+        first_revision = await session.get(
+            StorefrontCatalogRevision,
+            (1, 1),
+        )
+        first_events = (
+            await session.execute(
+                select(IntegrationOutboxEvent).where(
+                    IntegrationOutboxEvent.event_type
+                    == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+                )
+            )
+        ).scalars().all()
+
+        assert first_revision is not None
+        assert first_revision.revision == 1
+        assert len(first_events) == 1
+        assert first_events[0].payload["scope"] == "storefront"
+        assert first_events[0].payload["cache_key"] == "g0-s1"
+        assert first_events[0].payload["reason"] == "tenant_offer_created"
+        assert "/product/scoped-offer-model/" in first_events[0].payload["paths"]
+
+        unchanged = await TenantOfferService.upsert_offer(
+            session,
+            payload={
+                "product_id": int(product.id),
+                "price": 1200,
+                "old_price": 1400,
+                "is_published": True,
+                "status": "active",
+            },
+            tenant_scope=scope,
+            actor_username="offer-revision-test",
+            actor_staff_user_id=None,
+        )
+
+        assert unchanged["id"] == created["id"]
+        await session.refresh(first_revision)
+        assert first_revision.revision == 1
+        assert len(
+            (
+                await session.execute(
+                    select(IntegrationOutboxEvent).where(
+                        IntegrationOutboxEvent.event_type
+                        == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+                    )
+                )
+            ).scalars().all()
+        ) == 1
+
+        updated = await TenantOfferService.update_offer(
+            session,
+            offer_id=created["id"],
+            payload={"price": 1250},
+            tenant_scope=scope,
+            actor_username="offer-revision-test",
+            actor_staff_user_id=None,
+        )
+
+        assert updated["price"] == 1250
+        await session.refresh(first_revision)
+        assert first_revision.revision == 2
+        events = (
+            await session.execute(
+                select(IntegrationOutboxEvent)
+                .where(
+                    IntegrationOutboxEvent.event_type
+                    == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+                )
+                .order_by(IntegrationOutboxEvent.occurred_at.asc())
+            )
+        ).scalars().all()
+        assert len(events) == 2
+        assert events[-1].payload["cache_key"] == "g0-s2"
+        assert events[-1].payload["reason"] == "tenant_offer_updated"
+
+
+@pytest.mark.asyncio
+async def test_tenant_offer_revision_and_outbox_roll_back_with_offer_and_audit(
+    db_engine,
+    monkeypatch,
+):
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as setup_session:
+        product = Product(
+            title="Atomic offer model",
+            slug="atomic-offer-model",
+            price=1000,
+        )
+        setup_session.add(product)
+        await setup_session.commit()
+        product_id = int(product.id)
+
+    original_enqueue = CatalogInvalidationEventService.enqueue_requested
+
+    async def fail_after_enqueue(cls, session, **kwargs):
+        await original_enqueue(session, **kwargs)
+        raise RuntimeError("simulated catalog outbox failure")
+
+    monkeypatch.setattr(
+        CatalogInvalidationEventService,
+        "enqueue_requested",
+        classmethod(fail_after_enqueue),
+    )
+    async with factory() as session:
+        with pytest.raises(RuntimeError, match="simulated catalog outbox failure"):
+            await TenantOfferService.upsert_offer(
+                session,
+                payload={
+                    "product_id": product_id,
+                    "price": 1200,
+                    "old_price": None,
+                    "is_published": True,
+                    "status": "active",
+                },
+                tenant_scope=TenantScope(
+                    tenant_id=1,
+                    storefront_id=1,
+                    is_system=True,
+                ),
+                actor_username="atomic-test",
+                actor_staff_user_id=None,
+            )
+
+    async with factory() as verification_session:
+        assert (
+            await verification_session.execute(select(TenantOffer))
+        ).scalars().all() == []
+        assert (
+            await verification_session.execute(select(TenantAuditEvent))
+        ).scalars().all() == []
+        assert (
+            await verification_session.execute(
+                select(StorefrontCatalogRevision)
+            )
+        ).scalars().all() == []
+        assert (
+            await verification_session.execute(
+                select(IntegrationOutboxEvent).where(
+                    IntegrationOutboxEvent.event_type
+                    == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+                )
+            )
+        ).scalars().all() == []
