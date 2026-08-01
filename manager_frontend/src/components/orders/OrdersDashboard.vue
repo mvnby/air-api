@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { Download, SlidersHorizontal, Upload, X } from 'lucide-vue-next';
-import type { DashboardView, Segment } from '../../api';
 import { api } from '../../api';
 import {
   ManagerOrdersService,
   type ManagerOrderDetailResponse,
-  type ManagerOrderImportPreviewResponse,
   type ManagerOrderListItemResponse,
   type ManagerOrderTransferPackage_Input,
   type ManagerOrderUpdatePayload,
@@ -17,124 +15,41 @@ import OrderKanbanBoard from './OrderKanbanBoard.vue';
 import OrdersListTable from './OrdersListTable.vue';
 import OrderEditDrawer from './OrderEditDrawer.vue';
 import {
-  BOARD_COLUMNS,
   STATUS_LABELS,
   STATUS_ORDER,
-  buildCustomerOrderRenderItems,
   formatMoney,
-  getOrderBoardColumn,
 } from './order-utils';
 import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
+import { managerSession, requireManagerSessionRecovery } from '../../services/manager-session';
+import OrdersImportPreviewModal from './OrdersImportPreviewModal.vue';
+import { useOrdersDashboardModel } from './useOrdersDashboardModel';
 import {
   buildBoardTransitionPayload,
   needsExecutionWithoutPaymentConfirmation,
   runOptimisticOrderTransition,
 } from './order-transition';
 
-const ORDERS_SEGMENT_STORAGE_KEY = 'manager_orders_segment';
-const ORDERS_VIEW_STORAGE_KEY = 'manager_orders_view';
-const ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY = 'manager_orders_group_by_customer_v2';
-const ORDERS_CUSTOMER_ALIASES_STORAGE_KEY = 'manager_orders_customer_aliases';
+const { recoveryRequired } = managerSession;
 
-const segment = ref<Segment>('b2c');
-const view = ref<DashboardView>('kanban');
-const statusFilter = ref('');
-const overdueOnly = ref(false);
-const sort = ref('created_at_desc');
-const search = ref('');
-const loading = ref(false);
-const saving = ref(false);
-const orders = ref<ManagerOrderListItemResponse[]>([]);
-const movingOrderIds = ref<number[]>([]);
 const toast = ref('');
-const isHydrated = ref(false);
-
-const drawerOpen = ref(false);
-const selectedOrder = ref<ManagerOrderDetailResponse | null>(null);
-const pendingOpenOrderId = ref<number | null>(null);
-const openedByUrlOrderId = ref<number | null>(null);
-const orderServerErrors = ref<Record<string, string>>({});
-const orderFormError = ref('');
-
-const showLoginModal = ref(false);
-const loginUsername = ref('');
-const loginPassword = ref('');
-const loginLoading = ref(false);
-const loginError = ref('');
-
-const hideOnHold = ref(true);
-const groupByCustomer = ref(true);
-const filtersOpen = ref(false);
-const customerAliases = ref<Record<number, string>>({});
-const selectedOrderIds = ref<number[]>([]);
-const transferLoading = ref(false);
-const importFileInput = ref<HTMLInputElement | null>(null);
-const importPackage = ref<ManagerOrderTransferPackage_Input | null>(null);
-const importPreview = ref<ManagerOrderImportPreviewResponse | null>(null);
-const importFileName = ref('');
-const importModalOpen = ref(false);
-
-const visibleOrders = computed(() => orders.value.filter((order) => {
-  if (hideOnHold.value && order.is_on_hold) return false;
-  return true;
-}));
-const normalizedSearch = computed(() => search.value.trim());
-const hasActiveOrderFilters = computed(() => Boolean(normalizedSearch.value || statusFilter.value || overdueOnly.value));
-
-const groupedOrders = computed(() => {
-  const groups: Record<string, ManagerOrderListItemResponse[]> = {};
-  for (const column of BOARD_COLUMNS) groups[column.value] = [];
-  for (const order of visibleOrders.value) {
-    const key = getOrderBoardColumn(order);
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(order);
-  }
-  return groups;
-});
-
-const groupedOrderItems = computed(() => {
-  const groups = groupedOrders.value;
-  const items: Record<string, ReturnType<typeof buildCustomerOrderRenderItems>> = {};
-  for (const column of BOARD_COLUMNS) {
-    items[column.value] = buildCustomerOrderRenderItems(groups[column.value] || [], segment.value, groupByCustomer.value, customerAliases.value);
-  }
-  return items;
-});
-
-const listItems = computed(() => buildCustomerOrderRenderItems(visibleOrders.value, segment.value, groupByCustomer.value, customerAliases.value));
-const visibleOrderIds = computed(() => visibleOrders.value.map((order) => order.id));
-
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
     if (toast.value === message) toast.value = '';
   }, 2500);
 };
-
-const toggleOrderSelection = (payload: { orderId: number; selected: boolean }) => {
-  const next = new Set(selectedOrderIds.value);
-  if (payload.selected) next.add(payload.orderId);
-  else next.delete(payload.orderId);
-  selectedOrderIds.value = Array.from(next);
-};
-
-const toggleManySelection = (payload: { orderIds: number[]; selected: boolean }) => {
-  const next = new Set(selectedOrderIds.value);
-  payload.orderIds.forEach((orderId) => {
-    if (payload.selected) next.add(orderId);
-    else next.delete(orderId);
-  });
-  selectedOrderIds.value = Array.from(next);
-};
-
-const selectAllVisible = () => {
-  selectedOrderIds.value = Array.from(new Set([...selectedOrderIds.value, ...visibleOrderIds.value]));
-};
-
-const clearSelection = () => {
-  selectedOrderIds.value = [];
-};
+const {
+  segment, view, statusFilter, overdueOnly, sort, search, loading, saving, orders,
+  movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
+  openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
+  groupByCustomer, filtersOpen, selectedOrderIds, transferLoading, importFileInput,
+  importPackage, importPreview, importFileName, importModalOpen, normalizedSearch,
+  hasActiveOrderFilters, groupedOrderItems, listItems, visibleOrderIds, setQueryParam,
+  restorePreferences, persistSegmentAndView, persistGrouping, restoreCustomerAliases,
+  renameCustomerGroup, toggleOrderSelection, toggleManySelection, selectAllVisible,
+  clearSelection, clearOrderIdFromUrl, clearIdentityScopedState,
+} = useOrdersDashboardModel(setToast);
 
 const downloadJson = (payload: unknown, filename: string) => {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -227,78 +142,6 @@ const commitImport = async () => {
 };
 
 let loadRequestId = 0;
-const setQueryParam = (key: string, value: string) => {
-  const url = new URL(window.location.href);
-  if (value) {
-    url.searchParams.set(key, value);
-  } else {
-    url.searchParams.delete(key);
-  }
-  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-};
-
-const restoreSegmentAndView = () => {
-  const params = new URLSearchParams(window.location.search);
-  const segmentFromUrl = params.get('segment');
-  const viewFromUrl = params.get('view');
-  const groupByFromUrl = params.get('groupBy');
-
-  const segmentFromStorage = window.localStorage.getItem(ORDERS_SEGMENT_STORAGE_KEY);
-  const viewFromStorage = window.localStorage.getItem(ORDERS_VIEW_STORAGE_KEY);
-  const groupByFromStorage = window.localStorage.getItem(ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY);
-
-  const resolvedSegment = segmentFromUrl || segmentFromStorage;
-  const resolvedView = viewFromUrl || viewFromStorage;
-
-  if (resolvedSegment === 'all' || resolvedSegment === 'b2b' || resolvedSegment === 'b2c') {
-    segment.value = resolvedSegment;
-  }
-  if (resolvedView === 'kanban' || resolvedView === 'list') {
-    view.value = resolvedView as DashboardView;
-  }
-  if (groupByFromUrl === 'customer') {
-    groupByCustomer.value = true;
-  } else if (!groupByFromUrl && groupByFromStorage === 'false') {
-    groupByCustomer.value = false;
-  }
-};
-
-const persistSegmentAndView = () => {
-  window.localStorage.setItem(ORDERS_SEGMENT_STORAGE_KEY, segment.value);
-  window.localStorage.setItem(ORDERS_VIEW_STORAGE_KEY, view.value);
-  setQueryParam('segment', segment.value);
-  setQueryParam('view', view.value);
-};
-
-const persistGrouping = () => {
-  window.localStorage.setItem(ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY, groupByCustomer.value ? 'true' : 'false');
-  setQueryParam('groupBy', groupByCustomer.value ? 'customer' : '');
-};
-
-const restoreCustomerAliases = () => {
-  try {
-    const raw = window.localStorage.getItem(ORDERS_CUSTOMER_ALIASES_STORAGE_KEY);
-    customerAliases.value = raw ? JSON.parse(raw) : {};
-  } catch {
-    customerAliases.value = {};
-  }
-};
-
-const persistCustomerAliases = () => {
-  window.localStorage.setItem(ORDERS_CUSTOMER_ALIASES_STORAGE_KEY, JSON.stringify(customerAliases.value));
-};
-
-const renameCustomerGroup = (payload: { customerId: number; alias: string | null }) => {
-  const next = { ...customerAliases.value };
-  if (payload.alias) {
-    next[payload.customerId] = payload.alias;
-  } else {
-    delete next[payload.customerId];
-  }
-  customerAliases.value = next;
-  persistCustomerAliases();
-  setToast(payload.alias ? 'Название группы сохранено' : 'Название группы сброшено');
-};
 
 const renameOrderTitle = async (payload: { orderId: number; title: string | null }) => {
   const nextTitle = payload.title?.trim() || null;
@@ -321,6 +164,7 @@ const renameOrderTitle = async (payload: { orderId: number; title: string | null
 };
 
 const loadOrders = async () => {
+  if (recoveryRequired.value) return;
   const requestId = ++loadRequestId;
   loading.value = true;
   try {
@@ -358,7 +202,9 @@ const loadOrders = async () => {
     console.error(error);
     const maybe = error as { status?: number };
     if (maybe?.status === 401) {
-      showLoginModal.value = true;
+      loadRequestId += 1;
+      clearIdentityScopedState();
+      requireManagerSessionRecovery();
       setToast('Требуется повторный вход');
       return;
     }
@@ -637,30 +483,9 @@ const applyOrderUpdate = (order: ManagerOrderDetailResponse) => {
   }
 };
 
-const clearOrderIdFromUrl = () => {
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has('orderId')) return;
-  url.searchParams.delete('orderId');
-  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-};
-
-const handleLogin = async () => {
-  loginLoading.value = true;
-  loginError.value = '';
-  try {
-    await api.login(loginUsername.value, loginPassword.value);
-    showLoginModal.value = false;
-    await loadOrders();
-  } catch {
-    loginError.value = 'Неверный логин или пароль';
-  } finally {
-    loginLoading.value = false;
-  }
-};
-
 onMounted(async () => {
   restoreCustomerAliases();
-  restoreSegmentAndView();
+  restorePreferences();
   const params = new URLSearchParams(window.location.search);
   const searchParam = params.get('search');
   if (searchParam) {
@@ -829,73 +654,13 @@ watch(drawerOpen, (isOpen) => {
       @reload="reloadOrder"
     />
 
-    <div v-if="showLoginModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-      <div class="w-full max-w-sm rounded-[2rem] border border-gray-200 bg-white text-gray-700 p-6">
-        <h2 class="mb-4 text-xl font-semibold">Вход в Manager</h2>
-        <div class="space-y-3">
-          <input v-model="loginUsername" class="field-input" placeholder="Логин" />
-          <input v-model="loginPassword" type="password" class="field-input" placeholder="Пароль" @keyup.enter="handleLogin" />
-          <p v-if="loginError" class="text-sm text-red-400">{{ loginError }}</p>
-          <button class="btn-mini w-full justify-center" :disabled="loginLoading" @click="handleLogin">
-            {{ loginLoading ? 'Входим...' : 'Войти' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="importModalOpen && importPreview" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
-      <div class="w-full max-w-2xl rounded-[1.5rem] border border-gray-200 bg-white p-5 text-gray-700 shadow-2xl">
-        <div class="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-900">Импорт заказов</h2>
-            <p class="mt-1 text-sm text-gray-500">{{ importFileName || 'orders-export.json' }}</p>
-          </div>
-          <button class="btn-mini-outline" type="button" @click="resetImportState">Закрыть</button>
-        </div>
-
-        <div class="grid gap-3 sm:grid-cols-3">
-          <div class="rounded-xl border border-gray-100 bg-slate-50 p-3">
-            <p class="text-xs text-gray-500">Заказы</p>
-            <p class="text-xl font-bold text-gray-900">{{ importPreview.orders_count }}</p>
-          </div>
-          <div class="rounded-xl border border-gray-100 bg-slate-50 p-3">
-            <p class="text-xs text-gray-500">Товары найдены</p>
-            <p class="text-xl font-bold text-teal-700">{{ importPreview.products_matched }} / {{ importPreview.products_total }}</p>
-          </div>
-          <div class="rounded-xl border border-gray-100 bg-slate-50 p-3">
-            <p class="text-xs text-gray-500">Новые клиенты</p>
-            <p class="text-xl font-bold text-gray-900">{{ importPreview.customers?.filter((item) => item.status === 'will_create').length || 0 }}</p>
-          </div>
-        </div>
-
-        <div v-if="importPreview.warnings?.length" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          <p v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</p>
-        </div>
-
-        <div v-if="importPreview.products_missing" class="mt-4 max-h-56 overflow-auto rounded-xl border border-red-100">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-red-50 text-xs uppercase text-red-700">
-              <tr>
-                <th class="px-3 py-2">Товар</th>
-                <th class="px-3 py-2">Причина</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in importPreview.products?.filter((product) => product.status !== 'matched')" :key="`${item.source_order_id}-${item.product_title}`" class="border-t border-red-100">
-                <td class="px-3 py-2">{{ item.product_title }}</td>
-                <td class="px-3 py-2 text-red-700">{{ item.reason || 'not_found' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button class="btn-mini-outline justify-center" type="button" :disabled="transferLoading" @click="resetImportState">Отмена</button>
-          <button class="btn-mini justify-center" type="button" :disabled="transferLoading || !importPreview.can_import" @click="commitImport">
-            {{ transferLoading ? 'Импорт...' : 'Создать заказы' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <OrdersImportPreviewModal
+      v-if="importModalOpen && importPreview"
+      :preview="importPreview"
+      :filename="importFileName"
+      :loading="transferLoading"
+      @cancel="resetImportState"
+      @commit="commitImport"
+    />
   </div>
 </template>
