@@ -15,7 +15,7 @@ from sqlalchemy import func
 from sqlmodel import select, update
 
 from models import Product, ProductImage, ProductImageVariant, ProductSeries
-from services.catalog_revision_service import CatalogRevisionService
+from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
     ProductImageProcessingContext,
@@ -759,12 +759,11 @@ class ManagerMediaService:
             await ManagerMediaService.sync_legacy_images(session, target_product.id)
             updated_products += 1
 
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="product_series_gallery_apply",
             product_ids=[source_product.id, *(product.id for product in target_products)],
         )
-        await session.commit()
 
         deleted_files_count = 0
         if delete_unreferenced:

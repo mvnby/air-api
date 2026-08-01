@@ -9,7 +9,7 @@ from core.tenant_scope import (
     verify_public_storefront_request,
 )
 from models.tenancy import TenantScope
-from schemas import CatalogRevisionResponse
+from schemas_catalog import CatalogRevisionResponse
 from services.catalog_revision_service import CatalogRevisionService
 
 

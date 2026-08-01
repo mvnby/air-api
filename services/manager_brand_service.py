@@ -19,7 +19,7 @@ from models import (
     TagGroup,
 )
 from services.brand_series_service import extract_series_name, sync_product_brand_series
-from services.catalog_revision_service import CatalogRevisionService
+from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
 from services.feature_scope_policy import FeatureScopePolicy
 
 
@@ -116,12 +116,11 @@ class ManagerBrandService:
                 sort_order=feature.sort_order,
             )
         )
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_feature_create",
             brand_slugs=[brand.slug],
         )
-        await session.commit()
         await session.refresh(feature)
         return ManagerBrandService._serialize_brand_feature(feature, series_count=0)
 
@@ -170,12 +169,11 @@ class ManagerBrandService:
             feature.sort_order = int(payload["sort_order"])
 
         session.add(feature)
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_feature_update",
             brand_slugs=[brand.slug],
         )
-        await session.commit()
         await session.refresh(feature)
         series_count = await ManagerBrandService._brand_feature_series_count(session, feature_id)
         return ManagerBrandService._serialize_brand_feature(feature, series_count=series_count)
@@ -200,12 +198,11 @@ class ManagerBrandService:
         feature.is_active = False
         feature.archived_at = datetime.now()
         session.add(feature)
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_feature_delete",
             brand_slugs=[brand.slug],
         )
-        await session.commit()
 
     @staticmethod
     async def create_brand(
@@ -239,12 +236,11 @@ class ManagerBrandService:
         await session.flush()
 
         await ManagerBrandService._sync_brand_tag(session, brand=brand, previous_slug=None)
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_create",
             brand_slugs=[brand.slug],
         )
-        await session.commit()
         await session.refresh(brand)
         return ManagerBrandService._serialize_brand(brand, products_count=0)
 
@@ -302,12 +298,11 @@ class ManagerBrandService:
         changed_slugs = [previous_slug]
         if brand.slug != previous_slug:
             changed_slugs.append(brand.slug)
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_update",
             brand_slugs=changed_slugs,
         )
-        await session.commit()
         await session.refresh(brand)
 
         products_count = (
@@ -373,12 +368,11 @@ class ManagerBrandService:
         brand_slug = brand.slug
 
         await session.delete(brand)
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_delete",
             brand_slugs=[brand_slug],
         )
-        await session.commit()
 
     @staticmethod
     async def list_brand_series(
@@ -450,13 +444,12 @@ class ManagerBrandService:
         if not changed_product_ids:
             return 0
 
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_series_auto_sync",
             product_ids=changed_product_ids,
             brand_slugs=[brand.slug],
         )
-        await session.commit()
         return len(changed_product_ids)
 
     @staticmethod
@@ -509,12 +502,11 @@ class ManagerBrandService:
                 feature_ids=payload.get("brand_feature_ids"),
             )
 
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_series_create",
             brand_slugs=[brand.slug],
         )
-        await session.commit()
         await session.refresh(series)
         feature_map = await ManagerBrandService._load_series_brand_features(session, [int(series.id or 0)])
         return ManagerBrandService._serialize_series(
@@ -592,12 +584,11 @@ class ManagerBrandService:
                 feature_ids=payload.get("brand_feature_ids"),
             )
 
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_series_update",
             brand_slugs=[brand.slug],
         )
-        await session.commit()
         await session.refresh(series)
 
         products_count = (
@@ -658,13 +649,12 @@ class ManagerBrandService:
                 "skipped_existing": 0,
             }
 
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_series_gallery_apply",
             product_ids=product_ids,
             brand_slugs=[brand.slug],
         )
-        await session.commit()
         return {
             **result,
             "series_id": int(series.id or series_id),
@@ -701,12 +691,11 @@ class ManagerBrandService:
         for link in link_rows:
             await session.delete(link)
         await session.delete(series)
-        await CatalogRevisionService.stage_invalidation(
+        await CatalogInvalidationCommitService.commit_global_mutation(
             session,
             reason="brand_series_delete",
             brand_slugs=[brand.slug],
         )
-        await session.commit()
 
     @staticmethod
     def _serialize_brand(brand: Brand, *, products_count: int = 0) -> Dict[str, Any]:
