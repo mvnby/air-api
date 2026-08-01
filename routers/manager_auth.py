@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api_contracts.manager_storefronts import ManagerStorefrontListResponse
+from core.database import get_session
 from core.security import AuthenticatedUser, require_manager_access
-from routers.manager_operation_ids import READ_USER_ME
+from routers.manager_operation_ids import LIST_MANAGER_STOREFRONTS, READ_USER_ME
 from schemas import ManagerAuthStatusResponse
+from services.manager_storefront_selector_service import ManagerStorefrontSelector
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager"])
@@ -25,3 +29,18 @@ async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_ac
         "storefront_id": auth.storefront_id,
         "tenant_membership_id": auth.tenant_membership_id,
     }
+
+
+@router.get(
+    "/storefronts",
+    response_model=ManagerStorefrontListResponse,
+    operation_id=LIST_MANAGER_STOREFRONTS,
+)
+async def list_manager_storefronts(
+    session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+):
+    return await ManagerStorefrontSelector.list_available(
+        session,
+        tenant_scope=auth.tenant_scope(),
+    )

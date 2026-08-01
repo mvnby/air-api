@@ -15,6 +15,7 @@ from services.documents.base import DOC_NAMES
 from services.google_service import get_google_service
 from services.settings_service import SettingsService
 from services.tenant_scope_service import (
+    storefront_scope_clause,
     tenant_scope_clause,
 )
 
@@ -370,7 +371,7 @@ class CustomerReconciliationService:
             select(Order)
             .where(
                 Order.customer_id == customer_id,
-                tenant_scope_clause(Order, tenant_scope),
+                storefront_scope_clause(Order, tenant_scope),
             )
             .options(
                 selectinload(Order.documents),

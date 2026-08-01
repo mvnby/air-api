@@ -7,6 +7,7 @@ from sqlmodel import select
 from models import Customer, CustomerBranch, CustomerType, Order
 from models.tenancy import TenantScope
 from services.tenant_scope_service import (
+    storefront_scope_clause,
     tenant_scope_clause,
 )
 
@@ -94,7 +95,7 @@ class CustomerService:
             .where(
                 Order.customer_id == customer_id,
                 Order.delivery_address.is_not(None),
-                tenant_scope_clause(Order, tenant_scope),
+                storefront_scope_clause(Order, tenant_scope),
             )
             .order_by(Order.created_at.desc())
             .limit(1)
@@ -119,7 +120,7 @@ class CustomerService:
         order_count_result = await session.execute(
             select(func.count(Order.id)).where(
                 Order.customer_id == customer_id,
-                tenant_scope_clause(Order, tenant_scope),
+                storefront_scope_clause(Order, tenant_scope),
             )
         )
         order_count = int(order_count_result.scalar() or 0)
@@ -400,7 +401,7 @@ class CustomerService:
             has_orders_clause = exists(
                 select(Order.id).where(
                     Order.customer_id == Customer.id,
-                    tenant_scope_clause(Order, tenant_scope),
+                    storefront_scope_clause(Order, tenant_scope),
                 )
             )
             stmt = stmt.where(has_orders_clause)
@@ -436,7 +437,7 @@ class CustomerService:
                 select(Order.customer_id, func.count(Order.id))
                 .where(
                     Order.customer_id.in_(customer_ids),
-                    tenant_scope_clause(Order, tenant_scope),
+                    storefront_scope_clause(Order, tenant_scope),
                 )
                 .group_by(Order.customer_id)
             )

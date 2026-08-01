@@ -152,3 +152,35 @@ async def test_update_rolls_back_default_proposal_and_product_lines(
     )
     assert proposals == []
     assert product_lines == []
+
+
+@pytest.mark.asyncio
+async def test_lost_order_does_not_archive_shared_customer_with_active_other_storefront_order(
+    update_session: AsyncSession,
+):
+    order_id, customer_id = await _create_order(update_session)
+    other_storefront_order = Order(
+        tenant_id=TEST_TENANT_SCOPE.tenant_id,
+        storefront_id=2,
+        customer_id=customer_id,
+        status=OrderStatus.NEGOTIATION,
+        title="Активный заказ другого storefront",
+    )
+    update_session.add(other_storefront_order)
+    await update_session.commit()
+
+    result = await OrderUpdateCommandService.update_order_for_manager(
+        update_session,
+        order_id,
+        ManagerOrderUpdatePayload(
+            status="closed",
+            closing_result="lost",
+            reject_reason="Тест межвитринного архива",
+        ),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    stored_customer = await update_session.get(Customer, customer_id)
+    assert result is not None
+    assert stored_customer is not None
+    assert stored_customer.is_archived is False

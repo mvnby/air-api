@@ -14,6 +14,11 @@ from services.manager_tenant_access_service import (
     ManagerTenantAccessResolutionError,
     ManagerTenantAccessResolver,
 )
+from services.manager_storefront_selector_service import (
+    MANAGER_STOREFRONT_HEADER,
+    ManagerStorefrontSelectionError,
+    ManagerStorefrontSelector,
+)
 from services.staff_user_service import StaffUserService
 from services.tenant_scope_service import SystemTenantScopeResolver
 
@@ -85,6 +90,24 @@ def _extract_token(request: Request, token: Optional[str]) -> str:
     return token_to_validate
 
 
+async def _resolve_requested_manager_storefront(
+    session: AsyncSession,
+    request: Request,
+    base_scope: TenantScope,
+) -> TenantScope:
+    try:
+        return await ManagerStorefrontSelector.resolve(
+            session,
+            base_scope=base_scope,
+            requested_slug=request.headers.get(MANAGER_STOREFRONT_HEADER),
+        )
+    except ManagerStorefrontSelectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Storefront access denied",
+        ) from exc
+
+
 async def get_current_auth_context(
     request: Request,
     token: Optional[str] = Depends(reusable_oauth2),
@@ -122,22 +145,32 @@ async def get_current_auth_context(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Active tenant membership required",
                 ) from exc
+            tenant_scope = await _resolve_requested_manager_storefront(
+                session,
+                request,
+                access.tenant_scope,
+            )
             return AuthenticatedUser(
                 username=username,
                 staff_user_id=int(staff_user.id or 0),
                 role=access.role,
                 display_name=staff_user.display_name,
                 auth_source=auth_source,
-                tenant_id=access.tenant_scope.tenant_id,
-                storefront_id=access.tenant_scope.storefront_id,
+                tenant_id=tenant_scope.tenant_id,
+                storefront_id=tenant_scope.storefront_id,
                 tenant_membership_id=access.membership_id,
-                is_system_tenant=access.tenant_scope.is_system,
+                is_system_tenant=tenant_scope.is_system,
             )
 
         if username != settings.ADMIN_USERNAME:
              raise HTTPException(status_code=401, detail="Invalid user")
 
         tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        tenant_scope = await _resolve_requested_manager_storefront(
+            session,
+            request,
+            tenant_scope,
+        )
         return AuthenticatedUser(
             username=username,
             auth_source="legacy",
