@@ -21,6 +21,7 @@ from routers.manager_operation_ids import (
     REPROCESS_IMAGE_VARIANT,
     SET_MAIN_IMAGE,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     BulkGalleryAddRequest,
     BulkGalleryDeleteRequest,
@@ -42,7 +43,11 @@ from services.manager_media_service import ManagerMediaService
 from services.product_image_variant_service import ProductImageVariantService
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.post(

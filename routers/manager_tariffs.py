@@ -15,6 +15,7 @@ from routers.manager_operation_ids import (
     UPDATE_MANAGER_TARIFF,
     UPDATE_MANAGER_TARIFF_RULE,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerActionMessageResponse,
     ManagerQuickTariffListResponse,
@@ -34,6 +35,7 @@ router = APIRouter(
     prefix="/api/manager/tariffs",
     tags=["manager/tariffs"],
     dependencies=[Depends(get_current_username)],
+    route_class=ManagerPermissionRoute,
 )
 
 

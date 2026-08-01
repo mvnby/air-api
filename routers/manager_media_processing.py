@@ -7,6 +7,7 @@ from routers.manager_operation_ids import (
     CREATE_MEDIA_PROCESSING_JOB,
     LIST_MEDIA_PROCESSING_JOBS,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerMediaProcessingJobCreatePayload,
     ManagerMediaProcessingJobListResponse,
@@ -15,7 +16,11 @@ from schemas import (
 from services.media_processing_job_service import MediaProcessingJobService
 
 
-router = APIRouter(prefix="/api/manager/media/processing-jobs", tags=["manager media"])
+router = APIRouter(
+    prefix="/api/manager/media/processing-jobs",
+    tags=["manager media"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get(

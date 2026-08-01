@@ -13,6 +13,7 @@ from routers.manager_operation_ids import (
     START_MANAGER_BACKUP_RUN,
     START_MANAGER_BACKUP_RESTORE,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerBackupListResponse,
     ManagerBackupRunStartResponse,
@@ -39,6 +40,7 @@ router = APIRouter(
     prefix="/api/manager/backups",
     tags=["manager/backups"],
     dependencies=[Depends(get_current_owner_username)],
+    route_class=ManagerPermissionRoute,
 )
 BACKUP_LIST_UNAVAILABLE = "backup_list_unavailable"
 BACKUP_LIST_UNAVAILABLE_MESSAGE = "Список резервных копий временно недоступен"

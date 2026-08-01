@@ -5,6 +5,7 @@ from core.database import get_session
 from core.logger import logger
 from core.security import get_current_username
 from routers.manager_operation_ids import BULK_UPDATE_SPECS, NORMALIZE_LEGACY_SPECS
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     BulkSpecUpdate,
     ManagerBulkSpecsResponse,
@@ -14,7 +15,11 @@ from services.manager_legacy_specs_service import ManagerLegacySpecsService
 from services.manager_specs_service import ManagerSpecsService
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.post(

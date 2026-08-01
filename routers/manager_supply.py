@@ -46,6 +46,7 @@ from routers.manager_operation_ids import (
     SYNC_SUPPLIER_SOURCE,
     UPSERT_PRODUCT_LOCAL_STOCK,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerActionMessageResponse,
     CatalogImportJobStartResponse,
@@ -97,7 +98,11 @@ from services.supplier_sync_service import SupplierSyncService
 from services.supply_request_service import SupplierProfileService, SupplyRequestService
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get("/suppliers", response_model=SupplierListResponse, operation_id=LIST_SUPPLIERS)

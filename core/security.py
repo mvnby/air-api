@@ -187,6 +187,18 @@ async def require_owner_access(
     return auth
 
 
+async def require_system_owner_access(
+    auth: AuthenticatedUser = Depends(require_owner_access),
+) -> AuthenticatedUser:
+    """Restrict platform infrastructure to system-tenant owners/admins."""
+    if not auth.is_system_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System tenant owner access required",
+        )
+    return auth
+
+
 async def get_current_user(
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> str:

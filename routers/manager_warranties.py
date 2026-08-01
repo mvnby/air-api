@@ -10,6 +10,7 @@ from routers.manager_operation_ids import (
     LIST_MANAGER_WARRANTY_POLICIES,
     PATCH_MANAGER_WARRANTY_POLICY,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import (
     ManagerEquipmentWarrantyCoverageResponse,
     ManagerWarrantyDecisionPayload,
@@ -20,7 +21,11 @@ from schemas import (
 from services.warranty_service import WarrantyService
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager-warranties"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager-warranties"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get("/warranty-policies", response_model=ManagerWarrantyPolicyListResponse, operation_id=LIST_MANAGER_WARRANTY_POLICIES)

@@ -63,6 +63,9 @@ async def google_auth_client(monkeypatch):
         username=settings.ADMIN_USERNAME,
         auth_source="legacy",
         role="owner",
+        tenant_id=1,
+        storefront_id=1,
+        is_system_tenant=True,
     )
 
     async def _override_session():
@@ -305,3 +308,47 @@ async def test_google_auth_owner_binding_rejects_demoted_staff(monkeypatch):
             "username": "manager",
         },
     ) is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tenant_is_system", "expected"),
+    [(True, True), (False, False)],
+)
+async def test_google_auth_owner_binding_requires_active_system_membership(
+    monkeypatch,
+    tenant_is_system,
+    expected,
+):
+    async def fake_get_by_id(_session, staff_user_id):
+        assert staff_user_id == 42
+        return SimpleNamespace(status="active", primary_role="owner", roles=["owner"])
+
+    class _Result:
+        @staticmethod
+        def first():
+            return (
+                SimpleNamespace(status="active", role="owner"),
+                SimpleNamespace(status="active", is_system=tenant_is_system),
+            )
+
+    class _Session:
+        @staticmethod
+        async def execute(_statement):
+            return _Result()
+
+    monkeypatch.setattr(
+        "routers.manager_google_auth.StaffUserService.get_by_id",
+        fake_get_by_id,
+    )
+
+    assert await _oauth_owner_binding_is_active(
+        _Session(),
+        {
+            "auth_source": "staff_password",
+            "staff_user_id": 42,
+            "username": "owner",
+            "tenant_membership_id": 7,
+            "tenant_id": 3,
+        },
+    ) is expected

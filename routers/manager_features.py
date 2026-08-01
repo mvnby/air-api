@@ -32,9 +32,14 @@ from routers.manager_operation_ids import (
     UPDATE_MANAGER_PRODUCT_FEATURES,
     UPSERT_MANAGER_FEATURE_TARGET_LINK,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 
 
-router = APIRouter(prefix="/api/manager", tags=["manager-features"])
+router = APIRouter(
+    prefix="/api/manager",
+    tags=["manager-features"],
+    route_class=ManagerPermissionRoute,
+)
 
 
 @router.get(

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from core.config import settings
 from core.database import get_session
@@ -16,10 +17,12 @@ from core.security import (
     get_current_owner_username,
     require_owner_access,
 )
+from models import Tenant, TenantMembership
 from routers.manager_operation_ids import (
     GET_MANAGER_GOOGLE_AUTH_STATUS,
     GET_MANAGER_GOOGLE_AUTH_URL,
 )
+from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse
 from services.google_service import get_google_service
 from services.staff_user_service import StaffUserService
@@ -40,6 +43,7 @@ class GoogleOAuthConfigurationError(RuntimeError):
 router = APIRouter(
     prefix="/api/manager/google-auth",
     tags=["manager/google-auth"],
+    route_class=ManagerPermissionRoute,
 )
 
 
@@ -134,7 +138,36 @@ async def _oauth_owner_binding_is_active(
         return False
     if staff_user is None or not StaffUserService.is_active(staff_user):
         return False
-    return StaffUserService.primary_role(staff_user).strip().lower() in OWNER_ACCESS_ROLES
+    if StaffUserService.primary_role(staff_user).strip().lower() not in OWNER_ACCESS_ROLES:
+        return False
+
+    try:
+        membership_id = int(pending.get("tenant_membership_id"))
+        tenant_id = int(pending.get("tenant_id"))
+    except (TypeError, ValueError):
+        return False
+    if membership_id <= 0 or tenant_id <= 0:
+        return False
+
+    statement = (
+        select(TenantMembership, Tenant)
+        .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+        .where(
+            TenantMembership.id == membership_id,
+            TenantMembership.staff_user_id == int(staff_user_id),
+            TenantMembership.tenant_id == tenant_id,
+        )
+    )
+    row = (await session.execute(statement)).first()
+    if row is None:
+        return False
+    membership, tenant = row
+    return (
+        str(membership.status or "").strip().lower() == "active"
+        and str(membership.role or "").strip().lower() in OWNER_ACCESS_ROLES
+        and str(tenant.status or "").strip().lower() == "active"
+        and bool(tenant.is_system)
+    )
 
 
 @router.get("/status", response_model=ManagerGoogleAuthStatusResponse, operation_id=GET_MANAGER_GOOGLE_AUTH_STATUS)
@@ -165,6 +198,8 @@ async def get_manager_google_auth_url(
             "auth_source": auth.auth_source,
             "staff_user_id": auth.staff_user_id,
             "username": auth.username,
+            "tenant_membership_id": auth.tenant_membership_id,
+            "tenant_id": auth.tenant_id,
         }
         url = await run_in_threadpool(
             lambda: get_google_service().get_auth_url(redirect_uri, state=state)
