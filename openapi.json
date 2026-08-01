@@ -10210,6 +10210,32 @@
         ]
       }
     },
+    "/api/manager/storefronts": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "List Manager Storefronts",
+        "operationId": "list_manager_storefronts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerStorefrontListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/orders/{order_id}/documents": {
       "get": {
         "tags": [
@@ -44280,6 +44306,68 @@
           "total"
         ],
         "title": "ManagerStaleWorkStageListResponse"
+      },
+      "ManagerStorefrontListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerStorefrontResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ManagerStorefrontListResponse"
+      },
+      "ManagerStorefrontResponse": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "default_locale": {
+            "type": "string",
+            "title": "Default Locale"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "display_name",
+          "default_locale",
+          "currency",
+          "is_default",
+          "is_current"
+        ],
+        "title": "ManagerStorefrontResponse"
       },
       "ManagerTagCreatePayload": {
         "properties": {

@@ -43,6 +43,42 @@ class ManagerTenantAccessRow:
 
 class TenancyDAO:
     @staticmethod
+    async def get_active_storefront_for_tenant_slug(
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        storefront_slug: str,
+    ) -> Storefront | None:
+        result = await session.execute(
+            select(Storefront).where(
+                Storefront.tenant_id == tenant_id,
+                Storefront.slug == storefront_slug,
+                Storefront.status == "active",
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_active_storefronts_for_tenant(
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+    ) -> list[Storefront]:
+        result = await session.execute(
+            select(Storefront)
+            .where(
+                Storefront.tenant_id == tenant_id,
+                Storefront.status == "active",
+            )
+            .order_by(
+                Storefront.is_default.desc(),
+                Storefront.display_name.asc(),
+                Storefront.id.asc(),
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
     async def list_active_system_scope_candidates(
         session: AsyncSession,
         *,
