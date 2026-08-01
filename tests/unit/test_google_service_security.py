@@ -411,3 +411,61 @@ def test_list_files_propagates_provider_failure_instead_of_returning_empty(
 
     with pytest.raises(GoogleDriveListError, match="failed to list files"):
         service.list_files("backup-folder")
+
+
+def test_delete_file_strict_treats_provider_not_found_as_success(monkeypatch):
+    class FakeHttpError(Exception):
+        def __init__(self, status: int):
+            super().__init__(f"provider status {status}")
+            self.resp = type("Response", (), {"status": status})()
+
+    class DeleteRequest:
+        def execute(self):
+            raise FakeHttpError(404)
+
+    class DriveFiles:
+        def update(self, *, fileId, body):
+            assert fileId == "drive-file"
+            assert body == {"trashed": True}
+            return DeleteRequest()
+
+    class DriveService:
+        @staticmethod
+        def files():
+            return DriveFiles()
+
+    service = _service_without_authentication()
+    monkeypatch.setattr(service, "_require_credentials", lambda: object())
+    monkeypatch.setattr(google_service, "HttpError", FakeHttpError)
+    monkeypatch.setattr(google_service, "build", lambda *_args, **_kwargs: DriveService())
+
+    service.delete_file_strict(" drive-file ")
+
+
+def test_delete_file_strict_surfaces_retryable_provider_failure(monkeypatch):
+    class FakeHttpError(Exception):
+        def __init__(self, status: int):
+            super().__init__(f"provider status {status}")
+            self.resp = type("Response", (), {"status": status})()
+
+    class DeleteRequest:
+        def execute(self):
+            raise FakeHttpError(503)
+
+    class DriveFiles:
+        @staticmethod
+        def update(**_kwargs):
+            return DeleteRequest()
+
+    class DriveService:
+        @staticmethod
+        def files():
+            return DriveFiles()
+
+    service = _service_without_authentication()
+    monkeypatch.setattr(service, "_require_credentials", lambda: object())
+    monkeypatch.setattr(google_service, "HttpError", FakeHttpError)
+    monkeypatch.setattr(google_service, "build", lambda *_args, **_kwargs: DriveService())
+
+    with pytest.raises(FakeHttpError, match="provider status 503"):
+        service.delete_file_strict("drive-file")

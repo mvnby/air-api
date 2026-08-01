@@ -155,6 +155,9 @@ class SchedulerService:
         # Materialize idempotent staff departure reminders every five minutes.
         tasks.append(asyncio.create_task(self._staff_task_departure_reminder_loop()))
 
+        # Delete external order documents only after their database transaction commits.
+        tasks.append(asyncio.create_task(self._order_document_cleanup_loop()))
+
         # Run bank receipt IMAP import loop
         tasks.append(asyncio.create_task(self._bank_mail_import_loop()))
 
@@ -342,6 +345,32 @@ class SchedulerService:
             except Exception:
                 logger.exception("Staff departure reminder loop error")
             await asyncio.sleep(5 * 60)
+
+    async def _order_document_cleanup_loop(self):
+        from services.order_document_cleanup_service import (
+            OrderDocumentCleanupService,
+        )
+
+        while True:
+            try:
+                outcomes = await OrderDocumentCleanupService.process_batch(
+                    worker_id="scheduler-order-document-cleanup",
+                    limit=25,
+                )
+                if outcomes:
+                    logger.info(
+                        "Order document cleanup batch processed: total=%s deleted=%s retry=%s dead=%s",
+                        len(outcomes),
+                        sum(item.outcome == "deleted" for item in outcomes),
+                        sum(item.outcome == "retry_scheduled" for item in outcomes),
+                        sum(item.outcome == "dead" for item in outcomes),
+                    )
+                    await asyncio.sleep(1)
+                else:
+                    await asyncio.sleep(30)
+            except Exception:
+                logger.exception("Order document cleanup loop error")
+                await asyncio.sleep(60)
 
     async def _bank_mail_import_loop(self):
         while True:

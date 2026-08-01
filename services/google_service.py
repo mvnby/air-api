@@ -7,6 +7,7 @@ from io import BytesIO
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBaseUpload
 import datetime
 
@@ -1013,17 +1014,33 @@ class GoogleDocsService:
         Args:
             file_id: ID файла в Google Drive
         """
-        credentials = self._require_credentials()
-                
         try:
-            drive_service = build('drive', 'v3', credentials=credentials)
-            
-            # Обновляем метаданные файла, устанавливая trashed=True
-            drive_service.files().update(fileId=file_id, body={'trashed': True}).execute()
-            
+            self.delete_file_strict(file_id)
         except Exception as e:
             # Логируем ошибку, но не прерываем выполнение (файл мог быть уже удален)
             logger.warning(f"Failed to delete Google Drive file {file_id}: {str(e)}")
+
+    def delete_file_strict(self, file_id: str) -> None:
+        """Move a file to trash and surface retryable provider failures.
+
+        A missing file is already in the desired state and is therefore
+        treated as success. Durable cleanup workers use this strict variant;
+        legacy best-effort callers keep using ``delete_file``.
+        """
+        normalized_file_id = str(file_id or "").strip()
+        if not normalized_file_id:
+            raise ValueError("Google Drive file_id is required")
+        credentials = self._require_credentials()
+        drive_service = build("drive", "v3", credentials=credentials)
+        try:
+            drive_service.files().update(
+                fileId=normalized_file_id,
+                body={"trashed": True},
+            ).execute()
+        except HttpError as exc:
+            if getattr(exc.resp, "status", None) == 404:
+                return
+            raise
 
 
     def upload_file(self, file_path: str, filename: str, mime_type: str, folder_id: str = None) -> str:

@@ -54,12 +54,14 @@ Deliver R2 as independently deployable slices:
 2. [x] work-stage and payment commands;
 3. [x] Manager order creation and Lead create/update/loss/qualification;
 4. [x] Manager order update, split into order/customer/commercial/finalization slices;
-5. [ ] order deletion and external document cleanup.
+5. [x] order deletion and durable post-commit external document cleanup.
 
 Order deletion stays separate because deleting a Google Drive document is an
-external side effect. A database transaction alone cannot undo that operation;
-the command needs an after-commit cleanup/outbox boundary instead of pretending
-that Drive and PostgreSQL share one transaction.
+external side effect. The command now stores one narrow cleanup event per file
+inside the same transaction as the database deletion. A dedicated scheduler
+consumer processes only that exact event type after commit, with leases,
+bounded retries and dead-letter state; the communications allowlist is not
+widened.
 
 When a command participates in an explicit caller-owned unit of work, its local
 boundary is a SAVEPOINT; ordinary HTTP commands own the root transaction.

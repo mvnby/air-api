@@ -2413,78 +2413,11 @@ class OrderService:
         *,
         tenant_scope: TenantScope,
     ) -> bool:
-        """
-        Delete an order and all cascading dependencies from DB.
-        Google Drive files are deleted on a best-effort basis and do not block DB deletion.
-        """
-        import sqlalchemy as sa
-        from models.order import (
-            BankReceipt,
-            Order,
-            OrderDocument,
-            OrderInstaller,
-            OrderProductLink,
-            OrderProposal,
-            OrderServiceLink,
-            OrderWorkStage,
-            OutgoingEmail,
-            Payment,
-        )
-        from services.document_service import DocumentService
-        from services.google_service import get_google_service
-        
-        order = await TenantEntityAccessService.get_order(
-            session,
-            order_id,
-            tenant_scope=tenant_scope,
-            for_update=True,
-        )
-        if not order:
-            raise ValueError(f"Order {order_id} not found")
+        """Compatibility delegate to the transactional delete command."""
+        from services.order_delete_command_service import OrderDeleteCommandService
 
-        # Delete associated documents from Google Drive (best-effort).
-        # OrderDocument rows themselves are deleted by ORM cascade together with the order.
-        docs = await DocumentService.list_order_documents(
+        return await OrderDeleteCommandService.delete_order(
             session,
             order_id,
             tenant_scope=tenant_scope,
         )
-        for doc in docs or []:
-            if not doc.google_file_id:
-                continue
-            try:
-                get_google_service().delete_file(doc.google_file_id)
-            except Exception as exc:
-                logger.warning(
-                    "Failed to delete Google Drive file while deleting order",
-                    extra={"order_id": order_id, "doc_id": doc.id, "google_file_id": doc.google_file_id, "error": str(exc)},
-                )
-
-        # Explicit SQL updates/deletes avoid async lazy-load cascade pitfalls on AsyncSession.
-        # Keep audit/history rows, but detach them from an order that is being hard-deleted.
-        await session.execute(
-            sa.update(BankReceipt)
-            .where(BankReceipt.matched_order_id == order_id)
-            .values(
-                status="requires_review",
-                matched_order_id=None,
-                matched_payment_id=None,
-                match_meta={"reason": "matched_order_deleted", "deleted_order_id": order_id},
-            )
-        )
-        await session.execute(
-            sa.update(OutgoingEmail)
-            .where(OutgoingEmail.order_id == order_id)
-            .values(order_id=None)
-        )
-        await session.execute(sa.delete(OrderProductLink).where(OrderProductLink.order_id == order_id))
-        await session.execute(sa.delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id))
-        await session.execute(sa.delete(OrderWorkStage).where(OrderWorkStage.order_id == order_id))
-        await session.execute(sa.delete(OrderInstaller).where(OrderInstaller.order_id == order_id))
-        await session.execute(sa.delete(Payment).where(Payment.order_id == order_id))
-        await session.execute(sa.delete(OrderDocument).where(OrderDocument.order_id == order_id))
-        await session.execute(sa.delete(OrderProposal).where(OrderProposal.order_id == order_id))
-        await session.execute(sa.delete(Order).where(Order.id == order_id))
-        await session.commit()
-        
-        return True
