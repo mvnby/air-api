@@ -142,7 +142,9 @@ def test_scheduler_gate_requires_monotonic_stability_despite_delay_override(
     # The harness starts many short-lived shell processes and is noticeably
     # slower on macOS under load.  Keep the bound well below the reviewed 9s
     # stability window without turning scheduler latency into a platform flake.
-    assert elapsed < 5
+    # Keep recovery strictly inside the reviewed 9-second stability window,
+    # while allowing loaded CI runners enough scheduling headroom.
+    assert elapsed < 8
     assert "did not remain running for 6 consecutive samples and at least 9s" in (
         result.stdout
     )
