@@ -224,11 +224,30 @@ describe('ManagerStorefrontSwitcher', () => {
     expect(wrapper.emitted('select')).toEqual([['orsha']]);
   });
 
-  it('uses a compact accessible list only when there are more than two storefronts', async () => {
+  it('keeps direct choices and never falls back to a dropdown for more storefronts', async () => {
     const wrapper = mountSwitcher([mainStorefront, orshaStorefront, minskStorefront]);
-    expect(wrapper.findAll('button')).toHaveLength(0);
-    const select = wrapper.get('select[aria-label="Выберите витрину"]');
-    await select.setValue('minsk');
+    const buttons = wrapper.findAll('button');
+    expect(buttons).toHaveLength(3);
+    expect(wrapper.find('select').exists()).toBe(false);
+    expect(buttons[2]?.attributes('aria-label')).toContain('MVN Минск, Минск');
+    await buttons[2]?.trigger('click');
     expect(wrapper.emitted('select')).toEqual([['minsk']]);
+  });
+
+  it('keeps current storefront context visible in the collapsed desktop sidebar', () => {
+    const wrapper = mount(ManagerStorefrontSwitcher, {
+      props: {
+        storefronts: [mainStorefront, orshaStorefront],
+        selectedSlug: 'orsha',
+        collapsed: true,
+      },
+    });
+    mountedWrappers.push(wrapper);
+
+    const badge = wrapper.get('[data-testid="collapsed-storefront-badge"]');
+    expect(badge.text()).toBe('ОР');
+    expect(badge.attributes('title')).toBe('Витрина: MVN Орша, Орша');
+    expect(badge.attributes('aria-label')).toBe('Текущая витрина: MVN Орша, Орша');
+    expect(badge.classes()).toContain('md:flex');
   });
 });

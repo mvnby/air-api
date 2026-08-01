@@ -3,12 +3,17 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, r
 import { Package, Zap, Loader2, Menu, X, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
-import type { TelegramLoginPayload } from './api';
-import type { ManagerAuthStatusResponse } from './client';
+import type { TelegramLoginPayload } from './client';
 import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
 import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
 import { confirmDialog } from './services/ui-feedback';
-import { managerStorefrontSelection } from './services/manager-storefront-selection';
+import {
+  clearManagerSession,
+  loginManagerWithPassword,
+  loginManagerWithTelegram,
+  managerSession,
+  restoreManagerSession,
+} from './services/manager-session';
 import {
   coreNavItems,
   defaultExpandedNavSections,
@@ -44,8 +49,7 @@ const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQua
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
 
-const isAuthenticated = ref(false);
-const currentUserRole = ref('');
+const { isAuthenticated, currentUserRole } = managerSession;
 const showLoginModal = ref(false);
 const loginUsername = ref('');
 const loginPassword = ref('');
@@ -274,20 +278,12 @@ const fetchWebRebuildStatus = async () => {
     // Non-critical status widget; the rebuild button reports its own errors.
   }
 };
-const establishAuthenticatedSession = async (auth: ManagerAuthStatusResponse) => {
-  await managerStorefrontSelection.initialize(auth);
-  currentUserRole.value = String(auth.role || '');
-  isAuthenticated.value = true;
-  enforceAuthorizedLocation();
-};
 const handleLogin = async () => {
   loginLoading.value = true;
   loginError.value = '';
   try {
-    managerStorefrontSelection.prepareAuthentication();
-    await api.login(loginUsername.value, loginPassword.value);
-    const auth = await api.checkAuth() as ManagerAuthStatusResponse;
-    await establishAuthenticatedSession(auth);
+    await loginManagerWithPassword(loginUsername.value, loginPassword.value);
+    enforceAuthorizedLocation();
     showLoginModal.value = false;
     loginPassword.value = '';
     void fetchLeadsCount();
@@ -303,10 +299,8 @@ const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
   telegramLoginLoading.value = true;
   loginError.value = '';
   try {
-    managerStorefrontSelection.prepareAuthentication();
-    await api.loginTelegram(payload);
-    const auth = await api.checkAuth() as ManagerAuthStatusResponse;
-    await establishAuthenticatedSession(auth);
+    await loginManagerWithTelegram(payload);
+    enforceAuthorizedLocation();
     showLoginModal.value = false;
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
@@ -370,15 +364,13 @@ const fetchLeadsCount = async () => {
 
 const checkAuth = async () => {
   try {
-    managerStorefrontSelection.prepareAuthentication();
-    const auth = await api.checkAuth() as ManagerAuthStatusResponse;
-    await establishAuthenticatedSession(auth);
+    await restoreManagerSession();
+    enforceAuthorizedLocation();
     // Fetch the badge count once authenticated
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
   } catch {
-    isAuthenticated.value = false;
-    currentUserRole.value = '';
+    clearManagerSession();
     showLoginModal.value = true;
   }
 };

@@ -26,6 +26,7 @@ import {
 } from './order-utils';
 import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
+import { loginManagerWithPassword } from '../../services/manager-session';
 import {
   buildBoardTransitionPayload,
   needsExecutionWithoutPaymentConfirmation,
@@ -648,8 +649,9 @@ const handleLogin = async () => {
   loginLoading.value = true;
   loginError.value = '';
   try {
-    await api.login(loginUsername.value, loginPassword.value);
+    await loginManagerWithPassword(loginUsername.value, loginPassword.value);
     showLoginModal.value = false;
+    loginPassword.value = '';
     await loadOrders();
   } catch {
     loginError.value = 'Неверный логин или пароль';

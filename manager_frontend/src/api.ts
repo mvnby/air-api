@@ -1,6 +1,5 @@
 import {
     OpenAPI,
-    LoginService,
     ManagerService,
     ManagerOrdersService,
     ManagerDashboardService,
@@ -32,7 +31,6 @@ import {
     type ManagerStaffCreatePayload,
     type ManagerStaffResponse,
     type ManagerStaffUpdatePayload,
-    type TelegramLoginPayload,
     type ManagerSettingUpdatePayload,
     type ManagerTariffCreatePayload,
     type ManagerQuickTariffListResponse,
@@ -134,7 +132,7 @@ export type { ProductCreate, ProductDuplicatePayload, ProductUpdate };
 export type { SpecRegistryResponse };
 export type { LeadsInboxItemResponse };
 export type { ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse };
-export type { ManagerStaffCreatePayload, ManagerStaffResponse, ManagerStaffUpdatePayload, TelegramLoginPayload };
+export type { ManagerStaffCreatePayload, ManagerStaffResponse, ManagerStaffUpdatePayload };
 export type {
     ManagerBackupListResponse,
     ManagerBackupRunStartResponse,
@@ -304,18 +302,6 @@ export interface CatalogQualityReportParams {
 }
 
 export const api = {
-    async login(username: string, password: string) {
-        return await LoginService.loginAccessToken({ username, password });
-    },
-
-    async loginTelegram(payload: TelegramLoginPayload) {
-        return await LoginService.loginTelegram(payload);
-    },
-
-    async checkAuth() {
-        return await ManagerService.readUserMe();
-    },
-
     async getDashboardStats() {
         return await ManagerDashboardService.getDashboardStats();
     },

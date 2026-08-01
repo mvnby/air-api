@@ -4,6 +4,11 @@ import { api, type Product } from '../api';
 import { Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images } from 'lucide-vue-next';
 import BulkSpecsModal from './BulkSpecsModal.vue';
 import { notify } from '../services/ui-feedback';
+import {
+  clearManagerSession,
+  loginManagerWithPassword,
+  restoreManagerSession,
+} from '../services/manager-session';
 
 // ... (state refs) ...
 const products = ref<Product[]>([]);
@@ -148,11 +153,12 @@ const handleLogin = async () => {
     loginLoading.value = true;
     loginError.value = '';
     try {
-        await api.login(loginUsername.value, loginPassword.value);
+        await loginManagerWithPassword(loginUsername.value, loginPassword.value);
         isAuthenticated.value = true;
         showLoginModal.value = false;
         await loadProducts();
     } catch (e) {
+        clearManagerSession();
         loginError.value = 'Invalid credentials';
     } finally {
         loginLoading.value = false;
@@ -161,11 +167,12 @@ const handleLogin = async () => {
 
 const checkAuth = async () => {
     try {
-        await api.checkAuth();
+        await restoreManagerSession();
         isAuthenticated.value = true;
         // After auth confirmed, load data
         loadProducts();
     } catch (e) {
+        clearManagerSession();
         isAuthenticated.value = false;
         showLoginModal.value = true;
     }

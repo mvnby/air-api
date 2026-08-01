@@ -14,11 +14,12 @@ const {
 </script>
 
 <template>
-  <div :class="collapsed ? 'md:hidden' : ''">
+  <div>
     <ManagerStorefrontSwitcher
       :storefronts="storefronts"
       :selected-slug="selectedSlug"
       :disabled="loading || switching"
+      :collapsed="collapsed"
       @select="managerStorefrontSelection.switchTo"
     />
     <p v-if="error" class="mt-1 px-1 text-[11px] leading-snug text-amber-700" role="status">
