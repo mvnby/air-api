@@ -30,7 +30,7 @@ def test_order_source_fingerprint_remains_in_the_single_alembic_chain():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == ["c9e0f1a2b3d4"]
+    assert script.get_heads() == ["d0f1a2b3c4d5"]
     assert revision is not None
     assert revision.down_revision == "f3c4d5e6f7a8"
     assert set(revision.nextrev) == {"d8e7f6a5b4c3"}
