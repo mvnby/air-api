@@ -1,5 +1,6 @@
 import { OpenAPI } from '../../client/core/OpenAPI';
 import type { ApiRequestOptions } from '../../client/core/ApiRequestOptions';
+import { getManagerStorefrontRequestHeaders } from '../../services/manager-storefront-selection';
 import type {
   ServiceAttachmentAccessResponse,
   ServiceAttachmentCategory,
@@ -39,6 +40,7 @@ const request = async <T>(path: string, options: RequestOptions = {}): Promise<T
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...options.headers,
+    ...getManagerStorefrontRequestHeaders(path),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 

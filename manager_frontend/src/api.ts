@@ -119,8 +119,13 @@ import {
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
 import type { LeadsInboxItemResponse } from './client/models/LeadsInboxItemResponse';
+import {
+    getManagerStorefrontRequestHeaders,
+    installManagerStorefrontHeaderResolver,
+} from './services/manager-storefront-selection';
 
 OpenAPI.WITH_CREDENTIALS = true;
+installManagerStorefrontHeaderResolver();
 
 export type Segment = 'all' | 'b2c' | 'b2b';
 export type DashboardView = 'kanban' | 'list';
@@ -240,6 +245,7 @@ export const downloadManagerDocBlob = async (docId: number): Promise<{ blob: Blo
         credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin',
         headers: {
             Accept: 'application/pdf',
+            ...getManagerStorefrontRequestHeaders(url),
         },
     });
 

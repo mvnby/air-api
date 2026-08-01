@@ -6,7 +6,9 @@ import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './api';
 import type { ManagerAuthStatusResponse } from './client';
 import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
+import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
 import { confirmDialog } from './services/ui-feedback';
+import { managerStorefrontSelection } from './services/manager-storefront-selection';
 import {
   coreNavItems,
   defaultExpandedNavSections,
@@ -272,16 +274,20 @@ const fetchWebRebuildStatus = async () => {
     // Non-critical status widget; the rebuild button reports its own errors.
   }
 };
-
+const establishAuthenticatedSession = async (auth: ManagerAuthStatusResponse) => {
+  await managerStorefrontSelection.initialize(auth);
+  currentUserRole.value = String(auth.role || '');
+  isAuthenticated.value = true;
+  enforceAuthorizedLocation();
+};
 const handleLogin = async () => {
   loginLoading.value = true;
   loginError.value = '';
   try {
+    managerStorefrontSelection.prepareAuthentication();
     await api.login(loginUsername.value, loginPassword.value);
     const auth = await api.checkAuth() as ManagerAuthStatusResponse;
-    currentUserRole.value = String(auth.role || '');
-    isAuthenticated.value = true;
-    enforceAuthorizedLocation();
+    await establishAuthenticatedSession(auth);
     showLoginModal.value = false;
     loginPassword.value = '';
     void fetchLeadsCount();
@@ -297,11 +303,10 @@ const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
   telegramLoginLoading.value = true;
   loginError.value = '';
   try {
+    managerStorefrontSelection.prepareAuthentication();
     await api.loginTelegram(payload);
     const auth = await api.checkAuth() as ManagerAuthStatusResponse;
-    currentUserRole.value = String(auth.role || '');
-    isAuthenticated.value = true;
-    enforceAuthorizedLocation();
+    await establishAuthenticatedSession(auth);
     showLoginModal.value = false;
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
@@ -365,10 +370,9 @@ const fetchLeadsCount = async () => {
 
 const checkAuth = async () => {
   try {
+    managerStorefrontSelection.prepareAuthentication();
     const auth = await api.checkAuth() as ManagerAuthStatusResponse;
-    currentUserRole.value = String(auth.role || '');
-    isAuthenticated.value = true;
-    enforceAuthorizedLocation();
+    await establishAuthenticatedSession(auth);
     // Fetch the badge count once authenticated
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
@@ -528,6 +532,8 @@ watch(currentPath, () => {
           <Sun v-else class="h-3.5 w-3.5" />
           {{ theme === 'light' ? 'Тёмная тема' : 'Светлая тема' }}
         </button>
+
+        <ManagerStorefrontSwitcherHost class="mt-3" :collapsed="isDesktopNavCollapsed" />
       </div>
 
       <nav class="flex-1 overflow-y-auto p-3 space-y-2">
