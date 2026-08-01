@@ -38,9 +38,7 @@ from services.service_attachment_presenter import (
 )
 from services.service_attachment_link_service import ServiceAttachmentLinkService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import (
-    tenant_scope_clause,
-)
+from services.tenant_scope_service import tenant_scope_clause
 
 class ServiceAttachmentService:
     CATEGORIES = {
@@ -379,7 +377,7 @@ class ServiceAttachmentService:
                     OrderAttachmentLink.order_id.in_(normalized_ids),
                     OrderAttachmentLink.archived_at.is_(None),
                     ServiceAttachment.archived_at.is_(None),
-                    tenant_scope_clause(Order, tenant_scope),
+                    TenantEntityAccessService.order_clause(tenant_scope),
                     TenantEntityAccessService.order_customer_clause(tenant_scope),
                 )
                 .group_by(OrderAttachmentLink.order_id)
@@ -668,7 +666,7 @@ class ServiceAttachmentService:
             .where(
                 OrderAttachmentLink.attachment_id == attachment_id,
                 OrderAttachmentLink.archived_at.is_(None),
-                tenant_scope_clause(Order, tenant_scope),
+                TenantEntityAccessService.order_clause(tenant_scope),
                 TenantEntityAccessService.order_customer_clause(tenant_scope),
             )
             .limit(1)
@@ -717,7 +715,7 @@ class ServiceAttachmentService:
                     .where(
                         OrderAttachmentLink.attachment_id == attachment_id,
                         OrderAttachmentLink.archived_at.is_(None),
-                        tenant_scope_clause(Order, tenant_scope),
+                        TenantEntityAccessService.order_clause(tenant_scope),
                         TenantEntityAccessService.order_customer_clause(
                             tenant_scope
                         ),

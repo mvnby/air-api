@@ -9,7 +9,6 @@ from services.order_update.context import OrderUpdateContext
 from services.staff_task_notification_event_service import (
     StaffTaskNotificationEventService,
 )
-from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import tenant_scope_clause
 
 
@@ -61,7 +60,9 @@ async def _archive_customer_without_other_real_orders(
         select(func.count(Order.id)).where(
             Order.customer_id == order.customer_id,
             Order.id != order.id,
-            TenantEntityAccessService.order_clause(context.tenant_scope),
+            # Customer ownership is tenant-wide. An active order in another
+            # storefront must still prevent archiving the shared customer.
+            tenant_scope_clause(Order, context.tenant_scope),
             not_(
                 or_(
                     Order.status == OrderStatus.NEW_LEAD,
