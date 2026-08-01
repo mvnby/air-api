@@ -48,6 +48,9 @@ class GeneralMediaStorage(Protocol):
     ) -> StoredGeneralMediaObject:
         """Persist media content and return its public URL plus metadata."""
 
+    async def delete_media(self, path: str) -> None:
+        """Delete a previously returned storage path."""
+
 
 class LocalGeneralMediaStorage:
     provider_name = "local"
@@ -112,6 +115,14 @@ class LocalGeneralMediaStorage:
                 if not target_path.exists():
                     target_path.write_bytes(content)
         return stored
+
+    async def delete_media(self, path: str) -> None:
+        target = Path(path).resolve()
+        base = self.base_dir.resolve()
+        if target != base and base not in target.parents:
+            raise ValueError("Invalid general media storage path")
+        if target.is_file():
+            await asyncio.to_thread(target.unlink)
 
 
 class S3CompatibleGeneralMediaStorage:
@@ -221,6 +232,14 @@ class S3CompatibleGeneralMediaStorage:
             },
         )
         return stored
+
+    async def delete_media(self, path: str) -> None:
+        key = "/".join(_safe_path_parts(path))
+        await asyncio.to_thread(
+            self._get_client().delete_object,
+            Bucket=self.bucket,
+            Key=key,
+        )
 
     def _get_client(self) -> Any:
         if self._client_override is not None:

@@ -79,6 +79,12 @@ endpoint. A valid signature with malformed JSON can therefore return `422`,
 while a partial or forged envelope with the same bytes returns `401` before the
 parser or database dependency runs.
 
+Installation-estimate and repair-diagnostic attachments also enforce an
+18 MiB aggregate file-content limit inside the API. This protects direct
+canonical traffic that does not pass through the signed-body buffer and leaves
+approximately 2 MiB for multipart boundaries and form fields under the default
+20 MiB gateway envelope. Each image remains independently limited to 10 MiB.
+
 Changing method, raw path, raw query, upstream API host, storefront host or any
 body byte invalidates the signature.
 
@@ -127,6 +133,42 @@ an identical captured request can be replayed within the accepted time window.
 Every public write therefore still needs its domain idempotency contract. Keep
 the window short, use TLS, never log the envelope, and do not treat this HMAC as
 user authentication.
+
+## Public write idempotency
+
+`POST /api/v1/orders` and every public Lead intake (`contact`,
+`product-availability`, `installation-estimate`, and `repair-diagnostic`) use
+the `Idempotency-Key` header. The accepted value is 16–128 characters from
+`A-Z`, `a-z`, `0-9`, `.`, `_`, `:`, and `-`.
+
+The API hashes the key and validated logical request content before storage.
+Receipts are unique by server-resolved tenant, storefront, command, and key;
+they never store the key, raw body, form fields, filenames, or other request
+PII. Multipart fingerprints use normalized form fields and each attachment's
+content hash, MIME type, size, field, and position. Regenerating a multipart
+boundary therefore does not change the fingerprint.
+
+The receipt and business mutation commit in one PostgreSQL transaction. A
+concurrent request on another replica waits at the unique insert, then either
+replays the original successful status/body or takes ownership after a failed
+transaction. Reusing a key with different logical content returns `409`.
+
+Signed storefront writes without `Idempotency-Key` return `428`. During the
+canonical MVN transition only, an unsigned request accepted under
+`STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=false` receives an ephemeral
+server-generated key. This fallback preserves legacy availability but cannot
+deduplicate a client retry. Installation estimate keeps its pre-existing rule:
+the header is required even for unsigned canonical traffic. Before enabling
+required signatures, `mvn-web` must
+generate one key per user submission, retain it across transport retries, and
+send it for checkout, contact, availability, and repair; installation estimate
+already does so. Remove the unsigned fallback only together with the canonical
+signed-traffic rollout.
+
+The coordinated `mvn-web` release must also lower installation's current
+30 MiB client aggregate to 18 MiB and add the same 18 MiB aggregate check to
+repair. The API limit is authoritative; browser checks exist only to fail early
+with a useful message.
 
 ## Resolution and compatibility
 

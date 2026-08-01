@@ -21,6 +21,15 @@ from services.lead_service import LeadService
 from services.order_service import OrderService
 from services.staff_user_service import StaffUserService
 from services.website_lead_service import WebsiteLeadService
+from services.public_write_idempotency_service import PublicWriteIdempotencyService
+
+
+async def _execute_once(session, *, operation, **_kwargs):
+    result = await operation()
+    commit = getattr(session, "commit", None)
+    if commit is not None:
+        await commit()
+    return SimpleNamespace(value=result.value, replayed=False)
 
 
 @pytest.mark.asyncio
@@ -51,6 +60,7 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(
         fake_recipients,
     )
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_contact_lead(
         object(),
@@ -61,6 +71,7 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(
             message="Нужен монтаж <script>",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="contact-request-unit-0001",
     )
 
     assert response == PublicContactLeadResponse(
@@ -156,6 +167,7 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
     monkeypatch.setattr(settings, "ADMIN_IDS", "1001,1002")
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_product_availability_lead(
         fake_session,
@@ -165,6 +177,7 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
             name="Иван",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="availability-request-unit-0001",
     )
 
     assert response.lead_id == 91
@@ -233,6 +246,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
     monkeypatch.setattr(settings, "ADMIN_IDS", "1001")
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_product_availability_lead(
         fake_session,
@@ -242,6 +256,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
             name="Иван",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="availability-request-unit-0002",
     )
 
     assert response.lead_id == 91
@@ -309,6 +324,7 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
     monkeypatch.setattr(settings, "ADMIN_IDS", "1001")
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_product_availability_lead(
         fake_session,
@@ -318,6 +334,7 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
             name="Иван",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="availability-request-unit-0003",
     )
 
     assert response.lead_id == 92
@@ -340,10 +357,11 @@ async def test_public_product_availability_lead_endpoint_returns_response(
     async def override_tenant_scope():
         return tenant_scope
 
-    async def fake_create(_session, payload, *, tenant_scope):
+    async def fake_create(_session, payload, *, tenant_scope, idempotency_key):
         assert payload.product_id == 7
         assert tenant_scope.tenant_id == 1
         assert tenant_scope.storefront_id == 1
+        assert idempotency_key
         return ProductAvailabilityLeadResponse(
             lead_id=12,
             status="new_lead",

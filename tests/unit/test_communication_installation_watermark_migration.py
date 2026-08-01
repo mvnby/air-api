@@ -32,7 +32,7 @@ def test_installation_watermark_precedes_the_single_provider_boundary_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == ["e1f2a3b4c5d6"]
+    assert script.get_heads() == ["aa91c2d4e6f8"]
     assert revision is not None
     assert revision.down_revision == "f4d5e6f7a8b9"
 

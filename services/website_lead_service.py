@@ -20,6 +20,11 @@ from schemas import (
 from services.bot_service import BotService
 from services.lead_service import LeadService
 from services.order_service import OrderService
+from services.public_write_fingerprint_service import PublicWriteFingerprintService
+from services.public_write_idempotency_service import (
+    PublicWriteCommandResponse,
+    PublicWriteIdempotencyService,
+)
 from services.staff_user_service import StaffUserService
 from services.tenant_scope_service import (
     TenantScope,
@@ -35,6 +40,48 @@ class WebsiteLeadService:
 
     @staticmethod
     async def create_contact_lead(
+        session: AsyncSession,
+        payload: PublicContactLeadPayload,
+        *,
+        tenant_scope: TenantScope,
+        idempotency_key: str,
+    ) -> PublicContactLeadResponse:
+        created_lead_id: int | None = None
+
+        async def create() -> PublicWriteCommandResponse[PublicContactLeadResponse]:
+            nonlocal created_lead_id
+            response = await WebsiteLeadService._create_contact_lead_mutation(
+                session,
+                payload,
+                tenant_scope=tenant_scope,
+            )
+            created_lead_id = response.lead_id
+            return PublicWriteCommandResponse(
+                value=response,
+                resource_type="lead",
+                resource_id=response.lead_id,
+            )
+
+        outcome = await PublicWriteIdempotencyService.execute(
+            session,
+            tenant_scope=tenant_scope,
+            command_name="public_contact_lead_v1",
+            idempotency_key=idempotency_key,
+            request_fingerprint=PublicWriteFingerprintService.for_payload(payload),
+            response_model=PublicContactLeadResponse,
+            operation=create,
+        )
+        if not outcome.replayed and created_lead_id is not None:
+            await WebsiteLeadService._notify_contact_lead_admins(
+                session=session,
+                lead_id=created_lead_id,
+                payload=payload,
+                tenant_scope=tenant_scope,
+            )
+        return outcome.value
+
+    @staticmethod
+    async def _create_contact_lead_mutation(
         session: AsyncSession,
         payload: PublicContactLeadPayload,
         *,
@@ -55,12 +102,6 @@ class WebsiteLeadService:
                 email=payload.email,
                 request_text="\n".join(request_lines),
             ),
-            tenant_scope=tenant_scope,
-        )
-        await WebsiteLeadService._notify_contact_lead_admins(
-            session=session,
-            lead_id=int(lead_data["id"]),
-            payload=payload,
             tenant_scope=tenant_scope,
         )
         return PublicContactLeadResponse(
@@ -121,7 +162,54 @@ class WebsiteLeadService:
         payload: ProductAvailabilityLeadPayload,
         *,
         tenant_scope: TenantScope,
+        idempotency_key: str,
     ) -> ProductAvailabilityLeadResponse:
+        notification: tuple[Order, Product, bool] | None = None
+
+        async def create() -> PublicWriteCommandResponse[ProductAvailabilityLeadResponse]:
+            nonlocal notification
+            response, notification = (
+                await WebsiteLeadService._create_product_availability_mutation(
+                    session,
+                    payload,
+                    tenant_scope=tenant_scope,
+                )
+            )
+            return PublicWriteCommandResponse(
+                value=response,
+                resource_type="order",
+                resource_id=response.lead_id,
+            )
+
+        outcome = await PublicWriteIdempotencyService.execute(
+            session,
+            tenant_scope=tenant_scope,
+            command_name="public_product_availability_lead_v1",
+            idempotency_key=idempotency_key,
+            request_fingerprint=PublicWriteFingerprintService.for_payload(payload),
+            response_model=ProductAvailabilityLeadResponse,
+            operation=create,
+        )
+        if not outcome.replayed and notification is not None:
+            order, product, is_repeat = notification
+            await WebsiteLeadService._notify_admins(
+                session=session,
+                order=order,
+                product=product,
+                payload=payload,
+                now=datetime.now(),
+                is_repeat=is_repeat,
+                tenant_scope=tenant_scope,
+            )
+        return outcome.value
+
+    @staticmethod
+    async def _create_product_availability_mutation(
+        session: AsyncSession,
+        payload: ProductAvailabilityLeadPayload,
+        *,
+        tenant_scope: TenantScope,
+    ) -> tuple[ProductAvailabilityLeadResponse, tuple[Order, Product, bool] | None]:
         product = await ProductDAO.get_by_id(session, payload.product_id)
         if not product or not product.is_published:
             raise LookupError(f"Product with id={payload.product_id} not found")
@@ -144,20 +232,13 @@ class WebsiteLeadService:
                 payload=payload,
                 now=now,
             )
-            if should_notify:
-                await WebsiteLeadService._notify_admins(
-                    session=session,
-                    order=order,
-                    product=product,
-                    payload=payload,
-                    now=now,
-                    is_repeat=True,
-                    tenant_scope=tenant_scope,
-                )
-            return ProductAvailabilityLeadResponse(
-                lead_id=int(order.id or 0),
-                status=str(order.status.value if hasattr(order.status, "value") else order.status),
-                created_at=order.created_at,
+            return (
+                ProductAvailabilityLeadResponse(
+                    lead_id=int(order.id or 0),
+                    status=str(order.status.value if hasattr(order.status, "value") else order.status),
+                    created_at=order.created_at,
+                ),
+                (order, product, True) if should_notify else None,
             )
 
         order = await OrderService.create_from_website(
@@ -171,31 +252,23 @@ class WebsiteLeadService:
             initial_status=OrderStatus.NEW_LEAD,
             comment=WebsiteLeadService._build_request_text(product),
             tenant_scope=tenant_scope,
+            commit=False,
         )
         WebsiteLeadService._set_order_meta(
             order,
             product_id=product.id,
             requested_at=now,
-            notified_at=now,
+            notified_at=None,
         )
         session.add(order)
-        await session.commit()
-        await session.refresh(order, ["customer"])
 
-        await WebsiteLeadService._notify_admins(
-            session=session,
-            order=order,
-            product=product,
-            payload=payload,
-            now=now,
-            is_repeat=False,
-            tenant_scope=tenant_scope,
-        )
-
-        return ProductAvailabilityLeadResponse(
-            lead_id=int(order.id or 0),
-            status=str(order.status.value if hasattr(order.status, "value") else order.status),
-            created_at=order.created_at,
+        return (
+            ProductAvailabilityLeadResponse(
+                lead_id=int(order.id or 0),
+                status=str(order.status.value if hasattr(order.status, "value") else order.status),
+                created_at=order.created_at,
+            ),
+            (order, product, False),
         )
 
     @staticmethod
@@ -271,8 +344,6 @@ class WebsiteLeadService:
             notified_at=None,
         )
         session.add(order)
-        await session.commit()
-        await session.refresh(order, ["customer"])
         return order
 
     @staticmethod

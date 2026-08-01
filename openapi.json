@@ -2456,15 +2456,33 @@
         ],
         "summary": "Create Public Contact Lead",
         "operationId": "create_public_contact_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PublicContactLeadPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2476,6 +2494,15 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid idempotency key"
+          },
+          "409": {
+            "description": "Idempotency key reused with different content"
+          },
+          "428": {
+            "description": "Signed write requires Idempotency-Key"
           },
           "422": {
             "description": "Validation Error",
@@ -2505,9 +2532,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9._:-]+$",
               "title": "Idempotency-Key"
             }
           }
@@ -2563,15 +2587,33 @@
         ],
         "summary": "Create Product Availability Lead",
         "operationId": "create_product_availability_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProductAvailabilityLeadPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2583,6 +2625,15 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid idempotency key"
+          },
+          "409": {
+            "description": "Idempotency key reused with different content"
+          },
+          "428": {
+            "description": "Signed write requires Idempotency-Key"
           },
           "422": {
             "description": "Validation Error",
@@ -2605,15 +2656,33 @@
         ],
         "summary": "Create Repair Diagnostic Lead",
         "operationId": "create_repair_diagnostic_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_create_repair_diagnostic_lead"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2625,6 +2694,15 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid form data or idempotency key"
+          },
+          "409": {
+            "description": "Idempotency key reused with different content"
+          },
+          "428": {
+            "description": "Signed write requires Idempotency-Key"
           },
           "422": {
             "description": "Validation Error",
@@ -2648,15 +2726,33 @@
         "summary": "Create Order",
         "description": "Create a new order from website.\nAccepts customer information and cart items.",
         "operationId": "create_order",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OrderPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2669,6 +2765,9 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid idempotency key"
+          },
           "409": {
             "description": "The selected installation quote conflicts with current tariffs.",
             "content": {
@@ -2678,6 +2777,9 @@
                 }
               }
             }
+          },
+          "428": {
+            "description": "Signed write requires Idempotency-Key"
           },
           "422": {
             "description": "Validation Error",

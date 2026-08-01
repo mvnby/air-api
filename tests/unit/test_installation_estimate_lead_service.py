@@ -19,6 +19,8 @@ from services.installation_estimate_lead_service import (
     InstallationEstimateIdempotencyConflict,
     InstallationEstimateIncomingFile,
     InstallationEstimateLeadService,
+    MAX_FILE_BYTES,
+    MAX_PAYLOAD_BYTES,
 )
 from services.private_attachment_storage_service import StoredPrivateObject
 from services.order_service import OrderService
@@ -40,9 +42,11 @@ class FakePrivateStorage:
 
     def __init__(self):
         self.objects: dict[str, bytes] = {}
+        self.save_calls: list[str] = []
 
     async def save(self, *, content, content_hash, extension, content_type, variant):
         key = f"service-attachments/{content_hash}/{variant}.{extension}"
+        self.save_calls.append(key)
         self.objects[key] = content
         return StoredPrivateObject(
             provider=self.provider_name,
@@ -73,6 +77,19 @@ class FakeUpload:
 
     async def read(self, size=-1):
         return _png_bytes()
+
+
+class SizedFakeUpload:
+    filename = "photo.png"
+    content_type = "image/png"
+
+    def __init__(self, content: bytes):
+        self.content = content
+        self.read_sizes: list[int] = []
+
+    async def read(self, size=-1):
+        self.read_sizes.append(size)
+        return self.content[:size] if size >= 0 else self.content
 
 
 @pytest.fixture
@@ -133,6 +150,7 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
         idempotency_key="estimate-request-0001",
         storage=storage,
     )
+    first_save_count = len(storage.save_calls)
     replayed = await InstallationEstimateLeadService.create_lead(
         installation_estimate_session,
         tenant_scope=tenant_scope,
@@ -143,9 +161,11 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     )
 
     assert created.replayed is False
-    assert replayed.replayed is True
+    assert replayed.replayed is False
     assert replayed.order_id == created.order_id
     assert replayed.attachment_count == 1
+    assert first_save_count > 0
+    assert len(storage.save_calls) == first_save_count
 
     order = await installation_estimate_session.get(Order, created.order_id)
     assert order is not None
@@ -206,7 +226,7 @@ async def test_installation_estimate_rejects_reused_key_with_different_request(
 
     with pytest.raises(
         InstallationEstimateIdempotencyConflict,
-        match="другой заявки",
+        match="different request content",
     ):
         await InstallationEstimateLeadService.create_lead(
             installation_estimate_session,
@@ -273,8 +293,8 @@ async def test_installation_estimate_idempotency_is_isolated_by_storefront(
     assert first.replayed is False
     assert second.replayed is False
     assert first.order_id != second.order_id
-    assert first_replay.replayed is True
-    assert second_replay.replayed is True
+    assert first_replay.replayed is False
+    assert second_replay.replayed is False
     assert first_replay.order_id == first.order_id
     assert second_replay.order_id == second.order_id
 
@@ -310,7 +330,7 @@ async def test_installation_estimate_same_storefront_still_rejects_key_reuse(
 
     with pytest.raises(
         InstallationEstimateIdempotencyConflict,
-        match="другой заявки",
+        match="different request content",
     ):
         await InstallationEstimateLeadService.create_lead(
             installation_estimate_session,
@@ -363,4 +383,26 @@ async def test_installation_estimate_enforces_per_category_file_limit():
     with pytest.raises(ValueError, match="не больше 5"):
         await InstallationEstimateLeadService.collect_uploads(
             {"indoor_unit": [FakeUpload() for _ in range(6)]}
+        )
+
+
+@pytest.mark.asyncio
+async def test_installation_estimate_aggregate_upload_boundary(monkeypatch):
+    async def accept_image(**_kwargs):
+        return None
+
+    monkeypatch.setattr(InstallationEstimateLeadService, "_validate_image", accept_image)
+    first = SizedFakeUpload(b"a" * (MAX_PAYLOAD_BYTES // 2))
+    exact = SizedFakeUpload(b"b" * (MAX_PAYLOAD_BYTES // 2))
+
+    uploads = await InstallationEstimateLeadService.collect_uploads(
+        {"indoor_unit": [first, exact]}
+    )
+    assert sum(len(upload.content) for upload in uploads) == MAX_PAYLOAD_BYTES
+    assert first.read_sizes == [MAX_FILE_BYTES + 1]
+
+    overflow = SizedFakeUpload(b"c" * (MAX_PAYLOAD_BYTES // 2 + 1))
+    with pytest.raises(ValueError, match="18 МБ"):
+        await InstallationEstimateLeadService.collect_uploads(
+            {"indoor_unit": [first, overflow]}
         )

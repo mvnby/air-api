@@ -9,6 +9,11 @@ from schemas import OrderPayload, OrderResponse
 from services.bot_service import BotService
 from services.installation_pricing_service import InstallationPricingService
 from services.order_service import OrderService
+from services.public_write_fingerprint_service import PublicWriteFingerprintService
+from services.public_write_idempotency_service import (
+    PublicWriteCommandResponse,
+    PublicWriteIdempotencyService,
+)
 from services.staff_user_service import StaffUserService
 from services.tenant_scope_service import TenantScope
 
@@ -22,7 +27,54 @@ class WebsiteOrderService:
         payload: OrderPayload,
         *,
         tenant_scope: TenantScope,
+        idempotency_key: str,
     ) -> OrderResponse:
+        created_order: Order | None = None
+
+        async def create() -> PublicWriteCommandResponse[OrderResponse]:
+            nonlocal created_order
+            created_order = await WebsiteOrderService._create_order_mutation(
+                session,
+                payload,
+                tenant_scope=tenant_scope,
+            )
+            response = OrderResponse(
+                id=created_order.id,
+                status=created_order.status,
+                total_amount=created_order.total_amount,
+                created_at=created_order.created_at,
+            )
+            return PublicWriteCommandResponse(
+                value=response,
+                resource_type="order",
+                resource_id=int(created_order.id or 0),
+            )
+
+        outcome = await PublicWriteIdempotencyService.execute(
+            session,
+            tenant_scope=tenant_scope,
+            command_name="public_order_checkout_v1",
+            idempotency_key=idempotency_key,
+            request_fingerprint=PublicWriteFingerprintService.for_payload(payload),
+            response_model=OrderResponse,
+            operation=create,
+        )
+        if not outcome.replayed and created_order is not None:
+            await WebsiteOrderService._notify_admins(
+                session,
+                created_order,
+                payload,
+                tenant_scope=tenant_scope,
+            )
+        return outcome.value
+
+    @staticmethod
+    async def _create_order_mutation(
+        session: AsyncSession,
+        payload: OrderPayload,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Order:
         logger.info(
             "PUBLIC_CHECKOUT_RECEIVED item_count=%s installation_item_count=%s",
             len(payload.items),
@@ -64,21 +116,9 @@ class WebsiteOrderService:
                 }
             } if pricing_snapshots else None,
             tenant_scope=tenant_scope,
+            commit=False,
         )
-
-        await WebsiteOrderService._notify_admins(
-            session,
-            order,
-            payload,
-            tenant_scope=tenant_scope,
-        )
-
-        return OrderResponse(
-            id=order.id,
-            status=order.status,
-            total_amount=order.total_amount,
-            created_at=order.created_at,
-        )
+        return order
 
     @staticmethod
     async def _notify_admins(

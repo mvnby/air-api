@@ -91,6 +91,7 @@ from .product_collection import (
     ProductCollectionItem,
     ProductCollectionPlacement,
 )
+from .public_write_idempotency import PublicWriteIdempotency
 from .supplier import (
     ProductLocalStock,
     ProductSupplierMapping,
@@ -179,6 +180,7 @@ __all__ = [
     "ProductCollection",
     "ProductCollectionItem",
     "ProductCollectionPlacement",
+    "PublicWriteIdempotency",
     "ProductAttachment",
     "ProductImage",
     "ProductMainImageCleanupBatch",

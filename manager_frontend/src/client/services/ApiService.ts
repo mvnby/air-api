@@ -295,19 +295,27 @@ export class ApiService {
     /**
      * Create Public Contact Lead
      * @param requestBody
+     * @param idempotencyKey
      * @returns PublicContactLeadResponse Successful Response
      * @throws ApiError
      */
     public static createPublicContactLead(
         requestBody: PublicContactLeadPayload,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<PublicContactLeadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/leads/contact',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                400: `Invalid idempotency key`,
+                409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
+                428: `Signed write requires Idempotency-Key`,
             },
         });
     }
@@ -341,38 +349,54 @@ export class ApiService {
     /**
      * Create Product Availability Lead
      * @param requestBody
+     * @param idempotencyKey
      * @returns ProductAvailabilityLeadResponse Successful Response
      * @throws ApiError
      */
     public static createProductAvailabilityLead(
         requestBody: ProductAvailabilityLeadPayload,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<ProductAvailabilityLeadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/leads/product-availability',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                400: `Invalid idempotency key`,
+                409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
+                428: `Signed write requires Idempotency-Key`,
             },
         });
     }
     /**
      * Create Repair Diagnostic Lead
      * @param formData
+     * @param idempotencyKey
      * @returns RepairDiagnosticLeadResponse Successful Response
      * @throws ApiError
      */
     public static createRepairDiagnosticLead(
         formData: Body_create_repair_diagnostic_lead,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<RepairDiagnosticLeadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/leads/repair-diagnostic',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
             formData: formData,
             mediaType: 'multipart/form-data',
             errors: {
+                400: `Invalid form data or idempotency key`,
+                409: `Idempotency key reused with different content`,
                 422: `Validation Error`,
+                428: `Signed write requires Idempotency-Key`,
             },
         });
     }
@@ -381,20 +405,27 @@ export class ApiService {
      * Create a new order from website.
      * Accepts customer information and cart items.
      * @param requestBody
+     * @param idempotencyKey
      * @returns OrderResponse Successful Response
      * @throws ApiError
      */
     public static createOrder(
         requestBody: OrderPayload,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<OrderResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/orders',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                400: `Invalid idempotency key`,
                 409: `The selected installation quote conflicts with current tariffs.`,
                 422: `Validation Error`,
+                428: `Signed write requires Idempotency-Key`,
             },
         });
     }

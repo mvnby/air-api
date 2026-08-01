@@ -10,17 +10,25 @@ from models import LeadSource, Order, OrderStatus
 from services.bot_service import BotService
 from services.general_media_storage_service import StoredGeneralMediaObject
 from services.repair_diagnostic_service import (
+    MAX_PAYLOAD_BYTES,
+    MAX_PHOTO_BYTES,
     RepairDiagnosticIncomingFile,
     RepairDiagnosticLeadPayload,
     RepairDiagnosticService,
 )
+from services.repair_diagnostic_intake_service import RepairDiagnosticIntakeService
 from services.staff_user_service import StaffUserService
 
 
 class FakeRepairDiagnosticStorage:
     provider_name = "local"
 
+    def __init__(self):
+        self.save_calls = []
+        self.delete_calls = []
+
     async def save_media(self, **kwargs):
+        self.save_calls.append(kwargs)
         variant_type = kwargs["variant_type"]
         extension = kwargs["extension"]
         return StoredGeneralMediaObject(
@@ -30,6 +38,22 @@ class FakeRepairDiagnosticStorage:
             path=f"media/orders/42/repair-diagnostic/{variant_type}/hash.{extension}",
             size_bytes=len(kwargs["content"]),
         )
+
+    async def delete_media(self, path):
+        self.delete_calls.append(path)
+
+
+class SizedFakeUpload:
+    filename = "photo.png"
+    content_type = "image/png"
+
+    def __init__(self, content: bytes):
+        self.content = content
+        self.read_sizes = []
+
+    async def read(self, size=-1):
+        self.read_sizes.append(size)
+        return self.content[:size] if size >= 0 else self.content
 
 
 @pytest.fixture
@@ -51,9 +75,10 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     monkeypatch,
     tenant_scope,
 ):
+    storage = FakeRepairDiagnosticStorage()
     monkeypatch.setattr(
-        "services.repair_diagnostic_service.get_general_media_storage",
-        lambda: FakeRepairDiagnosticStorage(),
+        "services.repair_diagnostic_intake_service.get_general_media_storage",
+        lambda: storage,
     )
     payload = RepairDiagnosticLeadPayload.model_validate(
         {
@@ -92,16 +117,32 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
         ],
     }
 
-    response, nameplate_files = await RepairDiagnosticService.create_lead(
+    response, nameplate_files, replayed = await RepairDiagnosticIntakeService.create_lead(
         sqlite_repair_diagnostic_session,
         payload=payload,
         uploads=uploads,
         tenant_scope=tenant_scope,
+        idempotency_key="repair-request-unit-0001",
     )
 
     assert response.status == "new_lead"
     assert response.ai_pre_diagnosis_status == "pending"
     assert len(nameplate_files) == 1
+    assert replayed is False
+    replay_response, _, replayed = await RepairDiagnosticIntakeService.create_lead(
+        sqlite_repair_diagnostic_session,
+        payload=payload,
+        uploads=uploads,
+        tenant_scope=tenant_scope,
+        idempotency_key="repair-request-unit-0001",
+    )
+    assert replayed is True
+    assert replay_response == response
+    assert len(storage.save_calls) == 2
+    assert all(
+        call["namespace"].startswith("public-write/1/1/repair-diagnostic/")
+        for call in storage.save_calls
+    )
 
     order = await sqlite_repair_diagnostic_session.get(Order, response.order_id)
     assert order is not None
@@ -124,6 +165,32 @@ async def test_repair_diagnostic_service_creates_repair_order_with_structured_me
     assert repair_meta["ai_pre_diagnosis_status"] == "pending"
     assert repair_meta["preliminary_fault_type"] == "refrigerant_leak"
     assert "Фото шильдика" not in repair_meta["missing_data"]
+
+
+@pytest.mark.asyncio
+async def test_repair_diagnostic_aggregate_upload_boundary(monkeypatch):
+    monkeypatch.setattr(
+        "services.repair_diagnostic_service._validate_photo",
+        lambda **_kwargs: None,
+    )
+    first = SizedFakeUpload(b"a" * (MAX_PAYLOAD_BYTES // 2))
+    exact = SizedFakeUpload(b"b" * (MAX_PAYLOAD_BYTES // 2))
+
+    uploads = await RepairDiagnosticService.collect_uploads(
+        {"nameplate": [first], "indoor_unit": [exact]}
+    )
+    assert sum(
+        len(item.content)
+        for group in uploads.values()
+        for item in group
+    ) == MAX_PAYLOAD_BYTES
+    assert first.read_sizes == [MAX_PHOTO_BYTES + 1]
+
+    overflow = SizedFakeUpload(b"c" * (MAX_PAYLOAD_BYTES // 2 + 1))
+    with pytest.raises(ValueError, match="18 МБ"):
+        await RepairDiagnosticService.collect_uploads(
+            {"nameplate": [first], "indoor_unit": [overflow]}
+        )
 
 
 @pytest.mark.asyncio

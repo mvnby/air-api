@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import mimetypes
 from dataclasses import dataclass
@@ -15,12 +16,15 @@ from sqlmodel import select
 
 from core.database import async_session_maker
 from core.input_validation import validate_required_phone
-from models import LeadSource, Order, OrderStatus
+from core.public_upload_limits import PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
+from models import Order
 from schemas import ManagerRepairActAiDraftPayload
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_service import BotService
 from services.defect_act_ai_service import DefectActAIService
-from services.general_media_storage_service import get_general_media_storage
+from services.general_media_storage_service import (
+    GeneralMediaStorage,
+)
 from services.order_service import OrderService
 from services.tenant_scope_service import TenantScope
 from services.staff_user_service import StaffUserService
@@ -86,6 +90,7 @@ PHOTO_FIELDS = set(PHOTO_LABELS)
 ALLOWED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 MAX_FILES_PER_FIELD = 5
+MAX_PAYLOAD_BYTES = PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
 
 SYMPTOM_FAULT_TYPE = {
     "not_cooling": "refrigerant_leak",
@@ -193,6 +198,15 @@ class RepairDiagnosticIncomingFile:
     filename: str
     content_type: Optional[str]
     content: bytes
+    content_hash: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.content_hash:
+            object.__setattr__(
+                self,
+                "content_hash",
+                hashlib.sha256(self.content).hexdigest(),
+            )
 
 
 class RepairDiagnosticService:
@@ -209,6 +223,7 @@ class RepairDiagnosticService:
     @staticmethod
     async def collect_uploads(raw_groups: Dict[str, Any]) -> Dict[str, List[RepairDiagnosticIncomingFile]]:
         uploads: Dict[str, List[RepairDiagnosticIncomingFile]] = {field: [] for field in PHOTO_FIELDS}
+        total_bytes = 0
         for field, raw_files in raw_groups.items():
             if field not in PHOTO_FIELDS:
                 continue
@@ -216,78 +231,25 @@ class RepairDiagnosticService:
             if len(files) > MAX_FILES_PER_FIELD:
                 raise ValueError(f"{PHOTO_LABELS[field]}: можно загрузить не больше {MAX_FILES_PER_FIELD} файлов")
             for upload in files:
-                content = await upload.read()
+                content = await upload.read(MAX_PHOTO_BYTES + 1)
                 content_type = _normalize_content_type(getattr(upload, "content_type", None))
                 filename = _clean_filename(getattr(upload, "filename", None), content_type)
+                total_bytes += len(content)
+                if total_bytes > MAX_PAYLOAD_BYTES:
+                    raise ValueError(
+                        "Общий размер фотографий не должен превышать "
+                        f"{MAX_PAYLOAD_BYTES // (1024 * 1024)} МБ"
+                    )
                 _validate_photo(content=content, content_type=content_type, label=PHOTO_LABELS[field])
                 uploads[field].append(
                     RepairDiagnosticIncomingFile(
                         filename=filename,
                         content_type=content_type,
                         content=content,
+                        content_hash=hashlib.sha256(content).hexdigest(),
                     )
                 )
         return uploads
-
-    @staticmethod
-    async def create_lead(
-        session,
-        *,
-        tenant_scope: TenantScope,
-        payload: RepairDiagnosticLeadPayload,
-        uploads: Dict[str, List[RepairDiagnosticIncomingFile]],
-    ) -> tuple[RepairDiagnosticLeadResponse, list[RepairDiagnosticIncomingFile]]:
-        comment = RepairDiagnosticService._build_order_comment(payload, uploads)
-        order = await OrderService.create_from_website(
-            session=session,
-            customer_name=payload.contact.name,
-            customer_phone=payload.contact.phone,
-            customer_email=None,
-            customer_address=payload.contact.address,
-            items=[],
-            lead_source=LeadSource.SITE,
-            initial_status=OrderStatus.NEW_LEAD,
-            comment=comment,
-            tenant_scope=tenant_scope,
-        )
-
-        order.workflow_type = "repair"
-        order.title = f"Ремонт кондиционера: {SYMPTOM_LABELS[payload.symptom]}"
-        order.delivery_address = payload.contact.address
-
-        photos = await RepairDiagnosticService._store_uploads(order_id=int(order.id), uploads=uploads)
-        repair_meta = RepairDiagnosticService._build_repair_meta(payload, photos)
-        meta = dict(order.technical_meta or {}) if isinstance(order.technical_meta, dict) else {}
-        meta["service_type"] = "repair"
-        order.technical_meta = meta
-        OrderService._set_repair_meta(
-            order,
-            repair_meta,
-            default_status=OrderService.REPAIR_DEFAULT_STATUS,
-        )
-        flag_modified(order, "technical_meta")
-
-        await OrderService._maybe_add_default_repair_diagnostic(session, order)
-        session.add(order)
-        await session.commit()
-        await session.refresh(order)
-
-        await RepairDiagnosticService._notify_admins(
-            session,
-            order,
-            payload,
-            photos,
-            tenant_scope=tenant_scope,
-        )
-
-        response = RepairDiagnosticLeadResponse(
-            order_id=int(order.id or 0),
-            status=str(order.status.value if hasattr(order.status, "value") else order.status),
-            created_at=order.created_at,
-            ai_pre_diagnosis_status=repair_meta["ai_pre_diagnosis_status"],
-        )
-        nameplate_files = uploads.get("nameplate") or []
-        return response, nameplate_files[:1]
 
     @staticmethod
     async def run_ai_pre_diagnosis(
@@ -338,22 +300,24 @@ class RepairDiagnosticService:
     @staticmethod
     async def _store_uploads(
         *,
-        order_id: int,
         uploads: Dict[str, List[RepairDiagnosticIncomingFile]],
+        storage: GeneralMediaStorage,
+        created_paths: set[str],
+        storage_namespace: str,
     ) -> Dict[str, List[Dict[str, Any]]]:
-        storage = get_general_media_storage()
         stored: Dict[str, List[Dict[str, Any]]] = {field: [] for field in PHOTO_FIELDS}
         uploaded_at = datetime.now().isoformat(timespec="seconds")
         for field, files in uploads.items():
-            for file in files:
+            for position, file in enumerate(files):
                 extension = _extension_for_file(file.filename, file.content_type)
                 saved = await storage.save_media(
                     content=file.content,
-                    namespace=f"orders/{order_id}/repair-diagnostic",
-                    variant_type=field,
+                    namespace=storage_namespace,
+                    variant_type=f"{field}-{position}",
                     extension=extension,
                     content_type=file.content_type,
                 )
+                created_paths.add(saved.path)
                 stored[field].append(
                     {
                         "filename": file.filename,

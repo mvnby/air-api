@@ -10,6 +10,15 @@ from services.installation_pricing_service import InstallationPricingService
 from services.order_service import OrderService
 from services.staff_user_service import StaffUserService
 from services.website_order_service import WebsiteOrderService
+from services.public_write_idempotency_service import PublicWriteIdempotencyService
+
+
+async def _execute_once(session, *, operation, **_kwargs):
+    result = await operation()
+    commit = getattr(session, "commit", None)
+    if commit is not None:
+        await commit()
+    return SimpleNamespace(value=result.value, replayed=False)
 
 
 @pytest.mark.asyncio
@@ -34,6 +43,7 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
     monkeypatch.setattr(OrderService, "create_from_website", fake_create_from_website)
     monkeypatch.setattr(InstallationPricingService, "price_public_items", fake_price_items)
     monkeypatch.setattr(WebsiteOrderService, "_notify_admins", fake_notify_admins)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     payload = OrderPayload.model_validate(
         {
@@ -61,6 +71,7 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
         SimpleNamespace(),
         payload,
         tenant_scope=tenant_scope,
+        idempotency_key="checkout-request-unit-0001",
     )
 
     assert response.id == 55
@@ -108,6 +119,7 @@ async def test_website_checkout_does_not_attempt_telegram_without_recipients(
         fake_recipients,
     )
     monkeypatch.setattr(BotService, "send_message", fail_if_sent)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     payload = OrderPayload.model_validate(
         {
@@ -124,6 +136,7 @@ async def test_website_checkout_does_not_attempt_telegram_without_recipients(
         object(),
         payload,
         tenant_scope=tenant_scope,
+        idempotency_key="checkout-request-unit-0002",
     )
 
     assert response.id == 56

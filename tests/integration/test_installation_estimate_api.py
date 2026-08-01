@@ -92,7 +92,7 @@ async def test_public_installation_estimate_contract_and_replay(
     assert response.status_code == 200, response.text
     assert replay.status_code == 200, replay.text
     assert response.json()["replayed"] is False
-    assert replay.json()["replayed"] is True
+    assert replay.json()["replayed"] is False
     assert replay.json()["order_id"] == response.json()["order_id"]
     assert response.json()["attachment_count"] == 2
 

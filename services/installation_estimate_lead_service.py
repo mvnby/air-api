@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
-import json
 import logging
 import warnings
 from dataclasses import dataclass
@@ -18,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from core.public_upload_limits import PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
 from models import Customer, LeadSource, Order, OrderStatus
 from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
@@ -40,14 +40,22 @@ from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
     get_private_attachment_storage,
 )
+from services.public_write_fingerprint_service import (
+    PublicWriteAttachmentFingerprint,
+    PublicWriteFingerprintService,
+)
+from services.public_write_idempotency_service import (
+    PublicWriteCommandResponse,
+    PublicWriteIdempotencyConflict,
+    PublicWriteIdempotencyService,
+)
 from services.service_attachment_service import ServiceAttachmentService
 
 
 logger = logging.getLogger(__name__)
 
 
-class InstallationEstimateIdempotencyConflict(ValueError):
-    pass
+InstallationEstimateIdempotencyConflict = PublicWriteIdempotencyConflict
 
 
 class InstallationEstimateTemporarilyUnavailable(RuntimeError):
@@ -69,7 +77,7 @@ ALLOWED_IMAGE_MIME_TYPES = {
 MAX_FILES_PER_CATEGORY = 5
 MAX_FILES_TOTAL = 15
 MAX_FILE_BYTES = 10 * 1024 * 1024
-MAX_PAYLOAD_BYTES = 30 * 1024 * 1024
+MAX_PAYLOAD_BYTES = PUBLIC_ATTACHMENT_PAYLOAD_MAX_BYTES
 
 
 @dataclass(frozen=True)
@@ -113,17 +121,17 @@ class InstallationEstimateLeadService:
                 filename = InstallationEstimateLeadService._clean_filename(
                     getattr(upload, "filename", None)
                 )
-                await InstallationEstimateLeadService._validate_image(
-                    filename=filename,
-                    content_type=content_type,
-                    content=content,
-                )
                 total_bytes += len(content)
                 if total_bytes > MAX_PAYLOAD_BYTES:
                     raise ValueError(
                         f"Общий размер фотографий не должен превышать "
                         f"{MAX_PAYLOAD_BYTES // (1024 * 1024)} МБ"
                     )
+                await InstallationEstimateLeadService._validate_image(
+                    filename=filename,
+                    content_type=content_type,
+                    content=content,
+                )
                 collected.append(
                     InstallationEstimateIncomingFile(
                         category=category,
@@ -147,33 +155,24 @@ class InstallationEstimateLeadService:
         payload: InstallationEstimateLeadPayload,
         uploads: list[InstallationEstimateIncomingFile],
     ) -> str:
-        canonical = {
-            "payload": payload.model_dump(mode="json"),
-            "files": sorted(
-                [
-                    {
-                        "category": upload.category,
-                        "content_type": upload.content_type,
-                        "size_bytes": len(upload.content),
-                        "content_hash": upload.content_hash,
-                    }
-                    for upload in uploads
-                ],
-                key=lambda item: (
-                    item["category"],
-                    item["content_hash"],
-                    item["content_type"],
-                    item["size_bytes"],
-                ),
-            ),
-        }
-        serialized = json.dumps(
-            canonical,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
+        positions: dict[str, int] = {}
+        attachments: list[PublicWriteAttachmentFingerprint] = []
+        for upload in uploads:
+            position = positions.get(upload.category, 0)
+            positions[upload.category] = position + 1
+            attachments.append(
+                PublicWriteAttachmentFingerprint(
+                    field=upload.category,
+                    position=position,
+                    content_hash=upload.content_hash,
+                    content_type=upload.content_type,
+                    size_bytes=len(upload.content),
+                )
+            )
+        return PublicWriteFingerprintService.for_multipart(
+            payload=payload,
+            attachments=attachments,
         )
-        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
     @classmethod
     async def create_lead(
@@ -188,14 +187,6 @@ class InstallationEstimateLeadService:
     ) -> InstallationEstimateLeadResponse:
         fingerprint = cls.source_fingerprint(idempotency_key)
         payload_hash = cls.request_hash(payload=payload, uploads=uploads)
-        existing = await cls._find_existing(
-            session,
-            tenant_scope=tenant_scope,
-            fingerprint=fingerprint,
-        )
-        if existing is not None:
-            return cls._replay_response(existing, payload_hash=payload_hash)
-
         selected_storage = storage or get_private_attachment_storage()
         created_storage_keys: set[str] = set()
         received_at = datetime.now(timezone.utc)
@@ -206,7 +197,20 @@ class InstallationEstimateLeadService:
         }
         comment = cls._build_comment(payload=payload, category_counts=category_counts)
 
-        try:
+        async def create() -> PublicWriteCommandResponse[InstallationEstimateLeadResponse]:
+            existing = await cls._find_existing(
+                session,
+                tenant_scope=tenant_scope,
+                fingerprint=fingerprint,
+            )
+            if existing is not None:
+                replay = cls._replay_response(existing, payload_hash=payload_hash)
+                return PublicWriteCommandResponse(
+                    value=replay,
+                    resource_type="order",
+                    resource_id=replay.order_id,
+                )
+
             order = await OrderService.create_from_website(
                 session=session,
                 customer_name=payload.name,
@@ -287,25 +291,48 @@ class InstallationEstimateLeadService:
                 priority=20,
                 max_attempts=8,
             )
-            await session.commit()
-            await session.refresh(order)
-        except IntegrityError:
-            await session.rollback()
-            await cls._cleanup_failed_uploads(
-                session,
-                storage=selected_storage,
-                storage_keys=created_storage_keys,
+            response = InstallationEstimateLeadResponse(
+                lead_id=int(order.id or 0),
+                order_id=int(order.id or 0),
+                status="new_lead",
+                created_at=order.created_at,
+                attachment_count=len(uploads),
+                replayed=False,
             )
-            existing = await cls._find_existing(
+            return PublicWriteCommandResponse(
+                value=response,
+                resource_type="order",
+                resource_id=response.order_id,
+            )
+
+        async def execute_once():
+            return await PublicWriteIdempotencyService.execute(
                 session,
                 tenant_scope=tenant_scope,
-                fingerprint=fingerprint,
+                command_name="public_installation_estimate_lead_v1",
+                idempotency_key=idempotency_key,
+                request_fingerprint=payload_hash,
+                response_model=InstallationEstimateLeadResponse,
+                operation=create,
             )
-            if existing is None:
-                raise
-            return cls._replay_response(existing, payload_hash=payload_hash)
+
+        try:
+            for attempt in range(2):
+                try:
+                    outcome = await execute_once()
+                    break
+                except IntegrityError:
+                    if attempt > 0:
+                        raise
+                    await cls._cleanup_failed_uploads(
+                        session,
+                        storage=selected_storage,
+                        storage_keys=created_storage_keys,
+                    )
+                    created_storage_keys.clear()
+            else:  # pragma: no cover - loop always returns or raises
+                raise RuntimeError("Installation estimate retry was exhausted")
         except Exception as exc:
-            await session.rollback()
             await cls._cleanup_failed_uploads(
                 session,
                 storage=selected_storage,
@@ -316,15 +343,7 @@ class InstallationEstimateLeadService:
                     "installation_estimate_temporarily_unavailable"
                 ) from exc
             raise
-
-        return InstallationEstimateLeadResponse(
-            lead_id=int(order.id or 0),
-            order_id=int(order.id or 0),
-            status="new_lead",
-            created_at=order.created_at,
-            attachment_count=len(uploads),
-            replayed=False,
-        )
+        return outcome.value
 
     @staticmethod
     async def _find_existing(
