@@ -33,6 +33,10 @@ from services.communications.providers.base import (
     ProviderDeliveryResult,
 )
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.scope_routing import (
+    recipients_for_scope,
+    routing_snapshot,
+)
 from services.communications.templates import TemplateRenderError
 from services.communications.template_registry import (
     TELEGRAM_CANARY_MAX_ATTEMPTS,
@@ -321,6 +325,12 @@ class CommunicationDeliveryWorker:
                         session,
                         plan=plan,
                     )
+                    recipients = recipients_for_scope(
+                        scope=self._scope,
+                        recipients=recipients,
+                        event_id=claim.event_id,
+                        template_key=claim.template_key,
+                    )
                 except (
                     CommunicationsCanarySafetyError,
                     TemplateRenderError,
@@ -348,10 +358,7 @@ class CommunicationDeliveryWorker:
                             )
                         ).scalars()
                     )
-                    expected_routing = {
-                        (recipient.recipient_key, recipient.destination)
-                        for recipient in recipients
-                    }
+                    expected_routing = routing_snapshot(recipients)
                     materialized_routing = {
                         (delivery.recipient_key, delivery.destination)
                         for delivery in deliveries

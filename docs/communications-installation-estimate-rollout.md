@@ -1,34 +1,45 @@
-# Installation-estimate communications rollout
+# Tenant website communications rollout
 
-`crm.installation_estimate_lead.created` is delivered only by the managed
-communications worker. The standalone staff bot must remain limited to staff
-task events, and this intake must not gain a direct `BotService` fallback.
+This runbook covers the managed Telegram worker for the reviewed tenant website
+notification allowlist. The historical filename is retained because operator
+automation already refers to it; the runtime is no longer installation-only.
 
-The production website scope is deliberately exact:
+The fixed production allowlist is:
 
-- event: `crm.installation_estimate_lead.created`;
-- template: `telegram.installation_estimate_lead_created`.
+| Event | Template |
+| --- | --- |
+| `crm.installation_estimate_lead.created` | `telegram.installation_estimate_lead_created` |
+| `tenant.website.checkout.created` | `telegram.tenant_website_checkout_created` |
+| `tenant.website.contact_lead.created` | `telegram.tenant_website_contact_lead_created` |
+| `tenant.website.product_availability.requested` | `telegram.tenant_website_product_availability_requested` |
+| `tenant.website.repair_diagnostic.created` | `telegram.tenant_website_repair_diagnostic_created` |
 
-Public order/contact events and the operations canary are excluded. Expanding
-the scope requires a separate reviewed rollout.
+Every event resolves active owner/admin memberships inside its exact tenant and
+storefront. There is no manager, global admin, or `ADMIN_IDS` fallback. The
+standalone staff bot remains limited to staff-task events.
 
-## Dormant compatibility-stage backlog suppression
+## Deployment profiles
 
-Old installation-estimate events are not sent automatically after the worker
-is enabled. Inventory covers both:
+The two HA Compose files must carry the same immutable worker profile.
 
-- stale `pending`/interrupted `processing` target outbox events;
-- stale `published`/`processing` target events with `queued`, `retry`, or
-  `running` Telegram deliveries.
+- Dormant reconciliation: `COMMUNICATIONS_WORKER_ENABLED=false`,
+  `COMMUNICATIONS_WORKER_ALLOW_ALL_MODE=false`.
+- Exact canary: `true/false`.
+- Full allowlist: `true/true`, only after a separate reviewed activation.
 
-This suppression is performed only in the earlier dormant (`false/false`)
-compatibility stage, before the active worker profile is deployed. The managed
-communications worker must be fully stopped, not merely paused: durable
-Telegram state must report `mode=off` and `status=stopped`.
+This release pins both Patroni nodes to the exact-canary `true/false` profile.
+Deploying it does not activate `all` mode. Do not edit one node independently:
+profile changes use the existing attested HA rollout.
 
-Production hosts are image-only. Resolve the current Patroni primary from a
-trusted operator checkout, SSH to that node, and from its Compose project
-directory resolve the active API slot:
+## Five-type backlog manifest
+
+Before any full activation, inventory every allowlisted event type. Use the
+canonical command; `reconcile_installation_estimate_backlog.py` remains only
+as a compatibility entrypoint for older installation-only automation and is not
+sufficient evidence for five-type activation.
+
+Production hosts are image-only. Resolve the writable Patroni primary and the
+active API slot, then run inside that immutable backend image:
 
 ```bash
 python3 scripts/ha/check_patroni_production.py --resolve-primary
@@ -41,222 +52,147 @@ if test -f .active-api-slot; then
     *) echo "invalid active API slot" >&2; exit 1 ;;
   esac
 fi
+
 BACKEND=(
   docker compose -f docker-compose.patroni.yml --profile bluegreen exec -T
   "${active_service}" python3
 )
-
-"${BACKEND[@]}" scripts/reconcile_installation_estimate_backlog.py \
-  --cutoff 2026-07-26T00:00:00+03:00 \
-  --limit 100
 ```
 
-The command is a privacy-safe dry-run unless `--execute` is provided. Its
-output contains counts and fixed status codes only: no event IDs, aggregate
-IDs, destinations, payloads, customer data or raw database errors.
-
-After reviewing the dry-run, suppress the same bounded selection explicitly:
+Prepare one UUID operation ID and one reviewed cutoff, count, and disposition
+for each type. Every flag is positional and repeated five times:
 
 ```bash
-"${BACKEND[@]}" scripts/reconcile_installation_estimate_backlog.py \
-  --cutoff 2026-07-26T00:00:00+03:00 \
-  --limit 100 \
-  --execute
+operation_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+cutoff=2026-08-01T00:00:00+03:00
+
+"${BACKEND[@]}" scripts/reconcile_website_communication_backlog.py \
+  --operation-id "${operation_id}" \
+  --event-type crm.installation_estimate_lead.created \
+  --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send \
+  --event-type tenant.website.checkout.created \
+  --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send \
+  --event-type tenant.website.contact_lead.created \
+  --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send \
+  --event-type tenant.website.product_availability.requested \
+  --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send \
+  --event-type tenant.website.repair_diagnostic.created \
+  --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send
 ```
 
-`--execute` fails closed unless all of these conditions are true:
+Dry-run is the default. Replace each expected count with the reported exact
+candidate count, choose a reviewed disposition, rerun dry-run, then add
+`--execute`.
 
-- `APP_ROLE=primary`;
-- PostgreSQL is the writable primary and the transaction is not read-only;
-- immutable deployment gates `COMMUNICATIONS_WORKER_ENABLED` and
-  `COMMUNICATIONS_WORKER_ALLOW_ALL_MODE` are both `false`;
-- the managed Telegram runtime advisory lock is available and remains held
-  until commit or rollback;
-- durable Telegram runtime control is `mode=off`, `status=stopped`;
-- every selected event, delivery, and attempt journal has a recognized,
-  internally consistent lifecycle.
+- `retain` performs inspection only and always blocks activation.
+- `terminal_no_send` marks the selected outbox rows terminal and closes every
+  non-terminal delivery without a provider call.
+- An ambiguous attempt is preserved as ambiguous and can never be claimed
+  again. It is never converted into a retry.
+- Execution requires a manifest containing each of the five types exactly once.
+  A count change, lock conflict, malformed lifecycle, ownership conflict, or
+  inventory overflow aborts the whole transaction.
+- Execution is accepted only on the writable primary while the managed runtime
+  is stopped/off, both deployment gates are false, and the runtime advisory lock
+  remains held through commit.
 
-SQLite and standby execution are rejected. Concurrently locked rows are skipped
-with PostgreSQL `FOR UPDATE SKIP LOCKED`, remain visible in
-`remaining_candidate_count`, and require another bounded pass.
-The command also fails closed before loading or locking more than 5,000
-deliveries or 40,000 attempt rows, even when a damaged event has abnormal
-fan-out.
+The report is per event type and contains aggregate counts plus the operation
+UUID. It never contains payloads, destinations, rendered messages, customer
+data, tokens, connection strings, or raw database errors. Do not continue until
+all five entries have `remaining_candidate_count=0`, no retain disposition,
+and the manifest reports `activation_safe=true`.
 
-Safe outbox candidates transition to terminal `dead`. Their non-terminal
-deliveries become `canceled`; a previously `running` delivery becomes `dead`
-and its existing attempt is finalized with `ambiguous=true`, because a provider
-request cannot be recalled or proven absent. A malformed or concurrently owned
-lifecycle aborts the whole transaction with a fixed privacy-safe error code.
+The later activation command re-acquires the exclusive website enqueue fence
+and re-queries the complete five-type backlog in the same transaction. A stale
+manifest report cannot authorize activation.
 
-Repeat bounded execution as needed, then repeat the dry-run. Do not enable
-delivery until `candidate_total=0`, `remaining_candidate_count=0`, and
-`activation_safe=true`. The output contains counts and fixed codes only; it
-must never contain event IDs, destinations, payloads, or customer data.
+## Exact website canary
 
-## Typed production control
+The canary consumes one already committed, due, untouched outbox event. It does
+not create a synthetic customer request and cannot broaden to a second event or
+recipient. Pick one eligible `staff:<id>` from the full current directory for
+that exact tenant/storefront.
 
-There is no generic `all` switch. `CommunicationRuntimeStateService.set_mode`
-rejects `all`, and operators must not replace the typed command with SQL or an
-ad-hoc Python snippet. The only activation path is fixed to:
+The immutable canary target is:
 
-- event `crm.installation_estimate_lead.created`;
-- template `telegram.installation_estimate_lead_created`;
-- channel `telegram`;
-- every active `StaffUser` whose primary role is `owner`.
+- one run UUID;
+- one 32-character event ID and its allowlisted event type;
+- one tenant ID and storefront ID;
+- one eligible recipient key.
 
-Managers and `ADMIN_IDS` are never a fallback. Activation fails closed if
-there are no active owners, if any active owner lacks a positive Telegram ID,
-or if recipient keys or Telegram destinations are not unique.
+No destination, payload, rendered message, or customer data is stored in the
+canary audit row. Runtime state stores only the canary kind and a foreign-key
+reference to that immutable row.
 
-Resolve the current primary and active API container as described in the HA
-runbook, then define a command that runs inside the immutable backend image:
+Run `--plan` first:
 
 ```bash
-INSTALLATION_NOTIFICATIONS=(
-  docker compose -f docker-compose.patroni.yml --profile bluegreen exec -T
-  "${active_service}"
-  python3 scripts/communications_installation_notifications.py
+WEBSITE_CANARY=(
+  "${BACKEND[@]}" scripts/communications_website_canary.py
+  --run-id 11111111-1111-4111-8111-111111111111
+  --event-id 0123456789abcdef0123456789abcdef
+  --event-type tenant.website.contact_lead.created
+  --tenant-id 7
+  --storefront-id 11
+  --recipient-key staff:9
 )
+
+"${WEBSITE_CANARY[@]}" --plan
 ```
 
-The CLI accepts exactly one of `--plan`, `--enable`, `--status`, and `--off`.
-It has no event, destination, template, message, retry, or watermark argument.
+Planning and arming fail closed unless all of these remain true:
 
-`--plan` and `--status` remain available in dormant, canary, and active
-deployment profiles. They return fixed codes and aggregate counts only. In a
-canary (`true/false`) or dormant (`false/false`) profile, `--enable` is always
-blocked:
+- deployment profile is exactly `true/false`;
+- the command runs on writable PostgreSQL primary with a real Telegram token;
+- runtime is `off`, `disabled`, freshly owned, and at the planned control
+  revision;
+- the exact event is pending, due, has zero attempts and no lease, inbox,
+  delivery, or attempt journal;
+- event type, template, audience, payload tenant, and payload storefront match;
+- the complete current tenant directory contains exactly one matching recipient
+  key. Other eligible owner/admin recipients are normal and do not invalidate
+  the canary.
+
+Arm using the revision returned by plan:
 
 ```bash
-"${INSTALLATION_NOTIFICATIONS[@]}" --plan
-"${INSTALLATION_NOTIFICATIONS[@]}" --status
+"${WEBSITE_CANARY[@]}" --arm --expected-control-revision 42
+"${WEBSITE_CANARY[@]}" --status
 ```
 
-The status inventory always includes these explicit buckets, including zeros:
+Dispatcher selection, materialization, delivery claim, lease recovery,
+recipient revalidation, and the final provider-boundary lock all carry the same
+exact event and recipient scope. A control revision change or any event,
+tenant, storefront, template, or recipient drift stops before provider I/O.
 
-- outbox: `pending`, `processing`, `published`, `dead`;
-- delivery: `queued`, `running`, `retry`, `sent`, `dead`, `canceled`;
-- attempts: `running`, `sent`, `retry`, `dead`, `canceled`;
-- provider acknowledgement count;
-- `ambiguous_nonterminal_count`, `ambiguous_terminal_count`, and
-  `ambiguous_total_count`.
-
-It never prints event IDs, order IDs, destinations, payloads, rendered content,
-customer data, tokens, connection strings, raw provider responses, or exception
-messages.
-
-## Activation transaction
-
-Deploy the active (`true/true`) profile while durable runtime control is still
-`off`. Then run `--plan`. Do not continue unless `enable_allowed=true` and the
-blocker list is empty:
+After status reports a terminal `sent`, `dead`, `canceled`, or
+`ambiguous` outcome, finalize it:
 
 ```bash
-"${INSTALLATION_NOTIFICATIONS[@]}" --plan
-"${INSTALLATION_NOTIFICATIONS[@]}" --enable
-"${INSTALLATION_NOTIFICATIONS[@]}" --status
+"${WEBSITE_CANARY[@]}" --complete
 ```
 
-`--enable` locks the durable Telegram control row and proves all gates in one
-database transaction:
+Finalization locks the runtime row, immutable run, event, inbox, delivery, and
+attempt evidence in one transaction. It records the terminal outcome and an off
+revision, then clears only the active runtime reference. Replaying the exact
+active arm is idempotent; reusing a completed run ID or event is rejected.
 
-- deployment profile is exactly active: worker enabled and `allow_all=true`;
-- `APP_ROLE=primary`;
-- PostgreSQL is the writable primary, not read-only or in recovery;
-- transaction isolation is exactly PostgreSQL `read committed`;
-- a non-placeholder Telegram token is configured;
-- database runtime locks are enabled;
-- exactly one fresh worker instance owns the expected advisory lock;
-- runtime mode is `off` and lifecycle status is `disabled`;
-- the exact owner audience is valid;
-- no currently committed pending/interrupted target event, non-terminal target
-  delivery, running target attempt, or ambiguous attempt attached to a
-  non-terminal target delivery remains unreconciled, regardless of its stored
-  `created_at`.
+## Emergency off and ambiguity
 
-Every normal target-event enqueue first takes a shared transaction advisory
-fence, then assigns the event `created_at` from the PostgreSQL clock. Shared
-holders do not serialize ordinary requests. `--enable` makes a non-blocking
-attempt to take the exclusive side of the same fence. If an enqueue transaction
-is still open, activation fails immediately with
-`installation_activation_fence_busy`, mutates no control state, and must be
-rerun after that request finishes. It never waits indefinitely behind a stalled
-request.
-
-A request that reaches the enqueue fence while `--enable` holds its exclusive
-side waits for at most one second. If activation does not finish in that bound,
-the whole intake transaction and private attachment writes are rolled back and
-the endpoint returns retryable HTTP `503` with `Retry-After: 1`. A client must
-resubmit the same `Idempotency-Key`; the server never partially creates an
-order or outbox event.
-
-With `read committed` isolation, a successful exclusive fence proves that
-earlier enqueue transactions are visible to the safety inventory; later
-enqueues cannot obtain their database timestamp until activation commits. The
-command then reads its cutoff from the same database clock. On the first
-successful activation it stores that value as the immutable activation
-watermark and increments the control revision. Dispatcher selection, delivery
-claim, and expired-lease recovery all require
-`IntegrationOutboxEvent.created_at >= watermark`; older events can never be
-sent. Emergency `off` retains the watermark. A reviewed re-enable reuses the
-same value and never moves it, and it first requires the whole currently
-committed unsafe target inventory to be reconciled. This all-row inventory
-also prevents a future-skewed timestamp from bypassing activation safety. Once
-runtime mode is `all`, a missing watermark fails closed. A persisted future or
-otherwise invalid watermark also blocks activation.
-
-After activation:
-
-1. Submit one new synthetic multipart request.
-2. Verify one outbox event and exactly one delivery per current active owner.
-3. Require a provider acknowledgement for every delivery and zero
-   queued/running/retry/dead/canceled rows for the synthetic request.
-4. Replay the identical request with the same `Idempotency-Key`.
-5. Verify the replay creates no event, delivery, attempt, or provider call.
-6. Have each owner confirm exactly one received message.
-
-## Emergency off and ambiguity policy
-
-`--off` is the independent emergency path. It does not require the active
-profile, token, owner audience, or activation gates:
+The compatibility control command still owns the independent emergency path:
 
 ```bash
-"${INSTALLATION_NOTIFICATIONS[@]}" --off
+"${BACKEND[@]}" scripts/communications_installation_notifications.py --off
 ```
 
-It commits `mode=off` first, retains the activation watermark, then waits for a
-bounded drain and reports durable runtime mode/status, running delivery count,
-ambiguous count, and whether drain completed. A timed-out drain is not a
-successful operator result. Re-run it on the newly resolved writable primary
-after a role change.
+Its name is historical; help and status cover the full five-type website
+allowlist. Emergency off needs no token or recipient lookup. If a website canary
+is active, it first records terminal `aborted` in the durable canary audit and
+then clears the runtime reference. If that audit cannot be verified, off fails
+with an explicit blocker instead of erasing the target.
 
-Telegram does not offer provider-side idempotency. Each attempt therefore has
-a durable provider boundary committed under its exact worker lease, after
-rendering, owner revalidation, and the final runtime safety check, immediately
-before network I/O. `off` and the provider boundary serialize on the same
-runtime-control row. If `off` commits first, the exact pre-provider claim is
-released with no ambiguity, its lease is cleared, and it becomes a delayed
-retry (or terminal non-ambiguous failure when attempts are exhausted). This
-keeps the off drain live while leaving the retry backlog visible to the next
-reviewed activation. An expired lease before that boundary is likewise provably
-unsent and follows the same retry/exhaustion policy. An expired
-lease after the boundary may have been accepted by Telegram and is always
-terminal `dead` with `ambiguous=true`. A timeout, connection loss, server
-failure, or malformed acknowledgement after the boundary follows the same
-terminal policy. Authentication and Telegram 400-series request failures are
-terminal as well.
-
-The standalone staff bot receives a delivery payload from the API in another
-process. That committed API handoff is itself its provider boundary. During a
-rolling upgrade, even a legacy staff-bot claim with no marker is recovered
-conservatively as post-boundary. Lost responses and bot crashes can therefore
-never turn into an automatic duplicate send.
-
-The sole automatic provider retry is an explicit Telegram 429 response with a
-valid positive `retry_after`, because Telegram has proven that request was not
-accepted for delivery. A historical terminal ambiguous attempt is permanently
-counted, alerted, and retained for manual follow-up; claim selection can never
-resurrect it. It does not become an eternal global re-enable blocker. Before
-activation, `ambiguous_nonterminal_count` must be zero; terminal and total
-counters must still be reviewed explicitly.
+Telegram has no provider-side idempotency. A timeout or lost response after the
+durable provider boundary is ambiguous and is never automatically resent.
+Only a proven Telegram 429 response with a valid positive retry delay is safe
+for automatic retry. Provider acknowledgement is required before a canary is
+classified as sent.

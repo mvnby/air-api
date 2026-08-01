@@ -33,7 +33,10 @@ from .catalog_import import CatalogImportJob
 from .catalog_revision import StorefrontCatalogRevision
 from .content import Article, GlobalConfig
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
-from .communication_runtime import CommunicationRuntimeState
+from .communication_runtime import (
+    CommunicationRuntimeState,
+    CommunicationWebsiteCanaryRun,
+)
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
 from .media import MediaAsset, MediaProcessingJob
 from .service_asset import (
@@ -127,6 +130,7 @@ __all__ = [
     "CommunicationDelivery",
     "CommunicationDeliveryAttempt",
     "CommunicationRuntimeState",
+    "CommunicationWebsiteCanaryRun",
     "ConsumerInbox",
     "Customer",
     "CustomerBranch",

@@ -175,6 +175,12 @@ class CommunicationRuntimePipeline:
                 )
                 return None
         try:
+            if control.website_canary_target is not None:
+                return CommunicationProcessingScope.website_canary(
+                    run_id=control.canary_run_id or "",
+                    control_revision=control.control_revision,
+                    target=control.website_canary_target,
+                )
             return CommunicationProcessingScope.canary(
                 run_id=control.canary_run_id or "",
                 control_revision=control.control_revision,

@@ -101,7 +101,7 @@ class InstallationNotificationInspection:
         }
 
 
-class InstallationNotificationOperations:
+class WebsiteNotificationOperations:
     """Inspect, activate, and emergency-disable the fixed website allowlist."""
 
     CHANNEL = "telegram"
@@ -650,3 +650,7 @@ class InstallationNotificationOperations:
                     "ambiguous_total_count": ambiguous_count,
                 }
             await asyncio.sleep(max(0.05, min(float(poll_seconds), 1.0)))
+
+
+# Compatibility export for the historical operator command and imports.
+InstallationNotificationOperations = WebsiteNotificationOperations

@@ -11,7 +11,7 @@ from sqlalchemy import inspect
 
 REVISION = "d0a1b2c3e4f6"
 DOWN_REVISION = "d0f1a2b3c4d5"
-HEAD_REVISION = "aa91c2d4e6f8"
+HEAD_REVISION = "ab02c3d4e5f6"
 MIGRATION_PATH = Path(
     "alembic/versions/d0a1b2c3e4f6_add_tenant_offers_and_audit.py"
 )
@@ -54,7 +54,8 @@ def test_tenant_offer_foundation_precedes_the_catalog_revision_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "e1f2a3b4c5d6"
+    assert script.get_revision(HEAD_REVISION).down_revision == "aa91c2d4e6f8"
+    assert script.get_revision("aa91c2d4e6f8").down_revision == "e1f2a3b4c5d6"
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
     assert script.get_revision("e1f2a3b4c5d6").down_revision == REVISION
 

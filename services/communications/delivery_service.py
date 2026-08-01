@@ -166,6 +166,11 @@ class CommunicationDeliveryService:
             statement = statement.where(
                 CommunicationDelivery.event_id == scope.exact_event_id
             )
+        if scope.website_canary_target is not None:
+            statement = statement.where(
+                CommunicationDelivery.recipient_key
+                == scope.website_canary_target.recipient_key
+            )
         if scope.event_created_at_watermark is not None:
             statement = statement.where(
                 IntegrationOutboxEvent.created_at
