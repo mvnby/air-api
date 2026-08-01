@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
@@ -26,7 +25,6 @@ from models import (
     Payment,
     PaymentCurrency,
     PaymentType,
-    Product,
     Service,
 )
 from models.common import EquipmentStatus
@@ -40,26 +38,18 @@ from schemas import (
     ManagerOrderTransferOrder,
     ManagerOrderTransferPackage,
     ManagerOrderTransferPayment,
-    ManagerOrderTransferProductLine,
-    ManagerOrderTransferProductRef,
     ManagerOrderTransferProposal,
     ManagerOrderTransferServiceLine,
     ManagerOrderTransferServiceRef,
     ManagerOrderTransferWorkStage,
 )
+from services.order_product_transfer_service import OrderProductTransferService
 from services.order_service import OrderService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
     TenantScope,
     tenant_scope_clause,
 )
-
-
-@dataclass
-class _ResolvedProduct:
-    product: Optional[Product]
-    status: str
-    reason: Optional[str] = None
 
 
 class OrderTransferService:
@@ -128,19 +118,6 @@ class OrderTransferService:
         )
 
     @staticmethod
-    def _product_ref(link: OrderProductLink) -> ManagerOrderTransferProductRef:
-        product = link.product
-        return ManagerOrderTransferProductRef(
-            source_id=product.id if product else link.product_id,
-            title=(
-                getattr(link, "title_snapshot", None)
-                or (product.title if product else f"Товар #{link.product_id}")
-            ),
-            slug=product.slug if product else None,
-            source_url=product.source_url if product else None,
-        )
-
-    @staticmethod
     def _service_ref(link: OrderServiceLink) -> Optional[ManagerOrderTransferServiceRef]:
         if not link.service and not link.service_id:
             return None
@@ -149,22 +126,6 @@ class OrderTransferService:
             source_id=service.id if service else link.service_id,
             title=service.title if service else (link.title or f"Услуга #{link.service_id}"),
             slug=service.slug if service else None,
-        )
-
-    @staticmethod
-    def _product_line_snapshot(link: OrderProductLink) -> ManagerOrderTransferProductLine:
-        return ManagerOrderTransferProductLine(
-            source_id=link.id,
-            product=OrderTransferService._product_ref(link),
-            title_snapshot=getattr(link, "title_snapshot", None),
-            currency_snapshot=getattr(link, "currency_snapshot", None),
-            quantity=int(link.quantity or 1),
-            price=int(link.price or 0),
-            cost=int(link.cost or 0),
-            is_installation_included=bool(link.is_installation_included),
-            installation_price=int(link.installation_price or 0),
-            installation_details=link.installation_details,
-            logistics_components=OrderService._serialize_order_logistics_components(link.logistics_components),
         )
 
     @staticmethod
@@ -189,7 +150,10 @@ class OrderTransferService:
             is_selected=bool(proposal.is_selected),
             is_archived=bool(proposal.is_archived),
             sort_order=int(proposal.sort_order or 0),
-            product_lines=[OrderTransferService._product_line_snapshot(link) for link in product_lines],
+            product_lines=[
+                OrderProductTransferService.snapshot_line(link)
+                for link in product_lines
+            ],
             service_lines=[OrderTransferService._service_line_snapshot(link) for link in service_lines],
         )
 
@@ -384,37 +348,6 @@ class OrderTransferService:
         return None, "will_create"
 
     @staticmethod
-    async def _find_product(session: AsyncSession, product_ref: ManagerOrderTransferProductRef) -> _ResolvedProduct:
-        slug = OrderTransferService._optional_clean(product_ref.slug)
-        if slug:
-            result = await session.execute(select(Product).where(Product.slug == slug).limit(1))
-            product = result.scalars().first()
-            if product:
-                return _ResolvedProduct(product=product, status="matched", reason="slug")
-
-        source_url = OrderTransferService._optional_clean(product_ref.source_url)
-        if source_url:
-            result = await session.execute(select(Product).where(Product.source_url == source_url).limit(1))
-            product = result.scalars().first()
-            if product:
-                return _ResolvedProduct(product=product, status="matched", reason="source_url")
-
-        title = OrderTransferService._optional_clean(product_ref.title)
-        if title:
-            result = await session.execute(
-                select(Product)
-                .where(func.lower(Product.title) == title.lower())
-                .limit(2)
-            )
-            products = list(result.scalars().all())
-            if len(products) == 1:
-                return _ResolvedProduct(product=products[0], status="matched", reason="title")
-            if len(products) > 1:
-                return _ResolvedProduct(product=None, status="missing", reason="ambiguous_title")
-
-        return _ResolvedProduct(product=None, status="missing", reason="not_found")
-
-    @staticmethod
     async def _find_service(session: AsyncSession, service_ref: Optional[ManagerOrderTransferServiceRef]) -> Optional[Service]:
         if not service_ref:
             return None
@@ -467,19 +400,18 @@ class OrderTransferService:
             for proposal in order_data.proposals:
                 for product_line in proposal.product_lines:
                     products_total += 1
-                    resolved = await OrderTransferService._find_product(session, product_line.product)
+                    resolved = await OrderProductTransferService.resolve_product(
+                        session,
+                        product_line.product,
+                    )
                     if resolved.product:
                         products_matched += 1
                     product_matches.append(
-                        {
-                            "source_order_id": order_data.source_id,
-                            "product_title": product_line.product.title,
-                            "product_slug": product_line.product.slug,
-                            "matched_product_id": resolved.product.id if resolved.product else None,
-                            "matched_product_title": resolved.product.title if resolved.product else None,
-                            "status": resolved.status,
-                            "reason": resolved.reason,
-                        }
+                        OrderProductTransferService.preview_match(
+                            source_order_id=order_data.source_id,
+                            product_line=product_line,
+                            resolved=resolved,
+                        )
                     )
 
         products_missing = products_total - products_matched
@@ -678,29 +610,18 @@ class OrderTransferService:
                 await session.flush()
 
                 for product_line in proposal_data.product_lines:
-                    resolved = await OrderTransferService._find_product(session, product_line.product)
+                    resolved = await OrderProductTransferService.resolve_product(
+                        session,
+                        product_line.product,
+                    )
                     if not resolved.product:
                         raise ValueError(f"Product not found: {product_line.product.title}")
                     session.add(
-                        OrderProductLink(
+                        OrderProductTransferService.build_import_link(
                             order_id=int(order.id),
                             proposal_id=int(proposal.id),
-                            product_id=int(resolved.product.id),
-                            quantity=int(product_line.quantity or 1),
-                            price=int(product_line.price or 0),
-                            title_snapshot=(
-                                product_line.title_snapshot
-                                or product_line.product.title
-                            ),
-                            currency_snapshot=product_line.currency_snapshot,
-                            cost=int(product_line.cost or 0),
-                            is_installation_included=bool(product_line.is_installation_included),
-                            installation_price=int(product_line.installation_price or 0),
-                            installation_details=product_line.installation_details,
-                            logistics_components=[
-                                item.model_dump() if hasattr(item, "model_dump") else dict(item)
-                                for item in (product_line.logistics_components or [])
-                            ] or None,
+                            product_line=product_line,
+                            product=resolved.product,
                         )
                     )
 

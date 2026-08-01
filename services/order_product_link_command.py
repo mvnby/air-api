@@ -25,13 +25,13 @@ class OrderProductCatalogSnapshot:
 
     def __post_init__(self) -> None:
         product_id = int(self.product_id)
-        title = " ".join(str(self.title or "").split())
+        title = self.title
         unit_price = int(self.unit_price)
         currency = str(self.currency or "").strip().upper()
         pricing_source = str(self.pricing_source or "").strip()
         if product_id <= 0:
             raise ValueError("product_id must be positive")
-        if not title:
+        if not isinstance(title, str) or len(title) == 0:
             raise ValueError("title snapshot is required")
         if unit_price < 0:
             raise ValueError("unit price snapshot must be non-negative")

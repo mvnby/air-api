@@ -19,10 +19,10 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # Nullable expansion keeps historical lines honest: only newly captured
-    # storefront snapshots can claim a title and currency fixed at checkout.
+    # links can claim a title and currency fixed at creation time.
     op.add_column(
         "order_product_link",
-        sa.Column("title_snapshot", sa.String(length=500), nullable=True),
+        sa.Column("title_snapshot", sa.Text(), nullable=True),
     )
     op.add_column(
         "order_product_link",

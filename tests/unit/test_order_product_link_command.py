@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import Text
 
 from models import OrderProductLink, Product
 from schemas_manager_orders import OrderProductLineResponse
@@ -127,3 +128,27 @@ def test_manager_product_line_dto_prefers_immutable_title_snapshot():
     assert response.product_title == "Public title at checkout"
     assert response.title_snapshot == "Public title at checkout"
     assert response.currency_snapshot == "BYN"
+
+
+def test_snapshot_preserves_unbounded_valid_product_title_exactly():
+    long_title = "  " + ("Товар " * 110) + "\n"
+    assert len(long_title) > 500
+    product = _product()
+    product.title = long_title
+
+    mutation = OrderProductLinkCommand.shared_catalog().build(
+        order_id=10,
+        proposal_id=20,
+        product=product,
+        item={"product_id": 17, "quantity": 1},
+        product_cost=1234,
+    )
+
+    assert mutation.link.title_snapshot == long_title
+    assert isinstance(mutation.link.__table__.c.title_snapshot.type, Text)
+    mutation.link.id = 32
+    response = OrderProductLineResponse.model_validate(
+        OrderProjectionService._map_product_line(mutation.link)
+    )
+    assert response.title_snapshot == long_title
+    assert response.product_title == long_title

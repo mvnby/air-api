@@ -275,7 +275,7 @@ class OrderProductLink(SQLModel, table=True):
     price: int = Field(default=0)
     title_snapshot: Optional[str] = Field(
         default=None,
-        sa_column=Column(String(500), nullable=True),
+        sa_column=Column(Text, nullable=True),
     )
     currency_snapshot: Optional[str] = Field(
         default=None,

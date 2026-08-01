@@ -55,9 +55,24 @@ def test_order_product_catalog_snapshot_is_nullable_and_reversible():
             )
         }
         assert columns["title_snapshot"]["nullable"] is True
-        assert columns["title_snapshot"]["type"].length == 500
+        assert isinstance(columns["title_snapshot"]["type"], sa.Text)
         assert columns["currency_snapshot"]["nullable"] is True
         assert columns["currency_snapshot"]["type"].length == 3
+
+        long_title = "Т" * 700
+        connection.execute(
+            sa.text(
+                "INSERT INTO order_product_link "
+                "(id, price, title_snapshot, currency_snapshot) "
+                "VALUES (1, 10, :title, 'BYN')"
+            ),
+            {"title": long_title},
+        )
+        assert connection.execute(
+            sa.text(
+                "SELECT title_snapshot FROM order_product_link WHERE id = 1"
+            )
+        ).scalar_one() == long_title
 
         migration.downgrade()
         remaining_columns = {
