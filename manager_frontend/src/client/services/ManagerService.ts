@@ -49,6 +49,7 @@ import type { ManagerMediaReuseSearchItemResponse } from '../models/ManagerMedia
 import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSetMainImageResponse';
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
+import type { ManagerStorefrontListResponse } from '../models/ManagerStorefrontListResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
 import type { MdvCatalogImportPayload } from '../models/MdvCatalogImportPayload';
 import type { MdvCatalogPreviewPayload } from '../models/MdvCatalogPreviewPayload';
@@ -1537,6 +1538,17 @@ export class ManagerService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/me',
+        });
+    }
+    /**
+     * List Manager Storefronts
+     * @returns ManagerStorefrontListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerStorefronts(): CancelablePromise<ManagerStorefrontListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/storefronts',
         });
     }
     /**

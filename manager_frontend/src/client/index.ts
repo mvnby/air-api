@@ -347,6 +347,8 @@ export type { ManagerStaffResponse } from './models/ManagerStaffResponse';
 export type { ManagerStaffUpdatePayload } from './models/ManagerStaffUpdatePayload';
 export type { ManagerStaleWorkStageItem } from './models/ManagerStaleWorkStageItem';
 export type { ManagerStaleWorkStageListResponse } from './models/ManagerStaleWorkStageListResponse';
+export type { ManagerStorefrontListResponse } from './models/ManagerStorefrontListResponse';
+export type { ManagerStorefrontResponse } from './models/ManagerStorefrontResponse';
 export type { ManagerTagCreatePayload } from './models/ManagerTagCreatePayload';
 export type { ManagerTagGroupCreatePayload } from './models/ManagerTagGroupCreatePayload';
 export type { ManagerTagGroupResponse } from './models/ManagerTagGroupResponse';

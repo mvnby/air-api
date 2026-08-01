@@ -1,0 +1,2 @@
+# openapi-typescript-codegen emits one trailing blank line in generated models.
+manager_frontend/src/client/models/** whitespace=-blank-at-eof
