@@ -119,13 +119,19 @@ class CanonicalPublicCatalogDAO:
             search_query=search_query,
         )
         if sort == "price_asc":
-            statement = statement.order_by(Product.price.asc())
+            statement = statement.order_by(Product.price.asc(), Product.id.asc())
         elif sort == "price_desc":
-            statement = statement.order_by(Product.price.desc())
+            statement = statement.order_by(Product.price.desc(), Product.id.desc())
         elif sort == "area_asc":
-            statement = statement.order_by(ProductDAO.area_expr(session).asc())
+            statement = statement.order_by(
+                ProductDAO.area_expr(session).asc(),
+                Product.id.asc(),
+            )
         elif sort == "area_desc":
-            statement = statement.order_by(ProductDAO.area_expr(session).desc())
+            statement = statement.order_by(
+                ProductDAO.area_expr(session).desc(),
+                Product.id.desc(),
+            )
         elif sort == "newest":
             statement = statement.order_by(
                 Product.created_at.desc(),

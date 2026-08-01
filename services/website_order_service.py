@@ -13,7 +13,10 @@ from services.installation_pricing_service import (
     InstallationPricingError,
     InstallationPricingService,
 )
-from services.order_product_link_command import OrderProductLinkCommand
+from services.order_product_link_command import (
+    OrderProductCatalogSnapshot,
+    OrderProductLinkCommand,
+)
 from services.order_service import OrderService
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.public_write_fingerprint_service import PublicWriteFingerprintService
@@ -87,17 +90,16 @@ class WebsiteOrderService:
             for item in payload.items
             if item.product_id is not None
         }
-        storefront_prices: dict[int, int] = {}
-        pricing_source: str | None = None
+        storefront_snapshots: dict[int, OrderProductCatalogSnapshot] = {}
         if product_ids:
-            storefront_prices, pricing_source = (
-                await PublicCatalogVisibilityService.get_checkout_prices(
+            storefront_snapshots = (
+                await PublicCatalogVisibilityService.get_checkout_snapshots(
                     session,
                     tenant_scope=tenant_scope,
                     product_ids=product_ids,
                 )
             )
-        missing_product_ids = sorted(product_ids - storefront_prices.keys())
+        missing_product_ids = sorted(product_ids - storefront_snapshots.keys())
         if missing_product_ids:
             raise InstallationPricingError(
                 f"Товар #{missing_product_ids[0]} недоступен для этой витрины",
@@ -118,17 +120,14 @@ class WebsiteOrderService:
             if item["with_installation"]
         ]
         catalog_pricing_snapshots = [
-            {
-                "product_id": int(item["product_id"]),
-                "unit_price": storefront_prices[int(item["product_id"])],
-                "source": pricing_source,
-            }
+            storefront_snapshots[int(item["product_id"])].as_technical_meta()
             for item in items
             if item.get("product_id") is not None
         ]
         technical_meta = {}
         if catalog_pricing_snapshots:
             technical_meta["public_catalog_pricing"] = {
+                "snapshot_version": 1,
                 "items": catalog_pricing_snapshots,
             }
         if pricing_snapshots:
@@ -156,7 +155,7 @@ class WebsiteOrderService:
             customer_bank_name=payload.customer.bank_name,
             order_technical_meta=technical_meta or None,
             product_link_command=OrderProductLinkCommand.storefront_snapshot(
-                storefront_prices
+                storefront_snapshots
             ),
             tenant_scope=tenant_scope,
             commit=False,

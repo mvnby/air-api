@@ -132,7 +132,10 @@ class OrderTransferService:
         product = link.product
         return ManagerOrderTransferProductRef(
             source_id=product.id if product else link.product_id,
-            title=product.title if product else f"Товар #{link.product_id}",
+            title=(
+                getattr(link, "title_snapshot", None)
+                or (product.title if product else f"Товар #{link.product_id}")
+            ),
             slug=product.slug if product else None,
             source_url=product.source_url if product else None,
         )
@@ -153,6 +156,8 @@ class OrderTransferService:
         return ManagerOrderTransferProductLine(
             source_id=link.id,
             product=OrderTransferService._product_ref(link),
+            title_snapshot=getattr(link, "title_snapshot", None),
+            currency_snapshot=getattr(link, "currency_snapshot", None),
             quantity=int(link.quantity or 1),
             price=int(link.price or 0),
             cost=int(link.cost or 0),
@@ -683,6 +688,11 @@ class OrderTransferService:
                             product_id=int(resolved.product.id),
                             quantity=int(product_line.quantity or 1),
                             price=int(product_line.price or 0),
+                            title_snapshot=(
+                                product_line.title_snapshot
+                                or product_line.product.title
+                            ),
+                            currency_snapshot=product_line.currency_snapshot,
                             cost=int(product_line.cost or 0),
                             is_installation_included=bool(product_line.is_installation_included),
                             installation_price=int(product_line.installation_price or 0),

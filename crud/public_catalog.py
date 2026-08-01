@@ -24,6 +24,7 @@ from models import (
 )
 from models.supplier import ProductLocalStock
 from models.tenancy import TenantScope
+from services.public_taxonomy_service import PublicTaxonomyService
 
 
 PublicCatalogRow = tuple[Product, int, int | None]
@@ -291,8 +292,9 @@ class PublicCatalogDAO:
             load_image_variants=load_image_variants,
         ).where(Product.id != product.id)
 
-        if product.series_id:
-            stmt = stmt.where(Product.series_id == product.series_id)
+        series = PublicTaxonomyService.public_series(product)
+        if series is not None and series.id is not None:
+            stmt = stmt.where(Product.series_id == series.id)
         else:
             series_tag_ids = [
                 int(tag.id)

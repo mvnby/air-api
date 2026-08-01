@@ -22,10 +22,13 @@ from services.public_taxonomy_service import PublicTaxonomyService
 class ProductSeriesService:
     @staticmethod
     def _sort_series_candidates(reference: Product, candidates: List[Product]) -> List[Product]:
+        reference_brand = PublicTaxonomyService.public_brand(reference)
+
         def score(item: Product) -> tuple[int, float, float, float, str, int]:
             same_brand = 1
-            if reference.brand_id and item.brand_id:
-                same_brand = 0 if reference.brand_id == item.brand_id else 1
+            item_brand = PublicTaxonomyService.public_brand(item)
+            if reference_brand is not None and item_brand is not None:
+                same_brand = 0 if reference_brand.id == item_brand.id else 1
             else:
                 reference_brand_ids = {
                     tag.id for tag in (reference.tags or [])
@@ -74,13 +77,14 @@ class ProductSeriesService:
 
     @staticmethod
     def _series_payload(product: Product) -> ProductSeriesResponse | None:
-        series = product.series if product.series_id else None
+        series = PublicTaxonomyService.public_series(product)
         return build_product_series_response(series)
 
     @staticmethod
     def _series_group_keys(product: Product) -> List[str]:
-        if product.series_id:
-            return [f"series:{product.series_id}"]
+        series = PublicTaxonomyService.public_series(product)
+        if series is not None and getattr(series, "id", None):
+            return [f"series:{series.id}"]
 
         keys = [
             f"tag:{tag.id}"
@@ -107,8 +111,9 @@ class ProductSeriesService:
     ) -> List[Product]:
         stmt = select(Product).where(Product.id != product.id).where(Product.is_published == True)
 
-        if product.series_id:
-            stmt = stmt.where(Product.series_id == product.series_id)
+        series = PublicTaxonomyService.public_series(product)
+        if series is not None and series.id is not None:
+            stmt = stmt.where(Product.series_id == series.id)
         else:
             series_tag_ids = [
                 tag.id
@@ -127,7 +132,10 @@ class ProductSeriesService:
             )
             stmt = stmt.join(series_product_ids, Product.id == series_product_ids.c.product_id)
 
-        stmt = stmt.options(selectinload(Product.tags).selectinload(Tag.group))
+        stmt = stmt.options(
+            selectinload(Product.brand),
+            selectinload(Product.tags).selectinload(Tag.group),
+        )
         candidates = list((await session.execute(stmt)).scalars().all())
         return ProductSeriesService._sort_series_candidates(product, candidates)[:limit]
 
@@ -140,6 +148,7 @@ class ProductSeriesService:
             select(Product)
             .where(Product.is_published == True)
             .options(
+                selectinload(Product.brand),
                 selectinload(Product.series)
                 .selectinload(ProductSeries.feature_links)
                 .selectinload(FeatureSeriesLink.feature),

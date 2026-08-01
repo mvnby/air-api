@@ -11,6 +11,7 @@ from crud.public_catalog import PublicCatalogDAO, PublicCatalogRow
 from crud.public_catalog_checkout import PublicCatalogCheckoutDAO
 from models import Product
 from models.tenancy import TenantScope
+from services.order_product_link_command import OrderProductCatalogSnapshot
 from services.tenant_scope_service import SystemTenantScopeResolver
 
 
@@ -84,26 +85,34 @@ class PublicCatalogVisibilityService:
         return cls.project_row(rows[0]) if rows else None
 
     @classmethod
-    async def get_checkout_prices(
+    async def get_checkout_snapshots(
         cls,
         session: AsyncSession,
         *,
         tenant_scope: TenantScope,
         product_ids: set[int],
-    ) -> tuple[dict[int, int], str]:
+    ) -> dict[int, OrderProductCatalogSnapshot]:
         if await cls.is_canonical_scope(session, tenant_scope):
-            return (
-                await PublicCatalogCheckoutDAO.get_shared_prices_by_ids(
-                    session,
-                    product_ids=product_ids,
-                ),
-                "shared_product",
-            )
-        return (
-            await PublicCatalogCheckoutDAO.get_offer_prices_by_ids(
+            rows = await PublicCatalogCheckoutDAO.get_shared_snapshots_by_ids(
                 session,
                 tenant_scope=tenant_scope,
                 product_ids=product_ids,
-            ),
-            "tenant_offer",
-        )
+            )
+            source = "shared_product"
+        else:
+            rows = await PublicCatalogCheckoutDAO.get_offer_snapshots_by_ids(
+                session,
+                tenant_scope=tenant_scope,
+                product_ids=product_ids,
+            )
+            source = "tenant_offer"
+        return {
+            product_id: OrderProductCatalogSnapshot(
+                product_id=row.product_id,
+                title=row.title,
+                unit_price=row.unit_price,
+                currency=row.currency,
+                pricing_source=source,
+            )
+            for product_id, row in rows.items()
+        }

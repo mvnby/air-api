@@ -1,6 +1,7 @@
 import pytest
 
 from models import (
+    Brand,
     Product,
     ProductImage,
     ProductImageVariant,
@@ -322,6 +323,30 @@ def test_map_product_to_response_hides_unpublished_series():
     payload = map_product_to_response(product)
 
     assert payload.series is None
+
+
+def test_map_product_to_response_hides_unpublished_brand():
+    brand = Brand(
+        id=9,
+        title="Internal brand",
+        slug="internal-brand",
+        is_published=False,
+    )
+    product = Product(
+        id=1,
+        title="Public product",
+        slug="public-product",
+        price=1200,
+        specs={"area_m2": 25},
+        is_published=True,
+        brand_id=brand.id,
+    )
+    product.brand = brand
+
+    payload = map_product_to_response(product)
+
+    assert payload.brand is None
+    assert "Internal brand" not in payload.model_dump_json()
 
 
 def test_map_product_to_response_projects_offer_prices_without_mutating_product():

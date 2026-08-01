@@ -419,6 +419,7 @@ class PublicCatalogService:
         candidates: list[PublicProductProjection],
     ) -> list[PublicProductProjection]:
         reference_product = reference.product
+        reference_brand = PublicTaxonomyService.public_brand(reference_product)
 
         def numeric(value) -> float:
             if value is None:
@@ -432,8 +433,9 @@ class PublicCatalogService:
         def score(item: PublicProductProjection):
             product = item.product
             same_brand = 1
-            if reference_product.brand_id and product.brand_id:
-                same_brand = 0 if reference_product.brand_id == product.brand_id else 1
+            product_brand = PublicTaxonomyService.public_brand(product)
+            if reference_brand is not None and product_brand is not None:
+                same_brand = 0 if reference_brand.id == product_brand.id else 1
             else:
                 reference_brand_ids = {
                     tag.id
@@ -521,7 +523,7 @@ class PublicCatalogService:
             )[:limit_per_product]
             payload[product.slug] = ProductSeriesNavigationItemResponse(
                 series=build_product_series_response(
-                    product.series if product.series_id else None
+                    PublicTaxonomyService.public_series(product)
                 ),
                 series_siblings=[
                     ProductSiblingResponse(

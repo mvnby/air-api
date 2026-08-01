@@ -217,7 +217,8 @@ def map_product_to_response(
             )
         )
 
-    series = product.series if product.series_id else None
+    public_brand = PublicTaxonomyService.public_brand(product)
+    series = PublicTaxonomyService.public_series(product)
     series_payload = build_product_series_response(series)
 
     manuals_payload = []
@@ -267,12 +268,12 @@ def map_product_to_response(
         delivery_max_days=delivery_max_days,
         brand=(
             ProductBrandResponse(
-                id=product.brand.id,
-                title=product.brand.title,
-                slug=product.brand.slug,
-                logo_url=product.brand.logo_url,
+                id=public_brand.id,
+                title=public_brand.title,
+                slug=public_brand.slug,
+                logo_url=public_brand.logo_url,
             )
-            if product.brand
+            if public_brand
             else None
         ),
         series=series_payload,

@@ -145,13 +145,18 @@ class OrderProjectionService:
 
     @staticmethod
     def _map_product_line(link: OrderProductLink) -> Dict[str, Any]:
-        product_title = link.product.title if link.product else f"Товар #{link.product_id}"
+        product_title = (
+            getattr(link, "title_snapshot", None)
+            or (link.product.title if link.product else f"Товар #{link.product_id}")
+        )
         line_total = link.price * link.quantity
         return {
             "id": link.id,
             "proposal_id": link.proposal_id,
             "product_id": link.product_id,
             "product_title": product_title,
+            "title_snapshot": getattr(link, "title_snapshot", None),
+            "currency_snapshot": getattr(link, "currency_snapshot", None),
             "quantity": link.quantity,
             "price": link.price,
             "cost": link.cost,

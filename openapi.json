@@ -40615,6 +40615,28 @@
           "product": {
             "$ref": "#/components/schemas/ManagerOrderTransferProductRef"
           },
+          "title_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Snapshot"
+          },
+          "currency_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Snapshot"
+          },
           "quantity": {
             "type": "integer",
             "title": "Quantity"
@@ -47223,6 +47245,28 @@
           "product_title": {
             "type": "string",
             "title": "Product Title"
+          },
+          "title_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Snapshot"
+          },
+          "currency_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Snapshot"
           },
           "quantity": {
             "type": "integer",
