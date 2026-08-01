@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     CREATE_MANAGER_WARRANTY_POLICY,
     DECIDE_MANAGER_WARRANTY_COVERAGE,
@@ -18,6 +19,7 @@ from schemas import (
     ManagerWarrantyPolicyPayload,
     ManagerWarrantyPolicyResponse,
 )
+from services.warranty_coverage_service import WarrantyCoverageService
 from services.warranty_service import WarrantyService
 
 
@@ -100,8 +102,16 @@ async def list_manager_equipment_warranty_coverages(
     equipment_id: int,
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await WarrantyService.list_coverages(session, equipment_id=equipment_id)
+    coverages = await WarrantyCoverageService.list_coverages(
+        session,
+        equipment_id=equipment_id,
+        tenant_scope=tenant_scope,
+    )
+    if coverages is None:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    return coverages
 
 
 @router.post(
@@ -114,14 +124,16 @@ async def decide_manager_warranty_coverage(
     payload: ManagerWarrantyDecisionPayload,
     username: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
-        data = await WarrantyService.record_decision(
+        data = await WarrantyCoverageService.record_decision(
             session,
             coverage_id=coverage_id,
             action=payload.action,
             reason=payload.reason,
             decided_by=username,
+            tenant_scope=tenant_scope,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

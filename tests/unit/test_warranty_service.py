@@ -8,6 +8,7 @@ from sqlmodel import SQLModel, select
 
 from models import (
     Brand,
+    Customer,
     CustomerEquipment,
     EquipmentMaintenanceReminder,
     EquipmentServiceEventType,
@@ -19,9 +20,35 @@ from models import (
     Supplier,
     WarrantyPolicy,
 )
+from models.tenancy import TenantScope
+from services.warranty_coverage_service import WarrantyCoverageService
 from services.warranty_service import WarrantyService
 from services.warranty_maintenance_service import WarrantyMaintenanceService
 from services.equipment_warranty_bridge_service import EquipmentWarrantyBridgeService
+
+
+TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
+
+async def _create_scoped_equipment(
+    session: AsyncSession,
+    *,
+    equipment_id: int,
+) -> CustomerEquipment:
+    customer = Customer(
+        tenant_id=TEST_TENANT_SCOPE.tenant_id,
+        name=f"Warranty customer {equipment_id}",
+        phone=f"+37529{equipment_id:07d}",
+    )
+    session.add(customer)
+    await session.flush()
+    equipment = CustomerEquipment(
+        id=equipment_id,
+        customer_id=int(customer.id),
+    )
+    session.add(equipment)
+    await session.flush()
+    return equipment
 
 
 @pytest.fixture
@@ -287,6 +314,7 @@ async def test_maintenance_advances_only_for_allowed_provider_and_within_grace(w
 @pytest.mark.asyncio
 async def test_manager_restore_uses_latest_verified_late_maintenance(warranty_session):
     due_at = datetime(2026, 5, 1, 9, 0)
+    await _create_scoped_equipment(warranty_session, equipment_id=51)
     coverage = EquipmentWarrantyCoverage(
         equipment_id=51,
         coverage_type="supplier",
@@ -307,12 +335,13 @@ async def test_manager_restore_uses_latest_verified_late_maintenance(warranty_se
     warranty_session.add_all([coverage, event])
     await warranty_session.flush()
 
-    restored = await WarrantyService.record_decision(
+    restored = await WarrantyCoverageService.record_decision(
         warranty_session,
         coverage_id=int(coverage.id),
         action="restored",
         reason="Late service accepted after inspection",
         decided_by="manager@example.test",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert restored is not None
@@ -401,6 +430,7 @@ async def test_policy_coverage_rejects_legacy_field_edit(warranty_session):
 @pytest.mark.asyncio
 async def test_overdue_reminders_are_idempotent_and_manual_decision_is_audited(warranty_session):
     due_at = datetime(2026, 6, 1, 9, 0, 0)
+    await _create_scoped_equipment(warranty_session, equipment_id=42)
     coverage = EquipmentWarrantyCoverage(
         equipment_id=42,
         coverage_type="supplier",
@@ -435,6 +465,7 @@ async def test_overdue_reminders_are_idempotent_and_manual_decision_is_audited(w
         action="voided",
         reason="  Maintenance was completed outside the allowed provider.  ",
         decided_by="manager@example.test",
+        tenant_scope=TEST_TENANT_SCOPE,
     )
     decisions = list(
         (await warranty_session.execute(select(EquipmentWarrantyDecision))).scalars().all()
