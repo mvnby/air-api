@@ -49,7 +49,7 @@ const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQua
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
 
-const { isAuthenticated, currentUserRole } = managerSession;
+const { isAuthenticated, currentUserRole, recoveryRequired } = managerSession;
 const showLoginModal = ref(false);
 const loginUsername = ref('');
 const loginPassword = ref('');
@@ -473,7 +473,7 @@ watch(currentPath, () => {
     </div>
   </div>
 
-  <div v-if="isAuthenticated" class="manager-root min-h-screen flex">
+  <div v-if="isAuthenticated || recoveryRequired" class="manager-root min-h-screen flex">
     <button
       class="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow md:hidden"
       @click="toggleMobileNav"

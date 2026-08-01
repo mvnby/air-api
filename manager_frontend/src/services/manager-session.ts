@@ -15,6 +15,7 @@ export const managerSession = {
   currentUserRole: ref(''),
   auth: shallowRef<ManagerAuthStatusResponse | null>(null),
   bootstrapping: ref(false),
+  recoveryRequired: ref(false),
 };
 
 export const clearManagerSession = (): void => {
@@ -23,12 +24,19 @@ export const clearManagerSession = (): void => {
   managerSession.currentUserRole.value = '';
   managerSession.auth.value = null;
   managerSession.bootstrapping.value = false;
+  managerSession.recoveryRequired.value = false;
+};
+
+export const requireManagerSessionRecovery = (): void => {
+  clearManagerSession();
+  managerSession.recoveryRequired.value = true;
 };
 
 export const bootstrapManagerSession = async (
   authenticate?: AuthenticationStep,
 ): Promise<ManagerAuthStatusResponse> => {
   managerSession.bootstrapping.value = true;
+  managerSession.isAuthenticated.value = false;
   managerSession.currentUserRole.value = '';
   managerSession.auth.value = null;
   managerStorefrontSelection.prepareAuthentication();

@@ -234,3 +234,31 @@ export const installManagerStorefrontHeaderResolver = (
   config.HEADERS = createManagerStorefrontHeaderResolver(config.HEADERS);
   installedConfigs.add(config);
 };
+
+type FetchHost = { fetch: typeof fetch };
+const installedFetchHosts = new WeakSet<object>();
+
+export const installManagerStorefrontFetchScope = (
+  host: FetchHost = window,
+): void => {
+  if (installedFetchHosts.has(host)) return;
+  const originalFetch = host.fetch.bind(host);
+  host.fetch = (input, init) => {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+    const scopedHeaders = getManagerStorefrontRequestHeaders(url);
+    if (!Object.keys(scopedHeaders).length) return originalFetch(input, init);
+
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
+    for (const [name, value] of Object.entries(scopedHeaders)) {
+      if (!headers.has(name)) headers.set(name, value);
+    }
+    return originalFetch(input, { ...init, headers });
+  };
+  installedFetchHosts.add(host);
+};

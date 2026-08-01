@@ -8,6 +8,7 @@ import {
   ManagerStorefrontSelection,
   createManagerStorefrontHeaderResolver,
   getManagerStorefrontRequestHeaders,
+  installManagerStorefrontFetchScope,
   managerStorefrontSelection,
   managerStorefrontStorageKey,
 } from '../src/services/manager-storefront-selection';
@@ -102,6 +103,39 @@ describe('manager storefront request scope', () => {
       'X-Existing': 'kept',
       [MANAGER_STOREFRONT_HEADER]: 'orsha',
     });
+  });
+
+  it('scopes direct fetch calls without leaking into public or worker routes', async () => {
+    managerStorefrontSelection.selectedSlug.value = 'orsha';
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const host = { fetch: fetchMock as unknown as typeof fetch };
+
+    installManagerStorefrontFetchScope(host);
+    const installedFetch = host.fetch;
+    installManagerStorefrontFetchScope(host);
+    expect(host.fetch).toBe(installedFetch);
+
+    await host.fetch('/api/manager/orders');
+    await host.fetch('/api/manager/orders/7', {
+      headers: {
+        [MANAGER_STOREFRONT_HEADER]: 'explicit-scope',
+        'X-Existing': 'kept',
+      },
+    });
+    await host.fetch('/api/v1/products');
+    await host.fetch('/api/internal/bot/v1/events');
+    await host.fetch('/api/manager/media/worker/jobs/claim');
+
+    const scopedHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(scopedHeaders.get(MANAGER_STOREFRONT_HEADER)).toBe('orsha');
+
+    const explicitHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(explicitHeaders.get(MANAGER_STOREFRONT_HEADER)).toBe('explicit-scope');
+    expect(explicitHeaders.get('X-Existing')).toBe('kept');
+
+    expect(fetchMock.mock.calls[2]).toEqual(['/api/v1/products', undefined]);
+    expect(fetchMock.mock.calls[3]).toEqual(['/api/internal/bot/v1/events', undefined]);
+    expect(fetchMock.mock.calls[4]).toEqual(['/api/manager/media/worker/jobs/claim', undefined]);
   });
 });
 

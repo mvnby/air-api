@@ -41,7 +41,6 @@ import {
     YANDEX_BUSINESS_MANAGER_DOWNLOAD_PATH,
     YANDEX_BUSINESS_PUBLIC_FEED_PATH,
 } from '../utils/yandex-business-feed';
-import { getManagerStorefrontRequestHeaders } from '../services/manager-storefront-selection';
 
 // Product state
 const products = ref<Product[]>([]);
@@ -157,7 +156,6 @@ const downloadYandexBusinessPriceList = async () => {
             credentials: 'include',
             headers: {
                 Accept: 'application/xml',
-                ...getManagerStorefrontRequestHeaders(YANDEX_BUSINESS_MANAGER_DOWNLOAD_PATH),
             },
         });
         if (!response.ok) {
