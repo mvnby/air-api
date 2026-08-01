@@ -10,6 +10,10 @@ from services.brand_series_service import extract_series_name, sync_product_bran
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
 from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.feature_scope_policy import FeatureScopePolicy
+from services.manager_brand_mutation_state import (
+    normalize_brand_feature_ids,
+    snapshot_brand_series,
+)
 
 
 class ManagerBrandSeriesOperations:
@@ -172,6 +176,7 @@ class ManagerBrandSeriesOperations:
             raise HTTPException(status_code=404, detail="Бренд не найден.")
 
         series = await cls._get_brand_series(session, brand_id, series_id)
+        before_state = snapshot_brand_series(series)
 
         if "title" in payload and payload["title"] is not None:
             title = str(payload["title"]).strip()
@@ -219,10 +224,13 @@ class ManagerBrandSeriesOperations:
         if "sort_order" in payload and payload["sort_order"] is not None:
             series.sort_order = int(payload["sort_order"])
 
-        session.add(series)
-        await session.flush()
+        entity_changed = snapshot_brand_series(series) != before_state
+        if entity_changed:
+            session.add(series)
+            await session.flush()
+        relation_changed = False
         if "brand_feature_ids" in payload and payload["brand_feature_ids"] is not None:
-            await cls._sync_series_brand_features(
+            relation_changed = await cls._sync_series_brand_features(
                 session,
                 series=series,
                 brand_id=brand_id,
@@ -232,7 +240,7 @@ class ManagerBrandSeriesOperations:
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.update_brand_series",
-            changed=True,
+            changed=entity_changed or relation_changed,
             brand_slugs=[brand.slug],
         )
         await session.refresh(series)
@@ -450,18 +458,19 @@ class ManagerBrandSeriesOperations:
         series: ProductSeries,
         brand_id: int,
         feature_ids: Any,
-    ) -> None:
+    ) -> bool:
         if not series.id:
-            return
+            return False
 
-        normalized_ids: List[int] = []
-        for value in feature_ids or []:
-            try:
-                feature_id = int(value)
-            except (TypeError, ValueError):
-                continue
-            if feature_id > 0 and feature_id not in normalized_ids:
-                normalized_ids.append(feature_id)
+        normalized_ids = normalize_brand_feature_ids(feature_ids)
+        existing_links = (
+            await session.execute(
+                select(FeatureSeriesLink).where(FeatureSeriesLink.series_id == series.id)
+            )
+        ).scalars().all()
+        existing_by_feature_id = {int(link.feature_id): link for link in existing_links}
+        if set(existing_by_feature_id) == set(normalized_ids):
+            return False
 
         if normalized_ids:
             candidates = list(
@@ -491,27 +500,27 @@ class ManagerBrandSeriesOperations:
                     detail=f"Фичи не найдены у этого бренда: {', '.join(map(str, missing_ids))}",
                 )
 
-        existing_links = (
-            await session.execute(
-                select(FeatureSeriesLink).where(FeatureSeriesLink.series_id == series.id)
-            )
-        ).scalars().all()
-        existing_by_feature_id = {int(link.feature_id): link for link in existing_links}
         keep_ids = set(normalized_ids)
 
         for link in existing_links:
             if int(link.feature_id) not in keep_ids:
                 await session.delete(link)
 
-        for index, feature_id in enumerate(normalized_ids):
-            link = existing_by_feature_id.get(feature_id)
-            if link is None:
-                link = FeatureSeriesLink(
-                    series_id=int(series.id),
-                    feature_id=feature_id,
+        next_sort_order = max(
+            (int(link.sort_order or 0) for link in existing_links),
+            default=0,
+        )
+        for feature_id in normalized_ids:
+            if feature_id not in existing_by_feature_id:
+                next_sort_order += 10
+                session.add(
+                    FeatureSeriesLink(
+                        series_id=int(series.id),
+                        feature_id=feature_id,
+                        sort_order=next_sort_order,
+                    )
                 )
-            link.sort_order = (index + 1) * 10
-            session.add(link)
+        return True
 
     @classmethod
     async def _get_brand_series(

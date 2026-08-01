@@ -19,6 +19,10 @@ from models import (
     TagGroup,
 )
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.manager_brand_mutation_state import (
+    snapshot_brand,
+    snapshot_brand_feature,
+)
 from services.manager_brand_series_service import ManagerBrandSeriesOperations
 
 
@@ -136,6 +140,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             raise HTTPException(status_code=404, detail="Бренд не найден.")
 
         feature = await ManagerBrandService._get_brand_feature(session, brand_id, feature_id)
+        before_state = snapshot_brand_feature(feature)
         if "title" in payload and payload["title"] is not None:
             title = str(payload["title"]).strip()
             if not title:
@@ -168,11 +173,14 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if "sort_order" in payload and payload["sort_order"] is not None:
             feature.sort_order = int(payload["sort_order"])
 
-        session.add(feature)
+        changed = snapshot_brand_feature(feature) != before_state
+        if changed:
+            feature.updated_at = datetime.now()
+            session.add(feature)
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.update_brand_feature",
-            changed=True,
+            changed=changed,
             brand_slugs=[brand.slug],
         )
         await session.refresh(feature)
@@ -196,13 +204,17 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
                 status_code=400,
                 detail="Нельзя удалить фичу: она привязана к сериям бренда.",
             )
-        feature.is_active = False
-        feature.archived_at = datetime.now()
-        session.add(feature)
+        changed = feature.is_active or feature.archived_at is None
+        if changed:
+            now = datetime.now()
+            feature.is_active = False
+            feature.archived_at = feature.archived_at or now
+            feature.updated_at = now
+            session.add(feature)
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.delete_brand_feature",
-            changed=True,
+            changed=changed,
             brand_slugs=[brand.slug],
         )
 
@@ -257,7 +269,9 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if brand is None:
             raise HTTPException(status_code=404, detail="Бренд не найден.")
 
+        previous_title = brand.title
         previous_slug = brand.slug
+        before_state = snapshot_brand(brand)
 
         if "title" in payload and payload["title"] is not None:
             title = str(payload["title"]).strip()
@@ -285,18 +299,31 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
                 brand.slug = new_slug
 
         if "logo_url" in payload:
-            brand.logo_url = payload["logo_url"]
+            brand.logo_url = ManagerBrandService._clean_optional_text(payload["logo_url"])
         if "description" in payload:
-            brand.description = payload["description"]
+            brand.description = ManagerBrandService._clean_optional_text(payload["description"])
         if "is_published" in payload and payload["is_published"] is not None:
             brand.is_published = bool(payload["is_published"])
         if "sort_order" in payload and payload["sort_order"] is not None:
             brand.sort_order = int(payload["sort_order"])
 
-        session.add(brand)
-        await session.flush()
+        changed = snapshot_brand(brand) != before_state
+        if changed:
+            session.add(brand)
+            await session.flush()
 
-        await ManagerBrandService._sync_brand_tag(session, brand=brand, previous_slug=previous_slug)
+        title_or_slug_changed = (brand.title, brand.slug) != (
+            previous_title,
+            previous_slug,
+        )
+        tag_changed = False
+        if title_or_slug_changed:
+            tag_changed = await ManagerBrandService._sync_brand_tag(
+                session,
+                brand=brand,
+                previous_slug=previous_slug,
+            )
+        changed = changed or tag_changed
 
         changed_slugs = [previous_slug]
         if brand.slug != previous_slug:
@@ -304,7 +331,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.update_brand",
-            changed=True,
+            changed=changed,
             brand_slugs=changed_slugs,
         )
         await session.refresh(brand)
@@ -550,12 +577,12 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         return blocks
 
     @staticmethod
-    async def _ensure_brand_group(session: AsyncSession) -> TagGroup:
+    async def _ensure_brand_group(session: AsyncSession) -> tuple[TagGroup, bool]:
         group = (
             await session.execute(select(TagGroup).where(TagGroup.slug == "brand"))
         ).scalar_one_or_none()
         if group is not None:
-            return group
+            return group, False
 
         group = TagGroup(
             title="Бренд",
@@ -566,7 +593,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         )
         session.add(group)
         await session.flush()
-        return group
+        return group, True
 
     @staticmethod
     async def _sync_brand_tag(
@@ -574,11 +601,11 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         *,
         brand: Brand,
         previous_slug: Optional[str],
-    ) -> None:
+    ) -> bool:
         if not brand.slug:
-            return
+            return False
 
-        brand_group = await ManagerBrandService._ensure_brand_group(session)
+        brand_group, group_changed = await ManagerBrandService._ensure_brand_group(session)
 
         tag: Optional[Tag] = None
         if previous_slug and previous_slug != brand.slug:
@@ -612,8 +639,17 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             )
             session.add(tag)
             await session.flush()
-            return
+            return True
 
+        tag_changed = (
+            tag.group_id != brand_group.id
+            or tag.title != brand.title
+            or tag.slug != brand.slug
+            or not tag.is_public
+            or not tag.is_filter
+        )
+        if not tag_changed:
+            return group_changed
         tag.group_id = brand_group.id
         tag.title = brand.title
         tag.slug = brand.slug
@@ -621,3 +657,4 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         tag.is_filter = True
         session.add(tag)
         await session.flush()
+        return True
