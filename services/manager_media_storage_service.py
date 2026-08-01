@@ -394,6 +394,15 @@ class ManagerMediaStorageOperations:
                 "Physical media GC is deferred until writer synchronization is available"
             )
 
+        base_dir = os.path.join("media", "products")
+        if not os.path.exists(base_dir):
+            return {
+                "dry_run": True,
+                "deleted_count": 0,
+                "reclaimed_bytes": 0,
+                "files": [],
+            }
+
         known_urls = set(
             (
                 await session.execute(
@@ -413,10 +422,6 @@ class ManagerMediaStorageOperations:
                 )
             ).scalars().all()
         )
-
-        base_dir = os.path.join("media", "products")
-        if not os.path.exists(base_dir):
-            return {"message": "Media directory not found", "deleted": 0}
 
         deleted_count = 0
         reclaimed_bytes = 0

@@ -13,16 +13,26 @@ from services.catalog_mutation_contracts import (
     PUBLIC_CATALOG_MUTATION_ENTRYPOINTS,
     PUBLIC_CATALOG_MUTATION_PRODUCERS,
 )
+from tests.unit.catalog_mutation_route_scanner import (
+    ScopedServiceCall,
+    scan_command_service_calls,
+    scan_route_service_calls,
+    unresolved_service_entrypoints,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
-MANAGER_MEDIA_WRITE_ROUTER = ROOT / "routers/manager_media_gallery_write.py"
+SCOPED_MUTATION_ROUTER_PATHS = (
+    ROOT / "routers/manager_media_gallery_write.py",
+    ROOT / "routers/manager_media_ingest_write.py",
+    ROOT / "routers/manager_brands.py",
+)
+SCOPED_COMMAND_CALLER_PATHS = (
+    ROOT / "scripts/backfill_yandex_feed_images.py",
+)
 NESTED_CATALOG_MUTATION_METHODS = {
     "bulk_add_gallery_images",
     "reprocess_variant",
-}
-REPORT_ONLY_MANAGER_MEDIA_ENTRYPOINTS = {
-    "ManagerMediaService.cleanup_media",
 }
 
 
@@ -43,17 +53,11 @@ def _imported_symbols(path: Path) -> dict[str, Path]:
     return imported
 
 
-def _manager_media_router_entrypoints() -> set[str]:
-    entrypoints: set[str] = set()
-    for node in ast.walk(ast.parse(MANAGER_MEDIA_WRITE_ROUTER.read_text())):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-            continue
-        if not isinstance(node.func.value, ast.Name):
-            continue
-        class_name = node.func.value.id
-        if class_name.endswith("Service"):
-            entrypoints.add(f"{class_name}.{node.func.attr}")
-    return entrypoints
+def _scoped_service_calls() -> tuple[ScopedServiceCall, ...]:
+    return (
+        *scan_route_service_calls(SCOPED_MUTATION_ROUTER_PATHS),
+        *scan_command_service_calls(SCOPED_COMMAND_CALLER_PATHS),
+    )
 
 
 def _has_false_commit_keyword(node: ast.Call) -> bool:
@@ -70,12 +74,16 @@ def _transaction_owner_paths() -> tuple[Path, ...]:
 
     paths = {
         ROOT / "services/importer_service.py",
-        MANAGER_MEDIA_WRITE_ROUTER,
+        *SCOPED_MUTATION_ROUTER_PATHS,
+        *SCOPED_COMMAND_CALLER_PATHS,
     }
-    router_imports = _imported_symbols(MANAGER_MEDIA_WRITE_ROUTER)
-    for entrypoint in _manager_media_router_entrypoints():
-        class_name = entrypoint.split(".", 1)[0]
-        paths.add(router_imports[class_name])
+    for caller_path in (*SCOPED_MUTATION_ROUTER_PATHS, *SCOPED_COMMAND_CALLER_PATHS):
+        imports = _imported_symbols(caller_path)
+        for call in _scoped_service_calls():
+            if call.source != caller_path.name:
+                continue
+            class_name = call.entrypoint.split(".", 1)[0]
+            paths.add(imports[class_name])
 
     for path in (ROOT / "services").glob("*.py"):
         tree = ast.parse(path.read_text())
@@ -108,32 +116,6 @@ def _transaction_owner_paths() -> tuple[Path, ...]:
 
 
 def test_public_catalog_mutation_inventory_covers_reviewed_entrypoints():
-    assert set(PUBLIC_CATALOG_MUTATION_ENTRYPOINTS) == {
-        "ImporterService.import_product",
-        "ManagerMediaService.set_main_image",
-        "ManagerMediaService.delete_gallery_image",
-        "ManagerMediaService.crop_gallery_image",
-        "ManagerMediaService.remove_background_gallery_image",
-        "ManagerMediaService.reuse_image_link",
-        "ManagerMediaService.process_and_save_image",
-        "ManagerMediaService.save_image_from_bytes",
-        "ManagerMediaService.save_images_from_bytes",
-        "ManagerMediaService.bulk_add_gallery_images",
-        "ManagerMediaService.bulk_delete_common_gallery_images",
-        "ManagerMediaService.apply_gallery_to_series",
-        "ManagerMediaService.bulk_upload_local_images",
-        "ManagerMediaOrchestratorService.upload_image_from_url",
-        "ManagerMediaOrchestratorService.upload_local_images",
-        "ManagerMediaOrchestratorService.link_search_result",
-        "ManagerMediaOrchestratorService.bulk_upload_local_images",
-        "FeatureAssignmentService.delete_product_assignment",
-        "FeatureAssignmentService.delete_target_link",
-        "ProductImageVariantService.reprocess_variant",
-        "ProductImageVariantService.process_missing_variants",
-        "YandexFeedImageService.backfill",
-        "ManagerBrandService.apply_series_gallery_to_products",
-    }
-
     entrypoint_producers = {
         producer
         for producers in PUBLIC_CATALOG_MUTATION_ENTRYPOINTS.values()
@@ -186,11 +168,29 @@ def test_literal_registered_producers_exist_in_the_contract_inventory():
 
     assert literal_producers
     assert literal_producers <= set(GLOBAL_CATALOG_MUTATION_CONTRACTS)
+    scoped_producers = {
+        producer
+        for call in _scoped_service_calls()
+        for producer in PUBLIC_CATALOG_MUTATION_ENTRYPOINTS[call.entrypoint]
+    }
+    assert scoped_producers <= literal_producers
 
 
-def test_manager_media_write_router_mutations_are_registered_automatically():
-    routed = _manager_media_router_entrypoints() - REPORT_ONLY_MANAGER_MEDIA_ENTRYPOINTS
-    assert routed <= set(PUBLIC_CATALOG_MUTATION_ENTRYPOINTS)
+def test_scoped_routes_and_command_callers_are_registered_automatically():
+    registered = set(PUBLIC_CATALOG_MUTATION_ENTRYPOINTS)
+    missing = [
+        f"{call.source}:{call.owner}:{call.transport}:{call.entrypoint}"
+        for call in _scoped_service_calls()
+        if call.entrypoint not in registered
+    ]
+    assert missing == []
+
+
+def test_registered_entrypoints_resolve_to_real_service_methods():
+    assert unresolved_service_entrypoints(
+        ROOT / "services",
+        PUBLIC_CATALOG_MUTATION_ENTRYPOINTS,
+    ) == set()
 
 
 def test_nested_catalog_mutations_require_a_caller_owned_batch():
@@ -211,7 +211,7 @@ def test_nested_catalog_mutations_require_a_caller_owned_batch():
 
 def test_manager_media_request_paths_never_unlink_physical_objects():
     paths = {
-        MANAGER_MEDIA_WRITE_ROUTER,
+        *SCOPED_MUTATION_ROUTER_PATHS,
         *(ROOT / "routers").glob("manager_media*.py"),
         *(ROOT / "services").glob("manager_media*.py"),
     }

@@ -115,9 +115,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
                 sort_order=feature.sort_order,
             )
         )
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_feature_create",
+            producer="manager_brand.create_brand_feature",
+            changed=True,
             brand_slugs=[brand.slug],
         )
         await session.refresh(feature)
@@ -168,9 +169,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             feature.sort_order = int(payload["sort_order"])
 
         session.add(feature)
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_feature_update",
+            producer="manager_brand.update_brand_feature",
+            changed=True,
             brand_slugs=[brand.slug],
         )
         await session.refresh(feature)
@@ -197,9 +199,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         feature.is_active = False
         feature.archived_at = datetime.now()
         session.add(feature)
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_feature_delete",
+            producer="manager_brand.delete_brand_feature",
+            changed=True,
             brand_slugs=[brand.slug],
         )
 
@@ -235,9 +238,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         await session.flush()
 
         await ManagerBrandService._sync_brand_tag(session, brand=brand, previous_slug=None)
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_create",
+            producer="manager_brand.create_brand",
+            changed=True,
             brand_slugs=[brand.slug],
         )
         await session.refresh(brand)
@@ -297,9 +301,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         changed_slugs = [previous_slug]
         if brand.slug != previous_slug:
             changed_slugs.append(brand.slug)
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_update",
+            producer="manager_brand.update_brand",
+            changed=True,
             brand_slugs=changed_slugs,
         )
         await session.refresh(brand)
@@ -367,9 +372,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         brand_slug = brand.slug
 
         await session.delete(brand)
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_delete",
+            producer="manager_brand.delete_brand",
+            changed=True,
             brand_slugs=[brand_slug],
         )
 

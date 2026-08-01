@@ -4,6 +4,8 @@ import pytest
 from fastapi import HTTPException
 
 from routers.manager_media_gallery_write import apply_gallery_to_series as apply_gallery_route
+from routers.manager_media_gallery_write import cleanup_media as cleanup_media_route
+from schemas import ManagerMediaCleanupResponse
 from services.manager_media_service import ManagerMediaService
 from services.product_image_variant_service import ProductImageVariantService
 
@@ -50,6 +52,40 @@ async def test_cleanup_execute_fails_before_scanning_database_or_files():
     with pytest.raises(RuntimeError, match="Physical media GC is deferred"):
         await ManagerMediaService.cleanup_media(session, dry_run=False)
 
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_report_has_valid_empty_response_without_local_media_root(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    session = AsyncMock()
+
+    result = await ManagerMediaService.cleanup_media(session, dry_run=True)
+
+    assert ManagerMediaCleanupResponse.model_validate(result).model_dump() == {
+        "dry_run": True,
+        "deleted_count": 0,
+        "reclaimed_bytes": 0,
+        "files": [],
+    }
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_route_supports_fresh_or_r2_only_runtime(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    session = AsyncMock()
+
+    result = await cleanup_media_route(
+        dry_run=True,
+        session=session,
+        username="manager",
+    )
+
+    assert ManagerMediaCleanupResponse.model_validate(result).deleted_count == 0
     session.execute.assert_not_awaited()
 
 

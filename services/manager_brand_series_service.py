@@ -85,9 +85,10 @@ class ManagerBrandSeriesOperations:
         if not changed_product_ids:
             return 0
 
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_series_auto_sync",
+            producer="manager_brand.list_brand_series",
+            changed=True,
             product_ids=changed_product_ids,
             brand_slugs=[brand.slug],
         )
@@ -144,9 +145,10 @@ class ManagerBrandSeriesOperations:
                 feature_ids=payload.get("brand_feature_ids"),
             )
 
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_series_create",
+            producer="manager_brand.create_brand_series",
+            changed=True,
             brand_slugs=[brand.slug],
         )
         await session.refresh(series)
@@ -227,9 +229,10 @@ class ManagerBrandSeriesOperations:
                 feature_ids=payload.get("brand_feature_ids"),
             )
 
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_series_update",
+            producer="manager_brand.update_brand_series",
+            changed=True,
             brand_slugs=[brand.slug],
         )
         await session.refresh(series)
@@ -341,9 +344,10 @@ class ManagerBrandSeriesOperations:
         for link in link_rows:
             await session.delete(link)
         await session.delete(series)
-        await CatalogInvalidationCommitService.commit_global_mutation(
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
-            reason="brand_series_delete",
+            producer="manager_brand.delete_brand_series",
+            changed=True,
             brand_slugs=[brand.slug],
         )
 

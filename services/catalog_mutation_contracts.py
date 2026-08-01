@@ -82,7 +82,17 @@ PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS = frozenset(
 
 MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS = frozenset(
     {
+        "manager_brand.create_brand",
+        "manager_brand.update_brand",
+        "manager_brand.delete_brand",
+        "manager_brand.create_brand_feature",
+        "manager_brand.update_brand_feature",
+        "manager_brand.delete_brand_feature",
+        "manager_brand.list_brand_series",
+        "manager_brand.create_brand_series",
+        "manager_brand.update_brand_series",
         "manager_brand.apply_series_gallery_to_products",
+        "manager_brand.delete_brand_series",
     }
 )
 
@@ -96,6 +106,8 @@ PUBLIC_CATALOG_MUTATION_PRODUCERS = frozenset(
     }
 )
 
+# This mapping is the single reviewed facade inventory used by the scoped route
+# scanner. An empty producer set marks an explicitly non-mutating route.
 PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
         "ImporterService.import_product": frozenset({"importer.import_product"}),
@@ -135,6 +147,7 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
         "ManagerMediaService.bulk_upload_local_images": frozenset(
             {"manager_media.bulk_upload_local_images"}
         ),
+        "ManagerMediaService.cleanup_media": frozenset(),
         "ManagerMediaOrchestratorService.upload_image_from_url": frozenset(
             {"manager_media.save_image_from_bytes"}
         ),
@@ -165,8 +178,40 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
         "YandexFeedImageService.backfill": frozenset(
             {"yandex_feed_image.backfill"}
         ),
+        "ManagerBrandService.list_brands": frozenset(),
+        "ManagerBrandService.list_brand_features": frozenset(),
+        "ManagerBrandService.create_brand": frozenset(
+            {"manager_brand.create_brand"}
+        ),
+        "ManagerBrandService.update_brand": frozenset(
+            {"manager_brand.update_brand"}
+        ),
+        "ManagerBrandService.delete_brand": frozenset(
+            {"manager_brand.delete_brand"}
+        ),
+        "ManagerBrandService.create_brand_feature": frozenset(
+            {"manager_brand.create_brand_feature"}
+        ),
+        "ManagerBrandService.update_brand_feature": frozenset(
+            {"manager_brand.update_brand_feature"}
+        ),
+        "ManagerBrandService.delete_brand_feature": frozenset(
+            {"manager_brand.delete_brand_feature"}
+        ),
+        "ManagerBrandService.list_brand_series": frozenset(
+            {"manager_brand.list_brand_series"}
+        ),
+        "ManagerBrandService.create_brand_series": frozenset(
+            {"manager_brand.create_brand_series"}
+        ),
+        "ManagerBrandService.update_brand_series": frozenset(
+            {"manager_brand.update_brand_series"}
+        ),
         "ManagerBrandService.apply_series_gallery_to_products": frozenset(
             {"manager_brand.apply_series_gallery_to_products"}
+        ),
+        "ManagerBrandService.delete_brand_series": frozenset(
+            {"manager_brand.delete_brand_series"}
         ),
     }
 )
@@ -249,9 +294,49 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
             "yandex_feed_image.backfill",
             "product_media_yandex_feed_backfill",
         ),
+        "manager_brand.create_brand": _contract(
+            "manager_brand.create_brand",
+            "brand_create",
+        ),
+        "manager_brand.update_brand": _contract(
+            "manager_brand.update_brand",
+            "brand_update",
+        ),
+        "manager_brand.delete_brand": _contract(
+            "manager_brand.delete_brand",
+            "brand_delete",
+        ),
+        "manager_brand.create_brand_feature": _contract(
+            "manager_brand.create_brand_feature",
+            "brand_feature_create",
+        ),
+        "manager_brand.update_brand_feature": _contract(
+            "manager_brand.update_brand_feature",
+            "brand_feature_update",
+        ),
+        "manager_brand.delete_brand_feature": _contract(
+            "manager_brand.delete_brand_feature",
+            "brand_feature_delete",
+        ),
+        "manager_brand.list_brand_series": _contract(
+            "manager_brand.list_brand_series",
+            "brand_series_auto_sync",
+        ),
+        "manager_brand.create_brand_series": _contract(
+            "manager_brand.create_brand_series",
+            "brand_series_create",
+        ),
+        "manager_brand.update_brand_series": _contract(
+            "manager_brand.update_brand_series",
+            "brand_series_update",
+        ),
         "manager_brand.apply_series_gallery_to_products": _contract(
             "manager_brand.apply_series_gallery_to_products",
             "brand_series_gallery_apply",
+        ),
+        "manager_brand.delete_brand_series": _contract(
+            "manager_brand.delete_brand_series",
+            "brand_series_delete",
         ),
     }
 )
