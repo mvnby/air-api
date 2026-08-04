@@ -113,6 +113,45 @@ async def test_command_uses_savepoint_inside_explicit_uow(
 
 
 @pytest.mark.asyncio
+async def test_failed_autobegin_command_preserves_preexisting_root_work(
+    transaction_session_factory: Any,
+):
+    async with transaction_session_factory() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO command_transaction_probe (value)
+                VALUES ('before')
+                """
+            )
+        )
+
+        with pytest.raises(RuntimeError, match="rollback command savepoint"):
+            async with command_transaction(session):
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO command_transaction_probe (value)
+                        VALUES ('nested')
+                        """
+                    )
+                )
+                raise RuntimeError("rollback command savepoint")
+
+        await session.execute(
+            text(
+                """
+                INSERT INTO command_transaction_probe (value)
+                VALUES ('after')
+                """
+            )
+        )
+        await session.commit()
+
+    assert await _stored_values(transaction_session_factory) == ["before", "after"]
+
+
+@pytest.mark.asyncio
 async def test_command_rolls_back_owned_autobegin_on_error(
     transaction_session_factory: Any,
 ):
