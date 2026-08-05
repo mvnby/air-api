@@ -284,6 +284,28 @@ def test_fetch_role_requires_strict_identity_and_leader_lock(
     )
 
 
+def test_primary_accepts_single_reviewed_local_dcs_member(monkeypatch):
+    status = _patroni_payload("leader")
+    cluster = {
+        "members": [
+            {
+                "name": "mvn-api",
+                "role": "leader",
+                "state": "running",
+                "timeline": 7,
+            }
+        ]
+    }
+    _mock_patroni(
+        monkeypatch,
+        status=status,
+        leader=dict(status),
+        cluster=cluster,
+    )
+
+    assert _fetch() == "primary"
+
+
 def test_fetch_role_rejects_unknown_running_role(monkeypatch):
     _mock_patroni(monkeypatch, status=_patroni_payload("mystery"))
     with pytest.raises(ValueError, match="unsupported Patroni role: mystery"):
@@ -362,6 +384,36 @@ def test_primary_requires_coherent_leader_endpoint_and_dcs_view(
         cluster["members"][1]["role"] = "leader"
     _mock_patroni(monkeypatch, status=status, leader=leader, cluster=cluster)
     with pytest.raises((ValueError, urllib.error.URLError), match=message):
+        _fetch()
+
+
+@pytest.mark.parametrize(
+    "members",
+    [
+        [],
+        [
+            {"name": "mvn-api", "role": "leader", "state": "running", "timeline": 7},
+            {"name": "mvn-api", "role": "replica", "state": "running", "timeline": 7},
+        ],
+        [
+            {"name": "mvn-api", "role": "leader", "state": "running", "timeline": 7},
+            {"name": "unexpected", "role": "replica", "state": "running", "timeline": 7},
+        ],
+        [
+            {"name": "zakup", "role": "leader", "state": "running", "timeline": 7},
+        ],
+    ],
+)
+def test_primary_rejects_unsafe_dcs_member_identities(monkeypatch, members):
+    status = _patroni_payload("leader")
+    _mock_patroni(
+        monkeypatch,
+        status=status,
+        leader=dict(status),
+        cluster={"members": members},
+    )
+
+    with pytest.raises(ValueError, match="identities are unsafe"):
         _fetch()
 
 
