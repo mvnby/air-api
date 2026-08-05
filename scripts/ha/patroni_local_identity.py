@@ -396,7 +396,7 @@ def reconcile_primary_systemd_units(
     if role == "standby":
         # ``systemctl stop`` deliberately does not clear a unit's failed latch.
         # A failed one-shot PITR service has no running owner, but the strict
-        # steady-state probe still requires ``inactive``.  Clear only the
+        # steady-state probe still requires ``inactive``. Clear only the
         # recorded failure after every stop attempt, then let the exact state
         # probe below prove that timers are disabled and every unit is inactive.
         for unit in unique_units:
@@ -609,7 +609,18 @@ def _validate_leader_lock(
     ):
         raise ValueError("Patroni /cluster member list is missing or invalid")
     names = [str(member.get("name") or "").strip() for member in raw_members]
-    if set(names) != EXPECTED_CLUSTER_NAMES or len(names) != len(EXPECTED_CLUSTER_NAMES):
+    reported_names = set(names)
+    # Patroni member keys are ephemeral. During a real node outage the elected
+    # primary may be the only reviewed member left in /cluster. Keep accepting
+    # only known, duplicate-free identities containing this local node; the
+    # fresh DCS observation, /leader proof, single-leader and timeline checks
+    # below still guard activation.
+    if (
+        not names
+        or len(names) != len(reported_names)
+        or expected_name not in reported_names
+        or not reported_names.issubset(EXPECTED_CLUSTER_NAMES)
+    ):
         raise ValueError(f"Patroni /cluster identities are unsafe: {sorted(names)}")
     leaders = [
         member
