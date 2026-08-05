@@ -29,8 +29,11 @@ API_NODE_COMPOSE_FILE="${API_NODE_COMPOSE_FILE:-${PRIMARY_COMPOSE_FILE}}"
 RESERVE_NODE_COMPOSE_FILE="${RESERVE_NODE_COMPOSE_FILE:-${STANDBY_COMPOSE_FILE}}"
 API_NODE_ORIGIN="${API_NODE_ORIGIN:-185.250.45.54}"
 RESERVE_NODE_ORIGIN="${RESERVE_NODE_ORIGIN:-193.47.42.213}"
-CONFIGURED_PRIMARY_ORIGIN="${PRIMARY_ORIGIN}"
-CONFIGURED_STANDBY_ORIGIN="${STANDBY_ORIGIN}"
+
+# Cloudflare pool order is stable configuration, not the current Patroni role.
+# Keep backward-compatible defaults from the legacy physical primary variables.
+CLOUDFLARE_PRIMARY_ORIGIN="${CLOUDFLARE_PRIMARY_ORIGIN:-${PRIMARY_ORIGIN}}"
+CLOUDFLARE_STANDBY_ORIGIN="${CLOUDFLARE_STANDBY_ORIGIN:-${STANDBY_ORIGIN}}"
 
 EXPECTED_CDN_BASE="${EXPECTED_CDN_BASE:-https://cdn.mvn.by}"
 MIN_DB_CDN_URLS="${MIN_DB_CDN_URLS:-3}"
@@ -182,8 +185,8 @@ run_cloudflare_lb() {
   fi
 
   CF_LB_HOSTNAME="${CF_LB_HOSTNAME:-${API_HOST}}" \
-    CF_LB_PRIMARY_ORIGIN="${CF_LB_PRIMARY_ORIGIN:-${CONFIGURED_PRIMARY_ORIGIN}}" \
-    CF_LB_STANDBY_ORIGIN="${CF_LB_STANDBY_ORIGIN:-${CONFIGURED_STANDBY_ORIGIN}}" \
+    CF_LB_PRIMARY_ORIGIN="${CF_LB_PRIMARY_ORIGIN:-${CLOUDFLARE_PRIMARY_ORIGIN}}" \
+    CF_LB_STANDBY_ORIGIN="${CF_LB_STANDBY_ORIGIN:-${CLOUDFLARE_STANDBY_ORIGIN}}" \
     CF_LB_HOST_HEADER="${CF_LB_HOST_HEADER:-${API_HOST}}" \
     CF_LB_MONITOR_PATH="${CF_LB_MONITOR_PATH:-/api/ready}" \
     CF_LB_MONITOR_METHOD="${CF_LB_MONITOR_METHOD:-GET}" \
@@ -233,11 +236,6 @@ case "${API_DB_HA_MODE}" in
         exit 1
         ;;
     esac
-    if [[ "${CONFIGURED_PRIMARY_ORIGIN}" != "${PRIMARY_ORIGIN}" ||
-          "${CONFIGURED_STANDBY_ORIGIN}" != "${STANDBY_ORIGIN}" ]]; then
-      log fail "configured API role origins disagree with the proven Patroni topology"
-      exit 1
-    fi
     ;;
   physical)
     patroni_primary_label=physical
@@ -248,7 +246,7 @@ case "${API_DB_HA_MODE}" in
     ;;
 esac
 
-log info "strict=${HA_READINESS_STRICT} ha_mode=${API_DB_HA_MODE} primary_label=${patroni_primary_label} primary=${PRIMARY_ORIGIN} standby=${STANDBY_ORIGIN} primary_ssh=${PRIMARY_SSH} standby_ssh=${STANDBY_SSH}"
+log info "strict=${HA_READINESS_STRICT} ha_mode=${API_DB_HA_MODE} primary_label=${patroni_primary_label} primary=${PRIMARY_ORIGIN} standby=${STANDBY_ORIGIN} primary_ssh=${PRIMARY_SSH} standby_ssh=${STANDBY_SSH} cloudflare_primary=${CLOUDFLARE_PRIMARY_ORIGIN} cloudflare_standby=${CLOUDFLARE_STANDBY_ORIGIN}"
 
 if is_true "${CHECK_ACTIVE_PASSIVE}"; then
   run_required "active_passive_invariant" run_active_passive
