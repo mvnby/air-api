@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+import sys
 
 import yaml
 
@@ -70,3 +72,24 @@ def test_pitr_host_asset_rollout_uses_pinned_ssh_controller_and_retains_log():
         "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
     )
     assert notify["if"] == "failure() && github.ref == 'refs/heads/main'"
+
+
+def test_pitr_host_asset_controller_starts_under_isolated_python():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(
+                REPO_ROOT
+                / "scripts/ha/rollout_postgres_pitr_host_assets.py"
+            ),
+            "--help",
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--transaction-id" in result.stdout
