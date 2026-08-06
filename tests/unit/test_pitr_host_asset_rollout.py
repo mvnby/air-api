@@ -56,6 +56,7 @@ class FakeOperations:
         self.events = []
         self.states = {"mvn-api": "fresh", "zakup": "fresh"}
         self.topologies = []
+        self.default_topology = _topology()
         self.discover_calls = 0
         self.release_failure = None
         self.verify_failure = False
@@ -65,7 +66,7 @@ class FakeOperations:
         self.events.append(("topology",))
         if self.topologies:
             return self.topologies.pop(0)
-        return _topology()
+        return self.default_topology
 
     def bundles(self, nodes):
         return {node.project_dir: _bundle(node) for node in nodes}
@@ -168,6 +169,33 @@ def test_fresh_rollout_uses_standby_first_and_finishes_with_strict_verify(
         ("release", "inspect", "mvn-api", TXID),
         ("verify", "mvn-api", "verify", TXID),
     ]
+
+
+def test_rollout_order_follows_dynamic_patroni_roles_when_zakup_is_primary(
+    tmp_path,
+):
+    operations = FakeOperations()
+    operations.default_topology = _topology(primary_alias="zakup")
+
+    result = rollout_host_assets(
+        context=_context(tmp_path),
+        transaction_id=TXID,
+        runner=_unused_runner,
+        dependencies=operations.dependencies(),
+    )
+
+    assert result.primary_alias == "zakup"
+    assert result.standby_alias == "mvn-api"
+    apply_events = [
+        event
+        for event in operations.events
+        if event[:2] == ("release", "apply")
+    ]
+    assert apply_events == [
+        ("release", "apply", "mvn-api", TXID),
+        ("release", "apply", "zakup", TXID),
+    ]
+    assert ("verify", "zakup", "verify", TXID) in operations.events
 
 
 def test_retry_resumes_durable_generations_before_touching_fresh_peer(tmp_path):
