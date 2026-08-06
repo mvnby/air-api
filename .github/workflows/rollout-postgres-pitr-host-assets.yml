@@ -1,0 +1,132 @@
+name: Rollout PostgreSQL PITR Host Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_sha:
+        description: "Exact 40-character main SHA to install and attest"
+        type: string
+        required: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+concurrency:
+  group: production-postgres-pitr-host-assets
+  cancel-in-progress: false
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require Reviewed Main SHA
+        env:
+          CONFIRM_SHA: ${{ inputs.confirm_sha }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::PITR host assets may be rolled out only from refs/heads/main"
+            exit 64
+          fi
+          if ! [[ "${CONFIRM_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::confirm_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 64
+          fi
+          if [ "${CONFIRM_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "::error::confirm_sha must equal the exact workflow main SHA"
+            exit 64
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Derive Stable Transaction ID
+        id: transaction
+        run: |
+          set -euo pipefail
+          transaction_id="$(
+            python3 - <<'PY'
+          import hashlib
+          import os
+
+          material = "\0".join(
+              (
+                  os.environ["GITHUB_REPOSITORY"],
+                  os.environ["GITHUB_RUN_ID"],
+                  os.environ["GITHUB_SHA"],
+                  "pitr-host-assets-v1",
+              )
+          )
+          print(hashlib.sha256(material.encode("utf-8")).hexdigest()[:32])
+          PY
+          )"
+          if ! [[ "${transaction_id}" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::error::derived PITR transaction ID is invalid"
+            exit 70
+          fi
+          echo "transaction_id=${transaction_id}" >> "${GITHUB_OUTPUT}"
+          echo "transaction_id=${transaction_id}" | tee pitr-host-assets-rollout.log
+
+      - name: Roll Out And Attest PITR Host Assets
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          PITR_TRANSACTION_ID: ${{ steps.transaction.outputs.transaction_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing required SSH_KEY secret"
+            exit 1
+          fi
+          identity_file="$(mktemp)"
+          cleanup() {
+            rm -f "${identity_file}"
+          }
+          trap cleanup EXIT
+          printf '%s\n' "${SSH_KEY}" > "${identity_file}"
+          unset SSH_KEY
+          chmod 600 "${identity_file}"
+
+          python3 -I scripts/ha/rollout_postgres_pitr_host_assets.py \
+            --identity-file "${identity_file}" \
+            --transaction-id "${PITR_TRANSACTION_ID}" \
+            2>&1 | tee -a pitr-host-assets-rollout.log
+
+      - name: Write Summary
+        if: always()
+        run: |
+          {
+            echo "## PostgreSQL PITR Host-Asset Rollout"
+            echo "- main_sha: ${GITHUB_SHA}"
+            echo "- transaction_id: ${{ steps.transaction.outputs.transaction_id || 'unavailable' }}"
+            echo "- ordering: current Patroni standby, then current Patroni primary"
+            echo "- transport: repository-pinned SSH host identities"
+            echo "- mutation: existing PITR lock + per-project deploy lock"
+            echo "- recovery: rerun this workflow attempt to preserve the transaction ID"
+            echo "- log_artifact: pitr-host-assets-rollout-log-${{ github.run_id }}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload PITR Host-Asset Rollout Log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pitr-host-assets-rollout-log-${{ github.run_id }}
+          path: pitr-host-assets-rollout.log
+          if-no-files-found: warn
+
+      - name: Notify HA failure
+        if: failure() && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/notify-ha-failure
+        with:
+          bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
+          chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
+          thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
+          title: "MVN PostgreSQL PITR host-asset rollout failed"
+          details: "Artifact: pitr-host-assets-rollout-log-${{ github.run_id }}"
