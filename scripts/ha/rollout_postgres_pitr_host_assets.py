@@ -12,6 +12,18 @@ import tempfile
 from pathlib import Path
 from typing import Sequence
 
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+_repo_import_index = next(
+    (
+        index
+        for index, value in enumerate(sys.path)
+        if "site-packages" in value
+    ),
+    len(sys.path),
+)
+sys.path.insert(_repo_import_index, str(REPO_ROOT))
+
 try:
     from scripts.ha.pitr_host_asset_rollout import (
         rollout_host_assets,
