@@ -41,6 +41,20 @@ require_root_directory() {
     fail "logical restore-drill state directory is unsafe: ${path}"
 }
 
+ensure_postgres_image() {
+  if docker image inspect "${POSTGRES_IMAGE}" >/dev/null 2>&1; then
+    log "restore_image_status=cached image=${POSTGRES_IMAGE}"
+    return
+  fi
+
+  log "restore_image_status=pulling image=${POSTGRES_IMAGE}"
+  docker pull "${POSTGRES_IMAGE}" >/dev/null ||
+    fail "could not pull the pinned PostgreSQL restore image"
+  docker image inspect "${POSTGRES_IMAGE}" >/dev/null 2>&1 ||
+    fail "pinned PostgreSQL restore image is unavailable after pull"
+  log "restore_image_status=pulled image=${POSTGRES_IMAGE}"
+}
+
 (( EUID == 0 )) || fail "logical restore drill requires root"
 [[ "${PITR_OPERATION_ID}" =~ ^[0-9a-f]{32}$ ]] ||
   fail "PITR_OPERATION_ID must be a guarded 32-character lowercase hex ID"
@@ -70,6 +84,7 @@ esac
 require_root_directory "${DRILL_ROOT}"
 
 cd "${PROJECT_DIR}"
+ensure_postgres_image
 BACKEND_IMAGE="$(
   "${RUNTIME_CHECK_HELPER}" \
     --project-dir "${PROJECT_DIR}" \
