@@ -99,6 +99,19 @@ def test_logical_drill_uses_root_state_and_isolated_generated_credentials():
     assert 'docker kill "${container}"' in text
 
 
+def test_logical_drill_pulls_only_the_exact_pinned_postgres_image_when_missing():
+    text = DRILL_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'POSTGRES_IMAGE="postgres:15.18-alpine@sha256:' in text
+    assert 'docker image inspect "${POSTGRES_IMAGE}"' in text
+    assert 'docker pull "${POSTGRES_IMAGE}"' in text
+    assert 'restore_image_status=cached image=${POSTGRES_IMAGE}' in text
+    assert 'restore_image_status=pulled image=${POSTGRES_IMAGE}' in text
+    assert 'docker run --pull never -d' in text
+    assert text.index("ensure_postgres_image") < text.index("BACKEND_IMAGE=")
+    assert text.index('docker pull "${POSTGRES_IMAGE}"') < text.index("docker run --pull never -d")
+
+
 def test_logical_drill_bounds_download_expansion_and_attests_runtime():
     text = DRILL_SCRIPT.read_text(encoding="utf-8")
 

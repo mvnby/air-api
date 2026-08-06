@@ -44,6 +44,7 @@ Runner = Callable[[Sequence[str], str | None], subprocess.CompletedProcess[str]]
 class ExpectedWorkflow:
     name: str
     max_age_hours: float | None = None
+    assurance_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -83,8 +84,8 @@ EXPECTED_WORKFLOWS = (
     ExpectedWorkflow("PostgreSQL Replication Check", max_age_hours=8),
     ExpectedWorkflow("Cloudflare LB Config Check", max_age_hours=8),
     ExpectedWorkflow("PostgreSQL PITR Check", max_age_hours=8),
-    ExpectedWorkflow("API Restore Drill", max_age_hours=36),
-    ExpectedWorkflow("PostgreSQL PITR Restore Drill", max_age_hours=36),
+    ExpectedWorkflow("API Restore Drill", max_age_hours=36, assurance_only=True),
+    ExpectedWorkflow("PostgreSQL PITR Restore Drill", max_age_hours=36, assurance_only=True),
 )
 
 
@@ -212,7 +213,17 @@ def evaluate_workflows(
             warnings.append(f"{workflow.name}: latest run is {run.status or 'unknown'} ({suffix})")
             continue
         if run.conclusion != "success":
-            failures.append(f"{workflow.name}: latest run concluded {run.conclusion or 'unknown'} ({suffix})")
+            message = (
+                f"{workflow.name}: latest run concluded {run.conclusion or 'unknown'} "
+                f"({suffix})"
+            )
+            if workflow.assurance_only:
+                warnings.append(
+                    f"{message}; restore assurance requires attention, "
+                    "but live service health is evaluated separately"
+                )
+            else:
+                failures.append(message)
             continue
 
         current_age = age_hours(run, now=now)
@@ -319,6 +330,12 @@ def next_steps_for(result: ReportResult) -> list[str]:
 
     if result.failures:
         add_once("inspect failed workflow URLs/artifacts before changing API routing or database roles")
+
+    if "restore assurance requires attention" in joined:
+        add_once(
+            "inspect the failed restore-drill URL/artifact; this is a recoverability "
+            "signal and does not by itself mean the live API is unavailable"
+        )
 
     if "Cloudflare LB Config Check" in joined:
         add_once(

@@ -78,6 +78,32 @@ def test_evaluate_workflows_flags_missing_failed_and_stale_runs():
     assert any("workflow missing from recent run list: API HA Invariant Check" in warning for warning in result.warnings)
 
 
+def test_evaluate_workflows_treats_failed_restore_drill_as_assurance_attention():
+    now = datetime(2026, 7, 3, 12, 0, tzinfo=timezone.utc)
+    latest = {
+        "API Restore Drill": report_ha_status.parse_workflow_run(
+            _run("API Restore Drill", conclusion="failure")
+        ),
+    }
+
+    result = report_ha_status.evaluate_workflows(
+        latest,
+        expected=(
+            report_ha_status.ExpectedWorkflow(
+                "API Restore Drill",
+                max_age_hours=36,
+                assurance_only=True,
+            ),
+        ),
+        now=now,
+    )
+
+    assert result.status == "attention"
+    assert not result.failures
+    assert any("restore assurance requires attention" in warning for warning in result.warnings)
+    assert any("live service health is evaluated separately" in warning for warning in result.warnings)
+
+
 def test_latest_runs_prefers_latest_completed_run_over_current_in_progress():
     current = report_ha_status.parse_workflow_run(
         _run(
@@ -98,6 +124,20 @@ def test_latest_runs_prefers_latest_completed_run_over_current_in_progress():
 
 def test_default_expected_workflows_do_not_self_check_status_report():
     assert all(workflow.name != "API HA Status Report" for workflow in report_ha_status.EXPECTED_WORKFLOWS)
+
+
+def test_default_restore_drills_are_assurance_only():
+    restore_drills = {
+        workflow.name: workflow
+        for workflow in report_ha_status.EXPECTED_WORKFLOWS
+        if "Restore Drill" in workflow.name
+    }
+
+    assert set(restore_drills) == {
+        "API Restore Drill",
+        "PostgreSQL PITR Restore Drill",
+    }
+    assert all(workflow.assurance_only for workflow in restore_drills.values())
 
 
 def test_external_prereq_failures_are_blockers_until_require_strict(monkeypatch):
@@ -182,6 +222,24 @@ def test_next_steps_prioritize_failed_workflows_and_live_skip():
 
     assert steps[0] == "inspect failed workflow URLs/artifacts before changing API routing or database roles"
     assert any("rerun without --skip-live" in step for step in steps)
+
+
+def test_next_steps_explain_restore_assurance_without_implying_outage():
+    result = report_ha_status.ReportResult(
+        ok=["active/passive direct-origin invariant passed"],
+        warnings=[
+            "API Restore Drill: latest run concluded failure; "
+            "restore assurance requires attention, but live service health is evaluated separately"
+        ],
+        blockers=[],
+        failures=[],
+    )
+
+    steps = report_ha_status.next_steps_for(result)
+
+    assert any("recoverability signal" in step for step in steps)
+    assert any("does not by itself mean the live API is unavailable" in step for step in steps)
+    assert not any("changing API routing or database roles" in step for step in steps)
 
 
 def test_next_steps_explain_failed_cloudflare_lb_config_check():
