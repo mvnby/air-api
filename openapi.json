@@ -2456,15 +2456,33 @@
         ],
         "summary": "Create Public Contact Lead",
         "operationId": "create_public_contact_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PublicContactLeadPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2473,6 +2491,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicContactLeadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Content-Length or idempotency key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -2505,9 +2581,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9._:-]+$",
               "title": "Idempotency-Key"
             }
           }
@@ -2534,13 +2607,62 @@
             }
           },
           "400": {
-            "description": "Invalid image or upload limits exceeded"
+            "description": "Invalid Content-Length, image, idempotency key, or upload limits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Idempotency key reused with different content"
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Request can be retried after a short delay"
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2563,15 +2685,33 @@
         ],
         "summary": "Create Product Availability Lead",
         "operationId": "create_product_availability_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProductAvailabilityLeadPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2580,6 +2720,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProductAvailabilityLeadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Content-Length or idempotency key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -2605,15 +2803,33 @@
         ],
         "summary": "Create Repair Diagnostic Lead",
         "operationId": "create_repair_diagnostic_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_create_repair_diagnostic_lead"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2622,6 +2838,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RepairDiagnosticLeadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Content-Length, form data, idempotency key, or upload limits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -2648,15 +2922,33 @@
         "summary": "Create Order",
         "description": "Create a new order from website.\nAccepts customer information and cart items.",
         "operationId": "create_order",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OrderPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2669,12 +2961,68 @@
               }
             }
           },
-          "409": {
-            "description": "The selected installation quote conflicts with current tariffs.",
+          "400": {
+            "description": "Invalid Content-Length or idempotency key",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublicOrderPricingErrorResponse"
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or unsupported storefront signature envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Installation pricing conflict or Idempotency-Key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PublicOrderPricingErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                    }
+                  ],
+                  "title": "Response 409 Create Order"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Storefront request body exceeds the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request can be retried after a short delay",
+            "headers": {
+              "Retry-After": {
+                "description": "Delay in seconds before retrying the same command",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteRequestErrorResponse"
                 }
               }
             }
@@ -51758,6 +52106,32 @@
           "currency"
         ],
         "title": "PublicStorefrontContextResponse"
+      },
+      "PublicWriteIdempotencyErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "PublicWriteIdempotencyErrorResponse"
+      },
+      "PublicWriteRequestErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "PublicWriteRequestErrorResponse"
       },
       "RepairDiagnosticLeadResponse": {
         "properties": {

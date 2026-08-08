@@ -19,6 +19,11 @@ from services.communications.processing_scope import CommunicationProcessingScop
 from services.communications.runtime_state import (
     CommunicationRuntimeStateService,
 )
+from services.communications.scope_routing import (
+    recipients_for_scope,
+    routing_snapshot,
+    validate_scope_plan,
+)
 from services.communications.template_registry import (
     CONSUMER_NAME,
     HANDLER_VERSION,
@@ -27,6 +32,9 @@ from services.communications.template_registry import (
     WebsiteTemplateRegistry,
 )
 from services.communications.templates import TemplateRenderError
+from services.communications.website_canary_target import (
+    WebsiteCanaryScopeMismatch,
+)
 
 
 class ConsumerInboxConsistencyError(RuntimeError):
@@ -153,6 +161,7 @@ class CommunicationOutboxDispatcher:
         *,
         event: IntegrationOutboxEvent,
         now: datetime,
+        scope: CommunicationProcessingScope,
     ) -> DispatchOutcomeV1 | None:
         inbox = await session.get(ConsumerInbox, (CONSUMER_NAME, event.event_id))
         if inbox is None:
@@ -162,6 +171,11 @@ class CommunicationOutboxDispatcher:
                 "Consumer inbox handler version is inconsistent"
             )
         plan = WebsiteTemplateRegistry.plan(event)
+        validate_scope_plan(
+            scope=scope,
+            event=event,
+            plan=plan,
+        )
         WebsiteTemplateRegistry.render(plan)
         deliveries = list(
             (
@@ -181,6 +195,7 @@ class CommunicationOutboxDispatcher:
             )
         if plan.audience in {
             "installation_estimate_owners",
+            "tenant_website_management",
             "operations_canary",
             "staff_assignee",
         }:
@@ -188,10 +203,13 @@ class CommunicationOutboxDispatcher:
                 session,
                 plan=plan,
             )
-            expected_routing = {
-                (recipient.recipient_key, recipient.destination)
-                for recipient in expected_recipients
-            }
+            expected_recipients = recipients_for_scope(
+                scope=scope,
+                recipients=expected_recipients,
+                event_id=event.event_id,
+                template_key=plan.template_key,
+            )
+            expected_routing = routing_snapshot(expected_recipients)
             actual_routing = {
                 (delivery.recipient_key, delivery.destination)
                 for delivery in deliveries
@@ -273,6 +291,7 @@ class CommunicationOutboxDispatcher:
                 session,
                 event=event,
                 now=dispatch_time,
+                scope=scope,
             )
         except (
             ConsumerInboxConsistencyError,
@@ -280,6 +299,7 @@ class CommunicationOutboxDispatcher:
             InvalidCommunicationEventPayload,
             TemplateRenderError,
             UnsupportedCommunicationEvent,
+            WebsiteCanaryScopeMismatch,
         ) as exc:
             return cls._record_failure(
                 event,
@@ -296,10 +316,21 @@ class CommunicationOutboxDispatcher:
             # failure state.
             async with session.begin_nested():
                 plan = WebsiteTemplateRegistry.plan(event)
+                validate_scope_plan(
+                    scope=scope,
+                    event=event,
+                    plan=plan,
+                )
                 WebsiteTemplateRegistry.render(plan)
                 recipients = await CommunicationAudienceResolver.list_telegram(
                     session,
                     plan=plan,
+                )
+                recipients = recipients_for_scope(
+                    scope=scope,
+                    recipients=recipients,
+                    event_id=event.event_id,
+                    template_key=plan.template_key,
                 )
                 materialized = await CommunicationDeliveryMaterializer.materialize(
                     session,
@@ -323,6 +354,7 @@ class CommunicationOutboxDispatcher:
             InvalidCommunicationEventPayload,
             TemplateRenderError,
             UnsupportedCommunicationEvent,
+            WebsiteCanaryScopeMismatch,
         ) as exc:
             return cls._record_failure(
                 event,

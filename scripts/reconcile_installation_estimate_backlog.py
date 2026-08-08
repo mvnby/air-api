@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Report or suppress a bounded stale installation-estimate event backlog."""
+"""Legacy installation-only entrypoint kept for compatibility.
+
+Use ``reconcile_website_communication_backlog.py`` for the required five-event
+manifest before activating the tenant website notification runtime.
+"""
 
 from __future__ import annotations
 

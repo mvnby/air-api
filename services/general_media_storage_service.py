@@ -48,6 +48,12 @@ class GeneralMediaStorage(Protocol):
     ) -> StoredGeneralMediaObject:
         """Persist media content and return its public URL plus metadata."""
 
+    async def delete_media(self, path: str) -> None:
+        """Delete a previously returned storage path."""
+
+    async def read_media(self, path: str) -> bytes:
+        """Read a previously returned storage path."""
+
 
 class LocalGeneralMediaStorage:
     provider_name = "local"
@@ -112,6 +118,21 @@ class LocalGeneralMediaStorage:
                 if not target_path.exists():
                     target_path.write_bytes(content)
         return stored
+
+    async def delete_media(self, path: str) -> None:
+        target = Path(path).resolve()
+        base = self.base_dir.resolve()
+        if target != base and base not in target.parents:
+            raise ValueError("Invalid general media storage path")
+        if target.is_file():
+            await asyncio.to_thread(target.unlink)
+
+    async def read_media(self, path: str) -> bytes:
+        target = Path(path).resolve()
+        base = self.base_dir.resolve()
+        if target != base and base not in target.parents:
+            raise ValueError("Invalid general media storage path")
+        return await asyncio.to_thread(target.read_bytes)
 
 
 class S3CompatibleGeneralMediaStorage:
@@ -221,6 +242,23 @@ class S3CompatibleGeneralMediaStorage:
             },
         )
         return stored
+
+    async def delete_media(self, path: str) -> None:
+        key = _normalize_stored_media_path(path)
+        await asyncio.to_thread(
+            self._get_client().delete_object,
+            Bucket=self.bucket,
+            Key=key,
+        )
+
+    async def read_media(self, path: str) -> bytes:
+        key = _normalize_stored_media_path(path)
+        response = await asyncio.to_thread(
+            self._get_client().get_object,
+            Bucket=self.bucket,
+            Key=key,
+        )
+        return await asyncio.to_thread(response["Body"].read)
 
     def _get_client(self) -> Any:
         if self._client_override is not None:
@@ -337,6 +375,25 @@ def _safe_path_parts(value: str) -> list[str]:
 
 def _normalize_key_prefix(value: str) -> str:
     return "/".join(_safe_path_parts(value))
+
+
+def _normalize_stored_media_path(value: str) -> str:
+    """Validate an internally persisted S3 key without rewriting its filename."""
+
+    key = str(value or "")
+    if (
+        not key
+        or key != key.strip()
+        or key.startswith("/")
+        or key.endswith("/")
+        or "\\" in key
+        or any(ord(char) < 32 or ord(char) == 127 for char in key)
+    ):
+        raise ValueError("Invalid general media storage path")
+    parts = key.split("/")
+    if any(not part or part in {".", ".."} for part in parts):
+        raise ValueError("Invalid general media storage path")
+    return key
 
 
 def _normalize_public_prefix(value: str) -> str:

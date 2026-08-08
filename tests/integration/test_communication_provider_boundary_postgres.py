@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlmodel import select
 
 from models import (
     CommunicationDelivery,
@@ -340,3 +341,73 @@ async def test_boundary_lock_commits_before_concurrent_off_and_sends_once(
         assert attempt is not None
         assert attempt.outcome == "sent"
         assert attempt.provider_started_at is not None
+
+
+@pytest.mark.asyncio
+async def test_provider_boundary_locks_runtime_before_delivery(
+    db_engine,
+):
+    """Operator state->delivery work must not deadlock with provider send."""
+
+    factory = sessionmaker(
+        db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    scope = await _seed_owned_all_runtime(factory)
+    _, delivery_id = await _seed_delivery(
+        factory,
+        sequence=503,
+        telegram_id=503503,
+    )
+    provider = RecordingProvider(
+        factory,
+        {"503503": ProviderDeliveryResult.sent("runtime-before-delivery")},
+    )
+    boundary_entered = asyncio.Event()
+
+    async def observed_boundary_check(session):
+        boundary_entered.set()
+        await CommunicationRuntimeStateService.lock_owned_processing_scope(
+            session,
+            channel="telegram",
+            instance_id=RUNTIME_INSTANCE_ID,
+            scope=scope,
+        )
+
+    worker = CommunicationDeliveryWorker(
+        session_factory=factory,
+        scope=scope,
+        provider=provider,
+        worker_id=RUNTIME_INSTANCE_ID,
+        lease_seconds=60,
+        provider_boundary_check=observed_boundary_check,
+    )
+
+    async with factory() as operator_session:
+        await CommunicationRuntimeStateService.lock_state_for_update(
+            operator_session,
+            channel="telegram",
+        )
+        worker_task = asyncio.create_task(worker.run_once())
+        await asyncio.wait_for(boundary_entered.wait(), timeout=3)
+
+        # The worker is waiting on the runtime row and therefore cannot already
+        # own the delivery row. This is the ordering that canary completion and
+        # emergency-off also use.
+        locked_delivery = (
+            await asyncio.wait_for(
+                operator_session.execute(
+                    select(CommunicationDelivery)
+                    .where(CommunicationDelivery.delivery_id == delivery_id)
+                    .with_for_update()
+                ),
+                timeout=2,
+            )
+        ).scalar_one()
+        assert locked_delivery.delivery_id == delivery_id
+        await operator_session.commit()
+
+    outcome = await asyncio.wait_for(worker_task, timeout=5)
+    assert outcome.outcome == "sent"
+    assert len(provider.calls) == 1

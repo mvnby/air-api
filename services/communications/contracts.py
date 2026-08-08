@@ -100,6 +100,8 @@ class PublicContactLeadCreatedPayloadV1(_ContractV1):
 
 
 class InstallationEstimateLeadCreatedPayloadV1(_ContractV1):
+    tenant_id: int = Field(gt=0)
+    storefront_id: int = Field(gt=0)
     order_id: int = Field(gt=0)
     status: str = Field(min_length=1, max_length=40)
     name: str = Field(min_length=1, max_length=160)
@@ -109,6 +111,41 @@ class InstallationEstimateLeadCreatedPayloadV1(_ContractV1):
     description: str | None = Field(default=None, max_length=2000)
     attachment_count: int = Field(ge=1, le=15)
     photo_categories: tuple[str, ...] = Field(min_length=1, max_length=5)
+
+
+class TenantWebsiteCheckoutCreatedPayloadV1(PublicOrderCreatedPayloadV1):
+    tenant_id: int = Field(gt=0)
+    storefront_id: int = Field(gt=0)
+
+
+class TenantWebsiteContactLeadCreatedPayloadV1(PublicContactLeadCreatedPayloadV1):
+    tenant_id: int = Field(gt=0)
+    storefront_id: int = Field(gt=0)
+
+
+class TenantWebsiteAvailabilityRequestedPayloadV1(_ContractV1):
+    tenant_id: int = Field(gt=0)
+    storefront_id: int = Field(gt=0)
+    order_id: int = Field(gt=0)
+    status: str = Field(min_length=1, max_length=40)
+    product_id: int = Field(gt=0)
+    product_title: str = Field(min_length=1, max_length=180)
+    product_slug: str = Field(min_length=1, max_length=200)
+    name: str | None = Field(default=None, max_length=160)
+    phone: str = Field(min_length=1, max_length=80)
+    is_repeat: bool
+
+
+class TenantWebsiteRepairDiagnosticCreatedPayloadV1(_ContractV1):
+    tenant_id: int = Field(gt=0)
+    storefront_id: int = Field(gt=0)
+    order_id: int = Field(gt=0)
+    status: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=1, max_length=160)
+    phone: str = Field(min_length=1, max_length=80)
+    address: str | None = Field(default=None, max_length=300)
+    symptom_label: str = Field(min_length=1, max_length=180)
+    photo_count: int = Field(ge=0, le=25)
 
 
 CanaryRecipientKeyV1 = Annotated[
@@ -168,6 +205,7 @@ class CommunicationTemplatePlanV1(_ContractV1):
     audience: Literal[
         "management",
         "installation_estimate_owners",
+        "tenant_website_management",
         "operations_canary",
         "staff_assignee",
     ] = "management"

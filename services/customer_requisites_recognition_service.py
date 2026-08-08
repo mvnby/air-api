@@ -10,8 +10,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
+from google.auth.exceptions import TransportError as GoogleAuthTransportError
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from httplib2 import HttpLib2Error
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -26,6 +29,11 @@ from core.input_validation import (
 from models import Customer, CustomerRequisitesRecognition, CustomerType
 from models.tenancy import TenantScope
 from services.customer_service import CustomerService
+from services.google_vision_error_policy import (
+    OcrProviderError,
+    google_vision_http_error,
+    google_vision_rpc_error,
+)
 from services.tenant_scope_service import tenant_scope_clause
 
 logger = logging.getLogger(__name__)
@@ -86,16 +94,26 @@ class CustomerRequisitesRecognitionService:
     def _get_vision_client(cls):
         credentials_file = str(settings.GOOGLE_VISION_CREDENTIALS_FILE or "").strip()
         if not credentials_file:
-            raise ValueError("GOOGLE_VISION_CREDENTIALS_FILE is not configured")
-        creds = service_account.Credentials.from_service_account_file(
-            credentials_file,
-            scopes=["https://www.googleapis.com/auth/cloud-vision"],
-        )
+            raise OcrProviderError(
+                "GOOGLE_VISION_CREDENTIALS_FILE is not configured",
+                retryable=False,
+                code="not_configured",
+            )
+        try:
+            creds = service_account.Credentials.from_service_account_file(
+                credentials_file,
+                scopes=["https://www.googleapis.com/auth/cloud-vision"],
+            )
+        except (OSError, ValueError) as exc:
+            raise OcrProviderError(
+                "Google Vision credentials are invalid",
+                retryable=False,
+                code="credentials_invalid",
+            ) from exc
         return build("vision", "v1", credentials=creds, cache_discovery=False)
 
     @classmethod
     def _vision_text_from_image_bytes_sync(cls, content: bytes) -> str:
-        vision = cls._get_vision_client()
         encoded = base64.b64encode(content).decode("ascii")
         body = {
             "requests": [
@@ -106,11 +124,42 @@ class CustomerRequisitesRecognitionService:
                 }
             ]
         }
-        response = vision.images().annotate(body=body).execute()
-        item = (response.get("responses") or [{}])[0]
-        if item.get("error"):
-            raise ValueError(f"Google Vision error: {item['error'].get('message') or item['error']}")
+        try:
+            vision = cls._get_vision_client()
+            response = vision.images().annotate(body=body).execute()
+        except OcrProviderError:
+            raise
+        except HttpError as exc:
+            raise cls._vision_http_error(exc) from exc
+        except (
+            GoogleAuthTransportError,
+            HttpLib2Error,
+            ConnectionError,
+            OSError,
+            TimeoutError,
+        ) as exc:
+            raise OcrProviderError(
+                "Google Vision is temporarily unavailable",
+                retryable=True,
+                code="network_error",
+            ) from exc
+        if not isinstance(response, dict):
+            raise cls._vision_rpc_error({})
+        responses = response.get("responses")
+        if (
+            not isinstance(responses, list)
+            or not responses
+            or not isinstance(responses[0], dict)
+        ):
+            raise cls._vision_rpc_error({})
+        item = responses[0]
+        if "error" in item:
+            error = item.get("error")
+            raise cls._vision_rpc_error(error if isinstance(error, dict) else {})
         return str((item.get("fullTextAnnotation") or {}).get("text") or "").strip()
+
+    _vision_http_error = staticmethod(google_vision_http_error)
+    _vision_rpc_error = staticmethod(google_vision_rpc_error)
 
     @classmethod
     async def extract_ocr_text(cls, content: bytes, *, mime_type: Optional[str], filename: Optional[str] = None) -> str:
@@ -146,7 +195,11 @@ class CustomerRequisitesRecognitionService:
         try:
             from pdf2image import convert_from_bytes
         except ImportError as exc:
-            raise ValueError("PDF OCR requires pdf2image dependency") from exc
+            raise OcrProviderError(
+                "PDF OCR requires pdf2image dependency",
+                retryable=False,
+                code="not_configured",
+            ) from exc
 
         images = convert_from_bytes(
             content,

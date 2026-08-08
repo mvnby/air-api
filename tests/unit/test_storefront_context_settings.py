@@ -46,6 +46,14 @@ def test_require_signed_switch_needs_primary_key_at_startup():
         _settings(STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=True)
 
 
+def test_legacy_v1_read_rollback_flag_needs_primary_key_at_startup():
+    with pytest.raises(
+        ValidationError,
+        match="Legacy storefront v1 reads require a configured primary",
+    ):
+        _settings(STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS=True)
+
+
 @pytest.mark.parametrize("value", [1023, 64 * 1024 * 1024 + 1])
 def test_signed_body_buffer_must_remain_bounded(value):
     with pytest.raises(ValidationError, match="between 1 KiB and 64 MiB"):
@@ -59,6 +67,7 @@ def test_complete_rotation_keyring_is_accepted():
         STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID="mvn-web-previous",
         STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET=_PREVIOUS_SECRET,
         STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS=True,
+        STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS=True,
         STOREFRONT_CONTEXT_API_HOSTS="api.mvn.by,api.internal.mvn.by",
     )
 
@@ -66,3 +75,4 @@ def test_complete_rotation_keyring_is_accepted():
         "api.mvn.by",
         "api.internal.mvn.by",
     )
+    assert configured.STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS is True

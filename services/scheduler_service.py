@@ -171,6 +171,15 @@ class SchedulerService:
         # Consume catalog cache invalidations outside producer transactions.
         tasks.append(asyncio.create_task(self._catalog_invalidation_loop()))
 
+        # Recover durable repair AI jobs after request/process failures.
+        tasks.append(asyncio.create_task(self._repair_diagnostic_ai_job_loop()))
+
+        # Enforce the documented public-write replay horizon in bounded batches.
+        tasks.append(asyncio.create_task(self._public_write_receipt_retention_loop()))
+
+        # Reconcile crash-left public private attachments after a long grace.
+        tasks.append(asyncio.create_task(self._private_attachment_orphan_loop()))
+
         # Run bank receipt IMAP import loop
         tasks.append(asyncio.create_task(self._bank_mail_import_loop()))
 
@@ -415,6 +424,63 @@ class SchedulerService:
             except Exception:
                 logger.exception("Catalog invalidation worker loop error")
                 await asyncio.sleep(max(5.0, poll_seconds))
+
+    async def _repair_diagnostic_ai_job_loop(self):
+        from services.repair_diagnostic_ai_job_service import (
+            RepairDiagnosticAiJobService,
+        )
+
+        while True:
+            try:
+                processed = await RepairDiagnosticAiJobService.process_batch(
+                    worker_id="scheduler-repair-diagnostic-ai",
+                    limit=10,
+                )
+                await asyncio.sleep(1 if processed else 15)
+            except Exception:
+                logger.exception("Repair diagnostic AI job loop error")
+                await asyncio.sleep(30)
+
+    async def _public_write_receipt_retention_loop(self):
+        from services.public_write_idempotency_retention_service import (
+            PublicWriteIdempotencyRetentionService,
+        )
+
+        while True:
+            try:
+                async with async_session_maker() as session:
+                    deleted = (
+                        await PublicWriteIdempotencyRetentionService.delete_expired_batch(
+                            session,
+                            limit=1000,
+                        )
+                    )
+                    await session.commit()
+                if deleted:
+                    logger.info("Expired public write receipts deleted: %s", deleted)
+                await asyncio.sleep(3600)
+            except Exception:
+                logger.exception("Public write receipt retention loop error")
+                await asyncio.sleep(300)
+
+    async def _private_attachment_orphan_loop(self):
+        from services.private_attachment_orphan_reconciler import (
+            PrivateAttachmentOrphanReconciler,
+        )
+
+        while True:
+            try:
+                async with async_session_maker() as session:
+                    deleted = await PrivateAttachmentOrphanReconciler.process_batch(
+                        session,
+                        limit=100,
+                    )
+                if deleted:
+                    logger.info("Private public-intake orphans deleted: %s", deleted)
+                await asyncio.sleep(3600)
+            except Exception:
+                logger.exception("Private attachment orphan loop error")
+                await asyncio.sleep(300)
 
     async def _bank_mail_import_loop(self):
         while True:

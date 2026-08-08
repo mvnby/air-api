@@ -259,6 +259,8 @@ def test_v1_templates_have_stable_golden_output():
         3,
         event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
         payload=InstallationEstimateLeadCreatedPayloadV1(
+            tenant_id=1,
+            storefront_id=1,
             order_id=3,
             status="new_lead",
             name="Анна & Иван",

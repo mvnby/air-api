@@ -2,10 +2,11 @@ import json
 import re
 from typing import Any, Dict
 
-import httpx
-
-from core.config import settings
 from schemas import ManagerRepairActAiDraftPayload
+from services.deepseek_provider_service import (
+    DefectActAIProviderError,
+    request_deepseek_completion,
+)
 from services.repair_defect_template_service import RepairDefectTemplateService
 
 
@@ -301,49 +302,28 @@ class DefectActAIService:
 
     @staticmethod
     async def _request_completion(prompt: str) -> str:
-        token = settings.DEEPSEEK_TOKEN.strip()
-        if not token:
-            raise ValueError("DEEPSEEK_TOKEN is not configured")
-
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(
-                settings.DEEPSEEK_API_URL,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.DEEPSEEK_MODEL,
-                    "temperature": 0.05,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "Ты строгий классификатор результатов диагностики климатического оборудования.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                },
-            )
-            if response.status_code == 401:
-                raise ValueError("DeepSeek отклонил API ключ. Проверьте DEEPSEEK_TOKEN в .env и перезапустите app-контейнер.")
-            if response.status_code == 403:
-                raise ValueError("DeepSeek запретил доступ для этого API ключа. Проверьте права ключа и баланс аккаунта.")
-            if response.status_code >= 400:
-                detail = DefectActAIService._deepseek_error_message(response)
-                raise ValueError(f"DeepSeek вернул ошибку {response.status_code}: {detail}")
-            data = response.json()
-
-        try:
-            return str(data["choices"][0]["message"]["content"])
-        except (KeyError, IndexError, TypeError) as exc:
-            raise ValueError("AI response has unexpected format") from exc
+        return await request_deepseek_completion(
+            prompt=prompt,
+            system_prompt=(
+                "Ты строгий классификатор результатов диагностики "
+                "климатического оборудования."
+            ),
+            temperature=0.05,
+        )
 
     @staticmethod
     async def generate_repair_meta(payload: ManagerRepairActAiDraftPayload) -> Dict[str, Any]:
         prompt = DefectActAIService.build_prompt(payload)
         content = await DefectActAIService._request_completion(prompt)
-        parsed = DefectActAIService._extract_json_object(content)
+        try:
+            parsed = DefectActAIService._extract_json_object(content)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise DefectActAIProviderError(
+                "DeepSeek response does not contain valid classification JSON",
+                status=200,
+                retryable=True,
+                code="invalid_response",
+            ) from exc
         structured = DefectActAIService._clean_structured(parsed, payload)
         current_meta = DefectActAIService._clean_meta(payload.current_meta or {})
         render_current_meta = current_meta
@@ -377,16 +357,3 @@ class DefectActAIService:
             if key in DefectActAIService.STRUCTURED_RESPONSE_KEYS
             or (key in DefectActAIService.PRIMARY_RESPONSE_KEYS and not current_meta.get(key))
         }
-
-    @staticmethod
-    def _deepseek_error_message(response: httpx.Response) -> str:
-        try:
-            data = response.json()
-        except ValueError:
-            return response.text[:300]
-        error = data.get("error") if isinstance(data, dict) else None
-        if isinstance(error, dict):
-            message = str(error.get("message") or "").strip()
-            if message:
-                return message[:300]
-        return str(data)[:300]

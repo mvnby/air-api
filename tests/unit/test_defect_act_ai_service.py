@@ -1,9 +1,68 @@
 import json
 
+import httpx
 import pytest
 
 from schemas import ManagerRepairActAiDraftPayload
-from services.defect_act_ai_service import DefectActAIService
+from services.defect_act_ai_service import (
+    DefectActAIProviderError,
+    DefectActAIService,
+)
+
+
+class _FakeAsyncClient:
+    response: httpx.Response
+
+    def __init__(self, **_kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+    async def post(self, *_args, **_kwargs):
+        return self.response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "code", "retryable"),
+    [
+        (401, "authentication_rejected", False),
+        (403, "authentication_rejected", False),
+        (400, "request_rejected", False),
+        (429, "rate_limited", True),
+        (500, "upstream_error", True),
+    ],
+)
+async def test_deepseek_http_errors_have_typed_retry_contract(
+    monkeypatch,
+    status,
+    code,
+    retryable,
+):
+    monkeypatch.setattr(
+        "services.deepseek_provider_service.settings.DEEPSEEK_TOKEN",
+        "test-token",
+    )
+    _FakeAsyncClient.response = httpx.Response(
+        status,
+        json={"error": {"message": "provider error"}},
+        request=httpx.Request("POST", "https://api.invalid/chat"),
+    )
+    monkeypatch.setattr(
+        "services.deepseek_provider_service.httpx.AsyncClient",
+        _FakeAsyncClient,
+    )
+
+    with pytest.raises(DefectActAIProviderError) as raised:
+        await DefectActAIService._request_completion("prompt")
+
+    assert raised.value.status == status
+    assert raised.value.code == code
+    assert raised.value.retryable is retryable
 
 
 @pytest.mark.asyncio

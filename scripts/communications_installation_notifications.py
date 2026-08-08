@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely plan, enable, inspect, or disable installation notifications."""
+"""Compatibility CLI for the five-type tenant website notification runtime."""
 
 from __future__ import annotations
 
@@ -21,8 +21,9 @@ CommandMode = Literal["plan", "enable", "status", "off"]
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Operate the fixed crm.installation_estimate_lead.created Telegram "
-            "delivery contract. Event type and destinations are not configurable."
+            "Operate the fixed five-type tenant website Telegram delivery "
+            "allowlist. The historical filename is retained for automation "
+            "compatibility; event types and destinations are not configurable."
         )
     )
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -34,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--enable",
         action="store_true",
-        help="Atomically activate the fixed owner-only delivery scope",
+        help="Atomically activate the fixed tenant owner/admin delivery scope",
     )
     mode.add_argument(
         "--status",
@@ -71,7 +72,7 @@ async def run_command(
     from core.config import settings
     from core.database import async_session_maker
     from services.communications.installation_notifications import (
-        InstallationNotificationOperations,
+        WebsiteNotificationOperations,
     )
     from services.communications.runtime_config import CommunicationRuntimeConfig
     from services.communications.runtime_state import (
@@ -85,18 +86,18 @@ async def run_command(
             try:
                 previous = await CommunicationRuntimeStateService.read_control(
                     session,
-                    channel=InstallationNotificationOperations.CHANNEL,
+                    channel=WebsiteNotificationOperations.CHANNEL,
                 )
                 control = await CommunicationRuntimeStateService.set_mode(
                     session,
-                    channel=InstallationNotificationOperations.CHANNEL,
+                    channel=WebsiteNotificationOperations.CHANNEL,
                     mode=CommunicationRuntimeMode.OFF,
                 )
                 await session.commit()
             except Exception:
                 await session.rollback()
                 raise
-        drain = await InstallationNotificationOperations.wait_until_off_drained(
+        drain = await WebsiteNotificationOperations.wait_until_off_drained(
             effective_factory,
             wait_seconds=off_wait_seconds,
         )
@@ -123,7 +124,7 @@ async def run_command(
     async with effective_factory() as session:
         try:
             if mode in {"plan", "status"}:
-                inspection = await InstallationNotificationOperations.inspect(
+                inspection = await WebsiteNotificationOperations.inspect(
                     session,
                     config=effective_config,
                     bot_token=effective_token,
@@ -136,7 +137,7 @@ async def run_command(
                 }
 
             inspection, revision, watermark = (
-                await InstallationNotificationOperations.activate_installation_from_off(
+                await WebsiteNotificationOperations.activate_installation_from_off(
                     session,
                     config=effective_config,
                     bot_token=effective_token,

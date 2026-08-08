@@ -18,8 +18,10 @@ from sqlmodel import select
 from models import IntegrationOutboxEvent
 from services.communications.contracts import IntegrationEventEnvelopeV1
 from services.communications.installation_activation_fence import (
-    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
-    acquire_installation_enqueue_fence,
+    acquire_website_communication_enqueue_fence,
+)
+from services.communications.tenant_website_events import (
+    TENANT_WEBSITE_EVENT_TYPES,
 )
 
 
@@ -162,12 +164,12 @@ class IntegrationOutboxService:
         normalized_payload = cls._normalize_payload(payload)
         normalized_event_type = str(event_type).strip()
         authoritative_created_at: datetime | None = None
-        if normalized_event_type == INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT:
+        if normalized_event_type in TENANT_WEBSITE_EVENT_TYPES:
             # Acquire before constructing the model: its ``created_at`` default
             # must be a DB timestamp ordered after any committed activation
             # watermark that won the exclusive side of this fence.
             authoritative_created_at = (
-                await acquire_installation_enqueue_fence(session)
+                await acquire_website_communication_enqueue_fence(session)
             )
         normalized_aggregate_type = str(aggregate_type).strip()
         normalized_aggregate_id = str(aggregate_id).strip()

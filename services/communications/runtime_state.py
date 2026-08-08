@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -12,6 +12,14 @@ from sqlmodel import select
 from models import CommunicationRuntimeState
 from services.communications.canary_run_id import normalize_canary_run_id
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.website_canary_runtime import (
+    WebsiteCanaryRuntimeError,
+    WebsiteCanaryRuntimeStore,
+)
+from services.communications.website_canary_target import (
+    CANARY_KIND_OPERATIONS,
+    WebsiteCanaryTarget,
+)
 
 
 class CommunicationRuntimeMode(str, Enum):
@@ -64,6 +72,9 @@ class CommunicationRuntimeControl:
     instance_id: str | None
     heartbeat_at: datetime | None
     installation_estimate_watermark_at: datetime | None
+    canary_kind: str = CANARY_KIND_OPERATIONS
+    website_canary_run_id: str | None = None
+    website_canary_target: WebsiteCanaryTarget | None = None
 
 
 class CommunicationRuntimeStateService:
@@ -137,6 +148,8 @@ class CommunicationRuntimeStateService:
             channel=normalized_channel,
             mode=CommunicationRuntimeMode.OFF.value,
             canary_run_id=None,
+            canary_kind=CANARY_KIND_OPERATIONS,
+            website_canary_run_id=None,
             control_revision=0,
             installation_estimate_watermark_at=None,
             status=CommunicationRuntimeStatus.STOPPED.value,
@@ -183,6 +196,17 @@ class CommunicationRuntimeStateService:
                 raise RuntimeError("Communication runtime state disappeared")
         return state
 
+    @classmethod
+    async def lock_state_for_update(
+        cls,
+        session: AsyncSession,
+        *,
+        channel: str,
+    ) -> CommunicationRuntimeState:
+        """Expose the runtime row lock to typed control transactions."""
+
+        return await cls._lock_state(session, channel=channel)
+
     @staticmethod
     def _normalize_canary_scope(
         mode: CommunicationRuntimeMode,
@@ -206,6 +230,13 @@ class CommunicationRuntimeStateService:
         now: datetime,
         installation_estimate_watermark_at: datetime | None,
     ) -> None:
+        if (
+            state.canary_kind != CANARY_KIND_OPERATIONS
+            or state.website_canary_run_id is not None
+        ):
+            raise CommunicationRuntimeControlConflict(
+                "website_canary_runtime_reference_invalid"
+            )
         current_watermark = (
             cls._as_utc(state.installation_estimate_watermark_at)
             if state.installation_estimate_watermark_at is not None
@@ -232,6 +263,8 @@ class CommunicationRuntimeStateService:
             )
         state.mode = mode.value
         state.canary_run_id = canary_run_id
+        state.canary_kind = CANARY_KIND_OPERATIONS
+        state.website_canary_run_id = None
         state.control_revision = int(state.control_revision) + 1
         state.installation_estimate_watermark_at = requested_watermark
         state.control_updated_at = now
@@ -257,7 +290,12 @@ class CommunicationRuntimeStateService:
         )
         state = await cls._lock_state(session, channel=channel)
         current_mode = CommunicationRuntimeMode(state.mode)
-        if current_mode == normalized_mode and state.canary_run_id == normalized_run_id:
+        if (
+            current_mode == normalized_mode
+            and state.canary_run_id == normalized_run_id
+            and state.canary_kind == CANARY_KIND_OPERATIONS
+            and state.website_canary_run_id is None
+        ):
             return cls._to_control(state)
         if (
             current_mode != CommunicationRuntimeMode.OFF
@@ -267,6 +305,20 @@ class CommunicationRuntimeStateService:
                 "runtime_control_transition_requires_off"
             )
         now = await cls.database_now(session)
+        if state.canary_kind != CANARY_KIND_OPERATIONS:
+            if normalized_mode != CommunicationRuntimeMode.OFF:
+                raise CommunicationRuntimeControlConflict(
+                    "runtime_control_transition_requires_off"
+                )
+            try:
+                await WebsiteCanaryRuntimeStore.abort_locked(
+                    session,
+                    state=state,
+                    now=now,
+                )
+            except WebsiteCanaryRuntimeError as error:
+                raise CommunicationRuntimeControlConflict(error.error_code) from None
+            return cls._to_control(state)
         cls._apply_control(
             state,
             mode=normalized_mode,
@@ -302,7 +354,7 @@ class CommunicationRuntimeStateService:
             ),
         )
         await session.flush()
-        return cls._to_control(state)
+        return await cls._hydrate_control(session, state=state, lock=True)
 
     @classmethod
     async def take_ownership(
@@ -324,7 +376,7 @@ class CommunicationRuntimeStateService:
         state.last_error_code = None
         state.updated_at = now
         await session.flush()
-        return cls._to_control(state)
+        return await cls._hydrate_control(session, state=state, lock=True)
 
     @classmethod
     async def read_owned_control(
@@ -341,7 +393,7 @@ class CommunicationRuntimeStateService:
             raise CommunicationRuntimeStateOwnershipLost(
                 "Communication runtime state ownership was lost"
             )
-        return cls._to_control(state)
+        return await cls._hydrate_control(session, state=state)
 
     @classmethod
     async def read_control(
@@ -351,7 +403,7 @@ class CommunicationRuntimeStateService:
         channel: str,
     ) -> CommunicationRuntimeControl:
         state = await cls.ensure_state(session, channel=channel)
-        return cls._to_control(state)
+        return await cls._hydrate_control(session, state=state)
 
     @classmethod
     async def assert_owned_processing_scope(
@@ -374,6 +426,7 @@ class CommunicationRuntimeStateService:
             event_created_at_watermark=(
                 control.installation_estimate_watermark_at
             ),
+            website_canary_target=control.website_canary_target,
         ):
             raise CommunicationRuntimeModeBlocked(
                 control.mode,
@@ -399,7 +452,7 @@ class CommunicationRuntimeStateService:
             raise CommunicationRuntimeStateOwnershipLost(
                 "Communication runtime state ownership was lost"
             )
-        control = cls._to_control(state)
+        control = await cls._hydrate_control(session, state=state, lock=True)
         if not scope.matches_control(
             mode=control.mode.value,
             canary_run_id=control.canary_run_id,
@@ -407,6 +460,7 @@ class CommunicationRuntimeStateService:
             event_created_at_watermark=(
                 control.installation_estimate_watermark_at
             ),
+            website_canary_target=control.website_canary_target,
         ):
             raise CommunicationRuntimeModeBlocked(
                 control.mode,
@@ -451,6 +505,34 @@ class CommunicationRuntimeStateService:
                 "Communication runtime state ownership was lost"
             )
 
+    @classmethod
+    async def control_from_locked_state(
+        cls,
+        session: AsyncSession,
+        *,
+        state: CommunicationRuntimeState,
+    ) -> CommunicationRuntimeControl:
+        return await cls._hydrate_control(session, state=state, lock=True)
+
+    @classmethod
+    async def _hydrate_control(
+        cls,
+        session: AsyncSession,
+        *,
+        state: CommunicationRuntimeState,
+        lock: bool = False,
+    ) -> CommunicationRuntimeControl:
+        control = cls._to_control(state)
+        try:
+            target = await WebsiteCanaryRuntimeStore.load_active_target(
+                session,
+                state=state,
+                lock=lock,
+            )
+        except WebsiteCanaryRuntimeError as error:
+            raise CommunicationRuntimeControlConflict(error.error_code) from None
+        return replace(control, website_canary_target=target)
+
     @staticmethod
     def _to_control(state: CommunicationRuntimeState) -> CommunicationRuntimeControl:
         return CommunicationRuntimeControl(
@@ -468,4 +550,6 @@ class CommunicationRuntimeStateService:
                 if state.installation_estimate_watermark_at is not None
                 else None
             ),
+            canary_kind=state.canary_kind,
+            website_canary_run_id=state.website_canary_run_id,
         )

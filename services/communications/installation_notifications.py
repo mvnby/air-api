@@ -1,4 +1,4 @@
-"""Typed safety control for installation-estimate Telegram notifications."""
+"""Typed safety control for tenant website Telegram notifications."""
 
 from __future__ import annotations
 
@@ -16,13 +16,14 @@ from models import (
     CommunicationDeliveryAttempt,
     CommunicationRuntimeState,
     IntegrationOutboxEvent,
+    Storefront,
 )
 from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.installation_activation_fence import (
     acquire_installation_activation_fence,
 )
 from services.communications.recipient_directory import (
-    InstallationEstimateOwnerRecipientDirectory,
+    TenantWebsiteManagementRecipientDirectory,
 )
 from services.communications.runtime_config import CommunicationRuntimeConfig
 from services.communications.runtime_state import (
@@ -30,8 +31,9 @@ from services.communications.runtime_state import (
     CommunicationRuntimeStateService,
     CommunicationRuntimeStatus,
 )
-from services.communications.template_registry import (
+from services.communications.tenant_website_events import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    TENANT_WEBSITE_EVENT_TYPES,
 )
 from services.staff_user_service import StaffUserService
 
@@ -99,10 +101,12 @@ class InstallationNotificationInspection:
         }
 
 
-class InstallationNotificationOperations:
-    """Inspect, activate, and emergency-disable one fixed website event."""
+class WebsiteNotificationOperations:
+    """Inspect, activate, and emergency-disable the fixed website allowlist."""
 
     CHANNEL = "telegram"
+    EVENT_TYPES = TENANT_WEBSITE_EVENT_TYPES
+    # Compatibility export for the installation-specific operator surface.
     EVENT_TYPE = INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT
     NONTERMINAL_DELIVERY_STATUSES = ("queued", "retry", "running")
     DRAINED_RUNTIME_STATUSES = frozenset(
@@ -207,7 +211,7 @@ class InstallationNotificationOperations:
             .exists()
         )
         statement = select(func.count(IntegrationOutboxEvent.event_id)).where(
-            IntegrationOutboxEvent.event_type == cls.EVENT_TYPE,
+            IntegrationOutboxEvent.event_type.in_(cls.EVENT_TYPES),
             or_(
                 IntegrationOutboxEvent.status.in_(("pending", "processing")),
                 nonterminal_delivery_exists,
@@ -242,7 +246,7 @@ class InstallationNotificationOperations:
                 == CommunicationDelivery.delivery_id,
             )
             .where(
-                IntegrationOutboxEvent.event_type == cls.EVENT_TYPE,
+                IntegrationOutboxEvent.event_type.in_(cls.EVENT_TYPES),
                 or_(
                     CommunicationDelivery.status == "running",
                     CommunicationDeliveryAttempt.outcome == "running",
@@ -276,7 +280,7 @@ class InstallationNotificationOperations:
                 == CommunicationDelivery.event_id,
             )
             .where(
-                IntegrationOutboxEvent.event_type == cls.EVENT_TYPE,
+                IntegrationOutboxEvent.event_type.in_(cls.EVENT_TYPES),
                 CommunicationDeliveryAttempt.ambiguous.is_(True),
             )
         )
@@ -312,7 +316,7 @@ class InstallationNotificationOperations:
                     IntegrationOutboxEvent.status,
                     func.count(IntegrationOutboxEvent.event_id),
                 )
-                .where(IntegrationOutboxEvent.event_type == cls.EVENT_TYPE)
+                .where(IntegrationOutboxEvent.event_type.in_(cls.EVENT_TYPES))
                 .group_by(IntegrationOutboxEvent.status)
             )
         ).all()
@@ -327,7 +331,7 @@ class InstallationNotificationOperations:
                     IntegrationOutboxEvent.event_id
                     == CommunicationDelivery.event_id,
                 )
-                .where(IntegrationOutboxEvent.event_type == cls.EVENT_TYPE)
+                .where(IntegrationOutboxEvent.event_type.in_(cls.EVENT_TYPES))
                 .group_by(CommunicationDelivery.status)
             )
         ).all()
@@ -347,7 +351,7 @@ class InstallationNotificationOperations:
                     IntegrationOutboxEvent.event_id
                     == CommunicationDelivery.event_id,
                 )
-                .where(IntegrationOutboxEvent.event_type == cls.EVENT_TYPE)
+                .where(IntegrationOutboxEvent.event_type.in_(cls.EVENT_TYPES))
                 .group_by(CommunicationDeliveryAttempt.outcome)
             )
         ).all()
@@ -361,7 +365,7 @@ class InstallationNotificationOperations:
                         == CommunicationDelivery.event_id,
                     )
                     .where(
-                        IntegrationOutboxEvent.event_type == cls.EVENT_TYPE,
+                        IntegrationOutboxEvent.event_type.in_(cls.EVENT_TYPES),
                         CommunicationDelivery.status == "sent",
                         CommunicationDelivery.provider_message_id.is_not(None),
                     )
@@ -427,14 +431,31 @@ class InstallationNotificationOperations:
             blockers.append(database_blocker)
 
         owner_count = 0
-        try:
-            owner_count = len(
-                await InstallationEstimateOwnerRecipientDirectory.list_telegram(
-                    session
+        active_storefronts = list(
+            (
+                await session.execute(
+                    select(Storefront)
+                    .where(Storefront.status == "active")
+                    .order_by(Storefront.tenant_id, Storefront.id)
                 )
-            )
-        except CommunicationsCanarySafetyError as error:
-            blockers.append(error.error_code)
+            ).scalars()
+        )
+        if not active_storefronts:
+            blockers.append("tenant_website_storefront_count_invalid")
+        for storefront in active_storefronts:
+            try:
+                recipients = (
+                    await TenantWebsiteManagementRecipientDirectory.list_telegram(
+                        session,
+                        tenant_id=int(storefront.tenant_id),
+                        storefront_id=int(storefront.id or 0),
+                    )
+                )
+                if not recipients:
+                    blockers.append("tenant_website_recipient_count_invalid")
+                owner_count += len(recipients)
+            except CommunicationsCanarySafetyError as error:
+                blockers.append(error.error_code)
 
         runtime_mode = "missing"
         runtime_status = "missing"
@@ -629,3 +650,7 @@ class InstallationNotificationOperations:
                     "ambiguous_total_count": ambiguous_count,
                 }
             await asyncio.sleep(max(0.05, min(float(poll_seconds), 1.0)))
+
+
+# Compatibility export for the historical operator command and imports.
+InstallationNotificationOperations = WebsiteNotificationOperations

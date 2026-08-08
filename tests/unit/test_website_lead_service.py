@@ -1,10 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from httpx import ASGITransport, AsyncClient
 import pytest
 
-from core.config import settings
 from core.database import get_session
 from core.tenant_scope import get_public_tenant_scope
 from crud.product import ProductDAO
@@ -16,41 +15,70 @@ from schemas import (
     PublicContactLeadPayload,
     PublicContactLeadResponse,
 )
-from services.bot_service import BotService
+from services.communications.tenant_website_event_service import (
+    TenantWebsiteEventService,
+)
 from services.lead_service import LeadService
 from services.order_service import OrderService
-from services.staff_user_service import StaffUserService
+from services.product_availability_serialization import (
+    ProductAvailabilitySerialization,
+    ProductAvailabilitySerializationClaim,
+)
+from services.public_write_idempotency_service import PublicWriteIdempotencyService
 from services.website_lead_service import WebsiteLeadService
 
 
+async def _execute_once(session, *, operation, **_kwargs):
+    result = await operation()
+    commit = getattr(session, "commit", None)
+    if commit is not None:
+        await commit()
+    return SimpleNamespace(value=result.value, replayed=False)
+
+
+@pytest.fixture
+def availability_serialization_claim(monkeypatch):
+    database_now = datetime.now(timezone.utc)
+    steps = []
+
+    async def acquire(_session, *, tenant_scope, product_id, phone):
+        steps.append("lock")
+        return ProductAvailabilitySerializationClaim(
+            identity=ProductAvailabilitySerialization.build_identity(
+                tenant_scope=tenant_scope,
+                product_id=product_id,
+                phone=phone,
+            ),
+            database_now=database_now,
+        )
+
+    monkeypatch.setattr(ProductAvailabilitySerialization, "acquire", acquire)
+    return {"database_now": database_now, "steps": steps}
+
+
 @pytest.mark.asyncio
-async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(
+async def test_create_contact_lead_uses_lead_funnel_and_enqueues_event(
     monkeypatch,
     tenant_scope,
 ):
     created_at = datetime.now()
     captured = {}
-    messages = []
 
     async def fake_create_lead(_session, payload, *, tenant_scope):
         captured["payload"] = payload
         captured["tenant_scope"] = tenant_scope
         return {"id": 33, "status": "new", "created_at": created_at}
 
-    async def fake_recipients(_session, *, tenant_scope):
-        return [1001, 1002]
-
-    async def fake_send_message(admin_id, text):
-        messages.append((admin_id, text))
-        return True
+    async def fake_enqueue(_session, **kwargs):
+        captured["event"] = kwargs
 
     monkeypatch.setattr(LeadService, "create_lead", fake_create_lead)
     monkeypatch.setattr(
-        StaffUserService,
-        "get_active_owner_admin_telegram_recipient_ids",
-        fake_recipients,
+        TenantWebsiteEventService,
+        "enqueue_contact_lead",
+        fake_enqueue,
     )
-    monkeypatch.setattr(BotService, "send_message", fake_send_message)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_contact_lead(
         object(),
@@ -61,6 +89,7 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(
             message="Нужен монтаж <script>",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="contact-request-unit-0001",
     )
 
     assert response == PublicContactLeadResponse(
@@ -71,9 +100,11 @@ async def test_create_contact_lead_uses_lead_funnel_and_notifies_all_owners(
     assert captured["payload"].source == "site"
     assert captured["tenant_scope"] == tenant_scope
     assert "Адрес/район: Минск" in captured["payload"].request_text
-    assert [admin_id for admin_id, _text in messages] == [1001, 1002]
-    assert "&lt;b&gt;" in messages[0][1]
-    assert "&lt;script&gt;" in messages[0][1]
+    assert captured["event"]["lead_id"] == 33
+    assert captured["event"]["name"] == "Иван <b>"
+    assert captured["event"]["message"] == "Нужен монтаж <script>"
+    assert captured["event"]["tenant_scope"] == tenant_scope
+    assert len(captured["event"]["request_key_hash"]) == 64
 
 
 @pytest.mark.asyncio
@@ -99,9 +130,10 @@ async def test_public_contact_lead_endpoint_uses_dedicated_lead_contract(
 
 
 @pytest.mark.asyncio
-async def test_create_product_availability_request_creates_site_order_and_notifies_admins(
+async def test_create_product_availability_request_enqueues_with_single_commit(
     monkeypatch,
     tenant_scope,
+    availability_serialization_claim,
 ):
     product = Product(
         id=7,
@@ -121,13 +153,19 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
         technical_meta={},
     )
     fake_session = SimpleNamespace(commit_calls=0, add=lambda *_args, **_kwargs: None)
-    sent_messages = []
+    enqueued = []
 
     async def fake_get_by_id(_session, product_id):
+        availability_serialization_claim["steps"].append("product")
         assert product_id == product.id
         return product
 
-    async def fake_find_recent(*args, **kwargs):
+    async def fake_find_recent(**kwargs):
+        availability_serialization_claim["steps"].append("find")
+        assert kwargs["normalized_phone"] == "375291112233"
+        assert kwargs["now"] == availability_serialization_claim[
+            "database_now"
+        ].replace(tzinfo=None)
         return None
 
     async def fake_create_from_website(**kwargs):
@@ -137,9 +175,8 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
         assert kwargs["tenant_scope"] == tenant_scope
         return order
 
-    async def fake_send_message(admin_id, text):
-        sent_messages.append((admin_id, text))
-        return True
+    async def fake_enqueue(_session, **kwargs):
+        enqueued.append(kwargs)
 
     async def fake_commit():
         fake_session.commit_calls += 1
@@ -153,9 +190,8 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
     monkeypatch.setattr(ProductDAO, "get_by_id", fake_get_by_id)
     monkeypatch.setattr(WebsiteLeadService, "_find_recent_product_availability_order", fake_find_recent)
     monkeypatch.setattr(OrderService, "create_from_website", fake_create_from_website)
-    monkeypatch.setattr(BotService, "send_message", fake_send_message)
-    monkeypatch.setattr(settings, "ADMIN_IDS", "1001,1002")
-    monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(TenantWebsiteEventService, "enqueue_availability", fake_enqueue)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_product_availability_lead(
         fake_session,
@@ -165,23 +201,39 @@ async def test_create_product_availability_request_creates_site_order_and_notifi
             name="Иван",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="availability-request-unit-0001",
     )
 
     assert response.lead_id == 91
     assert response.status == "new_lead"
+    assert order.created_at == availability_serialization_claim[
+        "database_now"
+    ].replace(tzinfo=None)
     assert order.technical_meta["availability_product_id"] == product.id
     assert "availability_last_requested_at" in order.technical_meta
-    assert "availability_last_notified_at" in order.technical_meta
-    assert fake_session.commit_calls == 2
-    assert len(sent_messages) == 2
-    assert "Заявка #91" in sent_messages[0][1]
-    assert "tcl-breezein" in sent_messages[0][1]
+    assert order.technical_meta["availability_last_notified_at"] == (
+        availability_serialization_claim["database_now"]
+        .replace(tzinfo=None)
+        .isoformat()
+    )
+    assert availability_serialization_claim["steps"][:3] == [
+        "lock",
+        "product",
+        "find",
+    ]
+    assert fake_session.commit_calls == 1
+    assert len(enqueued) == 1
+    assert enqueued[0]["order"] is order
+    assert enqueued[0]["product"] is product
+    assert enqueued[0]["is_repeat"] is False
+    assert enqueued[0]["tenant_scope"] == tenant_scope
 
 
 @pytest.mark.asyncio
 async def test_create_product_availability_request_reuses_recent_duplicate_without_notify(
     monkeypatch,
     tenant_scope,
+    availability_serialization_claim,
 ):
     product = Product(
         id=7,
@@ -206,7 +258,6 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
     )
     existing_order.customer = customer
     fake_session = SimpleNamespace(commit_calls=0, add=lambda *_args, **_kwargs: None)
-    sent_messages = []
 
     async def fake_get_by_id(_session, product_id):
         assert product_id == product.id
@@ -221,18 +272,20 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
     async def fake_refresh(*_args, **_kwargs):
         return None
 
-    async def fake_send_message(admin_id, text):
-        sent_messages.append((admin_id, text))
-        return True
+    async def must_not_enqueue(*_args, **_kwargs):
+        raise AssertionError("availability cooldown repeated event enqueue")
 
     fake_session.commit = fake_commit
     fake_session.refresh = fake_refresh
 
     monkeypatch.setattr(ProductDAO, "get_by_id", fake_get_by_id)
     monkeypatch.setattr(WebsiteLeadService, "_find_recent_product_availability_order", fake_find_recent)
-    monkeypatch.setattr(BotService, "send_message", fake_send_message)
-    monkeypatch.setattr(settings, "ADMIN_IDS", "1001")
-    monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(
+        TenantWebsiteEventService,
+        "enqueue_availability",
+        must_not_enqueue,
+    )
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_product_availability_lead(
         fake_session,
@@ -242,6 +295,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
             name="Иван",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="availability-request-unit-0002",
     )
 
     assert response.lead_id == 91
@@ -249,13 +303,13 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
     assert existing_order.customer.name == "Иван"
     assert existing_order.comment == WebsiteLeadService._build_request_text(product)
     assert fake_session.commit_calls == 1
-    assert sent_messages == []
 
 
 @pytest.mark.asyncio
 async def test_create_product_availability_request_reuses_duplicate_and_notifies_after_cooldown(
     monkeypatch,
     tenant_scope,
+    availability_serialization_claim,
 ):
     product = Product(
         id=7,
@@ -282,7 +336,7 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
     existing_order.customer = customer
     existing_order.closing_result = "lost"
     fake_session = SimpleNamespace(commit_calls=0, add=lambda *_args, **_kwargs: None)
-    sent_messages = []
+    enqueued = []
 
     async def fake_get_by_id(_session, product_id):
         assert product_id == product.id
@@ -297,18 +351,16 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
     async def fake_refresh(*_args, **_kwargs):
         return None
 
-    async def fake_send_message(admin_id, text):
-        sent_messages.append((admin_id, text))
-        return True
+    async def fake_enqueue(_session, **kwargs):
+        enqueued.append(kwargs)
 
     fake_session.commit = fake_commit
     fake_session.refresh = fake_refresh
 
     monkeypatch.setattr(ProductDAO, "get_by_id", fake_get_by_id)
     monkeypatch.setattr(WebsiteLeadService, "_find_recent_product_availability_order", fake_find_recent)
-    monkeypatch.setattr(BotService, "send_message", fake_send_message)
-    monkeypatch.setattr(settings, "ADMIN_IDS", "1001")
-    monkeypatch.setattr(settings, "ADMIN_ID", 0)
+    monkeypatch.setattr(TenantWebsiteEventService, "enqueue_availability", fake_enqueue)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     response = await WebsiteLeadService.create_product_availability_lead(
         fake_session,
@@ -318,15 +370,17 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
             name="Иван",
         ),
         tenant_scope=tenant_scope,
+        idempotency_key="availability-request-unit-0003",
     )
 
     assert response.lead_id == 92
     assert existing_order.status == OrderStatus.NEW_LEAD
     assert existing_order.closing_result is None
     assert existing_order.closed_at is None
-    assert fake_session.commit_calls == 2
-    assert len(sent_messages) == 1
-    assert "ПОВТОРНЫЙ ЗАПРОС" in sent_messages[0][1]
+    assert fake_session.commit_calls == 1
+    assert len(enqueued) == 1
+    assert enqueued[0]["order"] is existing_order
+    assert enqueued[0]["is_repeat"] is True
 
 
 @pytest.mark.asyncio
@@ -340,10 +394,11 @@ async def test_public_product_availability_lead_endpoint_returns_response(
     async def override_tenant_scope():
         return tenant_scope
 
-    async def fake_create(_session, payload, *, tenant_scope):
+    async def fake_create(_session, payload, *, tenant_scope, idempotency_key):
         assert payload.product_id == 7
         assert tenant_scope.tenant_id == 1
         assert tenant_scope.storefront_id == 1
+        assert idempotency_key
         return ProductAvailabilityLeadResponse(
             lead_id=12,
             status="new_lead",

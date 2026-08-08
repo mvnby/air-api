@@ -4,19 +4,43 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
+from core.public_write_idempotency import get_public_write_idempotency_key
 from core.tenant_scope import (
     get_public_tenant_scope,
     verify_public_storefront_request,
 )
-from schemas import OrderPayload, OrderResponse, PublicOrderPricingErrorResponse
+from schemas import (
+    OrderPayload,
+    OrderResponse,
+    PublicOrderPricingErrorResponse,
+)
+from schemas_public_checkout import (
+    PublicWriteIdempotencyErrorResponse,
+    PublicWriteRequestErrorResponse,
+)
 from services.installation_pricing_service import InstallationPricingError
 from services.website_order_service import WebsiteOrderService
 from services.tenant_scope_service import TenantScope
+from services.public_write_idempotency_service import (
+    PublicWriteIdempotencyConflict,
+    PublicWriteIdempotencyUnavailable,
+)
 
 router = APIRouter(
     tags=["api"],
     dependencies=[Depends(verify_public_storefront_request)],
 )
+
+_IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
+    "description": "Request can be retried after a short delay",
+    "headers": {
+        "Retry-After": {
+            "description": "Delay in seconds before retrying the same command",
+            "schema": {"type": "string"},
+        }
+    },
+}
 
 
 @router.post(
@@ -24,14 +48,34 @@ router = APIRouter(
     response_model=OrderResponse,
     operation_id="create_order",
     responses={
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid Content-Length or idempotency key",
+        },
+        401: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid or unsupported storefront signature envelope",
+        },
         409: {
-            "model": PublicOrderPricingErrorResponse,
-            "description": "The selected installation quote conflicts with current tariffs.",
-        }
+            "model": (
+                PublicOrderPricingErrorResponse
+                | PublicWriteIdempotencyErrorResponse
+            ),
+            "description": (
+                "Installation pricing conflict or Idempotency-Key reused with "
+                "different content."
+            ),
+        },
+        413: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Storefront request body exceeds the configured limit",
+        },
+        503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },
 )
 async def create_order(
     payload: OrderPayload,
+    idempotency_key: str = Depends(get_public_write_idempotency_key),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
@@ -44,7 +88,16 @@ async def create_order(
             session,
             payload,
             tenant_scope=tenant_scope,
+            idempotency_key=idempotency_key,
         )
+    except PublicWriteIdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PublicWriteIdempotencyUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Приём заказа временно занят. Повторите отправку.",
+            headers={"Retry-After": "1"},
+        ) from exc
     except InstallationPricingError as exc:
         raise HTTPException(
             status_code=409,

@@ -5,6 +5,7 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
+from core.public_write_key import public_write_idempotency_key_sha256
 from models import Lead, Order, Product
 from models.tenancy import Storefront, StorefrontDomain, TenantScope
 from services.catalog_revision_service import CatalogRevisionService
@@ -50,7 +51,9 @@ def _headers(
     signature: str | None = None,
 ) -> dict[str, str]:
     timestamp = int(time.time())
-    return {
+    is_read = method.upper() in {"GET", "HEAD", "OPTIONS"}
+    idempotency_key = None if is_read else "storefront-context-request-0001"
+    headers = {
         "Host": "test",
         "X-MVN-Storefront-Key-Id": _KEY_ID,
         "X-MVN-Storefront-Host": "orsha.internal.mvn.by",
@@ -64,8 +67,16 @@ def _headers(
             api_hostname="test",
             storefront_hostname="orsha.internal.mvn.by",
             body_sha256=StorefrontContextSignatureService.body_sha256(body),
+            idempotency_key_sha256=(
+                ""
+                if idempotency_key is None
+                else public_write_idempotency_key_sha256(idempotency_key)
+            ),
         ),
     }
+    if idempotency_key is not None:
+        headers["Idempotency-Key"] = idempotency_key
+    return headers
 
 
 def _payload() -> dict[str, str]:
@@ -97,6 +108,11 @@ def _configure_signing(monkeypatch) -> None:
         settings,
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET",
         "",
+    )
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS",
+        False,
     )
 
 
@@ -402,6 +418,30 @@ async def test_signed_context_rejects_body_tamper_without_creating_lead(
     assert response.status_code == 401
     leads = (await db.execute(select(Lead))).scalars().all()
     assert leads == []
+
+
+@pytest.mark.asyncio
+async def test_signed_write_rejects_protocol_version_downgrade(
+    async_client,
+    db,
+    monkeypatch,
+):
+    await _seed_secondary_storefront(db)
+    _configure_signing(monkeypatch)
+    body = _json_body(_payload())
+    headers = _headers(body=body)
+    signature = headers["X-MVN-Storefront-Signature"]
+    assert signature.startswith("v2=")
+    headers["X-MVN-Storefront-Signature"] = "v1=" + signature.split("=", 1)[1]
+
+    response = await async_client.post(
+        _PATH,
+        content=body,
+        headers={**headers, "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 401
+    assert (await db.execute(select(Lead))).scalars().all() == []
 
 
 @pytest.mark.asyncio

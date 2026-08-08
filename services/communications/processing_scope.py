@@ -5,13 +5,16 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from services.communications.canary_run_id import normalize_canary_run_id
+from services.communications.tenant_website_events import (
+    TENANT_WEBSITE_EVENT_TYPES,
+    TENANT_WEBSITE_TEMPLATE_KEYS,
+)
 from services.communications.template_registry import (
-    INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
-    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
     TELEGRAM_CANARY_REQUESTED_EVENT,
     TELEGRAM_CANARY_TEMPLATE_KEY,
     telegram_canary_event_id,
 )
+from services.communications.website_canary_target import WebsiteCanaryTarget
 from services.communications.staff_task_contracts import (
     STAFF_TASK_EVENT_TYPE_VALUES,
     STAFF_TASK_TEMPLATE_KEY_VALUES,
@@ -24,8 +27,8 @@ CANARY_TEMPLATE_KEYS = (TELEGRAM_CANARY_TEMPLATE_KEY,)
 # "all" is the production website rollout scope, not a synonym for every
 # registered communication. Keep it deliberately narrow and expand it only
 # through a separately reviewed rollout.
-ALL_EVENT_TYPES = (INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,)
-ALL_TEMPLATE_KEYS = (INSTALLATION_ESTIMATE_TEMPLATE_KEY,)
+ALL_EVENT_TYPES = TENANT_WEBSITE_EVENT_TYPES
+ALL_TEMPLATE_KEYS = TENANT_WEBSITE_TEMPLATE_KEYS
 STAFF_BOT_EVENT_TYPES = STAFF_TASK_EVENT_TYPE_VALUES
 STAFF_BOT_TEMPLATE_KEYS = STAFF_TASK_TEMPLATE_KEY_VALUES
 
@@ -41,6 +44,7 @@ class CommunicationProcessingScope:
     exact_event_id: str | None = None
     canary_run_id: str | None = None
     event_created_at_watermark: datetime | None = None
+    website_canary_target: WebsiteCanaryTarget | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in {"canary", "all", "staff_bot"}:
@@ -63,11 +67,21 @@ class CommunicationProcessingScope:
             ):
                 raise ValueError("Canary processing scope requires an exact run")
             normalized_run_id = normalize_canary_run_id(self.canary_run_id)
-            if (
-                normalized_run_id != self.canary_run_id
-                or self.outbox_event_types != CANARY_EVENT_TYPES
-                or self.delivery_template_keys != CANARY_TEMPLATE_KEYS
-                or self.exact_event_id != telegram_canary_event_id(normalized_run_id)
+            target = self.website_canary_target
+            operations_scope_valid = (
+                target is None
+                and self.outbox_event_types == CANARY_EVENT_TYPES
+                and self.delivery_template_keys == CANARY_TEMPLATE_KEYS
+                and self.exact_event_id == telegram_canary_event_id(normalized_run_id)
+            )
+            website_scope_valid = (
+                target is not None
+                and self.outbox_event_types == (target.event_type,)
+                and self.delivery_template_keys == (target.template_key,)
+                and self.exact_event_id == target.event_id
+            )
+            if normalized_run_id != self.canary_run_id or not (
+                operations_scope_valid or website_scope_valid
             ):
                 raise ValueError("Canary processing scope identity is inconsistent")
         elif self.mode == "staff_bot":
@@ -75,6 +89,7 @@ class CommunicationProcessingScope:
                 self.canary_run_id is not None
                 or self.exact_event_id is not None
                 or self.event_created_at_watermark is not None
+                or self.website_canary_target is not None
                 or self.outbox_event_types != STAFF_BOT_EVENT_TYPES
                 or self.delivery_template_keys != STAFF_BOT_TEMPLATE_KEYS
             ):
@@ -84,6 +99,7 @@ class CommunicationProcessingScope:
             if (
                 self.canary_run_id is not None
                 or self.exact_event_id is not None
+                or self.website_canary_target is not None
                 or self.outbox_event_types != ALL_EVENT_TYPES
                 or self.delivery_template_keys != ALL_TEMPLATE_KEYS
                 or watermark is None
@@ -129,6 +145,25 @@ class CommunicationProcessingScope:
         )
 
     @classmethod
+    def website_canary(
+        cls,
+        *,
+        run_id: str,
+        control_revision: int,
+        target: WebsiteCanaryTarget,
+    ) -> "CommunicationProcessingScope":
+        normalized_run_id = normalize_canary_run_id(run_id)
+        return cls(
+            mode="canary",
+            control_revision=control_revision,
+            outbox_event_types=(target.event_type,),
+            delivery_template_keys=(target.template_key,),
+            exact_event_id=target.event_id,
+            canary_run_id=normalized_run_id,
+            website_canary_target=target,
+        )
+
+    @classmethod
     def staff_bot(cls, *, control_revision: int = 1) -> "CommunicationProcessingScope":
         return cls(
             mode="staff_bot",
@@ -144,11 +179,13 @@ class CommunicationProcessingScope:
         canary_run_id: str | None,
         control_revision: int,
         event_created_at_watermark: datetime | None = None,
+        website_canary_target: WebsiteCanaryTarget | None = None,
     ) -> bool:
         return (
             self.mode == mode
             and self.canary_run_id == canary_run_id
             and self.control_revision == int(control_revision)
+            and self.website_canary_target == website_canary_target
             and (
                 self.mode != "all"
                 or self.event_created_at_watermark == event_created_at_watermark

@@ -8,7 +8,7 @@ from typing import Any
 
 STALE_BACKLOG_ERROR_CODE = "stale_backlog_suppressed"
 STALE_BACKLOG_ERROR_MESSAGE = (
-    "Suppressed by explicit stale installation-estimate backlog reconciliation"
+    "Suppressed by explicit tenant website backlog reconciliation"
 )
 STALE_BACKLOG_ERROR_CATEGORY = "policy"
 MAX_RECONCILIATION_LIMIT = 1_000

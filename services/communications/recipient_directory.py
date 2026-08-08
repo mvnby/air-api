@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
-from models import StaffUser
+from models import StaffUser, Storefront, TenantMembership
 from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.contracts import CommunicationRecipientV1
 from services.staff_user_service import StaffUserService
@@ -120,6 +120,98 @@ class InstallationEstimateOwnerRecipientDirectory:
             if recipient_key in recipient_keys or destination in destinations:
                 raise CommunicationsCanarySafetyError(
                     "installation_owner_recipient_duplicate"
+                )
+            recipient_keys.add(recipient_key)
+            destinations.add(destination)
+            recipients.append(
+                CommunicationRecipientV1(
+                    recipient_key=recipient_key,
+                    destination=destination,
+                    source="staff",
+                    staff_user_id=int(staff_user.id),
+                )
+            )
+        return recipients
+
+
+class TenantWebsiteManagementRecipientDirectory:
+    """Resolve only active owner/admin memberships inside one tenant."""
+
+    ELIGIBLE_MEMBERSHIP_ROLES = (
+        StaffUserService.ROLE_OWNER,
+        StaffUserService.ROLE_ADMIN,
+    )
+
+    @classmethod
+    async def list_telegram(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        storefront_id: int,
+    ) -> list[CommunicationRecipientV1]:
+        normalized_tenant_id = int(tenant_id)
+        normalized_storefront_id = int(storefront_id)
+        storefront_exists = await session.scalar(
+            select(Storefront.id).where(
+                Storefront.id == normalized_storefront_id,
+                Storefront.tenant_id == normalized_tenant_id,
+            )
+        )
+        if storefront_exists is None:
+            raise CommunicationsCanarySafetyError(
+                "tenant_website_scope_invalid"
+            )
+
+        rows = (
+            await session.execute(
+                select(TenantMembership, StaffUser)
+                .join(
+                    StaffUser,
+                    StaffUser.id == TenantMembership.staff_user_id,
+                )
+                .where(
+                    TenantMembership.tenant_id == normalized_tenant_id,
+                    TenantMembership.status == "active",
+                    TenantMembership.role.in_(
+                        cls.ELIGIBLE_MEMBERSHIP_ROLES
+                    ),
+                    StaffUser.status == StaffUserService.STATUS_ACTIVE,
+                )
+                .order_by(StaffUser.id.asc())
+            )
+        ).all()
+
+        recipients: list[CommunicationRecipientV1] = []
+        recipient_keys: set[str] = set()
+        destinations: set[str] = set()
+        for membership, staff_user in rows:
+            if (
+                membership.staff_user_id is None
+                or staff_user.id is None
+                or staff_user.telegram_id is None
+            ):
+                raise CommunicationsCanarySafetyError(
+                    "tenant_website_recipient_invalid"
+                )
+            try:
+                telegram_id = int(staff_user.telegram_id)
+            except (TypeError, ValueError, OverflowError):
+                raise CommunicationsCanarySafetyError(
+                    "tenant_website_recipient_invalid"
+                ) from None
+            if telegram_id <= 0:
+                raise CommunicationsCanarySafetyError(
+                    "tenant_website_recipient_invalid"
+                )
+            recipient_key = f"staff:{int(staff_user.id)}"
+            destination = str(telegram_id)
+            if (
+                recipient_key in recipient_keys
+                or destination in destinations
+            ):
+                raise CommunicationsCanarySafetyError(
+                    "tenant_website_recipient_duplicate"
                 )
             recipient_keys.add(recipient_key)
             destinations.add(destination)

@@ -1,6 +1,5 @@
 """Service-layer orchestration for website lead capture flows."""
 
-import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
+from core.input_validation import normalize_phone_digits
 from crud.product import ProductDAO
 from models import LeadSource, Order, OrderStatus, Product
 from schemas import (
@@ -17,16 +17,23 @@ from schemas import (
     PublicContactLeadPayload,
     PublicContactLeadResponse,
 )
-from services.bot_service import BotService
+from services.communications.tenant_website_event_service import (
+    TenantWebsiteEventService,
+)
 from services.lead_service import LeadService
 from services.order_service import OrderService
-from services.staff_user_service import StaffUserService
+from services.product_availability_serialization import (
+    ProductAvailabilitySerialization,
+)
+from services.public_write_fingerprint_service import PublicWriteFingerprintService
+from services.public_write_idempotency_service import (
+    PublicWriteCommandResponse,
+    PublicWriteIdempotencyService,
+)
 from services.tenant_scope_service import (
     TenantScope,
     storefront_scope_clause,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class WebsiteLeadService:
@@ -39,6 +46,43 @@ class WebsiteLeadService:
         payload: PublicContactLeadPayload,
         *,
         tenant_scope: TenantScope,
+        idempotency_key: str,
+    ) -> PublicContactLeadResponse:
+        request_key_hash = PublicWriteIdempotencyService.key_hash(
+            idempotency_key
+        )
+
+        async def create() -> PublicWriteCommandResponse[PublicContactLeadResponse]:
+            response = await WebsiteLeadService._create_contact_lead_mutation(
+                session,
+                payload,
+                tenant_scope=tenant_scope,
+                request_key_hash=request_key_hash,
+            )
+            return PublicWriteCommandResponse(
+                value=response,
+                resource_type="lead",
+                resource_id=response.lead_id,
+            )
+
+        outcome = await PublicWriteIdempotencyService.execute(
+            session,
+            tenant_scope=tenant_scope,
+            command_name="public_contact_lead_v1",
+            idempotency_key=idempotency_key,
+            request_fingerprint=PublicWriteFingerprintService.for_payload(payload),
+            response_model=PublicContactLeadResponse,
+            operation=create,
+        )
+        return outcome.value
+
+    @staticmethod
+    async def _create_contact_lead_mutation(
+        session: AsyncSession,
+        payload: PublicContactLeadPayload,
+        *,
+        tenant_scope: TenantScope,
+        request_key_hash: str,
     ) -> PublicContactLeadResponse:
         request_lines = ["Заявка с сайта"]
         if payload.address:
@@ -57,63 +101,24 @@ class WebsiteLeadService:
             ),
             tenant_scope=tenant_scope,
         )
-        await WebsiteLeadService._notify_contact_lead_admins(
-            session=session,
-            lead_id=int(lead_data["id"]),
-            payload=payload,
-            tenant_scope=tenant_scope,
-        )
-        return PublicContactLeadResponse(
+        response = PublicContactLeadResponse(
             lead_id=int(lead_data["id"]),
             status=str(lead_data["status"]),
             created_at=lead_data["created_at"],
         )
-
-    @staticmethod
-    async def _notify_contact_lead_admins(
-        *,
-        session: AsyncSession,
-        lead_id: int,
-        payload: PublicContactLeadPayload,
-        tenant_scope: TenantScope,
-    ) -> None:
-        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
+        await TenantWebsiteEventService.enqueue_contact_lead(
             session,
+            lead_id=response.lead_id,
+            status=response.status,
+            name=payload.name,
+            phone=payload.phone,
+            email=payload.email,
+            address=payload.address,
+            message=payload.message,
             tenant_scope=tenant_scope,
+            request_key_hash=request_key_hash,
         )
-        if not admin_ids:
-            return
-
-        lines = [
-            f"🔔 <b>ЗАЯВКА С САЙТА #{lead_id}</b>",
-            f"👤 {BotService.escape_html(payload.name, max_length=160)}",
-            f"📱 {BotService.escape_html(payload.phone, max_length=80)}",
-        ]
-        if payload.email:
-            lines.append(f"📧 {BotService.escape_html(payload.email, max_length=254)}")
-        if payload.address:
-            lines.append(f"📍 {BotService.escape_html(payload.address, max_length=300)}")
-        if payload.message:
-            lines.extend(
-                ["", f"💬 {BotService.escape_html(payload.message, max_length=800)}"]
-            )
-        text = "\n".join(lines)
-
-        for admin_id in admin_ids:
-            try:
-                delivered = await BotService.send_message(admin_id, text)
-                if not delivered:
-                    logger.warning(
-                        "WEBSITE_CONTACT_LEAD_DELIVERY_FAILED lead_id=%s admin_id=%s",
-                        lead_id,
-                        admin_id,
-                    )
-            except Exception:
-                logger.exception(
-                    "WEBSITE_CONTACT_LEAD_SEND_FAILED lead_id=%s admin_id=%s",
-                    lead_id,
-                    admin_id,
-                )
+        return response
 
     @staticmethod
     async def create_product_availability_lead(
@@ -121,22 +126,71 @@ class WebsiteLeadService:
         payload: ProductAvailabilityLeadPayload,
         *,
         tenant_scope: TenantScope,
+        idempotency_key: str,
     ) -> ProductAvailabilityLeadResponse:
+        request_key_hash = PublicWriteIdempotencyService.key_hash(
+            idempotency_key
+        )
+
+        async def create() -> PublicWriteCommandResponse[ProductAvailabilityLeadResponse]:
+            response = await WebsiteLeadService._create_product_availability_mutation(
+                session,
+                payload,
+                tenant_scope=tenant_scope,
+                request_key_hash=request_key_hash,
+            )
+            return PublicWriteCommandResponse(
+                value=response,
+                resource_type="order",
+                resource_id=response.lead_id,
+            )
+
+        outcome = await PublicWriteIdempotencyService.execute(
+            session,
+            tenant_scope=tenant_scope,
+            command_name="public_product_availability_lead_v1",
+            idempotency_key=idempotency_key,
+            request_fingerprint=PublicWriteFingerprintService.for_payload(payload),
+            response_model=ProductAvailabilityLeadResponse,
+            operation=create,
+        )
+        return outcome.value
+
+    @staticmethod
+    async def _create_product_availability_mutation(
+        session: AsyncSession,
+        payload: ProductAvailabilityLeadPayload,
+        *,
+        tenant_scope: TenantScope,
+        request_key_hash: str,
+    ) -> ProductAvailabilityLeadResponse:
+        claim = await ProductAvailabilitySerialization.acquire(
+            session,
+            tenant_scope=tenant_scope,
+            product_id=payload.product_id,
+            phone=payload.phone,
+        )
         product = await ProductDAO.get_by_id(session, payload.product_id)
         if not product or not product.is_published:
             raise LookupError(f"Product with id={payload.product_id} not found")
 
-        now = datetime.now()
+        # Order timestamps are historically stored as naive UTC. The source is
+        # nevertheless the authoritative database clock sampled after the
+        # transaction-level lock was acquired.
+        now = claim.database_now.replace(tzinfo=None)
         existing_order = await WebsiteLeadService._find_recent_product_availability_order(
             session=session,
             tenant_scope=tenant_scope,
             product_id=product.id,
-            phone=payload.phone,
+            normalized_phone=claim.identity.normalized_phone,
             now=now,
         )
 
         if existing_order:
-            should_notify = WebsiteLeadService._should_notify_admins(existing_order, now)
+            should_enqueue = WebsiteLeadService._should_enqueue_notification(
+                existing_order,
+                now,
+            )
             order = await WebsiteLeadService._reuse_existing_order(
                 session=session,
                 order=existing_order,
@@ -144,19 +198,32 @@ class WebsiteLeadService:
                 payload=payload,
                 now=now,
             )
-            if should_notify:
-                await WebsiteLeadService._notify_admins(
-                    session=session,
+            if should_enqueue:
+                await TenantWebsiteEventService.enqueue_availability(
+                    session,
                     order=order,
                     product=product,
-                    payload=payload,
-                    now=now,
+                    name=payload.name,
+                    phone=payload.phone,
                     is_repeat=True,
                     tenant_scope=tenant_scope,
+                    request_key_hash=request_key_hash,
                 )
+                WebsiteLeadService._set_order_meta(
+                    order,
+                    product_id=int(product.id or 0),
+                    requested_at=now,
+                    notified_at=now,
+                )
+                order.updated_at = now
+                session.add(order)
             return ProductAvailabilityLeadResponse(
                 lead_id=int(order.id or 0),
-                status=str(order.status.value if hasattr(order.status, "value") else order.status),
+                status=str(
+                    order.status.value
+                    if hasattr(order.status, "value")
+                    else order.status
+                ),
                 created_at=order.created_at,
             )
 
@@ -171,30 +238,42 @@ class WebsiteLeadService:
             initial_status=OrderStatus.NEW_LEAD,
             comment=WebsiteLeadService._build_request_text(product),
             tenant_scope=tenant_scope,
+            commit=False,
         )
+        order.created_at = now
+        order.updated_at = now
         WebsiteLeadService._set_order_meta(
             order,
             product_id=product.id,
             requested_at=now,
-            notified_at=now,
+            notified_at=None,
         )
         session.add(order)
-        await session.commit()
-        await session.refresh(order, ["customer"])
-
-        await WebsiteLeadService._notify_admins(
-            session=session,
+        await TenantWebsiteEventService.enqueue_availability(
+            session,
             order=order,
             product=product,
-            payload=payload,
-            now=now,
+            name=payload.name,
+            phone=payload.phone,
             is_repeat=False,
             tenant_scope=tenant_scope,
+            request_key_hash=request_key_hash,
         )
-
+        WebsiteLeadService._set_order_meta(
+            order,
+            product_id=int(product.id or 0),
+            requested_at=now,
+            notified_at=now,
+        )
+        order.updated_at = now
+        session.add(order)
         return ProductAvailabilityLeadResponse(
             lead_id=int(order.id or 0),
-            status=str(order.status.value if hasattr(order.status, "value") else order.status),
+            status=str(
+                order.status.value
+                if hasattr(order.status, "value")
+                else order.status
+            ),
             created_at=order.created_at,
         )
 
@@ -207,7 +286,7 @@ class WebsiteLeadService:
         session: AsyncSession,
         tenant_scope: TenantScope,
         product_id: int,
-        phone: str,
+        normalized_phone: str,
         now: datetime,
     ) -> Order | None:
         cutoff = now - timedelta(days=WebsiteLeadService.PRODUCT_AVAILABILITY_LOOKBACK_DAYS)
@@ -223,18 +302,17 @@ class WebsiteLeadService:
         )
         result = await session.execute(stmt)
         orders = list(result.scalars().all())
-        normalized_phone = LeadService._normalize_phone_digits(phone)
         for order in orders:
             meta = order.technical_meta or {}
             if meta.get("availability_product_id") != product_id:
                 continue
             customer_phone = order.customer.phone if order.customer else None
-            if LeadService._normalize_phone_digits(customer_phone) == normalized_phone:
+            if normalize_phone_digits(customer_phone or "") == normalized_phone:
                 return order
         return None
 
     @staticmethod
-    def _should_notify_admins(order: Order, now: datetime) -> bool:
+    def _should_enqueue_notification(order: Order, now: datetime) -> bool:
         technical_meta = order.technical_meta or {}
         last_notified_raw = technical_meta.get("availability_last_notified_at")
         if not last_notified_raw:
@@ -271,8 +349,6 @@ class WebsiteLeadService:
             notified_at=None,
         )
         session.add(order)
-        await session.commit()
-        await session.refresh(order, ["customer"])
         return order
 
     @staticmethod
@@ -290,60 +366,3 @@ class WebsiteLeadService:
             new_meta["availability_last_notified_at"] = notified_at.isoformat()
         order.technical_meta = new_meta
         flag_modified(order, "technical_meta")
-
-    @staticmethod
-    async def _notify_admins(
-        session: AsyncSession,
-        order: Order,
-        product: Product,
-        payload: ProductAvailabilityLeadPayload,
-        now: datetime,
-        is_repeat: bool,
-        tenant_scope: TenantScope,
-    ) -> None:
-        admin_ids = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(
-            session,
-            tenant_scope=tenant_scope,
-        )
-        if not admin_ids:
-            return
-
-        message_lines = [
-            "🔔 <b>ПОВТОРНЫЙ ЗАПРОС НА ПОСТУПЛЕНИЕ</b>" if is_repeat else "🔔 <b>ЗАПРОС НА ПОСТУПЛЕНИЕ С САЙТА</b>",
-            f"🆔 Заявка #{order.id}",
-            f"📦 {BotService.escape_html(product.title, max_length=180)}",
-            f"🔗 /product/{BotService.escape_html(product.slug, max_length=200)}",
-            f"📱 {BotService.escape_html(payload.phone, max_length=80)}",
-        ]
-        if payload.name and payload.name.strip():
-            message_lines.insert(
-                4,
-                f"👤 {BotService.escape_html(payload.name.strip(), max_length=160)}",
-            )
-
-        admin_text = "\n".join(message_lines)
-        for admin_id in admin_ids:
-            try:
-                delivered = await BotService.send_message(admin_id, admin_text)
-                if not delivered:
-                    logger.warning(
-                        "WEBSITE_AVAILABILITY_NOTIFY_DELIVERY_FAILED order_id=%s admin_id=%s",
-                        order.id,
-                        admin_id,
-                    )
-            except Exception:
-                logger.exception(
-                    "WEBSITE_AVAILABILITY_NOTIFY_SEND_FAILED order_id=%s admin_id=%s",
-                    order.id,
-                    admin_id,
-                )
-
-        WebsiteLeadService._set_order_meta(
-            order,
-            product_id=product.id or 0,
-            requested_at=now,
-            notified_at=now,
-        )
-        order.updated_at = now
-        session.add(order)
-        await session.commit()

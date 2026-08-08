@@ -56,7 +56,8 @@ def test_patroni_communications_worker_uses_reviewed_profile_and_role_driven(
     assert worker["env_file"] == services["app"]["env_file"] == expected_env_file
     enabled = worker["environment"]["COMMUNICATIONS_WORKER_ENABLED"]
     allow_all = worker["environment"]["COMMUNICATIONS_WORKER_ALLOW_ALL_MODE"]
-    assert (enabled, allow_all) in REVIEWED_WORKER_PROFILES
+    assert (enabled, allow_all) == ("true", "false")
+    assert REVIEWED_WORKER_PROFILES[(enabled, allow_all)] == "canary"
     assert worker["environment"] == {
         "DATABASE_URL": expected_database_url,
         "ENVIRONMENT": "production",

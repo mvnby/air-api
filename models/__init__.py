@@ -33,7 +33,11 @@ from .catalog_import import CatalogImportJob
 from .catalog_revision import StorefrontCatalogRevision
 from .content import Article, GlobalConfig
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
-from .communication_runtime import CommunicationRuntimeState
+from .communication_runtime import (
+    CommunicationRuntimeState,
+    CommunicationWebsiteBacklogOperation,
+    CommunicationWebsiteCanaryRun,
+)
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
 from .media import MediaAsset, MediaProcessingJob
 from .service_asset import (
@@ -47,6 +51,7 @@ from .service_asset import (
     WarrantyPolicy,
 )
 from .staff import StaffUser
+from .storage_maintenance import StorageReconciliationCursor
 from .tenancy import Storefront, StorefrontDomain, Tenant, TenantMembership
 from .tenant_commerce import TenantAuditEvent, TenantOffer
 from .order import (
@@ -91,6 +96,7 @@ from .product_collection import (
     ProductCollectionItem,
     ProductCollectionPlacement,
 )
+from .public_write_idempotency import PublicWriteIdempotency
 from .supplier import (
     ProductLocalStock,
     ProductSupplierMapping,
@@ -125,6 +131,8 @@ __all__ = [
     "CommunicationDelivery",
     "CommunicationDeliveryAttempt",
     "CommunicationRuntimeState",
+    "CommunicationWebsiteBacklogOperation",
+    "CommunicationWebsiteCanaryRun",
     "ConsumerInbox",
     "Customer",
     "CustomerBranch",
@@ -179,6 +187,7 @@ __all__ = [
     "ProductCollection",
     "ProductCollectionItem",
     "ProductCollectionPlacement",
+    "PublicWriteIdempotency",
     "ProductAttachment",
     "ProductImage",
     "ProductMainImageCleanupBatch",
@@ -198,6 +207,7 @@ __all__ = [
     "TenantOffer",
     "Storefront",
     "StorefrontDomain",
+    "StorageReconciliationCursor",
     "Payment",
     "PaymentType",
     "Supplier",

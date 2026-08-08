@@ -145,6 +145,7 @@ async def test_public_product_installation_uses_server_rate_discount_and_meters(
             sqlite_checkout_session,
             payload,
             tenant_scope=tenant_scope,
+            idempotency_key="pricing-checkout-request-0001",
         )
 
     product_link = (
@@ -223,6 +224,7 @@ async def test_service_only_installation_uses_selected_server_rate_without_bundl
         sqlite_checkout_session,
         payload,
         tenant_scope=tenant_scope,
+        idempotency_key="pricing-checkout-request-0002",
     )
     service_links = list(
         (

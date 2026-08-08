@@ -2,13 +2,16 @@
 
 from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import settings
 from core.database import get_session
+from core.public_write_idempotency import (
+    get_public_write_idempotency_key,
+    get_required_public_write_idempotency_key,
+)
 from core.tenant_scope import (
     get_public_tenant_scope,
     verify_public_storefront_request,
@@ -27,18 +30,51 @@ from services.repair_diagnostic_service import (
     RepairDiagnosticLeadResponse,
     RepairDiagnosticService,
 )
+from services.repair_diagnostic_intake_service import RepairDiagnosticIntakeService
 from services.installation_estimate_lead_service import (
     InstallationEstimateIdempotencyConflict,
     InstallationEstimateLeadService,
     InstallationEstimateTemporarilyUnavailable,
 )
 from services.website_lead_service import WebsiteLeadService
+from services.public_write_idempotency_service import (
+    PublicWriteIdempotencyConflict,
+    PublicWriteIdempotencyUnavailable,
+)
 from services.tenant_scope_service import TenantScope
+from schemas_public_checkout import (
+    PublicWriteIdempotencyErrorResponse,
+    PublicWriteRequestErrorResponse,
+)
 
 router = APIRouter(
     tags=["api"],
     dependencies=[Depends(verify_public_storefront_request)],
 )
+
+_IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
+    "description": "Request can be retried after a short delay",
+    "headers": {
+        "Retry-After": {
+            "description": "Delay in seconds before retrying the same command",
+            "schema": {"type": "string"},
+        }
+    },
+}
+
+_STOREFRONT_AUTH_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
+    "description": "Invalid or unsupported storefront signature envelope",
+}
+_BODY_TOO_LARGE_RESPONSE = {
+    "model": PublicWriteRequestErrorResponse,
+    "description": "Storefront request body exceeds the configured limit",
+}
+_IDEMPOTENCY_CONFLICT_RESPONSE = {
+    "model": PublicWriteIdempotencyErrorResponse,
+    "description": "Idempotency key reused with different content",
+}
 
 
 async def installation_estimate_form_payload(
@@ -73,17 +109,38 @@ async def installation_estimate_form_payload(
     "/v1/leads/contact",
     response_model=PublicContactLeadResponse,
     operation_id="create_public_contact_lead",
+    responses={
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid Content-Length or idempotency key",
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
+        503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
+    },
 )
 async def create_public_contact_lead(
     payload: PublicContactLeadPayload,
+    idempotency_key: str = Depends(get_public_write_idempotency_key),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    return await WebsiteLeadService.create_contact_lead(
-        session,
-        payload,
-        tenant_scope=tenant_scope,
-    )
+    try:
+        return await WebsiteLeadService.create_contact_lead(
+            session,
+            payload,
+            tenant_scope=tenant_scope,
+            idempotency_key=idempotency_key,
+        )
+    except PublicWriteIdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PublicWriteIdempotencyUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Приём заявки временно занят. Повторите отправку.",
+            headers={"Retry-After": "1"},
+        ) from exc
 
 
 @router.post(
@@ -91,9 +148,16 @@ async def create_public_contact_lead(
     response_model=InstallationEstimateLeadResponse,
     operation_id="create_installation_estimate_lead",
     responses={
-        400: {"description": "Invalid image or upload limits exceeded"},
-        409: {"description": "Idempotency key reused with different content"},
-        503: {"description": "Request can be retried after a short delay"},
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": (
+                "Invalid Content-Length, image, idempotency key, or upload limits"
+            ),
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
+        503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
     },
 )
 async def create_installation_estimate_lead(
@@ -101,15 +165,7 @@ async def create_installation_estimate_lead(
         InstallationEstimateLeadPayload,
         Depends(installation_estimate_form_payload),
     ],
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            min_length=16,
-            max_length=128,
-            pattern=r"^[A-Za-z0-9._:-]+$",
-        ),
-    ],
+    idempotency_key: str = Depends(get_required_public_write_idempotency_key),
     indoor_unit: Optional[List[UploadFile]] = File(default=None),
     outdoor_unit: Optional[List[UploadFile]] = File(default=None),
     route: Optional[List[UploadFile]] = File(default=None),
@@ -143,6 +199,12 @@ async def create_installation_estimate_lead(
             detail="Приём заявки временно занят. Повторите отправку.",
             headers={"Retry-After": "1"},
         ) from exc
+    except PublicWriteIdempotencyUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Приём заявки временно занят. Повторите отправку.",
+            headers={"Retry-After": "1"},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -151,9 +213,20 @@ async def create_installation_estimate_lead(
     "/v1/leads/product-availability",
     response_model=ProductAvailabilityLeadResponse,
     operation_id="create_product_availability_lead",
+    responses={
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": "Invalid Content-Length or idempotency key",
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
+        503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
+    },
 )
 async def create_product_availability_lead(
     payload: ProductAvailabilityLeadPayload,
+    idempotency_key: str = Depends(get_public_write_idempotency_key),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
@@ -162,7 +235,16 @@ async def create_product_availability_lead(
             session,
             payload,
             tenant_scope=tenant_scope,
+            idempotency_key=idempotency_key,
         )
+    except PublicWriteIdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PublicWriteIdempotencyUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Приём заявки временно занят. Повторите отправку.",
+            headers={"Retry-After": "1"},
+        ) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -171,9 +253,21 @@ async def create_product_availability_lead(
     "/v1/leads/repair-diagnostic",
     response_model=RepairDiagnosticLeadResponse,
     operation_id="create_repair_diagnostic_lead",
+    responses={
+        400: {
+            "model": PublicWriteRequestErrorResponse,
+            "description": (
+                "Invalid Content-Length, form data, idempotency key, or upload limits"
+            ),
+        },
+        401: _STOREFRONT_AUTH_RESPONSE,
+        409: _IDEMPOTENCY_CONFLICT_RESPONSE,
+        413: _BODY_TOO_LARGE_RESPONSE,
+        503: _IDEMPOTENCY_UNAVAILABLE_RESPONSE,
+    },
 )
 async def create_repair_diagnostic_lead(
-    background_tasks: BackgroundTasks,
+    idempotency_key: str = Depends(get_public_write_idempotency_key),
     payload: str = Form(...),
     nameplate: Optional[List[UploadFile]] = File(default=None),
     indoor_unit: Optional[List[UploadFile]] = File(default=None),
@@ -194,23 +288,24 @@ async def create_repair_diagnostic_lead(
                 "leak_place": leak_place,
             }
         )
-        response, nameplate_files = await RepairDiagnosticService.create_lead(
+        response, _, _ = await RepairDiagnosticIntakeService.create_lead(
             session,
             payload=parsed_payload,
             uploads=uploads,
             tenant_scope=tenant_scope,
+            idempotency_key=idempotency_key,
         )
+    except PublicWriteIdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PublicWriteIdempotencyUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Приём заявки временно занят. Повторите отправку.",
+            headers={"Retry-After": "1"},
+        ) from exc
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if settings.ENVIRONMENT != "test":
-        background_tasks.add_task(
-            RepairDiagnosticService.run_ai_pre_diagnosis,
-            order_id=response.order_id,
-            tenant_id=tenant_scope.tenant_id,
-            payload_data=parsed_payload.model_dump(),
-            nameplate_files=nameplate_files,
-        )
     return response

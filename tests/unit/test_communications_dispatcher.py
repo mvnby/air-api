@@ -30,6 +30,10 @@ from services.communications.template_registry import (
     PUBLIC_ORDER_CREATED_EVENT,
     WebsiteTemplateRegistry,
 )
+from tests.unit.tenant_website_test_support import (
+    add_tenant_members as _add_tenant_members,
+    ensure_tenant_website_scope,
+)
 
 ALL_SCOPE = CommunicationProcessingScope.all(
     control_revision=0,
@@ -45,6 +49,9 @@ async def communications_session_factory(tmp_path):
         await connection.run_sync(SQLModel.metadata.create_all)
 
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        await ensure_tenant_website_scope(session)
+        await session.commit()
     try:
         yield factory
     finally:
@@ -57,6 +64,8 @@ def _installation_estimate_payload(
     description: str = "Нужна консультация",
 ):
     return InstallationEstimateLeadCreatedPayloadV1(
+        tenant_id=1,
+        storefront_id=1,
         order_id=order_id,
         status="new_lead",
         name="Иван <b>не HTML</b>",
@@ -122,7 +131,10 @@ async def test_dispatch_materializes_deliveries_inbox_and_published_atomically(
     async with communications_session_factory() as session:
         event = _event(21, now=dispatch_time)
         event_id = event.event_id
-        session.add_all([event, _owner(101), _owner(202, name="Second")])
+        first_owner = _owner(101)
+        second_owner = _owner(202, name="Second")
+        session.add(event)
+        await _add_tenant_members(session, first_owner, second_owner)
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
@@ -245,10 +257,7 @@ async def test_dispatch_retries_or_dead_letters_when_owner_audience_is_empty(
         assert retry.outcome == "retry_scheduled"
         assert retry.next_attempt_at is not None
         assert retry_event.status == "pending"
-        assert (
-            retry_event.last_error_code
-            == "installation_owner_recipient_count_invalid"
-        )
+        assert retry_event.last_error_code == "NoEligibleCommunicationRecipients"
         assert await session.get(
             ConsumerInbox, (CONSUMER_NAME, retry_event.event_id)
         ) is None
@@ -464,7 +473,11 @@ async def test_dispatch_materializer_conflict_rolls_back_new_recipient_savepoint
             recipients=existing_recipients,
             now=now,
         )
-        session.add_all([_owner(700), _owner(702, name="Second")])
+        await _add_tenant_members(
+            session,
+            _owner(700),
+            _owner(702, name="Second"),
+        )
         await session.commit()
         monkeypatch.setattr(settings, "ADMIN_IDS", "700,702", raising=False)
         monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
@@ -500,8 +513,7 @@ async def test_dispatch_recovers_existing_inbox_without_duplicate_delivery(
     async with communications_session_factory() as session:
         event = _event(61, now=now)
         owner = _owner(700)
-        session.add(owner)
-        await session.flush()
+        await _add_tenant_members(session, owner)
         plan = WebsiteTemplateRegistry.plan(event)
         recipient = CommunicationRecipientV1(
             recipient_key=f"staff:{owner.id}",

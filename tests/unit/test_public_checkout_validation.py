@@ -8,6 +8,9 @@ from core.database import get_session
 from core.tenant_scope import get_public_tenant_scope
 from routers.api_orders import router
 from services.installation_pricing_service import InstallationPricingError
+from services.public_write_idempotency_service import (
+    PublicWriteIdempotencyUnavailable,
+)
 from services.website_order_service import WebsiteOrderService
 from services.tenant_scope_service import TenantScope
 
@@ -169,9 +172,32 @@ async def test_public_checkout_maps_authoritative_pricing_error_to_documented_co
         "message": "Неизвестный тариф монтажа #999",
     }
     responses = app.openapi()["paths"]["/api/v1/orders"]["post"]["responses"]
-    assert responses["409"]["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/PublicOrderPricingErrorResponse"
+    conflict_schema = responses["409"]["content"]["application/json"]["schema"]
+    assert {
+        item["$ref"] for item in conflict_schema["anyOf"]
+    } == {
+        "#/components/schemas/PublicOrderPricingErrorResponse",
+        "#/components/schemas/PublicWriteIdempotencyErrorResponse",
     }
+
+
+@pytest.mark.asyncio
+async def test_public_checkout_maps_bounded_idempotency_wait_to_retryable_503(
+    checkout_app,
+):
+    app, create_order = checkout_app
+    create_order.side_effect = PublicWriteIdempotencyUnavailable("busy")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/orders",
+            json=_payload_with_item({"product_id": 1, "quantity": 1}),
+        )
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "1"
+    documented = app.openapi()["paths"]["/api/v1/orders"]["post"]["responses"]
+    assert "Retry-After" in documented["503"]["headers"]
 
 
 @pytest.mark.asyncio

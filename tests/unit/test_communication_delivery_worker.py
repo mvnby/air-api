@@ -29,6 +29,10 @@ from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
     INSTALLATION_ESTIMATE_TEMPLATE_KEY,
 )
+from tests.unit.tenant_website_test_support import (
+    add_tenant_members,
+    ensure_tenant_website_scope,
+)
 
 ALL_SCOPE = CommunicationProcessingScope.all(
     control_revision=0,
@@ -59,6 +63,7 @@ async def _seed_delivery(
 ) -> tuple[int, str]:
     now = datetime.now(timezone.utc)
     async with session_factory() as session:
+        await ensure_tenant_website_scope(session)
         owner = StaffUser(
             display_name=f"Owner {sequence}",
             status=status,
@@ -66,8 +71,7 @@ async def _seed_delivery(
             primary_role="owner",
             telegram_id=telegram_id,
         )
-        session.add(owner)
-        await session.flush()
+        await add_tenant_members(session, owner)
         assert owner.id is not None
         delivery_id = f"{sequence:032x}"
         event_id = f"{sequence + 1000:032x}"
@@ -98,6 +102,8 @@ async def _seed_delivery(
                 template_key=INSTALLATION_ESTIMATE_TEMPLATE_KEY,
                 template_version=1,
                 render_context=InstallationEstimateLeadCreatedPayloadV1(
+                    tenant_id=1,
+                    storefront_id=1,
                     order_id=sequence,
                     status="new_lead",
                     name=f"Lead {sequence}",
@@ -548,8 +554,7 @@ async def test_worker_keeps_recipient_failures_independent(
             primary_role="owner",
             telegram_id=404004,
         )
-        session.add(second_owner)
-        await session.flush()
+        await add_tenant_members(session, second_owner)
         assert second_owner.id is not None
         existing = await session.get(
             CommunicationDelivery,

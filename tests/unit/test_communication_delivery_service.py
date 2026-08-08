@@ -98,6 +98,8 @@ def _delivery(
         template_key=template_key,
         template_version=1,
         render_context=InstallationEstimateLeadCreatedPayloadV1(
+            tenant_id=1,
+            storefront_id=1,
             order_id=sequence,
             status="new_lead",
             name=f"Lead {sequence}",

@@ -9,15 +9,32 @@ from services.communications.contracts import (
     InstallationEstimateLeadCreatedPayloadV1,
     PublicContactLeadCreatedPayloadV1,
     PublicOrderCreatedPayloadV1,
+    TenantWebsiteAvailabilityRequestedPayloadV1,
+    TenantWebsiteCheckoutCreatedPayloadV1,
+    TenantWebsiteContactLeadCreatedPayloadV1,
+    TenantWebsiteRepairDiagnosticCreatedPayloadV1,
     TelegramCanaryRequestedPayloadV1,
 )
-from services.communications.installation_activation_fence import (
+from services.communications.tenant_website_events import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+    TENANT_WEBSITE_AVAILABILITY_REQUESTED_EVENT,
+    TENANT_WEBSITE_AVAILABILITY_TEMPLATE_KEY,
+    TENANT_WEBSITE_CHECKOUT_CREATED_EVENT,
+    TENANT_WEBSITE_CHECKOUT_TEMPLATE_KEY,
+    TENANT_WEBSITE_CONTACT_LEAD_CREATED_EVENT,
+    TENANT_WEBSITE_CONTACT_TEMPLATE_KEY,
+    TENANT_WEBSITE_REPAIR_DIAGNOSTIC_CREATED_EVENT,
+    TENANT_WEBSITE_REPAIR_TEMPLATE_KEY,
 )
 from services.communications.outbox_service import IntegrationOutboxService
 from services.communications.templates.operations import render_telegram_canary_v1
 from services.communications.templates.website import (
     render_installation_estimate_lead_v1,
+    render_tenant_website_availability_v1,
+    render_tenant_website_checkout_v1,
+    render_tenant_website_contact_v1,
+    render_tenant_website_repair_v1,
     render_website_contact_lead_v1,
     render_website_order_v1,
 )
@@ -46,13 +63,16 @@ SUPPORTED_EVENT_TYPES = {
     PUBLIC_ORDER_CREATED_EVENT,
     PUBLIC_CONTACT_LEAD_CREATED_EVENT,
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+    TENANT_WEBSITE_CHECKOUT_CREATED_EVENT,
+    TENANT_WEBSITE_CONTACT_LEAD_CREATED_EVENT,
+    TENANT_WEBSITE_AVAILABILITY_REQUESTED_EVENT,
+    TENANT_WEBSITE_REPAIR_DIAGNOSTIC_CREATED_EVENT,
     TELEGRAM_CANARY_REQUESTED_EVENT,
     *STAFF_TASK_EVENT_TYPE_VALUES,
 }
 
 ORDER_TEMPLATE_KEY = "telegram.website_order_created"
 CONTACT_LEAD_TEMPLATE_KEY = "telegram.website_contact_lead_created"
-INSTALLATION_ESTIMATE_TEMPLATE_KEY = "telegram.installation_estimate_lead_created"
 TELEGRAM_CANARY_TEMPLATE_KEY = "telegram.operations_canary"
 
 
@@ -121,7 +141,29 @@ class WebsiteTemplateRegistry:
                 payload = InstallationEstimateLeadCreatedPayloadV1.model_validate(
                     render_context
                 )
-                audience = "installation_estimate_owners"
+                audience = "tenant_website_management"
+            elif template_key == TENANT_WEBSITE_CHECKOUT_TEMPLATE_KEY:
+                payload = TenantWebsiteCheckoutCreatedPayloadV1.model_validate(
+                    render_context
+                )
+                audience = "tenant_website_management"
+            elif template_key == TENANT_WEBSITE_CONTACT_TEMPLATE_KEY:
+                payload = TenantWebsiteContactLeadCreatedPayloadV1.model_validate(
+                    render_context
+                )
+                audience = "tenant_website_management"
+            elif template_key == TENANT_WEBSITE_AVAILABILITY_TEMPLATE_KEY:
+                payload = TenantWebsiteAvailabilityRequestedPayloadV1.model_validate(
+                    render_context
+                )
+                audience = "tenant_website_management"
+            elif template_key == TENANT_WEBSITE_REPAIR_TEMPLATE_KEY:
+                payload = (
+                    TenantWebsiteRepairDiagnosticCreatedPayloadV1.model_validate(
+                        render_context
+                    )
+                )
+                audience = "tenant_website_management"
             elif template_key == TELEGRAM_CANARY_TEMPLATE_KEY:
                 payload = TelegramCanaryRequestedPayloadV1.model_validate(
                     render_context
@@ -173,6 +215,28 @@ class WebsiteTemplateRegistry:
                     event.payload
                 )
                 template_key = INSTALLATION_ESTIMATE_TEMPLATE_KEY
+            elif event.event_type == TENANT_WEBSITE_CHECKOUT_CREATED_EVENT:
+                payload = TenantWebsiteCheckoutCreatedPayloadV1.model_validate(
+                    event.payload
+                )
+                template_key = TENANT_WEBSITE_CHECKOUT_TEMPLATE_KEY
+            elif event.event_type == TENANT_WEBSITE_CONTACT_LEAD_CREATED_EVENT:
+                payload = TenantWebsiteContactLeadCreatedPayloadV1.model_validate(
+                    event.payload
+                )
+                template_key = TENANT_WEBSITE_CONTACT_TEMPLATE_KEY
+            elif event.event_type == TENANT_WEBSITE_AVAILABILITY_REQUESTED_EVENT:
+                payload = TenantWebsiteAvailabilityRequestedPayloadV1.model_validate(
+                    event.payload
+                )
+                template_key = TENANT_WEBSITE_AVAILABILITY_TEMPLATE_KEY
+            elif event.event_type == TENANT_WEBSITE_REPAIR_DIAGNOSTIC_CREATED_EVENT:
+                payload = (
+                    TenantWebsiteRepairDiagnosticCreatedPayloadV1.model_validate(
+                        event.payload
+                    )
+                )
+                template_key = TENANT_WEBSITE_REPAIR_TEMPLATE_KEY
             elif event.event_type == TELEGRAM_CANARY_REQUESTED_EVENT:
                 payload = TelegramCanaryRequestedPayloadV1.model_validate(event.payload)
                 run_id = payload.run_id
@@ -233,6 +297,14 @@ class WebsiteTemplateRegistry:
             return render_website_contact_lead_v1(plan.render_context)
         if plan.template_key == INSTALLATION_ESTIMATE_TEMPLATE_KEY:
             return render_installation_estimate_lead_v1(plan.render_context)
+        if plan.template_key == TENANT_WEBSITE_CHECKOUT_TEMPLATE_KEY:
+            return render_tenant_website_checkout_v1(plan.render_context)
+        if plan.template_key == TENANT_WEBSITE_CONTACT_TEMPLATE_KEY:
+            return render_tenant_website_contact_v1(plan.render_context)
+        if plan.template_key == TENANT_WEBSITE_AVAILABILITY_TEMPLATE_KEY:
+            return render_tenant_website_availability_v1(plan.render_context)
+        if plan.template_key == TENANT_WEBSITE_REPAIR_TEMPLATE_KEY:
+            return render_tenant_website_repair_v1(plan.render_context)
         if plan.template_key == TELEGRAM_CANARY_TEMPLATE_KEY:
             if plan.audience != "operations_canary":
                 raise UnsupportedCommunicationEvent(

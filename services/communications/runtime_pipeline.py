@@ -14,6 +14,9 @@ from services.communications.delivery_worker import (
 from services.communications.dispatcher import CommunicationOutboxDispatcher
 from services.communications.providers.base import CommunicationDeliveryProvider
 from services.communications.processing_scope import CommunicationProcessingScope
+from services.communications.provider_boundary_authorization import (
+    prepare_website_provider_boundary,
+)
 from services.communications.runtime_config import (
     CommunicationRuntimeConfig,
     CommunicationRuntimeError,
@@ -101,6 +104,13 @@ class CommunicationRuntimePipeline:
                     scope=scope,
                 )
             ),
+            provider_boundary_authorizer=lambda session, claim: (
+                prepare_website_provider_boundary(
+                    session,
+                    scope=scope,
+                    claim=claim,
+                )
+            ),
             db_operation_timeout_seconds=self._config.db_probe_timeout_seconds,
         )
 
@@ -175,6 +185,12 @@ class CommunicationRuntimePipeline:
                 )
                 return None
         try:
+            if control.website_canary_target is not None:
+                return CommunicationProcessingScope.website_canary(
+                    run_id=control.canary_run_id or "",
+                    control_revision=control.control_revision,
+                    target=control.website_canary_target,
+                )
             return CommunicationProcessingScope.canary(
                 run_id=control.canary_run_id or "",
                 control_revision=control.control_revision,

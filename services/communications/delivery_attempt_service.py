@@ -162,7 +162,7 @@ class CommunicationDeliveryAttemptService:
         delivery: CommunicationDelivery,
         started_at: datetime,
     ) -> None:
-        """Persist the acceptance-ambiguity boundary for the current attempt."""
+        """Persist the provider boundary while the attempt lock is held."""
 
         attempt_no = int(delivery.attempts)
         statement = select(CommunicationDeliveryAttempt).where(

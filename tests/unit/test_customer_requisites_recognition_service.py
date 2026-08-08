@@ -1,12 +1,17 @@
 from pathlib import Path
 
 import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import Response
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from models import CustomerRequisitesRecognition
-from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from services.customer_requisites_recognition_service import (
+    CustomerRequisitesRecognitionService,
+    OcrProviderError,
+)
 from models.tenancy import TenantScope
 
 
@@ -41,6 +46,158 @@ def test_normalize_vitebsk_landline_from_context():
 
 def test_normalize_unknown_landline_returns_none():
     assert CustomerRequisitesRecognitionService.normalize_phone("69-73-29", context="") is None
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "retryable"),
+    [
+        (400, "invalid_argument", False),
+        (401, "credentials_rejected", False),
+        (403, "credentials_rejected", False),
+        (429, "rate_limited", True),
+        (500, "upstream_error", True),
+        (503, "upstream_error", True),
+    ],
+)
+def test_google_vision_http_error_has_typed_retry_contract(
+    status,
+    code,
+    retryable,
+):
+    error = HttpError(
+        Response({"status": str(status), "reason": "test"}),
+        b'{"error":{"message":"provider detail"}}',
+    )
+
+    mapped = CustomerRequisitesRecognitionService._vision_http_error(error)
+
+    assert mapped.status == status
+    assert mapped.code == code
+    assert mapped.retryable is retryable
+    assert "provider detail" not in str(mapped)
+
+
+@pytest.mark.parametrize(
+    ("rpc_status", "status", "code", "retryable"),
+    [
+        ("INVALID_ARGUMENT", 400, "invalid_argument", False),
+        ("FAILED_PRECONDITION", 400, "failed_precondition", False),
+        ("UNAUTHENTICATED", 401, "credentials_rejected", False),
+        ("PERMISSION_DENIED", 403, "credentials_rejected", False),
+        ("RESOURCE_EXHAUSTED", 429, "rate_limited", True),
+        ("UNAVAILABLE", 503, "upstream_error", True),
+        ("INTERNAL", 500, "upstream_error", True),
+    ],
+)
+def test_google_vision_rpc_error_has_typed_retry_contract(
+    rpc_status,
+    status,
+    code,
+    retryable,
+):
+    mapped = CustomerRequisitesRecognitionService._vision_rpc_error(
+        {"status": rpc_status, "code": status, "message": "secret"}
+    )
+
+    assert mapped.status == status
+    assert mapped.code == code
+    assert mapped.retryable is retryable
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "retryable"),
+    [
+        (3, "invalid_argument", False),
+        (7, "credentials_rejected", False),
+        (9, "failed_precondition", False),
+        (16, "credentials_rejected", False),
+        (8, "rate_limited", True),
+        (14, "upstream_error", True),
+    ],
+)
+def test_google_vision_numeric_rpc_code_has_typed_retry_contract(
+    status,
+    code,
+    retryable,
+):
+    mapped = CustomerRequisitesRecognitionService._vision_rpc_error(
+        {"code": status, "message": "secret"}
+    )
+
+    assert mapped.status == status
+    assert mapped.code == code
+    assert mapped.retryable is retryable
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        {},
+        {"status": "FUTURE_CANONICAL_STATUS", "code": 14},
+        {"status": [], "code": "not-a-number"},
+    ],
+)
+def test_google_vision_malformed_rpc_status_fails_closed(error):
+    mapped = CustomerRequisitesRecognitionService._vision_rpc_error(error)
+
+    assert mapped.code == "unclassified_response"
+    assert mapped.retryable is False
+
+
+def test_google_vision_non_mapping_error_payload_fails_closed(monkeypatch):
+    class Request:
+        def execute(self):
+            return {"responses": [{"error": "malformed"}]}
+
+    class Images:
+        def annotate(self, **_kwargs):
+            return Request()
+
+    class Vision:
+        def images(self):
+            return Images()
+
+    monkeypatch.setattr(
+        CustomerRequisitesRecognitionService,
+        "_get_vision_client",
+        lambda: Vision(),
+    )
+
+    with pytest.raises(OcrProviderError) as captured:
+        CustomerRequisitesRecognitionService._vision_text_from_image_bytes_sync(
+            b"image"
+        )
+
+    assert captured.value.code == "unclassified_response"
+    assert captured.value.retryable is False
+
+
+def test_google_vision_execute_network_failure_is_retryable(monkeypatch):
+    class Request:
+        def execute(self):
+            raise OSError("network detail")
+
+    class Images:
+        def annotate(self, **_kwargs):
+            return Request()
+
+    class Vision:
+        def images(self):
+            return Images()
+
+    monkeypatch.setattr(
+        CustomerRequisitesRecognitionService,
+        "_get_vision_client",
+        lambda: Vision(),
+    )
+
+    with pytest.raises(OcrProviderError) as captured:
+        CustomerRequisitesRecognitionService._vision_text_from_image_bytes_sync(
+            b"image"
+        )
+
+    assert captured.value.code == "network_error"
+    assert captured.value.retryable is True
 
 
 def test_normalize_extracted_cleans_signer_basis_and_phone():

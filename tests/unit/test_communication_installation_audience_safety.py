@@ -38,6 +38,9 @@ from tests.unit.test_communications_dispatcher import (
     _owner,
     communications_session_factory,
 )
+from tests.unit.tenant_website_test_support import (
+    add_tenant_members as _add_tenant_members,
+)
 
 
 @pytest.mark.asyncio
@@ -126,7 +129,8 @@ async def test_dispatch_all_scope_never_selects_an_event_before_the_watermark(
             priority=-100,
         )
         at_watermark = _event(23, now=watermark, priority=100)
-        session.add_all([before, at_watermark, _owner(303)])
+        session.add_all([before, at_watermark])
+        await _add_tenant_members(session, _owner(303))
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
@@ -154,19 +158,17 @@ async def test_installation_audience_excludes_managers_and_admin_fallback(
     monkeypatch.setattr(settings, "ADMIN_ID", 702, raising=False)
     now = datetime(2026, 7, 12, 3, 0, tzinfo=timezone.utc)
     async with communications_session_factory() as session:
-        session.add_all(
-            [
-                _event(24, now=now),
-                _owner(303),
-                StaffUser(
-                    display_name="Manager",
-                    status="active",
-                    roles=["manager"],
-                    primary_role="manager",
-                    telegram_id=404,
-                ),
-            ]
+        owner = _owner(303)
+        manager = StaffUser(
+            display_name="Manager",
+            status="active",
+            roles=["manager"],
+            primary_role="manager",
+            telegram_id=404,
         )
+        session.add(_event(24, now=now))
+        await _add_tenant_members(session, owner)
+        await _add_tenant_members(session, manager, role="manager")
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
@@ -196,19 +198,16 @@ async def test_dispatch_fails_closed_when_any_active_owner_is_invalid(
     now = datetime(2026, 7, 12, 3, 0, tzinfo=timezone.utc)
     async with communications_session_factory() as session:
         event = _event(25, now=now, max_attempts=2)
-        session.add_all(
-            [
-                event,
-                _owner(303),
-                StaffUser(
-                    display_name="Owner without Telegram",
-                    status="active",
-                    roles=["owner"],
-                    primary_role="owner",
-                    telegram_id=None,
-                ),
-            ]
+        owner = _owner(303)
+        invalid_owner = StaffUser(
+            display_name="Owner without Telegram",
+            status="active",
+            roles=["owner"],
+            primary_role="owner",
+            telegram_id=None,
         )
+        session.add(event)
+        await _add_tenant_members(session, owner, invalid_owner)
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
@@ -221,7 +220,7 @@ async def test_dispatch_fails_closed_when_any_active_owner_is_invalid(
 
         assert outcome is not None
         assert outcome.outcome == "retry_scheduled"
-        assert event.last_error_code == "installation_owner_recipient_invalid"
+        assert event.last_error_code == "tenant_website_recipient_invalid"
         assert (
             await session.execute(
                 select(func.count(CommunicationDelivery.delivery_id))
@@ -237,8 +236,8 @@ async def test_dispatch_rejects_existing_inbox_after_exact_owner_set_drift(
     async with communications_session_factory() as session:
         event = _event(62, now=now)
         first_owner = _owner(700)
-        session.add_all([event, first_owner])
-        await session.flush()
+        session.add(event)
+        await _add_tenant_members(session, first_owner)
         plan = WebsiteTemplateRegistry.plan(event)
         await CommunicationDeliveryMaterializer.materialize(
             session,
@@ -263,7 +262,7 @@ async def test_dispatch_rejects_existing_inbox_after_exact_owner_set_drift(
                 processed_at=now,
             )
         )
-        session.add(_owner(701, name="New owner"))
+        await _add_tenant_members(session, _owner(701, name="New owner"))
         await session.commit()
 
         outcome = await CommunicationOutboxDispatcher.dispatch_next(
@@ -343,15 +342,14 @@ async def test_worker_cancels_when_materialized_set_no_longer_matches_all_owners
         telegram_id=220022,
     )
     async with worker_session_factory() as session:
-        session.add(
-            StaffUser(
-                display_name="Owner added after materialization",
-                status="active",
-                roles=["owner"],
-                primary_role="owner",
-                telegram_id=220023,
-            )
+        owner = StaffUser(
+            display_name="Owner added after materialization",
+            status="active",
+            roles=["owner"],
+            primary_role="owner",
+            telegram_id=220023,
         )
+        await _add_tenant_members(session, owner)
         await session.commit()
 
     provider = RecordingProvider(

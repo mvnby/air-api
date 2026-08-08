@@ -15,9 +15,14 @@ from models import (
     CommunicationRuntimeState,
     IntegrationOutboxEvent,
     StaffUser,
+    Storefront,
+    Tenant,
+    TenantMembership,
 )
 from services.communications.contracts import (
     InstallationEstimateLeadCreatedPayloadV1,
+    PublicOrderCustomerSnapshotV1,
+    TenantWebsiteCheckoutCreatedPayloadV1,
 )
 from services.communications.dispatcher import CommunicationOutboxDispatcher
 from services.communications.installation_notifications import (
@@ -36,6 +41,9 @@ from services.communications.runtime_state import (
 )
 from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+)
+from services.communications.tenant_website_events import (
+    TENANT_WEBSITE_CHECKOUT_CREATED_EVENT,
 )
 from services.runtime_lock_service import RuntimeLockService
 
@@ -62,6 +70,8 @@ def _config(lock_name: str) -> CommunicationRuntimeConfig:
 
 def _payload(order_id: int) -> InstallationEstimateLeadCreatedPayloadV1:
     return InstallationEstimateLeadCreatedPayloadV1(
+        tenant_id=1,
+        storefront_id=1,
         order_id=order_id,
         status="new_lead",
         name="Activation fence test",
@@ -72,19 +82,39 @@ def _payload(order_id: int) -> InstallationEstimateLeadCreatedPayloadV1:
     )
 
 
+def _checkout_payload(order_id: int) -> TenantWebsiteCheckoutCreatedPayloadV1:
+    return TenantWebsiteCheckoutCreatedPayloadV1(
+        tenant_id=1,
+        storefront_id=1,
+        order_id=order_id,
+        status="negotiation",
+        customer=PublicOrderCustomerSnapshotV1(
+            name="Activation fence checkout",
+            phone="+375291112233",
+        ),
+        total_amount=100,
+    )
+
+
 async def _enqueue(
     factory,
     *,
     order_id: int,
     occurred_at: datetime | None = None,
+    event_type: str = INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
 ):
+    payload = (
+        _checkout_payload(order_id)
+        if event_type == TENANT_WEBSITE_CHECKOUT_CREATED_EVENT
+        else _payload(order_id)
+    )
     async with factory() as session:
         result = await IntegrationOutboxService.enqueue_with_result(
             session,
-            event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+            event_type=event_type,
             aggregate_type="order",
             aggregate_id=order_id,
-            payload=_payload(order_id),
+            payload=payload,
             idempotency_key=f"activation-fence:{order_id}",
             occurred_at=occurred_at,
         )
@@ -115,6 +145,26 @@ async def activation_context(db_engine, monkeypatch):
     assert runtime_lock.acquired
     try:
         async with factory() as session:
+            if await session.get(Tenant, 1) is None:
+                session.add(
+                    Tenant(
+                        id=1,
+                        slug="main",
+                        display_name="Main tenant",
+                        status="active",
+                    )
+                )
+            if await session.get(Storefront, 1) is None:
+                session.add(
+                    Storefront(
+                        id=1,
+                        tenant_id=1,
+                        slug="main",
+                        display_name="Main storefront",
+                        status="active",
+                        is_default=True,
+                    )
+                )
             now = await CommunicationRuntimeStateService.database_now(session)
             state = await CommunicationRuntimeStateService.ensure_state(
                 session,
@@ -125,17 +175,22 @@ async def activation_context(db_engine, monkeypatch):
             state.started_at = now
             state.heartbeat_at = now
             state.updated_at = now
-            session.add_all(
-                [
-                    state,
-                    StaffUser(
-                        display_name="Owner",
-                        status="active",
-                        roles=["owner"],
-                        primary_role="owner",
-                        telegram_id=90001,
-                    ),
-                ]
+            owner = StaffUser(
+                display_name="Owner",
+                status="active",
+                roles=["owner"],
+                primary_role="owner",
+                telegram_id=90001,
+            )
+            session.add_all([state, owner])
+            await session.flush()
+            session.add(
+                TenantMembership(
+                    tenant_id=1,
+                    staff_user_id=int(owner.id or 0),
+                    role="owner",
+                    status="active",
+                )
             )
             await session.commit()
         yield factory, config
@@ -162,17 +217,29 @@ async def _activate(factory, config):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event_type",
+    [
+        INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+        TENANT_WEBSITE_CHECKOUT_CREATED_EVENT,
+    ],
+)
 async def test_activation_fails_fast_behind_uncommitted_enqueue_then_inventories_it(
     activation_context,
+    event_type,
 ):
     factory, config = activation_context
     async with factory() as enqueue_session:
         enqueued = await IntegrationOutboxService.enqueue_with_result(
             enqueue_session,
-            event_type=INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
+            event_type=event_type,
             aggregate_type="order",
             aggregate_id=701,
-            payload=_payload(701),
+            payload=(
+                _checkout_payload(701)
+                if event_type == TENANT_WEBSITE_CHECKOUT_CREATED_EVENT
+                else _payload(701)
+            ),
             idempotency_key="activation-fence:701",
         )
         assert enqueued.created is True

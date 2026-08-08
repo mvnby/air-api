@@ -4,6 +4,10 @@ import hmac
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from core.public_write_key import (
+    normalize_public_write_idempotency_key,
+    public_write_idempotency_key_sha256,
+)
 from core.storefront_request_envelope import storefront_signing_header_state
 from services.storefront_context_service import StorefrontContextService
 from services.storefront_context_signature_service import (
@@ -13,6 +17,7 @@ from services.storefront_context_signature_service import (
 
 
 STOREFRONT_VERIFIED_ENVELOPE_SCOPE_KEY = "mvn.storefront_verified_envelope"
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +28,7 @@ class StorefrontEnvelopeAuthConfig:
     previous_secret: str = field(default="", repr=False)
     allowed_api_hosts: tuple[str, ...] = ()
     max_age_seconds: int = 300
+    allow_legacy_v1_read_requests: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +123,50 @@ def resolve_allowed_api_hostname(
     return hostname
 
 
+def resolve_idempotency_key_binding(
+    *,
+    raw_headers: Iterable[tuple[bytes, bytes]],
+    method: str,
+    required_for_write: bool,
+) -> str:
+    """Return the signed digest, rejecting ambiguous header representations."""
+
+    values = [
+        value
+        for name, value in raw_headers
+        if name.lower() == b"idempotency-key"
+    ]
+    is_read = str(method or "").upper() in _READ_METHODS
+    if is_read:
+        if values:
+            raise InvalidStorefrontContextSignature(
+                "Storefront context idempotency key is invalid"
+            )
+        return ""
+    if not values:
+        if required_for_write:
+            raise InvalidStorefrontContextSignature(
+                "Storefront context idempotency key is required"
+            )
+        return ""
+    if len(values) != 1:
+        raise InvalidStorefrontContextSignature(
+            "Storefront context idempotency key is invalid"
+        )
+    raw_value = _decode_ascii_header(values[0], label="idempotency key")
+    try:
+        normalized = normalize_public_write_idempotency_key(raw_value)
+    except ValueError as exc:
+        raise InvalidStorefrontContextSignature(
+            "Storefront context idempotency key is invalid"
+        ) from exc
+    if raw_value != normalized:
+        raise InvalidStorefrontContextSignature(
+            "Storefront context idempotency key is not canonical"
+        )
+    return public_write_idempotency_key_sha256(normalized)
+
+
 def authenticate_storefront_envelope(
     *,
     raw_headers: Iterable[tuple[bytes, bytes]],
@@ -165,6 +215,11 @@ def authenticate_storefront_envelope(
         raw_path=raw_path,
         query_string=query_string,
     )
+    idempotency_key_sha256 = resolve_idempotency_key_binding(
+        raw_headers=headers,
+        method=method,
+        required_for_write=True,
+    )
     hostname = StorefrontContextSignatureService.verify(
         secret=secret,
         timestamp=int(raw_timestamp),
@@ -173,7 +228,11 @@ def authenticate_storefront_envelope(
         api_hostname=api_hostname,
         storefront_hostname=storefront_hostname,
         body_sha256=body_sha256,
+        idempotency_key_sha256=idempotency_key_sha256,
         signature=signature,
         max_age_seconds=config.max_age_seconds,
+        allow_legacy_v1_read_requests=(
+            config.allow_legacy_v1_read_requests
+        ),
     )
     return VerifiedStorefrontEnvelope(hostname=hostname)

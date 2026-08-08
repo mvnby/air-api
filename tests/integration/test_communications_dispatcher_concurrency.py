@@ -14,6 +14,7 @@ from models import (
     ConsumerInbox,
     IntegrationOutboxEvent,
     StaffUser,
+    TenantMembership,
 )
 from services.communications.canary import CommunicationsTelegramCanary
 from services.communications.contracts import (
@@ -51,6 +52,8 @@ def _event(sequence: int, *, now: datetime) -> IntegrationOutboxEvent:
         aggregate_version=1,
         deduplication_key=f"dispatcher-concurrency:{sequence}",
         payload=InstallationEstimateLeadCreatedPayloadV1(
+            tenant_id=1,
+            storefront_id=1,
             order_id=sequence,
             status="new_lead",
             name=f"Клиент {sequence}",
@@ -108,6 +111,26 @@ async def _materialize_once(
         return result
 
 
+async def _add_tenant_owner(session: AsyncSession, *, telegram_id: int) -> None:
+    owner = StaffUser(
+        display_name="Owner",
+        status="active",
+        roles=["owner"],
+        primary_role="owner",
+        telegram_id=telegram_id,
+    )
+    session.add(owner)
+    await session.flush()
+    session.add(
+        TenantMembership(
+            tenant_id=1,
+            staff_user_id=int(owner.id or 0),
+            role="owner",
+            status="active",
+        )
+    )
+
+
 @pytest.mark.asyncio
 async def test_postgres_concurrent_dispatchers_materialize_one_event_once(db_engine):
     assert db_engine.dialect.name == "postgresql"
@@ -119,18 +142,8 @@ async def test_postgres_concurrent_dispatchers_materialize_one_event_once(db_eng
     now = datetime(2026, 7, 12, 3, 0, tzinfo=timezone.utc)
     event = _event(701, now=now)
     async with factory() as setup_session:
-        setup_session.add_all(
-            [
-                event,
-                StaffUser(
-                    display_name="Owner",
-                    status="active",
-                    roles=["owner"],
-                    primary_role="owner",
-                    telegram_id=7001,
-                ),
-            ]
-        )
+        setup_session.add(event)
+        await _add_tenant_owner(setup_session, telegram_id=7001)
         await setup_session.commit()
 
     barrier = asyncio.Barrier(2)
@@ -174,18 +187,8 @@ async def test_postgres_concurrent_dispatchers_skip_locked_to_distinct_events(db
     now = datetime(2026, 7, 12, 3, 0, tzinfo=timezone.utc)
     events = [_event(711, now=now), _event(712, now=now)]
     async with factory() as setup_session:
-        setup_session.add_all(
-            [
-                *events,
-                StaffUser(
-                    display_name="Owner",
-                    status="active",
-                    roles=["owner"],
-                    primary_role="owner",
-                    telegram_id=7002,
-                ),
-            ]
-        )
+        setup_session.add_all(events)
+        await _add_tenant_owner(setup_session, telegram_id=7002)
         await setup_session.commit()
 
     barrier = asyncio.Barrier(2)

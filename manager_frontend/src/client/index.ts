@@ -472,6 +472,8 @@ export type { PublicProductCollectionResponse } from './models/PublicProductColl
 export type { PublicRelatedSeriesResponse } from './models/PublicRelatedSeriesResponse';
 export type { PublicSeriesPageResponse } from './models/PublicSeriesPageResponse';
 export type { PublicStorefrontContextResponse } from './models/PublicStorefrontContextResponse';
+export type { PublicWriteIdempotencyErrorResponse } from './models/PublicWriteIdempotencyErrorResponse';
+export type { PublicWriteRequestErrorResponse } from './models/PublicWriteRequestErrorResponse';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
 export type { ServiceResponse } from './models/ServiceResponse';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';

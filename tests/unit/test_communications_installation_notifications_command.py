@@ -14,6 +14,7 @@ from models import (
     CommunicationRuntimeState,
     IntegrationOutboxEvent,
     StaffUser,
+    TenantMembership,
 )
 import scripts.communications_installation_notifications as command_module
 from scripts.communications_installation_notifications import (
@@ -28,6 +29,11 @@ from services.communications.runtime_config import CommunicationRuntimeConfig
 from services.communications.template_registry import (
     INSTALLATION_ESTIMATE_LEAD_CREATED_EVENT,
     INSTALLATION_ESTIMATE_TEMPLATE_KEY,
+)
+from tests.unit.tenant_website_test_support import (
+    TENANT_WEBSITE_SCOPE_TABLES,
+    add_tenant_members,
+    ensure_tenant_website_scope,
 )
 
 
@@ -57,7 +63,10 @@ async def operator_session_factory(tmp_path):
         f"sqlite+aiosqlite:///{tmp_path / 'installation-operator.sqlite3'}"
     )
     async with engine.begin() as connection:
+        for table in TENANT_WEBSITE_SCOPE_TABLES:
+            await connection.run_sync(table.create)
         await connection.run_sync(StaffUser.__table__.create)
+        await connection.run_sync(TenantMembership.__table__.create)
         await connection.run_sync(IntegrationOutboxEvent.__table__.create)
         await connection.run_sync(CommunicationDelivery.__table__.create)
         await connection.run_sync(CommunicationDeliveryAttempt.__table__.create)
@@ -92,26 +101,26 @@ def allow_sqlite_operator_checks(monkeypatch):
 async def _seed_dormant_runtime(session_factory) -> None:
     now = datetime.now(timezone.utc) - timedelta(seconds=1)
     async with session_factory() as session:
-        session.add_all(
-            [
-                StaffUser(
-                    display_name="Owner",
-                    status="active",
-                    roles=["owner"],
-                    primary_role="owner",
-                    telegram_id=90001,
-                ),
-                CommunicationRuntimeState(
-                    channel="telegram",
-                    mode="off",
-                    status="disabled",
-                    instance_id="communications-worker",
-                    heartbeat_at=now,
-                    control_updated_at=now,
-                    created_at=now,
-                    updated_at=now,
-                ),
-            ]
+        await ensure_tenant_website_scope(session)
+        owner = StaffUser(
+            display_name="Owner",
+            status="active",
+            roles=["owner"],
+            primary_role="owner",
+            telegram_id=90001,
+        )
+        await add_tenant_members(session, owner)
+        session.add(
+            CommunicationRuntimeState(
+                channel="telegram",
+                mode="off",
+                status="disabled",
+                instance_id="communications-worker",
+                heartbeat_at=now,
+                control_updated_at=now,
+                created_at=now,
+                updated_at=now,
+            )
         )
         await session.commit()
 

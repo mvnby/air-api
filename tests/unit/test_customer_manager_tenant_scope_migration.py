@@ -13,7 +13,9 @@ REVISION = "b8d9e0f1a2c3"
 CONTRACT_REVISION = "c9e0f1a2b3d4"
 STOREFRONT_IDEMPOTENCY_REVISION = "d0f1a2b3c4d5"
 TENANT_OFFER_REVISION = "d0a1b2c3e4f6"
-HEAD_REVISION = "e1f2a3b4c5d6"
+HEAD_REVISION = "ab02c3d4e5f6"
+PUBLIC_WRITE_REVISION = "aa91c2d4e6f8"
+CATALOG_REVISION = "e1f2a3b4c5d6"
 MIGRATION_PATH = Path(
     "alembic/versions/b8d9e0f1a2c3_add_customer_manager_tenant_scope.py"
 )
@@ -93,6 +95,14 @@ def test_customer_manager_tenant_scope_is_single_alembic_head():
     assert script.get_current_head() == HEAD_REVISION
     assert (
         script.get_revision(HEAD_REVISION).down_revision
+        == PUBLIC_WRITE_REVISION
+    )
+    assert (
+        script.get_revision(PUBLIC_WRITE_REVISION).down_revision
+        == CATALOG_REVISION
+    )
+    assert (
+        script.get_revision(CATALOG_REVISION).down_revision
         == TENANT_OFFER_REVISION
     )
     assert (

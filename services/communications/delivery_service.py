@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
@@ -166,6 +166,11 @@ class CommunicationDeliveryService:
             statement = statement.where(
                 CommunicationDelivery.event_id == scope.exact_event_id
             )
+        if scope.website_canary_target is not None:
+            statement = statement.where(
+                CommunicationDelivery.recipient_key
+                == scope.website_canary_target.recipient_key
+            )
         if scope.event_created_at_watermark is not None:
             statement = statement.where(
                 IntegrationOutboxEvent.created_at
@@ -250,8 +255,12 @@ class CommunicationDeliveryService:
         lease_token: str,
         lease_seconds: int = 90,
         now: datetime | None = None,
+        authorization_check: (
+            Callable[[AsyncSession, CommunicationDelivery], Awaitable[None]]
+            | None
+        ) = None,
     ) -> datetime:
-        """Durably cross the provider-call boundary under the exact lease."""
+        """Authorize and cross the boundary in the shared global lock order."""
 
         delivery, started_at = await cls._lock_owned_delivery(
             session,
@@ -260,6 +269,13 @@ class CommunicationDeliveryService:
             lease_token=lease_token,
             now=now,
         )
+
+        # A provider-boundary caller acquires runtime/run/event locks first.
+        # Authorize its locked delivery and recipient before taking the attempt
+        # lock so canary completion follows the same order.
+        if authorization_check is not None:
+            await authorization_check(session, delivery)
+
         await CommunicationDeliveryAttemptService.mark_provider_started(
             session,
             delivery=delivery,

@@ -143,6 +143,14 @@ class PublicOrderPricingErrorResponse(BaseModel):
     detail: PublicOrderPricingErrorDetail
 
 
+class PublicWriteIdempotencyErrorResponse(BaseModel):
+    detail: str
+
+
+class PublicWriteRequestErrorResponse(BaseModel):
+    detail: str
+
+
 class PublicContactLeadPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

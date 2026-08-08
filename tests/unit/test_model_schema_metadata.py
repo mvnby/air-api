@@ -160,11 +160,26 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
     inbox = SQLModel.metadata.tables["consumer_inbox"]
     delivery = SQLModel.metadata.tables["communication_delivery"]
     runtime = SQLModel.metadata.tables["communication_runtime_state"]
+    website_canary_run = SQLModel.metadata.tables[
+        "communication_website_canary_run"
+    ]
+    website_backlog_operation = SQLModel.metadata.tables[
+        "communication_website_backlog_operation"
+    ]
 
     assert [column.name for column in runtime.primary_key.columns] == ["channel"]
     assert runtime.c.mode.nullable is False
     assert runtime.c.canary_run_id.nullable is True
     assert runtime.c.canary_run_id.type.length == 36
+    assert runtime.c.canary_kind.nullable is False
+    assert runtime.c.website_canary_run_id.nullable is True
+    assert not {
+        "canary_event_id",
+        "canary_event_type",
+        "canary_tenant_id",
+        "canary_storefront_id",
+        "canary_recipient_key",
+    } & set(runtime.c.keys())
     assert runtime.c.control_revision.nullable is False
     assert runtime.c.status.nullable is False
     assert any(
@@ -177,6 +192,8 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
         "ck_communication_runtime_mode_valid",
         "ck_communication_runtime_canary_scope_valid",
         "ck_communication_runtime_control_revision_non_negative",
+        "ck_communication_runtime_canary_kind_valid",
+        "ck_communication_runtime_canary_reference_valid",
         "ck_communication_runtime_status_valid",
     ):
         assert any(
@@ -184,6 +201,43 @@ def test_communication_foundation_metadata_has_durable_uniqueness_and_claim_inde
             and constraint.name == constraint_name
             for constraint in runtime.constraints
         )
+
+    assert [column.name for column in website_canary_run.primary_key.columns] == [
+        "run_id"
+    ]
+    assert any(
+        isinstance(constraint, UniqueConstraint)
+        and constraint.name == "uq_communication_website_canary_run_event_id"
+        and [column.name for column in constraint.columns] == ["event_id"]
+        for constraint in website_canary_run.constraints
+    )
+    assert not {
+        "destination",
+        "payload",
+        "render_context",
+        "rendered_message",
+        "template_key",
+    } & set(website_canary_run.c.keys())
+
+    assert [
+        column.name for column in website_backlog_operation.primary_key.columns
+    ] == ["operation_id"]
+    assert website_backlog_operation.c.manifest_fingerprint.type.length == 64
+    assert website_backlog_operation.c.aggregate_counts.type.none_as_null is True
+    assert any(
+        isinstance(constraint, CheckConstraint)
+        and constraint.name
+        == "ck_communication_website_backlog_operation_lifecycle_valid"
+        for constraint in website_backlog_operation.constraints
+    )
+    assert not {
+        "event_id",
+        "delivery_id",
+        "payload",
+        "destination",
+        "render_context",
+        "recipient_key",
+    } & set(website_backlog_operation.c.keys())
 
     assert [column.name for column in inbox.primary_key.columns] == [
         "consumer_name",

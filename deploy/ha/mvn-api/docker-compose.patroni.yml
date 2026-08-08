@@ -99,7 +99,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
       ENVIRONMENT: production
       COMMUNICATIONS_WORKER_ENABLED: "true"
-      COMMUNICATIONS_WORKER_ALLOW_ALL_MODE: "true"
+      COMMUNICATIONS_WORKER_ALLOW_ALL_MODE: "false"
     command: python -m services.communications.runtime
     mem_limit: ${MVN_PATRONI_COMMUNICATIONS_WORKER_MEMORY:-256m}
 
