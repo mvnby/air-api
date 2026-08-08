@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: api-restore-drill
+  group: postgres-pitr-host-operations
+  queue: max
   cancel-in-progress: false
 
 env:

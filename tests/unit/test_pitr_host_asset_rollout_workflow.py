@@ -30,9 +30,8 @@ def test_pitr_host_asset_rollout_is_manual_main_only_and_exact_sha_gated():
     workflow = _workflow()
     assert set(workflow["on"]) == {"workflow_dispatch"}
     assert workflow["concurrency"]["cancel-in-progress"] == "false"
-    assert workflow["concurrency"]["group"] == (
-        "production-postgres-pitr-host-assets"
-    )
+    assert workflow["concurrency"]["queue"] == "max"
+    assert workflow["concurrency"]["group"] == "postgres-pitr-host-operations"
 
     guard = _step(workflow, "Require Reviewed Main SHA")
     assert "refs/heads/main" in guard["run"]

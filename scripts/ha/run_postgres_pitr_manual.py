@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the two reviewed manual PITR phases through the host operation guard."""
+"""Run reviewed manual PITR phases through the host operation guard."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import os
 import re
 import stat
 import sys
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -33,6 +34,8 @@ PHASE_TIMEOUTS = {
     "restore-drill": 7200.0,
     "logical-restore-drill": 1200.0,
 }
+LOCK_WAIT_SECONDS = 30.0
+LOCK_RETRY_SECONDS = 0.25
 OPERATION_RE = re.compile(r"^[0-9a-f]{32}$")
 BACKUP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
@@ -162,6 +165,26 @@ def _open_lock(path: Path = LOCK_PATH) -> int:
         os.close(descriptor)
         raise
     return descriptor
+
+
+def _open_lock_bounded(
+    path: Path,
+    *,
+    busy_message: str,
+    wait_seconds: float = LOCK_WAIT_SECONDS,
+    deadline: float | None = None,
+) -> int:
+    """Wait briefly for normal deploy/PITR lock hand-offs, then fail closed."""
+    if deadline is None:
+        deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            return _open_lock(path)
+        except BlockingIOError as exc:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError(busy_message) from exc
+            time.sleep(min(LOCK_RETRY_SECONDS, remaining))
 
 
 def _reject_maintenance_marker() -> None:
@@ -332,9 +355,18 @@ def run_manual(
     elif expected_database_role:
         raise RuntimeError(f"{phase} does not accept an expected database role")
 
-    shared_lock = _open_lock()
+    lock_deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    shared_lock = _open_lock_bounded(
+        LOCK_PATH,
+        busy_message="another PITR host operation remained active",
+        deadline=lock_deadline,
+    )
     try:
-        deploy_lock = _open_lock(project / ".deploy.lock")
+        deploy_lock = _open_lock_bounded(
+            project / ".deploy.lock",
+            busy_message="project deployment lock remained active",
+            deadline=lock_deadline,
+        )
         try:
             _reject_maintenance_marker()
             for helper in REQUIRED_HELPERS:

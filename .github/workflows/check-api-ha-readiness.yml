@@ -11,6 +11,11 @@ on:
         required: false
         default: false
 
+concurrency:
+  group: postgres-pitr-host-operations
+  queue: max
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   HA_READINESS_STRICT: ${{ github.event_name == 'workflow_dispatch' && inputs.strict || vars.API_HA_READINESS_STRICT || 'false' }}
