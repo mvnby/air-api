@@ -200,7 +200,15 @@ jobs:
             -e SCHEDULER_ENABLED=false \
             -e PYTEST_SUITE="${suite}" \
             "${app_image}" \
-            sh -ec 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-client; export TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db_test:5432/air_conditioners_test"; pytest -q --tb=short --durations=25 --durations-min=1.0 --junitxml=/test-results/results.xml "tests/${PYTEST_SUITE}"'
+            sh -ec '
+              apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-client
+              export TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db_test:5432/air_conditioners_test"
+              set +e
+              pytest -q --tb=short --durations=25 --durations-min=1.0 --junitxml=/test-results/results.xml "tests/${PYTEST_SUITE}"
+              pytest_status=$?
+              chmod 0644 /test-results/results.xml 2>/dev/null || true
+              exit "${pytest_status}"
+            '
 
       - name: Upload Pytest Results
         if: always()

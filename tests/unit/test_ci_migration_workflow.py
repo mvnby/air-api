@@ -50,6 +50,9 @@ def test_ci_keeps_full_coverage_with_compact_diagnostic_output():
     assert 'pytest -q --tb=short --durations=25 --durations-min=1.0' in workflow
     assert '"tests/${PYTEST_SUITE}"' in workflow
     assert "--junitxml=/test-results/results.xml" in workflow
+    assert "pytest_status=$?" in workflow
+    assert "chmod 0644 /test-results/results.xml" in workflow
+    assert 'exit "${pytest_status}"' in workflow
     assert "actions/upload-artifact@v7" in workflow
     assert "pytest -v" not in workflow
 
