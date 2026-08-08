@@ -137,6 +137,8 @@ class OrderProductLineResponse(BaseModel):
     proposal_id: Optional[int] = None
     product_id: Optional[int] = None
     product_title: str
+    title_snapshot: Optional[str] = None
+    currency_snapshot: Optional[str] = None
     quantity: int
     price: int
     cost: int

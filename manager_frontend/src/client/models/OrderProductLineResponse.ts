@@ -9,6 +9,8 @@ export type OrderProductLineResponse = {
     proposal_id?: (number | null);
     product_id?: (number | null);
     product_title: string;
+    title_snapshot?: (string | null);
+    currency_snapshot?: (string | null);
     quantity: number;
     price: number;
     cost: number;

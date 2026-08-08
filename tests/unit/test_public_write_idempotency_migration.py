@@ -11,7 +11,8 @@ from sqlalchemy import inspect, text
 
 
 REVISION = "aa91c2d4e6f8"
-HEAD_REVISION = "ab02c3d4e5f6"
+CANARY_REVISION = "ab02c3d4e5f6"
+HEAD_REVISION = "f2a3b4c5d6e7"
 MIGRATION_PATH = Path(
     "alembic/versions/aa91c2d4e6f8_add_public_write_idempotency.py"
 )
@@ -59,7 +60,8 @@ def test_public_write_idempotency_migration_is_single_head() -> None:
     revision = script.get_revision(REVISION)
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == CANARY_REVISION
+    assert script.get_revision(CANARY_REVISION).down_revision == REVISION
     assert revision is not None
     assert revision.down_revision == "e1f2a3b4c5d6"
 

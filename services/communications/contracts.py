@@ -78,7 +78,10 @@ class PublicOrderCreatedPayloadV1(_ContractV1):
     customer: PublicOrderCustomerSnapshotV1
     comment: str | None = Field(default=None, max_length=2000)
     total_amount: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
-    currency: Literal["BYN"] = "BYN"
+    currency: Annotated[
+        str,
+        Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$"),
+    ] = "BYN"
     product_lines: list[PublicOrderProductLineSnapshotV1] = Field(
         default_factory=list,
         max_length=20,

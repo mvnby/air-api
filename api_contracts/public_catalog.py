@@ -1,0 +1,40 @@
+"""Explicit response contracts for public catalog helper endpoints."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from schemas import ProductKind, PublicStockState
+
+
+class PublicProductSearchItemResponse(BaseModel):
+    """Small public projection; internal sourcing and margin data is excluded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    title: str
+    slug: str | None = None
+    price: int
+    old_price: int | None = None
+    product_kind: ProductKind = "unknown"
+    is_inverter: bool
+    power_cooling: float | None = None
+    main_image: str | None = None
+    card_image: str | None = None
+    full_image: str | None = None
+    specs: dict[str, Any] = Field(default_factory=dict)
+    vitebsk_qty: int = 0
+    minsk_qty: int = 0
+    availability_status: str | None = None
+    public_stock_state: PublicStockState | None = None
+    delivery_min_days: int | None = None
+    delivery_max_days: int | None = None
+
+
+class PublicProductSearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PublicProductSearchItemResponse] = Field(default_factory=list)

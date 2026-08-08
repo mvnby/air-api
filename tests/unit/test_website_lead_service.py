@@ -6,7 +6,6 @@ import pytest
 
 from core.database import get_session
 from core.tenant_scope import get_public_tenant_scope
-from crud.product import ProductDAO
 from main import app
 from models import Customer, Lead, LeadSource, Order, OrderStatus, Product
 from schemas import (
@@ -23,6 +22,10 @@ from services.order_service import OrderService
 from services.product_availability_serialization import (
     ProductAvailabilitySerialization,
     ProductAvailabilitySerializationClaim,
+)
+from services.public_catalog_visibility_service import (
+    PublicCatalogVisibilityService,
+    PublicProductProjection,
 )
 from services.public_write_idempotency_service import PublicWriteIdempotencyService
 from services.website_lead_service import WebsiteLeadService
@@ -154,11 +157,17 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
     )
     fake_session = SimpleNamespace(commit_calls=0, add=lambda *_args, **_kwargs: None)
     enqueued = []
+    expected_scope = tenant_scope
 
-    async def fake_get_by_id(_session, product_id):
+    async def fake_get_visible(_session, *, tenant_scope, product_id):
         availability_serialization_claim["steps"].append("product")
+        assert tenant_scope == expected_scope
         assert product_id == product.id
-        return product
+        return PublicProductProjection(
+            product=product,
+            price=product.price,
+            old_price=product.old_price,
+        )
 
     async def fake_find_recent(**kwargs):
         availability_serialization_claim["steps"].append("find")
@@ -187,7 +196,11 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
     fake_session.commit = fake_commit
     fake_session.refresh = fake_refresh
 
-    monkeypatch.setattr(ProductDAO, "get_by_id", fake_get_by_id)
+    monkeypatch.setattr(
+        PublicCatalogVisibilityService,
+        "get_visible_product_by_id",
+        fake_get_visible,
+    )
     monkeypatch.setattr(WebsiteLeadService, "_find_recent_product_availability_order", fake_find_recent)
     monkeypatch.setattr(OrderService, "create_from_website", fake_create_from_website)
     monkeypatch.setattr(TenantWebsiteEventService, "enqueue_availability", fake_enqueue)
@@ -259,9 +272,13 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
     existing_order.customer = customer
     fake_session = SimpleNamespace(commit_calls=0, add=lambda *_args, **_kwargs: None)
 
-    async def fake_get_by_id(_session, product_id):
+    async def fake_get_visible(_session, *, tenant_scope, product_id):
         assert product_id == product.id
-        return product
+        return PublicProductProjection(
+            product=product,
+            price=product.price,
+            old_price=product.old_price,
+        )
 
     async def fake_find_recent(**kwargs):
         return existing_order
@@ -278,7 +295,11 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
     fake_session.commit = fake_commit
     fake_session.refresh = fake_refresh
 
-    monkeypatch.setattr(ProductDAO, "get_by_id", fake_get_by_id)
+    monkeypatch.setattr(
+        PublicCatalogVisibilityService,
+        "get_visible_product_by_id",
+        fake_get_visible,
+    )
     monkeypatch.setattr(WebsiteLeadService, "_find_recent_product_availability_order", fake_find_recent)
     monkeypatch.setattr(
         TenantWebsiteEventService,
@@ -338,9 +359,13 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
     fake_session = SimpleNamespace(commit_calls=0, add=lambda *_args, **_kwargs: None)
     enqueued = []
 
-    async def fake_get_by_id(_session, product_id):
+    async def fake_get_visible(_session, *, tenant_scope, product_id):
         assert product_id == product.id
-        return product
+        return PublicProductProjection(
+            product=product,
+            price=product.price,
+            old_price=product.old_price,
+        )
 
     async def fake_find_recent(**kwargs):
         return existing_order
@@ -357,7 +382,11 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
     fake_session.commit = fake_commit
     fake_session.refresh = fake_refresh
 
-    monkeypatch.setattr(ProductDAO, "get_by_id", fake_get_by_id)
+    monkeypatch.setattr(
+        PublicCatalogVisibilityService,
+        "get_visible_product_by_id",
+        fake_get_visible,
+    )
     monkeypatch.setattr(WebsiteLeadService, "_find_recent_product_availability_order", fake_find_recent)
     monkeypatch.setattr(TenantWebsiteEventService, "enqueue_availability", fake_enqueue)
     monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
@@ -381,6 +410,70 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
     assert len(enqueued) == 1
     assert enqueued[0]["order"] is existing_order
     assert enqueued[0]["is_repeat"] is True
+
+
+@pytest.mark.asyncio
+async def test_unoffered_product_in_storefront_b_is_neutral_and_has_no_side_effects(
+    monkeypatch,
+    availability_serialization_claim,
+):
+    scope_b = SimpleNamespace(
+        tenant_id=2,
+        storefront_id=21,
+        is_canonical_storefront=False,
+    )
+    calls = {"visibility": 0, "lookup": 0, "create": 0, "enqueue": 0}
+
+    async def fake_visible(_session, *, tenant_scope, product_id):
+        calls["visibility"] += 1
+        assert tenant_scope is scope_b
+        assert product_id == 7
+        return None
+
+    async def fail_lookup(*_args, **_kwargs):
+        calls["lookup"] += 1
+        raise AssertionError("recent orders must not be read for a hidden product")
+
+    async def fail_create(**_kwargs):
+        calls["create"] += 1
+        raise AssertionError("an order must not be created for a hidden product")
+
+    async def fail_enqueue(*_args, **_kwargs):
+        calls["enqueue"] += 1
+        raise AssertionError("an event must not be enqueued for a hidden product")
+
+    monkeypatch.setattr(
+        PublicCatalogVisibilityService,
+        "get_visible_product_by_id",
+        fake_visible,
+    )
+    monkeypatch.setattr(
+        WebsiteLeadService,
+        "_find_recent_product_availability_order",
+        fail_lookup,
+    )
+    monkeypatch.setattr(OrderService, "create_from_website", fail_create)
+    monkeypatch.setattr(
+        TenantWebsiteEventService,
+        "enqueue_availability",
+        fail_enqueue,
+    )
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
+
+    with pytest.raises(LookupError, match="^Product not found$"):
+        await WebsiteLeadService.create_product_availability_lead(
+            object(),
+            ProductAvailabilityLeadPayload(
+                product_id=7,
+                phone="+375 (29) 111-22-33",
+                name="Иван",
+            ),
+            tenant_scope=scope_b,
+            idempotency_key="availability-hidden-unit-0001",
+        )
+
+    assert availability_serialization_claim["steps"] == ["lock"]
+    assert calls == {"visibility": 1, "lookup": 0, "create": 0, "enqueue": 0}
 
 
 @pytest.mark.asyncio

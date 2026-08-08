@@ -78,3 +78,14 @@ def test_rule_matcher_requires_every_selected_effective_feature():
         rule_config={"feature_ids": [10, 30]},
         supply_metrics={},
     )
+
+
+def test_secondary_collection_rules_use_offer_price_override():
+    product = _product(price=9000)
+
+    assert ProductCollectionRuleMatcher.matches(
+        product,
+        rule_config={"min_price": 2500, "max_price": 3500},
+        supply_metrics={},
+        price_override=3000,
+    )

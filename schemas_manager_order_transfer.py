@@ -49,6 +49,8 @@ class ManagerOrderTransferServiceRef(BaseModel):
 class ManagerOrderTransferProductLine(BaseModel):
     source_id: Optional[int] = None
     product: ManagerOrderTransferProductRef
+    title_snapshot: Optional[str] = None
+    currency_snapshot: Optional[str] = None
     quantity: int
     price: int
     cost: int = 0

@@ -8,10 +8,18 @@ from schemas import OrderPayload
 from services.communications.tenant_website_event_service import (
     TenantWebsiteEventService,
 )
-from services.installation_pricing_service import InstallationPricingService
+from services.installation_pricing_service import (
+    InstallationPricingError,
+    InstallationPricingService,
+)
+from services.order_product_link_command import (
+    OrderProductCatalogSnapshot,
+    OrderProductLinkCommand,
+)
 from services.order_service import OrderService
-from services.website_order_service import WebsiteOrderService
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.public_write_idempotency_service import PublicWriteIdempotencyService
+from services.website_order_service import WebsiteOrderService
 
 
 async def _execute_once(session, *, operation, **_kwargs):
@@ -51,8 +59,26 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
     async def fake_price_items(_session, items):
         return [item.model_dump() for item in items]
 
+    async def fake_checkout_snapshots(_session, *, tenant_scope, product_ids):
+        assert tenant_scope is not None
+        assert product_ids == {7}
+        return {
+            7: OrderProductCatalogSnapshot(
+                product_id=7,
+                title="Checkout title",
+                unit_price=3000,
+                currency="BYN",
+                pricing_source="shared_product",
+            )
+        }
+
     monkeypatch.setattr(OrderService, "create_from_website", fake_create_from_website)
     monkeypatch.setattr(InstallationPricingService, "price_public_items", fake_price_items)
+    monkeypatch.setattr(
+        PublicCatalogVisibilityService,
+        "get_checkout_snapshots",
+        fake_checkout_snapshots,
+    )
     monkeypatch.setattr(TenantWebsiteEventService, "enqueue_checkout", fake_enqueue)
     monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
@@ -92,6 +118,24 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
     assert captured_kwargs["customer_address"] == "г. Минск, ул. Тестовая 10"
     assert captured_kwargs["items"][0]["product_id"] == 7
     assert captured_kwargs["items"][0]["with_installation"] is True
+    product_link_command = captured_kwargs["product_link_command"]
+    assert isinstance(product_link_command, OrderProductLinkCommand)
+    assert dict(product_link_command.unit_prices or {}) == {7: 3000}
+    assert product_link_command.snapshots[7].title == "Checkout title"
+    assert product_link_command.snapshots[7].currency == "BYN"
+    assert captured_kwargs["commit"] is False
+    assert captured_kwargs["order_technical_meta"]["public_catalog_pricing"] == {
+        "snapshot_version": 1,
+        "items": [
+            {
+                "product_id": 7,
+                "title_snapshot": "Checkout title",
+                "unit_price": 3000,
+                "currency_snapshot": "BYN",
+                "source": "shared_product",
+            }
+        ]
+    }
     assert captured_kwargs["tenant_scope"] == tenant_scope
     assert captured_kwargs["commit"] is False
     assert captured_event["session"] is session
@@ -148,3 +192,61 @@ async def test_website_checkout_replay_does_not_repeat_mutation_or_enqueue(
     )
 
     assert response.id == 56
+
+
+@pytest.mark.asyncio
+async def test_unoffered_checkout_fails_before_order_mutation(monkeypatch, tenant_scope):
+    mutation_calls = 0
+    pricing_calls = 0
+
+    async def fake_price_items(_session, items):
+        nonlocal pricing_calls
+        pricing_calls += 1
+        raise AssertionError("hidden product must fail before installation pricing")
+
+    async def fake_checkout_snapshots(_session, *, tenant_scope, product_ids):
+        assert product_ids == {7}
+        return {}
+
+    async def fail_create_from_website(**_kwargs):
+        nonlocal mutation_calls
+        mutation_calls += 1
+        raise AssertionError("hidden product must fail before order mutation")
+
+    monkeypatch.setattr(
+        InstallationPricingService,
+        "price_public_items",
+        fake_price_items,
+    )
+    monkeypatch.setattr(
+        PublicCatalogVisibilityService,
+        "get_checkout_snapshots",
+        fake_checkout_snapshots,
+    )
+    monkeypatch.setattr(
+        OrderService,
+        "create_from_website",
+        fail_create_from_website,
+    )
+
+    payload = OrderPayload.model_validate(
+        {
+            "customer": {
+                "name": "Тестовый клиент",
+                "phone": "+375291112233",
+            },
+            "items": [{"product_id": 7, "quantity": 1}],
+        }
+    )
+
+    with pytest.raises(InstallationPricingError) as exc_info:
+        await WebsiteOrderService._create_order_mutation(
+            object(),
+            payload,
+            tenant_scope=tenant_scope,
+            request_key_hash="0" * 64,
+        )
+
+    assert exc_info.value.code == "product_not_available"
+    assert pricing_calls == 0
+    assert mutation_calls == 0

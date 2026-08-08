@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from core.database import get_session
-from core.tenant_scope import verify_public_storefront_request
+from core.tenant_scope import get_public_tenant_scope, verify_public_storefront_request
+from models.tenancy import TenantScope
 from schemas import (
     ArticleResponse,
     PublicBrandDetailResponse,
@@ -46,9 +47,15 @@ async def get_services(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/v1/content/brands", response_model=List[PublicBrandResponse], operation_id="get_public_brands")
-async def get_public_brands(session: AsyncSession = Depends(get_session)):
+async def get_public_brands(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
     """Get published brands that have at least one published product."""
-    return await ContentApiService.get_public_brands(session)
+    return await ContentApiService.get_public_brands(
+        session,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.get(
@@ -56,9 +63,17 @@ async def get_public_brands(session: AsyncSession = Depends(get_session)):
     response_model=PublicBrandDetailResponse,
     operation_id="get_public_brand",
 )
-async def get_public_brand(slug: str, session: AsyncSession = Depends(get_session)):
+async def get_public_brand(
+    slug: str,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
     """Get a published brand by slug if it has published products."""
-    brand = await ContentApiService.get_public_brand_by_slug(session, slug)
+    brand = await ContentApiService.get_public_brand_by_slug(
+        session,
+        slug,
+        tenant_scope=tenant_scope,
+    )
     if not brand:
         raise HTTPException(status_code=404, detail=f"Brand with slug '{slug}' not found")
     return brand
@@ -73,12 +88,14 @@ async def get_public_brand_series(
     brand_slug: str,
     series_slug: str,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """Get one published series and its public product cards."""
     payload = await PublicSeriesPageService.get_by_slugs(
         session,
         brand_slug=brand_slug,
         series_slug=series_slug,
+        tenant_scope=tenant_scope,
     )
     if payload is None:
         raise HTTPException(

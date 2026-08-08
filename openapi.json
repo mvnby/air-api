@@ -1923,7 +1923,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProductSearchResponse"
+                }
               }
             }
           },
@@ -40613,6 +40615,28 @@
           "product": {
             "$ref": "#/components/schemas/ManagerOrderTransferProductRef"
           },
+          "title_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Snapshot"
+          },
+          "currency_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Snapshot"
+          },
           "quantity": {
             "type": "integer",
             "title": "Quantity"
@@ -47222,6 +47246,28 @@
             "type": "string",
             "title": "Product Title"
           },
+          "title_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Snapshot"
+          },
+          "currency_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Snapshot"
+          },
           "quantity": {
             "type": "integer",
             "title": "Quantity"
@@ -51977,6 +52023,196 @@
           "updated_at"
         ],
         "title": "PublicProductCollectionResponse"
+      },
+      "PublicProductSearchItemResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "old_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Price"
+          },
+          "product_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "complete_split_system",
+              "indoor_unit",
+              "outdoor_unit",
+              "panel",
+              "accessory",
+              "consumable",
+              "other"
+            ],
+            "title": "Product Kind",
+            "default": "unknown"
+          },
+          "is_inverter": {
+            "type": "boolean",
+            "title": "Is Inverter"
+          },
+          "power_cooling": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Cooling"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "card_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Image"
+          },
+          "full_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Image"
+          },
+          "specs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Specs"
+          },
+          "vitebsk_qty": {
+            "type": "integer",
+            "title": "Vitebsk Qty",
+            "default": 0
+          },
+          "minsk_qty": {
+            "type": "integer",
+            "title": "Minsk Qty",
+            "default": 0
+          },
+          "availability_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability Status"
+          },
+          "public_stock_state": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local_stock",
+                  "supplier_stock",
+                  "available_to_order",
+                  "out_of_stock"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Stock State"
+          },
+          "delivery_min_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Min Days"
+          },
+          "delivery_max_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Max Days"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "price",
+          "is_inverter"
+        ],
+        "title": "PublicProductSearchItemResponse",
+        "description": "Small public projection; internal sourcing and margin data is excluded."
+      },
+      "PublicProductSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProductSearchItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PublicProductSearchResponse"
       },
       "PublicRelatedSeriesResponse": {
         "properties": {

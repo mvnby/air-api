@@ -8,8 +8,11 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from crud.public_catalog import PublicCatalogDAO
 from models import Brand, Feature, FeatureBrandLink, GlobalConfig, Product, Service
+from models.tenancy import TenantScope
 from services.feature_scope_policy import FeatureScopePolicy
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 
 
 class ContentApiService:
@@ -157,34 +160,63 @@ class ContentApiService:
         return [ContentApiService._serialize_service(service) for service in result.scalars().all()]
 
     @staticmethod
-    async def get_public_brands(session: AsyncSession) -> List[Dict[str, Any]]:
-        stmt = (
-            select(Brand, func.count(Product.id).label("products_count"))
-            .join(Product, Product.brand_id == Brand.id)
-            .where(Brand.is_published == True)
-            .where(Product.is_published == True)
-            .group_by(Brand.id)
-            .having(func.count(Product.id) > 0)
-            .order_by(Brand.sort_order.asc(), Brand.title.asc())
-        )
-        result = await session.execute(stmt)
+    async def get_public_brands(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope | None = None,
+    ) -> List[Dict[str, Any]]:
+        if tenant_scope is not None and not await PublicCatalogVisibilityService.is_canonical_scope(
+            session,
+            tenant_scope,
+        ):
+            rows = await PublicCatalogDAO.list_brand_counts(
+                session,
+                tenant_scope=tenant_scope,
+            )
+        else:
+            stmt = (
+                select(Brand, func.count(Product.id).label("products_count"))
+                .join(Product, Product.brand_id == Brand.id)
+                .where(Brand.is_published == True)
+                .where(Product.is_published == True)
+                .group_by(Brand.id)
+                .having(func.count(Product.id) > 0)
+                .order_by(Brand.sort_order.asc(), Brand.title.asc())
+            )
+            rows = list((await session.execute(stmt)).all())
         return [
             ContentApiService._serialize_brand(brand, products_count=products_count)
-            for brand, products_count in result.all()
+            for brand, products_count in rows
         ]
 
     @staticmethod
-    async def get_public_brand_by_slug(session: AsyncSession, slug: str) -> Dict[str, Any] | None:
-        stmt = (
-            select(Brand, func.count(Product.id).label("products_count"))
-            .join(Product, Product.brand_id == Brand.id)
-            .where(Brand.is_published == True)
-            .where(Brand.slug == slug)
-            .where(Product.is_published == True)
-            .group_by(Brand.id)
-            .having(func.count(Product.id) > 0)
-        )
-        row = (await session.execute(stmt)).one_or_none()
+    async def get_public_brand_by_slug(
+        session: AsyncSession,
+        slug: str,
+        *,
+        tenant_scope: TenantScope | None = None,
+    ) -> Dict[str, Any] | None:
+        if tenant_scope is not None and not await PublicCatalogVisibilityService.is_canonical_scope(
+            session,
+            tenant_scope,
+        ):
+            rows = await PublicCatalogDAO.list_brand_counts(
+                session,
+                tenant_scope=tenant_scope,
+                brand_slug=slug,
+            )
+            row = rows[0] if rows else None
+        else:
+            stmt = (
+                select(Brand, func.count(Product.id).label("products_count"))
+                .join(Product, Product.brand_id == Brand.id)
+                .where(Brand.is_published == True)
+                .where(Brand.slug == slug)
+                .where(Product.is_published == True)
+                .group_by(Brand.id)
+                .having(func.count(Product.id) > 0)
+            )
+            row = (await session.execute(stmt)).one_or_none()
         if row is None:
             return None
         brand, products_count = row

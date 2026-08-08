@@ -41,6 +41,32 @@ def test_versioned_public_order_payload_is_bounded_and_json_safe():
     assert dumped["product_lines"][0]["product_id"] == 7
 
 
+def test_public_order_payload_accepts_storefront_currency_and_rejects_invalid_code():
+    payload = PublicOrderCreatedPayloadV1(
+        order_id=42,
+        status="negotiation",
+        customer=PublicOrderCustomerSnapshotV1(
+            name="Tenant customer",
+            phone="+375291112233",
+        ),
+        total_amount=Decimal("4200"),
+        currency="EUR",
+    )
+
+    assert payload.currency == "EUR"
+    with pytest.raises(ValidationError):
+        PublicOrderCreatedPayloadV1(
+            order_id=43,
+            status="negotiation",
+            customer=PublicOrderCustomerSnapshotV1(
+                name="Tenant customer",
+                phone="+375291112233",
+            ),
+            total_amount=Decimal("4200"),
+            currency="eur",
+        )
+
+
 def test_contact_lead_contract_matches_public_ingress_bounds():
     payload = PublicContactLeadCreatedPayloadV1(
         lead_id=12,

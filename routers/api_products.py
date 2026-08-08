@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import get_current_username
-from core.tenant_scope import verify_public_storefront_request
+from core.tenant_scope import get_public_tenant_scope, verify_public_storefront_request
+from models.tenancy import TenantScope
 from schemas import (
     CatalogResponse,
     FiltersConfigResponse,
@@ -18,10 +19,10 @@ from schemas import (
     SpecRegistryResponse,
 )
 from services.description_generator import DescriptionGeneratorService
-from services.catalog import CatalogService
 from services.product_response_mapper import map_product_to_response
 from services.product_service import ProductService
 from services.feature_resolver_service import FeatureResolverService
+from services.public_catalog_service import PublicCatalogService
 
 router = APIRouter(tags=["api"])
 _PUBLIC_STOREFRONT_DEPENDENCIES = [Depends(verify_public_storefront_request)]
@@ -33,8 +34,14 @@ _PUBLIC_STOREFRONT_DEPENDENCIES = [Depends(verify_public_storefront_request)]
     operation_id="get_public_spec_keys",
     dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
-async def get_public_spec_keys(session: AsyncSession = Depends(get_session)):
-    payload = await ProductService.get_public_spec_keys(session)
+async def get_public_spec_keys(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    payload = await PublicCatalogService.get_public_spec_keys(
+        session,
+        tenant_scope=tenant_scope,
+    )
     return SpecsKeysResponse(**payload)
 
 
@@ -55,8 +62,14 @@ async def get_public_spec_registry():
     operation_id="get_filters_config",
     dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
-async def get_filters_config(session: AsyncSession = Depends(get_session)):
-    return await ProductService.get_filters_config(session)
+async def get_filters_config(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    return await PublicCatalogService.get_filters_config(
+        session,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.post("/products/{product_id}/generate-description")
@@ -105,14 +118,16 @@ async def get_catalog(
     is_inverter: Optional[bool] = None,
     q: Optional[str] = Query(None, description="Smart search query"),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     try:
         ProductService.validate_public_pagination(page, limit)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    payload = await ProductService.get_catalog_page(
+    payload = await PublicCatalogService.get_catalog_page(
         session,
+        tenant_scope=tenant_scope,
         page=page,
         limit=limit,
         sort=sort,
@@ -130,16 +145,18 @@ async def get_catalog(
         is_inverter=is_inverter,
         search=q,
     )
-    supply_metrics = await ProductService.get_supply_metrics_map(session, payload["items"])
-    await FeatureResolverService.resolve_for_products(session, payload["items"])
+    products = [projection.product for projection in payload["items"]]
+    supply_metrics = await ProductService.get_supply_metrics_map(session, products)
+    await FeatureResolverService.resolve_for_products(session, products)
 
     return CatalogResponse(
         items=[
             map_product_to_response(
-                product,
-                supply_metrics=supply_metrics.get(product.id),
+                projection.product,
+                supply_metrics=supply_metrics.get(projection.product.id),
+                pricing=projection.pricing,
             )
-            for product in payload["items"]
+            for projection in payload["items"]
         ],
         meta=Meta(**payload["meta"]),
     )
@@ -151,16 +168,25 @@ async def get_catalog(
     operation_id="get_vitebsk_featured_products",
     dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
-async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_session)):
-    products = await CatalogService.get_vitebsk_featured_products(session, limit=6)
+async def get_vitebsk_featured_products(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    projections = await PublicCatalogService.get_vitebsk_featured_products(
+        session,
+        tenant_scope=tenant_scope,
+        limit=6,
+    )
+    products = [projection.product for projection in projections]
     supply_metrics = await ProductService.get_supply_metrics_map(session, products)
     await FeatureResolverService.resolve_for_products(session, products)
     return [
         map_product_to_response(
-            product,
-            supply_metrics=supply_metrics.get(product.id),
+            projection.product,
+            supply_metrics=supply_metrics.get(projection.product.id),
+            pricing=projection.pricing,
         )
-        for product in products
+        for projection in projections
     ]
 
 
@@ -170,8 +196,14 @@ async def get_vitebsk_featured_products(session: AsyncSession = Depends(get_sess
     operation_id="get_product_series_navigation",
     dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
-async def get_product_series_navigation(session: AsyncSession = Depends(get_session)):
-    return await ProductService.get_series_navigation(session)
+async def get_product_series_navigation(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    return await PublicCatalogService.get_series_navigation(
+        session,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.get(
@@ -180,15 +212,30 @@ async def get_product_series_navigation(session: AsyncSession = Depends(get_sess
     operation_id="get_product",
     dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
-async def get_product_by_identifier(identifier: str, session: AsyncSession = Depends(get_session)):
-    product = await ProductService.get_public_product_by_identifier(session, identifier)
-    if not product:
+async def get_product_by_identifier(
+    identifier: str,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    page = await PublicCatalogService.get_product_page(
+        session,
+        tenant_scope=tenant_scope,
+        identifier=identifier,
+    )
+    if not page:
         raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
-    siblings = await ProductService.get_series_siblings(session, product, limit=8)
+    product = page.product.product
+    siblings = [projection.product for projection in page.siblings]
     supply_metrics = await ProductService.get_supply_metrics_map(session, [product])
     await FeatureResolverService.resolve_for_products(session, [product])
     return map_product_to_response(
         product,
         series_siblings=siblings,
         supply_metrics=supply_metrics.get(product.id),
+        pricing=page.product.pricing,
+        sibling_pricing={
+            int(projection.product.id): projection.pricing
+            for projection in page.siblings
+            if projection.product.id is not None
+        },
     )

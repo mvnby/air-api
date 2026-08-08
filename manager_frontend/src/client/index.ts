@@ -469,6 +469,8 @@ export type { PublicOrderPricingErrorResponse } from './models/PublicOrderPricin
 export type { PublicProductCollectionItemResponse } from './models/PublicProductCollectionItemResponse';
 export type { PublicProductCollectionPlacementResponse } from './models/PublicProductCollectionPlacementResponse';
 export type { PublicProductCollectionResponse } from './models/PublicProductCollectionResponse';
+export type { PublicProductSearchItemResponse } from './models/PublicProductSearchItemResponse';
+export type { PublicProductSearchResponse } from './models/PublicProductSearchResponse';
 export type { PublicRelatedSeriesResponse } from './models/PublicRelatedSeriesResponse';
 export type { PublicSeriesPageResponse } from './models/PublicSeriesPageResponse';
 export type { PublicStorefrontContextResponse } from './models/PublicStorefrontContextResponse';

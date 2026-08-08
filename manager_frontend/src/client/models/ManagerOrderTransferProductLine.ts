@@ -7,6 +7,8 @@ import type { OrderProductLogisticsComponent } from './OrderProductLogisticsComp
 export type ManagerOrderTransferProductLine = {
     source_id?: (number | null);
     product: ManagerOrderTransferProductRef;
+    title_snapshot?: (string | null);
+    currency_snapshot?: (string | null);
     quantity: number;
     price: number;
     cost?: number;

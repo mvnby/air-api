@@ -1,7 +1,15 @@
 import pytest
 from httpx import AsyncClient
 from datetime import datetime, timedelta
-from models import Brand, Product, ProductImage, ProductImageVariant
+from models import (
+    Brand,
+    Product,
+    ProductImage,
+    ProductImageVariant,
+    ProductTagLink,
+    Tag,
+    TagGroup,
+)
 from crud.supplier import ProductLocalStockDAO
 from services.product_image_processing_contract import (
     ProductImageManualQualityStatus,
@@ -428,22 +436,39 @@ async def test_catalog_rejects_unknown_color(async_client: AsyncClient):
 async def test_catalog_filters_by_brand_entity_slug(async_client: AsyncClient, db):
     mdv = Brand(title="MDV", slug="mdv", is_published=True, sort_order=10)
     haier = Brand(title="Haier", slug="haier", is_published=True, sort_order=40)
-    db.add_all([mdv, haier])
+    brand_group = TagGroup(
+        title="Brand",
+        slug="brand",
+        is_public=True,
+    )
+    db.add_all([mdv, haier, brand_group])
     await db.flush()
 
-    db.add_all(
-        [
-            Product(title="MDV product", slug="mdv-product", price=1000, specs={"area_m2": 25}, brand_id=mdv.id, is_published=True),
-            Product(
-                title="Haier product",
-                slug="haier-product",
-                price=1000,
-                specs={"area_m2": 25},
-                brand_id=haier.id,
-                is_published=True,
-            ),
-        ]
+    mdv_tag = Tag(
+        title="MDV",
+        slug="mdv",
+        group_id=brand_group.id,
+        is_public=True,
     )
+    mdv_product = Product(
+        title="MDV product",
+        slug="mdv-product",
+        price=1000,
+        specs={"area_m2": 25},
+        brand_id=mdv.id,
+        is_published=True,
+    )
+    haier_product = Product(
+        title="Haier product",
+        slug="haier-product",
+        price=1000,
+        specs={"area_m2": 25},
+        brand_id=haier.id,
+        is_published=True,
+    )
+    db.add_all([mdv_tag, mdv_product, haier_product])
+    await db.flush()
+    db.add(ProductTagLink(product_id=mdv_product.id, tag_id=mdv_tag.id))
     await db.commit()
 
     response = await async_client.get("/api/v1/products?tag_slugs=mdv")

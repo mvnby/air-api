@@ -1,6 +1,14 @@
 import pytest
 
-from models import Product, ProductImage, ProductImageVariant, ProductSeries
+from models import (
+    Brand,
+    Product,
+    ProductImage,
+    ProductImageVariant,
+    ProductSeries,
+    Tag,
+    TagGroup,
+)
 from services.product_image_processing_contract import (
     ProductImageManualQualityStatus,
     ProductImageProcessingStatus,
@@ -44,6 +52,54 @@ def _product_with_variant(
     ]
     product.gallery_images = [source_image]
     return product
+
+
+def test_map_product_to_response_excludes_hidden_tags_and_hidden_groups():
+    product = _product_with_variant()
+    public_group = TagGroup(
+        id=1,
+        title="Public group",
+        slug="public-group",
+        is_public=True,
+    )
+    hidden_group = TagGroup(
+        id=2,
+        title="Internal group",
+        slug="internal-group",
+        is_public=False,
+    )
+    public_tag = Tag(
+        id=10,
+        group_id=1,
+        title="Visible",
+        slug="visible",
+        is_public=True,
+    )
+    hidden_tag = Tag(
+        id=11,
+        group_id=1,
+        title="Internal tag",
+        slug="internal-tag",
+        is_public=False,
+    )
+    tag_in_hidden_group = Tag(
+        id=12,
+        group_id=2,
+        title="Internal group tag",
+        slug="internal-group-tag",
+        is_public=True,
+    )
+    public_tag.group = public_group
+    hidden_tag.group = public_group
+    tag_in_hidden_group.group = hidden_group
+    product.tags = [public_tag, hidden_tag, tag_in_hidden_group]
+
+    payload = map_product_to_response(product)
+
+    assert [tag.slug for tag in payload.tags] == ["visible"]
+    serialized = payload.model_dump_json()
+    assert "Internal tag" not in serialized
+    assert "Internal group" not in serialized
 
 
 def test_map_product_to_response_selects_only_approved_ready_card_and_full_variants():
@@ -267,3 +323,63 @@ def test_map_product_to_response_hides_unpublished_series():
     payload = map_product_to_response(product)
 
     assert payload.series is None
+
+
+def test_map_product_to_response_hides_unpublished_brand():
+    brand = Brand(
+        id=9,
+        title="Internal brand",
+        slug="internal-brand",
+        is_published=False,
+    )
+    product = Product(
+        id=1,
+        title="Public product",
+        slug="public-product",
+        price=1200,
+        specs={"area_m2": 25},
+        is_published=True,
+        brand_id=brand.id,
+    )
+    product.brand = brand
+
+    payload = map_product_to_response(product)
+
+    assert payload.brand is None
+    assert "Internal brand" not in payload.model_dump_json()
+
+
+def test_map_product_to_response_projects_offer_prices_without_mutating_product():
+    product = Product(
+        id=1,
+        title="Shared product",
+        slug="shared-product",
+        price=9000,
+        old_price=9500,
+        specs={"area_m2": 25},
+        is_published=True,
+    )
+    sibling = Product(
+        id=2,
+        title="Shared sibling",
+        slug="shared-sibling",
+        price=10000,
+        old_price=10500,
+        specs={"area_m2": 35},
+        is_published=True,
+    )
+
+    payload = map_product_to_response(
+        product,
+        series_siblings=[sibling],
+        pricing=(3000, 3500),
+        sibling_pricing={2: (4000, 4500)},
+    )
+
+    assert (payload.price, payload.old_price) == (3000, 3500)
+    assert (
+        payload.series_siblings[0].price,
+        payload.series_siblings[0].old_price,
+    ) == (4000, 4500)
+    assert (product.price, product.old_price) == (9000, 9500)
+    assert (sibling.price, sibling.old_price) == (10000, 10500)

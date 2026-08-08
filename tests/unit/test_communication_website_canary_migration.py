@@ -15,6 +15,7 @@ from alembic.script import ScriptDirectory
 
 REVISION = "ab02c3d4e5f6"
 DOWN_REVISION = "aa91c2d4e6f8"
+HEAD_REVISION = "f2a3b4c5d6e7"
 MIGRATION_PATH = Path(
     "alembic/versions/ab02c3d4e5f6_add_website_canary_runtime_target.py"
 )
@@ -58,10 +59,11 @@ def _create_previous_schema(connection) -> None:
     metadata.create_all(connection)
 
 
-def test_website_canary_migration_is_the_additive_single_head() -> None:
+def test_website_canary_migration_precedes_the_additive_catalog_snapshot_head() -> None:
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [HEAD_REVISION]
+    assert script.get_revision(HEAD_REVISION).down_revision == REVISION
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
 

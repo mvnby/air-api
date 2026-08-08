@@ -60,7 +60,7 @@ def test_storefront_idempotency_migration_is_the_single_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == ["ab02c3d4e5f6"]
+    assert script.get_heads() == ["f2a3b4c5d6e7"]
     assert revision is not None
     assert revision.down_revision == "c9e0f1a2b3d4"
 

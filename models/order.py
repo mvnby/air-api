@@ -273,6 +273,14 @@ class OrderProductLink(SQLModel, table=True):
     quantity: int = Field(default=1)
 
     price: int = Field(default=0)
+    title_snapshot: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
+    currency_snapshot: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(3), nullable=True),
+    )
     cost: int = Field(default=0)
 
     is_installation_included: bool = Field(default=False)

@@ -21,6 +21,9 @@ class TenantScope:
     # Transitional legacy rows belong only to the canonical system tenant.
     # New tenants must never be allowed to claim nullable MVN-era ownership.
     is_system: bool = False
+    # Public resolvers set this explicitly. ``None`` keeps compatibility for
+    # internal callers that only know the persisted IDs.
+    is_canonical_storefront: bool | None = None
 
 
 class Tenant(SQLModel, table=True):
