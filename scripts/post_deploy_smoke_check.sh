@@ -69,8 +69,8 @@ for service in ${COMPOSE_SERVICE_CHECKS}; do
 done
 COMPOSE_SERVICE_CHECKS="${resolved_service_checks[*]}"
 
-HEALTH_URL_PRIMARY="${BASE_URL}/health"
-HEALTH_URL_FALLBACK="${BASE_URL}/api/health"
+HEALTH_URL_PRIMARY="${BASE_URL}/api/health"
+HEALTH_URL_FALLBACK="${BASE_URL}/health"
 PRODUCTS_URL="${BASE_URL}/api/v1/products?limit=5"
 FILTERS_URL="${BASE_URL}/api/v1/filters/config"
 HEALTH_URL_USED=""

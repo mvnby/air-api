@@ -184,6 +184,18 @@ async def db_engine(request):
                 """
             )
         )
+        # The test foundation inserts stable compatibility IDs directly. Keep
+        # PostgreSQL sequences aligned so services can safely create the next
+        # tenant/storefront without hard-coding test-only IDs.
+        for table_name in ("tenant", "storefront"):
+            await conn.execute(
+                text(
+                    "SELECT setval("
+                    "pg_get_serial_sequence(:table_name, 'id'), "
+                    f"(SELECT MAX(id) FROM {table_name}), true)"
+                ),
+                {"table_name": table_name},
+            )
     
     yield engine
     

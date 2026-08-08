@@ -170,7 +170,7 @@ Production server intentionally runs from Docker images only (no git checkout in
    - Tenant-scope backfill execution is retired after the contract migration.
      The retained scripts are report-only unless an expand-schema rollback was
      explicitly reviewed.
-   - Post-deploy smoke-check must pass (`/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
+   - Post-deploy smoke-check must pass (`/api/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
 
 ## Notes
 
