@@ -145,6 +145,7 @@ class OrshaStorefrontLifecycleStagingService:
             tenant_id=int(tenant.id),
             storefront_id=int(storefront.id),
             is_system=True,
+            is_canonical_storefront=False,
         )
         for item in state.resolved_offers:
             mutation = await TenantOfferMutationStagingService.stage_upsert(
@@ -268,6 +269,7 @@ class OrshaStorefrontLifecycleStagingService:
             tenant_id=int(tenant.id),
             storefront_id=int(storefront.id),
             is_system=True,
+            is_canonical_storefront=False,
         )
         changed = 0
         for offer, _ in state.offers:
@@ -336,6 +338,7 @@ class OrshaStorefrontLifecycleStagingService:
                 tenant_id=int(tenant.id),
                 storefront_id=int(storefront.id),
                 is_system=True,
+                is_canonical_storefront=False,
             ),
             product_ids=[int(product.id) for _, product in state.offers],
             slugs=[product.slug for _, product in state.offers],

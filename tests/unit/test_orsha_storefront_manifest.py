@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from crud.catalog_revision import CatalogRevisionDAO
 from models import Storefront, StorefrontDomain, Tenant
 from models.tenancy import TenantScope
 from scripts.manage_orsha_storefront import (
@@ -365,11 +366,17 @@ async def test_catalog_invalidation_adapter_is_safe_before_revision_release(
 @pytest.mark.asyncio
 async def test_catalog_invalidation_adapter_is_future_safe(monkeypatch) -> None:
     stage = AsyncMock(return_value={"staged": True})
+    list_targets = AsyncMock(return_value=(SimpleNamespace(),))
     monkeypatch.setattr(
         CatalogRevisionService,
         "stage_invalidation",
         stage,
         raising=False,
+    )
+    monkeypatch.setattr(
+        CatalogRevisionDAO,
+        "list_invalidation_targets",
+        list_targets,
     )
     session = SimpleNamespace()
     scope = TenantScope(tenant_id=1, storefront_id=9, is_system=True)
@@ -383,6 +390,7 @@ async def test_catalog_invalidation_adapter_is_future_safe(monkeypatch) -> None:
     )
 
     assert result is True
+    list_targets.assert_awaited_once_with(session, tenant_scope=scope)
     stage.assert_awaited_once_with(
         session,
         reason="tenant_offer_updated",
@@ -390,3 +398,41 @@ async def test_catalog_invalidation_adapter_is_future_safe(monkeypatch) -> None:
         product_ids=(1, 2),
         slugs=("one", "two"),
     )
+
+
+@pytest.mark.asyncio
+async def test_catalog_invalidation_adapter_defers_unroutable_draft_scope(
+    monkeypatch,
+) -> None:
+    stage = AsyncMock(return_value={"staged": True})
+    monkeypatch.setattr(CatalogRevisionService, "stage_invalidation", stage)
+    monkeypatch.setattr(
+        CatalogRevisionDAO,
+        "list_invalidation_targets",
+        AsyncMock(return_value=()),
+    )
+    scope = TenantScope(tenant_id=1, storefront_id=9, is_system=True)
+
+    assert (
+        await TenantOfferCatalogInvalidationAdapter.stage(
+            SimpleNamespace(),
+            reason="tenant_offer_updated",
+            tenant_scope=scope,
+            product_ids=[1],
+            slugs=["one"],
+        )
+        is False
+    )
+    with pytest.raises(
+        TenantOfferCatalogInvalidationUnavailableError,
+        match="not routable",
+    ):
+        await TenantOfferCatalogInvalidationAdapter.stage(
+            SimpleNamespace(),
+            reason="orsha_storefront_activated",
+            tenant_scope=scope,
+            product_ids=[1],
+            slugs=["one"],
+            required=True,
+        )
+    stage.assert_not_awaited()

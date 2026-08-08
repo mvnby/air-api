@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from crud.catalog_revision import CatalogRevisionDAO
 from models.tenancy import TenantScope
 from services.catalog_revision_service import CatalogRevisionService
 
@@ -15,9 +16,9 @@ class TenantOfferCatalogInvalidationUnavailableError(RuntimeError):
 class TenantOfferCatalogInvalidationAdapter:
     """Bridge offer mutations to the contextual revision/outbox release.
 
-    The current foundation release does not expose ``stage_invalidation`` yet.
-    Once the reviewed storefront-revision branch is rebased, the same adapter
-    stages its revision and durable outbox event inside the caller transaction.
+    Draft storefronts have no public cache target yet, so ordinary offer
+    staging may safely defer invalidation until activation. Routable lifecycle
+    changes set ``required=True`` and fail closed if the exact target is absent.
     """
 
     @staticmethod
@@ -47,6 +48,20 @@ class TenantOfferCatalogInvalidationAdapter:
                     "Storefront catalog invalidation staging is unavailable"
                 )
             return False
+        targets = await CatalogRevisionDAO.list_invalidation_targets(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        if not targets:
+            if required:
+                raise TenantOfferCatalogInvalidationUnavailableError(
+                    "Storefront catalog invalidation target is not routable"
+                )
+            return False
+        if len(targets) != 1:
+            raise TenantOfferCatalogInvalidationUnavailableError(
+                "Storefront catalog invalidation target is ambiguous"
+            )
         await stage_invalidation(
             session,
             reason=reason,
