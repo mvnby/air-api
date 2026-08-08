@@ -17,16 +17,38 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
-  test:
+  manager:
     runs-on: ubuntu-latest
-    # The immutable-image pytest suite can exceed 30 minutes on a throttled
-    # hosted runner while still making steady progress. The full job also
-    # includes manager builds and migration checks, so keep enough headroom
-    # around the observed 45-minute end-to-end runtime while retaining a hard
-    # bound for genuinely hung suites.
-    timeout-minutes: 60
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: manager_frontend/package-lock.json
+
+      - name: Build Manager Frontend and Run Component Tests
+        working-directory: ./manager_frontend
+        run: |
+          npm ci
+          npm run build
+          npm run test:components
+
+  backend-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: manager_frontend/package-lock.json
 
       - name: Create Dummy Env
         run: |
@@ -34,12 +56,9 @@ jobs:
             echo "POSTGRES_USER=postgres"
             echo "POSTGRES_PASSWORD=postgres"
             echo "POSTGRES_DB=air_conditioners"
-            # IMPORTANT: Inside docker network, host is 'db' (service name)
             echo "POSTGRES_SERVER=db"
             echo "POSTGRES_PORT=5432"
-            # Construct URL explicitly to be safe
             echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/air_conditioners"
-
             echo "SECRET_KEY=dummy_secret_for_tests"
             echo "BOT_TOKEN=dummy_token"
             echo "BOT_API_TOKEN=dummy_bot_api_token"
@@ -49,27 +68,19 @@ jobs:
             echo "ADMIN_PASSWORD=admin"
             echo "ENVIRONMENT=test"
             echo "WEBSITE_URL=http://localhost:4321"
-          } >> .env
+          } > .env
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-
-      - name: Build Manager Frontend and Run Component Tests
+      - name: Build Manager Frontend for Immutable API Image
         working-directory: ./manager_frontend
         run: |
           npm ci
           npm run build
-          npm run test:components
 
-      - name: Start Services
-        run: docker compose up -d --build
+      - name: Start Backend Contract Services
+        run: docker compose up -d --build app
 
       - name: Wait for DB
-        run: |
-          scripts/ci/wait_for_stable_postgres.sh db air_conditioners postgres
-          scripts/ci/wait_for_stable_postgres.sh db_test air_conditioners_test postgres
+        run: scripts/ci/wait_for_stable_postgres.sh db air_conditioners postgres
 
       - name: Verify Alembic Upgrade From Empty Database
         run: |
@@ -118,21 +129,108 @@ jobs:
             exit 1
           )
 
-      - name: Run Pytest
-        # Test the immutable image rather than the bind-mounted development
-        # checkout. This preserves root-only control-plane ownership checks
-        # while sharing the already-started app container's database network.
+      - name: Stop Backend Contract Services
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  python-tests:
+    name: pytest-${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [unit, integration]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Create Dummy Env
         run: |
+          {
+            echo "POSTGRES_USER=postgres"
+            echo "POSTGRES_PASSWORD=postgres"
+            echo "POSTGRES_DB=air_conditioners"
+            echo "POSTGRES_SERVER=db"
+            echo "POSTGRES_PORT=5432"
+            echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/air_conditioners"
+            echo "SECRET_KEY=dummy_secret_for_tests"
+            echo "BOT_TOKEN=dummy_token"
+            echo "BOT_API_TOKEN=dummy_bot_api_token"
+            echo "BOT_API_BASE_URL=http://app:8000/api/internal/bot/v1"
+            echo "BOT_ENABLED=false"
+            echo "ADMIN_USERNAME=admin"
+            echo "ADMIN_PASSWORD=admin"
+            echo "ENVIRONMENT=test"
+            echo "WEBSITE_URL=http://localhost:4321"
+          } > .env
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: manager_frontend/package-lock.json
+
+      - name: Build Manager Frontend for Immutable Test Image
+        working-directory: ./manager_frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start Isolated Test Services
+        run: docker compose up -d --build app db_test
+
+      - name: Wait for DB
+        run: |
+          scripts/ci/wait_for_stable_postgres.sh db air_conditioners postgres
+          scripts/ci/wait_for_stable_postgres.sh db_test air_conditioners_test postgres
+
+      - name: Run ${{ matrix.suite }} Tests
+        run: |
+          suite="${{ matrix.suite }}"
+          results_dir="${PWD}/test-results/${suite}"
+          mkdir -p "${results_dir}"
           app_container="$(docker compose ps -q app)"
           app_image="$(docker inspect --format '{{.Image}}' "${app_container}")"
           docker run --rm \
             --network "container:${app_container}" \
             --mount "type=bind,src=${PWD}/.github,dst=/app/.github,readonly" \
+            --mount "type=bind,src=${results_dir},dst=/test-results" \
             --env-file .env \
             -e SCHEDULER_ENABLED=false \
+            -e PYTEST_SUITE="${suite}" \
             "${app_image}" \
-            sh -ec 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-client; export TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db_test:5432/air_conditioners_test"; pytest -v'
+            sh -ec 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-client; export TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db_test:5432/air_conditioners_test"; pytest -q --tb=short --durations=25 --durations-min=1.0 --junitxml=/test-results/results.xml "tests/${PYTEST_SUITE}"'
 
-      - name: Stop CI Services
+      - name: Upload Pytest Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-${{ matrix.suite }}-results-${{ github.run_id }}
+          path: test-results/${{ matrix.suite }}/results.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop Isolated Test Services
         if: always()
         run: docker compose down -v --remove-orphans
+
+  test:
+    if: always()
+    needs: [manager, backend-contracts, python-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require Every CI Lane
+        env:
+          MANAGER_RESULT: ${{ needs.manager.result }}
+          BACKEND_CONTRACTS_RESULT: ${{ needs.backend-contracts.result }}
+          PYTHON_TESTS_RESULT: ${{ needs.python-tests.result }}
+        run: |
+          printf '%s\n' \
+            "manager=${MANAGER_RESULT}" \
+            "backend-contracts=${BACKEND_CONTRACTS_RESULT}" \
+            "python-tests=${PYTHON_TESTS_RESULT}"
+          test "${MANAGER_RESULT}" = "success"
+          test "${BACKEND_CONTRACTS_RESULT}" = "success"
+          test "${PYTHON_TESTS_RESULT}" = "success"
