@@ -18,6 +18,7 @@ from models import (
     PublicWriteIdempotency,
     ServiceAttachment,
     Storefront,
+    TenantOffer,
 )
 from schemas import (
     OrderPayload,
@@ -308,6 +309,19 @@ async def test_public_write_family_full_idempotency_matrix(
             is_published=True,
         )
         setup.add(product)
+        await setup.flush()
+        setup.add(
+            TenantOffer(
+                tenant_id=1,
+                storefront_id=2,
+                product_id=int(product.id),
+                price=1200,
+                is_published=True,
+                status="active",
+                created_by_username="test",
+                updated_by_username="test",
+            )
+        )
         await setup.commit()
         await setup.refresh(product)
         product_id = int(product.id or 0)

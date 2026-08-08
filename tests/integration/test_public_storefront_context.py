@@ -6,7 +6,7 @@ from sqlmodel import select
 
 from core.config import settings
 from core.public_write_key import public_write_idempotency_key_sha256
-from models import Lead, Order, Product
+from models import Lead, Order, Product, TenantOffer
 from models.tenancy import Storefront, StorefrontDomain, TenantScope
 from services.catalog_revision_service import CatalogRevisionService
 from services.storefront_context_signature_service import (
@@ -153,6 +153,19 @@ async def test_signed_context_routes_public_order_to_secondary_storefront(
         is_published=True,
     )
     db.add(product)
+    await db.flush()
+    db.add(
+        TenantOffer(
+            tenant_id=1,
+            storefront_id=int(storefront.id),
+            product_id=int(product.id),
+            price=2100,
+            is_published=True,
+            status="active",
+            created_by_username="test",
+            updated_by_username="test",
+        )
+    )
     await db.commit()
     await db.refresh(product)
     _configure_signing(monkeypatch)
@@ -231,13 +244,25 @@ async def test_signed_context_authenticates_public_catalog_raw_query(
     db,
     monkeypatch,
 ):
-    await _seed_secondary_storefront(db)
+    storefront = await _seed_secondary_storefront(db)
+    product = Product(
+        title="Signed catalog product",
+        slug="signed-catalog-product",
+        price=1800,
+        is_published=True,
+    )
+    db.add(product)
+    await db.flush()
     db.add(
-        Product(
-            title="Signed catalog product",
-            slug="signed-catalog-product",
+        TenantOffer(
+            tenant_id=1,
+            storefront_id=int(storefront.id),
+            product_id=int(product.id),
             price=1800,
             is_published=True,
+            status="active",
+            created_by_username="test",
+            updated_by_username="test",
         )
     )
     await db.commit()

@@ -5,7 +5,15 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, Lead, Order, OrderProductLink, OrderServiceLink, Product
+from models import (
+    Customer,
+    Lead,
+    Order,
+    OrderProductLink,
+    OrderServiceLink,
+    Product,
+    Storefront,
+)
 from schemas import OrderPayload
 from services.communications.contracts import (
     PublicOrderCustomerSnapshotV1,
@@ -65,6 +73,12 @@ class TenantWebsiteEventService:
         customer = await session.get(Customer, int(order.customer_id or 0))
         if customer is None or int(customer.tenant_id or 0) != tenant_scope.tenant_id:
             raise ValueError("Tenant website checkout customer scope is invalid")
+        storefront = await session.get(Storefront, tenant_scope.storefront_id)
+        if (
+            storefront is None
+            or int(storefront.tenant_id or 0) != tenant_scope.tenant_id
+        ):
+            raise ValueError("Tenant website checkout storefront scope is invalid")
 
         product_rows = (
             await session.execute(
@@ -101,6 +115,7 @@ class TenantWebsiteEventService:
             ),
             comment=request.comment,
             total_amount=order.total_amount,
+            currency=str(storefront.currency).strip().upper(),
             product_lines=[
                 PublicOrderProductLineSnapshotV1(
                     product_id=link.product_id,

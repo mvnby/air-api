@@ -13,7 +13,9 @@ from models import (
     OrderServiceLink,
     Product,
     Service,
+    Storefront,
     Tag,
+    Tenant,
 )
 from schemas import OrderPayload
 from services.installation_pricing_service import (
@@ -31,6 +33,29 @@ async def sqlite_checkout_session(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add(
+            Tenant(
+                id=1,
+                slug="mvn",
+                display_name="MVN",
+                kind="operator",
+                status="active",
+                is_system=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            Storefront(
+                id=1,
+                tenant_id=1,
+                slug="main",
+                display_name="MVN",
+                status="active",
+                currency="BYN",
+                is_default=True,
+            )
+        )
+        await session.commit()
         yield session
 
     await engine.dispose()
