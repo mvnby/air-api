@@ -171,3 +171,36 @@ async def test_command_rolls_back_owned_autobegin_on_error(
                 raise RuntimeError("rollback owned command")
 
     assert await _stored_values(transaction_session_factory) == []
+
+
+@pytest.mark.asyncio
+async def test_nested_command_cannot_commit_outer_autobegin_scope(
+    transaction_session_factory: Any,
+):
+    async with transaction_session_factory() as session:
+        await session.execute(text("SELECT 1"))
+
+        with pytest.raises(RuntimeError, match="rollback outer command"):
+            async with command_transaction(session):
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO command_transaction_probe (value)
+                        VALUES ('outer')
+                        """
+                    )
+                )
+                async with command_transaction(session):
+                    await session.execute(
+                        text(
+                            """
+                            INSERT INTO command_transaction_probe (value)
+                            VALUES ('inner')
+                            """
+                        )
+                    )
+                raise RuntimeError("rollback outer command")
+
+        await session.commit()
+
+    assert await _stored_values(transaction_session_factory) == []

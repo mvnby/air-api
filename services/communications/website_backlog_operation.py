@@ -197,36 +197,24 @@ class WebsiteBacklogOperationRunner:
             )
 
     @classmethod
-    async def _terminalize_failure(
+    def _terminalize_locked(
         cls,
-        session_factory: Callable[[], AsyncSession],
+        operation: CommunicationWebsiteBacklogOperation,
         *,
-        operation_id: str,
-        manifest_fingerprint: str,
-        manifest_summary: dict,
         state: str,
         outcome_code: str,
         finished_at: datetime,
     ) -> None:
-        async with session_factory() as session:
-            operation = await cls._lock_operation(
-                session,
-                operation_id=operation_id,
+        if operation.state != "started":
+            raise WebsiteBacklogOperationFailed(
+                "website_backlog_operation_not_started"
             )
-            cls._assert_manifest(
-                operation,
-                manifest_fingerprint=manifest_fingerprint,
-                manifest_summary=manifest_summary,
-            )
-            if operation.state != "started":
-                await session.rollback()
-                return
-            operation.state = state
-            operation.outcome_code = outcome_code[:100]
-            operation.aggregate_counts = cls._fallback_counts(manifest_summary)
-            operation.finished_at = finished_at
-            session.add(operation)
-            await session.commit()
+        operation.state = state
+        operation.outcome_code = outcome_code[:100]
+        operation.aggregate_counts = cls._fallback_counts(
+            dict(operation.manifest_summary or {})
+        )
+        operation.finished_at = finished_at
 
     @classmethod
     async def execute_manifest(
@@ -257,64 +245,69 @@ class WebsiteBacklogOperationRunner:
             created_at=operation_time,
         )
 
-        try:
-            async with session_factory() as session:
-                operation = await cls._lock_operation(
-                    session,
-                    operation_id=normalized_operation_id,
-                )
-                cls._assert_manifest(
-                    operation,
-                    manifest_fingerprint=fingerprint,
-                    manifest_summary=manifest_summary,
-                )
-                if operation.state == "succeeded":
-                    report = cls._report_from_operation(operation)
-                    await session.rollback()
-                    return report
-                if operation.state != "started":
-                    cls._raise_replayed_failure(operation)
-                report = await WebsiteCommunicationBacklogReconciliation.reconcile_manifest(
-                    session,
-                    manifest=ordered,
-                    operation_id=normalized_operation_id,
-                    execute=True,
-                    now=operation_time,
-                    runtime_lock=runtime_lock,
-                    app_role=app_role,
-                )
-                if runtime_lock is None or not await runtime_lock.is_held():
-                    raise InstallationEstimateBacklogExecutionBlocked(
-                        "communications_runtime_lock_lost"
+        async with session_factory() as session:
+            operation = await cls._lock_operation(
+                session,
+                operation_id=normalized_operation_id,
+            )
+            cls._assert_manifest(
+                operation,
+                manifest_fingerprint=fingerprint,
+                manifest_summary=manifest_summary,
+            )
+            if operation.state == "succeeded":
+                report = cls._report_from_operation(operation)
+                await session.rollback()
+                return report
+            if operation.state != "started":
+                cls._raise_replayed_failure(operation)
+
+            try:
+                # Keep the durable operation row locked while the mutable
+                # reconciliation runs in a SAVEPOINT. A failure rolls back the
+                # candidate mutations, then records its terminal outcome in the
+                # still-owned outer transaction before any contender can run.
+                async with session.begin_nested():
+                    report = (
+                        await WebsiteCommunicationBacklogReconciliation.reconcile_manifest(
+                            session,
+                            manifest=ordered,
+                            operation_id=normalized_operation_id,
+                            execute=True,
+                            now=operation_time,
+                            runtime_lock=runtime_lock,
+                            app_role=app_role,
+                        )
                     )
-                operation.state = "succeeded"
-                operation.outcome_code = "succeeded"
-                operation.aggregate_counts = cls._report_counts(report)
-                operation.finished_at = operation_time
+                    if runtime_lock is None or not await runtime_lock.is_held():
+                        raise InstallationEstimateBacklogExecutionBlocked(
+                            "communications_runtime_lock_lost"
+                        )
+            except InstallationEstimateBacklogExecutionBlocked as error:
+                cls._terminalize_locked(
+                    operation,
+                    state="blocked",
+                    outcome_code=error.error_code,
+                    finished_at=operation_time,
+                )
                 session.add(operation)
                 await session.commit()
-                return report
-        except WebsiteBacklogOperationManifestMismatch:
-            raise
-        except InstallationEstimateBacklogExecutionBlocked as error:
-            await cls._terminalize_failure(
-                session_factory,
-                operation_id=normalized_operation_id,
-                manifest_fingerprint=fingerprint,
-                manifest_summary=manifest_summary,
-                state="blocked",
-                outcome_code=error.error_code,
-                finished_at=operation_time,
-            )
-            raise
-        except Exception:
-            await cls._terminalize_failure(
-                session_factory,
-                operation_id=normalized_operation_id,
-                manifest_fingerprint=fingerprint,
-                manifest_summary=manifest_summary,
-                state="failed",
-                outcome_code="website_backlog_operation_failed",
-                finished_at=operation_time,
-            )
-            raise
+                raise
+            except Exception:
+                cls._terminalize_locked(
+                    operation,
+                    state="failed",
+                    outcome_code="website_backlog_operation_failed",
+                    finished_at=operation_time,
+                )
+                session.add(operation)
+                await session.commit()
+                raise
+
+            operation.state = "succeeded"
+            operation.outcome_code = "succeeded"
+            operation.aggregate_counts = cls._report_counts(report)
+            operation.finished_at = operation_time
+            session.add(operation)
+            await session.commit()
+            return report

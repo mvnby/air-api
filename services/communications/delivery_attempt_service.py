@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,9 +161,8 @@ class CommunicationDeliveryAttemptService:
         *,
         delivery: CommunicationDelivery,
         started_at: datetime,
-        authorization_check: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
-        """Authorize and persist the boundary while the attempt lock is held."""
+        """Persist the provider boundary while the attempt lock is held."""
 
         attempt_no = int(delivery.attempts)
         statement = select(CommunicationDeliveryAttempt).where(
@@ -183,8 +181,6 @@ class CommunicationDeliveryAttemptService:
                 f"Communication delivery {delivery.delivery_id!r} attempt "
                 f"{attempt_no} is not running"
             )
-        if authorization_check is not None:
-            await authorization_check()
         # Idempotency matters when the commit acknowledgement itself times out:
         # an already durable boundary is still safe to proceed from.
         if attempt.provider_started_at is None:

@@ -11,7 +11,11 @@ from sqlalchemy.orm import sessionmaker
 
 import services.communications.runtime as runtime_module
 from conftest import TEST_DATABASE_URL
-from models import CommunicationRuntimeState
+from models import (
+    CommunicationRuntimeState,
+    CommunicationWebsiteCanaryRun,
+    IntegrationOutboxEvent,
+)
 from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.runtime import (
     CommunicationRuntimeConfig,
@@ -51,6 +55,8 @@ async def runtime_postgres_engine():
         connect_args={"server_settings": {"search_path": schema_name}},
     )
     async with engine.begin() as connection:
+        await connection.run_sync(IntegrationOutboxEvent.__table__.create)
+        await connection.run_sync(CommunicationWebsiteCanaryRun.__table__.create)
         await connection.run_sync(CommunicationRuntimeState.__table__.create)
     try:
         yield engine

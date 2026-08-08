@@ -291,10 +291,13 @@ async def test_recipient_revoked_after_early_check_cancels_before_provider(
         {"950095": ProviderDeliveryResult.sent("must-not-send")},
     )
 
-    async def revoked_at_boundary(_session, _claim, _delivery):
-        raise WebsiteCanaryProviderBoundaryRejected(
-            "website_canary_provider_boundary_rejected"
-        )
+    async def revoked_at_boundary(_session, _claim):
+        async def reject_delivery(_delivery):
+            raise WebsiteCanaryProviderBoundaryRejected(
+                "website_canary_provider_boundary_rejected"
+            )
+
+        return reject_delivery
 
     worker = CommunicationDeliveryWorker(
         session_factory=worker_session_factory,

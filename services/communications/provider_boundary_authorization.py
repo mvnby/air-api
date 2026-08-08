@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import NoReturn
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,7 @@ from sqlmodel import select
 
 from models import (
     CommunicationDelivery,
+    ConsumerInbox,
     IntegrationOutboxEvent,
     StaffUser,
     Storefront,
@@ -29,6 +31,8 @@ from services.communications.scope_routing import (
 )
 from services.communications.templates import TemplateRenderError
 from services.communications.template_registry import (
+    CONSUMER_NAME,
+    HANDLER_VERSION,
     UnsupportedCommunicationEvent,
     WebsiteTemplateRegistry,
 )
@@ -41,6 +45,11 @@ from services.staff_user_service import StaffUserService
 
 class WebsiteCanaryProviderBoundaryRejected(CommunicationsCanarySafetyError):
     """The selected website recipient lost authorization before provider I/O."""
+
+
+WebsiteProviderBoundaryDeliveryAuthorizer = Callable[
+    [CommunicationDelivery], Awaitable[None]
+]
 
 
 def _reject() -> NoReturn:
@@ -186,19 +195,29 @@ async def lock_exact_website_recipient(
     return str(int(staff_user.telegram_id))
 
 
-async def authorize_website_provider_boundary(
+async def prepare_website_provider_boundary(
     session: AsyncSession,
     *,
     scope: CommunicationProcessingScope,
     claim: ClaimedCommunicationDelivery,
-    delivery: CommunicationDelivery,
-) -> None:
-    """Lock and authorize the exact website recipient at the provider boundary."""
+) -> WebsiteProviderBoundaryDeliveryAuthorizer:
+    """Lock the canary event first and return the post-delivery authorization.
+
+    The runtime state and canary-run rows are locked by the caller before this
+    function. The returned callback must be invoked only after the exact
+    delivery row is locked; it then locks recipient authorization before the
+    delivery-attempt row. Keeping that order aligned with canary completion
+    prevents operator/provider deadlocks.
+    """
 
     target = scope.website_canary_target
     if target is None:
-        return
-    _assert_claim_snapshot(claim=claim, delivery=delivery)
+        async def authorize_unscoped_delivery(
+            _delivery: CommunicationDelivery,
+        ) -> None:
+            return None
+
+        return authorize_unscoped_delivery
     event = (
         await session.execute(
             _lock(
@@ -228,6 +247,18 @@ async def authorize_website_provider_boundary(
         ValueError,
     ):
         _reject()
+    inbox = await session.get(
+        ConsumerInbox,
+        (CONSUMER_NAME, target.event_id),
+        populate_existing=True,
+        with_for_update=(session.get_bind().dialect.name == "postgresql"),
+    )
+    if (
+        inbox is None
+        or inbox.handler_version != HANDLER_VERSION
+        or inbox.processed_at is None
+    ):
+        _reject()
     expected_delivery_id = CommunicationDeliveryMaterializer.build_delivery_id(
         event_id=target.event_id,
         channel=plan.channel,
@@ -235,19 +266,56 @@ async def authorize_website_provider_boundary(
         template_version=plan.template_version,
     )
     if (
-        delivery.delivery_id != expected_delivery_id
-        or delivery.event_id != target.event_id
-        or delivery.channel != "telegram"
-        or delivery.channel != plan.channel
-        or delivery.recipient_key != target.recipient_key
-        or delivery.template_key != target.template_key
-        or delivery.template_key != plan.template_key
-        or int(delivery.template_version) != int(plan.template_version)
-        or dict(delivery.render_context or {}) != dict(plan.render_context)
-        or int(delivery.max_attempts) != max(1, int(event.max_attempts))
+        claim.delivery_id != expected_delivery_id
+        or claim.event_id != target.event_id
+        or claim.channel != "telegram"
+        or claim.channel != plan.channel
+        or claim.recipient_key != target.recipient_key
+        or claim.template_key != target.template_key
+        or claim.template_key != plan.template_key
+        or int(claim.template_version) != int(plan.template_version)
+        or claim.render_context_dict() != dict(plan.render_context)
+        or int(claim.max_attempts) != max(1, int(event.max_attempts))
     ):
         _reject()
 
-    destination = await lock_exact_website_recipient(session, target=target)
-    if destination != delivery.destination:
-        _reject()
+    async def authorize_locked_delivery(
+        delivery: CommunicationDelivery,
+    ) -> None:
+        _assert_claim_snapshot(claim=claim, delivery=delivery)
+        if (
+            delivery.delivery_id != expected_delivery_id
+            or delivery.event_id != target.event_id
+            or delivery.channel != "telegram"
+            or delivery.channel != plan.channel
+            or delivery.recipient_key != target.recipient_key
+            or delivery.template_key != target.template_key
+            or delivery.template_key != plan.template_key
+            or int(delivery.template_version) != int(plan.template_version)
+            or dict(delivery.render_context or {}) != dict(plan.render_context)
+            or int(delivery.max_attempts) != max(1, int(event.max_attempts))
+        ):
+            _reject()
+
+        destination = await lock_exact_website_recipient(session, target=target)
+        if destination != delivery.destination:
+            _reject()
+
+    return authorize_locked_delivery
+
+
+async def authorize_website_provider_boundary(
+    session: AsyncSession,
+    *,
+    scope: CommunicationProcessingScope,
+    claim: ClaimedCommunicationDelivery,
+    delivery: CommunicationDelivery,
+) -> None:
+    """Compatibility wrapper for direct authorization checks and tests."""
+
+    authorize_locked_delivery = await prepare_website_provider_boundary(
+        session,
+        scope=scope,
+        claim=claim,
+    )
+    await authorize_locked_delivery(delivery)

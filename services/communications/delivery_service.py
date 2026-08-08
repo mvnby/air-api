@@ -260,7 +260,7 @@ class CommunicationDeliveryService:
             | None
         ) = None,
     ) -> datetime:
-        """Authorize and cross the boundary under delivery and attempt locks."""
+        """Authorize and cross the boundary in the shared global lock order."""
 
         delivery, started_at = await cls._lock_owned_delivery(
             session,
@@ -270,19 +270,16 @@ class CommunicationDeliveryService:
             now=now,
         )
 
-        async def authorize_locked_delivery() -> None:
-            if authorization_check is not None:
-                await authorization_check(session, delivery)
+        # A provider-boundary caller acquires runtime/run/event locks first.
+        # Authorize its locked delivery and recipient before taking the attempt
+        # lock so canary completion follows the same order.
+        if authorization_check is not None:
+            await authorization_check(session, delivery)
 
         await CommunicationDeliveryAttemptService.mark_provider_started(
             session,
             delivery=delivery,
             started_at=started_at,
-            authorization_check=(
-                authorize_locked_delivery
-                if authorization_check is not None
-                else None
-            ),
         )
         lease_expires_at = started_at + timedelta(
             seconds=cls._normalize_lease_seconds(lease_seconds)

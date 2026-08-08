@@ -12,8 +12,13 @@ from typing import Any, Literal, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import CommunicationDelivery
 from services.communications.contracts import CommunicationTemplatePlanV1
+from services.communications.delivery_provider_boundary import (
+    ProviderBoundaryAuthorizer,
+    ProviderBoundaryCheck,
+    ProviderBoundaryCheckFailed,
+    mark_provider_started_at_authorized_boundary,
+)
 from services.communications.delivery_service import (
     ClaimedCommunicationDelivery,
     CommunicationDeliveryLeaseLost,
@@ -56,12 +61,6 @@ class _ProviderResultDuringCancellation(RuntimeError):
         self.cancellation = cancellation
 
 
-class _ProviderBoundaryCheckFailed(RuntimeError):
-    def __init__(self, error: BaseException) -> None:
-        super().__init__("Provider boundary safety check failed")
-        self.error = error
-
-
 @dataclass(frozen=True)
 class DeliveryRunOutcome:
     outcome: Literal[
@@ -96,20 +95,8 @@ class CommunicationDeliveryWorker:
         lease_seconds: int = 90,
         recovery_limit: int = 100,
         safety_check: Callable[[], Awaitable[None]] | None = None,
-        provider_boundary_check: (
-            Callable[[AsyncSession], Awaitable[None]] | None
-        ) = None,
-        provider_boundary_authorizer: (
-            Callable[
-                [
-                    AsyncSession,
-                    ClaimedCommunicationDelivery,
-                    CommunicationDelivery,
-                ],
-                Awaitable[None],
-            ]
-            | None
-        ) = None,
+        provider_boundary_check: ProviderBoundaryCheck | None = None,
+        provider_boundary_authorizer: ProviderBoundaryAuthorizer | None = None,
         db_operation_timeout_seconds: float | None = None,
     ) -> None:
         self._session_factory = session_factory
@@ -201,7 +188,7 @@ class CommunicationDeliveryWorker:
             raise
         try:
             await self._mark_provider_started_before_send(claim)
-        except _ProviderBoundaryCheckFailed as rejected:
+        except ProviderBoundaryCheckFailed as rejected:
             if isinstance(
                 rejected.error,
                 WebsiteCanaryProviderBoundaryRejected,
@@ -501,43 +488,17 @@ class CommunicationDeliveryWorker:
         self,
         claim: ClaimedCommunicationDelivery,
     ) -> None:
-        boundary_pending = (
-            self._provider_boundary_check is not None
-            or self._provider_boundary_authorizer is not None
-        )
-        try:
-            async with self._bounded_db_operation():
-                async with self._session_factory() as session:
-                    async def authorize(
-                        locked_session: AsyncSession,
-                        delivery: CommunicationDelivery,
-                    ) -> None:
-                        nonlocal boundary_pending
-                        if self._provider_boundary_check is not None:
-                            await self._provider_boundary_check(locked_session)
-                        if self._provider_boundary_authorizer is not None:
-                            await self._provider_boundary_authorizer(
-                                locked_session,
-                                claim,
-                                delivery,
-                            )
-                        boundary_pending = False
-
-                    await CommunicationDeliveryService.mark_provider_started(
-                        session,
-                        delivery_id=claim.delivery_id,
-                        worker_id=self._worker_id,
-                        lease_token=claim.lease_token,
-                        lease_seconds=self._lease_seconds,
-                        authorization_check=(
-                            authorize if boundary_pending else None
-                        ),
-                    )
-                    await session.commit()
-        except BaseException as error:
-            if boundary_pending:
-                raise _ProviderBoundaryCheckFailed(error) from error
-            raise
+        async with self._bounded_db_operation():
+            async with self._session_factory() as session:
+                await mark_provider_started_at_authorized_boundary(
+                    session,
+                    claim=claim,
+                    worker_id=self._worker_id,
+                    lease_seconds=self._lease_seconds,
+                    boundary_check=self._provider_boundary_check,
+                    boundary_authorizer=self._provider_boundary_authorizer,
+                )
+                await session.commit()
 
     async def _release_pre_provider_claim_despite_cancellation(
         self,

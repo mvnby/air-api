@@ -10,6 +10,7 @@ from sqlmodel import SQLModel, select
 
 from models import (
     CommunicationDelivery,
+    ConsumerInbox,
     IntegrationOutboxEvent,
     StaffUser,
     TenantMembership,
@@ -23,7 +24,11 @@ from services.communications.provider_boundary_authorization import (
     WebsiteCanaryProviderBoundaryRejected,
     authorize_website_provider_boundary,
 )
-from services.communications.template_registry import WebsiteTemplateRegistry
+from services.communications.template_registry import (
+    CONSUMER_NAME,
+    HANDLER_VERSION,
+    WebsiteTemplateRegistry,
+)
 from services.communications.tenant_website_events import (
     TENANT_WEBSITE_CONTACT_LEAD_CREATED_EVENT,
 )
@@ -119,7 +124,18 @@ async def _seed_boundary(session: AsyncSession):
         created_at=now,
         updated_at=now,
     )
-    session.add_all([event, delivery])
+    session.add_all(
+        [
+            event,
+            ConsumerInbox(
+                consumer_name=CONSUMER_NAME,
+                event_id=event.event_id,
+                handler_version=HANDLER_VERSION,
+                processed_at=now,
+            ),
+            delivery,
+        ]
+    )
     await session.commit()
     claim = ClaimedCommunicationDelivery(
         delivery_id=delivery.delivery_id,
@@ -213,5 +229,31 @@ async def test_boundary_rejects_claim_snapshot_drift(boundary_session_factory):
                 session,
                 scope=scope,
                 claim=replace(claim, channel="email"),
+                delivery=delivery,
+            )
+
+
+@pytest.mark.asyncio
+async def test_boundary_requires_exact_materialization_inbox(
+    boundary_session_factory,
+):
+    async with boundary_session_factory() as session:
+        target, scope, claim = await _seed_boundary(session)
+        inbox = await session.get(
+            ConsumerInbox,
+            (CONSUMER_NAME, target.event_id),
+        )
+        assert inbox is not None
+        await session.delete(inbox)
+        await session.commit()
+
+    async with boundary_session_factory() as session:
+        delivery = await session.get(CommunicationDelivery, claim.delivery_id)
+        assert delivery is not None
+        with pytest.raises(WebsiteCanaryProviderBoundaryRejected):
+            await authorize_website_provider_boundary(
+                session,
+                scope=scope,
+                claim=claim,
                 delivery=delivery,
             )

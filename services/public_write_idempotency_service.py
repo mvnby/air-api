@@ -19,6 +19,7 @@ from core.public_write_key import (
 )
 from crud.public_write_idempotency import PublicWriteIdempotencyDAO
 from models import PublicWriteIdempotency
+from services.command_transaction import command_transaction
 from services.communications.installation_activation_fence import (
     WebsiteCommunicationEnqueueFenceBusy,
 )
@@ -82,49 +83,46 @@ class PublicWriteIdempotencyService:
         key_hash = cls.key_hash(idempotency_key)
 
         try:
-            if session.get_bind().dialect.name == "postgresql":
-                await session.execute(
-                    text(
-                        "SET LOCAL lock_timeout = "
-                        f"'{cls.LOCK_TIMEOUT_MILLISECONDS}ms'"
+            async with command_transaction(session):
+                if session.get_bind().dialect.name == "postgresql":
+                    await session.execute(
+                        text(
+                            "SET LOCAL lock_timeout = "
+                            f"'{cls.LOCK_TIMEOUT_MILLISECONDS}ms'"
+                        )
                     )
-                )
-            claimed = await PublicWriteIdempotencyDAO.claim(
-                session,
-                tenant_scope=tenant_scope,
-                command_name=normalized_command,
-                key_hash=key_hash,
-                request_fingerprint=normalized_fingerprint,
-                expires_at=datetime.now(timezone.utc)
-                + timedelta(days=cls.RETENTION_DAYS),
-            )
-            if claimed is None:
-                existing = await PublicWriteIdempotencyDAO.get_by_scope_key(
+                claimed = await PublicWriteIdempotencyDAO.claim(
                     session,
                     tenant_scope=tenant_scope,
                     command_name=normalized_command,
                     key_hash=key_hash,
-                )
-                outcome = cls._replay(
-                    existing,
                     request_fingerprint=normalized_fingerprint,
-                    response_model=response_model,
+                    expires_at=datetime.now(timezone.utc)
+                    + timedelta(days=cls.RETENTION_DAYS),
                 )
-                await session.commit()
-                return outcome
+                if claimed is None:
+                    existing = await PublicWriteIdempotencyDAO.get_by_scope_key(
+                        session,
+                        tenant_scope=tenant_scope,
+                        command_name=normalized_command,
+                        key_hash=key_hash,
+                    )
+                    return cls._replay(
+                        existing,
+                        request_fingerprint=normalized_fingerprint,
+                        response_model=response_model,
+                    )
 
-            result = await operation()
-            cls._complete_receipt(claimed, result)
-            session.add(claimed)
-            await session.flush()
-            await session.commit()
-            return PublicWriteCommandOutcome(
-                value=result.value,
-                status_code=result.status_code,
-                replayed=False,
-            )
+                result = await operation()
+                cls._complete_receipt(claimed, result)
+                session.add(claimed)
+                await session.flush()
+                return PublicWriteCommandOutcome(
+                    value=result.value,
+                    status_code=result.status_code,
+                    replayed=False,
+                )
         except Exception as exc:
-            await session.rollback()
             if isinstance(exc, WebsiteCommunicationEnqueueFenceBusy):
                 raise PublicWriteIdempotencyUnavailable(
                     "Website communication activation fence is temporarily busy"

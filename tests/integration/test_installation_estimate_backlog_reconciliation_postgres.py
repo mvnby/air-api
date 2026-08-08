@@ -16,6 +16,7 @@ from models import (
     CommunicationDelivery,
     CommunicationDeliveryAttempt,
     CommunicationRuntimeState,
+    CommunicationWebsiteCanaryRun,
     IntegrationOutboxEvent,
 )
 from scripts.reconcile_installation_estimate_backlog import run_command
@@ -45,6 +46,7 @@ async def reconciliation_postgres_factory(monkeypatch):
         await connection.run_sync(IntegrationOutboxEvent.__table__.create)
         await connection.run_sync(CommunicationDelivery.__table__.create)
         await connection.run_sync(CommunicationDeliveryAttempt.__table__.create)
+        await connection.run_sync(CommunicationWebsiteCanaryRun.__table__.create)
         await connection.run_sync(CommunicationRuntimeState.__table__.create)
     monkeypatch.setattr(
         settings,
