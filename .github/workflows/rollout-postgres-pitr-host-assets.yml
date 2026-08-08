@@ -12,7 +12,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 concurrency:
-  group: production-postgres-pitr-host-assets
+  group: postgres-pitr-host-operations
+  queue: max
   cancel-in-progress: false
 
 jobs:

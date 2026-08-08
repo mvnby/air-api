@@ -89,7 +89,8 @@ def test_restore_drill_checks_out_repo_before_local_alert_action():
         "persist-credentials": "false",
     }
     assert workflow["concurrency"] == {
-        "group": "api-restore-drill",
+        "group": "postgres-pitr-host-operations",
+        "queue": "max",
         "cancel-in-progress": "false",
     }
     assert run_step["env"] == {"SSH_KEY": "${{ secrets.SSH_KEY }}"}

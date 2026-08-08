@@ -33,6 +33,11 @@ def test_ha_readiness_workflow_wires_core_and_soft_blocker_inputs():
     summary_step = _step(workflow, "Write Summary")
     artifact_step = _step(workflow, "Upload HA readiness log")
 
+    assert workflow["concurrency"] == {
+        "group": "postgres-pitr-host-operations",
+        "queue": "max",
+        "cancel-in-progress": "false",
+    }
     assert dispatch_inputs["strict"]["default"] == "false"
     assert "API_HA_READINESS_STRICT" in workflow["env"]["HA_READINESS_STRICT"]
     assert "secrets.SSH_HOST_API" in ssh_step["env"]["SSH_HOST_API"]

@@ -73,6 +73,67 @@ def test_self_attestation_rejects_checkout_execution():
         manual._validate_self()
 
 
+def test_manual_lock_waits_boundedly_for_transient_owner(monkeypatch):
+    attempts = []
+    sleeps = []
+
+    def open_lock(path):
+        attempts.append(path)
+        if len(attempts) < 3:
+            raise BlockingIOError(11, "temporarily unavailable")
+        return 17
+
+    monotonic_values = iter((10.0, 10.1, 10.2))
+    monkeypatch.setattr(manual, "_open_lock", open_lock)
+    monkeypatch.setattr(manual.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(manual.time, "sleep", sleeps.append)
+
+    descriptor = manual._open_lock_bounded(
+        manual.LOCK_PATH,
+        busy_message="lock remained active",
+        wait_seconds=1.0,
+    )
+
+    assert descriptor == 17
+    assert attempts == [manual.LOCK_PATH] * 3
+    assert sleeps == [manual.LOCK_RETRY_SECONDS] * 2
+
+
+def test_manual_lock_fails_closed_after_bounded_wait(monkeypatch):
+    def open_busy_lock(_path):
+        raise BlockingIOError(11, "temporarily unavailable")
+
+    monkeypatch.setattr(manual, "_open_lock", open_busy_lock)
+    monotonic_values = iter((10.0, 40.0))
+    monkeypatch.setattr(manual.time, "monotonic", lambda: next(monotonic_values))
+
+    with pytest.raises(RuntimeError, match="lock remained active"):
+        manual._open_lock_bounded(
+            manual.LOCK_PATH,
+            busy_message="lock remained active",
+            wait_seconds=30.0,
+        )
+
+
+def test_manual_lock_does_not_retry_non_contention_failure(monkeypatch):
+    sleeps = []
+
+    def unsafe_lock(_path):
+        raise RuntimeError("unsafe shared PITR operation lock")
+
+    monkeypatch.setattr(manual, "_open_lock", unsafe_lock)
+    monkeypatch.setattr(manual.time, "sleep", sleeps.append)
+
+    with pytest.raises(RuntimeError, match="unsafe shared PITR operation lock"):
+        manual._open_lock_bounded(
+            manual.LOCK_PATH,
+            busy_message="lock remained active",
+            wait_seconds=30.0,
+        )
+
+    assert sleeps == []
+
+
 @pytest.mark.parametrize("kind", ["regular", "symlink"])
 def test_any_maintenance_marker_presence_fails_closed(tmp_path, monkeypatch, kind):
     marker = tmp_path / "maintenance"

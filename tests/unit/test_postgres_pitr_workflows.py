@@ -27,6 +27,11 @@ def test_postgres_pitr_check_workflow_preserves_strict_remote_gate():
     artifact_step = _step(workflow, "check", "Upload PITR Check Log")
 
     assert int(check_job["timeout-minutes"]) >= 30
+    assert workflow["concurrency"] == {
+        "group": "postgres-pitr-host-operations",
+        "queue": "max",
+        "cancel-in-progress": "false",
+    }
     assert dispatch_inputs == {"required": dispatch_inputs["required"]}
     assert checkout_step["uses"] == f"actions/checkout@{CHECKOUT_SHA}"
     assert checkout_step["with"] == {
@@ -88,6 +93,11 @@ def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_pr
     summary_step = _step(workflow, "pitr-restore-drill", "Write Summary")
     artifact_step = _step(workflow, "pitr-restore-drill", "Upload PITR Restore Drill Log")
 
+    assert workflow["concurrency"] == {
+        "group": "postgres-pitr-host-operations",
+        "queue": "max",
+        "cancel-in-progress": "false",
+    }
     assert "POSTGRES_PITR_REQUIRED" in env["PITR_RESTORE_DRILL_REQUIRED"]
     assert checkout_step["uses"] == f"actions/checkout@{CHECKOUT_SHA}"
     assert checkout_step["with"] == {
