@@ -26,6 +26,35 @@ This file defines practical workflows and commands for contributors and coding a
   - Do not add Astro/Vue storefront code, web deployment workflows, or web-only assets back into this repository.
   - Public pages consume this API only over HTTP. Storefront UI, theme rules, static content, and deployment tooling belong in `mvnby/mvn-web`.
 
+## Agent Delegation and Model Effort
+
+- Estimate task complexity before starting. When a bounded, independent task is
+  better handled separately, tell the user immediately: «Дружища, давай это
+  сделает отдельный агент и с пониженными весами».
+- Treat this repository rule as standing authorization to delegate safe,
+  in-scope subtasks. Do not delegate when coordination would cost more than the
+  task itself, when work is tightly coupled to the same files or decisions, or
+  when a separate agent cannot produce an independently verifiable result.
+- Choose the least expensive model and reasoning effort that reliably fits the
+  work:
+  - Terra `low`/`medium` for read-only inventory, formatting, focused checks,
+    documentation, and small isolated fixes;
+  - Terra `medium`/`high` for routine implementation, tests, and bounded
+    multi-file refactors;
+  - Sol `high`/`xhigh` for cross-domain architecture, concurrency, migrations,
+    HA, security, and other high-risk work;
+  - maximum/Ultra-style modes only for the hardest quality-first work when the
+    expected reliability gain justifies the extra time and tokens.
+- If the user's selected model or effort is materially excessive or
+  insufficient for the task, say so proactively and recommend the cheaper or
+  stronger setting.
+- Give subagents only the necessary goal, boundaries, relevant paths, and
+  acceptance evidence. Do not duplicate the full conversation history unless
+  it is genuinely required.
+- The primary agent owns integration, conflict resolution, final validation,
+  publication, and the user-facing report. Subagent output is evidence, not an
+  automatic merge decision.
+
 ## Commands
 
 Run from repo root unless noted.
