@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 import services.communications.runtime as runtime_module
-from conftest import TEST_DATABASE_URL
 from models import (
     CommunicationRuntimeState,
     CommunicationWebsiteCanaryRun,
@@ -45,13 +44,13 @@ RUN_ID_B = "123e4567-e89b-42d3-a456-426614174001"
 
 
 @pytest_asyncio.fixture
-async def runtime_postgres_engine():
+async def runtime_postgres_engine(test_database_url):
     schema_name = f"communication_runtime_{uuid4().hex}"
-    admin_engine = create_async_engine(TEST_DATABASE_URL)
+    admin_engine = create_async_engine(test_database_url)
     async with admin_engine.begin() as connection:
         await connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
     engine = create_async_engine(
-        TEST_DATABASE_URL,
+        test_database_url,
         connect_args={"server_settings": {"search_path": schema_name}},
     )
     async with engine.begin() as connection:

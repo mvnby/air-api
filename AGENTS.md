@@ -72,6 +72,17 @@ Run from repo root unless noted.
 - Run all tests (local venv): `pytest`
 - Run unit tests only: `pytest tests/unit -q`
 - Run integration tests only: `pytest tests/integration -q`
+- Prove physical PostgreSQL isolation for two future pytest workers:
+  `pytest -q -n 2 --dist load tests/integration/test_postgres_worker_database_isolation.py`
+
+PostgreSQL test policy:
+
+- Every pytest process/xdist worker derives and owns a separate physical
+  database from `TEST_DATABASE_URL`.
+- Do not point `PYTEST_BASE_DATABASE_URL` at a production database. The test
+  bootstrap rejects base database names without a `test` marker.
+- Keep broad unit/integration suites serial until worker-isolation proof and
+  timing evidence are green in CI; enable xdist per suite as a separate change.
 
 ### Manager Frontend (Vue)
 

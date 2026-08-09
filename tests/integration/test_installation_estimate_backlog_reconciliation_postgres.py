@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
-from conftest import TEST_DATABASE_URL
 from core.config import settings
 from models import (
     CommunicationDelivery,
@@ -33,13 +32,13 @@ from services.runtime_lock_service import RuntimeLock, RuntimeLockService
 
 
 @pytest_asyncio.fixture
-async def reconciliation_postgres_factory(monkeypatch):
+async def reconciliation_postgres_factory(monkeypatch, test_database_url):
     schema_name = f"communications_backlog_{uuid4().hex}"
-    admin_engine = create_async_engine(TEST_DATABASE_URL)
+    admin_engine = create_async_engine(test_database_url)
     async with admin_engine.begin() as connection:
         await connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
     engine = create_async_engine(
-        TEST_DATABASE_URL,
+        test_database_url,
         connect_args={"server_settings": {"search_path": schema_name}},
     )
     async with engine.begin() as connection:

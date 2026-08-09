@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -32,14 +31,8 @@ class _HeldRuntimeLock:
 
 
 @pytest.fixture
-async def backlog_operation_session_factory():
-    database_url = os.environ.get("TEST_DATABASE_URL") or os.environ.get(
-        "DATABASE_URL"
-    )
-    environment = os.environ.get("ENVIRONMENT", "").strip().lower()
-    assert database_url
-    assert "test" in database_url.lower() or environment == "test"
-
+async def backlog_operation_session_factory(test_database_url):
+    database_url = test_database_url
     schema_name = f"website_backlog_c1_{uuid.uuid4().hex}"
     admin_engine = create_async_engine(database_url)
     async with admin_engine.begin() as connection:
