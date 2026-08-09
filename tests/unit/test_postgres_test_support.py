@@ -74,6 +74,9 @@ def test_database_name_requires_a_test_token_not_a_substring():
 def test_base_url_resolution_ignores_non_test_database(monkeypatch):
     monkeypatch.delenv("PYTEST_BASE_DATABASE_URL", raising=False)
     monkeypatch.delenv("TEST_DATABASE_URL", raising=False)
+    monkeypatch.delenv("TEST_DB_HOST", raising=False)
+    monkeypatch.delenv("TEST_DB_PORT", raising=False)
+    monkeypatch.delenv("POSTGRES_PORT", raising=False)
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql+asyncpg://postgres:test-password@localhost:5432/air_conditioners",
