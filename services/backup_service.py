@@ -39,8 +39,7 @@ class BackupService:
         self.backup_folder_id = os.getenv("BACKUP_FOLDER_ID")
         self.media_dir = "media"
 
-        if not os.path.exists(BACKUP_DIR):
-            os.makedirs(BACKUP_DIR)
+        os.makedirs(BACKUP_DIR, exist_ok=True)
 
     @staticmethod
     def _parse_created_at(raw_value: Optional[str]) -> datetime:

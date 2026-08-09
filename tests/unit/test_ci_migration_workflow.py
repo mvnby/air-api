@@ -89,7 +89,8 @@ def test_ci_uses_dependency_cache_and_isolated_compose_cleanup():
     assert workflow.count("cache-dependency-path: manager_frontend/package-lock.json") == 3
     assert workflow.count("npm run build") == 1
     assert workflow.count("actions/download-artifact@") == 2
-    assert "manager-dist-${{ github.run_id }}-${{ github.run_attempt }}" in workflow
+    assert workflow.count("manager-dist-${{ github.run_id }}") == 3
+    assert "github.run_attempt" not in workflow
     assert workflow.count("docker/setup-buildx-action@") == 2
     assert workflow.count("docker/build-push-action@") == 2
     assert (
@@ -120,6 +121,7 @@ def test_ci_uses_dependency_cache_and_isolated_compose_cleanup():
     )
     assert manager_upload["with"]["retention-days"] == 1
     assert manager_upload["with"]["if-no-files-found"] == "error"
+    assert manager_upload["with"]["overwrite"] is True
     manager_steps = "\n".join(
         str(step.get("run", "")) for step in jobs["manager"]["steps"]
     )
