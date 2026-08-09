@@ -290,7 +290,10 @@ jobs:
                     tests/integration/test_postgres_worker_database_isolation.py
               fi
               set +e
-              pytest -q --tb=short --durations=25 --durations-min=1.0 --junitxml=/test-results/results.xml "tests/${PYTEST_SUITE}"
+              pytest -q -n 2 --dist loadscope \
+                --tb=short --durations=25 --durations-min=1.0 \
+                --junitxml=/test-results/results.xml \
+                "tests/${PYTEST_SUITE}"
               pytest_status=$?
               chmod 0644 /test-results/results.xml 2>/dev/null || true
               exit "${pytest_status}"

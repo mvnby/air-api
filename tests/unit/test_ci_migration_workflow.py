@@ -68,10 +68,11 @@ def test_ci_keeps_full_coverage_with_compact_diagnostic_output():
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "suite: [unit, integration]" in workflow
-    assert 'pytest -q --tb=short --durations=25 --durations-min=1.0' in workflow
+    assert "pytest -q -n 2 --dist loadscope" in workflow
+    assert "--tb=short --durations=25 --durations-min=1.0" in workflow
     assert '"tests/${PYTEST_SUITE}"' in workflow
     assert "EXPECT_XDIST_DATABASE_ISOLATION=1" in workflow
-    assert "pytest -q -n 2 --dist load" in workflow
+    assert "pytest -q -n 2 --dist load \\" in workflow
     assert "test_postgres_worker_database_isolation.py" in workflow
     assert "--junitxml=/test-results/results.xml" in workflow
     assert "pytest_status=$?" in workflow

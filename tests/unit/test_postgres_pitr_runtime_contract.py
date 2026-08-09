@@ -593,6 +593,8 @@ def test_scheduled_runner_reports_lock_collision_as_intentional_skip(
     monkeypatch,
     capsys,
 ):
+    umask_calls = []
+    monkeypatch.setattr(scheduled.os, "umask", umask_calls.append)
     monkeypatch.setattr(
         scheduled,
         "run_scheduled",
@@ -611,4 +613,5 @@ def test_scheduled_runner_reports_lock_collision_as_intentional_skip(
     )
 
     assert result == 75
+    assert umask_calls == [0o077]
     assert "busy" in capsys.readouterr().err
