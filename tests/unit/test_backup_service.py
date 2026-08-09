@@ -1,10 +1,35 @@
-import pytest
-import tarfile
 import io
+import os
+import tarfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
+
+from services import backup_service
 from services.backup_service import BackupConfigurationError, BackupService
 from services.google_oauth_credentials import GoogleTokenRefreshError
+
+
+def test_concurrent_initialization_creates_backup_directory_once(monkeypatch, tmp_path: Path):
+    backup_dir = tmp_path / "backups"
+    workers = 8
+    barrier = threading.Barrier(workers)
+    real_makedirs = os.makedirs
+
+    def synchronized_makedirs(path, mode=0o777, exist_ok=False):
+        barrier.wait(timeout=5)
+        return real_makedirs(path, mode=mode, exist_ok=exist_ok)
+
+    monkeypatch.setattr(backup_service, "BACKUP_DIR", str(backup_dir))
+    monkeypatch.setattr(backup_service.os, "makedirs", synchronized_makedirs)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        services = list(executor.map(lambda _: BackupService(), range(workers)))
+
+    assert len(services) == workers
+    assert backup_dir.is_dir()
 
 
 def test_list_backups_classifies_and_sorts(monkeypatch):
