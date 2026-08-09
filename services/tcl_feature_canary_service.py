@@ -61,6 +61,19 @@ class TclFeatureCanaryService:
 
     async def run(self, *, execute: bool) -> dict[str, Any]:
         await self._load_inventory()
+        if execute and self.series:
+            await self.session.execute(
+                select(ProductSeries.id)
+                .where(ProductSeries.id.in_(sorted(int(item.id) for item in self.series.values())))
+                .order_by(ProductSeries.id.asc())
+                .with_for_update()
+            )
+        if execute and self.brand is not None:
+            await self.session.execute(
+                select(Brand.id)
+                .where(Brand.id == self.brand.id)
+                .with_for_update()
+            )
         await self._upsert_features()
         await self._remove_legacy_brand_links()
         await self._remove_stale_series_links()

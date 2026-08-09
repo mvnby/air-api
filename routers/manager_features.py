@@ -13,13 +13,18 @@ from schemas_features import (
     ManagerFeatureListResponse,
     ManagerFeatureResponse,
     ManagerFeatureSuggestionsApplyPayload,
+    ManagerFeatureSeriesMigrationApplyPayload,
+    ManagerFeatureSeriesMigrationApplyResponse,
+    ManagerFeatureSeriesMigrationPreviewResponse,
     ManagerProductFeaturesUpdatePayload,
     ManagerProductFeatureWorkspaceResponse,
 )
 from services.feature_assignment_service import FeatureAssignmentService
 from services.feature_library_service import FeatureLibraryService
+from services.feature_series_migration_service import FeatureSeriesMigrationService
 from routers.manager_operation_ids import (
     APPLY_MANAGER_PRODUCT_FEATURE_SUGGESTIONS,
+    APPLY_MANAGER_FEATURE_SERIES_MIGRATION,
     ARCHIVE_MANAGER_FEATURE,
     CREATE_MANAGER_FEATURE,
     DELETE_MANAGER_FEATURE_TARGET_LINK,
@@ -28,6 +33,7 @@ from routers.manager_operation_ids import (
     GET_MANAGER_PRODUCT_FEATURES,
     LIST_MANAGER_FEATURE_CATEGORIES,
     LIST_MANAGER_FEATURES,
+    PREVIEW_MANAGER_FEATURE_SERIES_MIGRATION,
     UPDATE_MANAGER_FEATURE,
     UPDATE_MANAGER_PRODUCT_FEATURES,
     UPSERT_MANAGER_FEATURE_TARGET_LINK,
@@ -93,6 +99,32 @@ async def create_feature(
     _user: str = Depends(get_current_username),
 ):
     return await FeatureLibraryService.create_feature(session, payload)
+
+
+@router.get(
+    "/features/series-migration/preview",
+    response_model=ManagerFeatureSeriesMigrationPreviewResponse,
+    operation_id=PREVIEW_MANAGER_FEATURE_SERIES_MIGRATION,
+)
+async def preview_feature_series_migration(
+    series_ids: list[int] | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    return await FeatureSeriesMigrationService.preview(session, series_ids=series_ids)
+
+
+@router.post(
+    "/features/series-migration/apply",
+    response_model=ManagerFeatureSeriesMigrationApplyResponse,
+    operation_id=APPLY_MANAGER_FEATURE_SERIES_MIGRATION,
+)
+async def apply_feature_series_migration(
+    payload: ManagerFeatureSeriesMigrationApplyPayload,
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_username),
+):
+    return await FeatureSeriesMigrationService.apply(session, payload.candidates)
 
 
 @router.get(

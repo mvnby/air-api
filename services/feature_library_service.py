@@ -62,8 +62,12 @@ class FeatureLibraryService:
         if category_id is not None:
             stmt = stmt.where(Feature.category_id == category_id)
         if brand_id is not None:
-            linked = select(FeatureBrandLink.feature_id).where(FeatureBrandLink.brand_id == brand_id)
-            stmt = stmt.where(or_(Feature.brand_id == brand_id, Feature.id.in_(linked)))
+            stmt = stmt.where(
+                or_(
+                    Feature.scope_type == "universal",
+                    (Feature.scope_type == "brand") & (Feature.brand_id == brand_id),
+                )
+            )
         if scope_type:
             stmt = stmt.where(Feature.scope_type == scope_type)
         if is_active is not None:
@@ -117,20 +121,11 @@ class FeatureLibraryService:
         data = payload.model_dump(exclude={"rules"})
         data["slug"] = await FeatureLibraryService._unique_slug(session, data.get("slug"), payload.name)
         data["aliases"] = FeatureLibraryService._strings(data.get("aliases"))
-        await FeatureLibraryService._validate_references(session, data)
+        await FeatureLibraryService._validate_references(session, data, rules=payload.rules)
         feature = Feature(**data)
         session.add(feature)
         await session.flush()
         await FeatureLibraryService._sync_rules(session, feature, payload.rules)
-        if feature.scope_type == "brand" and feature.brand_id is not None:
-            session.add(
-                FeatureBrandLink(
-                    brand_id=feature.brand_id,
-                    feature_id=int(feature.id),
-                    source="manual",
-                    sort_order=feature.sort_order,
-                )
-            )
         await CatalogRevisionService.stage_invalidation(
             session,
             reason="feature_create",
@@ -144,10 +139,18 @@ class FeatureLibraryService:
         feature_id: int,
         payload: FeatureUpdatePayload,
     ) -> ManagerFeatureResponse:
-        feature = await FeatureLibraryService._get_model(session, feature_id)
-        previous_scope_type = feature.scope_type
-        previous_brand_id = feature.brand_id
         fields = payload.model_fields_set
+        requested_replacement_id = (
+            payload.replaces_feature_id if "replaces_feature_id" in fields else None
+        )
+        prelocked_features, prelocked_feature_ids = (
+            await FeatureLibraryService._prelock_update_features(
+                session,
+                feature_id=feature_id,
+                replacement_id=requested_replacement_id,
+            )
+        )
+        feature = await FeatureLibraryService._get_model(session, feature_id)
         data = payload.model_dump(exclude_unset=True, exclude={"rules"})
         if "scope_type" in data and data["scope_type"] != "brand" and "brand_id" not in data:
             data["brand_id"] = None
@@ -157,19 +160,50 @@ class FeatureLibraryService:
             )
         if "aliases" in data:
             data["aliases"] = FeatureLibraryService._strings(data["aliases"])
-        await FeatureLibraryService._validate_references(session, {**feature.__dict__, **data})
+        merged = {**feature.__dict__, **data}
+        if merged.get("scope_type") not in {"universal", "brand"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Legacy scope нужно заменить на universal или brand перед редактированием",
+            )
+        if feature.scope_type == "universal" and merged.get("scope_type") == "brand":
+            active_replacement = (
+                await session.execute(
+                    select(Feature.id)
+                    .where(
+                        Feature.replaces_feature_id == feature_id,
+                        Feature.scope_type == "brand",
+                        Feature.is_active.is_(True),
+                        Feature.archived_at.is_(None),
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if active_replacement is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Общую фичу нельзя сделать брендовой, пока активные брендовые фичи заменяют её",
+                )
+        if merged.get("scope_type") != "brand":
+            merged["brand_id"] = None
+            merged["replaces_feature_id"] = None
+            data["brand_id"] = None
+            data["replaces_feature_id"] = None
+        await FeatureLibraryService._validate_references(
+            session,
+            merged,
+            feature_id=feature_id,
+            rules=payload.rules if "rules" in fields else list(feature.rules or []),
+            prelocked_features=prelocked_features,
+            prelocked_feature_ids=prelocked_feature_ids,
+            lock_replacement=False,
+        )
         for key, value in data.items():
             setattr(feature, key, value)
         feature.updated_at = datetime.now()
         session.add(feature)
         if "rules" in fields:
             await FeatureLibraryService._sync_rules(session, feature, payload.rules or [])
-        await FeatureLibraryService._sync_owner_brand_link(
-            session,
-            feature,
-            previous_scope_type=previous_scope_type,
-            previous_brand_id=previous_brand_id,
-        )
         await CatalogRevisionService.stage_invalidation(
             session,
             reason="feature_update",
@@ -178,8 +212,34 @@ class FeatureLibraryService:
         return await FeatureLibraryService.get_feature(session, feature_id)
 
     @staticmethod
+    async def _prelock_update_features(
+        session: AsyncSession,
+        *,
+        feature_id: int,
+        replacement_id: int | None,
+    ) -> tuple[dict[int, Feature], set[int]]:
+        feature_ids = {int(feature_id)}
+        if replacement_id is not None:
+            feature_ids.add(int(replacement_id))
+        ordered_ids = sorted(feature_ids)
+        rows = list(
+            (
+                await session.execute(
+                    select(Feature)
+                    .where(Feature.id.in_(ordered_ids))
+                    .order_by(Feature.id.asc())
+                    .with_for_update()
+                )
+            ).scalars().all()
+        )
+        return (
+            {int(feature.id): feature for feature in rows if feature.id is not None},
+            feature_ids,
+        )
+
+    @staticmethod
     async def archive_feature(session: AsyncSession, feature_id: int) -> ManagerFeatureResponse:
-        feature = await FeatureLibraryService._get_model(session, feature_id)
+        feature = await FeatureLibraryService._get_model(session, feature_id, for_update=True)
         feature.is_active = False
         feature.archived_at = datetime.now()
         feature.updated_at = datetime.now()
@@ -192,20 +252,35 @@ class FeatureLibraryService:
         return await FeatureLibraryService.get_feature(session, feature_id)
 
     @staticmethod
-    async def _get_model(session: AsyncSession, feature_id: int) -> Feature:
-        feature = (
-            await session.execute(
-                select(Feature)
-                .where(Feature.id == feature_id)
-                .options(selectinload(Feature.category), selectinload(Feature.rules))
-            )
-        ).scalar_one_or_none()
+    async def _get_model(
+        session: AsyncSession,
+        feature_id: int,
+        *,
+        for_update: bool = False,
+    ) -> Feature:
+        stmt = (
+            select(Feature)
+            .where(Feature.id == feature_id)
+            .options(selectinload(Feature.category), selectinload(Feature.rules))
+        )
+        if for_update:
+            stmt = stmt.with_for_update()
+        feature = (await session.execute(stmt)).scalar_one_or_none()
         if feature is None:
             raise HTTPException(status_code=404, detail="Фича не найдена")
         return feature
 
     @staticmethod
-    async def _validate_references(session: AsyncSession, data: dict[str, Any]) -> None:
+    async def _validate_references(
+        session: AsyncSession,
+        data: dict[str, Any],
+        *,
+        feature_id: int | None = None,
+        rules: list[Any] | None = None,
+        prelocked_features: dict[int, Feature] | None = None,
+        prelocked_feature_ids: set[int] | None = None,
+        lock_replacement: bool = True,
+    ) -> None:
         category_id = data.get("category_id")
         if category_id is None or await session.get(FeatureCategory, category_id) is None:
             raise HTTPException(status_code=400, detail="Категория фичи не найдена")
@@ -214,6 +289,49 @@ class FeatureLibraryService:
             raise HTTPException(status_code=400, detail="Для брендовой фичи нужен brand_id")
         if brand_id is not None and await session.get(Brand, brand_id) is None:
             raise HTTPException(status_code=400, detail="Бренд не найден")
+        if data.get("scope_type") != "brand" and brand_id is not None:
+            raise HTTPException(status_code=400, detail="brand_id допустим только для брендовой фичи")
+        replacement_id = data.get("replaces_feature_id")
+        if replacement_id is not None:
+            if data.get("scope_type") != "brand":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Только брендовая фича может заменять общую",
+                )
+            if feature_id is not None and int(replacement_id) == feature_id:
+                raise HTTPException(status_code=400, detail="Фича не может заменять саму себя")
+            normalized_replacement_id = int(replacement_id)
+            if normalized_replacement_id in (prelocked_feature_ids or set()):
+                replacement = (prelocked_features or {}).get(normalized_replacement_id)
+            else:
+                replacement_stmt = select(Feature).where(
+                    Feature.id == normalized_replacement_id
+                )
+                if lock_replacement:
+                    replacement_stmt = replacement_stmt.with_for_update()
+                replacement = (
+                    await session.execute(replacement_stmt)
+                ).scalar_one_or_none()
+            if (
+                replacement is None
+                or replacement.scope_type != "universal"
+                or not replacement.is_active
+                or replacement.archived_at is not None
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Заменять можно только активную общую фичу",
+                )
+            await FeatureLibraryService._validate_no_replacement_cycle(
+                session,
+                feature_id=feature_id,
+                replacement=replacement,
+            )
+        if rules and data.get("scope_type") != "universal":
+            raise HTTPException(
+                status_code=400,
+                detail="Автоматические правила допустимы только для общих фич",
+            )
         for key in ("icon_media_id", "image_media_id"):
             media_id = data.get(key)
             if media_id is not None and await session.get(MediaAsset, media_id) is None:
@@ -248,45 +366,22 @@ class FeatureLibraryService:
         await session.flush()
 
     @staticmethod
-    async def _sync_owner_brand_link(
+    async def _validate_no_replacement_cycle(
         session: AsyncSession,
-        feature: Feature,
         *,
-        previous_scope_type: str,
-        previous_brand_id: int | None,
+        feature_id: int | None,
+        replacement: Feature,
     ) -> None:
-        owner_changed = (
-            previous_scope_type != feature.scope_type
-            or previous_brand_id != feature.brand_id
-        )
-        if not owner_changed:
-            return
-        if previous_scope_type == "brand" and previous_brand_id is not None:
-            await session.execute(
-                delete(FeatureBrandLink).where(
-                    FeatureBrandLink.feature_id == feature.id,
-                    FeatureBrandLink.brand_id == previous_brand_id,
-                )
-            )
-        if feature.scope_type != "brand" or feature.brand_id is None:
-            return
-        existing = (
-            await session.execute(
-                select(FeatureBrandLink).where(
-                    FeatureBrandLink.feature_id == feature.id,
-                    FeatureBrandLink.brand_id == feature.brand_id,
-                )
-            )
-        ).scalar_one_or_none()
-        if existing is None:
-            session.add(
-                FeatureBrandLink(
-                    feature_id=int(feature.id),
-                    brand_id=feature.brand_id,
-                    source="manual",
-                    sort_order=feature.sort_order,
-                )
-            )
+        seen: set[int] = set()
+        current: Feature | None = replacement
+        while current is not None and current.id is not None:
+            current_id = int(current.id)
+            if current_id in seen or (feature_id is not None and current_id == feature_id):
+                raise HTTPException(status_code=400, detail="Циклическая замена фич запрещена")
+            seen.add(current_id)
+            if current.replaces_feature_id is None:
+                break
+            current = await session.get(Feature, int(current.replaces_feature_id))
 
     @staticmethod
     async def _serialize_many(session: AsyncSession, features: list[Feature]) -> list[ManagerFeatureResponse]:
@@ -335,6 +430,7 @@ class FeatureLibraryService:
                     category=FeatureCategoryResponse.model_validate(category, from_attributes=True),
                     scope_type=feature.scope_type,
                     brand_id=feature.brand_id,
+                    replaces_feature_id=feature.replaces_feature_id,
                     icon_media_id=feature.icon_media_id,
                     image_media_id=feature.image_media_id,
                     icon=feature.icon,

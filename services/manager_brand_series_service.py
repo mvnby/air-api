@@ -141,7 +141,14 @@ class ManagerBrandSeriesOperations:
         )
         session.add(series)
         await session.flush()
-        if "brand_feature_ids" in payload and payload["brand_feature_ids"] is not None:
+        if payload.get("feature_assignments") is not None:
+            await cls._sync_series_feature_assignments(
+                session,
+                series=series,
+                brand_id=brand_id,
+                assignments=payload.get("feature_assignments"),
+            )
+        elif "brand_feature_ids" in payload and payload["brand_feature_ids"] is not None:
             await cls._sync_series_brand_features(
                 session,
                 series=series,
@@ -229,7 +236,14 @@ class ManagerBrandSeriesOperations:
             session.add(series)
             await session.flush()
         relation_changed = False
-        if "brand_feature_ids" in payload and payload["brand_feature_ids"] is not None:
+        if payload.get("feature_assignments") is not None:
+            relation_changed = await cls._sync_series_feature_assignments(
+                session,
+                series=series,
+                brand_id=brand_id,
+                assignments=payload.get("feature_assignments"),
+            )
+        elif "brand_feature_ids" in payload and payload["brand_feature_ids"] is not None:
             relation_changed = await cls._sync_series_brand_features(
                 session,
                 series=series,
@@ -381,6 +395,15 @@ class ManagerBrandSeriesOperations:
             "features": cls._normalize_features(series.features),
             "brand_features": selected_features,
             "brand_feature_ids": [int(item["id"]) for item in selected_features if item.get("id") is not None],
+            "feature_assignments": [
+                {
+                    "feature_id": int(item["id"]),
+                    "is_featured": bool(item.get("is_featured", False)),
+                }
+                for item in selected_features
+                if item.get("id") is not None
+            ],
+            "catalog_features": selected_features,
             "feature_blocks": cls._normalize_feature_blocks(series.feature_blocks),
             "content_blocks": cls._normalize_content_blocks(series.content_blocks),
             "footnotes": cls._normalize_string_list(series.footnotes),
@@ -411,6 +434,7 @@ class ManagerBrandSeriesOperations:
             "aliases": cls._normalize_string_list(feature.aliases),
             "is_published": feature.is_active,
             "sort_order": int(link.sort_order if link.sort_order is not None else feature.sort_order or 0),
+            "is_featured": bool(link.is_featured),
         }
 
     @classmethod
@@ -428,9 +452,13 @@ class ManagerBrandSeriesOperations:
                 select(FeatureSeriesLink, Feature, ProductSeries.brand_id)
                 .join(Feature, Feature.id == FeatureSeriesLink.feature_id)
                 .join(ProductSeries, ProductSeries.id == FeatureSeriesLink.series_id)
-                .where(FeatureSeriesLink.series_id.in_(normalized_ids))
+                .where(
+                    FeatureSeriesLink.series_id.in_(normalized_ids),
+                    FeatureSeriesLink.is_enabled.is_(True),
+                )
                 .order_by(
                     FeatureSeriesLink.series_id.asc(),
+                    FeatureSeriesLink.is_featured.desc(),
                     FeatureSeriesLink.sort_order.asc(),
                     Feature.sort_order.asc(),
                     Feature.name.asc(),
@@ -449,6 +477,102 @@ class ManagerBrandSeriesOperations:
                 cls._serialize_series_feature_link(link, feature)
             )
         return out
+
+    @classmethod
+    async def _sync_series_feature_assignments(
+        cls,
+        session: AsyncSession,
+        *,
+        series: ProductSeries,
+        brand_id: int,
+        assignments: Any,
+    ) -> bool:
+        normalized: list[tuple[int, bool]] = []
+        seen: set[int] = set()
+        for raw in assignments or []:
+            data = raw.model_dump() if hasattr(raw, "model_dump") else dict(raw)
+            feature_id = int(data.get("feature_id") or 0)
+            if feature_id <= 0 or feature_id in seen:
+                raise HTTPException(status_code=400, detail="Фича серии указана повторно или некорректно")
+            seen.add(feature_id)
+            normalized.append((feature_id, bool(data.get("is_featured", False))))
+        if sum(1 for _, is_featured in normalized if is_featured) > 3:
+            raise HTTPException(status_code=400, detail="У серии может быть не более трёх главных фич")
+
+        await cls._validate_series_feature_ids(
+            session,
+            brand_id=brand_id,
+            feature_ids=[feature_id for feature_id, _ in normalized],
+        )
+        existing_links = list(
+            (
+                await session.execute(
+                    select(FeatureSeriesLink).where(FeatureSeriesLink.series_id == series.id)
+                )
+            ).scalars().all()
+        )
+        existing = {int(link.feature_id): link for link in existing_links}
+        requested = {feature_id: is_featured for feature_id, is_featured in normalized}
+        changed = set(existing) != set(requested)
+        for link in existing_links:
+            if int(link.feature_id) not in requested:
+                await session.delete(link)
+
+        next_sort_order = max((int(link.sort_order or 0) for link in existing_links), default=0)
+        for feature_id, is_featured in normalized:
+            link = existing.get(feature_id)
+            if link is None:
+                next_sort_order += 10
+                link = FeatureSeriesLink(
+                    series_id=int(series.id),
+                    feature_id=feature_id,
+                    sort_order=next_sort_order,
+                )
+            if bool(link.is_featured) != is_featured or not link.is_enabled or link.source != "manual":
+                changed = True
+            link.is_featured = is_featured
+            link.is_enabled = True
+            link.source = "manual"
+            session.add(link)
+        return changed
+
+    @classmethod
+    async def _validate_series_feature_ids(
+        cls,
+        session: AsyncSession,
+        *,
+        brand_id: int,
+        feature_ids: List[int],
+    ) -> None:
+        if not feature_ids:
+            return
+        candidates = list(
+            (
+                await session.execute(
+                    select(Feature).where(
+                        Feature.id.in_(feature_ids),
+                        Feature.is_active.is_(True),
+                        Feature.archived_at.is_(None),
+                    )
+                )
+            ).scalars().all()
+        )
+        found_ids = {
+            int(feature.id)
+            for feature in candidates
+            if feature.scope_type in {"universal", "brand"}
+            and FeatureScopePolicy.allows_target(
+                feature,
+                target_type="series",
+                brand_id=brand_id,
+            )
+        }
+        missing_ids = [feature_id for feature_id in feature_ids if feature_id not in found_ids]
+        if missing_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Фичи недоступны этой серии: {', '.join(map(str, missing_ids))}",
+            )
 
     @classmethod
     async def _sync_series_brand_features(
@@ -472,33 +596,11 @@ class ManagerBrandSeriesOperations:
         if set(existing_by_feature_id) == set(normalized_ids):
             return False
 
-        if normalized_ids:
-            candidates = list(
-                (
-                    await session.execute(
-                        select(Feature).where(
-                            Feature.id.in_(normalized_ids),
-                            Feature.is_active.is_(True),
-                            Feature.archived_at.is_(None),
-                        )
-                    )
-                ).scalars().all()
-            )
-            found_ids = {
-                int(feature.id)
-                for feature in candidates
-                if FeatureScopePolicy.allows_target(
-                    feature,
-                    target_type="series",
-                    brand_id=brand_id,
-                )
-            }
-            missing_ids = [feature_id for feature_id in normalized_ids if feature_id not in found_ids]
-            if missing_ids:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Фичи не найдены у этого бренда: {', '.join(map(str, missing_ids))}",
-                )
+        await cls._validate_series_feature_ids(
+            session,
+            brand_id=brand_id,
+            feature_ids=list(normalized_ids),
+        )
 
         keep_ids = set(normalized_ids)
 
@@ -534,7 +636,7 @@ class ManagerBrandSeriesOperations:
                 select(ProductSeries).where(
                     ProductSeries.id == series_id,
                     ProductSeries.brand_id == brand_id,
-                )
+                ).with_for_update()
             )
         ).scalar_one_or_none()
         if series is None:

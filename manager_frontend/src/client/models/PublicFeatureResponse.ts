@@ -13,6 +13,7 @@ export type PublicFeatureResponse = {
     scope_type: 'universal' | 'brand' | 'series' | 'product' | 'derived';
     source: 'product_override' | 'product_manual' | 'series' | 'brand' | 'derived';
     is_overridden?: boolean;
+    is_featured?: boolean;
     sort_order?: number;
     feature_sort_order?: number;
     icon?: (string | null);

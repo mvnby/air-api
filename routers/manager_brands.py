@@ -28,13 +28,15 @@ from schemas import (
     ManagerBrandFeatureUpdatePayload,
     ManagerBrandListResponse,
     ManagerBrandResponse,
+    ManagerSeriesGalleryApplyPayload,
+    ManagerSeriesGalleryApplyResponse,
+    ManagerBrandUpdatePayload,
+)
+from schemas_brand_series import (
     ManagerBrandSeriesCreatePayload,
     ManagerBrandSeriesListResponse,
     ManagerBrandSeriesResponse,
     ManagerBrandSeriesUpdatePayload,
-    ManagerSeriesGalleryApplyPayload,
-    ManagerSeriesGalleryApplyResponse,
-    ManagerBrandUpdatePayload,
 )
 from services.manager_brand_service import ManagerBrandService
 

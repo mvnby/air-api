@@ -165,14 +165,14 @@ class FeatureAssignmentService:
         current = await FeatureResolverService.resolve_for_products(
             session, [product], include_suggestions=True
         )
-        allowed = {
+        suggestion_ids = {
             item.id for item in current[int(product.id)]["automatic_suggestions"]
         }
-        allowed.update(
+        allowed = suggestion_ids | {
             item.id
             for item in current[int(product.id)]["effective"]
             if item.source == "derived"
-        )
+        }
         requested = set(feature_ids)
         invalid = sorted(requested - allowed)
         if invalid:
@@ -181,35 +181,37 @@ class FeatureAssignmentService:
                 detail={"message": "Предложения устарели; обновите preview", "feature_ids": invalid},
             )
 
-        existing = {
-            int(link.feature_id): link
-            for link in (
-                await session.execute(
-                    select(FeatureProductLink).where(
-                        FeatureProductLink.product_id == product_id,
-                        FeatureProductLink.feature_id.in_(requested),
+        # Universal rules now resolve automatically and never need stored links.
+        # Keep writes only for historical scope=derived suggestions while old
+        # Manager builds and legacy rows are being phased out.
+        legacy_ids = requested & suggestion_ids
+        if legacy_ids:
+            existing = {
+                int(link.feature_id): link
+                for link in (
+                    await session.execute(
+                        select(FeatureProductLink).where(
+                            FeatureProductLink.product_id == product_id,
+                            FeatureProductLink.feature_id.in_(legacy_ids),
+                        )
                     )
-                )
-            ).scalars().all()
-        }
-        now = datetime.now()
-        for feature_id in requested:
-            link = existing.get(feature_id)
-            if link is None:
-                link = FeatureProductLink(
+                ).scalars().all()
+            }
+            now = datetime.now()
+            for feature_id in legacy_ids:
+                link = existing.get(feature_id) or FeatureProductLink(
                     product_id=product_id,
                     feature_id=feature_id,
-                    source="derived",
                 )
-            link.source = "derived"
-            link.is_enabled = True
-            link.updated_at = now
-            session.add(link)
-        await CatalogRevisionService.stage_invalidation(
-            session,
-            reason="product_feature_suggestions_apply",
-            product_ids=[product_id],
-        )
+                link.source = "derived"
+                link.is_enabled = True
+                link.updated_at = now
+                session.add(link)
+            await CatalogRevisionService.stage_invalidation(
+                session,
+                reason="legacy_product_feature_suggestion_apply",
+                product_ids=[product_id],
+            )
         await session.commit()
         return await FeatureAssignmentService.get_product_workspace(session, product_id)
 
@@ -222,10 +224,6 @@ class FeatureAssignmentService:
         target_id: int,
         payload: FeatureTargetLinkPayload,
     ) -> None:
-        feature = (await FeatureAssignmentService._get_active_features(session, [feature_id]))[
-            feature_id
-        ]
-        await FeatureAssignmentService._validate_override_media(session, [payload.override_media_id])
         config = {
             "brand": (Brand, FeatureBrandLink, FeatureBrandLink.brand_id, "brand_id"),
             "series": (ProductSeries, FeatureSeriesLink, FeatureSeriesLink.series_id, "series_id"),
@@ -233,9 +231,28 @@ class FeatureAssignmentService:
         if config is None:
             raise ValueError("Unsupported feature target")
         target_model, link_model, target_column, target_field = config
-        target = await session.get(target_model, target_id)
+        if target_type == "series":
+            target = (
+                await session.execute(
+                    select(ProductSeries)
+                    .where(ProductSeries.id == target_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+        else:
+            target = (
+                await session.execute(
+                    select(Brand)
+                    .where(Brand.id == target_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
         if target is None:
             raise HTTPException(status_code=404, detail="Цель назначения не найдена")
+        feature = (await FeatureAssignmentService._get_active_features(session, [feature_id]))[
+            feature_id
+        ]
+        await FeatureAssignmentService._validate_override_media(session, [payload.override_media_id])
         target_brand_id = int(target.id) if target_type == "brand" else target.brand_id
         if not FeatureScopePolicy.allows_target(
             feature,
@@ -256,7 +273,25 @@ class FeatureAssignmentService:
         ).scalar_one_or_none()
         if link is None:
             link = link_model(**{target_field: target_id, "feature_id": feature_id})
-        for key, value in payload.model_dump().items():
+        if target_type == "brand" and payload.is_featured:
+            raise HTTPException(status_code=400, detail="Важность задаётся только для серии")
+        if target_type == "series" and payload.is_featured:
+            featured_count = (
+                await session.execute(
+                    select(FeatureSeriesLink.id).where(
+                        FeatureSeriesLink.series_id == target_id,
+                        FeatureSeriesLink.is_featured.is_(True),
+                        FeatureSeriesLink.is_enabled.is_(True),
+                        FeatureSeriesLink.feature_id != feature_id,
+                    )
+                )
+            ).scalars().all()
+            if len(featured_count) >= 3:
+                raise HTTPException(status_code=400, detail="У серии может быть не более трёх главных фич")
+        link_data = payload.model_dump()
+        if target_type == "brand":
+            link_data.pop("is_featured", None)
+        for key, value in link_data.items():
             setattr(link, key, value)
         link.source = "manual"
         link.updated_at = datetime.now()
@@ -282,6 +317,22 @@ class FeatureAssignmentService:
         if config is None:
             raise ValueError("Unsupported feature target")
         model, target_column = config
+        if target_type == "series":
+            locked_target = (
+                await session.execute(
+                    select(ProductSeries.id)
+                    .where(ProductSeries.id == target_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if locked_target is None:
+                raise HTTPException(status_code=404, detail="Цель назначения не найдена")
+        else:
+            await session.execute(
+                select(Brand.id)
+                .where(Brand.id == target_id)
+                .with_for_update()
+            )
         result = await session.execute(
             delete(model).where(
                 target_column == target_id,

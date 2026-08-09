@@ -9,8 +9,9 @@ export type FeatureCreatePayload = {
     short_description?: (string | null);
     full_description?: (string | null);
     category_id: number;
-    scope_type?: 'universal' | 'brand' | 'series' | 'product' | 'derived';
+    scope_type?: 'universal' | 'brand';
     brand_id?: (number | null);
+    replaces_feature_id?: (number | null);
     icon_media_id?: (number | null);
     image_media_id?: (number | null);
     icon?: (string | null);

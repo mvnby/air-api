@@ -13,7 +13,9 @@ from services.feature_assignment_service import FeatureAssignmentService
 async def test_repeated_target_delete_marks_only_the_first_call_as_changed(monkeypatch):
     session = AsyncMock()
     session.execute.side_effect = [
+        SimpleNamespace(),
         SimpleNamespace(rowcount=1),
+        SimpleNamespace(),
         SimpleNamespace(rowcount=0),
     ]
     commit_mutation = AsyncMock()

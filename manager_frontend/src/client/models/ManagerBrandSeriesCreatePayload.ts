@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerFeatureSeriesAssignmentPayload } from './ManagerFeatureSeriesAssignmentPayload';
 import type { ProductSeriesContentBlockResponse } from './ProductSeriesContentBlockResponse';
 import type { ProductSeriesFeatureBlockResponse } from './ProductSeriesFeatureBlockResponse';
 export type ManagerBrandSeriesCreatePayload = {
@@ -14,6 +15,7 @@ export type ManagerBrandSeriesCreatePayload = {
     gallery_images?: Array<string>;
     features?: Array<string>;
     brand_feature_ids?: Array<number>;
+    feature_assignments?: (Array<ManagerFeatureSeriesAssignmentPayload> | null);
     feature_blocks?: Array<ProductSeriesFeatureBlockResponse>;
     content_blocks?: Array<ProductSeriesContentBlockResponse>;
     footnotes?: Array<string>;

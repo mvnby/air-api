@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 FeatureScopeType = Literal["universal", "brand", "series", "product", "derived"]
+EditableFeatureScopeType = Literal["universal", "brand"]
 FeatureRuleOperator = Literal["eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "exists"]
 FeatureLinkSource = Literal["manual", "inherited", "derived"]
 ResolvedFeatureSource = Literal["product_override", "product_manual", "series", "brand", "derived"]
@@ -53,8 +54,9 @@ class FeatureCreatePayload(BaseModel):
     short_description: Optional[str] = None
     full_description: Optional[str] = None
     category_id: int
-    scope_type: FeatureScopeType = "universal"
+    scope_type: EditableFeatureScopeType = "universal"
     brand_id: Optional[int] = None
+    replaces_feature_id: Optional[int] = None
     icon_media_id: Optional[int] = None
     image_media_id: Optional[int] = None
     icon: Optional[str] = None
@@ -84,8 +86,9 @@ class FeatureUpdatePayload(BaseModel):
     short_description: Optional[str] = None
     full_description: Optional[str] = None
     category_id: Optional[int] = None
-    scope_type: Optional[FeatureScopeType] = None
+    scope_type: Optional[EditableFeatureScopeType] = None
     brand_id: Optional[int] = None
+    replaces_feature_id: Optional[int] = None
     icon_media_id: Optional[int] = None
     image_media_id: Optional[int] = None
     icon: Optional[str] = None
@@ -120,6 +123,7 @@ class PublicFeatureResponse(BaseModel):
     scope_type: FeatureScopeType
     source: ResolvedFeatureSource
     is_overridden: bool = False
+    is_featured: bool = False
     sort_order: int = 0
     feature_sort_order: int = 0
     icon: Optional[str] = None
@@ -139,6 +143,7 @@ class ManagerFeatureResponse(BaseModel):
     category: FeatureCategoryResponse
     scope_type: FeatureScopeType
     brand_id: Optional[int] = None
+    replaces_feature_id: Optional[int] = None
     icon_media_id: Optional[int] = None
     image_media_id: Optional[int] = None
     icon: Optional[str] = None
@@ -183,6 +188,7 @@ class FeatureLinkPayload(BaseModel):
 
 class FeatureTargetLinkPayload(BaseModel):
     is_enabled: bool = True
+    is_featured: bool = False
     sort_order: int = 0
     override_title: Optional[str] = None
     override_description: Optional[str] = None
@@ -207,3 +213,51 @@ class ManagerProductFeaturesUpdatePayload(BaseModel):
 
 class ManagerFeatureSuggestionsApplyPayload(BaseModel):
     feature_ids: List[int] = Field(default_factory=list)
+
+
+class ManagerFeatureSeriesAssignmentPayload(BaseModel):
+    feature_id: int
+    is_featured: bool = False
+
+
+class ManagerFeatureSeriesMigrationCandidate(BaseModel):
+    candidate_token: str
+    series_id: int
+    series_title: str
+    brand_id: int
+    brand_title: str
+    feature_id: int
+    feature_name: str
+    feature_slug: str
+    published_products_count: int
+    matching_assignments_count: int
+    sort_order: int
+
+
+class ManagerFeatureSeriesMigrationPreviewResponse(BaseModel):
+    candidates: List[ManagerFeatureSeriesMigrationCandidate] = Field(default_factory=list)
+    total: int = 0
+
+
+class ManagerFeatureSeriesMigrationApplyItem(BaseModel):
+    series_id: int
+    feature_id: int
+    candidate_token: str
+
+
+class ManagerFeatureSeriesMigrationApplyPayload(BaseModel):
+    candidates: List[ManagerFeatureSeriesMigrationApplyItem] = Field(default_factory=list)
+
+
+class ManagerFeatureSeriesMigrationAppliedItem(BaseModel):
+    series_id: int
+    feature_id: int
+    status: Literal["applied", "already_applied"]
+    deleted_product_assignments: int = 0
+
+
+class ManagerFeatureSeriesMigrationApplyResponse(BaseModel):
+    items: List[ManagerFeatureSeriesMigrationAppliedItem] = Field(default_factory=list)
+    applied_count: int = 0
+    already_applied_count: int = 0
+    deleted_product_assignments: int = 0

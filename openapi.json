@@ -4612,6 +4612,109 @@
         }
       }
     },
+    "/api/manager/features/series-migration/preview": {
+      "get": {
+        "tags": [
+          "manager-features"
+        ],
+        "summary": "Preview Feature Series Migration",
+        "operationId": "preview_manager_feature_series_migration",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "series_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Series Ids"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerFeatureSeriesMigrationPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/features/series-migration/apply": {
+      "post": {
+        "tags": [
+          "manager-features"
+        ],
+        "summary": "Apply Feature Series Migration",
+        "operationId": "apply_manager_feature_series_migration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerFeatureSeriesMigrationApplyPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerFeatureSeriesMigrationApplyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/features/{feature_id}": {
       "get": {
         "tags": [
@@ -7418,6 +7521,98 @@
             }
           }
         }
+      }
+    },
+    "/api/manager/content-ai/features/draft": {
+      "post": {
+        "tags": [
+          "manager-content-ai"
+        ],
+        "summary": "Create Manager Feature Content Ai Draft",
+        "operationId": "create_manager_feature_content_ai_draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeatureContentDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureContentDraft"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/content-ai/series/draft": {
+      "post": {
+        "tags": [
+          "manager-content-ai"
+        ],
+        "summary": "Create Manager Series Content Ai Draft",
+        "operationId": "create_manager_series_content_ai_draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductSeriesContentDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductSeriesContentDraft"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/manager/main-image-cleanup/batches": {
@@ -27471,6 +27666,149 @@
         ],
         "title": "FeatureCategoryResponse"
       },
+      "FeatureContentDraft": {
+        "properties": {
+          "short_description": {
+            "type": "string",
+            "maxLength": 700,
+            "minLength": 1,
+            "title": "Short Description"
+          },
+          "full_description": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Full Description"
+          },
+          "footnote": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 700
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footnote"
+          },
+          "seo_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 68
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Title"
+          },
+          "seo_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 158
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Description"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "short_description",
+          "full_description",
+          "prompt_version"
+        ],
+        "title": "FeatureContentDraft"
+      },
+      "FeatureContentDraftRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "from_source",
+              "polish_text"
+            ],
+            "title": "Mode"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "full_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "brand_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Name"
+          },
+          "category_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "FeatureContentDraftRequest",
+        "description": "Only immutable context and source text are sent; entity fields are never saved."
+      },
       "FeatureCreatePayload": {
         "properties": {
           "slug": {
@@ -27521,10 +27859,7 @@
             "type": "string",
             "enum": [
               "universal",
-              "brand",
-              "series",
-              "product",
-              "derived"
+              "brand"
             ],
             "title": "Scope Type",
             "default": "universal"
@@ -27539,6 +27874,17 @@
               }
             ],
             "title": "Brand Id"
+          },
+          "replaces_feature_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces Feature Id"
           },
           "icon_media_id": {
             "anyOf": [
@@ -27897,6 +28243,11 @@
             "title": "Is Enabled",
             "default": true
           },
+          "is_featured": {
+            "type": "boolean",
+            "title": "Is Featured",
+            "default": false
+          },
           "sort_order": {
             "type": "integer",
             "title": "Sort Order",
@@ -28038,10 +28389,7 @@
                 "type": "string",
                 "enum": [
                   "universal",
-                  "brand",
-                  "series",
-                  "product",
-                  "derived"
+                  "brand"
                 ]
               },
               {
@@ -28060,6 +28408,17 @@
               }
             ],
             "title": "Brand Id"
+          },
+          "replaces_feature_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces Feature Id"
           },
           "icon_media_id": {
             "anyOf": [
@@ -30319,6 +30678,20 @@
             "type": "array",
             "title": "Brand Feature Ids"
           },
+          "feature_assignments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManagerFeatureSeriesAssignmentPayload"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Assignments"
+          },
           "feature_blocks": {
             "items": {
               "$ref": "#/components/schemas/ProductSeriesFeatureBlockResponse"
@@ -30502,6 +30875,20 @@
             },
             "type": "array",
             "title": "Brand Feature Ids"
+          },
+          "feature_assignments": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerFeatureSeriesAssignmentPayload"
+            },
+            "type": "array",
+            "title": "Feature Assignments"
+          },
+          "catalog_features": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerSeriesCatalogFeatureResponse"
+            },
+            "type": "array",
+            "title": "Catalog Features"
           },
           "feature_blocks": {
             "items": {
@@ -30696,6 +31083,20 @@
               }
             ],
             "title": "Brand Feature Ids"
+          },
+          "feature_assignments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManagerFeatureSeriesAssignmentPayload"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Assignments"
           },
           "feature_blocks": {
             "anyOf": [
@@ -35975,6 +36376,17 @@
             ],
             "title": "Brand Id"
           },
+          "replaces_feature_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces Feature Id"
+          },
           "icon_media_id": {
             "anyOf": [
               {
@@ -36180,6 +36592,201 @@
           "updated_at"
         ],
         "title": "ManagerFeatureResponse"
+      },
+      "ManagerFeatureSeriesAssignmentPayload": {
+        "properties": {
+          "feature_id": {
+            "type": "integer",
+            "title": "Feature Id"
+          },
+          "is_featured": {
+            "type": "boolean",
+            "title": "Is Featured",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "feature_id"
+        ],
+        "title": "ManagerFeatureSeriesAssignmentPayload"
+      },
+      "ManagerFeatureSeriesMigrationAppliedItem": {
+        "properties": {
+          "series_id": {
+            "type": "integer",
+            "title": "Series Id"
+          },
+          "feature_id": {
+            "type": "integer",
+            "title": "Feature Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "already_applied"
+            ],
+            "title": "Status"
+          },
+          "deleted_product_assignments": {
+            "type": "integer",
+            "title": "Deleted Product Assignments",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "series_id",
+          "feature_id",
+          "status"
+        ],
+        "title": "ManagerFeatureSeriesMigrationAppliedItem"
+      },
+      "ManagerFeatureSeriesMigrationApplyItem": {
+        "properties": {
+          "series_id": {
+            "type": "integer",
+            "title": "Series Id"
+          },
+          "feature_id": {
+            "type": "integer",
+            "title": "Feature Id"
+          },
+          "candidate_token": {
+            "type": "string",
+            "title": "Candidate Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "series_id",
+          "feature_id",
+          "candidate_token"
+        ],
+        "title": "ManagerFeatureSeriesMigrationApplyItem"
+      },
+      "ManagerFeatureSeriesMigrationApplyPayload": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerFeatureSeriesMigrationApplyItem"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "title": "ManagerFeatureSeriesMigrationApplyPayload"
+      },
+      "ManagerFeatureSeriesMigrationApplyResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerFeatureSeriesMigrationAppliedItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "applied_count": {
+            "type": "integer",
+            "title": "Applied Count",
+            "default": 0
+          },
+          "already_applied_count": {
+            "type": "integer",
+            "title": "Already Applied Count",
+            "default": 0
+          },
+          "deleted_product_assignments": {
+            "type": "integer",
+            "title": "Deleted Product Assignments",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ManagerFeatureSeriesMigrationApplyResponse"
+      },
+      "ManagerFeatureSeriesMigrationCandidate": {
+        "properties": {
+          "candidate_token": {
+            "type": "string",
+            "title": "Candidate Token"
+          },
+          "series_id": {
+            "type": "integer",
+            "title": "Series Id"
+          },
+          "series_title": {
+            "type": "string",
+            "title": "Series Title"
+          },
+          "brand_id": {
+            "type": "integer",
+            "title": "Brand Id"
+          },
+          "brand_title": {
+            "type": "string",
+            "title": "Brand Title"
+          },
+          "feature_id": {
+            "type": "integer",
+            "title": "Feature Id"
+          },
+          "feature_name": {
+            "type": "string",
+            "title": "Feature Name"
+          },
+          "feature_slug": {
+            "type": "string",
+            "title": "Feature Slug"
+          },
+          "published_products_count": {
+            "type": "integer",
+            "title": "Published Products Count"
+          },
+          "matching_assignments_count": {
+            "type": "integer",
+            "title": "Matching Assignments Count"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate_token",
+          "series_id",
+          "series_title",
+          "brand_id",
+          "brand_title",
+          "feature_id",
+          "feature_name",
+          "feature_slug",
+          "published_products_count",
+          "matching_assignments_count",
+          "sort_order"
+        ],
+        "title": "ManagerFeatureSeriesMigrationCandidate"
+      },
+      "ManagerFeatureSeriesMigrationPreviewResponse": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerFeatureSeriesMigrationCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ManagerFeatureSeriesMigrationPreviewResponse"
       },
       "ManagerFeatureSuggestionsApplyPayload": {
         "properties": {
@@ -43177,6 +43784,106 @@
           "stage"
         ],
         "title": "ManagerRestoreJobStatusResponse"
+      },
+      "ManagerSeriesCatalogFeatureResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "footnote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footnote"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Aliases"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published",
+            "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "is_featured": {
+            "type": "boolean",
+            "title": "Is Featured",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug"
+        ],
+        "title": "ManagerSeriesCatalogFeatureResponse"
       },
       "ManagerSeriesGalleryApplyPayload": {
         "properties": {
@@ -51003,6 +51710,137 @@
         "type": "object",
         "title": "ProductSeriesContentBlockResponse"
       },
+      "ProductSeriesContentDraft": {
+        "properties": {
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          },
+          "short_description": {
+            "type": "string",
+            "maxLength": 700,
+            "minLength": 1,
+            "title": "Short Description"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 16000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "seo_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 68
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Title"
+          },
+          "seo_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 158
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seo Description"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "short_description",
+          "description",
+          "prompt_version"
+        ],
+        "title": "ProductSeriesContentDraft"
+      },
+      "ProductSeriesContentDraftRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "from_source",
+              "polish_text"
+            ],
+            "title": "Mode"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "full_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Description"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "brand_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "ProductSeriesContentDraftRequest",
+        "description": "Series identity is grounding context, not a generated output field."
+      },
       "ProductSeriesFeatureBlockResponse": {
         "properties": {
           "title": {
@@ -51772,6 +52610,11 @@
           "is_overridden": {
             "type": "boolean",
             "title": "Is Overridden",
+            "default": false
+          },
+          "is_featured": {
+            "type": "boolean",
+            "title": "Is Featured",
             "default": false
           },
           "sort_order": {
