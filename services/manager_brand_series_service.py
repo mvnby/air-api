@@ -226,6 +226,19 @@ class ManagerBrandSeriesOperations:
             series.seo_description = cls._clean_optional_text(payload["seo_description"])
         if "source_url" in payload:
             series.source_url = cls._clean_optional_text(payload["source_url"])
+        if "is_featured" in payload and payload["is_featured"] is not None:
+            requested_featured = bool(payload["is_featured"])
+            resulting_published = (
+                bool(payload["is_published"])
+                if payload.get("is_published") is not None
+                else series.is_published
+            )
+            if requested_featured and not resulting_published:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Нельзя добавить скрытую серию в подборку бренда.",
+                )
+            series.is_featured = requested_featured
         if "is_published" in payload and payload["is_published"] is not None:
             series.is_published = bool(payload["is_published"])
         if "sort_order" in payload and payload["sort_order"] is not None:
@@ -410,6 +423,7 @@ class ManagerBrandSeriesOperations:
             "seo_title": series.seo_title,
             "seo_description": series.seo_description,
             "source_url": series.source_url,
+            "is_featured": series.is_featured,
             "is_published": series.is_published,
             "sort_order": series.sort_order,
             "created_at": series.created_at,

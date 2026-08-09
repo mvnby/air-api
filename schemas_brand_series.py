@@ -63,6 +63,7 @@ class ManagerBrandSeriesResponse(BaseModel):
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     source_url: Optional[str] = None
+    is_featured: bool = False
     is_published: bool
     sort_order: int
     created_at: datetime
@@ -111,5 +112,6 @@ class ManagerBrandSeriesUpdatePayload(BaseModel):
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     source_url: Optional[str] = None
+    is_featured: Optional[bool] = None
     is_published: Optional[bool] = None
     sort_order: Optional[int] = None

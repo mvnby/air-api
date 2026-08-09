@@ -25,6 +25,7 @@ async def test_manager_brands_crud(async_client):
         json={
             "title": "Brand Test TCL",
             "logo_url": "https://example.com/tcl.png",
+            "short_description": "  Calm brand summary.  ",
             "description": "Test description",
             "sort_order": 50,
             "is_published": True,
@@ -34,6 +35,7 @@ async def test_manager_brands_crud(async_client):
     created = create_resp.json()
     assert created["title"] == "Brand Test TCL"
     assert created["slug"] == "brand-test-tcl"
+    assert created["short_description"] == "Calm brand summary."
     brand_id = created["id"]
 
     list_resp = await async_client.get("/api/manager/brands", headers=headers)
@@ -46,6 +48,7 @@ async def test_manager_brands_crud(async_client):
         headers=headers,
         json={
             "title": "Brand Test TCL Updated",
+            "short_description": "Updated short summary.",
             "is_published": False,
             "sort_order": 5,
         },
@@ -53,6 +56,7 @@ async def test_manager_brands_crud(async_client):
     assert update_resp.status_code == 200
     updated = update_resp.json()
     assert updated["title"] == "Brand Test TCL Updated"
+    assert updated["short_description"] == "Updated short summary."
     assert updated["is_published"] is False
     assert updated["sort_order"] == 5
 
@@ -183,6 +187,7 @@ async def test_manager_brand_series_crud(async_client):
     assert created["seo_title"] == "FreshIN series"
     assert created["seo_description"] == "FreshIN SEO description"
     assert created["source_url"] == "https://example.com/freshin"
+    assert created["is_featured"] is False
     assert created["products_count"] == 0
     assert created["brand_feature_ids"] == [feature["id"]]
     assert created["brand_features"][0]["title"] == "Gentle Breeze"
@@ -210,6 +215,14 @@ async def test_manager_brand_series_crud(async_client):
         headers=headers,
     )
     assert blocked_feature_delete.status_code == 400
+
+    featured_resp = await async_client.put(
+        f"/api/manager/brands/{brand_id}/series/{series_id}",
+        headers=headers,
+        json={"is_featured": True},
+    )
+    assert featured_resp.status_code == 200, featured_resp.text
+    assert featured_resp.json()["is_featured"] is True
 
     update_resp = await async_client.put(
         f"/api/manager/brands/{brand_id}/series/{series_id}",
@@ -249,8 +262,25 @@ async def test_manager_brand_series_crud(async_client):
     assert updated["footnotes"] == ["Updated note"]
     assert updated["seo_title"] == "Updated SEO"
     assert updated["is_published"] is False
+    assert updated["is_featured"] is True
     assert updated["sort_order"] == 3
     assert updated["brand_features"] == []
+
+    unfeatured_resp = await async_client.put(
+        f"/api/manager/brands/{brand_id}/series/{series_id}",
+        headers=headers,
+        json={"is_featured": False},
+    )
+    assert unfeatured_resp.status_code == 200, unfeatured_resp.text
+    assert unfeatured_resp.json()["is_featured"] is False
+
+    rejected_refeature_resp = await async_client.put(
+        f"/api/manager/brands/{brand_id}/series/{series_id}",
+        headers=headers,
+        json={"is_featured": True},
+    )
+    assert rejected_refeature_resp.status_code == 400
+    assert "скрытую серию" in rejected_refeature_resp.json()["detail"].lower()
 
     delete_resp = await async_client.delete(
         f"/api/manager/brands/{brand_id}/series/{series_id}",

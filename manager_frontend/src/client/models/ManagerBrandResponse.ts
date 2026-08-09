@@ -7,6 +7,7 @@ export type ManagerBrandResponse = {
     title: string;
     slug: string;
     logo_url?: (string | null);
+    short_description?: (string | null);
     description?: (string | null);
     is_published: boolean;
     sort_order: number;

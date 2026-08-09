@@ -4,6 +4,7 @@ export type BrandForm = {
   title: string;
   slug: string;
   logo_url: string;
+  short_description: string;
   description: string;
   sort_order: number;
   is_published: boolean;

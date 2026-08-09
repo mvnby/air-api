@@ -61,6 +61,7 @@ export const useSeriesWorkspace = ({
   const reorderingSeries = ref(false);
   const draggedSeriesId = ref<number | null>(null);
   const seriesDropTargetId = ref<number | null>(null);
+  const featuredSeriesId = ref<number | null>(null);
   const expandedSeriesIds = ref<Set<number>>(new Set());
   const seriesForm = ref<SeriesForm>(emptyForm(0));
 
@@ -69,6 +70,7 @@ export const useSeriesWorkspace = ({
       !selectedBrandId.value ||
       seriesLoading.value ||
       seriesSaving.value ||
+      featuredSeriesId.value !== null ||
       reorderingSeries.value,
   );
   const availableCatalogFeatures = computed(() =>
@@ -415,6 +417,35 @@ export const useSeriesWorkspace = ({
     }
   };
 
+  const toggleSeriesFeatured = async (series: ManagerBrandSeries) => {
+    if (
+      !selectedBrandId.value ||
+      featuredSeriesId.value !== null ||
+      (!series.is_published && !series.is_featured)
+    )
+      return;
+
+    const wasFeatured = Boolean(series.is_featured);
+    featuredSeriesId.value = series.id;
+    seriesError.value = "";
+    try {
+      const payload = { is_featured: !wasFeatured };
+      await api.updateManagerBrandSeries(
+        selectedBrandId.value,
+        series.id,
+        payload,
+      );
+      await fetchSeries();
+      setToast(
+        wasFeatured ? "Серия убрана из подборки" : "Серия добавлена в подборку",
+      );
+    } catch (cause) {
+      seriesError.value = getApiErrorMessage(cause);
+    } finally {
+      featuredSeriesId.value = null;
+    }
+  };
+
   watch(selectedBrandId, () => {
     void fetchSeries();
     void fetchCatalogFeatures();
@@ -430,6 +461,7 @@ export const useSeriesWorkspace = ({
     deleteSeries,
     editingSeries,
     expandedSeriesIds,
+    featuredSeriesId,
     isSeriesReorderDisabled,
     onSeriesDragOver,
     onSeriesDragStart,
@@ -453,5 +485,6 @@ export const useSeriesWorkspace = ({
     draggedSeriesId,
     toggleSeriesExpanded,
     toggleSeriesExpandedFromCard,
+    toggleSeriesFeatured,
   };
 };

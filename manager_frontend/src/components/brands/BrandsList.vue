@@ -17,6 +17,7 @@ defineProps<{
   seriesError: string;
   seriesReordering: boolean;
   seriesReorderDisabled: boolean;
+  featuredSeriesId: number | null;
   draggedSeriesId: number | null;
   seriesDropTargetId: number | null;
   expandedSeriesIds: Set<number>;
@@ -36,6 +37,7 @@ const emit = defineEmits<{
   editSeries: [series: ManagerBrandSeries];
   deleteSeries: [series: ManagerBrandSeries];
   openSeriesProducts: [series: ManagerBrandSeries];
+  toggleSeriesFeatured: [series: ManagerBrandSeries];
   toggleSeriesExpanded: [seriesId: number];
   toggleSeriesFromCard: [series: ManagerBrandSeries];
   seriesDragStart: [event: DragEvent, series: ManagerBrandSeries];
@@ -230,6 +232,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
                   :error="seriesError"
                   :reordering="seriesReordering"
                   :reorder-disabled="seriesReorderDisabled"
+                  :featured-series-id="featuredSeriesId"
                   :dragged-id="draggedSeriesId"
                   :drop-target-id="seriesDropTargetId"
                   :expanded-ids="expandedSeriesIds"
@@ -237,6 +240,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
                   @edit="emit('editSeries', $event)"
                   @delete="emit('deleteSeries', $event)"
                   @open-products="emit('openSeriesProducts', $event)"
+                  @toggle-featured="emit('toggleSeriesFeatured', $event)"
                   @toggle-expanded="emit('toggleSeriesExpanded', $event)"
                   @toggle-from-card="emit('toggleSeriesFromCard', $event)"
                   @drag-start="forwardSeriesDragStart"

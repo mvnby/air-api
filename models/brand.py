@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, List, Optional
-from sqlalchemy import Column, JSON, Text, UniqueConstraint
+from sqlalchemy import Column, Index, JSON, Text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -11,6 +11,7 @@ class Brand(SQLModel, table=True):
     title: str = Field(index=True)
     slug: str = Field(unique=True, index=True)
     logo_url: Optional[str] = Field(default=None)
+    short_description: Optional[str] = Field(default=None, sa_column=Column(Text))
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     is_published: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0)
@@ -28,6 +29,14 @@ class ProductSeries(SQLModel, table=True):
     __tablename__ = "product_series"
     __table_args__ = (
         UniqueConstraint("brand_id", "slug", name="uq_product_series_brand_id_slug"),
+        Index(
+            "ix_product_series_brand_featured_public_sort",
+            "brand_id",
+            "is_featured",
+            "is_published",
+            "sort_order",
+            "id",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -66,6 +75,7 @@ class ProductSeries(SQLModel, table=True):
     seo_title: Optional[str] = Field(default=None)
     seo_description: Optional[str] = Field(default=None, sa_column=Column(Text))
     source_url: Optional[str] = Field(default=None)
+    is_featured: bool = Field(default=False)
     is_published: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.now)

@@ -8,6 +8,7 @@ def test_content_ai_routes_are_post_only_non_mutating_drafts_without_database_de
     draft_routes = [route for route in router.routes if getattr(route, "path", "").endswith("/draft")]
 
     assert {route.path for route in draft_routes} == {
+        "/api/manager/content-ai/brands/short-description/draft",
         "/api/manager/content-ai/features/draft",
         "/api/manager/content-ai/series/draft",
     }

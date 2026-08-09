@@ -232,8 +232,11 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         brand = Brand(
             title=title,
             slug=slug,
-            logo_url=payload.get("logo_url"),
-            description=payload.get("description"),
+            logo_url=ManagerBrandService._clean_optional_text(payload.get("logo_url")),
+            short_description=ManagerBrandService._clean_optional_text(
+                payload.get("short_description")
+            ),
+            description=ManagerBrandService._clean_optional_text(payload.get("description")),
             is_published=bool(payload.get("is_published", True)),
             sort_order=int(payload.get("sort_order") or 0),
         )
@@ -291,6 +294,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
 
         if "logo_url" in payload:
             brand.logo_url = ManagerBrandService._clean_optional_text(payload["logo_url"])
+        if "short_description" in payload:
+            brand.short_description = ManagerBrandService._clean_optional_text(
+                payload["short_description"]
+            )
         if "description" in payload:
             brand.description = ManagerBrandService._clean_optional_text(payload["description"])
         if "is_published" in payload and payload["is_published"] is not None:
@@ -404,6 +411,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             "title": brand.title,
             "slug": brand.slug,
             "logo_url": brand.logo_url,
+            "short_description": brand.short_description,
             "description": brand.description,
             "is_published": brand.is_published,
             "sort_order": brand.sort_order,
