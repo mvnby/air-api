@@ -40,7 +40,7 @@ async def test_feature_library_crud_archives_instead_of_deleting(async_client, d
         json={
             "name": "Тихий режим",
             "category_id": category.id,
-            "scope_type": "derived",
+            "scope_type": "universal",
             "rules": [{"spec_key": "noise_db", "operator": "lte", "target_value": 20}],
         },
     )
@@ -60,7 +60,7 @@ async def test_feature_library_crud_archives_instead_of_deleting(async_client, d
     brand_scope = await async_client.patch(
         f"/api/manager/features/{feature['id']}",
         headers=headers,
-        json={"scope_type": "brand", "brand_id": brand.id},
+        json={"scope_type": "brand", "brand_id": brand.id, "rules": []},
     )
     assert brand_scope.status_code == 200, brand_scope.text
     assert brand_scope.json()["brand_id"] == brand.id
@@ -411,10 +411,10 @@ async def test_feature_scope_isolation_and_universal_assignments(async_client, d
         headers=headers,
     )
     assert mdv_workspace.status_code == 200, mdv_workspace.text
-    assert [item["slug"] for item in mdv_workspace.json()["effective"]] == []
-    assert [item["slug"] for item in mdv_workspace.json()["automatic_suggestions"]] == [
+    assert [item["slug"] for item in mdv_workspace.json()["effective"]] == [
         "scope-universal-wifi"
     ]
+    assert mdv_workspace.json()["automatic_suggestions"] == []
 
     mdv_library = await async_client.get(
         "/api/manager/features",

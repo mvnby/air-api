@@ -45,6 +45,7 @@ const OutgoingEmailsView = defineAsyncComponent(() => import('./views/OutgoingEm
 const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
 const BrandsView = defineAsyncComponent(() => import('./views/BrandsView.vue'));
 const FeaturesView = defineAsyncComponent(() => import('./views/FeaturesView.vue'));
+const FeatureSeriesMigrationView = defineAsyncComponent(() => import('./views/FeatureSeriesMigrationView.vue'));
 const SupplierFeedsView = defineAsyncComponent(() => import('./views/SupplierFeedsView.vue'));
 const SupplierMappingView = defineAsyncComponent(() => import('./views/SupplierMappingView.vue'));
 const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQualityView.vue'));
@@ -173,6 +174,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/payments')) return 'payments';
   if (path.startsWith('/manager/tags')) return 'tags';
   if (path.startsWith('/manager/brands')) return 'brands';
+  if (path.startsWith('/manager/features/series-migration')) return 'feature-series-migration';
   if (path.startsWith('/manager/features')) return 'features';
   if (path.startsWith('/manager/supply')) return 'supply';
   if (path.startsWith('/manager/suppliers')) return 'suppliers';
@@ -656,6 +658,7 @@ watch(currentPath, () => {
       <BankReceiptsView v-else-if="currentView === 'payments'" :key="currentLocation" />
       <TagsView v-else-if="currentView === 'tags'" :key="currentLocation" />
       <BrandsView v-else-if="currentView === 'brands'" :key="currentLocation" />
+      <FeatureSeriesMigrationView v-else-if="currentView === 'feature-series-migration'" :key="currentLocation" />
       <FeaturesView v-else-if="currentView === 'features'" :key="currentLocation" />
       <SupplyRequestsView v-else-if="currentView === 'supply'" :key="currentLocation" />
       <SupplierFeedsView v-else-if="currentView === 'suppliers'" :key="currentLocation" />

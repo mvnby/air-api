@@ -22,8 +22,19 @@ class _FakeAsyncClient:
     async def __aexit__(self, *_args):
         return None
 
-    async def post(self, *_args, **_kwargs):
+    def build_request(self, method, url, **kwargs):
+        return httpx.Request(method, url, **kwargs)
+
+    async def send(self, *_args, **_kwargs):
         return self.response
+
+
+class _FakeStream(httpx.AsyncByteStream):
+    def __init__(self, body: bytes):
+        self.body = body
+
+    async def __aiter__(self):
+        yield self.body
 
 
 @pytest.mark.asyncio
@@ -49,7 +60,8 @@ async def test_deepseek_http_errors_have_typed_retry_contract(
     )
     _FakeAsyncClient.response = httpx.Response(
         status,
-        json={"error": {"message": "provider error"}},
+        headers={"Content-Type": "application/json"},
+        stream=_FakeStream(json.dumps({"error": {"message": "provider error"}}).encode()),
         request=httpx.Request("POST", "https://api.invalid/chat"),
     )
     monkeypatch.setattr(

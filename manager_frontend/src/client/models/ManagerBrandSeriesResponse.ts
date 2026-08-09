@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerFeatureSeriesAssignmentPayload } from './ManagerFeatureSeriesAssignmentPayload';
+import type { ManagerSeriesCatalogFeatureResponse } from './ManagerSeriesCatalogFeatureResponse';
 import type { ProductSeriesBrandFeatureResponse } from './ProductSeriesBrandFeatureResponse';
 import type { ProductSeriesContentBlockResponse } from './ProductSeriesContentBlockResponse';
 import type { ProductSeriesFeatureBlockResponse } from './ProductSeriesFeatureBlockResponse';
@@ -18,6 +20,8 @@ export type ManagerBrandSeriesResponse = {
     features?: Array<string>;
     brand_features?: Array<ProductSeriesBrandFeatureResponse>;
     brand_feature_ids?: Array<number>;
+    feature_assignments?: Array<ManagerFeatureSeriesAssignmentPayload>;
+    catalog_features?: Array<ManagerSeriesCatalogFeatureResponse>;
     feature_blocks?: Array<ProductSeriesFeatureBlockResponse>;
     content_blocks?: Array<ProductSeriesContentBlockResponse>;
     footnotes?: Array<string>;

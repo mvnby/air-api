@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, List, Optional
 
-from sqlalchemy import CheckConstraint, Column, JSON, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, Index, JSON, Text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -41,6 +41,12 @@ class Feature(SQLModel, table=True):
     category_id: int = Field(foreign_key="feature_category.id", index=True)
     scope_type: str = Field(default="universal", index=True)
     brand_id: Optional[int] = Field(default=None, foreign_key="brand.id", ondelete="SET NULL", index=True)
+    replaces_feature_id: Optional[int] = Field(
+        default=None,
+        foreign_key="feature.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     icon_media_id: Optional[int] = Field(default=None, foreign_key="media_asset.id", ondelete="SET NULL")
     image_media_id: Optional[int] = Field(default=None, foreign_key="media_asset.id", ondelete="SET NULL")
     icon: Optional[str] = None
@@ -129,11 +135,18 @@ class FeatureSeriesLink(FeatureLinkFields, table=True):
             "source IN ('manual', 'inherited', 'derived')",
             name="ck_feature_series_link_source",
         ),
+        Index(
+            "ix_feature_series_link_series_featured_sort",
+            "series_id",
+            "is_featured",
+            "sort_order",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     series_id: int = Field(foreign_key="product_series.id", ondelete="CASCADE", index=True)
     feature_id: int = Field(foreign_key="feature.id", ondelete="CASCADE", index=True)
+    is_featured: bool = Field(default=False, index=True)
 
     series: Optional["ProductSeries"] = Relationship(back_populates="feature_links")
     feature: Optional[Feature] = Relationship(back_populates="series_links")

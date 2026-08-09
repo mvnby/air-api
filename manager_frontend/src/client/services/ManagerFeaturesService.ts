@@ -8,6 +8,9 @@ import type { FeatureTargetLinkPayload } from '../models/FeatureTargetLinkPayloa
 import type { FeatureUpdatePayload } from '../models/FeatureUpdatePayload';
 import type { ManagerFeatureListResponse } from '../models/ManagerFeatureListResponse';
 import type { ManagerFeatureResponse } from '../models/ManagerFeatureResponse';
+import type { ManagerFeatureSeriesMigrationApplyPayload } from '../models/ManagerFeatureSeriesMigrationApplyPayload';
+import type { ManagerFeatureSeriesMigrationApplyResponse } from '../models/ManagerFeatureSeriesMigrationApplyResponse';
+import type { ManagerFeatureSeriesMigrationPreviewResponse } from '../models/ManagerFeatureSeriesMigrationPreviewResponse';
 import type { ManagerFeatureSuggestionsApplyPayload } from '../models/ManagerFeatureSuggestionsApplyPayload';
 import type { ManagerProductFeaturesUpdatePayload } from '../models/ManagerProductFeaturesUpdatePayload';
 import type { ManagerProductFeatureWorkspaceResponse } from '../models/ManagerProductFeatureWorkspaceResponse';
@@ -73,6 +76,45 @@ export class ManagerFeaturesService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/features',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Feature Series Migration
+     * @param seriesIds
+     * @returns ManagerFeatureSeriesMigrationPreviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static previewManagerFeatureSeriesMigration(
+        seriesIds?: (Array<number> | null),
+    ): CancelablePromise<ManagerFeatureSeriesMigrationPreviewResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/features/series-migration/preview',
+            query: {
+                'series_ids': seriesIds,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Feature Series Migration
+     * @param requestBody
+     * @returns ManagerFeatureSeriesMigrationApplyResponse Successful Response
+     * @throws ApiError
+     */
+    public static applyManagerFeatureSeriesMigration(
+        requestBody: ManagerFeatureSeriesMigrationApplyPayload,
+    ): CancelablePromise<ManagerFeatureSeriesMigrationApplyResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/features/series-migration/apply',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

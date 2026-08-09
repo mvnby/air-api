@@ -4,6 +4,7 @@
 /* eslint-disable */
 export type FeatureTargetLinkPayload = {
     is_enabled?: boolean;
+    is_featured?: boolean;
     sort_order?: number;
     override_title?: (string | null);
     override_description?: (string | null);

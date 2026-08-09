@@ -72,6 +72,10 @@ FEATURE_DELETE_GLOBAL_MUTATION_PRODUCERS = frozenset(
     }
 )
 
+FEATURE_MIGRATION_GLOBAL_MUTATION_PRODUCERS = frozenset(
+    {"feature_series_migration.apply"}
+)
+
 PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS = frozenset(
     {
         "product_image_variant.reprocess_variant",
@@ -101,6 +105,7 @@ PUBLIC_CATALOG_MUTATION_PRODUCERS = frozenset(
         *IMPORTER_GLOBAL_MUTATION_PRODUCERS,
         *MANAGER_MEDIA_GLOBAL_MUTATION_PRODUCERS,
         *FEATURE_DELETE_GLOBAL_MUTATION_PRODUCERS,
+        *FEATURE_MIGRATION_GLOBAL_MUTATION_PRODUCERS,
         *PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS,
         *MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS,
     }
@@ -168,6 +173,10 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
                 "feature_assignment.delete_target_link.brand",
                 "feature_assignment.delete_target_link.series",
             }
+        ),
+        "FeatureSeriesMigrationService.preview": frozenset(),
+        "FeatureSeriesMigrationService.apply": frozenset(
+            {"feature_series_migration.apply"}
         ),
         "ProductImageVariantService.reprocess_variant": frozenset(
             {"product_image_variant.reprocess_variant"}
@@ -281,6 +290,10 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
         "feature_assignment.delete_target_link.series": _contract(
             "feature_assignment.delete_target_link.series",
             "feature_series_link_delete",
+        ),
+        "feature_series_migration.apply": _contract(
+            "feature_series_migration.apply",
+            "feature_product_links_migrated_to_series",
         ),
         "product_image_variant.reprocess_variant": _contract(
             "product_image_variant.reprocess_variant",

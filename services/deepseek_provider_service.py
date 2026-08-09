@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
 
 from core.config import settings
+
+
+MAX_DEEPSEEK_RESPONSE_BYTES = 512_000
+MAX_DEEPSEEK_OUTPUT_TOKENS = 4_096
 
 
 class DefectActAIProviderError(ValueError):
@@ -41,17 +46,22 @@ async def request_deepseek_completion(
             code="not_configured",
         )
 
+    response: httpx.Response | None = None
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(
+        async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+            request = client.build_request(
+                "POST",
                 settings.DEEPSEEK_API_URL,
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "Accept-Encoding": "identity",
                 },
                 json={
                     "model": settings.DEEPSEEK_MODEL,
                     "temperature": temperature,
+                    "max_tokens": MAX_DEEPSEEK_OUTPUT_TOKENS,
                     "response_format": {"type": "json_object"},
                     "messages": [
                         {"role": "system", "content": system_prompt},
@@ -59,6 +69,11 @@ async def request_deepseek_completion(
                     ],
                 },
             )
+            response = await client.send(request, stream=True)
+            try:
+                raw_response = await _read_limited_response(response)
+            finally:
+                await response.aclose()
     except httpx.TimeoutException as exc:
         raise DefectActAIProviderError(
             "DeepSeek request timed out",
@@ -74,17 +89,18 @@ async def request_deepseek_completion(
             code="unavailable",
         ) from exc
 
+    assert response is not None
     if response.status_code >= 400:
         status = int(response.status_code)
         code, retryable = _status_contract(status)
         raise DefectActAIProviderError(
-            f"DeepSeek returned HTTP {status}: {_error_message(response)}",
+            f"DeepSeek returned HTTP {status}: {_error_message(raw_response)}",
             status=status,
             retryable=retryable,
             code=code,
         )
     try:
-        data = response.json()
+        data = json.loads(raw_response)
         return str(data["choices"][0]["message"]["content"])
     except ValueError as exc:
         raise invalid_deepseek_response(
@@ -121,11 +137,41 @@ def _status_contract(status: int) -> tuple[str, bool]:
     return "request_rejected", False
 
 
-def _error_message(response: httpx.Response) -> str:
+async def _read_limited_response(response: httpx.Response) -> bytes:
+    content_encoding = response.headers.get("content-encoding", "").strip().lower()
+    if content_encoding not in {"", "identity"}:
+        raise invalid_deepseek_response(
+            "DeepSeek returned unsupported content encoding",
+            status=int(response.status_code),
+        )
+    declared_size = response.headers.get("content-length")
+    if declared_size:
+        try:
+            if int(declared_size) > MAX_DEEPSEEK_RESPONSE_BYTES:
+                raise invalid_deepseek_response(
+                    "DeepSeek response is too large",
+                    status=int(response.status_code),
+                )
+        except ValueError:
+            pass
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in response.aiter_raw():
+        size += len(chunk)
+        if size > MAX_DEEPSEEK_RESPONSE_BYTES:
+            raise invalid_deepseek_response(
+                "DeepSeek response is too large",
+                status=int(response.status_code),
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _error_message(raw_response: bytes) -> str:
     try:
-        data: Any = response.json()
-    except ValueError:
-        return response.text[:300]
+        data: Any = json.loads(raw_response)
+    except (UnicodeDecodeError, ValueError):
+        return raw_response.decode("utf-8", errors="replace")[:300]
     error = data.get("error") if isinstance(data, dict) else None
     if isinstance(error, dict):
         message = str(error.get("message") or "").strip()

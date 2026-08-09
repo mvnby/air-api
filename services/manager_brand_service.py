@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import (
     Brand,
     Feature,
-    FeatureBrandLink,
     FeatureCategory,
     FeatureSeriesLink,
     Product,
@@ -111,14 +110,6 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         )
         session.add(feature)
         await session.flush()
-        session.add(
-            FeatureBrandLink(
-                brand_id=brand_id,
-                feature_id=int(feature.id),
-                source="manual",
-                sort_order=feature.sort_order,
-            )
-        )
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.create_brand_feature",

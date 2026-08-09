@@ -492,6 +492,21 @@ async def seed_lg24_series_content(
     series_rows = (
         await session.execute(select(ProductSeries).where(ProductSeries.brand_id == brand.id))
     ).scalars().all()
+    if execute and series_rows:
+        series_rows = list(
+            (
+                await session.execute(
+                    select(ProductSeries)
+                    .where(ProductSeries.id.in_(sorted(int(item.id) for item in series_rows)))
+                    .order_by(ProductSeries.id.asc())
+                    .with_for_update()
+                )
+            ).scalars().all()
+        )
+    if execute:
+        await session.execute(
+            select(Brand.id).where(Brand.id == brand.id).with_for_update()
+        )
     feature_ids = await upsert_brand_features(
         session,
         brand_id=int(brand.id),

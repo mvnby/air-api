@@ -9,8 +9,9 @@ export type FeatureUpdatePayload = {
     short_description?: (string | null);
     full_description?: (string | null);
     category_id?: (number | null);
-    scope_type?: ('universal' | 'brand' | 'series' | 'product' | 'derived' | null);
+    scope_type?: ('universal' | 'brand' | null);
     brand_id?: (number | null);
+    replaces_feature_id?: (number | null);
     icon_media_id?: (number | null);
     image_media_id?: (number | null);
     icon?: (string | null);

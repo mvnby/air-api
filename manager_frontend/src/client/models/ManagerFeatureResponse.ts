@@ -13,6 +13,7 @@ export type ManagerFeatureResponse = {
     category: FeatureCategoryResponse;
     scope_type: 'universal' | 'brand' | 'series' | 'product' | 'derived';
     brand_id?: (number | null);
+    replaces_feature_id?: (number | null);
     icon_media_id?: (number | null);
     image_media_id?: (number | null);
     icon?: (string | null);

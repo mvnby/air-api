@@ -11,6 +11,7 @@ from models import (
     Feature,
     FeatureBrandLink,
     FeatureProductLink,
+    FeatureRule,
     FeatureSeriesLink,
     MediaAsset,
     Product,
@@ -50,12 +51,14 @@ class FeatureResolverService:
             .where(Feature.is_active.is_(True), Feature.archived_at.is_(None))
             .options(selectinload(Feature.category), selectinload(Feature.rules))
         )
-        if not include_suggestions:
-            linked_feature_ids = {
-                int(link.feature_id)
-                for link in (*product_links, *brand_links, *series_links)
-            }
-            feature_stmt = feature_stmt.where(Feature.id.in_(linked_feature_ids or {-1}))
+        linked_feature_ids = {
+            int(link.feature_id)
+            for link in (*product_links, *brand_links, *series_links)
+        }
+        feature_stmt = feature_stmt.where(
+            (Feature.id.in_(linked_feature_ids or {-1}))
+            | Feature.rules.any(FeatureRule.is_active.is_(True))
+        )
         feature_rows = list((await session.execute(feature_stmt)).scalars().all())
         features = {int(feature.id): feature for feature in feature_rows if feature.id is not None}
         media = await FeatureResolverService._load_media(
@@ -115,13 +118,19 @@ class FeatureResolverService:
                         disabled_ids.append(feature_id)
                         continue
                     chosen, source = b_link, "brand"
-                elif p_link is not None and p_link.source == "derived" and matched:
-                    if not p_link.is_enabled:
-                        disabled_ids.append(feature_id)
-                        continue
+                elif feature.scope_type == "universal" and feature.rules and matched:
+                    chosen, source = None, "derived"
+                elif (
+                    p_link is not None
+                    and p_link.source == "derived"
+                    and p_link.is_enabled
+                    and feature.rules
+                    and matched
+                ):
+                    # Read compatibility for historical stored derived links.
                     chosen, source = p_link, "derived"
 
-                if chosen is not None and source is not None:
+                if source is not None:
                     item = FeatureResolverService._serialize_resolved(
                         feature,
                         chosen,
@@ -140,6 +149,7 @@ class FeatureResolverService:
                     include_suggestions
                     and matched
                     and feature.rules
+                    and feature.scope_type == "derived"
                     and FeatureScopePolicy.allows_product(
                         feature,
                         product,
@@ -159,6 +169,11 @@ class FeatureResolverService:
                     )
 
             sort_key = FeatureResolverService._sort_key
+            suppressed_ids = FeatureResolverService._replacement_targets(effective, features)
+            if suppressed_ids:
+                effective = [item for item in effective if item.id not in suppressed_ids]
+                inherited = [item for item in inherited if item.id not in suppressed_ids]
+                manual = [item for item in manual if item.id not in suppressed_ids]
             payload = {
                 "effective": sorted(effective, key=sort_key),
                 "automatic_suggestions": sorted(suggestions, key=sort_key),
@@ -199,6 +214,14 @@ class FeatureResolverService:
                             applied_rule=None,
                         )
                     )
+                suppressed_series_ids = FeatureResolverService._replacement_targets(
+                    series_items,
+                    features,
+                )
+                if suppressed_series_ids:
+                    series_items = [
+                        item for item in series_items if item.id not in suppressed_series_ids
+                    ]
                 series.__dict__["_resolved_features"] = sorted(series_items, key=sort_key)
 
         return resolved_by_product
@@ -243,6 +266,22 @@ class FeatureResolverService:
                 "override_footnote",
             )
         )
+
+    @staticmethod
+    def _replacement_targets(
+        resolved: Iterable[PublicFeatureResponse],
+        features: dict[int, Feature],
+    ) -> set[int]:
+        targets: set[int] = set()
+        for item in resolved:
+            feature = features.get(item.id)
+            if (
+                feature is not None
+                and feature.scope_type == "brand"
+                and feature.replaces_feature_id is not None
+            ):
+                targets.add(int(feature.replaces_feature_id))
+        return targets
 
     @staticmethod
     def _manual_assignments(links: Iterable[Any]) -> list[FeatureLinkPayload]:
@@ -302,6 +341,7 @@ class FeatureResolverService:
             scope_type=feature.scope_type,
             source=source,
             is_overridden=FeatureResolverService._has_override(link) if link else False,
+            is_featured=bool(getattr(link, "is_featured", False)) if link else False,
             sort_order=int(link.sort_order if link is not None else feature.sort_order),
             feature_sort_order=feature.sort_order,
             icon=(getattr(link, "override_icon", None) if link else None) or feature.icon,
@@ -315,6 +355,7 @@ class FeatureResolverService:
     @staticmethod
     def _sort_key(item: PublicFeatureResponse):
         return (
+            not item.is_featured,
             item.sort_order,
             item.category.sort_order,
             item.feature_sort_order,
