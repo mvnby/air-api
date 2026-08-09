@@ -28,6 +28,7 @@ export type ManagerBrandSeriesResponse = {
     seo_title?: (string | null);
     seo_description?: (string | null);
     source_url?: (string | null);
+    is_featured?: boolean;
     is_published: boolean;
     sort_order: number;
     created_at: string;

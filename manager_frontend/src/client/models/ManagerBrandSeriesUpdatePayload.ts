@@ -22,6 +22,7 @@ export type ManagerBrandSeriesUpdatePayload = {
     seo_title?: (string | null);
     seo_description?: (string | null);
     source_url?: (string | null);
+    is_featured?: (boolean | null);
     is_published?: (boolean | null);
     sort_order?: (number | null);
 };

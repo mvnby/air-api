@@ -45,6 +45,21 @@ class ProductSeriesContentDraftRequest(_ContentDraftRequest):
     brand_name: str | None = Field(default=None, max_length=200)
 
 
+class BrandShortDescriptionDraftRequest(BaseModel):
+    """Brand identity and source copy are immutable draft context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    brand_name: str | None = Field(default=None, max_length=200)
+    full_description: str = Field(min_length=1, max_length=50_000)
+
+    @model_validator(mode="after")
+    def validate_description(self):
+        if not self.full_description.strip():
+            raise ValueError("full_description is required")
+        return self
+
+
 class FeatureContentDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -64,4 +79,11 @@ class ProductSeriesContentDraft(BaseModel):
     description: str = Field(min_length=1, max_length=16_000)
     seo_title: str | None = Field(default=None, max_length=68)
     seo_description: str | None = Field(default=None, max_length=158)
+    prompt_version: str
+
+
+class BrandShortDescriptionDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    short_description: str = Field(min_length=1, max_length=200)
     prompt_version: str

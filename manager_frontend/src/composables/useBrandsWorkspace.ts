@@ -15,6 +15,7 @@ const emptyBrandForm = (sortOrder: number): BrandForm => ({
   title: "",
   slug: "",
   logo_url: "",
+  short_description: "",
   description: "",
   sort_order: sortOrder,
   is_published: true,
@@ -118,6 +119,7 @@ export const useBrandsWorkspace = () => {
       title: String(brand.title || ""),
       slug: String(brand.slug || ""),
       logo_url: String(brand.logo_url || ""),
+      short_description: String(brand.short_description || ""),
       description: String(brand.description || ""),
       sort_order: Number(brand.sort_order || 0),
       is_published: Boolean(brand.is_published),
@@ -147,6 +149,8 @@ export const useBrandsWorkspace = () => {
         title,
         slug: String(form.value.slug || "").trim() || undefined,
         logo_url: String(form.value.logo_url || "").trim() || undefined,
+        short_description:
+          String(form.value.short_description || "").trim() || undefined,
         description: String(form.value.description || "").trim() || undefined,
         sort_order: wasEditing
           ? Number(form.value.sort_order || 0)

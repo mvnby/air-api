@@ -6,6 +6,7 @@ export type ManagerBrandUpdatePayload = {
     title?: (string | null);
     slug?: (string | null);
     logo_url?: (string | null);
+    short_description?: (string | null);
     description?: (string | null);
     is_published?: (boolean | null);
     sort_order?: (number | null);

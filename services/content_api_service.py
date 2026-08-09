@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from crud.public_catalog import PublicCatalogDAO
-from models import Brand, Feature, FeatureBrandLink, GlobalConfig, Product, Service
+from models import Brand, Feature, FeatureBrandLink, GlobalConfig, Product, ProductSeries, Service
 from models.tenancy import TenantScope
 from services.feature_scope_policy import FeatureScopePolicy
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
@@ -120,10 +120,44 @@ class ContentApiService:
         return [ContentApiService._serialize_brand_feature(feature) for feature in published]
 
     @staticmethod
+    async def _load_public_featured_series(
+        session: AsyncSession,
+        brand_ids: List[int],
+    ) -> Dict[int, List[ProductSeries]]:
+        normalized_ids = [int(value) for value in dict.fromkeys(brand_ids) if value]
+        if not normalized_ids:
+            return {}
+        rows = list(
+            (
+                await session.execute(
+                    select(ProductSeries)
+                    .where(
+                        ProductSeries.brand_id.in_(normalized_ids),
+                        ProductSeries.is_featured.is_(True),
+                        ProductSeries.is_published.is_(True),
+                    )
+                    .order_by(
+                        ProductSeries.brand_id.asc(),
+                        ProductSeries.sort_order.asc(),
+                        ProductSeries.title.asc(),
+                        ProductSeries.id.asc(),
+                    )
+                )
+            ).scalars().all()
+        )
+        result: Dict[int, List[ProductSeries]] = {}
+        for series in rows:
+            if series.brand_id is None:
+                continue
+            result.setdefault(int(series.brand_id), []).append(series)
+        return result
+
+    @staticmethod
     def _serialize_brand(
         brand: Brand,
         *,
         products_count: int,
+        featured_series: List[ProductSeries] | None = None,
         include_features: bool = False,
     ) -> Dict[str, Any]:
         payload = {
@@ -131,9 +165,18 @@ class ContentApiService:
             "title": brand.title,
             "slug": brand.slug,
             "logo_url": brand.logo_url,
+            "short_description": brand.short_description,
             "description": brand.description,
             "products_count": int(products_count or 0),
             "sort_order": brand.sort_order,
+            "featured_series": [
+                {
+                    "name": series.title,
+                    "slug": series.slug,
+                    "sort_order": int(series.sort_order or 0),
+                }
+                for series in featured_series or []
+            ],
         }
         if include_features:
             payload["features"] = ContentApiService._serialize_brand_features(brand)
@@ -184,8 +227,16 @@ class ContentApiService:
                 .order_by(Brand.sort_order.asc(), Brand.title.asc())
             )
             rows = list((await session.execute(stmt)).all())
+        featured_map = await ContentApiService._load_public_featured_series(
+            session,
+            [int(brand.id) for brand, _ in rows if brand.id is not None],
+        )
         return [
-            ContentApiService._serialize_brand(brand, products_count=products_count)
+            ContentApiService._serialize_brand(
+                brand,
+                products_count=products_count,
+                featured_series=featured_map.get(int(brand.id or 0), []),
+            )
             for brand, products_count in rows
         ]
 
@@ -220,6 +271,10 @@ class ContentApiService:
         if row is None:
             return None
         brand, products_count = row
+        featured_map = await ContentApiService._load_public_featured_series(
+            session,
+            [int(brand.id)] if brand.id is not None else [],
+        )
         features = list(
             (
                 await session.execute(
@@ -244,7 +299,12 @@ class ContentApiService:
             )
         ]
         brand.__dict__["_resolved_brand_features"] = features
-        return ContentApiService._serialize_brand(brand, products_count=products_count, include_features=True)
+        return ContentApiService._serialize_brand(
+            brand,
+            products_count=products_count,
+            featured_series=featured_map.get(int(brand.id or 0), []),
+            include_features=True,
+        )
 
     @staticmethod
     async def get_global_config_map(session: AsyncSession) -> Dict[str, str]:

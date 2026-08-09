@@ -4,11 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.security import AuthenticatedUser, get_current_auth_context, get_current_username
 from routers.manager_operation_ids import (
+    CREATE_MANAGER_BRAND_SHORT_DESCRIPTION_AI_DRAFT,
     CREATE_MANAGER_FEATURE_CONTENT_AI_DRAFT,
     CREATE_MANAGER_SERIES_CONTENT_AI_DRAFT,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas_content_ai import (
+    BrandShortDescriptionDraft,
+    BrandShortDescriptionDraftRequest,
     FeatureContentDraft,
     FeatureContentDraftRequest,
     ProductSeriesContentDraft,
@@ -30,6 +33,24 @@ router = APIRouter(
     route_class=ManagerPermissionRoute,
 )
 service = ManagerContentAIService()
+
+
+@router.post(
+    "/brands/short-description/draft",
+    response_model=BrandShortDescriptionDraft,
+    operation_id=CREATE_MANAGER_BRAND_SHORT_DESCRIPTION_AI_DRAFT,
+)
+async def create_manager_brand_short_description_ai_draft(
+    payload: BrandShortDescriptionDraftRequest,
+    auth: AuthenticatedUser = Depends(get_current_auth_context),
+) -> BrandShortDescriptionDraft:
+    try:
+        async with manager_content_ai_limiter.limit(_limit_key(auth)):
+            return await service.generate_brand_short_description_draft(payload)
+    except ManagerContentAIRateLimitError as exc:
+        raise _rate_limit_http_error(exc) from exc
+    except DefectActAIProviderError as exc:
+        raise _provider_http_error(exc) from exc
 
 
 @router.post(

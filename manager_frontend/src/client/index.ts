@@ -98,6 +98,8 @@ export type { BotTaskResponse } from './models/BotTaskResponse';
 export type { BotTaskStatusUpdateRequest } from './models/BotTaskStatusUpdateRequest';
 export type { BotTaskStatusUpdateResponse } from './models/BotTaskStatusUpdateResponse';
 export type { BotVoiceQuickOrderParseResponse } from './models/BotVoiceQuickOrderParseResponse';
+export type { BrandShortDescriptionDraft } from './models/BrandShortDescriptionDraft';
+export type { BrandShortDescriptionDraftRequest } from './models/BrandShortDescriptionDraftRequest';
 export type { BulkGalleryAddRequest } from './models/BulkGalleryAddRequest';
 export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest';
 export type { BulkProductIdsRequest } from './models/BulkProductIdsRequest';
@@ -475,6 +477,7 @@ export type { PublicBrandDetailResponse } from './models/PublicBrandDetailRespon
 export type { PublicBrandResponse } from './models/PublicBrandResponse';
 export type { PublicContactLeadPayload } from './models/PublicContactLeadPayload';
 export type { PublicContactLeadResponse } from './models/PublicContactLeadResponse';
+export type { PublicFeaturedSeriesResponse } from './models/PublicFeaturedSeriesResponse';
 export type { PublicFeatureResponse } from './models/PublicFeatureResponse';
 export type { PublicOrderPricingErrorDetail } from './models/PublicOrderPricingErrorDetail';
 export type { PublicOrderPricingErrorResponse } from './models/PublicOrderPricingErrorResponse';

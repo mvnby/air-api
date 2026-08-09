@@ -8,6 +8,7 @@ const props = defineProps<{
   error: string;
   reordering: boolean;
   reorderDisabled: boolean;
+  featuredSeriesId: number | null;
   draggedId: number | null;
   dropTargetId: number | null;
   expandedIds: Set<number>;
@@ -18,6 +19,7 @@ const emit = defineEmits<{
   edit: [series: ManagerBrandSeries];
   delete: [series: ManagerBrandSeries];
   openProducts: [series: ManagerBrandSeries];
+  toggleFeatured: [series: ManagerBrandSeries];
   toggleExpanded: [seriesId: number];
   toggleFromCard: [series: ManagerBrandSeries];
   dragStart: [event: DragEvent, series: ManagerBrandSeries];
@@ -202,6 +204,34 @@ const productLabel = (count: number | undefined) => {
                       : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'
                   "
                   >{{ series.is_published ? "Публичная" : "Скрыта" }}</span
+                ><button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  :class="
+                    series.is_featured
+                      ? 'bg-teal-100 text-teal-800 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-100 dark:hover:bg-teal-900/60'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                  "
+                  :disabled="
+                    featuredSeriesId !== null ||
+                    (!series.is_published && !series.is_featured)
+                  "
+                  :title="
+                    featuredSeriesId === series.id
+                      ? 'Сохраняем подборку'
+                      : !series.is_published && !series.is_featured
+                      ? 'Сначала опубликуйте серию'
+                      : series.is_featured
+                        ? 'Убрать из подборки'
+                        : 'Добавить в подборку'
+                  "
+                  @click.stop="emit('toggleFeatured', series)"
+                >
+                  <span class="material-icons-round text-[14px]">{{
+                    series.is_featured ? "star" : "star_border"
+                  }}</span
+                  >В подборке
+                </button
                 ><button
                   type="button"
                   class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-teal-700 transition-colors hover:bg-teal-50 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-teal-300 dark:hover:bg-teal-950/40 dark:hover:text-teal-100"

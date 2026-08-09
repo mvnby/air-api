@@ -31,7 +31,8 @@ def _load_migration_module():
 def test_order_product_catalog_snapshot_is_the_single_alembic_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
-    assert script.get_heads() == ["f3a4b5c6d7e8"]
+    assert script.get_heads() == ["f4b5c6d7e8f9"]
+    assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == REVISION
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 

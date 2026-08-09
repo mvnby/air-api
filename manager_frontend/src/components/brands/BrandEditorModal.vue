@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import MediaField from "../MediaField.vue";
+import BrandShortDescriptionAiAction from "./BrandShortDescriptionAiAction.vue";
 import type { BrandForm } from "./brand-form-types";
 
 defineProps<{
@@ -58,6 +59,25 @@ const emit = defineEmits<{
           accept="image/svg+xml,image/png,image/jpeg,image/webp,.svg"
           placeholder="/media/library/original/logo.svg"
         />
+        <div class="space-y-1 text-sm">
+          <label class="block space-y-1"
+            ><span class="font-medium text-gray-600 dark:text-slate-300"
+              >Короткое описание</span
+            ><textarea
+              v-model="form.short_description"
+              rows="2"
+              maxlength="200"
+              class="w-full rounded-lg border border-gray-200 bg-slate-100 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
+            /><span class="block text-xs text-gray-500 dark:text-slate-400"
+              >1–2 строки для карточки бренда.</span
+            ></label
+          ><BrandShortDescriptionAiAction
+            :title="form.title"
+            :description="form.description"
+            :has-existing-content="Boolean(form.short_description.trim())"
+            @draft="form.short_description = $event.short_description"
+          />
+        </div>
         <label class="block space-y-1 text-sm"
           ><span class="font-medium text-gray-600 dark:text-slate-300"
             >Описание</span

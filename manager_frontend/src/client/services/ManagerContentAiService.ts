@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BrandShortDescriptionDraft } from '../models/BrandShortDescriptionDraft';
+import type { BrandShortDescriptionDraftRequest } from '../models/BrandShortDescriptionDraftRequest';
 import type { FeatureContentDraft } from '../models/FeatureContentDraft';
 import type { FeatureContentDraftRequest } from '../models/FeatureContentDraftRequest';
 import type { ProductSeriesContentDraft } from '../models/ProductSeriesContentDraft';
@@ -10,6 +12,25 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerContentAiService {
+    /**
+     * Create Manager Brand Short Description Ai Draft
+     * @param requestBody
+     * @returns BrandShortDescriptionDraft Successful Response
+     * @throws ApiError
+     */
+    public static createManagerBrandShortDescriptionAiDraft(
+        requestBody: BrandShortDescriptionDraftRequest,
+    ): CancelablePromise<BrandShortDescriptionDraft> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/content-ai/brands/short-description/draft',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Create Manager Feature Content Ai Draft
      * @param requestBody

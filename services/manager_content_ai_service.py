@@ -16,6 +16,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from schemas_content_ai import (
+    BrandShortDescriptionDraft,
+    BrandShortDescriptionDraftRequest,
     FeatureContentDraft,
     FeatureContentDraftRequest,
     ProductSeriesContentDraft,
@@ -51,7 +53,14 @@ class _SeriesProviderDraft(BaseModel):
     seo_description: str | None = None
 
 
+class _BrandShortDescriptionProviderDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    short_description: str
+
+
 class ManagerContentAIService:
+    BRAND_SHORT_DESCRIPTION_PROMPT_VERSION = "manager-brand-short-description-v1"
     FEATURE_PROMPT_VERSION = "manager-feature-content-v1"
     SERIES_PROMPT_VERSION = "manager-series-content-v1"
 
@@ -98,6 +107,31 @@ class ManagerContentAIService:
             )
         except ValidationError as exc:
             raise invalid_deepseek_response("DeepSeek returned an invalid feature draft") from exc
+
+    async def generate_brand_short_description_draft(
+        self,
+        payload: BrandShortDescriptionDraftRequest,
+    ) -> BrandShortDescriptionDraft:
+        prompt = self._brand_short_description_prompt(payload)
+        content = await self._completion_request(
+            prompt=prompt,
+            system_prompt=self._SYSTEM_PROMPT,
+            temperature=0.1,
+        )
+        parsed = self._parse_provider_json(content, _BrandShortDescriptionProviderDraft)
+        try:
+            return BrandShortDescriptionDraft(
+                short_description=self._clean_plain(
+                    parsed.short_description,
+                    200,
+                    required=True,
+                ),
+                prompt_version=self.BRAND_SHORT_DESCRIPTION_PROMPT_VERSION,
+            )
+        except ValidationError as exc:
+            raise invalid_deepseek_response(
+                "DeepSeek returned an invalid brand short-description draft"
+            ) from exc
 
     async def generate_series_draft(
         self,
@@ -204,6 +238,29 @@ class ManagerContentAIService:
                 "seo_description": 158,
             },
             "untrusted_material": material,
+        }
+        return json.dumps(task, ensure_ascii=False, separators=(",", ":"))
+
+    @classmethod
+    def _brand_short_description_prompt(
+        cls,
+        payload: BrandShortDescriptionDraftRequest,
+    ) -> str:
+        task = {
+            "prompt_version": cls.BRAND_SHORT_DESCRIPTION_PROMPT_VERSION,
+            "entity": "brand",
+            "immutable_context": {"brand_name": payload.brand_name},
+            "instructions": [
+                "Сделай одно короткое самостоятельное позиционирование бренда для карточки каталога.",
+                "Используй только подтвержденные факты из полного описания и не добавляй новые свойства.",
+                "Пиши спокойно и конкретно, без рекламных клише, превосходных степеней и сравнения с конкурентами.",
+                "Не повторяй название бренда без необходимости и верни ровно поле short_description.",
+            ],
+            "limits": {"short_description": 200},
+            "untrusted_material": {
+                "kind": "pasted_text",
+                "text": payload.full_description.strip(),
+            },
         }
         return json.dumps(task, ensure_ascii=False, separators=(",", ":"))
 

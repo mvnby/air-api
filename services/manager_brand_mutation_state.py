@@ -11,6 +11,7 @@ def snapshot_brand(brand: Brand) -> tuple[object, ...]:
         brand.title,
         brand.slug,
         brand.logo_url,
+        brand.short_description,
         brand.description,
         brand.is_published,
         brand.sort_order,
@@ -49,6 +50,7 @@ def snapshot_brand_series(series: ProductSeries) -> tuple[object, ...]:
         series.seo_title,
         series.seo_description,
         series.source_url,
+        series.is_featured,
         series.is_published,
         series.sort_order,
     )

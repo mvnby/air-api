@@ -7523,6 +7523,52 @@
         }
       }
     },
+    "/api/manager/content-ai/brands/short-description/draft": {
+      "post": {
+        "tags": [
+          "manager-content-ai"
+        ],
+        "summary": "Create Manager Brand Short Description Ai Draft",
+        "operationId": "create_manager_brand_short_description_ai_draft",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandShortDescriptionDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandShortDescriptionDraft"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/content-ai/features/draft": {
       "post": {
         "tags": [
@@ -25643,6 +25689,56 @@
         ],
         "title": "BotVoiceQuickOrderParseResponse"
       },
+      "BrandShortDescriptionDraft": {
+        "properties": {
+          "short_description": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Short Description"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "short_description",
+          "prompt_version"
+        ],
+        "title": "BrandShortDescriptionDraft"
+      },
+      "BrandShortDescriptionDraftRequest": {
+        "properties": {
+          "brand_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Name"
+          },
+          "full_description": {
+            "type": "string",
+            "maxLength": 50000,
+            "minLength": 1,
+            "title": "Full Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "full_description"
+        ],
+        "title": "BrandShortDescriptionDraftRequest",
+        "description": "Brand identity and source copy are immutable draft context."
+      },
       "BulkGalleryAddRequest": {
         "properties": {
           "product_ids": {
@@ -30138,6 +30234,18 @@
             ],
             "title": "Logo Url"
           },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -30555,6 +30663,17 @@
             ],
             "title": "Logo Url"
           },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -30944,6 +31063,11 @@
             ],
             "title": "Source Url"
           },
+          "is_featured": {
+            "type": "boolean",
+            "title": "Is Featured",
+            "default": false
+          },
           "is_published": {
             "type": "boolean",
             "title": "Is Published"
@@ -31173,6 +31297,17 @@
             ],
             "title": "Source Url"
           },
+          "is_featured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Featured"
+          },
           "is_published": {
             "anyOf": [
               {
@@ -31233,6 +31368,18 @@
               }
             ],
             "title": "Logo Url"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
           },
           "description": {
             "anyOf": [
@@ -52371,6 +52518,17 @@
             ],
             "title": "Logo Url"
           },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -52389,6 +52547,13 @@
           "sort_order": {
             "type": "integer",
             "title": "Sort Order"
+          },
+          "featured_series": {
+            "items": {
+              "$ref": "#/components/schemas/PublicFeaturedSeriesResponse"
+            },
+            "type": "array",
+            "title": "Featured Series"
           },
           "features": {
             "items": {
@@ -52433,6 +52598,17 @@
             ],
             "title": "Logo Url"
           },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
           "description": {
             "anyOf": [
               {
@@ -52451,6 +52627,13 @@
           "sort_order": {
             "type": "integer",
             "title": "Sort Order"
+          },
+          "featured_series": {
+            "items": {
+              "$ref": "#/components/schemas/PublicFeaturedSeriesResponse"
+            },
+            "type": "array",
+            "title": "Featured Series"
           }
         },
         "type": "object",
@@ -52704,6 +52887,29 @@
           "source"
         ],
         "title": "PublicFeatureResponse"
+      },
+      "PublicFeaturedSeriesResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slug",
+          "sort_order"
+        ],
+        "title": "PublicFeaturedSeriesResponse"
       },
       "PublicOrderPricingErrorDetail": {
         "properties": {

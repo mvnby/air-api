@@ -22,6 +22,7 @@ const {
   editingSeries,
   error,
   expandedSeriesIds,
+  featuredSeriesId,
   filteredBrands,
   form,
   isBrandReorderDisabled,
@@ -63,6 +64,7 @@ const {
   toast,
   toggleSeriesExpanded,
   toggleSeriesExpandedFromCard,
+  toggleSeriesFeatured,
 } = useBrandsWorkspace();
 
 const clearSeriesDropTarget = (seriesId: number) => {
@@ -112,6 +114,7 @@ const clearSeriesDropTarget = (seriesId: number) => {
       :series-error="seriesError"
       :series-reordering="reorderingSeries"
       :series-reorder-disabled="isSeriesReorderDisabled"
+      :featured-series-id="featuredSeriesId"
       :dragged-series-id="draggedSeriesId"
       :series-drop-target-id="seriesDropTargetId"
       :expanded-series-ids="expandedSeriesIds"
@@ -128,6 +131,7 @@ const clearSeriesDropTarget = (seriesId: number) => {
       @edit-series="openSeriesEdit"
       @delete-series="deleteSeries"
       @open-series-products="openSeriesProducts"
+      @toggle-series-featured="toggleSeriesFeatured"
       @toggle-series-expanded="toggleSeriesExpanded"
       @toggle-series-from-card="toggleSeriesExpandedFromCard"
       @series-drag-start="onSeriesDragStart"

@@ -559,14 +559,22 @@ class ServiceResponse(BaseModel):
     base_price: int
 
 
+class PublicFeaturedSeriesResponse(BaseModel):
+    name: str
+    slug: str
+    sort_order: int
+
+
 class PublicBrandResponse(BaseModel):
     id: int
     title: str
     slug: str
     logo_url: Optional[str] = None
+    short_description: Optional[str] = None
     description: Optional[str] = None
     products_count: int
     sort_order: int
+    featured_series: List[PublicFeaturedSeriesResponse] = Field(default_factory=list)
 
 
 class PublicBrandDetailResponse(PublicBrandResponse):
@@ -1658,6 +1666,7 @@ class ManagerBrandResponse(BaseModel):
     title: str
     slug: str
     logo_url: Optional[str] = None
+    short_description: Optional[str] = None
     description: Optional[str] = None
     is_published: bool
     sort_order: int
@@ -1673,6 +1682,7 @@ class ManagerBrandCreatePayload(BaseModel):
     title: str
     slug: Optional[str] = None
     logo_url: Optional[str] = None
+    short_description: Optional[str] = Field(default=None, max_length=200)
     description: Optional[str] = None
     is_published: bool = True
     sort_order: int = 0
@@ -1682,6 +1692,7 @@ class ManagerBrandUpdatePayload(BaseModel):
     title: Optional[str] = None
     slug: Optional[str] = None
     logo_url: Optional[str] = None
+    short_description: Optional[str] = Field(default=None, max_length=200)
     description: Optional[str] = None
     is_published: Optional[bool] = None
     sort_order: Optional[int] = None
