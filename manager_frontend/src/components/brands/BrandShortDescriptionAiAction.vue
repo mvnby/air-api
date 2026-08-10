@@ -18,26 +18,26 @@ const loading = ref(false);
 const error = ref("");
 
 const generate = async () => {
+  if (loading.value) return;
   const description = props.description.trim();
   if (!description) {
     error.value = "Сначала заполните полное описание бренда.";
     return;
   }
-  if (
-    props.hasExistingContent &&
-    !(await confirmDialog({
-      title: "Заменить короткое описание?",
-      description:
-        "AI подготовит новый черновик. Изменения останутся только в форме до сохранения.",
-      confirmText: "Заменить",
-      variant: "warning",
-    }))
-  )
-    return;
-
   loading.value = true;
   error.value = "";
   try {
+    if (
+      props.hasExistingContent &&
+      !(await confirmDialog({
+        title: "Заменить короткое описание?",
+        description:
+          "AI подготовит новый черновик. Изменения останутся только в форме до сохранения.",
+        confirmText: "Заменить",
+        variant: "warning",
+      }))
+    )
+      return;
     emit(
       "draft",
       await contentAiApi.brandShortDescriptionDraft({

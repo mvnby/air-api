@@ -48,3 +48,35 @@ async def test_api_ready_returns_200_when_public_traffic_enabled(async_client, m
     assert payload["traffic"] == "enabled"
     assert payload["database"] == "online"
     assert payload["scheduler_runtime"] == scheduler_runtime
+
+
+@pytest.mark.asyncio
+async def test_standby_fences_api_mutations_before_auth_or_database(
+    async_client,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "APP_ROLE", "standby", raising=False)
+    monkeypatch.setattr(settings, "API_READY_ENABLED", False, raising=False)
+
+    response = await async_client.post(
+        "/api/manager/content-ai/brands/short-description/draft",
+        json={"brand_name": "TCL", "full_description": "Описание"},
+    )
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "3"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["detail"]["code"] == "api_write_fenced"
+
+
+@pytest.mark.asyncio
+async def test_primary_does_not_apply_standby_write_fence(async_client, monkeypatch):
+    monkeypatch.setattr(settings, "APP_ROLE", "primary", raising=False)
+    monkeypatch.setattr(settings, "API_READY_ENABLED", True, raising=False)
+
+    response = await async_client.post(
+        "/api/manager/content-ai/brands/short-description/draft",
+        json={"brand_name": "TCL", "full_description": "Описание"},
+    )
+
+    assert response.status_code == 401

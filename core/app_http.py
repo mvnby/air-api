@@ -8,6 +8,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.app_constants import (
     INTERNAL_SERVER_ERROR_MESSAGE,
 )
+from core.api_write_fence import ApiWriteFenceMiddleware
 from core.config import settings
 from core.logger import logger
 from core.manager_error_codes import INTERNAL_ERROR, VALIDATION_ERROR, resolve_manager_error_message
@@ -155,6 +156,7 @@ def configure_http(app: FastAPI) -> None:
         StorefrontRequestGatewayMiddleware,
         max_body_bytes=settings.STOREFRONT_CONTEXT_MAX_BODY_BYTES,
     )
+    app.add_middleware(ApiWriteFenceMiddleware)
     # Added last so it is the outermost user middleware and also covers CORS
     # preflight/short-circuit responses.
     app.add_middleware(RequestContextMiddleware)

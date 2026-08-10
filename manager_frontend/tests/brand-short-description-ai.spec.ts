@@ -1,5 +1,5 @@
 import { mount, shallowMount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { brandShortDescriptionDraft, confirmDialog } = vi.hoisted(() => ({
   brandShortDescriptionDraft: vi.fn(),
@@ -13,6 +13,10 @@ vi.mock("../src/services/ui-feedback", () => ({ confirmDialog }));
 
 import BrandEditorModal from "../src/components/brands/BrandEditorModal.vue";
 import BrandShortDescriptionAiAction from "../src/components/brands/BrandShortDescriptionAiAction.vue";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("BrandShortDescriptionAiAction", () => {
   it("is unavailable until the full description is present", () => {
@@ -51,6 +55,34 @@ describe("BrandShortDescriptionAiAction", () => {
         prompt_version: "manager-brand-short-description-v1",
       },
     ]);
+  });
+
+  it("does not start duplicate requests while confirmation is open", async () => {
+    let resolveConfirmation: ((value: boolean) => void) | undefined;
+    confirmDialog.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveConfirmation = resolve;
+        }),
+    );
+    brandShortDescriptionDraft.mockResolvedValue({
+      short_description: "Короткий текст",
+      prompt_version: "manager-brand-short-description-v1",
+    });
+    const wrapper = mount(BrandShortDescriptionAiAction, {
+      props: {
+        title: "TCL",
+        description: "Полное описание",
+        hasExistingContent: true,
+      },
+    });
+
+    await wrapper.get("button").trigger("click");
+    await wrapper.get("button").trigger("click");
+
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
+    resolveConfirmation?.(true);
+    await vi.waitFor(() => expect(brandShortDescriptionDraft).toHaveBeenCalledTimes(1));
   });
 });
 
