@@ -227,6 +227,85 @@ async def test_manager_feature_scope_owner_and_series_assignment_contract(async_
 
 
 @pytest.mark.asyncio
+async def test_series_update_preserves_existing_legacy_assignment_but_rejects_new_one(
+    async_client,
+    db,
+):
+    category = FeatureCategory(slug="legacy-series-save", name="Legacy series save")
+    brand = Brand(title="Legacy Save Brand", slug="legacy-save-brand")
+    db.add_all([category, brand])
+    await db.flush()
+    series = ProductSeries(
+        brand_id=brand.id,
+        title="Legacy Save Series",
+        slug="legacy-save-series",
+    )
+    db.add(series)
+    await db.flush()
+    existing_legacy = Feature(
+        slug="legacy-save-derived",
+        name="Existing derived feature",
+        category_id=category.id,
+        scope_type="derived",
+    )
+    new_legacy = Feature(
+        slug="legacy-save-new-derived",
+        name="New derived feature",
+        category_id=category.id,
+        scope_type="derived",
+    )
+    universal = Feature(
+        slug="legacy-save-universal",
+        name="Universal feature",
+        category_id=category.id,
+        scope_type="universal",
+    )
+    db.add_all([existing_legacy, new_legacy, universal])
+    await db.flush()
+    db.add(
+        FeatureSeriesLink(
+            series_id=series.id,
+            feature_id=existing_legacy.id,
+            source="manual",
+            is_enabled=True,
+            sort_order=10,
+        )
+    )
+    await db.commit()
+    headers = await _auth_headers(async_client)
+
+    saved = await async_client.put(
+        f"/api/manager/brands/{brand.id}/series/{series.id}",
+        headers=headers,
+        json={
+            "feature_assignments": [
+                {"feature_id": existing_legacy.id, "is_featured": False},
+                {"feature_id": universal.id, "is_featured": True},
+            ]
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["feature_assignments"] == [
+        {"feature_id": universal.id, "is_featured": True},
+        {"feature_id": existing_legacy.id, "is_featured": False},
+    ]
+
+    rejected = await async_client.put(
+        f"/api/manager/brands/{brand.id}/series/{series.id}",
+        headers=headers,
+        json={
+            "feature_assignments": [
+                {"feature_id": existing_legacy.id, "is_featured": False},
+                {"feature_id": universal.id, "is_featured": True},
+                {"feature_id": new_legacy.id, "is_featured": False},
+            ]
+        },
+    )
+    assert rejected.status_code == 400
+    assert str(new_legacy.id) in rejected.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_disabled_legacy_derived_link_does_not_hide_series_or_brand(db):
     category = FeatureCategory(slug="legacy-derived-priority", name="Priority")
     brand = Brand(title="Priority Brand", slug="priority-brand")

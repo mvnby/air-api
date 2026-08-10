@@ -513,17 +513,20 @@ class ManagerBrandSeriesOperations:
         if sum(1 for _, is_featured in normalized if is_featured) > 3:
             raise HTTPException(status_code=400, detail="У серии может быть не более трёх главных фич")
 
-        await cls._validate_series_feature_ids(
-            session,
-            brand_id=brand_id,
-            feature_ids=[feature_id for feature_id, _ in normalized],
-        )
         existing_links = list(
             (
                 await session.execute(
                     select(FeatureSeriesLink).where(FeatureSeriesLink.series_id == series.id)
                 )
             ).scalars().all()
+        )
+        await cls._validate_series_feature_ids(
+            session,
+            brand_id=brand_id,
+            feature_ids=[feature_id for feature_id, _ in normalized],
+            preserved_legacy_feature_ids={
+                int(link.feature_id) for link in existing_links if link.is_enabled
+            },
         )
         existing = {int(link.feature_id): link for link in existing_links}
         requested = {feature_id: is_featured for feature_id, is_featured in normalized}
@@ -557,9 +560,11 @@ class ManagerBrandSeriesOperations:
         *,
         brand_id: int,
         feature_ids: List[int],
+        preserved_legacy_feature_ids: set[int] | None = None,
     ) -> None:
         if not feature_ids:
             return
+        preserved_legacy_ids = preserved_legacy_feature_ids or set()
         candidates = list(
             (
                 await session.execute(
@@ -574,7 +579,13 @@ class ManagerBrandSeriesOperations:
         found_ids = {
             int(feature.id)
             for feature in candidates
-            if feature.scope_type in {"universal", "brand"}
+            if (
+                feature.scope_type in {"universal", "brand"}
+                or (
+                    int(feature.id) in preserved_legacy_ids
+                    and feature.scope_type in {"series", "derived"}
+                )
+            )
             and FeatureScopePolicy.allows_target(
                 feature,
                 target_type="series",
@@ -614,6 +625,9 @@ class ManagerBrandSeriesOperations:
             session,
             brand_id=brand_id,
             feature_ids=list(normalized_ids),
+            preserved_legacy_feature_ids={
+                int(link.feature_id) for link in existing_links if link.is_enabled
+            },
         )
 
         keep_ids = set(normalized_ids)

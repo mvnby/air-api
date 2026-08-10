@@ -15,6 +15,7 @@ const props = defineProps<{
   featuresLoading: boolean;
   saving: boolean;
   galleryApplying: boolean;
+  error?: string;
 }>();
 
 const emit = defineEmits<{
@@ -400,22 +401,31 @@ const addGallery = (url = pendingGalleryImage.value) => {
         >
       </div>
       <footer
-        class="flex items-center justify-end gap-2 border-t border-gray-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/60"
+        class="flex flex-col gap-3 border-t border-gray-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/60 sm:flex-row sm:items-center sm:justify-between"
       >
-        <button
-          type="button"
-          class="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
-          @click="emit('close')"
+        <p
+          v-if="error"
+          role="alert"
+          class="text-sm font-medium text-red-700 dark:text-red-300"
         >
-          Отмена</button
-        ><button
-          type="button"
-          class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
-          :disabled="saving"
-          @click="emit('save')"
-        >
-          {{ saving ? "Сохранение..." : "Сохранить" }}
-        </button>
+          {{ error }}
+        </p>
+        <div class="flex items-center justify-end gap-2 sm:ml-auto">
+          <button
+            type="button"
+            class="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
+            @click="emit('close')"
+          >
+            Отмена</button
+          ><button
+            type="button"
+            class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+            :disabled="saving"
+            @click="emit('save')"
+          >
+            {{ saving ? "Сохранение..." : "Сохранить" }}
+          </button>
+        </div>
       </footer>
     </div>
   </div>

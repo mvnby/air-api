@@ -94,4 +94,39 @@ describe("SeriesContentAiActions", () => {
     expect(wrapper.text()).not.toContain("SEO из контента");
     expect(wrapper.text()).not.toContain("Промпт для AI");
   });
+
+  it("shows a series save error inside the open editor", () => {
+    const wrapper = shallowMount(SeriesEditorModal, {
+      props: {
+        open: true,
+        form: {
+          title: "Elite",
+          slug: "elite",
+          tagline: "",
+          short_description: "",
+          description: "",
+          hero_image: "",
+          galleryImages: [],
+          feature_assignments: [],
+          contentBlocks: [],
+          footnotesText: "",
+          seo_title: "",
+          seo_description: "",
+          source_url: "",
+          sort_order: 0,
+          is_published: true,
+        },
+        editing: true,
+        features: [],
+        featuresLoading: false,
+        saving: false,
+        galleryApplying: false,
+        error: "Фичи недоступны этой серии: 40",
+      },
+    });
+
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      "Фичи недоступны этой серии: 40",
+    );
+  });
 });
