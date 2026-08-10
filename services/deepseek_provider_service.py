@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -12,6 +13,7 @@ from core.config import settings
 
 MAX_DEEPSEEK_RESPONSE_BYTES = 512_000
 MAX_DEEPSEEK_OUTPUT_TOKENS = 4_096
+DEEPSEEK_REQUEST_DEADLINE_SECONDS = 50.0
 
 
 class DefectActAIProviderError(ValueError):
@@ -36,6 +38,7 @@ async def request_deepseek_completion(
     prompt: str,
     system_prompt: str,
     temperature: float,
+    thinking_enabled: bool | None = None,
 ) -> str:
     token = settings.DEEPSEEK_TOKEN.strip()
     if not token:
@@ -46,35 +49,42 @@ async def request_deepseek_completion(
             code="not_configured",
         )
 
+    request_payload: dict[str, Any] = {
+        "model": settings.DEEPSEEK_MODEL,
+        "temperature": temperature,
+        "max_tokens": MAX_DEEPSEEK_OUTPUT_TOKENS,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    if thinking_enabled is not None:
+        request_payload["thinking"] = {
+            "type": "enabled" if thinking_enabled else "disabled"
+        }
+
     response: httpx.Response | None = None
     try:
-        async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
-            request = client.build_request(
-                "POST",
-                settings.DEEPSEEK_API_URL,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "Accept-Encoding": "identity",
-                },
-                json={
-                    "model": settings.DEEPSEEK_MODEL,
-                    "temperature": temperature,
-                    "max_tokens": MAX_DEEPSEEK_OUTPUT_TOKENS,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                },
-            )
-            response = await client.send(request, stream=True)
-            try:
-                raw_response = await _read_limited_response(response)
-            finally:
-                await response.aclose()
-    except httpx.TimeoutException as exc:
+        async with asyncio.timeout(DEEPSEEK_REQUEST_DEADLINE_SECONDS):
+            async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+                request = client.build_request(
+                    "POST",
+                    settings.DEEPSEEK_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "Accept-Encoding": "identity",
+                    },
+                    json=request_payload,
+                )
+                response = await client.send(request, stream=True)
+                try:
+                    raw_response = await _read_limited_response(response)
+                finally:
+                    await response.aclose()
+    except (TimeoutError, httpx.TimeoutException) as exc:
         raise DefectActAIProviderError(
             "DeepSeek request timed out",
             status=None,

@@ -62,6 +62,7 @@ async def test_brand_short_description_draft_is_grounded_clean_and_capped():
     assert result.short_description == "Бытовые серии для разных сценариев"
     assert result.prompt_version == "manager-brand-short-description-v1"
     assert captured["temperature"] == 0.1
+    assert captured["thinking_enabled"] is False
     prompt = json.loads(captured["prompt"])
     assert prompt["entity"] == "brand"
     assert prompt["immutable_context"] == {"brand_name": "TCL"}
@@ -87,6 +88,36 @@ async def test_brand_short_description_draft_rejects_extra_provider_fields():
         )
 
     assert raised.value.code == "invalid_response"
+
+
+@pytest.mark.asyncio
+async def test_brand_short_description_prefers_complete_sentence_when_capped():
+    async def completion_request(**_kwargs):
+        return json.dumps(
+            {
+                "short_description": (
+                    "Бренд предлагает бытовые и коммерческие системы для квартир, "
+                    "домов, офисов и магазинов. "
+                    "Вторая фраза заведомо длинная и не должна остаться обрезанным "
+                    "фрагментом после достижения установленного лимита карточки. "
+                    "Дополнительный хвост делает ответ длиннее двухсот символов."
+                )
+            },
+            ensure_ascii=False,
+        )
+
+    service = ManagerContentAIService(completion_request=completion_request)
+    result = await service.generate_brand_short_description_draft(
+        BrandShortDescriptionDraftRequest(
+            brand_name="TCL",
+            full_description="Исходное описание бренда.",
+        )
+    )
+
+    assert result.short_description == (
+        "Бренд предлагает бытовые и коммерческие системы для квартир, домов, "
+        "офисов и магазинов."
+    )
 
 
 @pytest.mark.asyncio

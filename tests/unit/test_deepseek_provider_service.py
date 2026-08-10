@@ -60,12 +60,14 @@ async def test_deepseek_transport_is_bounded_and_disables_environment_proxy(monk
         prompt="prompt",
         system_prompt="system",
         temperature=0.1,
+        thinking_enabled=False,
     )
 
     assert result == '{"ok":true}'
     assert _RecordingClient.init_kwargs["trust_env"] is False
     request_payload = json.loads(_RecordingClient.request.content)
     assert request_payload["max_tokens"] == 4096
+    assert request_payload["thinking"] == {"type": "disabled"}
     assert _RecordingClient.request.headers["accept-encoding"] == "identity"
 
 

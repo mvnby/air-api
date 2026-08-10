@@ -94,6 +94,7 @@ class ManagerContentAIService:
             prompt=prompt,
             system_prompt=self._SYSTEM_PROMPT,
             temperature=0.1,
+            thinking_enabled=False,
         )
         parsed = self._parse_provider_json(content, _FeatureProviderDraft)
         try:
@@ -117,6 +118,7 @@ class ManagerContentAIService:
             prompt=prompt,
             system_prompt=self._SYSTEM_PROMPT,
             temperature=0.1,
+            thinking_enabled=False,
         )
         parsed = self._parse_provider_json(content, _BrandShortDescriptionProviderDraft)
         try:
@@ -143,6 +145,7 @@ class ManagerContentAIService:
             prompt=prompt,
             system_prompt=self._SYSTEM_PROMPT,
             temperature=0.1,
+            thinking_enabled=False,
         )
         parsed = self._parse_provider_json(content, _SeriesProviderDraft)
         try:
@@ -374,6 +377,13 @@ class ManagerContentAIService:
         if len(value) <= max_length:
             return value
         shortened = value[:max_length].rstrip()
+        sentence_boundary = max(
+            shortened.rfind("."),
+            shortened.rfind("!"),
+            shortened.rfind("?"),
+        )
+        if sentence_boundary >= max(40, max_length // 3):
+            return shortened[: sentence_boundary + 1].rstrip()
         boundary = max(shortened.rfind(" "), shortened.rfind("\n"))
         if boundary >= max_length // 2:
             shortened = shortened[:boundary].rstrip(" ,;:-")
