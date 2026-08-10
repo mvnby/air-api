@@ -159,6 +159,7 @@ const clearSeriesDropTarget = (seriesId: number) => {
       :features-loading="catalogFeaturesLoading"
       :saving="seriesSaving"
       :gallery-applying="seriesGalleryApplying"
+      :error="seriesError"
       @close="closeSeriesModal"
       @save="saveSeries"
       @apply-gallery="applySeriesGalleryToProducts"
