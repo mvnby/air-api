@@ -510,7 +510,11 @@ export type { SupplierMappingBulkErrorResponse } from './models/SupplierMappingB
 export type { SupplierMappingBulkItemPayload } from './models/SupplierMappingBulkItemPayload';
 export type { SupplierMappingCreatePayload } from './models/SupplierMappingCreatePayload';
 export type { SupplierMappingResponse } from './models/SupplierMappingResponse';
+export type { SupplierOfferCandidateListResponse } from './models/SupplierOfferCandidateListResponse';
+export type { SupplierOfferCandidateResponse } from './models/SupplierOfferCandidateResponse';
 export type { SupplierOfferListResponse } from './models/SupplierOfferListResponse';
+export type { SupplierOfferMappingPutPayload } from './models/SupplierOfferMappingPutPayload';
+export type { SupplierOfferMappingResponse } from './models/SupplierOfferMappingResponse';
 export type { SupplierOfferResponse } from './models/SupplierOfferResponse';
 export type { SupplierOfferSuggestionCandidate } from './models/SupplierOfferSuggestionCandidate';
 export type { SupplierOfferSuggestionItem } from './models/SupplierOfferSuggestionItem';

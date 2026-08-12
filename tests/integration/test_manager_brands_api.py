@@ -364,7 +364,7 @@ async def test_manager_brand_series_delete_forbidden_when_products_linked(async_
 
 
 @pytest.mark.asyncio
-async def test_manager_brand_series_list_auto_creates_series_from_product_specs(async_client, db):
+async def test_manager_brand_series_list_is_read_only(async_client, db):
     headers = await _auth_headers(async_client)
 
     brand_resp = await async_client.post(
@@ -409,24 +409,19 @@ async def test_manager_brand_series_list_auto_creates_series_from_product_specs(
     )
 
     assert list_resp.status_code == 200, list_resp.text
-    items = list_resp.json()["items"]
-    by_slug = {item["slug"]: item for item in items}
-    assert by_slug["cosmo"]["title"] == "COSMO"
-    assert by_slug["cosmo"]["products_count"] == 2
-    assert by_slug["luna-matt"]["title"] == "LUNA Matt"
-    assert by_slug["luna-matt"]["products_count"] == 1
+    assert list_resp.json()["items"] == []
     after_first_revision = await CatalogRevisionService.get_current(db)
 
     db.expire_all()
     for product_id in product_ids:
         updated = await db.get(Product, product_id)
-        assert updated.series_id is not None
+        assert updated.series_id is None
 
     second_list_resp = await async_client.get(
         f"/api/manager/brands/{brand_id}/series",
         headers=headers,
     )
     assert second_list_resp.status_code == 200, second_list_resp.text
-    assert second_list_resp.json()["items"] == items
+    assert second_list_resp.json()["items"] == []
     after_second_revision = await CatalogRevisionService.get_current(db)
     assert after_second_revision["revision"] == after_first_revision["revision"]

@@ -14,6 +14,7 @@ from services.brand_series_service import sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
 from services.product_attachment_service import replace_manuals
 from services.product_kind_service import ProductKindService
+from services.product_series_assignment_service import ProductSeriesAssignmentService
 from services.spec_normalizer import normalize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 
@@ -66,6 +67,8 @@ class ProductWriteService:
     ) -> Dict[str, Any]:
         payload = dict(create_data)
         manuals_payload = payload.pop("manuals", [])
+        explicit_series_override = "series_id" in payload
+        explicit_series_id = payload.pop("series_id", None)
         selected_tags = await ProductWriteService._resolve_tags(session, tag_ids)
         title = str(payload.get("title") or "").strip()
         if not title:
@@ -102,7 +105,6 @@ class ProductWriteService:
             is_published=bool(payload.get("is_published", True)),
             source_url=payload.get("source_url"),
             brand_id=payload.get("brand_id"),
-            series_id=payload.get("series_id"),
         )
         session.add(product)
         await session.flush()
@@ -120,6 +122,8 @@ class ProductWriteService:
             tags=selected_tags,
             explicit_brand_id=payload.get("brand_id"),
             explicit_brand_override="brand_id" in payload,
+            explicit_series_id=explicit_series_id,
+            explicit_series_override=explicit_series_override,
         )
         await CatalogRevisionService.stage_invalidation(
             session,
@@ -148,6 +152,8 @@ class ProductWriteService:
 
         payload = dict(overrides)
         manuals_payload = payload.pop("manuals", None)
+        explicit_series_override = "series_id" in payload
+        explicit_series_id = payload.pop("series_id", None)
         title = str(payload.get("title") or source.title or "").strip()
         if not title:
             raise ValueError("Название товара обязательно.")
@@ -196,7 +202,8 @@ class ProductWriteService:
             is_published=is_published,
             source_url=payload.get("source_url"),
             brand_id=payload.get("brand_id", source.brand_id),
-            series_id=payload.get("series_id", source.series_id),
+            series_id=source.series_id,
+            series_assignment_source=source.series_assignment_source,
         )
         session.add(product)
         await session.flush()
@@ -244,6 +251,9 @@ class ProductWriteService:
             tags=selected_tags,
             explicit_brand_id=payload.get("brand_id"),
             explicit_brand_override="brand_id" in payload,
+            explicit_series_id=explicit_series_id,
+            explicit_series_override=explicit_series_override,
+            original_brand_id=source.brand_id,
         )
         await CatalogRevisionService.stage_invalidation(
             session,
@@ -294,6 +304,20 @@ class ProductWriteService:
     ) -> Optional[Dict[str, Any]]:
         payload = dict(update_data)
         manuals_payload = payload.pop("manuals", None)
+        explicit_series_override = "series_id" in payload
+        explicit_series_id = payload.pop("series_id", None)
+        existing_product = await ProductDAO.get_by_id(session, product_id)
+        if not existing_product:
+            return None
+        original_brand_id = existing_product.brand_id
+        await ProductSeriesAssignmentService.validate_update_request(
+            session,
+            product=existing_product,
+            requested_brand_id=payload.get("brand_id"),
+            explicit_brand_override="brand_id" in payload,
+            requested_series_id=explicit_series_id,
+            explicit_series_override=explicit_series_override,
+        )
         wifi_tag_slugs: Optional[List[str]] = None
         selected_tags: Optional[List[Tag]] = None
         if tag_ids is not None:
@@ -306,16 +330,12 @@ class ProductWriteService:
             wifi_tag_slugs = [tag.slug for tag in selected_tags if tag.slug in {"wifi-builtin", "wifi-ready"}]
 
         if "specs" in payload and payload["specs"] is not None:
-            existing_product = None
             if wifi_tag_slugs is None:
-                existing_product = await ProductDAO.get_by_id(session, product_id)
                 wifi_tag_slugs = [
                     tag.slug
                     for tag in (existing_product.tags or [])
                     if tag.slug in {"wifi-builtin", "wifi-ready"}
                 ] if existing_product else []
-            if existing_product is None and "title" not in payload:
-                existing_product = await ProductDAO.get_by_id(session, product_id)
             payload["specs"] = normalize_specs(
                 payload["specs"],
                 wifi_tag_slugs=wifi_tag_slugs,
@@ -345,6 +365,7 @@ class ProductWriteService:
                 product_id=product_id,
                 manuals=manuals_payload,
             )
+            session.expire(product, ["attachments"])
 
         explicit_brand_override = "brand_id" in payload
         explicit_brand_id = payload.get("brand_id") if explicit_brand_override else None
@@ -356,6 +377,15 @@ class ProductWriteService:
             tags=selected_tags,
             explicit_brand_id=explicit_brand_id,
             explicit_brand_override=explicit_brand_override,
+            explicit_series_id=explicit_series_id,
+            explicit_series_override=explicit_series_override,
+            original_brand_id=original_brand_id,
+            allow_series_title_fallback=(
+                explicit_series_override
+                or "title" in payload
+                or "specs" in payload
+                or tag_ids is not None
+            ),
         )
         await CatalogRevisionService.stage_invalidation(
             session,

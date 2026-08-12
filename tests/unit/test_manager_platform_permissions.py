@@ -40,6 +40,7 @@ from routers import (
     manager_settings,
     manager_specs,
     manager_supply,
+    manager_supplier_mapping,
     manager_tags,
     manager_tariffs,
     manager_warranties,
@@ -63,6 +64,7 @@ PLATFORM_ROUTERS = (
     manager_product_collections.router,
     manager_mdv_catalog.router,
     manager_supply.router,
+    manager_supplier_mapping.router,
     manager_media_gallery_write.router,
     manager_media_ingest_write.router,
     manager_media_library.router,
@@ -87,6 +89,7 @@ PURE_GLOBAL_MUTATION_ROUTERS = (
     manager_product_collections.router,
     manager_mdv_catalog.router,
     manager_supply.router,
+    manager_supplier_mapping.router,
     manager_media_gallery_write.router,
     manager_media_ingest_write.router,
     manager_media_library.router,
@@ -95,6 +98,7 @@ PURE_GLOBAL_MUTATION_ROUTERS = (
 )
 FULLY_SYSTEM_SCOPED_ROUTERS = (
     manager_supply.router,
+    manager_supplier_mapping.router,
     manager_media_library.router,
     manager_media_processing.router,
     manager_media_cleanup.router,

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Column, Float, Index, String, UniqueConstraint, cast, func
+from sqlalchemy import CheckConstraint, Column, Float, Index, String, UniqueConstraint, cast, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, JSON, Relationship, SQLModel
 
@@ -56,6 +56,13 @@ class Tag(SQLModel, table=True):
 
 
 class Product(SQLModel, table=True):
+    __table_args__ = (
+        CheckConstraint(
+            "series_assignment_source IN ('manual', 'derived')",
+            name="ck_product_series_assignment_source",
+        ),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
 
     title: str = Field(index=True)
@@ -91,6 +98,10 @@ class Product(SQLModel, table=True):
         foreign_key="product_series.id",
         ondelete="SET NULL",
         index=True,
+    )
+    series_assignment_source: str = Field(
+        default="derived",
+        sa_column=Column(String(16), nullable=False, server_default="derived"),
     )
     brand: Optional["Brand"] = Relationship(back_populates="products")
     series: Optional["ProductSeries"] = Relationship(back_populates="products")

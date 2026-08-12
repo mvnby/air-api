@@ -51,7 +51,7 @@ const dirty = ref(false);
 const errorMessage = ref('');
 const toast = ref('');
 const moreOpen = ref(false);
-const supplierOfferCount = ref(0);
+const supplierOfferCount = ref<number | null>(null);
 const qualityProduct = ref<QualityProduct | null>(null);
 const qualityLoaded = ref(false);
 const rebuildStatus = ref<WebRebuildStatusResponse | null>(null);
@@ -146,13 +146,12 @@ const loadProduct = async () => {
   loading.value = true;
   errorMessage.value = '';
   try {
-    const [detail, offers, rebuild] = await Promise.all([
+    const [detail, rebuild] = await Promise.all([
       api.getManagerProduct(productId),
-      api.getProductSupplierOffers(productId).catch(() => ({ items: [] } as any)),
       api.getWebRebuildStatus().catch(() => null),
     ]);
     product.value = detail;
-    supplierOfferCount.value = Number(offers?.items?.length || 0);
+    supplierOfferCount.value = null;
     rebuildStatus.value = rebuild;
     loading.value = false;
     void loadProductQuality(detail);
@@ -303,7 +302,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
           <button type="button" class="hidden h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 sm:inline-flex" :disabled="!publicProductUrl" @click="openPublicProduct">
             <ExternalLink class="h-4 w-4" /> На сайте
           </button>
-          <button type="button" class="inline-flex h-9 items-center gap-2 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50" :disabled="saving || loading || activeSection === 'media'" @click="saveCurrent">
+          <button v-if="activeSection !== 'features'" type="button" class="inline-flex h-9 items-center gap-2 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50" :disabled="saving || loading || activeSection === 'media'" @click="saveCurrent">
             <Save class="h-4 w-4" /> <span class="hidden sm:inline">{{ saving ? 'Сохранение…' : 'Сохранить' }}</span>
           </button>
           <div class="relative">
@@ -343,7 +342,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
         <button v-for="section in sections" :key="section.id" type="button" class="flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition xl:mb-1 xl:w-full" :class="activeSection === section.id ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200' : 'text-gray-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-900'" @click="scrollToSection(section.id)">
           <component :is="section.icon" class="h-4 w-4" />{{ section.label }}
           <span v-if="section.id === 'media'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800">{{ mediaCount }}</span>
-          <span v-if="section.id === 'suppliers'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800">{{ supplierOfferCount }}</span>
+          <span v-if="section.id === 'suppliers'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800" :title="supplierOfferCount == null ? 'Счётчик будет доступен после загрузки предложений' : undefined">{{ supplierOfferCount == null ? '—' : supplierOfferCount }}</span>
           <span v-if="section.id === 'publication' && rebuildStatus?.needs_rebuild" class="ml-auto h-2 w-2 rounded-full bg-amber-500" title="Сайт требует пересборки" />
         </button>
       </nav>
@@ -351,7 +350,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
       <main class="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <ProductWorkspaceMedia v-show="activeSection === 'media'" :product="product" @open-editor="openMediaEditor" />
         <ProductWorkspaceFeatures v-if="activeSection === 'features'" :product="product" />
-        <ProductEditModal ref="editor" v-show="!['media', 'features'].includes(activeSection)" :model-value="true" :product="product" mode="edit" presentation="workspace" :workspace-section="activeSection" :expert-mode="expertMode" @update:model-value="goBack" @dirty-change="dirty = $event" />
+        <ProductEditModal ref="editor" v-show="!['media', 'features'].includes(activeSection)" :model-value="true" :product="product" mode="edit" presentation="workspace" :workspace-section="activeSection" :expert-mode="expertMode" @update:model-value="goBack" @dirty-change="dirty = $event" @supplier-offers-loaded="supplierOfferCount = $event" />
       </main>
 
       <aside class="space-y-4 xl:sticky xl:top-[132px] xl:self-start">

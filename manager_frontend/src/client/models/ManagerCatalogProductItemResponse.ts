@@ -10,6 +10,7 @@ export type ManagerCatalogProductItemResponse = {
     id: number;
     brand_id?: (number | null);
     series_id?: (number | null);
+    series_assignment_source?: 'manual' | 'derived';
     title: string;
     slug: (string | null);
     price: number;

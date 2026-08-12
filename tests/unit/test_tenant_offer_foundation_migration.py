@@ -53,7 +53,7 @@ def _create_parent_schema(connection) -> None:
 def test_tenant_offer_foundation_precedes_the_catalog_revision_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
-    assert script.get_heads() == ["f4b5c6d7e8f9"]
+    assert script.get_heads() == ["f5c6d7e8a9b0"]
     assert script.get_revision("f2a3b4c5d6e7").down_revision == HEAD_REVISION
     assert script.get_revision(HEAD_REVISION).down_revision == "aa91c2d4e6f8"
     assert script.get_revision("aa91c2d4e6f8").down_revision == "e1f2a3b4c5d6"

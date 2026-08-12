@@ -92,7 +92,6 @@ MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS = frozenset(
         "manager_brand.create_brand_feature",
         "manager_brand.update_brand_feature",
         "manager_brand.delete_brand_feature",
-        "manager_brand.list_brand_series",
         "manager_brand.create_brand_series",
         "manager_brand.update_brand_series",
         "manager_brand.apply_series_gallery_to_products",
@@ -207,9 +206,7 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
         "ManagerBrandService.delete_brand_feature": frozenset(
             {"manager_brand.delete_brand_feature"}
         ),
-        "ManagerBrandService.list_brand_series": frozenset(
-            {"manager_brand.list_brand_series"}
-        ),
+        "ManagerBrandService.list_brand_series": frozenset(),
         "ManagerBrandService.create_brand_series": frozenset(
             {"manager_brand.create_brand_series"}
         ),
@@ -330,10 +327,6 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
         "manager_brand.delete_brand_feature": _contract(
             "manager_brand.delete_brand_feature",
             "brand_feature_delete",
-        ),
-        "manager_brand.list_brand_series": _contract(
-            "manager_brand.list_brand_series",
-            "brand_series_auto_sync",
         ),
         "manager_brand.create_brand_series": _contract(
             "manager_brand.create_brand_series",

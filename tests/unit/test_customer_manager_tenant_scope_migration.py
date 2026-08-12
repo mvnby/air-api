@@ -13,7 +13,7 @@ REVISION = "b8d9e0f1a2c3"
 CONTRACT_REVISION = "c9e0f1a2b3d4"
 STOREFRONT_IDEMPOTENCY_REVISION = "d0f1a2b3c4d5"
 TENANT_OFFER_REVISION = "d0a1b2c3e4f6"
-HEAD_REVISION = "f4b5c6d7e8f9"
+HEAD_REVISION = "f5c6d7e8a9b0"
 WEBSITE_CANARY_REVISION = "ab02c3d4e5f6"
 PUBLIC_WRITE_REVISION = "aa91c2d4e6f8"
 CATALOG_REVISION = "e1f2a3b4c5d6"
@@ -94,7 +94,8 @@ def _create_legacy_schema(connection) -> None:
 def test_customer_manager_tenant_scope_is_single_alembic_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     assert script.get_current_head() == HEAD_REVISION
-    assert script.get_revision(HEAD_REVISION).down_revision == "f3a4b5c6d7e8"
+    assert script.get_revision(HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
+    assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == "f2a3b4c5d6e7"
     assert script.get_revision("f2a3b4c5d6e7").down_revision == WEBSITE_CANARY_REVISION
     assert (

@@ -571,6 +571,7 @@ async def list_unmapped_supplier_offers(
     limit: int = Query(50, ge=1, le=100),
     supplier_id: Optional[int] = Query(None),
     source_id: Optional[int] = Query(None),
+    q: Optional[str] = Query(None, max_length=200),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
@@ -578,6 +579,7 @@ async def list_unmapped_supplier_offers(
         session=session,
         supplier_id=supplier_id,
         source_id=source_id,
+        query=q,
         page=page,
         limit=limit,
     )

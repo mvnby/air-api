@@ -82,7 +82,10 @@ import type { SupplierMappingBulkCreatePayload } from '../models/SupplierMapping
 import type { SupplierMappingBulkCreateResponse } from '../models/SupplierMappingBulkCreateResponse';
 import type { SupplierMappingCreatePayload } from '../models/SupplierMappingCreatePayload';
 import type { SupplierMappingResponse } from '../models/SupplierMappingResponse';
+import type { SupplierOfferCandidateListResponse } from '../models/SupplierOfferCandidateListResponse';
 import type { SupplierOfferListResponse } from '../models/SupplierOfferListResponse';
+import type { SupplierOfferMappingPutPayload } from '../models/SupplierOfferMappingPutPayload';
+import type { SupplierOfferMappingResponse } from '../models/SupplierOfferMappingResponse';
 import type { SupplierOfferSuggestionsPayload } from '../models/SupplierOfferSuggestionsPayload';
 import type { SupplierOfferSuggestionsResponse } from '../models/SupplierOfferSuggestionsResponse';
 import type { SupplierPriceSourceCreatePayload } from '../models/SupplierPriceSourceCreatePayload';
@@ -1969,6 +1972,7 @@ export class ManagerService {
      * @param limit
      * @param supplierId
      * @param sourceId
+     * @param q
      * @returns SupplierOfferListResponse Successful Response
      * @throws ApiError
      */
@@ -1977,6 +1981,7 @@ export class ManagerService {
         limit: number = 50,
         supplierId?: (number | null),
         sourceId?: (number | null),
+        q?: (string | null),
     ): CancelablePromise<SupplierOfferListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -1986,6 +1991,7 @@ export class ManagerService {
                 'limit': limit,
                 'supplier_id': supplierId,
                 'source_id': sourceId,
+                'q': q,
             },
             errors: {
                 422: `Validation Error`,
@@ -2337,6 +2343,70 @@ export class ManagerService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/supply-requests/message/logistics',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Product Supplier Offer Candidates
+     * @param productId
+     * @param supplierId
+     * @param sourceId
+     * @param q
+     * @param page
+     * @param limit
+     * @param includeInactive
+     * @returns SupplierOfferCandidateListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listProductSupplierOfferCandidates(
+        productId: number,
+        supplierId: number,
+        sourceId?: (number | null),
+        q?: (string | null),
+        page: number = 1,
+        limit: number = 50,
+        includeInactive: boolean = false,
+    ): CancelablePromise<SupplierOfferCandidateListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/products/{product_id}/supplier-offer-candidates',
+            path: {
+                'product_id': productId,
+            },
+            query: {
+                'supplier_id': supplierId,
+                'source_id': sourceId,
+                'q': q,
+                'page': page,
+                'limit': limit,
+                'include_inactive': includeInactive,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Put Supplier Offer Mapping
+     * @param offerId
+     * @param requestBody
+     * @returns SupplierOfferMappingResponse Successful Response
+     * @throws ApiError
+     */
+    public static putSupplierOfferMapping(
+        offerId: number,
+        requestBody: SupplierOfferMappingPutPayload,
+    ): CancelablePromise<SupplierOfferMappingResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/supplier-offers/{offer_id}/mapping',
+            path: {
+                'offer_id': offerId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

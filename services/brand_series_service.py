@@ -403,7 +403,6 @@ async def ensure_brand(
         if not existing.title and normalized_title:
             existing.title = normalized_title
             session.add(existing)
-            await session.flush()
             return existing, True
         return existing, False
 
@@ -484,9 +483,13 @@ async def sync_product_brand_series(
     tags: Optional[Sequence[Tag]] = None,
     explicit_brand_id: Optional[int] = None,
     explicit_brand_override: bool = False,
+    explicit_series_id: object = None,
+    explicit_series_override: bool = False,
+    original_brand_id: Optional[int] = None,
     allow_series_tag_fallback: bool = True,
     allow_series_title_fallback: bool = True,
     clear_series_when_missing: bool = False,
+    change_kinds: Optional[set[str]] = None,
 ) -> bool:
     data_specs = specs if specs is not None else (product.specs or {})
     product_title = title if title is not None else (product.title or "")
@@ -551,6 +554,8 @@ async def sync_product_brand_series(
                 title=brand_name,
                 slug=brand_slug,
             )
+            if brand_changed and change_kinds is not None:
+                change_kinds.add("taxonomy")
             changed = changed or brand_changed
             if product.brand_id != brand.id:
                 product.brand_id = brand.id
@@ -566,26 +571,28 @@ async def sync_product_brand_series(
             ):
                 changed = True
 
-    series_name = extract_series_name(
-        specs=data_specs,
-        tags=tag_list if allow_series_tag_fallback else [],
-        group_slug_by_id=group_slug_by_id,
-        title=product_title if allow_series_title_fallback else "",
-        brand_name=brand_name if allow_series_title_fallback else None,
+    from services.product_series_assignment_service import (
+        ProductSeriesAssignmentService,
+        SERIES_ID_UNSET,
     )
-    if series_name:
-        series, series_changed = await ensure_series(
-            session,
-            title=series_name,
-            brand_id=product.brand_id,
-        )
-        changed = changed or series_changed
-        if product.series_id != series.id:
-            product.series_id = series.id
-            changed = True
-    elif clear_series_when_missing and product.series_id is not None:
-        product.series_id = None
-        changed = True
+
+    series_changed = await ProductSeriesAssignmentService.assign(
+        session,
+        product=product,
+        requested_series_id=(explicit_series_id if explicit_series_override else SERIES_ID_UNSET),
+        specs=data_specs,
+        title=product_title,
+        tags=tag_list,
+        group_slug_by_id=group_slug_by_id,
+        brand_name=brand_name,
+        original_brand_id=original_brand_id,
+        explicit_brand_override=explicit_brand_override,
+        allow_series_tag_fallback=allow_series_tag_fallback,
+        allow_series_title_fallback=allow_series_title_fallback,
+        clear_series_when_missing=clear_series_when_missing,
+        change_kinds=change_kinds,
+    )
+    changed = changed or series_changed
 
     if changed:
         session.add(product)
