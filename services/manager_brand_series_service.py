@@ -6,7 +6,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Brand, FeatureSeriesLink, Product, ProductSeries
-from services.brand_series_service import extract_series_name, sync_product_brand_series
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
 from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.manager_brand_mutation_state import snapshot_brand_series
@@ -25,11 +24,6 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
         brand = await session.get(Brand, brand_id)
         if brand is None:
             raise HTTPException(status_code=404, detail="Бренд не найден.")
-
-        await cls._sync_missing_product_series_for_brand(
-            session,
-            brand=brand,
-        )
 
         rows = (
             await session.execute(
@@ -52,50 +46,6 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
             )
             for series, products_count in rows
         ]
-
-    @classmethod
-    async def _sync_missing_product_series_for_brand(
-        cls,
-        session: AsyncSession,
-        *,
-        brand: Brand,
-    ) -> int:
-        products = (
-            await session.execute(
-                select(Product).where(
-                    Product.brand_id == brand.id,
-                    Product.series_id.is_(None),
-                )
-            )
-        ).scalars().all()
-
-        changed_product_ids: List[int] = []
-        for product in products:
-            if not extract_series_name(specs=product.specs or {}):
-                continue
-
-            if await sync_product_brand_series(
-                session,
-                product=product,
-                specs=product.specs or {},
-                title=product.title or "",
-                explicit_brand_id=brand.id,
-                explicit_brand_override=True,
-            ):
-                if product.id is not None:
-                    changed_product_ids.append(int(product.id))
-
-        if not changed_product_ids:
-            return 0
-
-        await CatalogInvalidationCommitService.commit_registered_global_mutation(
-            session,
-            producer="manager_brand.list_brand_series",
-            changed=True,
-            product_ids=changed_product_ids,
-            brand_slugs=[brand.slug],
-        )
-        return len(changed_product_ids)
 
     @classmethod
     async def create_brand_series(

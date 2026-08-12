@@ -438,14 +438,17 @@ class ImporterService:
                 session.add(product)
                 catalog_changed = True
 
+            brand_series_change_kinds: set[str] = set()
             brand_series_changed = await sync_product_brand_series(
                 session,
                 product=product,
                 specs=normalized_specs,
                 title=title,
                 tags=tag_objects,
+                change_kinds=brand_series_change_kinds,
             )
-            catalog_changed = catalog_changed or brand_series_changed
+            if previous_product_state is None or "taxonomy" in brand_series_change_kinds:
+                catalog_changed = catalog_changed or brand_series_changed
             await session.flush()
 
             if previous_product_state is not None:

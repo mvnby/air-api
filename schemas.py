@@ -763,6 +763,7 @@ class ManagerCatalogProductItemResponse(BaseModel):
     id: int
     brand_id: Optional[int] = None
     series_id: Optional[int] = None
+    series_assignment_source: Literal["manual", "derived"] = "derived"
     title: str
     slug: Optional[str]
     price: int

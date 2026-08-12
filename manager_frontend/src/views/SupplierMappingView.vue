@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
+import { supplierMappingApi } from '../services/product-supplier-offers-api';
 
 const loading = ref(false);
 const error = ref('');
@@ -25,6 +26,10 @@ const sourceUrlSelection = ref<Record<string, boolean>>({});
 const sourceUrlLoading = ref(false);
 const sourceUrlImportLoading = ref(false);
 const importWithRelated = ref(false);
+const query = ref('');
+const page = ref(1);
+const limit = 25;
+const meta = ref({ total: 0, page: 1, limit, pages: 1 });
 
 const keyOf = (offer: any) => `${offer.supplier_id}:${offer.external_id}`;
 const readyToApplyCount = computed(() => Object.keys(bulkSelection.value).filter((k) => bulkSelection.value[k] && selectedProductMap.value[k]).length);
@@ -62,13 +67,13 @@ const loadUnmapped = async () => {
   loading.value = true;
   error.value = '';
   try {
-    const res = await api.listUnmappedSupplierOffers(
-      1,
-      100,
-      supplierFilterId.value ? Number(supplierFilterId.value) : undefined,
-      sourceFilterId.value ? Number(sourceFilterId.value) : undefined,
-    );
+    const res = await supplierMappingApi.listUnmapped(page.value, limit, {
+      supplierId: supplierFilterId.value ? Number(supplierFilterId.value) : undefined,
+      sourceId: sourceFilterId.value ? Number(sourceFilterId.value) : undefined,
+      q: query.value,
+    });
     unmapped.value = res.items || [];
+    meta.value = res.meta || { total: 0, page: page.value, limit, pages: 1 };
     expandedKey.value = null;
   } catch (e) {
     error.value = getApiErrorMessage(e);
@@ -246,10 +251,25 @@ watch(supplierFilterId, async (value) => {
     const sourceValid = filteredSources.value.some((s) => String(s.id) === sourceFilterId.value);
     if (!sourceValid) sourceFilterId.value = '';
   }
+  page.value = 1;
   await loadUnmapped();
 });
 
-watch(sourceFilterId, loadUnmapped);
+watch(sourceFilterId, async () => {
+  page.value = 1;
+  await loadUnmapped();
+});
+
+const applySearch = async () => {
+  page.value = 1;
+  await loadUnmapped();
+};
+
+const goToPage = async (nextPage: number) => {
+  if (nextPage < 1 || nextPage > meta.value.pages || nextPage === page.value) return;
+  page.value = nextPage;
+  await loadUnmapped();
+};
 
 onMounted(async () => {
   await loadFilters();
@@ -280,6 +300,10 @@ onMounted(async () => {
             {{ src.supplier_name || `#${src.supplier_id}` }} / {{ src.sheet_name || `source #${src.id}` }}
           </option>
         </select>
+        <form class="flex min-w-64 flex-1 gap-2" @submit.prevent="applySearch">
+          <input v-model="query" type="search" class="min-w-0 flex-1 rounded border px-3 py-2" placeholder="Поиск по названию или артикулу" />
+          <button type="submit" class="rounded border border-slate-300 px-3 py-2 text-sm font-semibold">Найти</button>
+        </form>
         <button
           class="px-3 py-2 rounded bg-slate-900 text-white disabled:opacity-50"
           :disabled="suggestionLoading || loading"
@@ -362,14 +386,14 @@ onMounted(async () => {
       <table class="w-full text-sm">
         <thead class="bg-gray-50 dark:bg-slate-900/40 text-gray-500">
           <tr>
-            <th class="p-3 text-left">Batch</th>
-            <th class="p-3 text-left">Supplier</th>
-            <th class="p-3 text-left">SKU/ID</th>
-            <th class="p-3 text-left">Title</th>
-            <th class="p-3 text-left">Qty</th>
-            <th class="p-3 text-left">Wholesale</th>
+            <th class="p-3 text-left">Выбор</th>
+            <th class="p-3 text-left">Поставщик</th>
+            <th class="p-3 text-left">Артикул</th>
+            <th class="p-3 text-left">Название</th>
+            <th class="p-3 text-left">Остаток</th>
+            <th class="p-3 text-left">Закупка</th>
             <th class="p-3 text-left">Сигнал</th>
-            <th class="p-3 text-right">Action</th>
+            <th class="p-3 text-right">Действие</th>
           </tr>
         </thead>
         <tbody>
@@ -425,7 +449,7 @@ onMounted(async () => {
                 </span>
               </td>
               <td class="p-3 text-right">
-                <button class="px-2 py-1 rounded bg-teal-600 text-white" @click="toggleMap(offer)">Map</button>
+                <button class="px-2 py-1 rounded bg-teal-600 text-white" @click="toggleMap(offer)">Привязать</button>
               </td>
             </tr>
 
@@ -481,6 +505,10 @@ onMounted(async () => {
         </tbody>
       </table>
       <div v-if="loading" class="p-4 text-sm text-gray-500">Загрузка...</div>
+      <div v-else class="flex items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-slate-700 dark:text-slate-300">
+        <span>Показано {{ unmapped.length }} из {{ meta.total }}</span>
+        <div class="flex items-center gap-2"><button type="button" class="rounded border px-3 py-1.5 disabled:opacity-40" :disabled="page <= 1" @click="goToPage(page - 1)">Назад</button><span>Страница {{ meta.page }} из {{ meta.pages }}</span><button type="button" class="rounded border px-3 py-1.5 disabled:opacity-40" :disabled="page >= meta.pages" @click="goToPage(page + 1)">Далее</button></div>
+      </div>
     </div>
   </div>
 </template>

@@ -5,6 +5,7 @@ import { X, Save, Plus, Trash2, Edit3, Globe, Tag } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import ProductSpecificationsEditor from './products/ProductSpecificationsEditor.vue';
 import ProductSuppliersEditor from './products/ProductSuppliersEditor.vue';
+import ProductSeriesSelector from './products/ProductSeriesSelector.vue';
 import { useSpecRegistry } from '../composables/useSpecRegistry';
 import { collapseWifiSpecs } from '../utils/product-spec-safety';
 import type { ProductWorkspaceSection } from '../utils/product-workspace';
@@ -69,6 +70,7 @@ const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
     (e: 'success'): void;
     (e: 'dirty-change', value: boolean): void;
+    (e: 'supplier-offers-loaded', count: number | null): void;
 }>();
 
 const form = ref<any>({
@@ -92,11 +94,27 @@ const brandsLoading = ref(false);
 const tagSearchQuery = ref('');
 const managerBrands = ref<ManagerBrand[]>([]);
 const selectedBrandEntityId = ref<number | null>(null);
+const selectedSeriesId = ref<number | null>(null);
+const selectedSeriesTitle = ref('');
+const seriesSelectionTouched = ref(false);
 const vitebskQty = ref(0);
 const supplierOffers = ref<SupplierOfferResponse[]>([]);
+const supplierOffersLoading = ref(false);
+const supplierOffersError = ref('');
 const localStockSaving = ref(false);
 const unlinkingMappingId = ref<number | null>(null);
 const COMPATIBLE_INDOOR_KEY = 'compatible_indoor_slugs';
+const SERIES_SPEC_KEYS = new Set([
+    'series',
+    'серия',
+    'серия модели',
+    'серия кондиционера',
+    'линейка',
+    'линейка модели',
+    'модельная серия',
+    'модельный ряд',
+    'model_series',
+]);
 const COMPATIBLE_OUTDOOR_KEY = 'compatible_outdoor_slugs';
 const MULTI_COMBO_RULES_KEY = 'multi_combo_rules';
 const MULTI_COMPAT_MODE_KEY = 'multi_compat_mode';
@@ -630,10 +648,19 @@ const setBrandTag = (tagId: number | null) => {
 
     const bySlug = managerBrands.value.find((brand) => normalizeText(brand.slug) === normalizeText(selected.slug));
     const byTitle = managerBrands.value.find((brand) => normalizeText(brand.title) === normalizeText(selected.title));
-    selectedBrandEntityId.value = bySlug?.id ?? byTitle?.id ?? null;
+    const matchedBrandId = bySlug?.id ?? byTitle?.id ?? null;
+    if (selectedBrandEntityId.value !== matchedBrandId) {
+        selectedSeriesId.value = null;
+        selectedSeriesTitle.value = '';
+    }
+    selectedBrandEntityId.value = matchedBrandId;
 };
 
 const applyBrandEntitySelection = (nextId: number | null) => {
+    if (selectedBrandEntityId.value !== nextId) {
+        selectedSeriesId.value = null;
+        selectedSeriesTitle.value = '';
+    }
     selectedBrandEntityId.value = nextId;
 
     if (!nextId) {
@@ -658,6 +685,17 @@ const onBrandEntitySelectChange = (event: Event) => {
     const target = event.target as HTMLSelectElement | null;
     const raw = Number(target?.value || 0);
     applyBrandEntitySelection(Number.isFinite(raw) && raw > 0 ? raw : null);
+};
+
+const onSeriesSelect = (series: { id: number; title: string } | null) => {
+    selectedSeriesId.value = series?.id ?? null;
+    selectedSeriesTitle.value = series?.title || '';
+};
+
+const onSeriesIdChange = (seriesId: number | null) => {
+    selectedSeriesId.value = seriesId;
+    seriesSelectionTouched.value = true;
+    if (seriesId == null) selectedSeriesTitle.value = '';
 };
 
 const createAndSelectBrand = async () => {
@@ -968,6 +1006,9 @@ const resetEditorState = () => {
     selectedTagIds.value = new Set();
     tagSearchQuery.value = '';
     selectedBrandEntityId.value = null;
+    selectedSeriesId.value = null;
+    selectedSeriesTitle.value = '';
+    seriesSelectionTouched.value = false;
     vitebskQty.value = 0;
     supplierOffers.value = [];
     cleanFingerprint.value = '';
@@ -979,6 +1020,7 @@ const editorFingerprint = () => JSON.stringify({
     manuals: manuals.value,
     tagIds: Array.from(selectedTagIds.value).sort((a, b) => a - b),
     brandId: selectedBrandEntityId.value,
+    seriesId: selectedSeriesId.value,
     indoorSlugs: compatibilityIndoorSlugs.value,
     outdoorSlugs: compatibilityOutdoorSlugs.value,
     logisticsComponents: logisticsComponents.value,
@@ -1021,7 +1063,7 @@ const initializeEditor = async () => {
         : 'free_match';
     capacityCombosInput.value = parseCapacityCombos((s as any)[MULTI_CAPACITY_COMBOS_KEY]).join(', ');
     specs.value = collapseWifiSpecs(Object.entries(s)
-        .filter(([key]) => !COMPATIBILITY_KEYS.has(key) && !isHiddenSpecKey(key))
+        .filter(([key]) => !COMPATIBILITY_KEYS.has(key) && !isHiddenSpecKey(key) && !SERIES_SPEC_KEYS.has(normalizeText(key)))
         .map(([key, value]) => ({ key, value: normalizeValueForEdit(key, value) })));
     manuals.value = (((source as any)?.manuals || []) as Array<any>)
         .map((item) => ({
@@ -1054,6 +1096,13 @@ const initializeEditor = async () => {
             }
         }
     }
+    const explicitSeriesId = Number((source as any)?.series_id || 0);
+    const legacySeriesEntry = Object.entries(s).find(([key, value]) => (
+        SERIES_SPEC_KEYS.has(normalizeText(key)) && String(value || '').trim()
+    ));
+    selectedSeriesId.value = Number.isFinite(explicitSeriesId) && explicitSeriesId > 0 ? explicitSeriesId : null;
+    selectedSeriesTitle.value = String(legacySeriesEntry?.[1] || '').trim();
+    seriesSelectionTouched.value = false;
 
     if (isPersistedProduct.value) {
         vitebskQty.value = Number((source as any)?.vitebsk_qty || 0);
@@ -1072,13 +1121,26 @@ watch(isDirty, (value) => emit('dirty-change', value));
 
 const loadSupplierOffers = async () => {
     if (!props.product) return;
+    const productId = props.product.id;
+    supplierOffersLoading.value = true;
+    supplierOffersError.value = '';
     try {
-        const res = await api.getProductSupplierOffers(props.product.id);
+        const res = await api.getProductSupplierOffers(productId);
+        if (props.product?.id !== productId) return;
         supplierOffers.value = res.items || [];
+        emit('supplier-offers-loaded', supplierOffers.value.length);
     } catch (e) {
-        console.error(e);
-        supplierOffers.value = [];
+        if (props.product?.id !== productId) return;
+        supplierOffersError.value = `Не удалось загрузить предложения поставщиков: ${getApiErrorMessage(e)}`;
+        emit('supplier-offers-loaded', null);
+    } finally {
+        if (props.product?.id === productId) supplierOffersLoading.value = false;
     }
+};
+
+const handleSupplierMapped = async () => {
+    await loadSupplierOffers();
+    emit('success');
 };
 
 const addManualRow = () => manuals.value.push({ title: 'Инструкция', url: '' });
@@ -1129,6 +1191,8 @@ const save = async (): Promise<boolean> => {
         delete validSpecs['Марка'];
         delete validSpecs['Производитель'];
     }
+    delete validSpecs.series;
+    if (selectedSeriesTitle.value) validSpecs.series = selectedSeriesTitle.value;
 
     if (compatibilityIndoorSlugs.value.length > 0) {
         validSpecs[COMPATIBLE_INDOOR_KEY] = [...compatibilityIndoorSlugs.value];
@@ -1171,6 +1235,9 @@ const save = async (): Promise<boolean> => {
         const updateData: ProductUpdate = {
             ...form.value,
             brand_id: selectedBrandEntityId.value ?? null,
+            ...(selectedSeriesId.value != null || seriesSelectionTouched.value || !selectedSeriesTitle.value
+                ? { series_id: selectedSeriesId.value ?? null }
+                : {}),
             specs: validSpecs,
             tag_ids: Array.from(selectedTagIds.value),
             manuals: validManuals,
@@ -1368,13 +1435,17 @@ defineExpose({ save, isDirty, loading });
                         <ProductSuppliersEditor
                             v-if="showSuppliersSection && isPersistedProduct"
                             id="product-section-suppliers"
+                            :product-id="product!.id"
                             :offers="supplierOffers"
+                            :offers-loading="supplierOffersLoading"
+                            :offers-error="supplierOffersError"
                             :vitebsk-qty="vitebskQty"
                             :stock-saving="localStockSaving"
                             :unlinking-mapping-id="unlinkingMappingId"
                             @update:vitebsk-qty="vitebskQty = $event"
                             @save-stock="saveLocalStock"
                             @unlink="unlinkSupplierOffer"
+                            @mapped="handleSupplierMapped"
                         />
 
                         <div
@@ -1451,6 +1522,13 @@ defineExpose({ save, isDirty, loading });
                                 </button>
                             </div>
                             <p class="text-[11px] text-emerald-700 dark:text-emerald-300">Связанные данные бренда синхронизируются при сохранении.</p>
+                            <ProductSeriesSelector
+                                :brand-id="selectedBrandEntityId"
+                                :model-value="selectedSeriesId"
+                                :legacy-series-title="selectedSeriesId == null ? selectedSeriesTitle : ''"
+                                @update:model-value="onSeriesIdChange"
+                                @select="onSeriesSelect"
+                            />
                             <template v-if="effectiveExpertMode">
                             <div class="h-px bg-gray-100 dark:bg-slate-700"></div>
                             <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">

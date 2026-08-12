@@ -197,22 +197,9 @@ class SupplierCatalogService:
         source = await SupplierSourceDAO.get_source(session, source_id)
         if not source:
             return False
-        supplier_id = int(source.supplier_id)
-        await SupplierOfferDAO.clear_source_reference(session, source_id)
-        await session.commit()
+        offer_keys = await SupplierOfferDAO.deactivate_for_source(session, source_id)
+        await SupplierMappingDAO.deactivate_for_offer_keys(session, offer_keys)
         await SupplierSourceDAO.delete_source(session, source)
-        remaining_sources = await SupplierSourceDAO.list_active_google_sources_for_supplier(
-            session, supplier_id
-        )
-        # Rebuild supplier offers after source deletion to avoid stale rows in mapping UI.
-        await SupplierOfferDAO.deactivate_all_for_supplier(session, supplier_id)
-        await SupplierMappingDAO.deactivate_all_for_supplier(session, supplier_id)
-        await session.commit()
-        if remaining_sources:
-            from services.supplier_sync_service import SupplierSyncService
-
-            for remaining_source in remaining_sources:
-                await SupplierSyncService.sync_source(session, remaining_source)
         return True
 
     @staticmethod
@@ -231,14 +218,17 @@ class SupplierMappingService:
         *,
         supplier_id: int | None = None,
         source_id: int | None = None,
+        query: str | None = None,
         page: int = 1,
         limit: int = 50,
     ) -> dict:
         offset = (page - 1) * limit
+        normalized_query = " ".join((query or "").split()) or None
         items, total = await SupplierOfferDAO.list_unmapped(
             session=session,
             supplier_id=supplier_id,
             source_id=source_id,
+            query=normalized_query,
             limit=limit,
             offset=offset,
         )
@@ -301,6 +291,8 @@ class SupplierMappingService:
         offer = await SupplierOfferDAO.get_by_key(session, supplier_id, external_id)
         if not offer:
             raise ValueError("Supplier offer not found")
+        if not offer.is_active:
+            raise ValueError("Inactive supplier offer cannot be mapped")
 
         try:
             return await SupplierMappingDAO.create_mapping(

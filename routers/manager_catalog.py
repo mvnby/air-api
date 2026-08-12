@@ -134,6 +134,7 @@ async def create_product(
             endpoint=CREATE_MANAGER_PRODUCT,
             error_code=BAD_REQUEST,
             message=str(exc),
+            field_errors=getattr(exc, "field_errors", None),
         ) from exc
 
 
@@ -161,6 +162,7 @@ async def duplicate_product(
             endpoint=DUPLICATE_MANAGER_PRODUCT,
             error_code=BAD_REQUEST,
             message=str(exc),
+            field_errors=getattr(exc, "field_errors", None),
         ) from exc
     if not result:
         raise manager_http_error(
@@ -185,11 +187,20 @@ async def update_product(
     """
     Update individual product fields.
     """
-    result = await ManagerCatalogService.update_product(
-        session=session,
-        product_id=product_id,
-        data=data,
-    )
+    try:
+        result = await ManagerCatalogService.update_product(
+            session=session,
+            product_id=product_id,
+            data=data,
+        )
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=UPDATE_PRODUCT,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+            field_errors=getattr(exc, "field_errors", None),
+        ) from exc
 
     if not result:
         raise manager_http_error(

@@ -11,7 +11,7 @@ from sqlalchemy import inspect
 
 REVISION = "e1f2a3b4c5d6"
 DOWN_REVISION = "d0a1b2c3e4f6"
-HEAD_REVISION = "f4b5c6d7e8f9"
+HEAD_REVISION = "f5c6d7e8a9b0"
 MIGRATION_PATH = Path(
     "alembic/versions/e1f2a3b4c5d6_add_storefront_catalog_revision.py"
 )
@@ -59,7 +59,8 @@ def test_storefront_catalog_revision_is_the_single_alembic_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "f3a4b5c6d7e8"
+    assert script.get_revision(HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
+    assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == "f2a3b4c5d6e7"
     assert script.get_revision("f2a3b4c5d6e7").down_revision == "ab02c3d4e5f6"
     assert script.get_revision("ab02c3d4e5f6").down_revision == "aa91c2d4e6f8"

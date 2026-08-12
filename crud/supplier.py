@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import and_, delete, func
+from sqlalchemy import String, and_, cast, delete, func, or_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -256,10 +256,29 @@ class SupplierOfferDAO:
             session.add(offer)
 
     @staticmethod
+    async def deactivate_for_source(
+        session: AsyncSession,
+        source_id: int,
+    ) -> list[tuple[int, str]]:
+        result = await session.execute(
+            select(SupplierOffer).where(SupplierOffer.source_id == source_id).with_for_update()
+        )
+        offers = list(result.scalars().all())
+        keys: list[tuple[int, str]] = []
+        for offer in offers:
+            keys.append((int(offer.supplier_id), offer.external_id))
+            offer.source_id = None
+            offer.is_active = False
+            offer.updated_at = datetime.now()
+            session.add(offer)
+        return keys
+
+    @staticmethod
     async def list_unmapped(
         session: AsyncSession,
         supplier_id: Optional[int] = None,
         source_id: Optional[int] = None,
+        query: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> tuple[list[SupplierOffer], int]:
@@ -287,6 +306,19 @@ class SupplierOfferDAO:
         if source_id is not None:
             base = base.where(SupplierOffer.source_id == source_id)
             count_stmt = count_stmt.where(SupplierOffer.source_id == source_id)
+        if query:
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            search_filter = or_(
+                SupplierOffer.external_id.ilike(pattern, escape="\\"),
+                SupplierOffer.title_raw.ilike(pattern, escape="\\"),
+                SupplierOffer.title_normalized.ilike(pattern, escape="\\"),
+                cast(SupplierOffer.model_tokens, String).ilike(pattern, escape="\\"),
+                cast(SupplierOffer.indoor_model_tokens, String).ilike(pattern, escape="\\"),
+                cast(SupplierOffer.outdoor_model_tokens, String).ilike(pattern, escape="\\"),
+            )
+            base = base.where(search_filter)
+            count_stmt = count_stmt.where(search_filter)
 
         total = (await session.execute(count_stmt)).scalar_one()
         result = await session.execute(
@@ -346,6 +378,29 @@ class SupplierMappingDAO:
             session.add(mapping)
             deactivated += 1
         return deactivated
+
+    @staticmethod
+    async def deactivate_for_offer_keys(
+        session: AsyncSession,
+        keys: list[tuple[int, str]],
+    ) -> int:
+        if not keys:
+            return 0
+        result = await session.execute(
+            select(ProductSupplierMapping)
+            .where(
+                tuple_(
+                    ProductSupplierMapping.supplier_id,
+                    ProductSupplierMapping.external_id,
+                ).in_(keys)
+            )
+            .with_for_update()
+        )
+        mappings = list(result.scalars().all())
+        for mapping in mappings:
+            mapping.is_active = False
+            session.add(mapping)
+        return len(mappings)
 
     @staticmethod
     async def list_mappings_for_products(

@@ -19,7 +19,7 @@ CUSTOMER_SCOPE_REVISION = "b8d9e0f1a2c3"
 CONTRACT_REVISION = "c9e0f1a2b3d4"
 STOREFRONT_IDEMPOTENCY_REVISION = "d0f1a2b3c4d5"
 TENANT_OFFER_REVISION = "d0a1b2c3e4f6"
-HEAD_REVISION = "f4b5c6d7e8f9"
+HEAD_REVISION = "f5c6d7e8a9b0"
 WEBSITE_CANARY_REVISION = "ab02c3d4e5f6"
 PUBLIC_WRITE_REVISION = "aa91c2d4e6f8"
 CATALOG_REVISION = "e1f2a3b4c5d6"
@@ -83,7 +83,8 @@ def test_lead_order_tenant_provenance_expand_is_in_single_head_chain():
     assert heads == [HEAD_REVISION]
     assert revision is not None
     assert revision.down_revision == "e9a1b2c3d4e5"
-    assert script.get_revision(HEAD_REVISION).down_revision == "f3a4b5c6d7e8"
+    assert script.get_revision(HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
+    assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == "f2a3b4c5d6e7"
     assert script.get_revision("f2a3b4c5d6e7").down_revision == WEBSITE_CANARY_REVISION
     assert (
