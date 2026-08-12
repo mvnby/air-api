@@ -428,6 +428,64 @@
         }
       }
     },
+    "/api/internal/bot/v1/tasks/stages/{stage_id}/attachments": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Attach Internal Bot Task Stage File",
+        "operationId": "attach_internal_bot_task_stage_file_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Stage Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_attach_internal_bot_task_stage_file_v1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotTaskAttachmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/bot/v1/quick-orders/parse": {
       "post": {
         "tags": [
@@ -22857,6 +22915,55 @@
         ],
         "title": "Body_attach_internal_bot_order_file_v1"
       },
+      "Body_attach_internal_bot_task_stage_file_v1": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "file_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "telegram_chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Chat Id"
+          },
+          "telegram_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Message Id"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "file_id",
+          "file"
+        ],
+        "title": "Body_attach_internal_bot_task_stage_file_v1"
+      },
       "Body_attach_manager_doc_file": {
         "properties": {
           "file": {
@@ -25395,6 +25502,31 @@
           "lease_token"
         ],
         "title": "BotStaffNotificationRenewRequest"
+      },
+      "BotTaskAttachmentResponse": {
+        "properties": {
+          "stage_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Stage Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "already_attached": {
+            "type": "boolean",
+            "title": "Already Attached",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage_id",
+          "order_id"
+        ],
+        "title": "BotTaskAttachmentResponse"
       },
       "BotTaskListRequest": {
         "properties": {

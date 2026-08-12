@@ -164,6 +164,10 @@ class ServiceAttachmentService:
                 OrderAttachmentLink.archived_at.is_(None),
                 ServiceAttachment.archived_at.is_(None),
             ]
+            if work_stage_id is not None:
+                occurrence_filters.append(
+                    OrderAttachmentLink.work_stage_id == work_stage_id
+                )
             if telegram_chat_id is not None and telegram_message_id is not None:
                 occurrence_filters.extend(
                     [

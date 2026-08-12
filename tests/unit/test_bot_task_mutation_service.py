@@ -157,3 +157,69 @@ async def test_task_report_mutation_is_normalized_and_idempotent(monkeypatch):
     assert repeated.changed is False
     assert stage.installer_report == "Монтаж завершен"
     assert session.commit_count == 1
+
+
+@pytest.mark.asyncio
+async def test_task_attachment_uses_stage_order_and_service_provenance(monkeypatch):
+    stage = SimpleNamespace(id=10, order_id=42, installer_id=7)
+    session = object()
+    authorize = AsyncMock(return_value=stage)
+    exists = AsyncMock(return_value=False)
+    create = AsyncMock(return_value={"id": 99})
+    monkeypatch.setattr(
+        BotTaskMutationService,
+        "_authorized_stage_for_update",
+        authorize,
+    )
+    monkeypatch.setattr(BotTaskMutationService, "_stage_attachment_exists", exists)
+    monkeypatch.setattr(
+        "services.bot_task_mutation_service."
+        "ServiceAttachmentService.create_and_link_order_attachment",
+        create,
+    )
+
+    result = await BotTaskMutationService.attach_stage_attachment(
+        session,
+        telegram_id=777,
+        stage_id=10,
+        file_id="telegram-file-10",
+        filename="report.jpg",
+        mime_type="image/jpeg",
+        content=b"photo",
+        telegram_chat_id=-100,
+        telegram_message_id=55,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert result.stage_id == 10
+    assert result.order_id == 42
+    assert result.already_attached is False
+    authorize.assert_awaited_once_with(
+        session,
+        telegram_id=777,
+        stage_id=10,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    exists.assert_awaited_once_with(
+        session,
+        stage_id=10,
+        order_id=42,
+        file_id="telegram-file-10",
+        telegram_chat_id=-100,
+        telegram_message_id=55,
+    )
+    kwargs = create.await_args.kwargs
+    assert kwargs["order_id"] == 42
+    assert kwargs["work_stage_id"] == 10
+    assert kwargs["category"] == "service"
+    assert kwargs["source"] == "telegram_bot"
+    assert kwargs["telegram_meta"] == {
+        "file_id": "telegram-file-10",
+        "user_id": 777,
+        "chat_id": -100,
+        "message_id": 55,
+    }
+    assert kwargs["source_meta"] == {
+        "purpose": "task_stage_report",
+        "stage_id": 10,
+    }

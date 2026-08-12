@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_attach_internal_bot_task_stage_file_v1 } from '../models/Body_attach_internal_bot_task_stage_file_v1';
 import type { Body_recognize_internal_bot_customer_requisites_file_v1 } from '../models/Body_recognize_internal_bot_customer_requisites_file_v1';
 import type { BotApiHealthResponse } from '../models/BotApiHealthResponse';
 import type { BotCatalogProductLookupResponse } from '../models/BotCatalogProductLookupResponse';
@@ -16,6 +17,7 @@ import type { BotQuickOrderCreateResponse } from '../models/BotQuickOrderCreateR
 import type { BotQuickOrderParseRequest } from '../models/BotQuickOrderParseRequest';
 import type { BotQuickOrderParseResponse } from '../models/BotQuickOrderParseResponse';
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
+import type { BotTaskAttachmentResponse } from '../models/BotTaskAttachmentResponse';
 import type { BotTaskListRequest } from '../models/BotTaskListRequest';
 import type { BotTaskListResponse } from '../models/BotTaskListResponse';
 import type { BotTaskReportSaveRequest } from '../models/BotTaskReportSaveRequest';
@@ -163,6 +165,30 @@ export class InternalBotV1Service {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Attach Internal Bot Task Stage File
+     * @param stageId
+     * @param formData
+     * @returns BotTaskAttachmentResponse Successful Response
+     * @throws ApiError
+     */
+    public static attachInternalBotTaskStageFileV1(
+        stageId: number,
+        formData: Body_attach_internal_bot_task_stage_file_v1,
+    ): CancelablePromise<BotTaskAttachmentResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/tasks/stages/{stage_id}/attachments',
+            path: {
+                'stage_id': stageId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: `Validation Error`,
             },
