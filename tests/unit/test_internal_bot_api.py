@@ -20,6 +20,7 @@ from services.bot_quick_order_api_service import (
 )
 from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
 from services.bot_task_mutation_service import (
+    BotTaskAttachmentMutationResult,
     BotTaskMutationAccessDeniedError,
     BotTaskMutationConflictError,
     BotTaskMutationService,
@@ -118,6 +119,9 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     task_list = schema["paths"]["/api/internal/bot/v1/tasks/my"]["post"]
     task_status = schema["paths"]["/api/internal/bot/v1/tasks/stages/{stage_id}/status"]["post"]
     task_report = schema["paths"]["/api/internal/bot/v1/tasks/stages/{stage_id}/report"]["post"]
+    task_attachment = schema["paths"][
+        "/api/internal/bot/v1/tasks/stages/{stage_id}/attachments"
+    ]["post"]
     quick_order_parse = schema["paths"]["/api/internal/bot/v1/quick-orders/parse"]["post"]
     quick_order_create = schema["paths"]["/api/internal/bot/v1/quick-orders"]["post"]
     requisites_text = schema["paths"]["/api/internal/bot/v1/customers/requisites/recognize-text"]["post"]
@@ -140,6 +144,7 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     assert task_list["operationId"] == "list_internal_bot_my_tasks_v1"
     assert task_status["operationId"] == "update_internal_bot_task_status_v1"
     assert task_report["operationId"] == "save_internal_bot_task_report_v1"
+    assert task_attachment["operationId"] == "attach_internal_bot_task_stage_file_v1"
     assert quick_order_parse["operationId"] == "parse_internal_bot_quick_order_v1"
     assert quick_order_create["operationId"] == "create_internal_bot_quick_order_v1"
     assert requisites_text["operationId"] == "recognize_internal_bot_customer_requisites_text_v1"
@@ -148,6 +153,8 @@ def test_internal_bot_api_openapi_contract_is_versioned_and_secured():
     assert health["security"] == [{"BotServiceBearer": []}]
     assert staff_context["security"] == [{"BotServiceBearer": []}]
     assert catalog_search["security"] == [{"BotServiceBearer": []}]
+    assert task_attachment["security"] == [{"BotServiceBearer": []}]
+    assert "multipart/form-data" in task_attachment["requestBody"]["content"]
     assert catalog_product["security"] == [{"BotServiceBearer": []}]
     assert task_list["security"] == [{"BotServiceBearer": []}]
     assert task_status["security"] == [{"BotServiceBearer": []}]
@@ -659,6 +666,88 @@ async def test_internal_bot_task_report_normalizes_and_saves(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"stage_id": 7, "changed": False}
+
+
+async def test_internal_bot_task_attachment_uses_typed_authorized_service(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def fake_attach(_session, **kwargs):
+        assert kwargs == {
+            "telegram_id": 123456,
+            "stage_id": 7,
+            "file_id": "telegram-file-7",
+            "filename": "report.jpg",
+            "mime_type": "image/jpeg",
+            "content": b"photo-content",
+            "telegram_chat_id": -100,
+            "telegram_message_id": 55,
+            "tenant_scope": TEST_TENANT_SCOPE,
+        }
+        return BotTaskAttachmentMutationResult(
+            stage_id=7,
+            order_id=42,
+            already_attached=False,
+        )
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotTaskMutationService, "attach_stage_attachment", fake_attach)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                "/api/internal/bot/v1/tasks/stages/7/attachments",
+                headers={"Authorization": "Bearer expected-token"},
+                data={
+                    "telegram_id": "123456",
+                    "file_id": "telegram-file-7",
+                    "telegram_chat_id": "-100",
+                    "telegram_message_id": "55",
+                },
+                files={"file": ("report.jpg", b"photo-content", "image/jpeg")},
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "stage_id": 7,
+        "order_id": 42,
+        "already_attached": False,
+    }
+
+
+async def test_internal_bot_task_attachment_maps_stage_access_denial(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+
+    async def deny(*_args, **_kwargs):
+        raise BotTaskMutationAccessDeniedError("not assigned")
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(BotTaskMutationService, "attach_stage_attachment", deny)
+    app.dependency_overrides[get_session] = fake_session
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                "/api/internal/bot/v1/tasks/stages/7/attachments",
+                headers={"Authorization": "Bearer expected-token"},
+                data={"telegram_id": "123456", "file_id": "telegram-file-7"},
+                files={"file": ("report.jpg", b"photo-content", "image/jpeg")},
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "not assigned"}
 
 
 async def test_internal_bot_quick_order_parse_and_create_use_stable_contract(monkeypatch):

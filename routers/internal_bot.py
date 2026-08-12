@@ -19,6 +19,7 @@ from api_contracts.bot import (
     BotQuickOrderParseRequest,
     BotQuickOrderParseResponse,
     BotStaffContextResponse,
+    BotTaskAttachmentResponse,
     BotTaskListRequest,
     BotTaskListResponse,
     BotTaskReportSaveRequest,
@@ -32,6 +33,7 @@ from core.database import get_session
 from core.tenant_scope import get_system_tenant_scope
 from models import OrderStageStatus
 from models.tenancy import TenantScope
+from routers.internal_bot_common import read_bot_upload
 from services.bot_access_service import BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
 from services.bot_customer_requisites_api_service import (
@@ -218,6 +220,49 @@ async def save_internal_bot_task_report(
     return BotTaskReportSaveResponse(
         stage_id=result.stage_id,
         changed=result.changed,
+    )
+
+
+@router.post(
+    "/tasks/stages/{stage_id}/attachments",
+    response_model=BotTaskAttachmentResponse,
+    operation_id="attach_internal_bot_task_stage_file_v1",
+)
+async def attach_internal_bot_task_stage_file(
+    stage_id: int = Path(ge=1),
+    telegram_id: int = Form(ge=1),
+    file_id: str = Form(min_length=1, max_length=255),
+    telegram_chat_id: int | None = Form(default=None),
+    telegram_message_id: int | None = Form(default=None),
+    file: UploadFile = File(),
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+) -> BotTaskAttachmentResponse:
+    content, filename, mime_type = await read_bot_upload(file)
+    try:
+        result = await BotTaskMutationService.attach_stage_attachment(
+            session,
+            telegram_id=telegram_id,
+            stage_id=stage_id,
+            file_id=file_id,
+            filename=filename,
+            mime_type=mime_type,
+            content=content,
+            telegram_chat_id=telegram_chat_id,
+            telegram_message_id=telegram_message_id,
+            tenant_scope=tenant_scope,
+        )
+    except BotTaskMutationAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    return BotTaskAttachmentResponse(
+        stage_id=result.stage_id,
+        order_id=result.order_id,
+        already_attached=result.already_attached,
     )
 
 

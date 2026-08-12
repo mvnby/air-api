@@ -2,12 +2,21 @@
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from models import OrderStageStatus, OrderWorkStage
+from sqlmodel import select
+
+from models import (
+    OrderAttachmentLink,
+    OrderStageStatus,
+    OrderWorkStage,
+    ServiceAttachment,
+)
 from models.tenancy import TenantScope
 from services.bot_access_service import BotAccessService
 from services.notification_service import NotificationService
+from services.service_attachment_service import ServiceAttachmentService
 from services.tenant_entity_access_service import TenantEntityAccessService
 
 logger = logging.getLogger(__name__)
@@ -32,6 +41,13 @@ class BotTaskStatusMutationResult:
 class BotTaskReportMutationResult:
     stage_id: int
     changed: bool
+
+
+@dataclass(frozen=True)
+class BotTaskAttachmentMutationResult:
+    stage_id: int
+    order_id: int
+    already_attached: bool
 
 
 class BotTaskMutationService:
@@ -136,3 +152,99 @@ class BotTaskMutationService:
         session.add(stage)
         await session.commit()
         return BotTaskReportMutationResult(stage_id=stage_id, changed=True)
+
+    @staticmethod
+    async def _stage_attachment_exists(
+        session: AsyncSession,
+        *,
+        stage_id: int,
+        order_id: int,
+        file_id: str,
+        telegram_chat_id: int | None,
+        telegram_message_id: int | None,
+    ) -> bool:
+        filters = [
+            OrderAttachmentLink.order_id == order_id,
+            OrderAttachmentLink.work_stage_id == stage_id,
+            OrderAttachmentLink.archived_at.is_(None),
+            ServiceAttachment.archived_at.is_(None),
+        ]
+        if telegram_chat_id is not None and telegram_message_id is not None:
+            filters.extend(
+                [
+                    ServiceAttachment.telegram_chat_id == telegram_chat_id,
+                    ServiceAttachment.telegram_message_id == telegram_message_id,
+                ]
+            )
+        else:
+            filters.append(ServiceAttachment.telegram_file_id == file_id)
+        statement = (
+            select(OrderAttachmentLink.id)
+            .join(
+                ServiceAttachment,
+                ServiceAttachment.id == OrderAttachmentLink.attachment_id,
+            )
+            .where(*filters)
+            .limit(1)
+        )
+        return await session.scalar(statement) is not None
+
+    @classmethod
+    async def attach_stage_attachment(
+        cls,
+        session: AsyncSession,
+        *,
+        telegram_id: int,
+        stage_id: int,
+        file_id: str,
+        filename: str,
+        mime_type: str | None,
+        content: bytes,
+        telegram_chat_id: int | None,
+        telegram_message_id: int | None,
+        tenant_scope: TenantScope,
+    ) -> BotTaskAttachmentMutationResult:
+        stage = await cls._authorized_stage_for_update(
+            session,
+            telegram_id=telegram_id,
+            stage_id=stage_id,
+            tenant_scope=tenant_scope,
+        )
+        order_id = int(stage.order_id)
+        # The authorized stage is locked through the attachment service commit,
+        # so concurrent retries serialize before this idempotency check.
+        already_attached = await cls._stage_attachment_exists(
+            session,
+            stage_id=stage_id,
+            order_id=order_id,
+            file_id=file_id,
+            telegram_chat_id=telegram_chat_id,
+            telegram_message_id=telegram_message_id,
+        )
+        await ServiceAttachmentService.create_and_link_order_attachment(
+            session,
+            order_id=order_id,
+            content=content,
+            filename=filename,
+            mime_type=mime_type,
+            category="service",
+            source="telegram_bot",
+            work_stage_id=stage_id,
+            captured_at=datetime.now(),
+            telegram_meta={
+                "file_id": file_id,
+                "user_id": telegram_id,
+                "chat_id": telegram_chat_id,
+                "message_id": telegram_message_id,
+            },
+            source_meta={
+                "purpose": "task_stage_report",
+                "stage_id": stage_id,
+            },
+            tenant_scope=tenant_scope,
+        )
+        return BotTaskAttachmentMutationResult(
+            stage_id=stage_id,
+            order_id=order_id,
+            already_attached=already_attached,
+        )

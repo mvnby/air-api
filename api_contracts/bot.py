@@ -142,6 +142,12 @@ class BotTaskReportSaveResponse(BaseModel):
     changed: bool
 
 
+class BotTaskAttachmentResponse(BaseModel):
+    stage_id: int = Field(ge=1)
+    order_id: int = Field(ge=1)
+    already_attached: bool = False
+
+
 BotQuickOrderServiceType = Literal[
     "turnkey",
     "install_only",

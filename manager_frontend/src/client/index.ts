@@ -24,6 +24,7 @@ export type { BankStatementImportResponse } from './models/BankStatementImportRe
 export type { Body_apply_internal_bot_repair_nameplate_v1 } from './models/Body_apply_internal_bot_repair_nameplate_v1';
 export type { Body_apply_internal_bot_warranty_nameplate_v1 } from './models/Body_apply_internal_bot_warranty_nameplate_v1';
 export type { Body_attach_internal_bot_order_file_v1 } from './models/Body_attach_internal_bot_order_file_v1';
+export type { Body_attach_internal_bot_task_stage_file_v1 } from './models/Body_attach_internal_bot_task_stage_file_v1';
 export type { Body_attach_manager_doc_file } from './models/Body_attach_manager_doc_file';
 export type { Body_bulk_upload_local_images } from './models/Body_bulk_upload_local_images';
 export type { Body_complete_media_worker_job } from './models/Body_complete_media_worker_job';
@@ -90,6 +91,7 @@ export type { BotStaffNotificationMutationResponse } from './models/BotStaffNoti
 export type { BotStaffNotificationNackRequest } from './models/BotStaffNotificationNackRequest';
 export type { BotStaffNotificationPayload } from './models/BotStaffNotificationPayload';
 export type { BotStaffNotificationRenewRequest } from './models/BotStaffNotificationRenewRequest';
+export type { BotTaskAttachmentResponse } from './models/BotTaskAttachmentResponse';
 export type { BotTaskListRequest } from './models/BotTaskListRequest';
 export type { BotTaskListResponse } from './models/BotTaskListResponse';
 export type { BotTaskReportSaveRequest } from './models/BotTaskReportSaveRequest';
