@@ -128,6 +128,105 @@ def test_nameplate_normalization_prefers_tcl_barcode_serial_candidate():
     assert "несколько похожих номеров" in flags["warnings"]["serial_candidates"]
 
 
+def test_nameplate_normalization_rejects_manufacture_date_and_prefers_reported_aeronik_serial():
+    extracted, flags = BotRepairNameplateService.normalize_extracted(
+        {
+            "brand": "Aeronik",
+            "model": "AMV-450WM/B-X",
+            "serial_number": "MANUFACTURED DATE: 2018.06",
+            "serial_candidates": [
+                "MANUFACTURED DATE: 2018.06",
+                "REFRI. CHARGE: 10.30KG",
+                "5064TONNES",
+                "380-415V",
+                "600008000357",
+            ],
+            "manufactured_year": "2018.06",
+        },
+        "\n".join(
+            [
+                "AERONIK AIR CONDITIONER OUTDOOR UNIT",
+                "MODEL AMV-450WM/B-X",
+                "REFRIGERANT R410A",
+                "REFRI. CHARGE 10.30KG",
+                "MANUFACTURED DATE 2018.06",
+                "CEREAL",
+                "63229991431",
+                "600008000357",
+            ]
+        ),
+    )
+
+    assert extracted["equipment_serial_number"] == "600008000357"
+    assert "equipment_commissioning_date" not in extracted
+    assert flags["serial_candidates"][0] == "600008000357"
+    assert "MANUFACTURED DATE: 2018.06" not in flags["serial_candidates"]
+    assert flags["serial_selection_required"] is True
+    assert flags["serial_selection"]["source"] == "auto"
+
+
+def test_nameplate_normalization_requires_choice_when_candidates_are_ambiguous():
+    extracted, flags = BotRepairNameplateService.normalize_extracted(
+        {
+            "brand": "Generic",
+            "model": "AC-12",
+            "serial_candidates": ["12345678901", "12345678902"],
+        },
+        "12345678901\n12345678902",
+    )
+
+    assert extracted["equipment_serial_number"] in {"12345678901", "12345678902"}
+    assert flags["serial_selection_required"] is True
+    assert "должен выбрать" in flags["warnings"]["serial_candidates"]
+
+
+@pytest.mark.parametrize(
+    ("label", "serial"),
+    [
+        ("SERIAL NO", "ABC1234567"),
+        ("S/N", "SN99887766"),
+        ("BARCODE", "AB1234567890"),
+        ("CEREAL", "600008000357"),
+    ],
+)
+def test_nameplate_normalization_uses_serial_and_barcode_labels(label, serial):
+    extracted, flags = BotRepairNameplateService.normalize_extracted(
+        {"brand": "Generic", "model": "AC-12"},
+        f"MODEL AC-12\n{label}\n{serial}\nMANUFACTURED DATE 2020.06",
+    )
+
+    assert extracted["equipment_serial_number"] == serial
+    assert flags["serial_selection_required"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["repair", "warranty"])
+async def test_nameplate_apply_rejects_unconfirmed_ambiguous_serial(
+    sqlite_repair_nameplate_session, flow
+):
+    kwargs = {
+        "extracted": {"equipment_serial_number": "12345678901"},
+        "raw_text": "12345678901\n12345678902",
+        "validation_flags": {"serial_selection_required": True},
+        "file_id": "photo",
+        "filename": "plate.jpg",
+        "mime_type": "image/jpeg",
+        "telegram_user_id": 777,
+        "telegram_chat_id": 100,
+        "telegram_message_id": 55,
+        "can_attach_any": True,
+        "tenant_scope": TEST_TENANT_SCOPE,
+    }
+    if flow == "warranty":
+        kwargs["unit_type"] = "outdoor_unit"
+        service = BotWarrantyNameplateService
+    else:
+        service = BotRepairNameplateService
+
+    with pytest.raises(ValueError, match="явно выбрать"):
+        await service.apply_to_order(sqlite_repair_nameplate_session, 999, **kwargs)
+
+
 def test_nameplate_normalization_decodes_tcl_factory_serial_details():
     extracted, flags = BotRepairNameplateService.normalize_extracted(
         {
@@ -787,3 +886,29 @@ async def test_warranty_nameplate_creates_order_equipment_and_updates_selected_c
     assert component.model == "AS25S2SF1FA"
     assert component.serial == "SN-IN-001"
     assert order.technical_meta["warranty_nameplate_recognitions"][0]["purpose"] == "warranty_nameplate"
+
+    repeated = await BotWarrantyNameplateService.apply_to_order(
+        sqlite_repair_nameplate_session,
+        int(order.id),
+        unit_type="indoor_unit",
+        extracted={
+            "equipment_brand": "Haier",
+            "equipment_model": "AS25S2SF1FA",
+            "equipment_serial_number": "SN-IN-001",
+            "refrigerant_type": "R32",
+        },
+        raw_text="MODEL AS25S2SF1FA SERIAL SN-IN-001",
+        validation_flags={"warnings": {}, "is_valid": True},
+        file_id="photo-file",
+        filename="nameplate.jpg",
+        mime_type="image/jpeg",
+        telegram_user_id=777,
+        telegram_chat_id=100,
+        telegram_message_id=55,
+        can_attach_any=True,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert repeated is not None
+    await sqlite_repair_nameplate_session.refresh(order)
+    assert len(order.technical_meta["warranty_nameplate_recognitions"]) == 1

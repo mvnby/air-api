@@ -440,6 +440,8 @@ class BotWarrantyNameplateService:
     ) -> dict[str, Any] | None:
         if unit_type not in cls.UNIT_TYPES:
             raise ValueError("Неизвестный тип блока")
+        if isinstance(validation_flags, dict) and validation_flags.get("serial_selection_required"):
+            raise ValueError("Серийный номер нужно явно выбрать перед записью")
         allowed = await cls.can_use_order(
             session,
             order_id,
@@ -569,7 +571,18 @@ class BotWarrantyNameplateService:
                 "raw_text": raw_text[:4000],
             }
         )
-        history.append(entry)
+        existing_index = next(
+            (
+                index
+                for index, item in enumerate(history)
+                if isinstance(item, dict) and item.get("file_id") == file_id
+            ),
+            None,
+        )
+        if existing_index is None:
+            history.append(entry)
+        else:
+            history[existing_index] = entry
         meta[cls.HISTORY_META_KEY] = history[-20:]
         BotOrderAttachmentService.upsert_telegram_attachment(meta, entry)
         order.technical_meta = meta

@@ -26,6 +26,7 @@ from services.deepseek_provider_service import (
     request_deepseek_completion,
 )
 from services.order_service import OrderService
+from services.nameplate_serial_resolver import resolve_serial_number
 from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
@@ -82,139 +83,9 @@ class BotRepairNameplateService:
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text[:max_length].strip() or None
 
-    @classmethod
-    def _clean_serial_candidate(cls, value: Any) -> Optional[str]:
-        text = cls._clean_text(value, max_length=240)
-        if not text:
-            return None
-        text = text.upper().strip(" .,:;")
-        text = re.sub(r"\s+", " ", text)
-        comparable = re.sub(r"[^A-Z0-9]", "", text)
-        if len(comparable) < 5:
-            return None
-        if "/" in text:
-            return None
-        return text
-
-    @classmethod
-    def _serial_candidate_tokens(cls, value: Any) -> list[str]:
-        text = cls._clean_text(value, max_length=4000)
-        if not text:
-            return []
-        candidates = []
-        if "\n" not in text and len(text) <= 80 and not re.search(
-            r"\b(MODEL|МОДЕЛЬ|REFRIGERANT|CAPACITY|МОЩНОСТЬ)\b",
-            text,
-            flags=re.IGNORECASE,
-        ):
-            candidates.append(text)
-        candidates.extend(re.findall(r"\b[A-Z0-9][A-Z0-9/-]{5,}[A-Z0-9]\b", text, flags=re.IGNORECASE))
-        cleaned: list[str] = []
-        for candidate in candidates:
-            normalized = cls._clean_serial_candidate(candidate)
-            if normalized:
-                cleaned.append(normalized)
-        return cleaned
-
     @staticmethod
     def _serial_identity(value: str) -> str:
         return re.sub(r"[^A-Z0-9]", "", value.upper())
-
-    @classmethod
-    def _collect_serial_candidates(
-        cls,
-        raw: dict[str, Any],
-        raw_text: str,
-        *,
-        equipment_model: str | None,
-    ) -> list[str]:
-        values: list[Any] = []
-        for key in (
-            "equipment_serial_number",
-            "serial_number",
-            "serial",
-            "sn",
-            "s_n",
-            "barcode_text",
-            "barcode_value",
-            "barcode",
-        ):
-            values.append(raw.get(key))
-
-        for key in (
-            "serial_candidates",
-            "serial_number_candidates",
-            "serials",
-            "barcode_values",
-            "barcodes",
-            "raw_markings",
-        ):
-            value = raw.get(key)
-            if isinstance(value, list):
-                values.extend(value)
-            elif isinstance(value, dict):
-                values.extend(value.values())
-            else:
-                values.append(value)
-        values.append(raw_text)
-
-        model_identity = cls._serial_identity(equipment_model or "")
-        seen: set[str] = set()
-        result: list[str] = []
-        for value in values:
-            for candidate in cls._serial_candidate_tokens(value):
-                identity = cls._serial_identity(candidate)
-                if (
-                    not identity
-                    or identity == model_identity
-                    or bool(model_identity and identity in model_identity)
-                    or identity in seen
-                ):
-                    continue
-                seen.add(identity)
-                result.append(candidate)
-        return result
-
-    @classmethod
-    def _serial_candidate_score(cls, candidate: str, *, brand: str | None, model: str | None) -> int:
-        identity = cls._serial_identity(candidate)
-        score = min(len(identity), 30)
-        has_letters = bool(re.search(r"[A-Z]", identity))
-        has_digits = bool(re.search(r"\d", identity))
-        if has_letters and has_digits:
-            score += 25
-        if len(identity) >= 18:
-            score += 35
-        elif len(identity) >= 14:
-            score += 20
-        elif len(identity) <= 10 and identity.isdigit():
-            score -= 20
-
-        brand_text = (brand or "").upper()
-        model_text = (model or "").upper()
-        looks_like_tcl = "TCL" in brand_text or model_text.startswith("TAC-")
-        if looks_like_tcl:
-            if has_letters and has_digits and len(identity) >= 18:
-                score += 60
-            if re.fullmatch(r"MO\d+", identity):
-                score -= 60
-            if identity.isdigit() and len(identity) <= 12:
-                score -= 35
-        elif re.fullmatch(r"MO\d+", identity):
-            score -= 25
-        return score
-
-    @classmethod
-    def _select_serial_candidate(
-        cls,
-        candidates: list[str],
-        *,
-        brand: str | None,
-        model: str | None,
-    ) -> Optional[str]:
-        if not candidates:
-            return None
-        return max(candidates, key=lambda candidate: cls._serial_candidate_score(candidate, brand=brand, model=model))
 
     @classmethod
     def _decode_tcl_year(cls, value: str) -> Optional[int]:
@@ -468,8 +339,10 @@ class BotRepairNameplateService:
             "Правила:\n"
             "- equipment_name: человекочитаемо, например 'Кондиционер, наружный блок' или 'Кондиционер'.\n"
             "- equipment_model: модель блока ровно как на шильдике.\n"
-            "- equipment_serial_number: серийный номер/SN/Serial No, только если он явно виден.\n"
+            "- equipment_serial_number: серийный номер/SN/Serial No, только если он явно виден. "
+            "Сначала ищи значение рядом с Serial, Serial No, S/N, SN (OCR иногда пишет CEREAL), затем под штрих-кодом.\n"
             "- serial_candidates: если на наклейке несколько похожих номеров, верни массив всех вариантов.\n"
+            "- Дата производства/Manufactured Date, модель, напряжение, мощность, ток, хладагент, заправка и значения с kg/W/V/Hz/MPa — не серийные номера.\n"
             "- Для TCL/TAC часто серийный номер — длинный буквенно-цифровой код под штрихкодом; короткие MO/даты/партии не выбирай серийником, если есть длинный код.\n"
             "- Для TCL factory SN формата 20 символов учитывай сегменты: 1 + 4 + W/N/Z + год/месяц заказа + batch + S/Z + год/месяц/день производства + 5 цифр серийного номера.\n"
             "- equipment_power: полезная холодопроизводительность/мощность, как на шильдике; не путай с потребляемой мощностью.\n"
@@ -516,25 +389,20 @@ class BotRepairNameplateService:
                 raw.get("equipment_inventory_number") or raw.get("inventory_number"),
                 max_length=160,
             ),
-            "equipment_commissioning_date": cls._clean_text(
-                raw.get("equipment_commissioning_date") or raw.get("manufactured_year"),
-                max_length=80,
-            ),
+            "equipment_commissioning_date": cls._clean_text(raw.get("equipment_commissioning_date"), max_length=80),
             "refrigerant_type": cls._normalize_refrigerant_type(raw.get("refrigerant_type") or raw.get("refrigerant")),
             "refrigerant_amount": cls._normalize_refrigerant_amount(
                 raw.get("refrigerant_amount") or raw.get("refrigerant_charge")
             ),
         }
-        serial_candidates = cls._collect_serial_candidates(
+        serial_resolution = resolve_serial_number(
             raw,
             raw_text,
             equipment_model=data.get("equipment_model"),
-        )
-        selected_serial = cls._select_serial_candidate(
-            serial_candidates,
             brand=data.get("equipment_brand"),
-            model=data.get("equipment_model"),
         )
+        serial_candidates = serial_resolution["candidates"]
+        selected_serial = serial_resolution["selected"]
         if selected_serial:
             data["equipment_serial_number"] = selected_serial
         data = {key: value for key, value in data.items() if value}
@@ -555,9 +423,13 @@ class BotRepairNameplateService:
             warnings["equipment_model"] = "Модель не распознана уверенно"
         if not data.get("equipment_serial_number"):
             warnings["equipment_serial_number"] = "Серийный номер не найден на шильдике"
+        elif serial_resolution["selection_required"]:
+            warnings["serial_candidates"] = (
+                "Серийный номер определен неоднозначно; сотрудник должен выбрать вариант перед записью"
+            )
         elif len(serial_candidates) > 1:
             warnings["serial_candidates"] = (
-                "Нашел несколько похожих номеров; выбрал наиболее вероятный серийник, проверьте перед записью"
+                "Нашел несколько похожих номеров; выбран вариант с явными признаками серийного номера"
             )
         if not data.get("refrigerant_type"):
             warnings["refrigerant_type"] = "Хладагент не распознан"
@@ -567,15 +439,6 @@ class BotRepairNameplateService:
             confidence_value = float(confidence) if confidence is not None else None
         except (TypeError, ValueError):
             confidence_value = None
-        serial_candidates = sorted(
-            serial_candidates,
-            key=lambda candidate: cls._serial_candidate_score(
-                candidate,
-                brand=data.get("equipment_brand"),
-                model=data.get("equipment_model"),
-            ),
-            reverse=True,
-        )
         flags = {
             "warnings": warnings,
             "confidence": confidence_value,
@@ -584,6 +447,11 @@ class BotRepairNameplateService:
         }
         if serial_candidates:
             flags["serial_candidates"] = serial_candidates[:8]
+            flags["serial_candidate_details"] = serial_resolution["details"][:8]
+            flags["serial_selection_required"] = bool(serial_resolution["selection_required"])
+            flags["serial_selection"] = serial_resolution["selection"]
+        if serial_resolution["rejected"]:
+            flags["serial_rejected_candidates"] = serial_resolution["rejected"][:8]
         serial_details = cls._decode_tcl_factory_serial(data.get("equipment_serial_number"))
         if serial_details:
             flags["serial_details"] = serial_details
@@ -673,6 +541,8 @@ class BotRepairNameplateService:
         file_content: bytes | None = None,
         tenant_scope: TenantScope,
     ) -> dict[str, Any] | None:
+        if isinstance(validation_flags, dict) and validation_flags.get("serial_selection_required"):
+            raise ValueError("Серийный номер нужно явно выбрать перед записью")
         allowed = await cls.can_use_order(
             session,
             order_id,
