@@ -140,5 +140,5 @@ jobs:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
           chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
           thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
-          title: "MVN PostgreSQL PITR restore drill failed"
-          details: "Artifact: postgres-pitr-restore-drill-log-${{ github.run_id }}"
+          title: "🟡 Не удалось проверить восстановление PostgreSQL"
+          details: "Работа основной базы не обязательно нарушена: завершилась ошибкой изолированная учебная проверка восстановления."

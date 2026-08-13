@@ -17,9 +17,7 @@ ALERTED_WORKFLOWS = [
     (".github/workflows/check-cloudflare-lb-config.yml", "check"),
     (".github/workflows/check-media-cdn.yml", "check"),
     (".github/workflows/check-postgres-pitr.yml", "check"),
-    (".github/workflows/check-postgres-replication.yml", "check"),
     (".github/workflows/postgres-pitr-restore-drill.yml", "pitr-restore-drill"),
-    (".github/workflows/report-ha-status.yml", "report"),
 ]
 
 
@@ -41,6 +39,8 @@ def test_notify_ha_failure_action_skips_when_telegram_secrets_are_absent():
     assert "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" in run
     assert "GITHUB_RUN_ID" in run
     assert "disable_web_page_preview" in run
+    assert "message_file" in run
+    assert "Технические подробности" in run
 
 
 def test_ha_monitor_workflows_notify_on_failure_after_artifact_upload():
@@ -69,7 +69,34 @@ def test_ha_monitor_workflows_notify_on_failure_after_artifact_upload():
         assert "HA_ALERT_TELEGRAM_BOT_TOKEN" in notify_step["with"]["bot-token"]
         assert "HA_ALERT_TELEGRAM_CHAT_ID" in notify_step["with"]["chat-id"]
         assert "HA_ALERT_TELEGRAM_THREAD_ID" in notify_step["with"]["thread-id"]
-        assert "Artifact:" in notify_step["with"]["details"]
+        assert notify_step["with"]["title"][0] in {"🟡", "🟠", "🔴"}
+        assert len(notify_step["with"]["details"]) >= 40
+
+
+def test_replication_workflow_sends_stateful_owner_events_without_rollup_duplicates():
+    replication = _yaml(REPO_ROOT / ".github/workflows/check-postgres-replication.yml")
+    steps = replication["jobs"]["check"]["steps"]
+    classify = _step(replication, "check", "Classify owner-facing HA event")
+    notify = _step(replication, "check", "Notify owner about HA event")
+
+    assert replication["concurrency"] == {
+        "group": "postgres-replication-monitor",
+        "cancel-in-progress": "false",
+    }
+    assert replication["jobs"]["check"]["permissions"]["actions"] == "read"
+    assert "--snapshot-output postgres-ha-snapshot.json" in _step(
+        replication, "check", "Run PostgreSQL replication check"
+    )["run"]
+    assert "ha_telegram_events.py" in classify["run"]
+    assert steps.index(notify) > steps.index(
+        _step(replication, "check", "Upload HA notification state")
+    )
+    assert "steps.ha-event.outputs.notify == 'true'" in notify["if"]
+    assert notify["with"]["message-file"] == "ha-owner-message.txt"
+
+    report = _yaml(REPO_ROOT / ".github/workflows/report-ha-status.yml")
+    report_steps = report["jobs"]["report"]["steps"]
+    assert all(step.get("name") != "Notify HA failure" for step in report_steps)
 
 
 def test_restore_drill_checks_out_repo_before_local_alert_action():

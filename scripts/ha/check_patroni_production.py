@@ -9,12 +9,10 @@ three-member etcd quorum without reading database or infrastructure secrets.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import shlex
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
@@ -677,70 +675,10 @@ def _check_runtime(
         )
 
 
-def perform_checks(config: CheckerConfig, runner: SshRunner) -> Report:
-    report = Report()
-    payloads = probe_nodes(config, runner)
-    primary, standby = select_primary(config.nodes, payloads)
-    report.pass_check(
-        f"exactly one Patroni primary: {primary.label} ({primary.patroni_name})"
-    )
-
-    _check_cluster_views(config, runner, primary, standby, report)
-    _check_postgres(config, runner, primary, standby, report)
-    _check_runtime(config, runner, primary, standby, report)
-
-    etcd = runner.run(config.api, config.etcd_check_command, check=False)
-    if etcd.returncode == 0 and "etcd_quorum_status=passed members=3" in etcd.stdout:
-        report.pass_check("etcd quorum has three healthy members")
-    else:
-        detail = (etcd.stderr or etcd.stdout or "check failed").strip().replace("\n", " ")
-        report.fail(f"etcd quorum check failed: {detail}")
-    return report
-
-
-def _print_report(report: Report) -> None:
-    for message in report.ok:
-        print(f"[patroni-production][ok] {message}")
-    for message in report.failures:
-        print(f"[patroni-production][fail] {message}")
-    status = "failed" if report.failures else "passed"
-    print(
-        f"[patroni-production][summary] status={status} "
-        f"ok={len(report.ok)} failures={len(report.failures)}"
-    )
-
-
-def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--resolve-primary",
-        action="store_true",
-        help="Print only api or reserve after validating the two Patroni roles.",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv or sys.argv[1:])
-    try:
-        config = load_config()
-        runner = SshRunner(config.ssh_options)
-        if args.resolve_primary:
-            primary, _ = select_primary(config.nodes, probe_nodes(config, runner))
-            print(primary.label)
-            return 0
-        report = perform_checks(config, runner)
-    except (RuntimeError, ValueError) as exc:
-        if args.resolve_primary:
-            print(f"could not resolve Patroni primary: {exc}", file=sys.stderr)
-        else:
-            print(f"[patroni-production][fail] {exc}")
-            print("[patroni-production][summary] status=failed ok=0 failures=1")
-        return 2
-
-    _print_report(report)
-    return 1 if report.failures else 0
-
-
 if __name__ == "__main__":
+    try:
+        from scripts.ha.patroni_production_command import main
+    except ModuleNotFoundError:
+        from patroni_production_command import main
+
     raise SystemExit(main())

@@ -94,5 +94,5 @@ jobs:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
           chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
           thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
-          title: "MVN Cloudflare LB config check failed"
-          details: "Artifact: cloudflare-lb-config-log-${{ github.run_id }}"
+          title: "🟡 Маршрутизация Cloudflare требует проверки"
+          details: "Конфигурация переключения трафика между API-серверами отличается от проверенной."

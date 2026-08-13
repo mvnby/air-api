@@ -228,9 +228,26 @@ Scheduled monitors:
 
 Owner-visible alerting:
 
-All HA monitor workflows call `.github/actions/notify-ha-failure` on failure
-after the log artifact upload step. Without the secrets below, the notifier
-prints a skip message and does not fail the workflow:
+The replication monitor is the authoritative source for PostgreSQL topology
+events. It stores a secret-free state artifact after each run and compares the
+new observation with the latest retained state. Telegram receives an event only
+for a confirmed transition:
+
+- `primary_changed`: names the old and new primary with country labels;
+- `degraded`: the primary remains writable but synchronous standby protection
+  is not confirmed;
+- `critical`: no safe writable primary or another unsafe topology was proven;
+- `monitoring_error`: two consecutive checks could not observe the cluster;
+- `recovered` / `monitoring_recovered`: the corresponding incident closed.
+
+A single SSH timeout is retained in the diagnostic artifact but does not page
+the owner. Repeated identical observations are deduplicated. The rollup status
+report does not send a second Telegram alert for failures already owned by a
+source monitor. Other HA workflows still send a concise Russian failure message
+after their diagnostic artifact is uploaded.
+
+Without the secrets below, the notifier prints a skip message and does not fail
+the workflow:
 
 ```bash
 gh secret set HA_ALERT_TELEGRAM_BOT_TOKEN --repo mvnby/air-api

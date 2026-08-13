@@ -21,6 +21,10 @@ inputs:
     description: Optional one-line context, usually the uploaded artifact name.
     required: false
     default: ""
+  message-file:
+    description: Optional UTF-8 file containing the complete owner-facing message.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -33,6 +37,7 @@ runs:
         THREAD_ID: ${{ inputs.thread-id }}
         TITLE: ${{ inputs.title }}
         DETAILS: ${{ inputs.details }}
+        MESSAGE_FILE: ${{ inputs.message-file }}
       run: |
         set -euo pipefail
         if [ -z "${BOT_TOKEN}" ] || [ -z "${CHAT_ID}" ]; then
@@ -50,15 +55,23 @@ runs:
             f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/"
             f"{os.environ.get('GITHUB_RUN_ID', '')}"
         )
-        lines = [
-            os.environ.get("TITLE", "MVN HA monitor failed"),
-            f"Workflow: {os.environ.get('GITHUB_WORKFLOW', '')}",
-            f"Branch: {os.environ.get('GITHUB_REF_NAME', '')}",
-            f"Run: {run_url}",
-        ]
-        details = os.environ.get("DETAILS", "").strip()
-        if details:
-            lines.append(details)
+        message_file = os.environ.get("MESSAGE_FILE", "").strip()
+        if message_file:
+            with open(message_file, encoding="utf-8") as source:
+                message = source.read().strip()
+            if not message or len(message) > 3500:
+                raise SystemExit("owner-facing HA message must contain 1..3500 characters")
+            lines = [message, "", f"Технические подробности: {run_url}"]
+        else:
+            lines = [
+                os.environ.get("TITLE", "MVN HA monitor failed"),
+                f"Workflow: {os.environ.get('GITHUB_WORKFLOW', '')}",
+                f"Branch: {os.environ.get('GITHUB_REF_NAME', '')}",
+                f"Run: {run_url}",
+            ]
+            details = os.environ.get("DETAILS", "").strip()
+            if details:
+                lines.append(details)
 
         payload = {
             "chat_id": os.environ["CHAT_ID"],
