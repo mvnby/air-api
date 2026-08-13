@@ -188,7 +188,7 @@ jobs:
           API_NODE_COMPOSE_SOURCE: deploy/ha/mvn-api/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: host_nginx
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_PAT: ${{ github.token }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh migrate
@@ -218,7 +218,7 @@ jobs:
           API_NODE_COMPOSE_SOURCE: deploy/ha/zakup/docker-compose.patroni.yml
           API_NODE_PROXY_MODE: container_nginx
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_PAT: ${{ github.token }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh migrate
@@ -249,7 +249,7 @@ jobs:
           API_NODE_PROXY_MODE: container_nginx
           API_EXPECTED_PATRONI_ROLE: standby
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_PAT: ${{ github.token }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
@@ -280,7 +280,7 @@ jobs:
           API_NODE_PROXY_MODE: host_nginx
           API_EXPECTED_PATRONI_ROLE: standby
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_PAT: ${{ github.token }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
@@ -312,7 +312,7 @@ jobs:
           API_NODE_PROXY_MODE: host_nginx
           API_EXPECTED_PATRONI_ROLE: primary
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_PAT: ${{ github.token }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
@@ -344,7 +344,7 @@ jobs:
           API_NODE_PROXY_MODE: container_nginx
           API_EXPECTED_PATRONI_ROLE: primary
           SSH_PRIVATE_KEY: ${{ secrets.SSH_KEY }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_PAT: ${{ github.token }}
           BOT_VOICE_TRANSCRIPTION_API_KEY: ${{ secrets.BOT_VOICE_TRANSCRIPTION_API_KEY }}
           BACKEND_IMAGE: ${{ needs.build-backend.outputs.backend_image }}
         run: bash scripts/ha/run_patroni_node_remote.sh deploy && bash scripts/ha/run_patroni_node_remote.sh verify
