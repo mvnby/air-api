@@ -126,13 +126,3 @@ jobs:
           name: ha-status-report-log-${{ github.run_id }}
           path: ha-status-report.log
           if-no-files-found: warn
-
-      - name: Notify HA failure
-        if: failure()
-        uses: ./.github/actions/notify-ha-failure
-        with:
-          bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
-          chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
-          thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
-          title: "MVN API HA status report failed"
-          details: "Artifact: ha-status-report-log-${{ github.run_id }}"

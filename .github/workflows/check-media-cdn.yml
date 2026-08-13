@@ -143,5 +143,5 @@ jobs:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
           chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
           thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
-          title: "MVN media CDN check failed"
-          details: "Artifact: media-cdn-check-log-${{ github.run_id }}"
+          title: "🟡 Проверка изображений и CDN не прошла"
+          details: "Часть файлов может быть временно недоступна; основной API проверяется отдельно."

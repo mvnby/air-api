@@ -14,11 +14,16 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
+concurrency:
+  group: postgres-replication-monitor
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:
+      actions: read
       contents: read
 
     steps:
@@ -96,7 +101,9 @@ jobs:
               export RESERVE_NODE_COMPOSE_FILE=docker-compose.patroni.yml
               export API_NODE_WG_IP="${EXPECTED_PRIMARY_WG_IP}"
               export RESERVE_NODE_WG_IP="${EXPECTED_STANDBY_WG_IP}"
-              python3 scripts/ha/check_patroni_production.py | tee -a postgres-replication-check.log
+              python3 scripts/ha/check_patroni_production.py \
+                --snapshot-output postgres-ha-snapshot.json \
+                | tee -a postgres-replication-check.log
               ;;
             physical)
               export PRIMARY_SSH="${SSH_USER_API}@${SSH_HOST_API}"
@@ -108,6 +115,49 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Restore previous HA notification state
+        id: previous-state
+        if: ${{ always() && (vars.API_DB_HA_MODE || 'physical') == 'patroni' && steps.maintenance.outputs.active != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          previous_dir="${RUNNER_TEMP}/ha-notification-previous"
+          mkdir -p "${previous_dir}"
+          restored=false
+          while IFS= read -r previous_run_id; do
+            if gh run download "${previous_run_id}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --name "ha-notification-state-${previous_run_id}" \
+              --dir "${previous_dir}" 2>/dev/null; then
+              restored=true
+              break
+            fi
+          done < <(
+            gh run list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --workflow check-postgres-replication.yml \
+              --branch main \
+              --status completed \
+              --limit 10 \
+              --json databaseId \
+              --jq '.[].databaseId'
+          )
+          echo "restored=${restored}" >> "${GITHUB_OUTPUT}"
+
+      - name: Classify owner-facing HA event
+        id: ha-event
+        if: ${{ always() && (vars.API_DB_HA_MODE || 'physical') == 'patroni' && steps.maintenance.outputs.active != 'true' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ha/ha_telegram_events.py \
+            --snapshot postgres-ha-snapshot.json \
+            --previous-state "${RUNNER_TEMP}/ha-notification-previous/ha-notification-state.json" \
+            --fallback-log postgres-replication-check.log \
+            --state-output ha-notification-state.json \
+            --message-output ha-owner-message.txt \
+            --github-output "${GITHUB_OUTPUT}"
 
       - name: Write Summary
         if: always()
@@ -133,12 +183,21 @@ jobs:
           path: postgres-replication-check.log
           if-no-files-found: warn
 
-      - name: Notify HA failure
-        if: failure()
+      - name: Upload HA notification state
+        if: ${{ always() && steps.ha-event.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ha-notification-state-${{ github.run_id }}
+          path: ha-notification-state.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Notify owner about HA event
+        if: ${{ always() && github.ref == 'refs/heads/main' && steps.ha-event.outputs.notify == 'true' }}
         uses: ./.github/actions/notify-ha-failure
         with:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
           chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
           thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
-          title: "MVN PostgreSQL replication check failed"
-          details: "Artifact: postgres-replication-check-log-${{ github.run_id }}"
+          title: "Событие PostgreSQL HA"
+          message-file: ha-owner-message.txt

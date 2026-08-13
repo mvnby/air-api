@@ -553,8 +553,11 @@ role-aware instead of treating the API VPS as a permanent primary:
   `scripts/ha/check_patroni_production.py`;
 - `PostgreSQL PITR Check` probes both Patroni REST APIs and executes the local
   archive/timer/R2 freshness check on whichever node is currently primary;
-- both workflows retain the existing Telegram failure action and diagnostic
-  artifacts.
+- the replication workflow persists a secret-free observation state and sends
+  deduplicated owner events for primary changes, degraded protection, critical
+  topology, repeated monitoring failure, and recovery;
+- the PITR workflow retains a separate human-readable backup warning and
+  diagnostic artifact, so a backup problem is not mislabeled as a failover.
 
 Scheduled HA checks recognize an official maintenance window only after
 `scripts/ha/check_patroni_maintenance.py` proves the marker independently on

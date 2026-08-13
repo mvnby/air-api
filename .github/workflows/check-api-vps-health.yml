@@ -184,5 +184,5 @@ jobs:
           bot-token: ${{ secrets.HA_ALERT_TELEGRAM_BOT_TOKEN }}
           chat-id: ${{ secrets.HA_ALERT_TELEGRAM_CHAT_ID }}
           thread-id: ${{ secrets.HA_ALERT_TELEGRAM_THREAD_ID }}
-          title: "MVN API VPS health check failed"
-          details: "Artifact: api-vps-health-log-${{ github.run_id }}"
+          title: "🟠 Один из API-серверов требует проверки"
+          details: "Мониторинг обнаружил проблему доступности или ресурсов сервера; состояние публичного API проверяется отдельно."
