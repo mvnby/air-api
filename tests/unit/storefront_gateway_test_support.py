@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 
 import pytest
@@ -38,6 +39,23 @@ _DEFAULT_KEY = object()
 
 class ValidatedPayload(BaseModel):
     name: str
+
+
+def signing_keyring_json(
+    *entries: tuple[str, str, dict[str, str]],
+) -> str:
+    return json.dumps(
+        {
+            "keys": {
+                key_id: {
+                    "secret": secret,
+                    "host_roles": host_roles,
+                }
+                for key_id, secret, host_roles in entries
+            }
+        },
+        separators=(",", ":"),
+    )
 
 
 def signed_headers(
@@ -101,10 +119,14 @@ def signed_headers(
 
 def configure_signing_settings(monkeypatch) -> None:
     values = {
-        "STOREFRONT_CONTEXT_SIGNING_KEY_ID": PRIMARY_KEY_ID,
-        "STOREFRONT_CONTEXT_SIGNING_SECRET": PRIMARY_SECRET,
+        "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON": signing_keyring_json(
+            (PRIMARY_KEY_ID, PRIMARY_SECRET, {STOREFRONT_HOST: "primary"})
+        ),
+        "STOREFRONT_CONTEXT_SIGNING_KEY_ID": "",
+        "STOREFRONT_CONTEXT_SIGNING_SECRET": "",
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID": "",
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET": "",
+        "STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS": "",
         "STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS": False,
         "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS": False,
         "STOREFRONT_CONTEXT_API_HOSTS": "api.mvn.by,localhost",
@@ -123,6 +145,19 @@ def gateway_app(monkeypatch):
     app.state.session_calls = 0
     app.state.validated_endpoint_calls = 0
     canonical_scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    canonical_context = StorefrontContext(
+        tenant_id=1,
+        tenant_slug="mvn",
+        tenant_kind="operator",
+        storefront_id=1,
+        storefront_slug="main",
+        storefront_name="MVN",
+        hostname="mvn.by",
+        city="Минск",
+        default_locale="ru-BY",
+        currency="BYN",
+        tenant_is_system=True,
+    )
     orsha_context = StorefrontContext(
         tenant_id=1,
         tenant_slug="mvn",
@@ -147,6 +182,8 @@ def gateway_app(monkeypatch):
     async def resolve_storefront(_session, raw_host):
         if raw_host == STOREFRONT_HOST:
             return orsha_context
+        if raw_host == "mvn.by":
+            return canonical_context
         return None
 
     monkeypatch.setattr(SystemTenantScopeResolver, "resolve", resolve_system)

@@ -1,21 +1,21 @@
-import re
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
-from pydantic import ValidationError, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.runtime_controls import (
     RuntimeControlDecision,
     resolve_single_active_control,
 )
+from core.storefront_signing_keyring import (
+    InvalidStorefrontSigningKeyring,
+    StorefrontSigningKeyring,
+    build_storefront_signing_keyring,
+    canonical_public_site_hostname,
+)
 
 load_dotenv()
-
-
-_STOREFRONT_SIGNING_KEY_ID_PATTERN = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
-)
 
 
 def _redact_settings_validation_error(error: ValidationError) -> ValidationError:
@@ -121,13 +121,27 @@ class Settings(BaseSettings):
     STATIC_DIR: str = "static"
     UPLOAD_DIR: str = "static/uploads"
     PUBLIC_SITE_URL: str = "https://mvn.by"
-    # Optional runtime keyring for a trusted storefront SSR/proxy. When unset,
-    # public requests keep using the canonical MVN storefront; a request that
-    # tries to select another storefront still fails closed.
+    # Host-scoped runtime keyring for trusted storefront SSR/proxy services.
+    # The JSON is secret-bearing and deliberately excluded from repr. The four
+    # historical pair fields remain only for a bounded canonical-host migration.
+    STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON: str = Field(
+        default="",
+        repr=False,
+        exclude=True,
+    )
     STOREFRONT_CONTEXT_SIGNING_KEY_ID: str = ""
-    STOREFRONT_CONTEXT_SIGNING_SECRET: str = ""
+    STOREFRONT_CONTEXT_SIGNING_SECRET: str = Field(
+        default="",
+        repr=False,
+        exclude=True,
+    )
     STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID: str = ""
-    STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET: str = ""
+    STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET: str = Field(
+        default="",
+        repr=False,
+        exclude=True,
+    )
+    STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS: str = ""
     STOREFRONT_CONTEXT_MAX_AGE_SECONDS: int = 300
     STOREFRONT_CONTEXT_MAX_BODY_BYTES: int = 20 * 1024 * 1024
     STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS: bool = False
@@ -159,34 +173,6 @@ class Settings(BaseSettings):
             "app",
         )
 
-    @field_validator(
-        "STOREFRONT_CONTEXT_SIGNING_KEY_ID",
-        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID",
-    )
-    @classmethod
-    def _validate_storefront_context_key_id(cls, value: str) -> str:
-        normalized = str(value or "").strip()
-        if normalized and not _STOREFRONT_SIGNING_KEY_ID_PATTERN.fullmatch(
-            normalized
-        ):
-            raise ValueError(
-                "Storefront context signing key ID must use 1-64 ASCII letters, digits, dot, underscore or dash"
-            )
-        return normalized
-
-    @field_validator(
-        "STOREFRONT_CONTEXT_SIGNING_SECRET",
-        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET",
-    )
-    @classmethod
-    def _validate_storefront_context_secret(cls, value: str) -> str:
-        normalized = str(value or "")
-        if normalized and len(normalized.encode("utf-8")) < 32:
-            raise ValueError(
-                "STOREFRONT_CONTEXT_SIGNING_SECRET must contain at least 32 bytes"
-            )
-        return normalized
-
     @field_validator("STOREFRONT_CONTEXT_MAX_AGE_SECONDS")
     @classmethod
     def _validate_storefront_context_max_age(cls, value: int) -> int:
@@ -209,41 +195,53 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_storefront_context_keyring(self):
-        primary_id = bool(self.STOREFRONT_CONTEXT_SIGNING_KEY_ID)
-        primary_secret = bool(self.STOREFRONT_CONTEXT_SIGNING_SECRET)
-        previous_id = bool(self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID)
-        previous_secret = bool(self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET)
-
-        if primary_id != primary_secret:
-            raise ValueError(
-                "STOREFRONT_CONTEXT_SIGNING_KEY_ID and STOREFRONT_CONTEXT_SIGNING_SECRET must be configured together"
-            )
-        if previous_id != previous_secret:
-            raise ValueError(
-                "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID and "
-                "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET must be configured together"
-            )
-        if previous_id and not primary_id:
-            raise ValueError(
-                "Previous storefront signing key requires a configured primary key"
-            )
-        if (
-            previous_id
-            and self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID
-            == self.STOREFRONT_CONTEXT_SIGNING_KEY_ID
+        try:
+            keyring = self.storefront_context_signing_keyring
+        except InvalidStorefrontSigningKeyring as exc:
+            raise ValueError(f"Storefront signing keyring is invalid: {exc}") from None
+        if self.STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS:
+            if not keyring.enabled:
+                raise ValueError(
+                    "Signed storefront requests cannot be required without a signing keyring"
+                )
+            try:
+                canonical_hostname = canonical_public_site_hostname(
+                    self.PUBLIC_SITE_URL
+                )
+            except InvalidStorefrontSigningKeyring as exc:
+                raise ValueError(
+                    f"Signed storefront requests require a valid PUBLIC_SITE_URL: {exc}"
+                ) from None
+            if not keyring.has_primary_for(canonical_hostname):
+                raise ValueError(
+                    "Signed storefront requests require a primary key for the "
+                    "canonical PUBLIC_SITE_URL host"
+                )
+        if self.STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS and not any(
+            key.legacy_v1_read_compatible for key in keyring.keys
         ):
             raise ValueError(
-                "Primary and previous storefront signing key IDs must differ"
-            )
-        if self.STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS and not primary_id:
-            raise ValueError(
-                "Signed storefront requests cannot be required without a primary signing key"
-            )
-        if self.STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS and not primary_id:
-            raise ValueError(
-                "Legacy storefront v1 reads require a configured primary signing key"
+                "Legacy storefront v1 reads require a canonical legacy signing key"
             )
         return self
+
+    @property
+    def storefront_context_signing_keyring(self) -> StorefrontSigningKeyring:
+        return build_storefront_signing_keyring(
+            raw_json=self.STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON,
+            legacy_primary_key_id=self.STOREFRONT_CONTEXT_SIGNING_KEY_ID,
+            legacy_primary_secret=self.STOREFRONT_CONTEXT_SIGNING_SECRET,
+            legacy_previous_key_id=(
+                self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID
+            ),
+            legacy_previous_secret=(
+                self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET
+            ),
+            legacy_allowed_hosts=(
+                self.STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS
+            ),
+            public_site_url=self.PUBLIC_SITE_URL,
+        )
 
     # Product media storage. Default stays local so CI/deploy do not require
     # R2/S3 secrets unless PRODUCT_MEDIA_STORAGE_PROVIDER is changed.

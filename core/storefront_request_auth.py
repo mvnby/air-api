@@ -9,6 +9,11 @@ from core.public_write_key import (
     public_write_idempotency_key_sha256,
 )
 from core.storefront_request_envelope import storefront_signing_header_state
+from core.storefront_signing_keyring import (
+    StorefrontSigningKey,
+    StorefrontSigningKeyring,
+    is_valid_storefront_signing_key_id,
+)
 from services.storefront_context_service import StorefrontContextService
 from services.storefront_context_signature_service import (
     InvalidStorefrontContextSignature,
@@ -22,10 +27,7 @@ _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 @dataclass(frozen=True, slots=True)
 class StorefrontEnvelopeAuthConfig:
-    primary_key_id: str
-    primary_secret: str = field(repr=False)
-    previous_key_id: str = ""
-    previous_secret: str = field(default="", repr=False)
+    signing_keyring: StorefrontSigningKeyring = field(repr=False)
     allowed_api_hosts: tuple[str, ...] = ()
     max_age_seconds: int = 300
     allow_legacy_v1_read_requests: bool = False
@@ -60,36 +62,42 @@ def _complete_signing_headers(
     }
 
 
-def _select_signing_secret(
+def _select_signing_key(
     *,
     supplied_key_id: str,
+    storefront_hostname: str,
     config: StorefrontEnvelopeAuthConfig,
-) -> str:
-    if not config.primary_key_id or not config.primary_secret:
+) -> StorefrontSigningKey:
+    if not config.signing_keyring.enabled:
         raise InvalidStorefrontContextSignature(
             "Storefront context signing is disabled"
         )
-    if bool(config.previous_key_id) != bool(config.previous_secret):
+    if not is_valid_storefront_signing_key_id(supplied_key_id):
         raise InvalidStorefrontContextSignature(
-            "Storefront context signing keyring is invalid"
+            "Storefront context signing key ID is invalid"
         )
 
-    candidates = [(config.primary_key_id, config.primary_secret)]
-    if config.previous_key_id and config.previous_secret:
-        if config.previous_key_id == config.primary_key_id:
+    selected: StorefrontSigningKey | None = None
+    supplied = supplied_key_id.encode("ascii")
+    for candidate in config.signing_keyring.keys:
+        try:
+            candidate_id = candidate.key_id.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise InvalidStorefrontContextSignature(
+                "Storefront context signing keyring is invalid"
+            ) from exc
+        if not hmac.compare_digest(candidate_id, supplied):
+            continue
+        if candidate.role_for(storefront_hostname) not in {"primary", "previous"}:
+            continue
+        if selected is not None:
             raise InvalidStorefrontContextSignature(
                 "Storefront context signing keyring is invalid"
             )
-        candidates.append((config.previous_key_id, config.previous_secret))
-
-    selected = ""
-    supplied = supplied_key_id.encode("utf-8")
-    for candidate_id, candidate_secret in candidates:
-        if hmac.compare_digest(candidate_id.encode("utf-8"), supplied):
-            selected = candidate_secret
-    if not selected:
+        selected = candidate
+    if selected is None:
         raise InvalidStorefrontContextSignature(
-            "Storefront context signing key is not allowed"
+            "Storefront context signing key is not allowed for this host"
         )
     return selected
 
@@ -207,8 +215,17 @@ def authenticate_storefront_envelope(
         raw_headers=headers,
         allowed_api_hosts=config.allowed_api_hosts,
     )
-    secret = _select_signing_secret(
+    try:
+        normalized_storefront_hostname = (
+            StorefrontContextService.normalize_hostname(storefront_hostname)
+        )
+    except (TypeError, ValueError) as exc:
+        raise InvalidStorefrontContextSignature(
+            "Storefront context storefront host is invalid"
+        ) from exc
+    signing_key = _select_signing_key(
         supplied_key_id=key_id,
+        storefront_hostname=normalized_storefront_hostname,
         config=config,
     )
     target = StorefrontContextSignatureService.request_target(
@@ -221,18 +238,19 @@ def authenticate_storefront_envelope(
         required_for_write=True,
     )
     hostname = StorefrontContextSignatureService.verify(
-        secret=secret,
+        secret=signing_key.secret,
         timestamp=int(raw_timestamp),
         method=method,
         path_and_query=target,
         api_hostname=api_hostname,
-        storefront_hostname=storefront_hostname,
+        storefront_hostname=normalized_storefront_hostname,
         body_sha256=body_sha256,
         idempotency_key_sha256=idempotency_key_sha256,
         signature=signature,
         max_age_seconds=config.max_age_seconds,
         allow_legacy_v1_read_requests=(
             config.allow_legacy_v1_read_requests
+            and signing_key.legacy_v1_read_compatible
         ),
     )
     return VerifiedStorefrontEnvelope(hostname=hostname)

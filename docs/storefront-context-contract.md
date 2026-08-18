@@ -115,38 +115,63 @@ body byte or the idempotency key invalidates the signature.
 
 ## Runtime keyring and rotation
 
-Keys exist only in runtime secret configuration:
+Keys exist only in the secret-bearing
+`STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON` runtime setting. Its closed schema is:
 
-- `STOREFRONT_CONTEXT_SIGNING_KEY_ID` and
-  `STOREFRONT_CONTEXT_SIGNING_SECRET` are the primary pair;
-- `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID` and
-  `STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET` are the optional rotation pair;
-- `STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS` is a default-off, read-only
-  rollback switch; it never permits a v1 write;
-- every secret contains at least 32 UTF-8 bytes;
-- key IDs are a case-sensitive allowlist and are never supplied by the
-  database or a public payload.
+```json
+{
+  "keys": {
+    "polotsk-web-2026-08": {
+      "secret": "<random 32+ byte secret>",
+      "host_roles": {
+        "polotsk.mvn.by": "primary"
+      }
+    }
+  }
+}
+```
 
-The API selects one allowed key by ID and compares the HMAC in constant time.
-The previous key is accepted only while a complete primary pair is configured.
-Clearing the primary pair disables every signed request, including a request
-using a stale previous key.
+Every key ID is unique and case-sensitive. Every exact canonical hostname has
+one `primary` key and at most one different `previous` key. Each key binds to
+exactly one hostname; aliases and other storefronts receive separate keys.
+`*`, suffix matches, database domains and implicit sharing are not supported.
+Secrets contain 32–4096 UTF-8 bytes, must be unique across key IDs, and are
+excluded from settings/keyring representations and validation errors. Secret
+uniqueness is mandatory because the preserved v2 canonical message does not
+contain the public key ID.
 
-Zero-downtime rotation:
+The API normalizes the signed storefront host, selects an exact key-ID/hostname
+binding, then verifies HMAC v2. A valid HMAC made with a Polotsk secret but
+claiming `mvn.by` fails before storefront/database lookup. Unknown or malformed
+IDs, unbound hosts, duplicate headers, multiple primaries and previous-without-
+primary configurations fail closed.
 
-1. Add the new pair as primary and keep the old pair as previous.
-2. Deploy air-api, then switch each trusted storefront runtime to the new key.
-3. Run read, Lead and Order canaries with the new key.
-4. Wait longer than `STOREFRONT_CONTEXT_MAX_AGE_SECONDS`.
-5. Remove the previous pair.
+The historical four `...SIGNING_KEY_ID/SECRET` primary/previous variables are
+accepted only when `STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS` explicitly equals
+the one canonical hostname from `PUBLIC_SITE_URL`. They can never authorize a
+second storefront. `STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS` applies only to
+these bounded legacy keys; JSON keyring entries are v2-only. The legacy fields
+are a migration bridge, not the target configuration.
+
+Zero-downtime per-host rotation:
+
+1. Add the new key as `primary` for one exact host and retain its old key as
+   `previous` for that same host.
+2. Install the identical keyring on both API nodes and restart/validate the
+   fenced replica before the active node.
+3. Switch only that storefront runtime to the new key.
+4. Run read, Lead and Order canaries through the load-balanced hostname and
+   during a controlled node-path check.
+5. Wait longer than `STOREFRONT_CONTEXT_MAX_AGE_SECONDS`, then remove the old
+   `previous` binding from both API nodes.
 
 Never reuse `SECRET_KEY`, bot credentials or a Cloudflare token.
 
-The current primary/previous slots form one MVN-operated platform keyring: a
-holder can sign for any active storefront domain. It is therefore suitable only
-for runtimes controlled by MVN. Before an external tenant controls its own
-runtime, introduce per-runtime credentials bound to an explicit storefront-host
-allowlist or keep signing in the centrally managed MVN edge.
+Use a distinct key and secret for every exact storefront hostname, including
+aliases served by the same centrally managed runtime. This intentionally keeps
+the blast radius of one runtime credential to one hostname.
+See `docs/storefront-signing-keyring-runbook.md` for the two-node activation and
+rollback sequence.
 
 ## Replay boundary
 
@@ -370,9 +395,11 @@ Use this rolling order:
 2. Deploy the backend that verifies v2 while canonical unsigned traffic remains
    allowed. Keep `STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS=false` unless an
    emergency read-only rollback requires it.
-3. Configure the API primary key pair and allowed upstream API host on both HA
-   runtimes with the require-signed switch still false; configure the same pair
-   only in the trusted storefront server.
+3. Configure an exact host-scoped primary in the API JSON keyring and the
+   allowed upstream API host on both HA runtimes with the require-signed switch
+   still false; give only that key ID/secret to the matching trusted storefront
+   server. Follow the replica-first checks in
+   `docs/storefront-signing-keyring-runbook.md`.
 4. Deploy the storefront/proxy v2 signer. Create the second `Storefront` and
    active primary `StorefrontDomain` through
    the reviewed tenant setup path. Do not put test domains in migrations.
@@ -388,8 +415,9 @@ Use this rolling order:
    `STOREFRONT_CONTEXT_REQUIRE_SIGNED_REQUESTS`.
 
 Rollback is configuration-first: remove second-storefront routing, disable the
-require-signed switch, and clear the primary/previous key pairs if the trusted
-proxy is suspected. Canonical unsigned `mvn/main` remains available while the
-switch is false. If only signed reads need temporary compatibility, enable the
-legacy-v1-read flag without allowing any v1 write. No schema rollback is
-required.
+require-signed switch, and revoke only the affected host binding if its trusted
+proxy is suspected. Do not clear unrelated storefront keys. Canonical unsigned
+`mvn/main` remains available while the switch is false. If canonical legacy
+signed reads alone need temporary compatibility, the legacy-v1-read flag can
+apply only to the explicitly `mvn.by`-bound migration key and never permits a
+v1 write. No schema rollback is required.

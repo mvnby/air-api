@@ -97,8 +97,24 @@ def _json_body(payload: dict) -> bytes:
 
 
 def _configure_signing(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEY_ID", _KEY_ID)
-    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", _SECRET)
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON",
+        json.dumps(
+            {
+                "keys": {
+                    _KEY_ID: {
+                        "secret": _SECRET,
+                        "host_roles": {
+                            "orsha.internal.mvn.by": "primary",
+                        },
+                    }
+                }
+            }
+        ),
+    )
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEY_ID", "")
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", "")
     monkeypatch.setattr(
         settings,
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID",
@@ -476,17 +492,18 @@ async def test_context_selection_is_disabled_without_server_secret(
     monkeypatch,
 ):
     await _seed_secondary_storefront(db)
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON", "")
     monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEY_ID", "")
     monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", "")
     monkeypatch.setattr(
         settings,
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID",
-        _KEY_ID,
+        "",
     )
     monkeypatch.setattr(
         settings,
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET",
-        _SECRET,
+        "",
     )
     body = _json_body(_payload())
 
