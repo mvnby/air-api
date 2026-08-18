@@ -5,10 +5,12 @@ for reviewed tenant/storefront provisioning. It accepts a closed JSON manifest,
 never creates credentials, and never deletes tenant data.
 
 The manifest owns exact tenant/storefront identity, an exact hostname allowlist,
-and at most 100 reviewed offers. Unknown fields, credential-shaped fields,
-reserved MVN hostnames, ports, URLs, and hostnames outside the manifest allowlist
-fail closed. A managed tenant must be a non-system `independent_seller`; the
-legacy Orsha canary is a thin adapter for an existing system tenant.
+and at most 100 reviewed launch/canary offer exceptions. Empty `offers` means
+that the storefront receives no offers; it never means "share all products".
+Unknown fields, credential-shaped fields, reserved MVN hostnames, ports, URLs,
+and hostnames outside the manifest allowlist fail closed. A managed tenant must
+be a non-system `independent_seller`; the legacy Orsha canary is a thin adapter
+for an existing system tenant.
 
 ## Transaction contract
 
@@ -26,8 +28,12 @@ rows and CRM history.
 
 The reviewed manifest is
 `config/storefront_onboarding/polotsk.json`. It intentionally starts with an empty
-offer set; add reviewed public product offers to that same bounded file before
-bootstrap if the storefront must launch with catalog inventory.
+offer set, so bootstrap alone exposes no catalog inventory. The bounded manifest
+may carry a small, explicitly reviewed launch/canary subset, but it is not a bulk
+catalog transport. Full Polotsk inventory from the shared master catalog requires
+a separate system-owned catalog grant/sync boundary, with its own review and
+tests, before activation or any catalog presentation. That capability is not
+implemented by this onboarding change.
 
 Run each plan immediately before its matching mutation and copy only the emitted
 `reviewed_execute_command` after reviewing `blockers`, `changes`, resolved offers,
@@ -40,9 +46,12 @@ python3 scripts/manage_storefront_onboarding.py plan \
   --hostname polotsk.mvn.by
 ```
 
-After bootstrap commits, provision DNS/TLS outside this CLI and independently
-prove that `polotsk.mvn.by` reaches the intended storefront gateway. Then plan
-and execute domain verification:
+After bootstrap commits, establish and verify the separately implemented
+system-owned catalog grant/sync if Polotsk must present full shared inventory.
+Do not substitute more than 100 manually copied manifest offers for that
+boundary. Provision DNS/TLS outside this CLI and independently prove that
+`polotsk.mvn.by` reaches the intended storefront gateway. Then plan and execute
+domain verification:
 
 ```bash
 python3 scripts/manage_storefront_onboarding.py plan \
@@ -51,8 +60,8 @@ python3 scripts/manage_storefront_onboarding.py plan \
   --hostname polotsk.mvn.by
 ```
 
-Only after the DNS/TLS proof and `verify-domain` commit should activation be
-planned and executed:
+Only after the DNS/TLS proof, `verify-domain` commit, and any required full-catalog
+grant/sync verification should activation be planned and executed:
 
 ```bash
 python3 scripts/manage_storefront_onboarding.py plan \
