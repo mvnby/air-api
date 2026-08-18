@@ -343,6 +343,10 @@ async def recognize_internal_bot_customer_requisites_text(
     "/customers/requisites/recognize-file",
     response_model=BotCustomerRequisitesRecognitionResponse,
     operation_id="recognize_internal_bot_customer_requisites_file_v1",
+    description=(
+        "Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC, or DOCX "
+        "(up to 10 MB)."
+    ),
 )
 async def recognize_internal_bot_customer_requisites_file(
     telegram_id: int = Form(ge=1),

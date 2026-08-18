@@ -3,13 +3,17 @@ import base64
 import json
 import logging
 import re
+import subprocess
+import tempfile
 import uuid
+import zipfile
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
 
 import httpx
+from defusedxml import ElementTree
 from google.auth.exceptions import TransportError as GoogleAuthTransportError
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -50,6 +54,13 @@ class CustomerRequisitesRecognitionService:
 
     IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
     PDF_MIME_TYPES = {"application/pdf"}
+    DOC_MIME_TYPES = {"application/msword", "application/vnd.ms-word"}
+    DOCX_MIME_TYPE = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    DOCX_MIME_TYPES = {DOCX_MIME_TYPE}
+    MAX_WORD_ARCHIVE_FILES = 500
+    MAX_WORD_UNCOMPRESSED_BYTES = 20 * 1024 * 1024
 
     CITY_PHONE_CODES = {
         "витебск": "212",
@@ -77,6 +88,9 @@ class CustomerRequisitesRecognitionService:
                 "image/png": ".png",
                 "image/webp": ".webp",
                 "application/pdf": ".pdf",
+                "application/msword": ".doc",
+                "application/vnd.ms-word": ".doc",
+                cls.DOCX_MIME_TYPE: ".docx",
             }.get(mime_type or "", ".bin")
         stem = re.sub(r"[^A-Za-z0-9_.-]+", "-", Path(filename or "requisites").stem).strip(".-") or "requisites"
         return f"{uuid.uuid4().hex}_{stem[:80]}{suffix}"
@@ -165,6 +179,14 @@ class CustomerRequisitesRecognitionService:
     async def extract_ocr_text(cls, content: bytes, *, mime_type: Optional[str], filename: Optional[str] = None) -> str:
         effective_mime = str(mime_type or "").split(";")[0].strip().lower()
         lower_name = str(filename or "").lower()
+        is_docx = effective_mime in cls.DOCX_MIME_TYPES or lower_name.endswith(".docx")
+        if is_docx:
+            return await asyncio.to_thread(cls._extract_docx_text, content)
+
+        is_doc = effective_mime in cls.DOC_MIME_TYPES or lower_name.endswith(".doc")
+        if is_doc:
+            return await asyncio.to_thread(cls._extract_doc_text, content)
+
         is_pdf = effective_mime in cls.PDF_MIME_TYPES or lower_name.endswith(".pdf")
         if is_pdf:
             text = await asyncio.to_thread(cls._extract_pdf_text, content)
@@ -173,8 +195,60 @@ class CustomerRequisitesRecognitionService:
             return await asyncio.to_thread(cls._ocr_pdf_pages, content)
 
         if effective_mime and effective_mime not in cls.IMAGE_MIME_TYPES:
-            raise ValueError("Поддерживаются только JPG, PNG, WEBP и PDF")
+            raise ValueError("Поддерживаются только JPG, PNG, WEBP, PDF, DOC и DOCX")
         return await asyncio.to_thread(cls._vision_text_from_image_bytes_sync, content)
+
+    @classmethod
+    def _extract_docx_text(cls, content: bytes) -> str:
+        try:
+            with zipfile.ZipFile(BytesIO(content)) as archive:
+                entries = archive.infolist()
+                if len(entries) > cls.MAX_WORD_ARCHIVE_FILES:
+                    raise ValueError("DOCX содержит слишком много файлов")
+                if sum(entry.file_size for entry in entries) > cls.MAX_WORD_UNCOMPRESSED_BYTES:
+                    raise ValueError("DOCX слишком большой после распаковки")
+                document_xml = archive.read("word/document.xml")
+        except (KeyError, zipfile.BadZipFile) as exc:
+            raise ValueError("Не удалось прочитать DOCX") from exc
+
+        try:
+            root = ElementTree.fromstring(document_xml)
+        except Exception as exc:
+            raise ValueError("Не удалось прочитать текст DOCX") from exc
+
+        namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        paragraphs: list[str] = []
+        for paragraph in root.iter(f"{namespace}p"):
+            text = "".join(
+                str(node.text or "") for node in paragraph.iter(f"{namespace}t")
+            ).strip()
+            if text:
+                paragraphs.append(text)
+        result = "\n".join(paragraphs).strip()
+        if not result:
+            raise ValueError("В DOCX не найден текст")
+        return result
+
+    @staticmethod
+    def _extract_doc_text(content: bytes) -> str:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".doc") as source:
+                source.write(content)
+                source.flush()
+                completed = subprocess.run(
+                    ["antiword", "-m", "UTF-8.txt", source.name],
+                    capture_output=True,
+                    check=False,
+                    timeout=15,
+                )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError("Не удалось прочитать DOC") from exc
+        if completed.returncode != 0:
+            raise ValueError("Не удалось прочитать DOC")
+        result = completed.stdout.decode("utf-8", errors="replace").strip()
+        if not result:
+            raise ValueError("В DOC не найден текст")
+        return result
 
     @staticmethod
     def _extract_pdf_text(content: bytes) -> str:

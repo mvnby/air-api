@@ -899,3 +899,57 @@ async def test_internal_bot_requisites_file_enforces_size_before_service(monkeyp
 
     assert response.status_code == 413
     recognize.assert_not_called()
+
+
+async def test_internal_bot_requisites_file_forwards_docx_to_service(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
+    recognition = {
+        "id": 12,
+        "status": "recognized",
+        "source": "telegram",
+        "extracted": {"name": "ООО Тест", "inn": "123456789"},
+        "validation_flags": {},
+        "duplicate_customer": None,
+        "confirmed_customer_id": None,
+        "confirmed_action": None,
+        "created_at": "2026-07-17T12:00:00",
+    }
+
+    async def fake_recognize(_session, **kwargs):
+        assert kwargs["filename"] == "requisites.docx"
+        assert kwargs["mime_type"] == (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        assert kwargs["content"] == b"docx-bytes"
+        return recognition
+
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(
+        BotCustomerRequisitesApiService,
+        "recognize_file_for_manager",
+        fake_recognize,
+    )
+    app.dependency_overrides[get_session] = fake_session
+    app.dependency_overrides[get_system_tenant_scope] = lambda: TEST_TENANT_SCOPE
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/internal/bot/v1/customers/requisites/recognize-file",
+                headers={"Authorization": "Bearer expected-token"},
+                data={"telegram_id": "123456"},
+                files={
+                    "file": (
+                        "requisites.docx",
+                        b"docx-bytes",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+        app.dependency_overrides.pop(get_system_tenant_scope, None)
+
+    assert response.status_code == 200
+    assert response.json()["extracted"]["inn"] == "123456789"

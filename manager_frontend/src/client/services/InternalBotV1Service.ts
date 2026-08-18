@@ -253,6 +253,7 @@ export class InternalBotV1Service {
     }
     /**
      * Recognize Internal Bot Customer Requisites File
+     * Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC, or DOCX (up to 10 MB).
      * @param formData
      * @returns BotCustomerRequisitesRecognitionResponse Successful Response
      * @throws ApiError
