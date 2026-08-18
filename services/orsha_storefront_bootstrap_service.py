@@ -1,37 +1,81 @@
+"""Thin backward-compatible Orsha adapter for generic storefront onboarding."""
+
 from __future__ import annotations
 
-import hmac
-import re
 from typing import Any, Iterable, Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crud.orsha_storefront_bootstrap import OrshaStorefrontBootstrapDAO
-from services.orsha_storefront_bootstrap_planner import (
-    OrshaStorefrontBootstrapPlanner,
+from services.orsha_storefront_manifest import (
+    OrshaStorefrontManifest,
+    OrshaStorefrontOfferSpec,
 )
-from services.orsha_storefront_bootstrap_state import (
-    OrshaStorefrontBootstrapBlockedError,
-    OrshaStorefrontDefinition,
-    serialize_state,
+from services.storefront_onboarding_manifest import StorefrontOnboardingManifest
+from services.storefront_onboarding_service import (
+    StorefrontOnboardingBlockedError,
+    StorefrontOnboardingService,
 )
-from services.orsha_storefront_lifecycle_staging import (
-    OrshaStorefrontLifecycleStagingService,
+
+
+ORSHA_ALLOWED_HOSTNAMES = frozenset(
+    {"orsha-internal.mvn.by", "orsha.mvn.by"}
 )
-from services.orsha_storefront_manifest import OrshaStorefrontOfferSpec
+OrshaStorefrontBootstrapBlockedError = StorefrontOnboardingBlockedError
+
+
+def build_orsha_manifest(
+    *,
+    hostname: str,
+    offer_specs: Iterable[OrshaStorefrontOfferSpec | Mapping[str, Any]],
+    enforce_offer_bounds: bool,
+) -> StorefrontOnboardingManifest:
+    normalized_hostname = str(hostname or "").strip().rstrip(".").casefold()
+    if normalized_hostname not in ORSHA_ALLOWED_HOSTNAMES:
+        raise ValueError("Orsha hostname is not in the compatibility allowlist")
+    raw_offers = [
+        value.to_dict() if isinstance(value, OrshaStorefrontOfferSpec) else value
+        for value in offer_specs
+    ]
+    offers = (
+        [value.to_dict() for value in OrshaStorefrontManifest.normalize(raw_offers)]
+        if enforce_offer_bounds
+        else raw_offers
+    )
+    return StorefrontOnboardingManifest.normalize(
+        {
+            "version": 1,
+            "tenant": {
+                "slug": "mvn",
+                "display_name": "Мастер Воздуха",
+                "kind": "operator",
+                "is_system": True,
+                "lifecycle": "existing",
+            },
+            "storefront": {
+                "slug": "orsha",
+                "display_name": "MVN Орша",
+                "city": "Орша",
+                "default_locale": "ru-BY",
+                "currency": "BYN",
+                "is_default": False,
+            },
+            "allowed_hostnames": [normalized_hostname],
+            "offers": offers,
+        }
+    )
 
 
 class OrshaStorefrontBootstrapService:
-    """Review-token guarded lifecycle boundary for the internal Orsha canary."""
+    """Deprecated API adapter; all lifecycle logic lives in the generic service."""
 
-    TENANT_SLUG = OrshaStorefrontDefinition.TENANT_SLUG
-    STOREFRONT_SLUG = OrshaStorefrontDefinition.STOREFRONT_SLUG
-    STOREFRONT_DISPLAY_NAME = OrshaStorefrontDefinition.STOREFRONT_DISPLAY_NAME
-    STOREFRONT_CITY = OrshaStorefrontDefinition.STOREFRONT_CITY
-    DEFAULT_LOCALE = OrshaStorefrontDefinition.DEFAULT_LOCALE
-    CURRENCY = OrshaStorefrontDefinition.CURRENCY
-    ACTOR_USERNAME = OrshaStorefrontDefinition.ACTOR_USERNAME
-    ACTIONS = OrshaStorefrontDefinition.ACTIONS
+    TENANT_SLUG = "mvn"
+    STOREFRONT_SLUG = "orsha"
+    STOREFRONT_DISPLAY_NAME = "MVN Орша"
+    STOREFRONT_CITY = "Орша"
+    DEFAULT_LOCALE = "ru-BY"
+    CURRENCY = "BYN"
+    ACTOR_USERNAME = "system:storefront-onboarding:mvn:orsha"
+    ACTIONS = frozenset({"bootstrap", "verify-domain", "activate", "disable"})
 
     @classmethod
     async def status(
@@ -40,28 +84,15 @@ class OrshaStorefrontBootstrapService:
         *,
         hostname: str,
     ) -> dict[str, Any]:
-        normalized_hostname = OrshaStorefrontBootstrapPlanner.normalize_hostname(
-            hostname
-        )
-        state = await OrshaStorefrontBootstrapPlanner.load_state(
+        return await StorefrontOnboardingService.status(
             session,
-            hostname=normalized_hostname,
-            offer_specs=(),
-            for_update=False,
+            hostname=hostname,
+            manifest=build_orsha_manifest(
+                hostname=hostname,
+                offer_specs=(),
+                enforce_offer_bounds=False,
+            ),
         )
-        blockers = OrshaStorefrontBootstrapPlanner.base_blockers(
-            state,
-            hostname=normalized_hostname,
-        )
-        return {
-            "mode": "status",
-            "tenant_slug": cls.TENANT_SLUG,
-            "storefront_slug": cls.STOREFRONT_SLUG,
-            "hostname": normalized_hostname,
-            "ownership_safe": not blockers,
-            "blockers": blockers,
-            "state": serialize_state(state),
-        }
 
     @classmethod
     async def plan(
@@ -72,14 +103,16 @@ class OrshaStorefrontBootstrapService:
         hostname: str,
         offer_specs: Iterable[OrshaStorefrontOfferSpec | Mapping[str, Any]] = (),
     ) -> dict[str, Any]:
-        plan, _ = await OrshaStorefrontBootstrapPlanner.build(
+        return await StorefrontOnboardingService.plan(
             session,
             action=action,
             hostname=hostname,
-            offer_specs=offer_specs,
-            for_update=False,
+            manifest=build_orsha_manifest(
+                hostname=hostname,
+                offer_specs=offer_specs,
+                enforce_offer_bounds=action in {"bootstrap", "activate"},
+            ),
         )
-        return plan
 
     @classmethod
     async def execute(
@@ -91,71 +124,22 @@ class OrshaStorefrontBootstrapService:
         plan_token: str,
         offer_specs: Iterable[OrshaStorefrontOfferSpec | Mapping[str, Any]] = (),
     ) -> dict[str, Any]:
-        cls._validate_plan_token(plan_token)
-        if not await OrshaStorefrontBootstrapDAO.try_acquire_transaction_lock(session):
-            raise OrshaStorefrontBootstrapBlockedError(
-                "Another Orsha storefront lifecycle transaction is already running"
-            )
-
-        reviewed, state = await OrshaStorefrontBootstrapPlanner.build(
+        return await StorefrontOnboardingService.execute(
             session,
             action=action,
             hostname=hostname,
-            offer_specs=offer_specs,
-            for_update=True,
+            plan_token=plan_token,
+            manifest=build_orsha_manifest(
+                hostname=hostname,
+                offer_specs=offer_specs,
+                enforce_offer_bounds=action in {"bootstrap", "activate"},
+            ),
         )
-        if not hmac.compare_digest(plan_token, reviewed["plan_token"]):
-            raise OrshaStorefrontBootstrapBlockedError(
-                "Orsha storefront plan token is stale; run a fresh plan"
-            )
-        if reviewed["blockers"]:
-            raise OrshaStorefrontBootstrapBlockedError(
-                "Orsha storefront preflight is blocked: "
-                + "; ".join(reviewed["blockers"])
-            )
-
-        normalized_action = reviewed["action"]
-        normalized_hostname = reviewed["hostname"]
-        request_id = f"orsha-{normalized_action}-{plan_token[:32]}"
-        changed, invalidation_staged = (
-            await OrshaStorefrontLifecycleStagingService.stage(
-                session,
-                action=normalized_action,
-                hostname=normalized_hostname,
-                state=state,
-                request_id=request_id,
-            )
-        )
-        await session.flush()
-
-        after, _ = await OrshaStorefrontBootstrapPlanner.build(
-            session,
-            action=normalized_action,
-            hostname=normalized_hostname,
-            offer_specs=offer_specs,
-            for_update=False,
-        )
-        if after["blockers"] or after["changes"]:
-            raise OrshaStorefrontBootstrapBlockedError(
-                "Orsha storefront post-check did not reach the reviewed target state"
-            )
-        return {
-            **reviewed,
-            "mode": "execute",
-            "changed_entities": changed,
-            "catalog_invalidation_staged": invalidation_staged,
-            "after": after["state"],
-        }
-
-    @staticmethod
-    def _validate_plan_token(plan_token: str) -> None:
-        if not re.fullmatch(r"[0-9a-f]{64}", str(plan_token or "")):
-            raise OrshaStorefrontBootstrapBlockedError(
-                "Execute requires the 64-character plan token from a fresh plan"
-            )
 
 
 __all__ = [
+    "ORSHA_ALLOWED_HOSTNAMES",
     "OrshaStorefrontBootstrapBlockedError",
     "OrshaStorefrontBootstrapService",
+    "build_orsha_manifest",
 ]

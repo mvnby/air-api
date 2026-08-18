@@ -58,6 +58,20 @@ async def _seed_active_orsha(session: AsyncSession) -> tuple[int, int, int]:
     )
     await session.commit()
 
+    verification = await OrshaStorefrontBootstrapService.plan(
+        session,
+        action="verify-domain",
+        hostname=_HOSTNAME,
+    )
+    assert verification["ready"] is True, verification["blockers"]
+    await OrshaStorefrontBootstrapService.execute(
+        session,
+        action="verify-domain",
+        hostname=_HOSTNAME,
+        plan_token=verification["plan_token"],
+    )
+    await session.commit()
+
     activation = await OrshaStorefrontBootstrapService.plan(
         session,
         action="activate",
