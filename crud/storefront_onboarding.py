@@ -15,6 +15,7 @@ from models import (
     StorefrontDomain,
     Tenant,
     TenantOffer,
+    TenantCatalogGrant,
 )
 
 
@@ -141,12 +142,45 @@ class StorefrontOnboardingDAO:
                 TenantOffer.tenant_id == tenant_id,
                 TenantOffer.storefront_id == storefront_id,
             )
-            .order_by(TenantOffer.product_id.asc(), TenantOffer.id.asc())
+            .order_by(
+                TenantOffer.catalog_grant_id.is_not(None).asc(),
+                TenantOffer.product_id.asc(),
+                TenantOffer.id.asc(),
+            )
             .limit(limit)
         )
         if for_update:
             statement = statement.with_for_update(of=TenantOffer)
         return list((await session.execute(statement)).all())
+
+    @staticmethod
+    async def list_visible_offer_products(
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        storefront_id: int,
+    ) -> list[Product]:
+        statement = (
+            select(Product)
+            .join(TenantOffer, TenantOffer.product_id == Product.id)
+            .outerjoin(
+                TenantCatalogGrant,
+                TenantCatalogGrant.id == TenantOffer.catalog_grant_id,
+            )
+            .where(
+                TenantOffer.tenant_id == tenant_id,
+                TenantOffer.storefront_id == storefront_id,
+                TenantOffer.status == "active",
+                TenantOffer.is_published.is_(True),
+                Product.is_published.is_(True),
+                or_(
+                    TenantOffer.catalog_grant_id.is_(None),
+                    TenantCatalogGrant.status == "active",
+                ),
+            )
+            .order_by(Product.id.asc())
+        )
+        return list((await session.execute(statement)).scalars().all())
 
     @staticmethod
     async def crm_counts(

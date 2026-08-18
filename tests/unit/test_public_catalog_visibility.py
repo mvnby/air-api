@@ -72,6 +72,8 @@ def test_secondary_catalog_sql_requires_exact_active_published_offer_pair():
     assert "tenant_offer.storefront_id = 11" in sql_a
     assert "tenant_offer.status = 'active'" in sql_a
     assert "tenant_offer.is_published IS true" in sql_a
+    assert "tenant_catalog_grant.status = 'active'" in sql_a
+    assert "tenant_offer.catalog_grant_id IS NULL" in sql_a
     assert "tenant_offer.tenant_id = 8" in sql_b
     assert "tenant_offer.storefront_id = 12" in sql_b
     assert sql_a != sql_b

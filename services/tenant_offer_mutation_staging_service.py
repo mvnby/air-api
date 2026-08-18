@@ -85,6 +85,7 @@ class TenantOfferMutationStagingService:
             }
             action = "tenant_offer.created"
         else:
+            normalized = cls.with_manual_price_provenance(offer, normalized)
             change_set = cls.apply_changes(
                 offer,
                 normalized,
@@ -150,6 +151,7 @@ class TenantOfferMutationStagingService:
                 "status": payload.get("status", offer.status),
             }
         )
+        normalized = cls.with_manual_price_provenance(offer, normalized)
         change_set = cls.apply_changes(
             offer,
             normalized,
@@ -259,6 +261,24 @@ class TenantOfferMutationStagingService:
             offer.updated_by_username = actor_username
             offer.updated_at = utc_now()
         return change_set
+
+    @staticmethod
+    def with_manual_price_provenance(
+        offer: TenantOffer,
+        values: dict[str, Any],
+    ) -> dict[str, Any]:
+        normalized = dict(values)
+        price_changed = any(
+            field in normalized and normalized[field] != getattr(offer, field)
+            for field in ("price", "old_price")
+        )
+        if (
+            price_changed
+            and offer.catalog_grant_id is not None
+            and offer.price_source == "inherited_master"
+        ):
+            normalized["price_source"] = "manual"
+        return normalized
 
     @staticmethod
     def audit_event(

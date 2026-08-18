@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -21,6 +21,7 @@ from models import (
     Tag,
     TagGroup,
     TenantOffer,
+    TenantCatalogGrant,
 )
 from models.supplier import ProductLocalStock
 from models.tenancy import TenantScope
@@ -40,6 +41,18 @@ class PublicCatalogDAO:
             TenantOffer.storefront_id == tenant_scope.storefront_id,
             TenantOffer.status == "active",
             TenantOffer.is_published.is_(True),
+            or_(
+                TenantOffer.catalog_grant_id.is_(None),
+                exists(
+                    select(TenantCatalogGrant.id).where(
+                        TenantCatalogGrant.id == TenantOffer.catalog_grant_id,
+                        TenantCatalogGrant.tenant_id == tenant_scope.tenant_id,
+                        TenantCatalogGrant.storefront_id
+                        == tenant_scope.storefront_id,
+                        TenantCatalogGrant.status == "active",
+                    )
+                ),
+            ),
         )
 
     @staticmethod

@@ -8,6 +8,10 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect
 
+from tests.unit.alembic_chain_test_support import (
+    assert_revision_in_single_head_chain,
+)
+
 
 REVISION = "f4d5e6f7a8b9"
 MIGRATION_PATH = Path(
@@ -30,7 +34,7 @@ def test_order_source_fingerprint_remains_in_the_single_alembic_chain():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == ["f5c6d7e8a9b0"]
+    assert_revision_in_single_head_chain(script, REVISION)
     assert revision is not None
     assert revision.down_revision == "f3c4d5e6f7a8"
     assert set(revision.nextrev) == {"d8e7f6a5b4c3"}

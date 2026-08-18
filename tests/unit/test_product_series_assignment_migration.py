@@ -2,6 +2,9 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 from models import Product
+from tests.unit.alembic_chain_test_support import (
+    assert_revision_in_single_head_chain,
+)
 
 
 REVISION = "f5c6d7e8a9b0"
@@ -12,7 +15,7 @@ def test_product_series_assignment_provenance_is_additive_single_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == [REVISION]
+    assert_revision_in_single_head_chain(script, REVISION)
     assert revision.down_revision == DOWN_REVISION
     column = Product.__table__.c.series_assignment_source
     assert column.nullable is False
