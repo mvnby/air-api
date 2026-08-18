@@ -71,8 +71,9 @@ python3 scripts/manage_orsha_storefront.py \
 
 The report must say `ready: true`. Review every resolved product, price,
 publication flag, ownership field, blocker, and proposed change. Copy the
-printed `reviewed_execute_command` exactly. It includes the SHA-256 plan token.
-Any relevant database change makes that token stale and execution fails closed.
+printed `reviewed_execute_command` exactly. It includes a signed plan token that
+expires after 15 minutes. Any relevant database or manifest change makes that
+token stale and execution fails closed.
 
 After execution, check status:
 
@@ -87,7 +88,19 @@ Expected state: tenant `mvn`, storefront `orsha/draft`, exactly one
 bootstrap plan must contain no changes; executing that no-op must add no audit
 rows.
 
-## Explicit activation
+## Domain verification and explicit activation
+
+After the reviewed DNS/TLS target has been independently proved, plan domain
+verification without the offer file:
+
+```bash
+python3 scripts/manage_orsha_storefront.py \
+  --plan-for verify-domain \
+  --hostname orsha-internal.mvn.by
+```
+
+Run the printed `--verify-domain` command. This records the verification audit
+timestamp but keeps the domain pending and the storefront draft.
 
 Activation requires the same exact manifest. First review:
 
@@ -99,9 +112,9 @@ python3 scripts/manage_orsha_storefront.py \
 ```
 
 Then run the printed command, which uses `--activate` and the fresh token. The
-transaction activates the storefront and domain, records domain verification,
-appends audit rows, and stages one storefront catalog invalidation batch. It
-does not configure DNS, Cloudflare, TLS, or a storefront deployment.
+transaction activates the already verified storefront and domain, appends audit
+rows, and stages one storefront catalog invalidation batch. It does not
+configure DNS, Cloudflare, TLS, or a storefront deployment.
 
 Before routing real traffic, verify:
 

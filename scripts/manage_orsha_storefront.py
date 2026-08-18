@@ -1,4 +1,4 @@
-"""Safely bootstrap, activate, inspect, or disable the internal Orsha canary."""
+"""Deprecated Orsha CLI adapter over generic storefront onboarding."""
 
 from __future__ import annotations
 
@@ -40,10 +40,11 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--status", action="store_true")
     mode.add_argument(
         "--plan-for",
-        choices=("bootstrap", "activate", "disable"),
+        choices=("bootstrap", "verify-domain", "activate", "disable"),
         metavar="ACTION",
     )
     mode.add_argument("--execute", action="store_true", help="Execute bootstrap.")
+    mode.add_argument("--verify-domain", action="store_true")
     mode.add_argument("--activate", action="store_true")
     mode.add_argument("--disable", action="store_true")
     parser.add_argument("--hostname", required=True)
@@ -73,6 +74,8 @@ def action_and_mode(args: argparse.Namespace) -> tuple[str | None, str]:
         return None, "status"
     if args.execute:
         return "bootstrap", "execute"
+    if args.verify_domain:
+        return "verify-domain", "execute"
     if args.activate:
         return "activate", "execute"
     if args.disable:
@@ -90,9 +93,9 @@ def validate_args(
         parser.error("mutations require --plan-token from a fresh plan")
     if mode != "execute" and args.plan_token:
         parser.error("--plan-token is accepted only for mutations")
-    if (mode == "status" or action == "disable") and has_offers:
-        parser.error("status and disable do not accept offer inputs")
-    if mode != "status" and action != "disable" and not has_offers:
+    if (mode == "status" or action in {"verify-domain", "disable"}) and has_offers:
+        parser.error("status, verify-domain and disable do not accept offer inputs")
+    if mode != "status" and action in {"bootstrap", "activate"} and not has_offers:
         parser.error("bootstrap and activate require an explicit offer allowlist")
 
 
@@ -184,7 +187,12 @@ def _reviewed_command(args: argparse.Namespace, result: dict[str, Any]) -> str |
     action = result["action"]
     command = ["python3", "scripts/manage_orsha_storefront.py"]
     command.append(
-        {"bootstrap": "--execute", "activate": "--activate", "disable": "--disable"}[
+        {
+            "bootstrap": "--execute",
+            "verify-domain": "--verify-domain",
+            "activate": "--activate",
+            "disable": "--disable",
+        }[
             action
         ]
     )
