@@ -181,7 +181,9 @@ def test_reviewed_polotsk_example_loads_without_credentials() -> None:
     )
 
     assert manifest.tenant.slug == "polotsk"
+    assert manifest.tenant.display_name == "Двина Климат"
     assert manifest.storefront.slug == "main"
+    assert manifest.storefront.display_name == "Двина Климат"
     assert manifest.allowed_hostnames == ("polotsk.mvn.by",)
     assert manifest.offers == ()
 

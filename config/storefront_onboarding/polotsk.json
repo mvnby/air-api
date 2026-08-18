@@ -2,14 +2,14 @@
   "version": 1,
   "tenant": {
     "slug": "polotsk",
-    "display_name": "MVN Полоцк",
+    "display_name": "Двина Климат",
     "kind": "independent_seller",
     "is_system": false,
     "lifecycle": "managed"
   },
   "storefront": {
     "slug": "main",
-    "display_name": "MVN Полоцк",
+    "display_name": "Двина Климат",
     "city": "Полоцк",
     "default_locale": "ru-BY",
     "currency": "BYN",
