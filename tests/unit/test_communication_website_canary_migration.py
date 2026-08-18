@@ -12,10 +12,14 @@ from alembic.operations import Operations
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
+from tests.unit.alembic_chain_test_support import (
+    assert_revision_in_single_head_chain,
+)
+
 
 REVISION = "ab02c3d4e5f6"
 DOWN_REVISION = "aa91c2d4e6f8"
-HEAD_REVISION = "f5c6d7e8a9b0"
+PREVIOUS_HEAD_REVISION = "f5c6d7e8a9b0"
 MIGRATION_PATH = Path(
     "alembic/versions/ab02c3d4e5f6_add_website_canary_runtime_target.py"
 )
@@ -62,8 +66,8 @@ def _create_previous_schema(connection) -> None:
 def test_website_canary_migration_precedes_the_additive_catalog_snapshot_head() -> None:
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
-    assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
+    assert_revision_in_single_head_chain(script, REVISION)
+    assert script.get_revision(PREVIOUS_HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
     assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == "f2a3b4c5d6e7"
     assert script.get_revision("f2a3b4c5d6e7").down_revision == REVISION

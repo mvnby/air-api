@@ -194,6 +194,11 @@ Production server intentionally runs from Docker images only (no git checkout in
      - The production contract is complete. Both commands should report no
        candidates and `contract_ready=true`; do not execute them unless the
        schema was deliberately rolled back to the expand phase.
+   - Shared catalog grant report (read-only plan):
+     `python3 scripts/manage_shared_catalog_grant.py plan --manifest config/shared_catalog_grants/polotsk.json --desired-status active`
+   - Shared catalog grant execution is manual-only: review the plan and run only
+     its emitted, expiring `reviewed_execute_command`; repeat fresh plans until
+     `complete=true`.
    - Normalize:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
    - Backfill brand/series:
@@ -210,6 +215,9 @@ Production server intentionally runs from Docker images only (no git checkout in
    - Tenant-scope backfill execution is retired after the contract migration.
      The retained scripts are report-only unless an expand-schema rollback was
      explicitly reviewed.
+   - Shared catalog grants are system-owned. Empty onboarding offers never mean
+     share-all, and tenant managers cannot run grant sync or edit inherited
+     prices.
    - Post-deploy smoke-check must pass (`/api/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
 
 ## Notes

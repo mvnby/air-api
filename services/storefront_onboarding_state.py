@@ -76,12 +76,14 @@ def serialize_state(state: LoadedStorefrontOnboardingState) -> dict[str, Any]:
                 "tenant_id": offer.tenant_id,
                 "storefront_id": offer.storefront_id,
                 "product_id": offer.product_id,
+                "catalog_grant_id": offer.catalog_grant_id,
                 "product_slug": product.slug,
                 "product_is_published": bool(product.is_published),
                 "price": offer.price,
                 "old_price": offer.old_price,
                 "is_published": offer.is_published,
                 "status": offer.status,
+                "price_source": offer.price_source,
                 "updated_at": datetime_value(offer.updated_at),
             }
             for offer, product in state.offers

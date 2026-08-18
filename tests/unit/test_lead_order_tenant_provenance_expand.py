@@ -11,6 +11,9 @@ from sqlalchemy import create_engine, inspect, text
 from sqlmodel import SQLModel
 
 import models  # noqa: F401 - registers SQLModel tables for metadata assertions
+from tests.unit.alembic_chain_test_support import (
+    assert_revision_in_single_head_chain,
+)
 
 
 REVISION = "f6b2a4d8e1c3"
@@ -19,7 +22,7 @@ CUSTOMER_SCOPE_REVISION = "b8d9e0f1a2c3"
 CONTRACT_REVISION = "c9e0f1a2b3d4"
 STOREFRONT_IDEMPOTENCY_REVISION = "d0f1a2b3c4d5"
 TENANT_OFFER_REVISION = "d0a1b2c3e4f6"
-HEAD_REVISION = "f5c6d7e8a9b0"
+PREVIOUS_HEAD_REVISION = "f5c6d7e8a9b0"
 WEBSITE_CANARY_REVISION = "ab02c3d4e5f6"
 PUBLIC_WRITE_REVISION = "aa91c2d4e6f8"
 CATALOG_REVISION = "e1f2a3b4c5d6"
@@ -77,13 +80,10 @@ def _create_legacy_schema(connection) -> None:
 def test_lead_order_tenant_provenance_expand_is_in_single_head_chain():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
-    heads = script.get_heads()
-
-    assert len(heads) == 1
-    assert heads == [HEAD_REVISION]
+    assert_revision_in_single_head_chain(script, REVISION)
     assert revision is not None
     assert revision.down_revision == "e9a1b2c3d4e5"
-    assert script.get_revision(HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
+    assert script.get_revision(PREVIOUS_HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
     assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == "f2a3b4c5d6e7"
     assert script.get_revision("f2a3b4c5d6e7").down_revision == WEBSITE_CANARY_REVISION

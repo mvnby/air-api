@@ -309,7 +309,7 @@ class StorefrontOnboardingPlanner:
                 )
             if not domain.is_primary:
                 blockers.append("storefront domain is not primary")
-        if len(state.offers) > MAX_OFFERS:
+        if len(cls._manifest_owned_offers(state)) > MAX_OFFERS:
             blockers.append(f"storefront has more than {MAX_OFFERS} offers")
         return blockers
 
@@ -366,7 +366,8 @@ class StorefrontOnboardingPlanner:
             cls._append_update(changes, "storefront_domain", domain, target)
 
         existing_by_product = {
-            int(offer.product_id): offer for offer, _ in state.offers
+            int(offer.product_id): offer
+            for offer, _ in cls._manifest_owned_offers(state)
         }
         desired_ids = {int(item.product.id) for item in state.resolved_offers}
         extras = sorted(set(existing_by_product) - desired_ids)
@@ -458,7 +459,8 @@ class StorefrontOnboardingPlanner:
                 blockers.append("domain must be verified before activation")
 
         existing_by_product = {
-            int(offer.product_id): offer for offer, _ in state.offers
+            int(offer.product_id): offer
+            for offer, _ in cls._manifest_owned_offers(state)
         }
         desired_ids = {int(item.product.id) for item in state.resolved_offers}
         if set(existing_by_product) != desired_ids:
@@ -513,7 +515,7 @@ class StorefrontOnboardingPlanner:
                 state.domains[0],
                 {"status": "disabled"},
             )
-        for offer, _ in state.offers:
+        for offer, _ in cls._manifest_owned_offers(state):
             cls._append_update(
                 changes,
                 "tenant_offer",
@@ -542,6 +544,16 @@ class StorefrontOnboardingPlanner:
                 "action must be bootstrap, verify-domain, activate, or disable"
             )
         return normalized
+
+    @staticmethod
+    def _manifest_owned_offers(
+        state: LoadedStorefrontOnboardingState,
+    ) -> list[tuple[Any, Any]]:
+        return [
+            (offer, product)
+            for offer, product in state.offers
+            if offer.catalog_grant_id is None
+        ]
 
     @staticmethod
     def _plan_digest(

@@ -32,8 +32,9 @@ offer set, so bootstrap alone exposes no catalog inventory. The bounded manifest
 may carry a small, explicitly reviewed launch/canary subset, but it is not a bulk
 catalog transport. Full Polotsk inventory from the shared master catalog requires
 a separate system-owned catalog grant/sync boundary, with its own review and
-tests, before activation or any catalog presentation. That capability is not
-implemented by this onboarding change.
+tests, before activation or any catalog presentation. Use the reviewed flow in
+`docs/shared-catalog-grant.md`; never replace it with an implicit empty-offer
+fallback or a copied manifest containing the full catalog.
 
 Run each plan immediately before its matching mutation and copy only the emitted
 `reviewed_execute_command` after reviewing `blockers`, `changes`, resolved offers,

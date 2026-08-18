@@ -53,7 +53,7 @@ from .service_asset import (
 from .staff import StaffUser
 from .storage_maintenance import StorageReconciliationCursor
 from .tenancy import Storefront, StorefrontDomain, Tenant, TenantMembership
-from .tenant_commerce import TenantAuditEvent, TenantOffer
+from .tenant_commerce import TenantAuditEvent, TenantCatalogGrant, TenantOffer
 from .order import (
     BankReceipt,
     Installer,
@@ -203,6 +203,7 @@ __all__ = [
     "TagGroup",
     "Tenant",
     "TenantAuditEvent",
+    "TenantCatalogGrant",
     "TenantMembership",
     "TenantOffer",
     "Storefront",

@@ -9,6 +9,10 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 
+from tests.unit.alembic_chain_test_support import (
+    assert_revision_in_single_head_chain,
+)
+
 
 REVISION = "f2a3b4c5d6e7"
 DOWN_REVISION = "ab02c3d4e5f6"
@@ -31,7 +35,7 @@ def _load_migration_module():
 def test_order_product_catalog_snapshot_is_the_single_alembic_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
 
-    assert script.get_heads() == ["f5c6d7e8a9b0"]
+    assert_revision_in_single_head_chain(script, REVISION)
     assert script.get_revision("f5c6d7e8a9b0").down_revision == "f4b5c6d7e8f9"
     assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == REVISION

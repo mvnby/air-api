@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "tenant_slug": "polotsk",
+  "storefront_slug": "main",
+  "mode": "all_published",
+  "price_policy": "inherit_master",
+  "owner_type": "system",
+  "actor_username": "system:catalog-grant-sync",
+  "batch_size": 100
+}

@@ -9,10 +9,14 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
+from tests.unit.alembic_chain_test_support import (
+    assert_revision_in_single_head_chain,
+)
+
 
 REVISION = "aa91c2d4e6f8"
 CANARY_REVISION = "ab02c3d4e5f6"
-HEAD_REVISION = "f5c6d7e8a9b0"
+PREVIOUS_HEAD_REVISION = "f5c6d7e8a9b0"
 MIGRATION_PATH = Path(
     "alembic/versions/aa91c2d4e6f8_add_public_write_idempotency.py"
 )
@@ -59,8 +63,8 @@ def test_public_write_idempotency_migration_is_single_head() -> None:
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
 
-    assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
+    assert_revision_in_single_head_chain(script, REVISION)
+    assert script.get_revision(PREVIOUS_HEAD_REVISION).down_revision == "f4b5c6d7e8f9"
     assert script.get_revision("f4b5c6d7e8f9").down_revision == "f3a4b5c6d7e8"
     assert script.get_revision("f3a4b5c6d7e8").down_revision == "f2a3b4c5d6e7"
     assert script.get_revision("f2a3b4c5d6e7").down_revision == CANARY_REVISION

@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Storefront, StorefrontDomain, Tenant, TenantAuditEvent
+from crud.storefront_onboarding import StorefrontOnboardingDAO
 from models.tenancy import TenantScope
 from services.storefront_onboarding_manifest import StorefrontOnboardingManifest
 from services.storefront_onboarding_state import LoadedStorefrontOnboardingState
@@ -352,6 +353,8 @@ class StorefrontOnboardingStagingService:
         )
         changed = 0
         for offer, _ in state.offers:
+            if offer.catalog_grant_id is not None:
+                continue
             mutation = await TenantOfferMutationStagingService.stage_update(
                 session,
                 offer_id=int(offer.id),
@@ -416,6 +419,11 @@ class StorefrontOnboardingStagingService:
         storefront = state.storefront
         assert tenant is not None and tenant.id is not None
         assert storefront is not None and storefront.id is not None
+        visible_products = await StorefrontOnboardingDAO.list_visible_offer_products(
+            session,
+            tenant_id=int(tenant.id),
+            storefront_id=int(storefront.id),
+        )
         return await TenantOfferCatalogInvalidationAdapter.stage(
             session,
             reason=reason,
@@ -424,8 +432,8 @@ class StorefrontOnboardingStagingService:
                 tenant_id=int(tenant.id),
                 storefront_id=int(storefront.id),
             ),
-            product_ids=[int(product.id) for _, product in state.offers],
-            slugs=[product.slug for _, product in state.offers],
+            product_ids=[int(product.id) for product in visible_products],
+            slugs=[product.slug for product in visible_products],
             required=True,
         )
 
