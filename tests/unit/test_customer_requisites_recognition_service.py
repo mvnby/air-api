@@ -1,3 +1,6 @@
+import subprocess
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -8,11 +11,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from models import CustomerRequisitesRecognition
+from models.tenancy import TenantScope
 from services.customer_requisites_recognition_service import (
     CustomerRequisitesRecognitionService,
     OcrProviderError,
 )
-from models.tenancy import TenantScope
 
 
 TEST_TENANT_SCOPE = TenantScope(
@@ -239,6 +242,51 @@ async def test_recognize_rejects_too_large_file_before_ocr(monkeypatch):
             source="test",
             tenant_scope=TEST_TENANT_SCOPE,
         )
+
+
+@pytest.mark.asyncio
+async def test_extract_docx_requisites_text_without_ocr():
+    document_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body>
+        <w:p><w:r><w:t>ООО Климат</w:t></w:r></w:p>
+        <w:p><w:r><w:t>УНП 123456789</w:t></w:r><w:r><w:t> IBAN BY00TEST</w:t></w:r></w:p>
+      </w:body>
+    </w:document>'''.encode()
+    content = BytesIO()
+    with zipfile.ZipFile(content, "w") as archive:
+        archive.writestr("word/document.xml", document_xml)
+
+    text = await CustomerRequisitesRecognitionService.extract_ocr_text(
+        content.getvalue(),
+        mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename="requisites.docx",
+    )
+
+    assert text == "ООО Климат\nУНП 123456789 IBAN BY00TEST"
+
+
+@pytest.mark.asyncio
+async def test_extract_legacy_doc_uses_bounded_antiword(monkeypatch):
+    def fake_run(command, **kwargs):
+        assert command[:3] == ["antiword", "-m", "UTF-8.txt"]
+        assert kwargs["capture_output"] is True
+        assert kwargs["timeout"] == 15
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="ООО Климат\nУНП 123456789".encode(),
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    text = await CustomerRequisitesRecognitionService.extract_ocr_text(
+        b"legacy-word",
+        mime_type="application/msword",
+        filename="requisites.doc",
+    )
+
+    assert text == "ООО Климат\nУНП 123456789"
 
 
 @pytest.mark.asyncio

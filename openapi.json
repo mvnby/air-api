@@ -630,6 +630,7 @@
           "internal bot v1"
         ],
         "summary": "Recognize Internal Bot Customer Requisites File",
+        "description": "Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC, or DOCX (up to 10 MB).",
         "operationId": "recognize_internal_bot_customer_requisites_file_v1",
         "requestBody": {
           "content": {
