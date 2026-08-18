@@ -1,6 +1,7 @@
 VALIDATION_ERROR = "validation_error"
 INTERNAL_ERROR = "internal_error"
 BAD_REQUEST = "bad_request"
+FORBIDDEN = "forbidden"
 LEAD_NOT_FOUND = "lead_not_found"
 ORDER_NOT_FOUND = "order_not_found"
 CUSTOMER_NOT_FOUND = "customer_not_found"
@@ -17,6 +18,7 @@ DEFAULT_MANAGER_ERROR_MESSAGES = {
     VALIDATION_ERROR: "Проверьте заполнение полей формы",
     INTERNAL_ERROR: "Внутренняя ошибка сервера",
     BAD_REQUEST: "Проверьте введенные данные",
+    FORBIDDEN: "Недостаточно прав для выполнения операции",
     LEAD_NOT_FOUND: "Лид не найден",
     ORDER_NOT_FOUND: "Сделка не найдена",
     CUSTOMER_NOT_FOUND: "Клиент не найден",

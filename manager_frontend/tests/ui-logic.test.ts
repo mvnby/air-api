@@ -41,6 +41,10 @@ import {
 import { countLabel } from '../src/components/catalog-quality/catalog-quality-copy';
 import { navSections } from '../src/manager-navigation';
 import {
+  MANAGER_CAPABILITY,
+  isManagerPathAllowed,
+} from '../src/manager-capabilities';
+import {
   buildProductWorkspacePath,
   getProductImageCount,
   getProductWorkspaceNeighbors,
@@ -97,6 +101,23 @@ assert(
   Object.keys(phoneOnlyPatch).join(',') === 'phone',
   'customer PATCH must contain only fields changed by the user',
 );
+const tenantManagerAuth = {
+  capabilities: [
+    MANAGER_CAPABILITY.crmManage,
+    MANAGER_CAPABILITY.catalogMasterRead,
+    MANAGER_CAPABILITY.storefrontOffersRead,
+  ],
+};
+assert(
+  isManagerPathAllowed(tenantManagerAuth, '/manager/products'),
+  'tenant managers must retain the safe catalog route',
+);
+for (const path of ['/manager/products/1', '/manager/suppliers', '/manager/product-collections']) {
+  assert(
+    !isManagerPathAllowed(tenantManagerAuth, path),
+    `tenant manager must not open platform route ${path}`,
+  );
+}
 assert(
   phoneOnlyPatch.phone === '+375 (29) 591-26-81',
   'changed customer phone must be normalized before PATCH',

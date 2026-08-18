@@ -12,5 +12,7 @@ export type ManagerAuthStatusResponse = {
     tenant_id: number;
     storefront_id: number;
     tenant_membership_id?: (number | null);
+    is_system_tenant?: boolean;
+    capabilities?: Array<string>;
 };
 

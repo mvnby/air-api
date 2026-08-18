@@ -382,6 +382,8 @@ export type { ManagerTariffServiceKind } from './models/ManagerTariffServiceKind
 export type { ManagerTariffUpdatePayload } from './models/ManagerTariffUpdatePayload';
 export type { ManagerTenantAuditEventListResponse } from './models/ManagerTenantAuditEventListResponse';
 export type { ManagerTenantAuditEventResponse } from './models/ManagerTenantAuditEventResponse';
+export type { ManagerTenantCatalogListResponse } from './models/ManagerTenantCatalogListResponse';
+export type { ManagerTenantCatalogProductResponse } from './models/ManagerTenantCatalogProductResponse';
 export type { ManagerTenantOfferListResponse } from './models/ManagerTenantOfferListResponse';
 export type { ManagerTenantOfferResponse } from './models/ManagerTenantOfferResponse';
 export type { ManagerTenantOfferUpdate } from './models/ManagerTenantOfferUpdate';
@@ -602,6 +604,7 @@ export { ManagerSettingsService } from './services/ManagerSettingsService';
 export { ManagerStaffService } from './services/ManagerStaffService';
 export { ManagerTagsService } from './services/ManagerTagsService';
 export { ManagerTariffsService } from './services/ManagerTariffsService';
+export { ManagerTenantCatalogService } from './services/ManagerTenantCatalogService';
 export { ManagerTenantOffersService } from './services/ManagerTenantOffersService';
 export { ManagerWarrantiesService } from './services/ManagerWarrantiesService';
 export { ManagerYandexBusinessService } from './services/ManagerYandexBusinessService';

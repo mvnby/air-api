@@ -2,6 +2,7 @@ import {
     OpenAPI,
     LoginService,
     ManagerService,
+    ManagerTenantCatalogService,
     ManagerOrdersService,
     ManagerDashboardService,
     ManagerInstallersService,
@@ -116,6 +117,8 @@ import {
     type ProductMainImageCleanupItemResponse,
     type SpecRegistryResponse,
 } from './client';
+import { MANAGER_CAPABILITY, hasManagerCapability } from './manager-capabilities';
+import { managerSession } from './services/manager-session';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
 import type { LeadsInboxItemResponse } from './client/models/LeadsInboxItemResponse';
@@ -897,6 +900,25 @@ export const api = {
         categorySlug?: string,
         filters: ManagerProductFilterOptions = {},
     ): Promise<Product[]> {
+        if (!hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.platformManage)) {
+            const response = await ManagerTenantCatalogService.listManagerTenantCatalogProducts(
+                1,
+                limit,
+                q,
+                true,
+            );
+            return (response.items ?? []).map(item => ({
+                id: item.id,
+                title: item.title,
+                slug: item.slug,
+                price: item.effective_price ?? 0,
+                is_inverter: item.is_inverter,
+                power_cooling: item.power_cooling,
+                availability_status: 'available',
+                vitebsk_qty: 0,
+                minsk_qty: 0,
+            })) as Product[];
+        }
         const res = await ManagerService.smartSearchProducts(
             q,
             limit,

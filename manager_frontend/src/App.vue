@@ -24,8 +24,14 @@ import {
   type NavSection,
   type NavSectionId,
 } from './manager-navigation';
+import {
+  MANAGER_CAPABILITY,
+  hasManagerCapability,
+  isManagerPathAllowed,
+} from './manager-capabilities';
 
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
+const TenantCatalogView = defineAsyncComponent(() => import('./views/TenantCatalogView.vue'));
 const ProductCollectionsView = defineAsyncComponent(() => import('./views/ProductCollectionsView.vue'));
 const ProductWorkspaceView = defineAsyncComponent(() => import('./views/ProductWorkspaceView.vue'));
 const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibraryView.vue'));
@@ -53,7 +59,7 @@ const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequ
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
 
 const props = defineProps<{ reloadPage?: () => void }>();
-const { isAuthenticated, currentUserRole, recoveryRequired } = managerSession;
+const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const showLoginModal = ref(false);
 const loginUsername = ref('');
 const loginPassword = ref('');
@@ -105,11 +111,17 @@ const normalizePath = (path: string) => {
 };
 
 const currentPath = computed(() => normalizePath(currentLocation.value.split('?')[0] || '/manager'));
-const canManageOwnerSettings = computed(() => ['owner', 'admin'].includes(currentUserRole.value));
+const canManagePlatform = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.platformManage));
+const canManageInfrastructure = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.infrastructureManage));
+const visibleCoreNavItems = computed(() => coreNavItems.filter(
+  item => !item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability),
+));
 const visibleNavSections = computed<NavSection[]>(() => navSections
   .map(section => ({
     ...section,
-    items: section.items.filter(item => !item.ownerOnly || canManageOwnerSettings.value),
+    items: section.items.filter(
+      item => !item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability),
+    ),
   }))
   .filter(section => section.items.length > 0));
 
@@ -182,6 +194,9 @@ const currentView = computed(() => {
   if (/^\/manager\/products\/\d+(?:\/|$)/.test(path)) return 'product-workspace';
   return 'products';
 });
+const authorizedView = computed(() => (
+  isManagerPathAllowed(auth.value, currentPath.value) ? currentView.value : 'home'
+));
 
 const webRebuildNeedsAttention = computed(() => Boolean(webRebuildStatus.value?.needs_rebuild));
 const webRebuildQueued = computed(() => webRebuildStatus.value?.state === 'queued');
@@ -238,12 +253,10 @@ const navigate = (path: string) => {
 };
 
 const enforceAuthorizedLocation = () => {
-  const ownerOnlyPath = (
-    currentPath.value.startsWith('/manager/settings')
-    || currentPath.value.startsWith('/manager/staff')
-    || currentPath.value.startsWith('/manager/users')
-  );
-  if (isAuthenticated.value && !canManageOwnerSettings.value && ownerOnlyPath) {
+  if (
+    isAuthenticated.value
+    && !isManagerPathAllowed(auth.value, currentPath.value)
+  ) {
     navigate('/manager');
     return true;
   }
@@ -277,6 +290,7 @@ const setToast = (message: string, type: 'success' | 'error' = 'success') => {
 };
 
 const fetchWebRebuildStatus = async () => {
+  if (!canManagePlatform.value) return;
   try {
     webRebuildStatus.value = await api.getWebRebuildStatus() as WebRebuildStatus;
   } catch {
@@ -340,6 +354,7 @@ const renderTelegramLogin = async () => {
 };
 
 const handleRebuild = async () => {
+  if (!canManagePlatform.value) return;
   const confirmed = await confirmDialog({
     title: 'Пересобрать сайт?',
     description: 'GitHub Actions запустит новую сборку Astro. Обычно это занимает около двух минут.',
@@ -361,6 +376,7 @@ const handleRebuild = async () => {
 };
 
 const fetchLeadsCount = async () => {
+  if (!hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)) return;
   try {
     const counter = await api.getLeadsCounter();
     leadsCount.value = counter.count;
@@ -396,7 +412,7 @@ onMounted(() => {
   }
   window.addEventListener('popstate', onPopState);
   webRebuildStatusInterval = window.setInterval(() => {
-    if (isAuthenticated.value) void fetchWebRebuildStatus();
+    if (isAuthenticated.value && canManagePlatform.value) void fetchWebRebuildStatus();
   }, 60_000);
   checkAuth();
 });
@@ -520,7 +536,7 @@ watch(currentPath, () => {
       <nav class="flex-1 overflow-y-auto p-3 space-y-2">
         <div class="space-y-1">
           <button
-            v-for="item in coreNavItems"
+            v-for="item in visibleCoreNavItems"
             :key="item.path"
             class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left relative"
             :class="[
@@ -597,7 +613,7 @@ watch(currentPath, () => {
         </div>
       </nav>
 
-      <div class="p-3 border-t border-gray-100 mt-auto">
+      <div v-if="canManagePlatform" class="p-3 border-t border-gray-100 mt-auto">
         <div
           v-if="webRebuildNoticeVisible && !isDesktopNavCollapsed"
           class="mb-2 rounded-lg border px-3 py-2 text-xs leading-snug"
@@ -639,32 +655,33 @@ watch(currentPath, () => {
     </aside>
 
     <main class="flex-1 overflow-auto md:ml-0">
-      <ManagerHomeView v-if="currentView === 'home'" :key="currentLocation" />
-      <LeadsView v-else-if="currentView === 'leads'" :key="currentLocation" />
-      <OrdersKanbanView v-else-if="currentView === 'orders'" :key="currentLocation" />
-      <CalendarDashboard v-else-if="currentView === 'calendar'" :key="currentLocation" />
-      <EquipmentRegistryView v-else-if="currentView === 'equipment'" :key="currentLocation" />
-      <MediaLibraryView v-else-if="currentView === 'media-library'" :key="currentLocation" />
-      <CatalogQualityView v-else-if="currentView === 'catalog-quality'" :key="currentLocation" />
-      <ProductCollectionsView v-else-if="currentView === 'product-collections'" :key="currentLocation" />
-      <CustomerProfileView v-else-if="currentView === 'customer-profile'" :key="currentLocation" />
-      <CustomersView v-else-if="currentView === 'customers'" :key="currentLocation" />
-      <InstallersView v-else-if="currentView === 'installers'" :key="currentLocation" />
-      <SettingsBackupView v-else-if="currentView === 'settings-backup' && canManageOwnerSettings" :key="currentLocation" />
-      <SettingsView v-else-if="currentView === 'settings' && canManageOwnerSettings" :key="currentLocation" />
-      <TariffsView v-else-if="currentView === 'tariffs'" :key="currentLocation" />
-      <ServiceEstimatesView v-else-if="currentView === 'service-estimates'" :key="currentLocation" />
-      <OutgoingEmailsView v-else-if="currentView === 'outgoing-emails'" :key="currentLocation" />
-      <BankReceiptsView v-else-if="currentView === 'payments'" :key="currentLocation" />
-      <TagsView v-else-if="currentView === 'tags'" :key="currentLocation" />
-      <BrandsView v-else-if="currentView === 'brands'" :key="currentLocation" />
-      <FeatureSeriesMigrationView v-else-if="currentView === 'feature-series-migration'" :key="currentLocation" />
-      <FeaturesView v-else-if="currentView === 'features'" :key="currentLocation" />
-      <SupplyRequestsView v-else-if="currentView === 'supply'" :key="currentLocation" />
-      <SupplierFeedsView v-else-if="currentView === 'suppliers'" :key="currentLocation" />
-      <SupplierMappingView v-else-if="currentView === 'supplier-mapping'" :key="currentLocation" />
-      <ProductWorkspaceView v-else-if="currentView === 'product-workspace'" :key="currentLocation" />
-      <ProductsView v-else :key="currentLocation" />
+      <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
+      <LeadsView v-else-if="authorizedView === 'leads'" :key="currentLocation" />
+      <OrdersKanbanView v-else-if="authorizedView === 'orders'" :key="currentLocation" />
+      <CalendarDashboard v-else-if="authorizedView === 'calendar'" :key="currentLocation" />
+      <EquipmentRegistryView v-else-if="authorizedView === 'equipment'" :key="currentLocation" />
+      <MediaLibraryView v-else-if="authorizedView === 'media-library'" :key="currentLocation" />
+      <CatalogQualityView v-else-if="authorizedView === 'catalog-quality'" :key="currentLocation" />
+      <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="currentLocation" />
+      <CustomerProfileView v-else-if="authorizedView === 'customer-profile'" :key="currentLocation" />
+      <CustomersView v-else-if="authorizedView === 'customers'" :key="currentLocation" />
+      <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />
+      <SettingsBackupView v-else-if="authorizedView === 'settings-backup' && canManageInfrastructure" :key="currentLocation" />
+      <SettingsView v-else-if="authorizedView === 'settings' && canManageInfrastructure" :key="currentLocation" />
+      <TariffsView v-else-if="authorizedView === 'tariffs'" :key="currentLocation" />
+      <ServiceEstimatesView v-else-if="authorizedView === 'service-estimates'" :key="currentLocation" />
+      <OutgoingEmailsView v-else-if="authorizedView === 'outgoing-emails'" :key="currentLocation" />
+      <BankReceiptsView v-else-if="authorizedView === 'payments'" :key="currentLocation" />
+      <TagsView v-else-if="authorizedView === 'tags'" :key="currentLocation" />
+      <BrandsView v-else-if="authorizedView === 'brands'" :key="currentLocation" />
+      <FeatureSeriesMigrationView v-else-if="authorizedView === 'feature-series-migration'" :key="currentLocation" />
+      <FeaturesView v-else-if="authorizedView === 'features'" :key="currentLocation" />
+      <SupplyRequestsView v-else-if="authorizedView === 'supply'" :key="currentLocation" />
+      <SupplierFeedsView v-else-if="authorizedView === 'suppliers'" :key="currentLocation" />
+      <SupplierMappingView v-else-if="authorizedView === 'supplier-mapping'" :key="currentLocation" />
+      <ProductWorkspaceView v-else-if="authorizedView === 'product-workspace' && canManagePlatform" :key="currentLocation" />
+      <ProductsView v-else-if="canManagePlatform" :key="currentLocation" />
+      <TenantCatalogView v-else :key="currentLocation" />
     </main>
 
     <Transition name="fade">

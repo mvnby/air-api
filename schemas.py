@@ -735,6 +735,8 @@ class ManagerAuthStatusResponse(BaseModel):
     tenant_id: int
     storefront_id: int
     tenant_membership_id: Optional[int] = None
+    is_system_tenant: bool = False
+    capabilities: List[str] = Field(default_factory=list)
 
 
 class ManagerCatalogProductImageResponse(BaseModel):

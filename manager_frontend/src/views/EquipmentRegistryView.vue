@@ -23,8 +23,14 @@ import type {
   EquipmentRegistryItem,
 } from '../components/equipment/types';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { MANAGER_CAPABILITY, hasManagerCapability } from '../manager-capabilities';
+import { managerSession } from '../services/manager-session';
 
 const PAGE_LIMIT = 25;
+const canManagePlatform = computed(() => hasManagerCapability(
+  managerSession.auth.value,
+  MANAGER_CAPABILITY.platformManage,
+));
 
 const items = ref<EquipmentRegistryItem[]>([]);
 const search = ref('');
@@ -193,7 +199,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <WarrantyPolicyManager />
+      <WarrantyPolicyManager v-if="canManagePlatform" />
 
       <EquipmentRegistryFilters
         v-model="search"

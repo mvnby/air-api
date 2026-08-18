@@ -22,6 +22,7 @@ from routers import (
     manager_catalog_quality,
     manager_content_ai,
     manager_crm,
+    manager_equipment,
     manager_features,
     manager_google_auth,
     manager_leads,
@@ -43,6 +44,7 @@ from routers import (
     manager_supplier_mapping,
     manager_tags,
     manager_tariffs,
+    manager_tenant_offers,
     manager_warranties,
     manager_yandex_business,
 )
@@ -51,8 +53,11 @@ from routers.manager_permission_policy import (
     SYSTEM_OWNER_OPERATION_IDS,
 )
 from services.settings_service import SettingsService
+from services.manager_catalog_service import ManagerCatalogService
+from services.equipment_service import EquipmentService
 from services.supplier_mapping_service import SupplierCatalogService
 from services.tag_service import TagService
+from services.tenant_offer_service import TenantOfferService
 
 
 PLATFORM_ROUTERS = (
@@ -79,6 +84,7 @@ PLATFORM_ROUTERS = (
     manager_media_gallery_read.router,
     manager_crm.router,
     manager_yandex_business.router,
+    manager_tenant_offers.router,
 )
 
 PURE_GLOBAL_MUTATION_ROUTERS = (
@@ -95,6 +101,7 @@ PURE_GLOBAL_MUTATION_ROUTERS = (
     manager_media_library.router,
     manager_media_processing.router,
     manager_media_cleanup.router,
+    manager_tenant_offers.router,
 )
 FULLY_SYSTEM_SCOPED_ROUTERS = (
     manager_supply.router,
@@ -389,6 +396,172 @@ async def test_sensitive_supplier_read_is_denied_before_service_for_tenant_manag
 
     assert response.status_code == 403
     list_suppliers.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path", "payload", "service_method"),
+    [
+        (
+            "post",
+            "/api/manager/tenant-offers",
+            {"product_id": 1, "price": 1000},
+            "upsert_offer",
+        ),
+        (
+            "patch",
+            "/api/manager/tenant-offers/1",
+            {"price": 1000},
+            "update_offer",
+        ),
+    ],
+)
+async def test_tenant_offer_mutation_is_denied_before_service_for_non_system_manager(
+    monkeypatch,
+    method,
+    path,
+    payload,
+    service_method,
+):
+    app = FastAPI()
+    app.include_router(manager_tenant_offers.router)
+    app.dependency_overrides[get_current_auth_context] = lambda: _auth_context(
+        role="manager",
+        is_system=False,
+    )
+
+    async def _session():
+        yield object()
+
+    app.dependency_overrides[get_session] = _session
+    service = AsyncMock()
+    monkeypatch.setattr(TenantOfferService, service_method, service)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await getattr(client, method)(path, json=payload)
+
+    assert response.status_code == 403
+    service.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "service_method"),
+    [
+        ("/api/manager/products/list", "list_products"),
+        ("/api/manager/products/smart-search?q=Allowed", "smart_search"),
+        ("/api/manager/products/1", "get_product"),
+    ],
+)
+async def test_sensitive_legacy_catalog_read_is_denied_before_service_for_tenant_manager(
+    monkeypatch,
+    path,
+    service_method,
+):
+    app = FastAPI()
+    app.include_router(manager_catalog.router)
+    app.dependency_overrides[get_current_auth_context] = lambda: _auth_context(
+        role="manager",
+        is_system=False,
+    )
+
+    async def _session():
+        yield object()
+
+    app.dependency_overrides[get_session] = _session
+    service = AsyncMock()
+    monkeypatch.setattr(ManagerCatalogService, service_method, service)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get(path)
+
+    assert response.status_code == 403
+    service.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path", "payload", "service_method"),
+    [
+        (
+            "post",
+            "/api/manager/equipment",
+            {"customer_id": 1, "supplier_id": None},
+            "create_equipment",
+        ),
+        (
+            "post",
+            "/api/manager/equipment/from-order/1",
+            {"supplier_id": 7},
+            "create_equipment_from_order",
+        ),
+        (
+            "post",
+            "/api/manager/equipment/1/components",
+            {"title": "Denied", "supplier_invoice_number": "INV-1"},
+            "create_component",
+        ),
+        (
+            "patch",
+            "/api/manager/equipment/1/components/2",
+            {"supplier_invoice_date": None},
+            "update_component",
+        ),
+    ],
+)
+async def test_equipment_supplier_fields_are_denied_before_service_for_tenant_manager(
+    monkeypatch,
+    method,
+    path,
+    payload,
+    service_method,
+):
+    app = FastAPI()
+    app.include_router(manager_equipment.router)
+    app.dependency_overrides[get_current_auth_context] = lambda: _auth_context(
+        role="manager",
+        is_system=False,
+    )
+
+    async def _session():
+        yield object()
+
+    app.dependency_overrides[get_session] = _session
+    service = AsyncMock()
+    monkeypatch.setattr(EquipmentService, service_method, service)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await getattr(client, method)(path, json=payload)
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["error_code"] == "forbidden"
+    service.assert_not_awaited()
+
+
+def test_tenant_offer_reads_remain_tenant_scoped_without_platform_gate():
+    routes = {
+        route.operation_id: route
+        for route in _api_routes(manager_tenant_offers.router)
+    }
+    for operation_id in (
+        "list_manager_tenant_offers",
+        "get_manager_tenant_offer",
+        "list_manager_tenant_audit_events",
+    ):
+        assert operation_id not in PLATFORM_MANAGER_OPERATION_IDS
+        assert not _has_direct_dependency(
+            routes[operation_id],
+            require_system_manager_tenant_scope,
+        )
 
 
 @pytest.mark.asyncio
