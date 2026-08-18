@@ -181,13 +181,8 @@ class StorefrontRequestGatewayMiddleware:
                 query_string=bytes(scope.get("query_string", b"")),
                 body_sha256=digest.hexdigest(),
                 config=StorefrontEnvelopeAuthConfig(
-                    primary_key_id=settings.STOREFRONT_CONTEXT_SIGNING_KEY_ID,
-                    primary_secret=settings.STOREFRONT_CONTEXT_SIGNING_SECRET,
-                    previous_key_id=(
-                        settings.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID
-                    ),
-                    previous_secret=(
-                        settings.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET
+                    signing_keyring=(
+                        settings.storefront_context_signing_keyring
                     ),
                     allowed_api_hosts=settings.storefront_context_api_hosts,
                     max_age_seconds=settings.STOREFRONT_CONTEXT_MAX_AGE_SECONDS,

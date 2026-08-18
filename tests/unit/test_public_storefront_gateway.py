@@ -4,12 +4,15 @@ import pytest
 
 from core.config import settings
 from tests.unit.storefront_gateway_test_support import (
+    PRIMARY_KEY_ID,
+    PRIMARY_SECRET,
     PREVIOUS_KEY_ID,
     PREVIOUS_SECRET,
     STOREFRONT_HOST,
     gateway_app,
     gateway_request,
     signed_headers,
+    signing_keyring_json,
 )
 
 
@@ -176,7 +179,29 @@ async def test_legacy_v1_read_is_rejected_by_default_and_allowed_by_flag(
     gateway_app,
     monkeypatch,
 ):
-    headers = signed_headers(method="GET", signature_version="v1")
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON", "")
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_SIGNING_KEY_ID",
+        "mvn-legacy-current",
+    )
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_SIGNING_SECRET",
+        "canonical-legacy-secret-at-least-32-bytes",
+    )
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS",
+        "mvn.by",
+    )
+    headers = signed_headers(
+        method="GET",
+        storefront_hostname="mvn.by",
+        key_id="mvn-legacy-current",
+        secret="canonical-legacy-secret-at-least-32-bytes",
+        signature_version="v1",
+    )
 
     rejected = await gateway_request(gateway_app, "GET", headers=headers)
     assert rejected.status_code == 401
@@ -195,18 +220,56 @@ async def test_legacy_v1_write_is_rejected_even_with_read_rollback_flag(
     gateway_app,
     monkeypatch,
 ):
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON", "")
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_SIGNING_KEY_ID",
+        "mvn-legacy-current",
+    )
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_SIGNING_SECRET",
+        "canonical-legacy-secret-at-least-32-bytes",
+    )
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS",
+        "mvn.by",
+    )
     monkeypatch.setattr(
         settings,
         "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS",
         True,
     )
-    headers = signed_headers()
+    headers = signed_headers(
+        storefront_hostname="mvn.by",
+        key_id="mvn-legacy-current",
+        secret="canonical-legacy-secret-at-least-32-bytes",
+    )
     v2_signature = headers["X-MVN-Storefront-Signature"]
     headers["X-MVN-Storefront-Signature"] = (
         "v1=" + v2_signature.split("=", 1)[1]
     )
 
     response = await gateway_request(gateway_app, "POST", headers=headers)
+
+    assert response.status_code == 401
+    assert gateway_app.state.session_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_json_keyring_key_remains_v2_only_if_legacy_flag_is_forced(
+    gateway_app,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_ALLOW_LEGACY_V1_READS",
+        True,
+    )
+    headers = signed_headers(method="GET", signature_version="v1")
+
+    response = await gateway_request(gateway_app, "GET", headers=headers)
 
     assert response.status_code == 401
     assert gateway_app.state.session_calls == 0
@@ -258,19 +321,72 @@ async def test_unknown_key_id_fails_without_trying_other_keys(gateway_app):
 
 
 @pytest.mark.asyncio
+async def test_key_for_one_storefront_cannot_forge_another_host(
+    gateway_app,
+):
+    headers = signed_headers(storefront_hostname="polotsk.mvn.by")
+
+    response = await gateway_request(gateway_app, "POST", headers=headers)
+
+    assert response.status_code == 401
+    assert gateway_app.state.session_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key_id",
+    ["", "bad/key", "bad:key", "x" * 65],
+)
+async def test_noncanonical_key_id_is_rejected_before_storefront_lookup(
+    gateway_app,
+    key_id,
+):
+    headers = signed_headers(key_id=key_id)
+
+    response = await gateway_request(gateway_app, "POST", headers=headers)
+
+    assert response.status_code == 401
+    assert gateway_app.state.session_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "header_name",
+    [
+        "X-MVN-Storefront-Key-Id",
+        "X-MVN-Storefront-Host",
+        "X-MVN-Storefront-Timestamp",
+        "X-MVN-Storefront-Signature",
+    ],
+)
+async def test_each_duplicate_signing_header_is_rejected_before_body_or_db(
+    gateway_app,
+    header_name,
+):
+    headers = list(signed_headers().items())
+    duplicate_value = next(
+        value for name, value in headers if name == header_name
+    )
+    headers.append((header_name, duplicate_value))
+
+    response = await gateway_request(gateway_app, "POST", headers=headers)
+
+    assert response.status_code == 401
+    assert gateway_app.state.session_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_previous_key_pair_is_accepted_during_rotation(
     gateway_app,
     monkeypatch,
 ):
     monkeypatch.setattr(
         settings,
-        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID",
-        PREVIOUS_KEY_ID,
-    )
-    monkeypatch.setattr(
-        settings,
-        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET",
-        PREVIOUS_SECRET,
+        "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON",
+        signing_keyring_json(
+            (PRIMARY_KEY_ID, PRIMARY_SECRET, {STOREFRONT_HOST: "primary"}),
+            (PREVIOUS_KEY_ID, PREVIOUS_SECRET, {STOREFRONT_HOST: "previous"}),
+        ),
     )
     headers = signed_headers(
         key_id=PREVIOUS_KEY_ID,
@@ -288,18 +404,7 @@ async def test_clearing_primary_pair_disables_stale_previous_key(
     gateway_app,
     monkeypatch,
 ):
-    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEY_ID", "")
-    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", "")
-    monkeypatch.setattr(
-        settings,
-        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID",
-        PREVIOUS_KEY_ID,
-    )
-    monkeypatch.setattr(
-        settings,
-        "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET",
-        PREVIOUS_SECRET,
-    )
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON", "")
 
     response = await gateway_request(
         gateway_app,
@@ -316,8 +421,29 @@ async def test_clearing_primary_pair_disables_stale_previous_key(
 @pytest.mark.asyncio
 async def test_valid_signature_for_unknown_or_inactive_domain_is_safe_404(
     gateway_app,
+    monkeypatch,
 ):
-    headers = signed_headers(storefront_hostname="disabled.mvn.by")
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON",
+        signing_keyring_json(
+            (
+                PRIMARY_KEY_ID,
+                PRIMARY_SECRET,
+                {STOREFRONT_HOST: "primary"},
+            ),
+            (
+                "disabled-web-current",
+                "disabled-storefront-secret-at-least-32-bytes",
+                {"disabled.mvn.by": "primary"},
+            ),
+        ),
+    )
+    headers = signed_headers(
+        storefront_hostname="disabled.mvn.by",
+        key_id="disabled-web-current",
+        secret="disabled-storefront-secret-at-least-32-bytes",
+    )
 
     response = await gateway_request(gateway_app, "POST", headers=headers)
 

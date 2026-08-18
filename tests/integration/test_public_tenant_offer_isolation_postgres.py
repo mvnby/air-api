@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 
 import pytest
@@ -59,8 +60,22 @@ def _signed_read_headers(path_and_query: str) -> dict[str, str]:
 
 
 def _configure_signing(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEY_ID", _KEY_ID)
-    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", _SECRET)
+    monkeypatch.setattr(
+        settings,
+        "STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON",
+        json.dumps(
+            {
+                "keys": {
+                    _KEY_ID: {
+                        "secret": _SECRET,
+                        "host_roles": {_SECONDARY_HOST: "primary"},
+                    }
+                }
+            }
+        ),
+    )
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_KEY_ID", "")
+    monkeypatch.setattr(settings, "STOREFRONT_CONTEXT_SIGNING_SECRET", "")
     monkeypatch.setattr(
         settings,
         "STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID",
