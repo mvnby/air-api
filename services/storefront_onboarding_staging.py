@@ -317,7 +317,7 @@ class StorefrontOnboardingStagingService:
             or storefront.id is None
         ):
             return 0, False
-        domain = state.domains[0] if state.domains else None
+        domain = next(iter(state.domains), None)
         routable = (
             tenant.status == "active"
             and storefront.status == "active"
@@ -440,7 +440,9 @@ class StorefrontOnboardingStagingService:
             tenant_id=tenant_id,
             storefront_id=storefront_id,
             is_system=manifest.tenant.is_system,
-            is_canonical_storefront=manifest.storefront.is_default,
+            is_canonical_storefront=(
+                manifest.tenant.is_system and manifest.storefront.is_default
+            ),
         )
 
     @classmethod

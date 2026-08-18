@@ -25,10 +25,16 @@ from models import (
 from services.catalog_invalidation_contracts import (
     CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
 )
+from services.public_catalog_visibility_service import (
+    PublicCatalogVisibilityService,
+)
 from services.storefront_onboarding_manifest import StorefrontOnboardingManifest
 from services.storefront_onboarding_service import (
     StorefrontOnboardingBlockedError,
     StorefrontOnboardingService,
+)
+from services.storefront_onboarding_staging import (
+    StorefrontOnboardingStagingService,
 )
 
 
@@ -255,6 +261,44 @@ async def test_stale_or_changed_manifest_token_is_rejected_before_writes(
     assert await db.scalar(select(Tenant).where(Tenant.slug == "polotsk")) is None
     assert await _count(db, TenantOffer) == 0
     assert await _count(db, TenantAuditEvent) == 0
+
+
+@pytest.mark.asyncio
+async def test_non_system_default_storefront_cannot_bypass_offer_boundary(
+    db: AsyncSession,
+) -> None:
+    unoffered = Product(
+        title="Published only in the shared catalog",
+        slug="shared-only-product",
+        price=25_000,
+        is_published=True,
+    )
+    db.add(unoffered)
+    await db.flush()
+    manifest = _manifest()
+    await _execute(db, action="bootstrap", manifest=manifest)
+    tenant = await db.scalar(select(Tenant).where(Tenant.slug == "polotsk"))
+    storefront = await db.scalar(
+        select(Storefront).where(
+            Storefront.tenant_id == tenant.id,
+            Storefront.slug == "main",
+        )
+    )
+    scope = StorefrontOnboardingStagingService._tenant_scope(
+        manifest=manifest,
+        tenant_id=int(tenant.id),
+        storefront_id=int(storefront.id),
+    )
+
+    assert scope.is_canonical_storefront is False
+    assert (
+        await PublicCatalogVisibilityService.get_visible_product_by_id(
+            db,
+            tenant_scope=scope,
+            product_id=int(unoffered.id),
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio

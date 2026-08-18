@@ -16,6 +16,9 @@ from services.storefront_onboarding_manifest import (
     StorefrontOnboardingManifestError,
 )
 from services.storefront_onboarding_plan_token import StorefrontOnboardingPlanToken
+from services.storefront_onboarding_staging import (
+    StorefrontOnboardingStagingService,
+)
 from services.storefront_onboarding_state import StorefrontOnboardingBlockedError
 
 
@@ -66,6 +69,19 @@ def test_polotsk_manifest_is_closed_bounded_and_deterministic() -> None:
     )
     assert "password" not in json.dumps(first.to_dict()).casefold()
     assert "secret" not in json.dumps(first.to_dict()).casefold()
+
+
+def test_non_system_default_storefront_is_not_canonical_mvn_scope() -> None:
+    manifest = StorefrontOnboardingManifest.normalize(_payload())
+
+    scope = StorefrontOnboardingStagingService._tenant_scope(
+        manifest=manifest,
+        tenant_id=2,
+        storefront_id=20,
+    )
+
+    assert scope.is_system is False
+    assert scope.is_canonical_storefront is False
 
 
 @pytest.mark.parametrize(
