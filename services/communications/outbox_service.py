@@ -255,9 +255,14 @@ class IntegrationOutboxService:
 
         inserted_event_id = (
             await session.execute(
-                statement.on_conflict_do_nothing(
-                    index_elements=[IntegrationOutboxEvent.deduplication_key]
-                ).returning(IntegrationOutboxEvent.event_id)
+                # ``event_id`` is derived from ``deduplication_key``. Two
+                # identical concurrent inserts can therefore race on either
+                # unique constraint; a targeted conflict clause only handles
+                # one of them. The read-back and identity check below still
+                # reject any unrelated collision.
+                statement.on_conflict_do_nothing().returning(
+                    IntegrationOutboxEvent.event_id
+                )
             )
         ).scalar_one_or_none()
         existing = await cls._find_existing(
