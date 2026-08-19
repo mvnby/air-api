@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "name": "polotsk-presentation-v1",
+  "public_catalog_url": "https://api.mvn.by/api/v1/products",
+  "expected_public_product_count": 1235,
+  "expected_public_snapshot_sha256": "7378a49393f4e1c729a603f790be7cfebe1e56f5a2e0ca6b20e3936916ee794f",
+  "expected_db_snapshot_sha256": "94dc007320cf987d3a0d7708b277f76ecc0b3b7f63a104c13d353b699cdc67ca",
+  "sources": [
+    {
+      "old_url": "/media/products/mdsaf07hrn8mdoaf.png",
+      "action": "ingest",
+      "expected_product_ids": [102, 111, 112, 113]
+    },
+    {
+      "old_url": "/media/products/mdv-infini-loft-erp-inverter-mdsalf-24hrfn8-mdoalf-24hfn8.png",
+      "action": "ingest",
+      "expected_product_ids": [33, 34, 35]
+    },
+    {
+      "old_url": "/media/products/mdv-mdsag07hrdn8.png",
+      "action": "ingest",
+      "expected_product_ids": [47, 48]
+    },
+    {
+      "old_url": "/media/products/shared/5832537fe3f19e524b7e3c193459a07fcd3cde2cc4a2f8b867c68c3a38c0b7ee.webp",
+      "action": "reuse",
+      "expected_product_ids": [123],
+      "target_url": "https://cdn.mvn.by/products/variants/original/5832537fe3f19e524b7e3c193459a07fcd3cde2cc4a2f8b867c68c3a38c0b7ee.webp"
+    },
+    {
+      "old_url": "/media/products/shared/65aae27a478979761e6ed7470e5488f0db5b0f8fcf9d7ac95ddea0b1ce3692ec.webp",
+      "action": "reuse",
+      "expected_product_ids": [119, 120, 121, 122, 715],
+      "target_url": "https://cdn.mvn.by/products/variants/original/65aae27a478979761e6ed7470e5488f0db5b0f8fcf9d7ac95ddea0b1ce3692ec.webp"
+    },
+    {
+      "old_url": "/media/products/shared/df789e5e860c45716fbfd06484022a03f34732929c4f1de2b322e038693a36c9.webp",
+      "action": "reuse",
+      "expected_product_ids": [736, 739, 742, 743, 744, 746],
+      "target_url": "https://cdn.mvn.by/products/variants/original/df789e5e860c45716fbfd06484022a03f34732929c4f1de2b322e038693a36c9.webp"
+    },
+    {
+      "old_url": "/media/products/shared/ef69c4aae0276ec3194d7ac14c7c236a8e0afa90c3ac014772de427761c63ac0.webp",
+      "action": "reuse",
+      "expected_product_ids": [38, 39, 40],
+      "target_url": "https://cdn.mvn.by/products/variants/original/ef69c4aae0276ec3194d7ac14c7c236a8e0afa90c3ac014772de427761c63ac0.webp"
+    },
+    {
+      "old_url": "/media/products/variants/main-cleanup/4941d21574832dc6bee16a303a5067656ec255f359006f5e785240f32bdd823b.webp",
+      "action": "reuse",
+      "expected_product_ids": [92],
+      "target_url": "https://cdn.mvn.by/products/variants/original/4941d21574832dc6bee16a303a5067656ec255f359006f5e785240f32bdd823b.webp"
+    },
+    {
+      "old_url": "/media/products/variants/main-cleanup/9a5be2b05dde737279fbe350d99ccd97518ad6a8158d746a5f0ab320ce9755c1.webp",
+      "action": "reuse",
+      "expected_product_ids": [101, 108, 109],
+      "target_url": "https://cdn.mvn.by/products/variants/original/9a5be2b05dde737279fbe350d99ccd97518ad6a8158d746a5f0ab320ce9755c1.webp"
+    },
+    {
+      "old_url": "/media/products/variants/main-cleanup/a0c3486afbf48c20d89f7fd4ccbfdfed889c7fb4b03ec1524b8123da63716dff.webp",
+      "action": "reuse",
+      "expected_product_ids": [100, 104, 105, 106],
+      "target_url": "https://cdn.mvn.by/products/variants/original/a0c3486afbf48c20d89f7fd4ccbfdfed889c7fb4b03ec1524b8123da63716dff.webp"
+    },
+    {
+      "old_url": "https://cdn.mvn.by/library/original/49b4f1b3652d4b7cfadfe0f9e459d1c38c68fdb3bfd67cdbeec2b35ceee73b79.webp",
+      "action": "ingest",
+      "expected_product_ids": [764, 768, 769, 770]
+    },
+    {
+      "old_url": "https://cdn.mvn.by/library/original/b7f8459506e1c160bd7be50e8a99af4c68f5d1303b1b46ddcc0dbca1cc1ed924.webp",
+      "action": "ingest",
+      "expected_product_ids": [1309]
+    },
+    {
+      "old_url": "https://www.lg.com/content/dam/channel/wcms/nl/images/air-conditioning/h09s1d_ns1_eebn_nl_c/gallery/large02.jpg",
+      "action": "blocked",
+      "expected_product_ids": [126, 127, 128],
+      "blocked_reason": "external_rights_review_required"
+    },
+    {
+      "old_url": "media/products/tac09chsdug11v3a/dad2d87b-73a4-4453-8d73-33049354cc22.jpg",
+      "action": "ingest",
+      "expected_product_ids": [88, 90, 91]
+    },
+    {
+      "old_url": "media/products/tcl-free-match-inverter-fma-27i3hddvohb/7b0e173b-069e-48c0-921c-5e66e5a4db1e.webp",
+      "action": "ingest",
+      "expected_product_ids": [167, 168, 169]
+    }
+  ]
+}
