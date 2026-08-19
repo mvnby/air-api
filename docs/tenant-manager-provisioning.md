@@ -114,6 +114,14 @@ Download the sanitized plan artifact. Continue only when `ready=true`,
 `create_staff_user` and `create_active_manager_membership` (or is empty for an
 already compliant idempotent rerun).
 
+If `changes=[]`, stop here: the existing manager already satisfies the exact
+tenant boundary. Do not create the temporary password secret and do not run
+execute. For the current `andrey.polotsk` production identity, this read-only
+no-op plan is the expected path.
+
+Only when `changes` is the exact ordered creation pair should the following
+password and execute steps be used.
+
 Generate and retain the initial password in an owner-only file outside every
 repository. These commands do not print it or put it in shell history:
 

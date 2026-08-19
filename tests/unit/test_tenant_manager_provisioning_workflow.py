@@ -31,7 +31,21 @@ def _arguments(tmp_path: Path, *, operation: str = "plan") -> argparse.Namespace
     )
 
 
-def _plan_payload(*, ready: bool = True, digest: str = "a" * 64) -> str:
+def _plan_payload(
+    *,
+    ready: bool = True,
+    digest: str = "a" * 64,
+    changes: list[str] | None = None,
+) -> str:
+    effective_changes = (
+        changes
+        if changes is not None
+        else (
+            ["create_staff_user", "create_active_manager_membership"]
+            if ready
+            else []
+        )
+    )
     return json.dumps(
         {
             "mode": "plan",
@@ -55,11 +69,7 @@ def _plan_payload(*, ready: bool = True, digest: str = "a" * 64) -> str:
                 "memberships": [],
             },
             "blockers": [] if ready else ["review required"],
-            "changes": (
-                ["create_staff_user", "create_active_manager_membership"]
-                if ready
-                else []
-            ),
+            "changes": effective_changes,
             "plan_digest": digest,
             "plan_token": "fresh-plan-token",
             "plan_token_max_age_seconds": 900,
@@ -340,6 +350,67 @@ def test_blocked_plan_writes_sanitized_review_artifact(tmp_path: Path, monkeypat
     assert written["result"]["blockers"] == ["review required"]
     assert "fresh-plan-token" not in str(written)
     assert "reviewed_execute_command" not in str(written)
+
+
+def test_existing_compliant_manager_plan_is_noop_and_never_executes(
+    tmp_path: Path, monkeypatch
+):
+    args = _arguments(tmp_path)
+    no_op_plan = json.loads(_plan_payload(changes=[]))
+    no_op_plan["current"] = {
+        "tenant": {"id": 34, "status": "active", "is_system": False},
+        "storefront": {
+            "id": 35,
+            "tenant_id": 34,
+            "status": "active",
+            "is_default": True,
+        },
+        "staff_users": [
+            {
+                "id": 36,
+                "username": "andrey.polotsk",
+                "display_name": "Андрей",
+                "phone": "+375297146293",
+                "status": "active",
+                "primary_role": "manager",
+                "roles": ["manager"],
+                "legacy_installer_id": None,
+                "telegram_id": None,
+                "telegram_username": None,
+            }
+        ],
+        "memberships": [
+            {"id": 37, "tenant_id": 34, "role": "manager", "status": "active"}
+        ],
+    }
+    remote_commands: list[str] = []
+    responses = iter(
+        [
+            workflow.RemoteOutput(0, _runtime_identity()),
+            workflow.RemoteOutput(0, ""),
+            workflow.RemoteOutput(0, json.dumps(no_op_plan)),
+        ]
+    )
+
+    monkeypatch.setattr(workflow, "create_context", lambda *args: object())
+    monkeypatch.setattr(workflow, "validate_effective_config", lambda *args: None)
+    monkeypatch.setattr(workflow, "discover_cluster_topology", lambda **kwargs: _topology())
+
+    def remote(node, context, command, **kwargs):
+        remote_commands.append(command)
+        return next(responses)
+
+    monkeypatch.setattr(workflow, "_run_remote", remote)
+
+    artifact = workflow.execute(args)
+
+    assert artifact["result"]["ready"] is True
+    assert artifact["result"]["changes"] == []
+    assert artifact["result"]["current"]["tenant"]["id"] == 34
+    assert artifact["result"]["current"]["storefront"]["id"] == 35
+    assert artifact["result"]["target"]["username"] == "andrey.polotsk"
+    assert not any("provision_tenant_manager.py execute" in item for item in remote_commands)
+    assert "fresh-plan-token" not in args.result_file.read_text(encoding="utf-8")
 
 
 def test_secret_is_not_copied_into_subprocess_environment(monkeypatch):
