@@ -439,11 +439,7 @@ async def test_signed_polotsk_uses_one_deep_tenant_neutral_projection(
         headers=_signed_headers(featured_path, _POLOTSK_HOST),
     )
     assert featured.status_code == 200, featured.text
-    assert [item["slug"] for item in featured.json()] == [local_product.slug]
-    _assert_tenant_neutral_product(
-        featured.json()[0],
-        expected_status="in_stock_now",
-    )
+    assert featured.json() == []
 
     collection_path = "/api/v1/content/placements/home/tenant_safe/collections"
     collection_response = await async_client.get(

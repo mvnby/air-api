@@ -23,7 +23,6 @@ from models import (
     TenantOffer,
     TenantCatalogGrant,
 )
-from models.supplier import ProductLocalStock
 from models.tenancy import TenantScope
 from services.public_taxonomy_service import PublicTaxonomyService
 
@@ -374,28 +373,6 @@ class PublicCatalogDAO:
             )
             .where(Product.series_id == series_id)
             .order_by(Product.title.asc(), Product.id.asc())
-        )
-        return PublicCatalogDAO._rows(await session.execute(stmt))
-
-    @staticmethod
-    async def get_vitebsk_featured(
-        session: AsyncSession,
-        *,
-        tenant_scope: TenantScope,
-        limit: int,
-    ) -> list[PublicCatalogRow]:
-        stmt = (
-            PublicCatalogDAO._select_products(
-                tenant_scope,
-                load_image_variants=True,
-            )
-            .join(ProductLocalStock, Product.id == ProductLocalStock.product_id)
-            .where(
-                ProductLocalStock.warehouse_code == "vitebsk",
-                ProductLocalStock.qty > 0,
-            )
-            .order_by(Product.created_at.desc(), Product.id.desc())
-            .limit(limit)
         )
         return PublicCatalogDAO._rows(await session.execute(stmt))
 

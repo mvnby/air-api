@@ -221,12 +221,9 @@ class PublicCatalogService:
                 PublicCatalogVisibilityService.project_product(item)
                 for item in products
             ]
-        rows = await PublicCatalogDAO.get_vitebsk_featured(
-            session,
-            tenant_scope=tenant_scope,
-            limit=limit,
-        )
-        return [PublicCatalogVisibilityService.project_row(row) for row in rows]
+        # The endpoint name and membership both reveal canonical MVN warehouse
+        # topology. Keep a response-compatible empty list for white-label hosts.
+        return []
 
     @staticmethod
     async def get_products_by_series_id(
