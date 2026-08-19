@@ -4,6 +4,7 @@ export const MANAGER_CAPABILITY = {
   crmManage: 'crm.manage',
   catalogMasterRead: 'catalog.master.read',
   storefrontOffersRead: 'storefront.offers.read',
+  storefrontCollectionsManage: 'storefront.collections.manage',
   platformManage: 'platform.manage',
   staffManage: 'staff.manage',
   infrastructureManage: 'infrastructure.manage',
@@ -30,6 +31,9 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   }
   if (path === '/manager/products' || path === '/manager/products/') {
     return MANAGER_CAPABILITY.catalogMasterRead;
+  }
+  if (path.startsWith('/manager/product-collections')) {
+    return MANAGER_CAPABILITY.storefrontCollectionsManage;
   }
   if (
     path.startsWith('/manager/staff')

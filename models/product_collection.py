@@ -1,7 +1,18 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKeyConstraint,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -12,7 +23,40 @@ def utc_now() -> datetime:
 class ProductCollection(SQLModel, table=True):
     __tablename__ = "product_collection"
     __table_args__ = (
-        UniqueConstraint("slug", name="uq_product_collection_slug"),
+        UniqueConstraint(
+            "id",
+            "tenant_id",
+            "storefront_id",
+            name="uq_product_collection_id_scope",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "storefront_id",
+            "slug",
+            name="uq_product_collection_scope_slug",
+        ),
+        ForeignKeyConstraint(
+            ["storefront_id", "tenant_id"],
+            ["storefront.id", "storefront.tenant_id"],
+            name="fk_product_collection_storefront_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["fallback_collection_id", "tenant_id", "storefront_id"],
+            [
+                "product_collection.id",
+                "product_collection.tenant_id",
+                "product_collection.storefront_id",
+            ],
+            name="fk_product_collection_fallback_scope",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["fallback_collection_id"],
+            ["product_collection.id"],
+            name="fk_product_collection_fallback_delete",
+            ondelete="SET NULL",
+        ),
         CheckConstraint(
             "status IN ('draft', 'published', 'archived')",
             name="ck_product_collection_status",
@@ -32,6 +76,10 @@ class ProductCollection(SQLModel, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False, index=True)
+    storefront_id: int = Field(
+        sa_column=Column(Integer, nullable=False, index=True),
+    )
     slug: str = Field(sa_column=Column(String(120), nullable=False, index=True))
     internal_name: str = Field(sa_column=Column(String(180), nullable=False, index=True))
     public_title: str = Field(sa_column=Column(String(180), nullable=False))
@@ -48,9 +96,7 @@ class ProductCollection(SQLModel, table=True):
     max_items: int = Field(default=6)
     fallback_collection_id: Optional[int] = Field(
         default=None,
-        foreign_key="product_collection.id",
-        ondelete="SET NULL",
-        index=True,
+        sa_column=Column(Integer, nullable=True, index=True),
     )
     starts_at: Optional[datetime] = Field(
         default=None,
@@ -76,23 +122,44 @@ class ProductCollection(SQLModel, table=True):
 class ProductCollectionItem(SQLModel, table=True):
     __tablename__ = "product_collection_item"
     __table_args__ = (
-        UniqueConstraint(
-            "collection_id",
-            "product_id",
-            name="uq_product_collection_item_product",
+        ForeignKeyConstraint(
+            ["storefront_id", "tenant_id"],
+            ["storefront.id", "storefront.tenant_id"],
+            name="fk_product_collection_item_storefront_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["collection_id", "tenant_id", "storefront_id"],
+            [
+                "product_collection.id",
+                "product_collection.tenant_id",
+                "product_collection.storefront_id",
+            ],
+            name="fk_product_collection_item_collection_scope",
+            ondelete="CASCADE",
         ),
         UniqueConstraint(
+            "tenant_id",
+            "storefront_id",
+            "collection_id",
+            "product_id",
+            name="uq_product_collection_item_scope_product",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "storefront_id",
             "collection_id",
             "position",
-            name="uq_product_collection_item_position",
+            name="uq_product_collection_item_scope_position",
         ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False, index=True)
+    storefront_id: int = Field(
+        sa_column=Column(Integer, nullable=False, index=True),
+    )
     collection_id: int = Field(
-        foreign_key="product_collection.id",
-        ondelete="CASCADE",
-        index=True,
+        sa_column=Column(Integer, nullable=False, index=True),
     )
     product_id: int = Field(
         foreign_key="product.id",
@@ -114,21 +181,40 @@ class ProductCollectionItem(SQLModel, table=True):
 class ProductCollectionPlacement(SQLModel, table=True):
     __tablename__ = "product_collection_placement"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["storefront_id", "tenant_id"],
+            ["storefront.id", "storefront.tenant_id"],
+            name="fk_product_collection_placement_storefront_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["collection_id", "tenant_id", "storefront_id"],
+            [
+                "product_collection.id",
+                "product_collection.tenant_id",
+                "product_collection.storefront_id",
+            ],
+            name="fk_product_collection_placement_collection_scope",
+            ondelete="CASCADE",
+        ),
         UniqueConstraint(
+            "tenant_id",
+            "storefront_id",
             "surface_key",
             "slot_key",
             "collection_id",
-            name="uq_product_collection_placement_slot",
+            name="uq_product_collection_placement_scope_slot",
         ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False, index=True)
+    storefront_id: int = Field(
+        sa_column=Column(Integer, nullable=False, index=True),
+    )
     surface_key: str = Field(sa_column=Column(String(80), nullable=False, index=True))
     slot_key: str = Field(sa_column=Column(String(80), nullable=False, index=True))
     collection_id: int = Field(
-        foreign_key="product_collection.id",
-        ondelete="CASCADE",
-        index=True,
+        sa_column=Column(Integer, nullable=False, index=True),
     )
     position: int = Field(default=0, index=True)
     is_enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, index=True))

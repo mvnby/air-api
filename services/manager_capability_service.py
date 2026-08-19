@@ -9,6 +9,7 @@ class ManagerCapabilityService:
     CRM_MANAGE = "crm.manage"
     CATALOG_MASTER_READ = "catalog.master.read"
     STOREFRONT_OFFERS_READ = "storefront.offers.read"
+    STOREFRONT_COLLECTIONS_MANAGE = "storefront.collections.manage"
     PLATFORM_MANAGE = "platform.manage"
     STAFF_MANAGE = "staff.manage"
     INFRASTRUCTURE_MANAGE = "infrastructure.manage"
@@ -17,6 +18,7 @@ class ManagerCapabilityService:
         CRM_MANAGE,
         CATALOG_MASTER_READ,
         STOREFRONT_OFFERS_READ,
+        STOREFRONT_COLLECTIONS_MANAGE,
         PLATFORM_MANAGE,
         STAFF_MANAGE,
         INFRASTRUCTURE_MANAGE,
@@ -32,6 +34,7 @@ class ManagerCapabilityService:
                     cls.CRM_MANAGE,
                     cls.CATALOG_MASTER_READ,
                     cls.STOREFRONT_OFFERS_READ,
+                    cls.STOREFRONT_COLLECTIONS_MANAGE,
                 }
             )
         if auth.is_system_tenant:

@@ -10,6 +10,7 @@ from models import (
     ProductImageVariant,
     ServiceTariff,
 )
+from models.tenancy import TenantScope
 from services.yandex_business_feed_text import sanitize_yandex_description
 from services.yandex_business_price_list_service import (
     ProductCatalogBuild,
@@ -17,6 +18,7 @@ from services.yandex_business_price_list_service import (
     YandexBusinessPriceListService,
     YandexCategory,
 )
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 
 @pytest.mark.parametrize(
@@ -156,7 +158,22 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
     async def load_tariffs(_session):
         return [tariff]
 
-    async def build_product_catalog(_session, _products):
+    tenant_scope = TenantScope(
+        tenant_id=1,
+        storefront_id=1,
+        is_system=True,
+    )
+
+    async def resolve_scope(_session):
+        return tenant_scope
+
+    async def build_product_catalog(
+        _session,
+        _products,
+        *,
+        tenant_scope: TenantScope,
+    ):
+        assert tenant_scope.is_system
         return ProductCatalogBuild(
             categories=[brand_category],
             offers=[ProductOffer(product=product, category=brand_category)],
@@ -165,6 +182,7 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
 
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_products", load_products)
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_tariffs", load_tariffs)
+    monkeypatch.setattr(SystemTenantScopeResolver, "resolve", resolve_scope)
     monkeypatch.setattr(
         YandexBusinessPriceListService,
         "_build_product_catalog",

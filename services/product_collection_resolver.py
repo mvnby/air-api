@@ -43,9 +43,14 @@ class ProductCollectionResolver:
         enforce_publication: bool,
         selection_source: str = "manual",
         visited_collection_ids: set[int] | None = None,
-        tenant_scope: TenantScope | None = None,
+        tenant_scope: TenantScope,
         use_offer_projection: bool | None = None,
     ) -> dict:
+        if (
+            collection.tenant_id != tenant_scope.tenant_id
+            or collection.storefront_id != tenant_scope.storefront_id
+        ):
+            return ProductCollectionResolver._empty_result(collection)
         now = utc_now()
         if enforce_publication and (
             collection.status != "published"
@@ -65,14 +70,17 @@ class ProductCollectionResolver:
 
         if use_offer_projection is None:
             use_offer_projection = bool(
-                tenant_scope is not None
-                and not await PublicCatalogVisibilityService.is_canonical_scope(
+                not await PublicCatalogVisibilityService.is_canonical_scope(
                     session,
                     tenant_scope,
                 )
             )
 
-        item_rows = await ProductCollectionDAO.list_items(session, collection_id)
+        item_rows = await ProductCollectionDAO.list_items(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+        )
         manual_rows = (
             item_rows
             if collection.mode == "manual"
@@ -81,12 +89,13 @@ class ProductCollectionResolver:
             else []
         )
         product_ids = [int(item.product_id) for item in manual_rows]
-        if use_offer_projection and tenant_scope is not None:
+        if use_offer_projection:
             scoped_rows = await PublicCatalogDAO.get_by_ids(
                 session,
                 tenant_scope=tenant_scope,
                 product_ids=product_ids,
                 load_image_variants=True,
+                require_catalog_grant=True,
             )
             projections = [
                 PublicCatalogVisibilityService.project_row(row)
@@ -180,10 +189,11 @@ class ProductCollectionResolver:
                 "limit": 500,
                 "load_image_variants": True,
             }
-            if use_offer_projection and tenant_scope is not None:
+            if use_offer_projection:
                 automatic_rows = await PublicCatalogDAO.get_filtered(
                     session,
                     tenant_scope=tenant_scope,
+                    require_catalog_grant=True,
                     **query,
                 )
                 automatic_projections = [
@@ -268,6 +278,7 @@ class ProductCollectionResolver:
             fallback = await ProductCollectionDAO.get(
                 session,
                 int(collection.fallback_collection_id),
+                tenant_scope=tenant_scope,
             )
             if fallback is not None:
                 fallback_result = await ProductCollectionResolver.resolve(
@@ -317,11 +328,10 @@ class ProductCollectionResolver:
         *,
         surface_key: str,
         slot_key: str,
-        tenant_scope: TenantScope | None = None,
+        tenant_scope: TenantScope,
     ) -> dict:
         use_offer_projection = bool(
-            tenant_scope is not None
-            and not await PublicCatalogVisibilityService.is_canonical_scope(
+            not await PublicCatalogVisibilityService.is_canonical_scope(
                 session,
                 tenant_scope,
             )
@@ -331,6 +341,7 @@ class ProductCollectionResolver:
             surface_key=surface_key,
             slot_key=slot_key,
             now=utc_now(),
+            tenant_scope=tenant_scope,
         )
         if surface_key == "home" and slot_key == "featured_products":
             rows = rows[:4]

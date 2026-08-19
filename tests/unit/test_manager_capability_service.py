@@ -22,6 +22,7 @@ def test_non_system_manager_gets_only_tenant_work_capabilities():
         "crm.manage",
         "catalog.master.read",
         "storefront.offers.read",
+        "storefront.collections.manage",
     ]
 
 

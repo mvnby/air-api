@@ -1,22 +1,24 @@
-"""Central route policy for platform-global Manager operations.
+"""Central route policy for platform and bounded Manager capabilities.
 
-Tenant-scoped CRM and commerce routes intentionally do not use this route
-class. The policy is keyed by stable operation IDs so adding a new global
-mutation requires an explicit permission decision that is covered by tests.
+The policy is keyed by stable operation IDs so every global mutation and
+explicitly delegated storefront surface has a reviewed permission decision.
 """
 
 from collections.abc import Sequence
 from typing import Any
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from fastapi.params import Depends as DependsParam
 from fastapi.routing import APIRoute
 
 from core.security import (
+    AuthenticatedUser,
+    require_manager_access,
     require_system_manager_tenant_scope,
     require_system_owner_access,
 )
 from routers import manager_operation_ids as operation_ids
+from services.manager_capability_service import ManagerCapabilityService
 
 
 PLATFORM_MANAGER_OPERATION_IDS = frozenset(
@@ -76,12 +78,6 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         # Storefront offer prices and publication remain operator-owned.
         operation_ids.UPSERT_MANAGER_TENANT_OFFER,
         operation_ids.UPDATE_MANAGER_TENANT_OFFER,
-        operation_ids.CREATE_MANAGER_PRODUCT_COLLECTION,
-        operation_ids.UPDATE_MANAGER_PRODUCT_COLLECTION,
-        operation_ids.DUPLICATE_MANAGER_PRODUCT_COLLECTION,
-        operation_ids.ARCHIVE_MANAGER_PRODUCT_COLLECTION,
-        operation_ids.REPLACE_MANAGER_PRODUCT_COLLECTION_ITEMS,
-        operation_ids.REPLACE_MANAGER_PRODUCT_COLLECTION_PLACEMENTS,
         # Platform-owned service dictionaries.
         operation_ids.CREATE_MANAGER_TARIFF,
         operation_ids.UPDATE_MANAGER_TARIFF,
@@ -181,6 +177,35 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
 )
 
 
+STOREFRONT_COLLECTION_OPERATION_IDS = frozenset(
+    {
+        operation_ids.SEARCH_MANAGER_PRODUCT_COLLECTION_PRODUCTS,
+        operation_ids.GET_MANAGER_PRODUCT_COLLECTION_RULE_OPTIONS,
+        operation_ids.LIST_MANAGER_PRODUCT_COLLECTIONS,
+        operation_ids.CREATE_MANAGER_PRODUCT_COLLECTION,
+        operation_ids.GET_MANAGER_PRODUCT_COLLECTION,
+        operation_ids.UPDATE_MANAGER_PRODUCT_COLLECTION,
+        operation_ids.DUPLICATE_MANAGER_PRODUCT_COLLECTION,
+        operation_ids.ARCHIVE_MANAGER_PRODUCT_COLLECTION,
+        operation_ids.REPLACE_MANAGER_PRODUCT_COLLECTION_ITEMS,
+        operation_ids.REPLACE_MANAGER_PRODUCT_COLLECTION_PLACEMENTS,
+        operation_ids.PREVIEW_MANAGER_PRODUCT_COLLECTION,
+    }
+)
+
+
+async def require_storefront_collections_manage(
+    auth: AuthenticatedUser = Depends(require_manager_access),
+) -> AuthenticatedUser:
+    capabilities = ManagerCapabilityService.for_auth(auth)
+    if ManagerCapabilityService.STOREFRONT_COLLECTIONS_MANAGE not in capabilities:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Storefront collection management access required",
+        )
+    return auth
+
+
 SYSTEM_OWNER_OPERATION_IDS = frozenset(
     {
         operation_ids.LIST_MANAGER_SETTINGS,
@@ -198,6 +223,8 @@ SYSTEM_OWNER_OPERATION_IDS = frozenset(
 
 
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in STOREFRONT_COLLECTION_OPERATION_IDS:
+        return require_storefront_collections_manage
     if operation_id in PLATFORM_MANAGER_OPERATION_IDS:
         return require_system_manager_tenant_scope
     if operation_id in SYSTEM_OWNER_OPERATION_IDS:

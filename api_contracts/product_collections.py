@@ -158,6 +158,8 @@ class ManagerProductCollectionPlacementResponse(BaseModel):
 
 class ManagerProductCollectionResponse(ProductCollectionFields):
     id: int
+    tenant_id: int
+    storefront_id: int
     slug: str
     created_at: datetime
     updated_at: datetime
@@ -167,6 +169,22 @@ class ManagerProductCollectionResponse(ProductCollectionFields):
 
 class ManagerProductCollectionListResponse(BaseModel):
     items: list[ManagerProductCollectionResponse] = Field(default_factory=list)
+
+
+class ManagerProductCollectionProductOptionResponse(BaseModel):
+    id: int
+    title: str
+    slug: str
+    product_kind: ProductKind
+    is_published: bool
+    price: int
+    main_image: str | None = None
+
+
+class ManagerProductCollectionProductOptionListResponse(BaseModel):
+    items: list[ManagerProductCollectionProductOptionResponse] = Field(
+        default_factory=list
+    )
 
 
 class ProductCollectionRuleChoiceResponse(BaseModel):

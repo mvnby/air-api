@@ -6,13 +6,19 @@ from api_contracts.product_collections import (
     ManagerProductCollectionItemsPayload,
     ManagerProductCollectionListResponse,
     ManagerProductCollectionPlacementsPayload,
+    ManagerProductCollectionProductOptionListResponse,
     ManagerProductCollectionResponse,
     ManagerProductCollectionUpdate,
     ProductCollectionPreviewResponse,
     ProductCollectionRuleOptionsResponse,
 )
 from core.database import get_session
-from core.security import get_current_username
+from core.security import (
+    AuthenticatedUser,
+    get_current_manager_tenant_scope,
+    require_manager_access,
+)
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     ARCHIVE_MANAGER_PRODUCT_COLLECTION,
     CREATE_MANAGER_PRODUCT_COLLECTION,
@@ -23,6 +29,7 @@ from routers.manager_operation_ids import (
     PREVIEW_MANAGER_PRODUCT_COLLECTION,
     REPLACE_MANAGER_PRODUCT_COLLECTION_ITEMS,
     REPLACE_MANAGER_PRODUCT_COLLECTION_PLACEMENTS,
+    SEARCH_MANAGER_PRODUCT_COLLECTION_PRODUCTS,
     UPDATE_MANAGER_PRODUCT_COLLECTION,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
@@ -37,15 +44,37 @@ router = APIRouter(
 
 
 @router.get(
+    "/product-options",
+    response_model=ManagerProductCollectionProductOptionListResponse,
+    operation_id=SEARCH_MANAGER_PRODUCT_COLLECTION_PRODUCTS,
+)
+async def search_manager_product_collection_products(
+    search: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=30, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    return await ManagerProductCollectionService.search_products(
+        session,
+        tenant_scope=tenant_scope,
+        search=search,
+        limit=limit,
+    )
+
+
+@router.get(
     "/rule-options",
     response_model=ProductCollectionRuleOptionsResponse,
     operation_id=GET_MANAGER_PRODUCT_COLLECTION_RULE_OPTIONS,
 )
 async def get_manager_product_collection_rule_options(
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await ManagerProductCollectionService.get_rule_options(session)
+    return await ManagerProductCollectionService.get_rule_options(
+        session,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.get(
@@ -55,9 +84,14 @@ async def get_manager_product_collection_rule_options(
 )
 async def list_manager_product_collections(
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return {"items": await ManagerProductCollectionService.list_collections(session)}
+    return {
+        "items": await ManagerProductCollectionService.list_collections(
+            session,
+            tenant_scope=tenant_scope,
+        )
+    }
 
 
 @router.post(
@@ -68,11 +102,15 @@ async def list_manager_product_collections(
 async def create_manager_product_collection(
     payload: ManagerProductCollectionCreate,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ManagerProductCollectionService.create_collection(
         session,
         payload.model_dump(),
+        tenant_scope=tenant_scope,
+        actor_username=auth.username,
+        actor_staff_user_id=auth.staff_user_id,
     )
 
 
@@ -84,9 +122,13 @@ async def create_manager_product_collection(
 async def get_manager_product_collection(
     collection_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await ManagerProductCollectionService.get_collection(session, collection_id)
+    return await ManagerProductCollectionService.get_collection(
+        session,
+        collection_id,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.patch(
@@ -98,12 +140,16 @@ async def update_manager_product_collection(
     collection_id: int,
     payload: ManagerProductCollectionUpdate,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ManagerProductCollectionService.update_collection(
         session,
         collection_id,
         payload.model_dump(exclude_unset=True),
+        tenant_scope=tenant_scope,
+        actor_username=auth.username,
+        actor_staff_user_id=auth.staff_user_id,
     )
 
 
@@ -115,9 +161,16 @@ async def update_manager_product_collection(
 async def duplicate_manager_product_collection(
     collection_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await ManagerProductCollectionService.duplicate(session, collection_id)
+    return await ManagerProductCollectionService.duplicate(
+        session,
+        collection_id,
+        tenant_scope=tenant_scope,
+        actor_username=auth.username,
+        actor_staff_user_id=auth.staff_user_id,
+    )
 
 
 @router.post(
@@ -128,9 +181,16 @@ async def duplicate_manager_product_collection(
 async def archive_manager_product_collection(
     collection_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await ManagerProductCollectionService.archive(session, collection_id)
+    return await ManagerProductCollectionService.archive(
+        session,
+        collection_id,
+        tenant_scope=tenant_scope,
+        actor_username=auth.username,
+        actor_staff_user_id=auth.staff_user_id,
+    )
 
 
 @router.put(
@@ -142,12 +202,16 @@ async def replace_manager_product_collection_items(
     collection_id: int,
     payload: ManagerProductCollectionItemsPayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ManagerProductCollectionService.replace_items(
         session,
         collection_id,
         [item.model_dump() for item in payload.items],
+        tenant_scope=tenant_scope,
+        actor_username=auth.username,
+        actor_staff_user_id=auth.staff_user_id,
     )
 
 
@@ -160,12 +224,16 @@ async def replace_manager_product_collection_placements(
     collection_id: int,
     payload: ManagerProductCollectionPlacementsPayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ManagerProductCollectionService.replace_placements(
         session,
         collection_id,
         [placement.model_dump() for placement in payload.placements],
+        tenant_scope=tenant_scope,
+        actor_username=auth.username,
+        actor_staff_user_id=auth.staff_user_id,
     )
 
 
@@ -179,11 +247,12 @@ async def preview_manager_product_collection(
     surface: str = Query(default="home"),
     slot: str = Query(default="featured_products"),
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ManagerProductCollectionService.preview(
         session,
         collection_id=collection_id,
         surface_key=surface,
         slot_key=slot,
+        tenant_scope=tenant_scope,
     )

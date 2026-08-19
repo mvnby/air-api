@@ -16,11 +16,10 @@ import {
 } from 'lucide-vue-next';
 import {
   ManagerProductCollectionsService,
-  ManagerService,
-  type ManagerCatalogProductItemResponse,
   type ManagerProductCollectionCreate,
   type ManagerProductCollectionItemResponse,
   type ManagerProductCollectionPlacementResponse,
+  type ManagerProductCollectionProductOptionResponse,
   type ManagerProductCollectionResponse,
   type ProductCollectionPreviewResponse,
   type ProductCollectionRuleConfig,
@@ -53,7 +52,7 @@ const placements = ref<ManagerProductCollectionPlacementResponse[]>([]);
 const preview = ref<ProductCollectionPreviewResponse | null>(null);
 const ruleOptions = ref<ProductCollectionRuleOptionsResponse>({});
 const searchQuery = ref('');
-const searchResults = ref<ManagerCatalogProductItemResponse[]>([]);
+const searchResults = ref<ManagerProductCollectionProductOptionResponse[]>([]);
 const loading = ref(false);
 const saving = ref(false);
 const searching = ref(false);
@@ -212,8 +211,11 @@ const searchProducts = async () => {
   searching.value = true;
   error.value = '';
   try {
-    const response = await ManagerService.smartSearchProducts(query, 30);
-    searchResults.value = response.items.filter(row => !selectedProductIds.value.has(row.id));
+    const response =
+      await ManagerProductCollectionsService.searchManagerProductCollectionProducts(query, 30);
+    searchResults.value = (response.items || []).filter(
+      row => !selectedProductIds.value.has(row.id),
+    );
   } catch (caught) {
     error.value = getApiErrorMessage(caught);
   } finally {
@@ -221,7 +223,7 @@ const searchProducts = async () => {
   }
 };
 
-const addProduct = (product: ManagerCatalogProductItemResponse) => {
+const addProduct = (product: ManagerProductCollectionProductOptionResponse) => {
   if (selectedProductIds.value.has(product.id)) return;
   items.value.push({
     id: -Date.now(),

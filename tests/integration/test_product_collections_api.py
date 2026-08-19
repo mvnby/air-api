@@ -3,7 +3,15 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from core.config import settings
-from models import Product
+from sqlmodel import select
+
+from models import (
+    IntegrationOutboxEvent,
+    Product,
+    StorefrontCatalogRevision,
+    TenantAuditEvent,
+)
+from services.tenant_scope_service import SystemTenantScopeResolver
 
 
 async def _auth_headers(async_client):
@@ -106,6 +114,124 @@ async def test_published_collection_can_replace_existing_children(async_client, 
     )
     assert replaced_placements.status_code == 200, replaced_placements.text
     assert len(replaced_placements.json()["placements"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_collection_commands_stage_audit_revision_and_outbox_atomically(
+    async_client,
+    db,
+):
+    headers = await _auth_headers(async_client)
+    product = _product(title="Audited split", slug="audited-split")
+    db.add(product)
+    await db.commit()
+    scope = await SystemTenantScopeResolver.resolve(db)
+
+    created = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={"internal_name": "Audited", "public_title": "Audited"},
+    )
+    assert created.status_code == 200, created.text
+    collection_id = created.json()["id"]
+    scheduled = await async_client.patch(
+        f"/api/manager/product-collections/{collection_id}",
+        headers=headers,
+        json={
+            "starts_at": "2026-09-01T09:00:00+03:00",
+            "ends_at": "2026-09-30T18:00:00+03:00",
+        },
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    scheduled_placement = await async_client.put(
+        f"/api/manager/product-collections/{collection_id}/placements",
+        headers=headers,
+        json={
+            "placements": [
+                {
+                    "surface_key": "home",
+                    "slot_key": "scheduled",
+                    "position": 0,
+                    "is_enabled": True,
+                    "starts_at": "2026-09-02T09:00:00+03:00",
+                    "ends_at": "2026-09-29T18:00:00+03:00",
+                }
+            ]
+        },
+    )
+    assert scheduled_placement.status_code == 200, scheduled_placement.text
+    replaced = await async_client.put(
+        f"/api/manager/product-collections/{collection_id}/items",
+        headers=headers,
+        json={"items": [{"product_id": product.id}]},
+    )
+    assert replaced.status_code == 200, replaced.text
+
+    audits = list(
+        (
+            await db.execute(
+                select(TenantAuditEvent)
+                .where(
+                    TenantAuditEvent.tenant_id == scope.tenant_id,
+                    TenantAuditEvent.storefront_id == scope.storefront_id,
+                    TenantAuditEvent.entity_type == "product_collection",
+                    TenantAuditEvent.entity_id == collection_id,
+                )
+                .order_by(TenantAuditEvent.id.asc())
+            )
+        ).scalars().all()
+    )
+    assert [row.action for row in audits] == [
+        "product_collection.created",
+        "product_collection.updated",
+        "product_collection.placements_reordered",
+        "product_collection.items_reordered",
+    ]
+    update_audit = audits[1].change_set
+    assert isinstance(update_audit["starts_at"]["after"], str)
+    assert isinstance(update_audit["ends_at"]["after"], str)
+    placement_audit = audits[2].change_set
+    placement_after = placement_audit["placements"]["after"][0]
+    assert isinstance(placement_after["starts_at"], str)
+    assert isinstance(placement_after["ends_at"], str)
+    revision = await db.get(
+        StorefrontCatalogRevision,
+        (scope.tenant_id, scope.storefront_id),
+    )
+    assert revision is not None and revision.revision >= 4
+    outbox = list(
+        (
+            await db.execute(
+                select(IntegrationOutboxEvent).where(
+                    IntegrationOutboxEvent.event_type
+                    == "catalog.cache_invalidation.requested.v1"
+                )
+            )
+        ).scalars().all()
+    )
+    assert len(outbox) >= 4
+
+    before_audits = len(audits)
+    before_revision = revision.revision
+    rejected = await async_client.put(
+        f"/api/manager/product-collections/{collection_id}/items",
+        headers=headers,
+        json={"items": [{"product_id": 2_147_483_647}]},
+    )
+    assert rejected.status_code == 404
+    current_audits = list(
+        (
+            await db.execute(
+                select(TenantAuditEvent).where(
+                    TenantAuditEvent.entity_type == "product_collection",
+                    TenantAuditEvent.entity_id == collection_id,
+                )
+            )
+        ).scalars().all()
+    )
+    await db.refresh(revision)
+    assert len(current_audits) == before_audits
+    assert revision.revision == before_revision
 
 
 @pytest.mark.asyncio

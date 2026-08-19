@@ -27,6 +27,7 @@ const tenantManagerAuth = {
     MANAGER_CAPABILITY.crmManage,
     MANAGER_CAPABILITY.catalogMasterRead,
     MANAGER_CAPABILITY.storefrontOffersRead,
+    MANAGER_CAPABILITY.storefrontCollectionsManage,
   ],
 };
 
@@ -75,7 +76,7 @@ describe('tenant manager capabilities', () => {
     managerSession.auth.value = tenantManagerAuth as any;
   });
 
-  it('allows only CRM and the read-only catalog routes', () => {
+  it('allows CRM, the read-only catalog and exact storefront collections', () => {
     for (const path of [
       '/manager',
       '/manager/leads',
@@ -84,12 +85,12 @@ describe('tenant manager capabilities', () => {
       '/manager/customers',
       '/manager/equipment',
       '/manager/products',
+      '/manager/product-collections',
     ]) {
       expect(isManagerPathAllowed(tenantManagerAuth, path), path).toBe(true);
     }
     for (const path of [
       '/manager/products/1',
-      '/manager/product-collections',
       '/manager/brands',
       '/manager/suppliers',
       '/manager/supply',
@@ -110,6 +111,7 @@ describe('tenant manager capabilities', () => {
       'Календарь',
       'Клиенты',
       'Кондиционеры',
+      'Подборки',
       'Оборудование',
     ]);
   });

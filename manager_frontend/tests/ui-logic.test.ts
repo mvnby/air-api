@@ -106,13 +106,18 @@ const tenantManagerAuth = {
     MANAGER_CAPABILITY.crmManage,
     MANAGER_CAPABILITY.catalogMasterRead,
     MANAGER_CAPABILITY.storefrontOffersRead,
+    MANAGER_CAPABILITY.storefrontCollectionsManage,
   ],
 };
 assert(
   isManagerPathAllowed(tenantManagerAuth, '/manager/products'),
   'tenant managers must retain the safe catalog route',
 );
-for (const path of ['/manager/products/1', '/manager/suppliers', '/manager/product-collections']) {
+assert(
+  isManagerPathAllowed(tenantManagerAuth, '/manager/product-collections'),
+  'tenant managers must retain their exact storefront collections route',
+);
+for (const path of ['/manager/products/1', '/manager/suppliers']) {
   assert(
     !isManagerPathAllowed(tenantManagerAuth, path),
     `tenant manager must not open platform route ${path}`,
