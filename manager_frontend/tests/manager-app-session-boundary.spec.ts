@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listStorefronts: vi.fn(),
   login: vi.fn(),
   loginTelegram: vi.fn(),
+  logout: vi.fn(),
   patchManagerOrder: vi.fn(),
   readMe: vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock('../src/client', () => ({
   LoginService: {
     loginAccessToken: mocks.login,
     loginTelegram: mocks.loginTelegram,
+    logoutAccessToken: mocks.logout,
   },
   ManagerMailService: {},
   ManagerOrdersService: {},
@@ -235,6 +237,7 @@ beforeEach(() => {
   networkFetch.mockImplementation(async () => okResponse());
   mocks.login.mockResolvedValue({ access_token: 'session', token_type: 'bearer' });
   mocks.loginTelegram.mockResolvedValue({ access_token: 'session', token_type: 'bearer' });
+  mocks.logout.mockResolvedValue(undefined);
   mocks.readMe.mockResolvedValue(oldAuth);
   mocks.listStorefronts.mockResolvedValue(oldStorefronts);
   mocks.getLeadsCounter.mockResolvedValue({ count: 7 });
@@ -406,5 +409,35 @@ describe('App Manager session boundary', () => {
     expect(managerSession.recoveryRequired.value).toBe(true);
     expect(prepareAuthentication).toHaveBeenCalledTimes(1);
     expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(false);
+  });
+
+  it('ends the visible manager session before returning to the ordinary login flow', async () => {
+    await mountApp();
+    expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(true);
+
+    await wrapper!.get('[data-testid="manager-logout"]').trigger('click');
+    await flushPromises();
+
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    expect(managerSession.isAuthenticated.value).toBe(false);
+    expect(managerSession.auth.value).toBeNull();
+    expect(managerSession.recoveryRequired.value).toBe(false);
+    expect(managerStorefrontSelection.selectedSlug.value).toBeNull();
+    expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(false);
+    expect(wrapper!.get('[role="dialog"]').text()).toContain('Вход в менеджер');
+  });
+
+  it('keeps the manager session mounted if the server cannot clear its cookie', async () => {
+    await mountApp();
+    mocks.logout.mockRejectedValueOnce({ status: 503, message: 'Unavailable' });
+
+    await wrapper!.get('[data-testid="manager-logout"]').trigger('click');
+    await flushPromises();
+
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    expect(managerSession.isAuthenticated.value).toBe(true);
+    expect(managerSession.auth.value?.username).toBe('old-owner');
+    expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(true);
+    expect(wrapper!.find('[role="dialog"]').exists()).toBe(false);
   });
 });

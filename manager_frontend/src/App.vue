@@ -6,6 +6,7 @@ import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './client';
 import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
 import ManagerLoginModal from './components/manager/ManagerLoginModal.vue';
+import ManagerLogoutButton from './components/manager/ManagerLogoutButton.vue';
 import ManagerSessionRecoveryModal from './components/manager/ManagerSessionRecoveryModal.vue';
 import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
 import { confirmDialog } from './services/ui-feedback';
@@ -29,7 +30,6 @@ import {
   hasManagerCapability,
   isManagerPathAllowed,
 } from './manager-capabilities';
-
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const TenantCatalogView = defineAsyncComponent(() => import('./views/TenantCatalogView.vue'));
 const ProductCollectionsView = defineAsyncComponent(() => import('./views/ProductCollectionsView.vue'));
@@ -57,7 +57,6 @@ const SupplierMappingView = defineAsyncComponent(() => import('./views/SupplierM
 const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQualityView.vue'));
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
-
 const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const showLoginModal = ref(false);
@@ -75,14 +74,12 @@ const theme = ref<'light' | 'dark'>('light');
 const leadsCount = ref(0);
 const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
-
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
 const THEME_STORAGE_KEY = 'manager_theme';
 const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
 const telegramLoginBotUsername = String(import.meta.env.VITE_TELEGRAM_LOGIN_BOT_USERNAME || '').trim();
 const telegramCallbackName = 'onTelegramManagerAuth';
 let webRebuildStatusInterval: ReturnType<typeof window.setInterval> | null = null;
-
 type WebRebuildStatus = {
   current_revision: number;
   current_revision_updated_at: string;
@@ -94,22 +91,18 @@ type WebRebuildStatus = {
   state: string;
   last_error?: string | null;
 };
-
 declare global {
   interface Window {
     onTelegramManagerAuth?: (user: TelegramLoginPayload) => void;
   }
 }
-
 const expandedNavSections = ref<Record<NavSectionId, boolean>>({ ...defaultExpandedNavSections });
-
 const normalizePath = (path: string) => {
   if (path.length > 1 && path.endsWith('/')) {
     return path.slice(0, -1);
   }
   return path;
 };
-
 const currentPath = computed(() => normalizePath(currentLocation.value.split('?')[0] || '/manager'));
 const canManagePlatform = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.platformManage));
 const canManageInfrastructure = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.infrastructureManage));
@@ -124,14 +117,11 @@ const visibleNavSections = computed<NavSection[]>(() => navSections
     ),
   }))
   .filter(section => section.items.length > 0));
-
 const isNavItemActive = (item: NavItem) => {
   if (item.match === 'exact') return currentPath.value === item.path;
   return currentPath.value === item.path || currentPath.value.startsWith(`${item.path}/`);
 };
-
 const isNavSectionActive = (section: NavSection) => section.items.some(isNavItemActive);
-
 const loadExpandedNavSections = () => {
   try {
     const storedValue = window.localStorage.getItem(NAV_SECTIONS_STORAGE_KEY);
@@ -147,7 +137,6 @@ const loadExpandedNavSections = () => {
     expandedNavSections.value = { ...defaultExpandedNavSections };
   }
 };
-
 const expandActiveNavSection = () => {
   const activeSection = visibleNavSections.value.find(isNavSectionActive);
   if (activeSection && !expandedNavSections.value[activeSection.id]) {
@@ -157,14 +146,12 @@ const expandActiveNavSection = () => {
     };
   }
 };
-
 const toggleNavSection = (sectionId: NavSectionId) => {
   expandedNavSections.value = {
     ...expandedNavSections.value,
     [sectionId]: !expandedNavSections.value[sectionId],
   };
 };
-
 const currentView = computed(() => {
   const path = currentPath.value;
   if (path === '/manager' || path === '/manager/') return 'home';
@@ -197,13 +184,11 @@ const currentView = computed(() => {
 const authorizedView = computed(() => (
   isManagerPathAllowed(auth.value, currentPath.value) ? currentView.value : 'home'
 ));
-
 const webRebuildNeedsAttention = computed(() => Boolean(webRebuildStatus.value?.needs_rebuild));
 const webRebuildQueued = computed(() => webRebuildStatus.value?.state === 'queued');
 const webRebuildNoticeVisible = computed(() => (
   webRebuildNeedsAttention.value || Boolean(webRebuildStatus.value?.last_error)
 ));
-
 const webRebuildNoticeClass = computed(() => {
   if (webRebuildQueued.value) return 'border-blue-200 bg-blue-50 text-blue-900';
   if (webRebuildNeedsAttention.value || webRebuildStatus.value?.last_error) {
@@ -211,13 +196,11 @@ const webRebuildNoticeClass = computed(() => {
   }
   return 'border-gray-200 bg-gray-50 text-gray-700';
 });
-
 const webRebuildNoticeTitle = computed(() => {
   if (webRebuildQueued.value) return 'Сборка запущена';
   if (webRebuildNeedsAttention.value) return 'Сайт устарел';
   return 'Статика актуальна';
 });
-
 const webRebuildNoticeText = computed(() => {
   if (webRebuildQueued.value) {
     return 'GitHub Actions собирает Astro. После deploy предупреждение снимется.';
@@ -227,23 +210,19 @@ const webRebuildNoticeText = computed(() => {
   }
   return 'Опубликована текущая ревизия каталога.';
 });
-
 const rebuildButtonLabel = computed(() => {
   if (rebuildLoading.value) return 'Сборка...';
   if (webRebuildNeedsAttention.value) return 'Пересобрать сайт';
   return 'Обновить сайт';
 });
-
 const rebuildButtonTitle = computed(() => {
   if (!isDesktopNavCollapsed.value) return '';
   if (webRebuildNeedsAttention.value) return 'Статика устарела - пересобрать сайт';
   return 'Обновить сайт';
 });
-
 const onPopState = () => {
   currentLocation.value = `${window.location.pathname}${window.location.search}`;
 };
-
 const navigate = (path: string) => {
   if (window.location.pathname !== path) {
     window.history.pushState({}, '', path);
@@ -251,7 +230,6 @@ const navigate = (path: string) => {
   }
   isMobileNavOpen.value = false;
 };
-
 const enforceAuthorizedLocation = () => {
   if (
     isAuthenticated.value
@@ -262,25 +240,20 @@ const enforceAuthorizedLocation = () => {
   }
   return false;
 };
-
 const toggleMobileNav = () => {
   isMobileNavOpen.value = !isMobileNavOpen.value;
 };
-
 const closeMobileNav = () => {
   isMobileNavOpen.value = false;
 };
-
 const applyTheme = (value: 'light' | 'dark') => {
   theme.value = value;
   document.documentElement.classList.toggle('dark', value === 'dark');
   window.localStorage.setItem(THEME_STORAGE_KEY, value);
 };
-
 const toggleTheme = () => {
   applyTheme(theme.value === 'light' ? 'dark' : 'light');
 };
-
 const setToast = (message: string, type: 'success' | 'error' = 'success') => {
   toast.value = message;
   toastType.value = type;
@@ -288,7 +261,6 @@ const setToast = (message: string, type: 'success' | 'error' = 'success') => {
     if (toast.value === message) toast.value = '';
   }, 3000);
 };
-
 const fetchWebRebuildStatus = async () => {
   if (!canManagePlatform.value) return;
   try {
@@ -314,7 +286,6 @@ const handleLogin = async () => {
     loginLoading.value = false;
   }
 };
-
 const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
   if (recoveryRequired.value) return;
   telegramLoginLoading.value = true;
@@ -331,7 +302,19 @@ const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
     telegramLoginLoading.value = false;
   }
 };
-
+const handleLogoutSuccess = () => {
+  leadsCount.value = 0;
+  webRebuildStatus.value = null;
+  rebuildLoading.value = false;
+  isMobileNavOpen.value = false;
+  loginUsername.value = '';
+  loginPassword.value = '';
+  loginError.value = '';
+  showLoginModal.value = true;
+};
+const handleLogoutError = (message: string) => {
+  setToast(`Не удалось завершить сессию: ${message}`, 'error');
+};
 const renderTelegramLogin = async () => {
   if (!telegramLoginBotUsername || !showLoginModal.value || recoveryRequired.value) return;
   await nextTick();
@@ -341,7 +324,6 @@ const renderTelegramLogin = async () => {
   window[telegramCallbackName] = (user: TelegramLoginPayload) => {
     void handleTelegramLogin(user);
   };
-
   const script = document.createElement('script');
   script.src = 'https://telegram.org/js/telegram-widget.js?22';
   script.async = true;
@@ -352,7 +334,6 @@ const renderTelegramLogin = async () => {
   script.setAttribute('data-onauth', `${telegramCallbackName}(user)`);
   container.appendChild(script);
 };
-
 const handleRebuild = async () => {
   if (!canManagePlatform.value) return;
   const confirmed = await confirmDialog({
@@ -374,7 +355,6 @@ const handleRebuild = async () => {
     rebuildLoading.value = false;
   }
 };
-
 const fetchLeadsCount = async () => {
   if (!hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)) return;
   try {
@@ -384,7 +364,6 @@ const fetchLeadsCount = async () => {
     // Badge is non-critical — silence errors
   }
 };
-
 const checkAuth = async () => {
   try {
     await restoreManagerSession();
@@ -397,7 +376,6 @@ const checkAuth = async () => {
     showLoginModal.value = true;
   }
 };
-
 onMounted(() => {
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (storedTheme === 'light' || storedTheme === 'dark') {
@@ -416,7 +394,6 @@ onMounted(() => {
   }, 60_000);
   checkAuth();
 });
-
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState);
   if (webRebuildStatusInterval) {
@@ -425,13 +402,11 @@ onBeforeUnmount(() => {
   }
   delete window[telegramCallbackName];
 });
-
 watch(showLoginModal, (visible) => {
   if (visible && !recoveryRequired.value) {
     void renderTelegramLogin();
   }
 });
-
 watch(recoveryRequired, (required) => {
   if (!required) return;
   leadsCount.value = 0;
@@ -445,11 +420,9 @@ watch(recoveryRequired, (required) => {
   if (telegramLoginContainer.value) telegramLoginContainer.value.innerHTML = '';
   delete window[telegramCallbackName];
 }, { flush: 'sync' });
-
 watch(expandedNavSections, (value) => {
   window.localStorage.setItem(NAV_SECTIONS_STORAGE_KEY, JSON.stringify(value));
 }, { deep: true });
-
 watch(currentPath, () => {
   if (enforceAuthorizedLocation()) return;
   expandActiveNavSection();
@@ -652,6 +625,12 @@ watch(currentPath, () => {
           <span v-if="!isDesktopNavCollapsed">{{ rebuildButtonLabel }}</span>
         </button>
       </div>
+
+      <ManagerLogoutButton
+        :collapsed="isDesktopNavCollapsed"
+        @logged-out="handleLogoutSuccess"
+        @error="handleLogoutError"
+      />
     </aside>
 
     <main class="flex-1 overflow-auto md:ml-0">
