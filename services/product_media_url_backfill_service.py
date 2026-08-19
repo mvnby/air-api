@@ -5,17 +5,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlmodel import select
 
-from models import Product, ProductImage, ProductImageVariant
 from services.catalog_mutation_contracts import require_global_catalog_mutation_contract
 from services.catalog_revision_service import CatalogRevisionService
 from services.media_storage_service import (
@@ -35,16 +31,17 @@ from services.product_media_url_backfill_plan_token import (
     ProductMediaUrlBackfillBlockedError,
     ProductMediaUrlBackfillPlanToken,
 )
+from services.product_media_url_backfill_state import (
+    LoadedProductMediaUrlState,
+    apply_product_media_url_locations,
+    collect_product_media_url_locations,
+    detect_product_media_url_collisions,
+    load_product_media_url_state,
+    product_media_url_db_snapshot_hash,
+    product_media_url_targets_are_complete,
+)
 from services.product_media_url_public_audit import ProductMediaUrlPublicAudit
 from services.product_original_media_service import ProductOriginalMediaService
-
-
-@dataclass(slots=True)
-class _LoadedProductState:
-    products: list[Product]
-    products_by_id: dict[int, Product]
-    image_by_id: dict[int, ProductImage]
-    variant_by_id: dict[int, ProductImageVariant]
 
 
 class ProductMediaUrlBackfillService:
@@ -228,7 +225,7 @@ class ProductMediaUrlBackfillService:
                 )
             target_by_source[source.old_url] = ingested.url
 
-        changes = cls._apply_locations(
+        changes = apply_product_media_url_locations(
             state,
             locations=reviewed["locations"],
             target_by_source=target_by_source,
@@ -267,7 +264,7 @@ class ProductMediaUrlBackfillService:
         *,
         manifest: ProductMediaUrlBackfillManifest,
         public_audit: dict[str, Any],
-        state: _LoadedProductState,
+        state: LoadedProductMediaUrlState,
         downloader: BoundedProductMediaDownloader,
         source_storage: ProductOriginalSourceStorage,
         issue_token: bool,
@@ -277,13 +274,13 @@ class ProductMediaUrlBackfillService:
             blockers.append("public audit contains blocked URLs outside the manifest")
         if public_audit["source_product_drift"]:
             blockers.append("public product/source membership drifted")
-        db_snapshot_hash = cls._db_snapshot_hash(state.products)
+        db_snapshot_hash = product_media_url_db_snapshot_hash(state.products)
         if not hmac.compare_digest(db_snapshot_hash, manifest.expected_db_snapshot_sha256):
             blockers.append("published product DB snapshot drifted")
         if not public_audit["snapshot_matches"]:
             blockers.append("public catalog snapshot drifted")
 
-        locations = cls._collect_locations(state, manifest)
+        locations = collect_product_media_url_locations(state, manifest)
         for source in manifest.sources:
             for product_id in source.expected_product_ids:
                 product = state.products_by_id.get(product_id)
@@ -291,8 +288,6 @@ class ProductMediaUrlBackfillService:
                     blockers.append(
                         f"expected product#{product_id} main image drifted for {source.old_url}"
                     )
-        cls._detect_product_image_collisions(state, manifest, blockers)
-
         source_evidence: list[dict[str, Any]] = []
         deferred_sources: list[dict[str, Any]] = []
         for source in manifest.sources:
@@ -322,12 +317,26 @@ class ProductMediaUrlBackfillService:
                 }
             source_evidence.append(evidence)
 
+        target_by_source = {
+            str(item["old_url"]): (
+                str(item["target_url"]) if item.get("target_url") else None
+            )
+            for item in source_evidence
+        }
+        detect_product_media_url_collisions(
+            state,
+            manifest,
+            target_by_source,
+            blockers,
+        )
+
         complete = False
         if not locations:
-            target_by_source = {
-                item["old_url"]: item.get("target_url") for item in source_evidence
-            }
-            complete = cls._targets_are_complete(state, manifest, target_by_source)
+            complete = product_media_url_targets_are_complete(
+                state,
+                manifest,
+                target_by_source,
+            )
             if complete:
                 blockers = [
                     item
@@ -480,248 +489,6 @@ class ProductMediaUrlBackfillService:
             )
         return f"https://api.mvn.by{normalized_path}", ("api.mvn.by",)
 
-    @staticmethod
-    async def _load_state(
-        session: AsyncSession,
-        *,
-        for_update: bool,
-    ) -> _LoadedProductState:
-        stmt = (
-            select(Product)
-            .where(Product.is_published.is_(True))
-            .options(
-                selectinload(Product.gallery_images).selectinload(
-                    ProductImage.variants
-                )
-            )
-            .order_by(Product.id.asc())
-        )
-        if for_update:
-            stmt = stmt.with_for_update()
-        products = list((await session.execute(stmt)).scalars().unique().all())
-        if for_update:
-            product_ids = [int(product.id) for product in products]
-            if product_ids:
-                list(
-                    (
-                        await session.execute(
-                            select(ProductImage)
-                            .where(ProductImage.product_id.in_(product_ids))
-                            .order_by(ProductImage.id.asc())
-                            .with_for_update()
-                            .execution_options(populate_existing=True)
-                        )
-                    ).scalars()
-                )
-                image_ids = [
-                    int(image.id)
-                    for product in products
-                    for image in product.gallery_images or []
-                    if image.id is not None
-                ]
-                if image_ids:
-                    list(
-                        (
-                            await session.execute(
-                                select(ProductImageVariant)
-                                .where(
-                                    ProductImageVariant.product_image_id.in_(image_ids)
-                                )
-                                .order_by(ProductImageVariant.id.asc())
-                                .with_for_update()
-                                .execution_options(populate_existing=True)
-                            )
-                        ).scalars()
-                    )
-        images = {
-            int(image.id): image
-            for product in products
-            for image in product.gallery_images or []
-            if image.id is not None
-        }
-        variants = {
-            int(variant.id): variant
-            for image in images.values()
-            for variant in image.variants or []
-            if variant.id is not None
-        }
-        return _LoadedProductState(
-            products=products,
-            products_by_id={int(product.id): product for product in products},
-            image_by_id=images,
-            variant_by_id=variants,
-        )
-
-    @staticmethod
-    def _db_snapshot_hash(products: list[Product]) -> str:
-        payload = [
-            {
-                "id": int(product.id),
-                "slug": str(product.slug),
-                "main_image": product.main_image,
-            }
-            for product in products
-        ]
-        return hashlib.sha256(
-            json.dumps(
-                payload,
-                ensure_ascii=True,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8")
-        ).hexdigest()
-
-    @staticmethod
-    def _collect_locations(
-        state: _LoadedProductState,
-        manifest: ProductMediaUrlBackfillManifest,
-    ) -> list[dict[str, Any]]:
-        source_by_product_id = {
-            product_id: source.old_url
-            for source in manifest.sources
-            if source.action != "blocked"
-            for product_id in source.expected_product_ids
-        }
-        locations: list[dict[str, Any]] = []
-        for product in state.products:
-            product_id = int(product.id)
-            source_url = source_by_product_id.get(product_id)
-            if source_url is None:
-                continue
-            if product.main_image == source_url:
-                locations.append(
-                    cls_location("product", product_id, product_id, "main_image", None, product.main_image)
-                )
-            images = list(product.images or [])
-            for index, value in enumerate(images):
-                if value == source_url:
-                    locations.append(
-                        cls_location("product", product_id, product_id, "images", index, value)
-                    )
-            for image in product.gallery_images or []:
-                if image.url == source_url:
-                    locations.append(
-                        cls_location("product_image", int(image.id), product_id, "url", None, image.url)
-                    )
-                for variant in image.variants or []:
-                    if variant.url == source_url:
-                        locations.append(
-                            cls_location(
-                                "product_image_variant",
-                                int(variant.id),
-                                product_id,
-                                "url",
-                                None,
-                                variant.url,
-                            )
-                        )
-        return sorted(
-            locations,
-            key=lambda item: (
-                item["product_id"],
-                item["table"],
-                item["row_id"],
-                item["field"],
-                -1 if item["index"] is None else item["index"],
-            ),
-        )
-
-    @staticmethod
-    def _detect_product_image_collisions(
-        state: _LoadedProductState,
-        manifest: ProductMediaUrlBackfillManifest,
-        blockers: list[str],
-    ) -> None:
-        target_by_source = {
-            source.old_url: source.target_url
-            for source in manifest.sources
-            if source.action == "reuse"
-        }
-        expected_ids = {
-            product_id
-            for source in manifest.sources
-            for product_id in source.expected_product_ids
-        }
-        for product in state.products:
-            if int(product.id) not in expected_ids:
-                continue
-            urls = {image.url for image in product.gallery_images or []}
-            for image in product.gallery_images or []:
-                target = target_by_source.get(image.url)
-                if target and target != image.url and target in urls:
-                    blockers.append(
-                        f"product#{product.id} already has ProductImage target {target}"
-                    )
-
-    @staticmethod
-    def _targets_are_complete(
-        state: _LoadedProductState,
-        manifest: ProductMediaUrlBackfillManifest,
-        target_by_source: dict[str, str | None],
-    ) -> bool:
-        for source in manifest.sources:
-            if source.action == "blocked":
-                continue
-            target = target_by_source.get(source.old_url)
-            if not target:
-                return False
-            for product_id in source.expected_product_ids:
-                product = state.products_by_id.get(product_id)
-                if product is None or product.main_image != target:
-                    return False
-        return True
-
-    @staticmethod
-    def _apply_locations(
-        state: _LoadedProductState,
-        *,
-        locations: list[dict[str, Any]],
-        target_by_source: dict[str, str],
-    ) -> list[dict[str, Any]]:
-        changes: list[dict[str, Any]] = []
-        for location in locations:
-            before = location["old_url"]
-            target = target_by_source.get(before)
-            if not target:
-                raise ProductMediaUrlBackfillBlockedError(
-                    "Reviewed target is missing for a planned location"
-                )
-            table = location["table"]
-            row_id = int(location["row_id"])
-            if table == "product":
-                row = state.products_by_id[row_id]
-                if location["field"] == "main_image":
-                    if row.main_image != before:
-                        raise ProductMediaUrlBackfillBlockedError(
-                            "Product main image changed after planning"
-                        )
-                    row.main_image = target
-                else:
-                    values = list(row.images or [])
-                    index = int(location["index"])
-                    if index >= len(values) or values[index] != before:
-                        raise ProductMediaUrlBackfillBlockedError(
-                            "Product image list changed after planning"
-                        )
-                    values[index] = target
-                    row.images = values
-            elif table == "product_image":
-                row = state.image_by_id[row_id]
-                if row.url != before:
-                    raise ProductMediaUrlBackfillBlockedError(
-                        "ProductImage changed after planning"
-                    )
-                row.url = target
-            else:
-                row = state.variant_by_id[row_id]
-                if row.url != before:
-                    raise ProductMediaUrlBackfillBlockedError(
-                        "ProductImageVariant changed after planning"
-                    )
-                row.url = target
-            changes.append({**location, "new_url": target})
-        return changes
-
     @classmethod
     async def _require_primary_and_lock(cls, session: AsyncSession) -> None:
         if session.bind is None or session.bind.dialect.name != "postgresql":
@@ -748,23 +515,9 @@ class ProductMediaUrlBackfillService:
                 "Another product-media repair owns the advisory lock"
             )
 
-
-def cls_location(
-    table: str,
-    row_id: int,
-    product_id: int,
-    field: str,
-    index: int | None,
-    old_url: str,
-) -> dict[str, Any]:
-    return {
-        "table": table,
-        "row_id": row_id,
-        "product_id": product_id,
-        "field": field,
-        "index": index,
-        "old_url": old_url,
-    }
+    # Compatibility aliases keep the safety-critical facade stable for callers and tests.
+    _load_state = staticmethod(load_product_media_url_state)
+    _db_snapshot_hash = staticmethod(product_media_url_db_snapshot_hash)
 
 
 __all__ = ["ProductMediaUrlBackfillService"]

@@ -7,6 +7,7 @@ import httpx
 import pytest
 from PIL import Image
 
+from models import Product, ProductImage
 from services.product_media_url_backfill_download import (
     BoundedProductMediaDownloader,
     ProductMediaDownloadBlockedError,
@@ -21,6 +22,10 @@ from services.product_media_url_backfill_plan_token import (
     ProductMediaUrlBackfillPlanToken,
 )
 from services.product_media_url_backfill_service import ProductMediaUrlBackfillService
+from services.product_media_url_backfill_state import (
+    LoadedProductMediaUrlState,
+    detect_product_media_url_collisions,
+)
 from services.product_media_url_public_audit import ProductMediaUrlPublicAudit
 
 
@@ -82,6 +87,53 @@ def test_external_ingest_requires_explicit_rights_and_host_boundary() -> None:
         ProductMediaUrlBackfillManifest.normalize(payload)
     payload["sources"][0]["rights_review_ref"] = "license-ticket-123"
     assert ProductMediaUrlBackfillManifest.normalize(payload).sources[0].action == "ingest"
+
+
+def test_collision_preflight_uses_resolved_ingest_target() -> None:
+    old_url = "https://cdn.mvn.by/products/library/model.jpg"
+    target_url = "https://cdn.mvn.by/products/shared/model.webp"
+    manifest = ProductMediaUrlBackfillManifest.normalize(
+        _manifest_payload(
+            sources=[
+                {
+                    "old_url": old_url,
+                    "action": "ingest",
+                    "expected_product_ids": [7],
+                    "fetch_url": old_url,
+                    "allowed_redirect_hosts": ["cdn.mvn.by"],
+                    "rights_review_ref": "mvn-owned-catalog-media",
+                }
+            ]
+        )
+    )
+    old_image = ProductImage(id=10, product_id=7, url=old_url)
+    target_image = ProductImage(id=11, product_id=7, url=target_url)
+    product = Product(
+        id=7,
+        title="Model",
+        slug="model",
+        price=1,
+        main_image=old_url,
+        gallery_images=[old_image, target_image],
+    )
+    state = LoadedProductMediaUrlState(
+        products=[product],
+        products_by_id={7: product},
+        image_by_id={10: old_image, 11: target_image},
+        variant_by_id={},
+    )
+    blockers: list[str] = []
+
+    detect_product_media_url_collisions(
+        state,
+        manifest,
+        {old_url: target_url},
+        blockers,
+    )
+
+    assert blockers == [
+        f"product#7 already has ProductImage target {target_url}"
+    ]
 
 
 @pytest.mark.parametrize(
