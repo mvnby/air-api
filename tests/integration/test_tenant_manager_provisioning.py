@@ -20,7 +20,7 @@ def _request() -> TenantManagerProvisioningRequest:
         tenant_slug="polotsk",
         storefront_slug="main",
         display_name="Андрей",
-        username="andrey-polotsk",
+        username="andrey.polotsk",
         phone="+375297146293",
     )
 

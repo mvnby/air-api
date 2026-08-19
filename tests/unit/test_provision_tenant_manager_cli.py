@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 
 import pytest
@@ -8,6 +9,7 @@ from scripts.provision_tenant_manager import (
     build_parser,
     password_source_count,
     read_password,
+    read_execution_input,
     reviewed_command,
     validate_args,
 )
@@ -130,3 +132,39 @@ def test_reviewed_command_uses_stdin_only_when_plan_creates_a_user() -> None:
 
     assert "--password-stdin" in creation
     assert "--password-stdin" not in no_op
+
+
+def test_execute_accepts_exact_execution_json_from_stdin_without_cli_secrets() -> None:
+    parser = build_parser()
+    args = parser.parse_args(_base_arguments("execute") + ["--execution-json-stdin"])
+
+    validate_args(args, parser)
+    assert args.plan_token is None
+    assert password_source_count(args) == 0
+    assert read_execution_input(
+        io.BytesIO(b'{"plan_token":"fresh-token","password":"safe password 2026"}')
+    ) == ("fresh-token", "safe password 2026")
+
+
+def test_execution_json_rejects_extra_fields_and_mixed_secret_sources() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        validate_args(
+            parser.parse_args(
+                _base_arguments("execute")
+                + [
+                    "--execution-json-stdin",
+                    "--plan-token",
+                    "token-in-argv",
+                ]
+            ),
+            parser,
+        )
+
+    with pytest.raises(ValueError, match="exactly plan_token and password"):
+        read_execution_input(
+            io.BytesIO(
+                b'{"plan_token":"fresh-token","password":"safe",'
+                b'"unexpected":"value"}'
+            )
+        )

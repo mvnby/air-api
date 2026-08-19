@@ -199,6 +199,12 @@ Production server intentionally runs from Docker images only (no git checkout in
    - Shared catalog grant execution is manual-only: review the plan and run only
      its emitted, expiring `reviewed_execute_command`; repeat fresh plans until
      `complete=true`.
+   - Tenant manager production plan/execute:
+     use the manual `Provision Tenant Manager` GitHub workflow from an exact
+     reviewed `main` SHA. Review its sanitized plan artifact, then execute with
+     `apply=true`, the exact `plan_digest`, and the temporary protected
+     `TENANT_MANAGER_ONE_TIME_PASSWORD` environment secret. Delete that secret
+     immediately after the run; see `docs/tenant-manager-provisioning.md`.
    - Product media URL audit/plan (read-only default):
      `python3 scripts/manage_product_media_url_backfill.py plan --manifest config/product_media_url_backfills/polotsk-presentation-v1.json`
    - Product media URL execution is primary-only and manual-only. Resolve every
@@ -224,6 +230,11 @@ Production server intentionally runs from Docker images only (no git checkout in
    - Shared catalog grants are system-owned. Empty onboarding offers never mean
      share-all, and tenant managers cannot run grant sync or edit inherited
      prices.
+   - Tenant manager production provisioning must resolve exactly one healthy
+     Patroni primary, use the exact pinned active immutable app container, share
+     the `production-release` concurrency group and per-project `.deploy.lock`,
+     and accept the password over stdin only. Never add arbitrary SSH commands
+     or dynamic secret-name inputs to this workflow.
    - Product media URL repair never widens storefront allowlists and never
      mutates supplier/cost/price data. External sources require an explicit
      rights review and exact host boundary.
