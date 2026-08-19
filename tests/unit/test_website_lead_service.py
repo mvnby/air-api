@@ -27,6 +27,7 @@ from services.public_catalog_visibility_service import (
     PublicCatalogVisibilityService,
     PublicProductProjection,
 )
+from services.public_catalog_disclosure import CANONICAL_PUBLIC_DISCLOSURE
 from services.public_write_idempotency_service import PublicWriteIdempotencyService
 from services.website_lead_service import WebsiteLeadService
 
@@ -167,6 +168,7 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
             product=product,
             price=product.price,
             old_price=product.old_price,
+            disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
         )
 
     async def fake_find_recent(**kwargs):
@@ -278,6 +280,7 @@ async def test_create_product_availability_request_reuses_recent_duplicate_witho
             product=product,
             price=product.price,
             old_price=product.old_price,
+            disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
         )
 
     async def fake_find_recent(**kwargs):
@@ -365,6 +368,7 @@ async def test_create_product_availability_request_reuses_duplicate_and_notifies
             product=product,
             price=product.price,
             old_price=product.old_price,
+            disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
         )
 
     async def fake_find_recent(**kwargs):

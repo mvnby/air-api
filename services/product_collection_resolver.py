@@ -160,9 +160,8 @@ class ProductCollectionResolver:
                     "selection_source": selection_source,
                     "position": len(selected),
                     "product": map_product_to_response(
-                        product,
+                        projection,
                         supply_metrics=metrics,
-                        pricing=projection.pricing,
                     ),
                 }
             )
@@ -263,9 +262,8 @@ class ProductCollectionResolver:
                         ),
                         "position": len(selected),
                         "product": map_product_to_response(
-                            product,
+                            projection,
                             supply_metrics=metrics,
-                            pricing=projection.pricing,
                         ),
                     }
                 )

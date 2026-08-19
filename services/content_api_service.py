@@ -11,7 +11,13 @@ from sqlmodel import select
 from crud.public_catalog import PublicCatalogDAO
 from models import Brand, Feature, FeatureBrandLink, GlobalConfig, Product, ProductSeries, Service
 from models.tenancy import TenantScope
+from schemas import ProductSeriesBrandFeatureResponse
 from services.feature_scope_policy import FeatureScopePolicy
+from services.public_catalog_disclosure import (
+    CANONICAL_PUBLIC_DISCLOSURE,
+    TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
+    PublicCatalogDisclosurePolicy,
+)
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 
 
@@ -91,23 +97,33 @@ class ContentApiService:
         }
 
     @staticmethod
-    def _serialize_brand_feature(feature: Feature) -> Dict[str, Any]:
-        return {
-            "id": feature.id,
-            "title": feature.name,
-            "slug": feature.slug,
-            "text": feature.full_description,
-            "image_url": feature.image_url,
-            "icon": feature.icon,
-            "footnote": feature.footnote,
-            "source_url": feature.source_url,
-            "aliases": feature.aliases or [],
-            "is_published": feature.is_active,
-            "sort_order": int(feature.sort_order or 0),
-        }
+    def _serialize_brand_feature(
+        feature: Feature,
+        *,
+        disclosure_policy: PublicCatalogDisclosurePolicy,
+    ) -> ProductSeriesBrandFeatureResponse:
+        payload = ProductSeriesBrandFeatureResponse(
+            id=int(feature.id),
+            title=feature.name,
+            slug=feature.slug,
+            text=feature.full_description,
+            image_url=feature.image_url,
+            icon=feature.icon,
+            footnote=feature.footnote,
+            source_url=feature.source_url,
+            aliases=feature.aliases or [],
+            is_published=feature.is_active,
+            sort_order=int(feature.sort_order or 0),
+        )
+        payload._disclose_source_url = disclosure_policy.expose_source_provenance
+        return payload
 
     @staticmethod
-    def _serialize_brand_features(brand: Brand) -> List[Dict[str, Any]]:
+    def _serialize_brand_features(
+        brand: Brand,
+        *,
+        disclosure_policy: PublicCatalogDisclosurePolicy,
+    ) -> List[ProductSeriesBrandFeatureResponse]:
         features = list(getattr(brand, "__dict__", {}).get("_resolved_brand_features") or [])
         published = [feature for feature in features if getattr(feature, "is_active", False)]
         published.sort(
@@ -117,7 +133,13 @@ class ContentApiService:
                 int(getattr(feature, "id", 0) or 0),
             )
         )
-        return [ContentApiService._serialize_brand_feature(feature) for feature in published]
+        return [
+            ContentApiService._serialize_brand_feature(
+                feature,
+                disclosure_policy=disclosure_policy,
+            )
+            for feature in published
+        ]
 
     @staticmethod
     async def _load_public_featured_series(
@@ -159,6 +181,7 @@ class ContentApiService:
         products_count: int,
         featured_series: List[ProductSeries] | None = None,
         include_features: bool = False,
+        disclosure_policy: PublicCatalogDisclosurePolicy = CANONICAL_PUBLIC_DISCLOSURE,
     ) -> Dict[str, Any]:
         payload = {
             "id": brand.id,
@@ -179,7 +202,10 @@ class ContentApiService:
             ],
         }
         if include_features:
-            payload["features"] = ContentApiService._serialize_brand_features(brand)
+            payload["features"] = ContentApiService._serialize_brand_features(
+                brand,
+                disclosure_policy=disclosure_policy,
+            )
         return payload
 
     @staticmethod
@@ -247,10 +273,14 @@ class ContentApiService:
         *,
         tenant_scope: TenantScope | None = None,
     ) -> Dict[str, Any] | None:
-        if tenant_scope is not None and not await PublicCatalogVisibilityService.is_canonical_scope(
-            session,
-            tenant_scope,
-        ):
+        is_canonical = (
+            tenant_scope is None
+            or await PublicCatalogVisibilityService.is_canonical_scope(
+                session,
+                tenant_scope,
+            )
+        )
+        if not is_canonical:
             rows = await PublicCatalogDAO.list_brand_counts(
                 session,
                 tenant_scope=tenant_scope,
@@ -304,6 +334,11 @@ class ContentApiService:
             products_count=products_count,
             featured_series=featured_map.get(int(brand.id or 0), []),
             include_features=True,
+            disclosure_policy=(
+                CANONICAL_PUBLIC_DISCLOSURE
+                if is_canonical
+                else TENANT_NEUTRAL_PUBLIC_DISCLOSURE
+            ),
         )
 
     @staticmethod

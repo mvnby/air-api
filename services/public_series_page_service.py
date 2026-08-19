@@ -18,6 +18,10 @@ from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
 from services.product_series_payloads import build_product_series_response
 from services.public_catalog_service import PublicCatalogService
+from services.public_catalog_disclosure import (
+    CANONICAL_PUBLIC_DISCLOSURE,
+    TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
+)
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 
 
@@ -59,19 +63,25 @@ class PublicSeriesPageService:
             series_id=int(series.id),
             load_image_variants=True,
         )
-        if (
-            not projections
-            and not await PublicCatalogVisibilityService.is_canonical_scope(
-                session,
-                tenant_scope,
-            )
-        ):
+        is_canonical = await PublicCatalogVisibilityService.is_canonical_scope(
+            session,
+            tenant_scope,
+        )
+        if not projections and not is_canonical:
             return None
         products = [projection.product for projection in projections]
         supply_metrics = await ProductReadService.get_supply_metrics_map(session, products)
         await FeatureResolverService.resolve_for_products(session, products)
 
-        series_payload = build_product_series_response(series)
+        disclosure_policy = (
+            CANONICAL_PUBLIC_DISCLOSURE
+            if is_canonical
+            else TENANT_NEUTRAL_PUBLIC_DISCLOSURE
+        )
+        series_payload = build_product_series_response(
+            series,
+            disclosure_policy=disclosure_policy,
+        )
         if series_payload is None:
             return None
 
@@ -85,9 +95,8 @@ class PublicSeriesPageService:
             series=series_payload,
             products=[
                 map_product_to_response(
-                    projection.product,
+                    projection,
                     supply_metrics=supply_metrics.get(int(projection.product.id)),
-                    pricing=projection.pricing,
                 )
                 for projection in projections
             ],

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
 
 from schemas import ProductKind, PublicStockState
 
@@ -32,6 +32,16 @@ class PublicProductSearchItemResponse(BaseModel):
     public_stock_state: PublicStockState | None = None
     delivery_min_days: int | None = None
     delivery_max_days: int | None = None
+    _disclose_legacy_availability: bool = PrivateAttr(default=True)
+
+    @model_serializer(mode="wrap")
+    def _serialize_availability_disclosure(self, handler):
+        payload = handler(self)
+        if not self._disclose_legacy_availability:
+            payload.pop("vitebsk_qty", None)
+            payload.pop("minsk_qty", None)
+            payload.pop("public_stock_state", None)
+        return payload
 
 
 class PublicProductSearchResponse(BaseModel):

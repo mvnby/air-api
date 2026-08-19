@@ -12,6 +12,11 @@ from crud.public_catalog_checkout import PublicCatalogCheckoutDAO
 from models import Product
 from models.tenancy import TenantScope
 from services.order_product_link_command import OrderProductCatalogSnapshot
+from services.public_catalog_disclosure import (
+    CANONICAL_PUBLIC_DISCLOSURE,
+    TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
+    PublicCatalogDisclosurePolicy,
+)
 from services.tenant_scope_service import SystemTenantScopeResolver
 
 
@@ -20,6 +25,7 @@ class PublicProductProjection:
     product: Product
     price: int
     old_price: int | None
+    disclosure_policy: PublicCatalogDisclosurePolicy
 
     @property
     def pricing(self) -> tuple[int, int | None]:
@@ -49,6 +55,7 @@ class PublicCatalogVisibilityService:
             product=product,
             price=price,
             old_price=old_price,
+            disclosure_policy=TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
         )
 
     @staticmethod
@@ -57,6 +64,7 @@ class PublicCatalogVisibilityService:
             product=product,
             price=int(product.price),
             old_price=(int(product.old_price) if product.old_price is not None else None),
+            disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
         )
 
     @classmethod

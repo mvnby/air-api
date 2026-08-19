@@ -1,5 +1,13 @@
 from typing import Annotated, List, Optional, Any, Dict, Literal
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_serializer,
+)
 from datetime import datetime
 from enum import Enum
 from core.input_validation import (
@@ -361,6 +369,14 @@ class ProductManualResponse(BaseModel):
     title: str
     url: str
     source: Optional[str] = None
+    _disclose_source: bool = PrivateAttr(default=True)
+
+    @model_serializer(mode="wrap")
+    def _serialize_source_disclosure(self, handler):
+        payload = handler(self)
+        if not self._disclose_source:
+            payload.pop("source", None)
+        return payload
 
 
 class ProductManualPayload(BaseModel):
@@ -411,6 +427,14 @@ class ProductSeriesResponse(BaseModel):
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     source_url: Optional[str] = None
+    _disclose_source_url: bool = PrivateAttr(default=True)
+
+    @model_serializer(mode="wrap")
+    def _serialize_source_disclosure(self, handler):
+        payload = handler(self)
+        if not self._disclose_source_url:
+            payload.pop("source_url", None)
+        return payload
 
 
 class ProductSeriesNavigationItemResponse(BaseModel):
@@ -438,6 +462,16 @@ class ProductResponse(ProductBase):
     manuals: List[ProductManualResponse] = []
     series_siblings: List[ProductSiblingResponse] = []
     features: List[PublicFeatureResponse] = []
+    _disclose_legacy_availability: bool = PrivateAttr(default=True)
+
+    @model_serializer(mode="wrap")
+    def _serialize_availability_disclosure(self, handler):
+        payload = handler(self)
+        if not self._disclose_legacy_availability:
+            payload.pop("vitebsk_qty", None)
+            payload.pop("minsk_qty", None)
+            payload.pop("public_stock_state", None)
+        return payload
 
 
 class ProductListResponse(ProductBase):

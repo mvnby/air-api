@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 
 from schemas_features import ManagerFeatureSeriesAssignmentPayload
 
@@ -28,6 +28,14 @@ class ProductSeriesBrandFeatureResponse(BaseModel):
     aliases: List[str] = Field(default_factory=list)
     is_published: bool = True
     sort_order: int = 0
+    _disclose_source_url: bool = PrivateAttr(default=True)
+
+    @model_serializer(mode="wrap")
+    def _serialize_source_disclosure(self, handler):
+        payload = handler(self)
+        if not self._disclose_source_url:
+            payload.pop("source_url", None)
+        return payload
 
 
 class ManagerSeriesCatalogFeatureResponse(ProductSeriesBrandFeatureResponse):
