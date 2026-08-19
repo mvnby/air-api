@@ -49,3 +49,110 @@ creation is a safe no-op and does not need or reset the password. A changed targ
 new collision, or stale plan token blocks before a write. Do not use this tool
 to convert an existing employee with other memberships or elevated privileges:
 review and remediate that identity separately.
+
+## Production GitHub workflow
+
+Use **Provision Tenant Manager** for production instead of a local SSH shell.
+The workflow is manual, accepts only an exact reviewed `main` SHA, and is gated
+by the `production-api` environment. It verifies the complete two-node Patroni
+topology through repository-pinned SSH host keys, requires exactly one healthy
+primary, discovers the active `app-blue`/`app-green` service from
+`.active-api-slot`, and pins its exact container ID and immutable image for the
+whole operation. A concurrent deployment or slot change therefore stops the
+operation instead of redirecting it to another container. Immediately before
+an execute, the controller proves the complete topology and synchronous
+replication a second time. The workflow shares the `production-release`
+concurrency group and every remote runtime command takes the same attested
+per-project `.deploy.lock` used by deployment. It fails instead of waiting on a
+busy lock, so there is no cross-workflow deadlock. It has no input for an
+arbitrary host, project path, container, script, or remote command.
+
+The `plan` operation is read-only. Its three-day artifact deliberately removes
+the signed plan token and emitted execute command; review `ready`, `blockers`,
+`current`, `changes`, `target`, the primary node, and immutable runtime image.
+The stable `result.plan_digest` is the only value copied into the execute form.
+A blocked plan still uploads this sanitized artifact for diagnosis, while the
+workflow remains visibly failed.
+
+The `execute` operation requires all of the following:
+
+- the same exact target fields;
+- `apply=true`;
+- the reviewed 64-character `plan_digest`;
+- the static, short-lived `TENANT_MANAGER_ONE_TIME_PASSWORD` secret in the
+  `production-api` GitHub environment.
+
+Execute creates another fresh plan on the current primary and compares its
+digest with the reviewed digest. The fresh signed token and password travel
+together over stdin to the exact tenant-manager CLI; neither is placed in a
+command argument, container environment, artifact, or workflow summary.
+Delete the temporary GitHub secret immediately after the execute run, whether
+the run succeeds or fails. Do not create per-manager or dynamically indexed
+secret names: one protected, documented short-lived secret keeps the
+operational boundary reviewable.
+
+### One-time Polotsk sequence for Andrey
+
+Wait until the release containing this workflow and the
+`--execution-json-stdin` CLI option is deployed. Then record the exact current
+`main` SHA and run **Provision Tenant Manager** with:
+
+```text
+operation: plan
+apply: false
+tenant_slug: polotsk
+storefront_slug: main
+display_name: Андрей
+username: andrey.polotsk
+phone: +375297146293
+reviewed_plan_digest: <empty>
+confirm_sha: <exact current main SHA>
+```
+
+Download the sanitized plan artifact. Continue only when `ready=true`,
+`blockers=[]`, the target is exact, and `changes` contains only
+`create_staff_user` and `create_active_manager_membership` (or is empty for an
+already compliant idempotent rerun).
+
+Generate and retain the initial password in an owner-only file outside every
+repository. These commands do not print it or put it in shell history:
+
+```sh
+umask 077
+mkdir -p "$HOME/.config/mvn-secrets"
+password_file="$HOME/.config/mvn-secrets/andrey.polotsk.password"
+openssl rand -base64 24 > "${password_file}"
+chmod 600 "${password_file}"
+gh secret set TENANT_MANAGER_ONE_TIME_PASSWORD \
+  --repo mvnby/air-api --env production-api < "${password_file}"
+```
+
+Keep that local file only until the credential has been transferred to Andrey
+through an approved private channel or saved in the chosen password manager.
+Never display it in a terminal, issue, task, PR, workflow input, or chat.
+
+Run the execute form after reviewing the plan:
+
+```text
+operation: execute
+apply: true
+tenant_slug: polotsk
+storefront_slug: main
+display_name: Андрей
+username: andrey.polotsk
+phone: +375297146293
+reviewed_plan_digest: <result.plan_digest from the reviewed artifact>
+confirm_sha: <the same still-current main SHA>
+```
+
+Immediately remove the GitHub copy, including after a failed run:
+
+```sh
+gh secret delete TENANT_MANAGER_ONE_TIME_PASSWORD \
+  --repo mvnby/air-api --env production-api
+```
+
+Review the execute artifact for `ready=true`, `changed=true` (or the expected
+idempotent `changed=false`), the exact target, and assigned staff/membership
+IDs. Then verify an Andrey login in a fresh browser session and confirm that
+the manager UI is limited to tenant `polotsk` and storefront `main`.

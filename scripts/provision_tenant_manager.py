@@ -28,6 +28,7 @@ from services.storefront_onboarding_state import (  # noqa: E402
 
 
 _ENVIRONMENT_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_MAX_EXECUTION_INPUT_BYTES = 16_384
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +45,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--username", required=True)
     parser.add_argument("--phone", required=True)
     parser.add_argument("--plan-token")
+    parser.add_argument(
+        "--execution-json-stdin",
+        action="store_true",
+        help=(
+            "Read an exact JSON object containing plan_token and password from "
+            "stdin. This keeps both values out of process arguments and the "
+            "environment for reviewed automation."
+        ),
+    )
     password_source = parser.add_mutually_exclusive_group()
     password_source.add_argument("--password-file", type=Path)
     password_source.add_argument("--password-env", metavar="VARIABLE")
@@ -54,8 +64,17 @@ def build_parser() -> argparse.ArgumentParser:
 def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     sources = password_source_count(args)
     if args.action == "plan":
+        if args.plan_token or sources or args.execution_json_stdin:
+            parser.error(
+                "plan does not accept a plan token or execution input source"
+            )
+        return
+    if args.execution_json_stdin:
         if args.plan_token or sources:
-            parser.error("plan does not accept a plan token or password source")
+            parser.error(
+                "--execution-json-stdin cannot be combined with a plan token "
+                "or another password source"
+            )
         return
     if not args.plan_token:
         parser.error("execute requires --plan-token from a fresh plan")
@@ -102,10 +121,33 @@ def read_password(args: argparse.Namespace) -> str:
     return value
 
 
+def read_execution_input(stream: Any | None = None) -> tuple[str, str]:
+    source = stream if stream is not None else sys.stdin.buffer
+    payload = source.read(_MAX_EXECUTION_INPUT_BYTES + 1)
+    if len(payload) > _MAX_EXECUTION_INPUT_BYTES:
+        raise ValueError("Execution input is too large")
+    try:
+        decoded = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Execution input must be valid UTF-8 JSON") from exc
+    if not isinstance(decoded, dict) or set(decoded) != {"plan_token", "password"}:
+        raise ValueError(
+            "Execution input must contain exactly plan_token and password"
+        )
+    plan_token = decoded["plan_token"]
+    password = decoded["password"]
+    if not isinstance(plan_token, str) or not plan_token or len(plan_token) > 4096:
+        raise ValueError("Execution input plan token is invalid")
+    if not isinstance(password, str) or not password:
+        raise ValueError("Execution input password is invalid")
+    return plan_token, password
+
+
 async def run(args: argparse.Namespace) -> dict[str, Any]:
     from core.database import async_session_maker
 
     request = request_from_args(args)
+    execution_input = read_execution_input() if args.execution_json_stdin else None
     async with async_session_maker() as session:
         try:
             if args.action == "plan":
@@ -117,8 +159,16 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             result = await TenantManagerProvisioningService.execute(
                 session,
                 request=request,
-                password=(read_password(args) if password_source_count(args) else None),
-                plan_token=args.plan_token,
+                password=(
+                    execution_input[1]
+                    if execution_input is not None
+                    else (read_password(args) if password_source_count(args) else None)
+                ),
+                plan_token=(
+                    execution_input[0]
+                    if execution_input is not None
+                    else args.plan_token
+                ),
             )
             await session.commit()
             return result

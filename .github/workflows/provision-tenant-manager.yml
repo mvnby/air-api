@@ -1,0 +1,204 @@
+name: Provision Tenant Manager
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_sha:
+        description: "Exact reviewed 40-character main SHA"
+        type: string
+        required: true
+      operation:
+        description: "Read-only plan or reviewed execute"
+        type: choice
+        required: true
+        default: plan
+        options:
+          - plan
+          - execute
+      apply:
+        description: "Must remain false for plan and be explicitly true for execute"
+        type: boolean
+        required: true
+        default: false
+      tenant_slug:
+        description: "Exact existing non-system tenant slug"
+        type: string
+        required: true
+      storefront_slug:
+        description: "Exact active default storefront slug"
+        type: string
+        required: true
+        default: main
+      display_name:
+        description: "Manager display name"
+        type: string
+        required: true
+      username:
+        description: "Unique manager login"
+        type: string
+        required: true
+      phone:
+        description: "Unique complete E.164 phone number"
+        type: string
+        required: true
+      reviewed_plan_digest:
+        description: "64-character plan_digest from the reviewed plan artifact; execute only"
+        type: string
+        required: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-api
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require Reviewed Main SHA And Explicit Operation
+        env:
+          APPLY: ${{ inputs.apply }}
+          CONFIRM_SHA: ${{ inputs.confirm_sha }}
+          OPERATION: ${{ inputs.operation }}
+          REVIEWED_PLAN_DIGEST: ${{ inputs.reviewed_plan_digest }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Tenant managers may be provisioned only from refs/heads/main"
+            exit 64
+          fi
+          if ! [[ "${CONFIRM_SHA}" =~ ^[0-9a-f]{40}$ ]] || [ "${CONFIRM_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "::error::confirm_sha must equal the exact reviewed workflow main SHA"
+            exit 64
+          fi
+          case "${OPERATION}:${APPLY}" in
+            plan:false)
+              if [ -n "${REVIEWED_PLAN_DIGEST}" ]; then
+                echo "::error::plan must not receive reviewed_plan_digest"
+                exit 64
+              fi
+              ;;
+            execute:true)
+              if ! [[ "${REVIEWED_PLAN_DIGEST}" =~ ^[0-9a-f]{64}$ ]]; then
+                echo "::error::execute requires the exact reviewed plan_digest"
+                exit 64
+              fi
+              ;;
+            *)
+              echo "::error::apply must be false for plan and explicitly true for execute"
+              exit 64
+              ;;
+          esac
+
+      - name: Checkout Exact Reviewed Main SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Prepare Pinned SSH Identity
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "${SSH_KEY}" ]; then
+            echo "::error::Missing required SSH_KEY production secret"
+            exit 1
+          fi
+          identity_file="${RUNNER_TEMP}/tenant-manager-ops-key"
+          printf '%s\n' "${SSH_KEY}" > "${identity_file}"
+          unset SSH_KEY
+          chmod 600 "${identity_file}"
+
+      - name: Create Read-Only Provisioning Plan
+        if: ${{ inputs.operation == 'plan' }}
+        env:
+          DISPLAY_NAME: ${{ inputs.display_name }}
+          PHONE: ${{ inputs.phone }}
+          STOREFRONT_SLUG: ${{ inputs.storefront_slug }}
+          TENANT_SLUG: ${{ inputs.tenant_slug }}
+          USERNAME: ${{ inputs.username }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -I scripts/ops/tenant_manager_provisioning_workflow.py plan \
+            --tenant-slug "${TENANT_SLUG}" \
+            --storefront-slug "${STOREFRONT_SLUG}" \
+            --display-name "${DISPLAY_NAME}" \
+            --username "${USERNAME}" \
+            --phone "${PHONE}" \
+            --identity-file "${RUNNER_TEMP}/tenant-manager-ops-key" \
+            --result-file "${GITHUB_WORKSPACE}/tenant-manager-operation-result.json"
+
+      - name: Execute Reviewed Provisioning Plan
+        if: ${{ inputs.operation == 'execute' }}
+        env:
+          DISPLAY_NAME: ${{ inputs.display_name }}
+          PHONE: ${{ inputs.phone }}
+          REVIEWED_PLAN_DIGEST: ${{ inputs.reviewed_plan_digest }}
+          STOREFRONT_SLUG: ${{ inputs.storefront_slug }}
+          TENANT_MANAGER_ONE_TIME_PASSWORD: ${{ secrets.TENANT_MANAGER_ONE_TIME_PASSWORD }}
+          TENANT_SLUG: ${{ inputs.tenant_slug }}
+          USERNAME: ${{ inputs.username }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          if [ -z "${TENANT_MANAGER_ONE_TIME_PASSWORD}" ]; then
+            echo "::error::Missing temporary TENANT_MANAGER_ONE_TIME_PASSWORD production secret"
+            exit 1
+          fi
+          mask_value="${TENANT_MANAGER_ONE_TIME_PASSWORD//'%'/'%25'}"
+          mask_value="${mask_value//$'\r'/'%0D'}"
+          mask_value="${mask_value//$'\n'/'%0A'}"
+          printf '::add-mask::%s\n' "${mask_value}"
+          unset mask_value
+          printf '%s' "${TENANT_MANAGER_ONE_TIME_PASSWORD}" | \
+            python3 -I scripts/ops/tenant_manager_provisioning_workflow.py execute \
+              --tenant-slug "${TENANT_SLUG}" \
+              --storefront-slug "${STOREFRONT_SLUG}" \
+              --display-name "${DISPLAY_NAME}" \
+              --username "${USERNAME}" \
+              --phone "${PHONE}" \
+              --reviewed-plan-digest "${REVIEWED_PLAN_DIGEST}" \
+              --identity-file "${RUNNER_TEMP}/tenant-manager-ops-key" \
+              --result-file "${GITHUB_WORKSPACE}/tenant-manager-operation-result.json"
+          unset TENANT_MANAGER_ONE_TIME_PASSWORD
+
+      - name: Write Sanitized Summary
+        if: always()
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          {
+            echo "## Tenant Manager Provisioning"
+            echo "- main_sha: ${GITHUB_SHA}"
+            echo "- operation: ${OPERATION}"
+            echo "- topology: dynamically verified single Patroni primary"
+            echo "- password transport: one-time production secret to stdin only"
+            echo "- artifact: tenant-manager-${OPERATION}-${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Sanitized Operation Result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tenant-manager-${{ inputs.operation }}-${{ github.run_id }}
+          path: tenant-manager-operation-result.json
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Remove Ephemeral Inputs
+        if: always()
+        run: |
+          rm -f \
+            "${RUNNER_TEMP}/tenant-manager-ops-key" \
+            "${GITHUB_WORKSPACE}/tenant-manager-operation-result.json"
