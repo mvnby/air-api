@@ -81,6 +81,7 @@ PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS = frozenset(
         "product_image_variant.reprocess_variant",
         "product_image_variant.process_missing_variants",
         "yandex_feed_image.backfill",
+        "product_media_url.backfill",
     }
 )
 
@@ -185,6 +186,9 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
         ),
         "YandexFeedImageService.backfill": frozenset(
             {"yandex_feed_image.backfill"}
+        ),
+        "ProductMediaUrlBackfillService.execute": frozenset(
+            {"product_media_url.backfill"}
         ),
         "ManagerBrandService.list_brands": frozenset(),
         "ManagerBrandService.list_brand_features": frozenset(),
@@ -303,6 +307,10 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
         "yandex_feed_image.backfill": _contract(
             "yandex_feed_image.backfill",
             "product_media_yandex_feed_backfill",
+        ),
+        "product_media_url.backfill": _contract(
+            "product_media_url.backfill",
+            "product_media_url_backfill",
         ),
         "manager_brand.create_brand": _contract(
             "manager_brand.create_brand",

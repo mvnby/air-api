@@ -199,6 +199,12 @@ Production server intentionally runs from Docker images only (no git checkout in
    - Shared catalog grant execution is manual-only: review the plan and run only
      its emitted, expiring `reviewed_execute_command`; repeat fresh plans until
      `complete=true`.
+   - Product media URL audit/plan (read-only default):
+     `python3 scripts/manage_product_media_url_backfill.py plan --manifest config/product_media_url_backfills/polotsk-presentation-v1.json`
+   - Product media URL execution is primary-only and manual-only. Resolve every
+     manifest blocker, review the exact source hashes/locations, and run only
+     the fresh plan's expiring `reviewed_execute_command`; see
+     `docs/product-media-url-backfill.md`.
    - Normalize:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
    - Backfill brand/series:
@@ -218,6 +224,9 @@ Production server intentionally runs from Docker images only (no git checkout in
    - Shared catalog grants are system-owned. Empty onboarding offers never mean
      share-all, and tenant managers cannot run grant sync or edit inherited
      prices.
+   - Product media URL repair never widens storefront allowlists and never
+     mutates supplier/cost/price data. External sources require an explicit
+     rights review and exact host boundary.
    - Post-deploy smoke-check must pass (`/api/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
 
 ## Notes

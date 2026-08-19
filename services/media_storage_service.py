@@ -507,6 +507,8 @@ def get_product_media_storage(
 
 def get_product_original_source_storage(
     provider: str | None = None,
+    *,
+    require_write: bool = True,
 ) -> ProductOriginalSourceStorage:
     """Build storage for product original source files."""
     load_dotenv()
@@ -523,13 +525,15 @@ def get_product_original_source_storage(
         )
 
     if selected_provider in {"r2", "s3", "s3_compatible"}:
+        access_key = _env("PRODUCT_MEDIA_S3_ACCESS_KEY_ID") if require_write else ""
+        secret_key = _env("PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY") if require_write else ""
         return S3CompatibleProductOriginalSourceStorage(
             provider_name=selected_provider,
             bucket=_env("PRODUCT_MEDIA_S3_BUCKET"),
             endpoint_url=_env("PRODUCT_MEDIA_S3_ENDPOINT_URL"),
             public_base_url=_env("PRODUCT_MEDIA_S3_PUBLIC_BASE_URL"),
-            access_key_id=_env("PRODUCT_MEDIA_S3_ACCESS_KEY_ID"),
-            secret_access_key=_env("PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY"),
+            access_key_id=access_key,
+            secret_access_key=secret_key,
             region_name=_env("PRODUCT_MEDIA_S3_REGION", "auto"),
             key_prefix=_env("PRODUCT_MEDIA_ORIGINAL_S3_KEY_PREFIX", "products/shared"),
             cache_control=_env(

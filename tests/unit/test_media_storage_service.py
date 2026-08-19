@@ -253,6 +253,27 @@ def test_original_source_storage_factory_supports_r2(monkeypatch):
     assert isinstance(storage, S3CompatibleProductOriginalSourceStorage)
 
 
+def test_original_source_r2_factory_plans_without_access_key_secrets(monkeypatch):
+    monkeypatch.setenv("PRODUCT_MEDIA_ORIGINAL_SOURCE_PROVIDER", "r2")
+    monkeypatch.setenv("PRODUCT_MEDIA_S3_BUCKET", "mvn-media")
+    monkeypatch.setenv(
+        "PRODUCT_MEDIA_S3_ENDPOINT_URL",
+        "https://example-account.r2.cloudflarestorage.com",
+    )
+    monkeypatch.setenv("PRODUCT_MEDIA_S3_PUBLIC_BASE_URL", "https://cdn.mvn.by")
+    monkeypatch.delenv("PRODUCT_MEDIA_S3_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("PRODUCT_MEDIA_S3_SECRET_ACCESS_KEY", raising=False)
+
+    storage = get_product_original_source_storage(require_write=False)
+    planned = storage.build_product_original_object(
+        content_hash="d" * 64,
+        extension="webp",
+    )
+
+    assert planned.storage_provider == "r2"
+    assert planned.url == f"https://cdn.mvn.by/products/shared/{'d' * 64}.webp"
+
+
 @pytest.mark.asyncio
 async def test_r2_factory_allows_dry_run_without_access_key_secrets(monkeypatch):
     monkeypatch.setenv("PRODUCT_MEDIA_S3_BUCKET", "mvn-media")
