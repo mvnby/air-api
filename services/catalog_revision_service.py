@@ -159,6 +159,7 @@ class CatalogRevisionService:
         slugs: Optional[Iterable[str]] = None,
         brand_slugs: Optional[Iterable[str]] = None,
         tenant_scope: TenantScope | None = None,
+        additional_paths: Optional[Iterable[str]] = None,
     ) -> dict[str, Any]:
         """Stage revision changes and outbox events in the caller transaction."""
 
@@ -179,6 +180,16 @@ class CatalogRevisionService:
         paths = build_catalog_purge_paths(
             product_slugs=purge_product_slugs,
             brand_slugs=purge_brand_slugs,
+        )
+        paths = CatalogRevisionService._dedupe_strings(
+            [
+                *paths,
+                *(
+                    str(path).strip()
+                    for path in (additional_paths or ())
+                    if str(path).strip().startswith("/")
+                ),
+            ]
         )
 
         if tenant_scope is None:

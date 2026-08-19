@@ -21370,6 +21370,67 @@
         }
       }
     },
+    "/api/manager/product-collections/product-options": {
+      "get": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Search Manager Product Collection Products",
+        "operationId": "search_manager_product_collection_products",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Search"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionProductOptionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/product-collections/rule-options": {
       "get": {
         "tags": [
@@ -43288,6 +43349,78 @@
         "type": "object",
         "title": "ManagerProductCollectionPlacementsPayload"
       },
+      "ManagerProductCollectionProductOptionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionProductOptionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ManagerProductCollectionProductOptionListResponse"
+      },
+      "ManagerProductCollectionProductOptionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "product_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "complete_split_system",
+              "indoor_unit",
+              "outdoor_unit",
+              "panel",
+              "accessory",
+              "consumable",
+              "other"
+            ],
+            "title": "Product Kind"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug",
+          "product_kind",
+          "is_published",
+          "price"
+        ],
+        "title": "ManagerProductCollectionProductOptionResponse"
+      },
       "ManagerProductCollectionResponse": {
         "properties": {
           "internal_name": {
@@ -43449,6 +43582,14 @@
             "type": "integer",
             "title": "Id"
           },
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "storefront_id": {
+            "type": "integer",
+            "title": "Storefront Id"
+          },
           "slug": {
             "type": "string",
             "title": "Slug"
@@ -43483,6 +43624,8 @@
           "internal_name",
           "public_title",
           "id",
+          "tenant_id",
+          "storefront_id",
           "slug",
           "created_at",
           "updated_at"

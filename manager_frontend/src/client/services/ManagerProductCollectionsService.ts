@@ -6,6 +6,7 @@ import type { ManagerProductCollectionCreate } from '../models/ManagerProductCol
 import type { ManagerProductCollectionItemsPayload } from '../models/ManagerProductCollectionItemsPayload';
 import type { ManagerProductCollectionListResponse } from '../models/ManagerProductCollectionListResponse';
 import type { ManagerProductCollectionPlacementsPayload } from '../models/ManagerProductCollectionPlacementsPayload';
+import type { ManagerProductCollectionProductOptionListResponse } from '../models/ManagerProductCollectionProductOptionListResponse';
 import type { ManagerProductCollectionResponse } from '../models/ManagerProductCollectionResponse';
 import type { ManagerProductCollectionUpdate } from '../models/ManagerProductCollectionUpdate';
 import type { ProductCollectionPreviewResponse } from '../models/ProductCollectionPreviewResponse';
@@ -14,6 +15,29 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerProductCollectionsService {
+    /**
+     * Search Manager Product Collection Products
+     * @param search
+     * @param limit
+     * @returns ManagerProductCollectionProductOptionListResponse Successful Response
+     * @throws ApiError
+     */
+    public static searchManagerProductCollectionProducts(
+        search: string,
+        limit: number = 30,
+    ): CancelablePromise<ManagerProductCollectionProductOptionListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/product-collections/product-options',
+            query: {
+                'search': search,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Get Manager Product Collection Rule Options
      * @returns ProductCollectionRuleOptionsResponse Successful Response

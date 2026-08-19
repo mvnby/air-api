@@ -35,23 +35,28 @@ class PublicCatalogDAO:
     """Read active offers without falling back to shared Product prices."""
 
     @staticmethod
-    def visible_offer_conditions(tenant_scope: TenantScope):
+    def visible_offer_conditions(
+        tenant_scope: TenantScope,
+        *,
+        require_catalog_grant: bool = False,
+    ):
+        grant_condition = exists(
+            select(TenantCatalogGrant.id).where(
+                TenantCatalogGrant.id == TenantOffer.catalog_grant_id,
+                TenantCatalogGrant.tenant_id == tenant_scope.tenant_id,
+                TenantCatalogGrant.storefront_id == tenant_scope.storefront_id,
+                TenantCatalogGrant.status == "active",
+            )
+        )
         return (
             TenantOffer.tenant_id == tenant_scope.tenant_id,
             TenantOffer.storefront_id == tenant_scope.storefront_id,
             TenantOffer.status == "active",
             TenantOffer.is_published.is_(True),
-            or_(
-                TenantOffer.catalog_grant_id.is_(None),
-                exists(
-                    select(TenantCatalogGrant.id).where(
-                        TenantCatalogGrant.id == TenantOffer.catalog_grant_id,
-                        TenantCatalogGrant.tenant_id == tenant_scope.tenant_id,
-                        TenantCatalogGrant.storefront_id
-                        == tenant_scope.storefront_id,
-                        TenantCatalogGrant.status == "active",
-                    )
-                ),
+            (
+                grant_condition
+                if require_catalog_grant
+                else or_(TenantOffer.catalog_grant_id.is_(None), grant_condition)
             ),
         )
 
@@ -75,13 +80,17 @@ class PublicCatalogDAO:
         tenant_scope: TenantScope,
         *,
         load_image_variants: bool = False,
+        require_catalog_grant: bool = False,
     ):
         return (
             select(Product, TenantOffer.price, TenantOffer.old_price)
             .join(TenantOffer, TenantOffer.product_id == Product.id)
             .where(
                 Product.is_published.is_(True),
-                *PublicCatalogDAO.visible_offer_conditions(tenant_scope),
+                *PublicCatalogDAO.visible_offer_conditions(
+                    tenant_scope,
+                    require_catalog_grant=require_catalog_grant,
+                ),
             )
             .options(
                 *PublicCatalogDAO._product_options(
@@ -122,10 +131,12 @@ class PublicCatalogDAO:
         page: int = 1,
         limit: int = 20,
         load_image_variants: bool = False,
+        require_catalog_grant: bool = False,
     ) -> list[PublicCatalogRow]:
         stmt = PublicCatalogDAO._select_products(
             tenant_scope,
             load_image_variants=load_image_variants,
+            require_catalog_grant=require_catalog_grant,
         )
         stmt = ProductDAO._apply_common_filters(
             session,
@@ -282,12 +293,14 @@ class PublicCatalogDAO:
         tenant_scope: TenantScope,
         product_ids: list[int],
         load_image_variants: bool = False,
+        require_catalog_grant: bool = False,
     ) -> list[PublicCatalogRow]:
         if not product_ids:
             return []
         stmt = PublicCatalogDAO._select_products(
             tenant_scope,
             load_image_variants=load_image_variants,
+            require_catalog_grant=require_catalog_grant,
         ).where(Product.id.in_(product_ids))
         return PublicCatalogDAO._rows(await session.execute(stmt))
 

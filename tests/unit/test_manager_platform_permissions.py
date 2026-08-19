@@ -50,7 +50,9 @@ from routers import (
 )
 from routers.manager_permission_policy import (
     PLATFORM_MANAGER_OPERATION_IDS,
+    STOREFRONT_COLLECTION_OPERATION_IDS,
     SYSTEM_OWNER_OPERATION_IDS,
+    require_storefront_collections_manage,
 )
 from services.settings_service import SettingsService
 from services.manager_catalog_service import ManagerCatalogService
@@ -66,7 +68,6 @@ PLATFORM_ROUTERS = (
     manager_tags.router,
     manager_features.router,
     manager_specs.router,
-    manager_product_collections.router,
     manager_mdv_catalog.router,
     manager_supply.router,
     manager_supplier_mapping.router,
@@ -92,7 +93,6 @@ PURE_GLOBAL_MUTATION_ROUTERS = (
     manager_tags.router,
     manager_features.router,
     manager_specs.router,
-    manager_product_collections.router,
     manager_mdv_catalog.router,
     manager_supply.router,
     manager_supplier_mapping.router,
@@ -198,6 +198,23 @@ def test_platform_policy_is_attached_to_every_registered_operation():
         assert _has_direct_dependency(
             by_operation_id[operation_id],
             require_system_owner_access,
+        ), operation_id
+
+
+def test_all_collection_routes_require_the_scoped_collection_capability():
+    routes = _api_routes(manager_product_collections.router)
+    by_operation_id = {route.operation_id: route for route in routes}
+
+    assert STOREFRONT_COLLECTION_OPERATION_IDS == by_operation_id.keys()
+    assert not (STOREFRONT_COLLECTION_OPERATION_IDS & PLATFORM_MANAGER_OPERATION_IDS)
+    for operation_id in STOREFRONT_COLLECTION_OPERATION_IDS:
+        assert _has_direct_dependency(
+            by_operation_id[operation_id],
+            require_storefront_collections_manage,
+        ), operation_id
+        assert not _has_direct_dependency(
+            by_operation_id[operation_id],
+            require_system_manager_tenant_scope,
         ), operation_id
 
 

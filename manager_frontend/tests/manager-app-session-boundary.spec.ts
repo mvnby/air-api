@@ -110,7 +110,7 @@ const oldAuth = {
   tenant_id: 1,
   storefront_id: 11,
   is_system_tenant: true,
-  capabilities: ['crm.manage', 'catalog.master.read', 'storefront.offers.read', 'platform.manage', 'staff.manage', 'infrastructure.manage'],
+  capabilities: ['crm.manage', 'catalog.master.read', 'storefront.offers.read', 'storefront.collections.manage', 'platform.manage', 'staff.manage', 'infrastructure.manage'],
 };
 
 const oldStorefronts = {
@@ -133,7 +133,7 @@ const newAuth = {
   tenant_id: 2,
   storefront_id: 22,
   is_system_tenant: false,
-  capabilities: ['crm.manage', 'catalog.master.read', 'storefront.offers.read'],
+  capabilities: ['crm.manage', 'catalog.master.read', 'storefront.offers.read', 'storefront.collections.manage'],
 };
 
 const newStorefronts = {

@@ -23,6 +23,8 @@ export type ManagerProductCollectionResponse = {
     starts_at?: (string | null);
     ends_at?: (string | null);
     id: number;
+    tenant_id: number;
+    storefront_id: number;
     slug: string;
     created_at: string;
     updated_at: string;

@@ -15,6 +15,8 @@ from models import (
     ServiceTariff,
 )
 from services.yandex_business_price_list_service import YandexBusinessPriceListService
+from services.tenant_scope_service import SystemTenantScopeResolver
+from models.tenancy import TenantScope
 
 
 async def _auth_headers(async_client):
@@ -48,8 +50,17 @@ def _product(
     )
 
 
-def _collection(*, slug: str, title: str, min_items: int = 1, **kwargs) -> ProductCollection:
+def _collection(
+    *,
+    tenant_scope: TenantScope,
+    slug: str,
+    title: str,
+    min_items: int = 1,
+    **kwargs,
+) -> ProductCollection:
     return ProductCollection(
+        tenant_id=tenant_scope.tenant_id,
+        storefront_id=tenant_scope.storefront_id,
         slug=slug,
         internal_name=title,
         public_title=title,
@@ -57,6 +68,28 @@ def _collection(*, slug: str, title: str, min_items: int = 1, **kwargs) -> Produ
         mode="manual",
         min_items=min_items,
         max_items=6,
+        **kwargs,
+    )
+
+
+def _collection_item(
+    tenant_scope: TenantScope,
+    **kwargs,
+) -> ProductCollectionItem:
+    return ProductCollectionItem(
+        tenant_id=tenant_scope.tenant_id,
+        storefront_id=tenant_scope.storefront_id,
+        **kwargs,
+    )
+
+
+def _collection_placement(
+    tenant_scope: TenantScope,
+    **kwargs,
+) -> ProductCollectionPlacement:
+    return ProductCollectionPlacement(
+        tenant_id=tenant_scope.tenant_id,
+        storefront_id=tenant_scope.storefront_id,
         **kwargs,
     )
 
@@ -162,6 +195,7 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
     async_client,
     db,
 ):
+    tenant_scope = await SystemTenantScopeResolver.resolve(db)
     tcl = Brand(title="TCL", slug="tcl", sort_order=10)
     haier = Brand(title="Haier", slug="haier", sort_order=20)
     aeronik = Brand(title="Aeronik", slug="aeronik", sort_order=20)
@@ -197,8 +231,16 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
         main_image="/media/aeronik-brand.webp",
     )
     unbranded = _product(title="Без бренда", slug="without-brand")
-    first = _collection(slug="value", title="Цена-качество")
-    second = _collection(slug="heat", title="Для обогрева")
+    first = _collection(
+        tenant_scope=tenant_scope,
+        slug="value",
+        title="Цена-качество",
+    )
+    second = _collection(
+        tenant_scope=tenant_scope,
+        slug="heat",
+        title="Для обогрева",
+    )
     service = ServiceTariff(
         service_kind="installation",
         selector_label="Монтаж",
@@ -228,28 +270,33 @@ async def test_feed_orders_collections_brands_unbranded_and_services_without_dup
     await _add_yandex_picture(db, aeronik_remaining, "aeronik-brand")
     db.add_all(
         [
-            ProductCollectionItem(
+            _collection_item(
+                tenant_scope,
                 collection_id=first.id,
                 product_id=overlap.id,
                 position=0,
             ),
-            ProductCollectionItem(
+            _collection_item(
+                tenant_scope,
                 collection_id=second.id,
                 product_id=overlap.id,
                 position=0,
             ),
-            ProductCollectionItem(
+            _collection_item(
+                tenant_scope,
                 collection_id=second.id,
                 product_id=second_collection_item.id,
                 position=1,
             ),
-            ProductCollectionPlacement(
+            _collection_placement(
+                tenant_scope,
                 surface_key="yandex_business",
                 slot_key="categories",
                 collection_id=first.id,
                 position=10,
             ),
-            ProductCollectionPlacement(
+            _collection_placement(
+                tenant_scope,
                 surface_key="yandex_business",
                 slot_key="categories",
                 collection_id=second.id,
@@ -348,29 +395,32 @@ async def test_feed_omits_inactive_empty_collections_and_keeps_primary_title_for
     async_client,
     db,
 ):
+    tenant_scope = await SystemTenantScopeResolver.resolve(db)
     now = datetime.now(timezone.utc)
     fallback_product = _product(
         title="Fallback product",
         slug="fallback-product",
     )
-    fallback = _collection(slug="fallback", title="Резерв")
-    primary = _collection(slug="primary", title="Основная")
-    empty = _collection(slug="empty", title="Пустая", min_items=2)
-    draft = _collection(slug="draft", title="Черновик")
+    fallback = _collection(tenant_scope=tenant_scope, slug="fallback", title="Резерв")
+    primary = _collection(tenant_scope=tenant_scope, slug="primary", title="Основная")
+    empty = _collection(tenant_scope=tenant_scope, slug="empty", title="Пустая", min_items=2)
+    draft = _collection(tenant_scope=tenant_scope, slug="draft", title="Черновик")
     draft.status = "draft"
-    archived = _collection(slug="archived", title="Архив")
+    archived = _collection(tenant_scope=tenant_scope, slug="archived", title="Архив")
     archived.status = "archived"
     future = _collection(
         slug="future",
         title="Будущая",
+        tenant_scope=tenant_scope,
         starts_at=now + timedelta(days=1),
     )
     expired = _collection(
         slug="expired",
         title="Истёкшая",
+        tenant_scope=tenant_scope,
         ends_at=now - timedelta(days=1),
     )
-    disabled = _collection(slug="disabled", title="Выключенная")
+    disabled = _collection(tenant_scope=tenant_scope, slug="disabled", title="Выключенная")
     db.add_all(
         [
             fallback_product,
@@ -387,7 +437,8 @@ async def test_feed_omits_inactive_empty_collections_and_keeps_primary_title_for
     await db.flush()
     primary.fallback_collection_id = fallback.id
     db.add(
-        ProductCollectionItem(
+        _collection_item(
+            tenant_scope,
             collection_id=fallback.id,
             product_id=fallback_product.id,
             position=0,
@@ -397,7 +448,8 @@ async def test_feed_omits_inactive_empty_collections_and_keeps_primary_title_for
         [primary, empty, draft, archived, future, expired, disabled]
     ):
         db.add(
-            ProductCollectionPlacement(
+            _collection_placement(
+                tenant_scope,
                 surface_key="yandex_business",
                 slot_key="categories",
                 collection_id=collection.id,
@@ -429,6 +481,7 @@ async def test_feed_omits_inactive_empty_collections_and_keeps_primary_title_for
 
 @pytest.mark.asyncio
 async def test_feed_uses_automatic_and_hybrid_resolver_modes(async_client, db):
+    tenant_scope = await SystemTenantScopeResolver.resolve(db)
     brand = Brand(title="Resolver", slug="resolver")
     pinned = _product(title="Pinned", slug="pinned", brand=brand, price=3000)
     automatic = _product(title="Automatic", slug="automatic", brand=brand, price=900)
@@ -439,6 +492,8 @@ async def test_feed_uses_automatic_and_hybrid_resolver_modes(async_client, db):
         price=1000,
     )
     hybrid = ProductCollection(
+        tenant_id=tenant_scope.tenant_id,
+        storefront_id=tenant_scope.storefront_id,
         slug="hybrid",
         internal_name="Hybrid",
         public_title="Hybrid",
@@ -450,6 +505,8 @@ async def test_feed_uses_automatic_and_hybrid_resolver_modes(async_client, db):
         max_items=2,
     )
     automatic_collection = ProductCollection(
+        tenant_id=tenant_scope.tenant_id,
+        storefront_id=tenant_scope.storefront_id,
         slug="automatic-collection",
         internal_name="Automatic",
         public_title="Automatic",
@@ -464,7 +521,8 @@ async def test_feed_uses_automatic_and_hybrid_resolver_modes(async_client, db):
     await db.flush()
     hybrid.rule_config = {"brand_ids": [brand.id]}
     db.add(
-        ProductCollectionItem(
+        _collection_item(
+            tenant_scope,
             collection_id=hybrid.id,
             product_id=pinned.id,
             position=0,
@@ -473,13 +531,15 @@ async def test_feed_uses_automatic_and_hybrid_resolver_modes(async_client, db):
     )
     db.add_all(
         [
-            ProductCollectionPlacement(
+            _collection_placement(
+                tenant_scope,
                 surface_key="yandex_business",
                 slot_key="categories",
                 collection_id=hybrid.id,
                 position=1,
             ),
-            ProductCollectionPlacement(
+            _collection_placement(
+                tenant_scope,
                 surface_key="yandex_business",
                 slot_key="categories",
                 collection_id=automatic_collection.id,

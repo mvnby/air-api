@@ -1,30 +1,88 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import HTTPException
-from slugify import slugify
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crud.product import ProductDAO
 from crud.product_collection import ProductCollectionDAO
-from models import ProductCollection
+from core.request_context import current_request_id
+from models import ProductCollection, TenantAuditEvent
+from models.tenancy import TenantScope
+from services.product_collection_catalog_access import ProductCollectionCatalogAccess
+from services.product_collection_invalidation import ProductCollectionInvalidationService
+from services.manager_product_collection_presenter import ManagerProductCollectionPresenter
+from services.manager_product_collection_validation import (
+    ManagerProductCollectionValidation,
+)
 from services.product_collection_resolver import ProductCollectionResolver
-
-
-KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,79}$")
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _audit_json_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {
+            str(key): _audit_json_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_audit_json_value(item) for item in value]
+    return value
+
+
 class ManagerProductCollectionService:
     @staticmethod
-    async def get_rule_options(session: AsyncSession) -> dict:
-        rows = await ProductCollectionDAO.list_rule_option_rows(session)
+    async def search_products(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        search: str,
+        limit: int,
+    ) -> dict:
+        projections = await ProductCollectionCatalogAccess.search_visible(
+            session,
+            tenant_scope=tenant_scope,
+            search=search,
+            limit=limit,
+        )
+        return {
+            "items": [
+                {
+                    "id": int(projection.product.id),
+                    "title": projection.product.title,
+                    "slug": projection.product.slug,
+                    "product_kind": projection.product.product_kind,
+                    "is_published": bool(projection.product.is_published),
+                    "price": projection.price,
+                    "main_image": projection.product.main_image,
+                }
+                for projection in projections
+            ]
+        }
+
+    @staticmethod
+    async def get_rule_options(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> dict:
+        allowed_product_ids = await ProductCollectionCatalogAccess.visible_product_ids(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        rows = await ProductCollectionDAO.list_rule_option_rows(
+            session,
+            tenant_scope=tenant_scope,
+            allowed_product_ids=allowed_product_ids,
+        )
         return {
             "brands": [
                 {"id": int(item.id), "label": item.title}
@@ -45,46 +103,88 @@ class ManagerProductCollectionService:
         }
 
     @staticmethod
-    async def list_collections(session: AsyncSession) -> list[dict]:
-        rows = await ProductCollectionDAO.list_all(session)
-        return [ManagerProductCollectionService._serialize(row) for row in rows]
+    async def list_collections(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+    ) -> list[dict]:
+        rows = await ProductCollectionDAO.list_all(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        return await ManagerProductCollectionPresenter.serialize_many(
+            session,
+            rows,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def get_collection(
         session: AsyncSession,
         collection_id: int,
+        *,
+        tenant_scope: TenantScope,
     ) -> dict:
-        collection = await ProductCollectionDAO.get(session, collection_id)
+        collection = await ProductCollectionDAO.get(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+        )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
-        return ManagerProductCollectionService._serialize(collection)
+        return (
+            await ManagerProductCollectionPresenter.serialize_many(
+                session,
+                [collection],
+                tenant_scope=tenant_scope,
+            )
+        )[0]
 
     @staticmethod
     async def create_collection(
         session: AsyncSession,
         payload: dict[str, Any],
+        *,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
     ) -> dict:
-        data = ManagerProductCollectionService._clean_fields(payload)
-        ManagerProductCollectionService._validate_required_text(data)
-        ManagerProductCollectionService._validate_automation(
+        data = ManagerProductCollectionValidation.clean_fields(payload)
+        ManagerProductCollectionValidation.required_text(data)
+        ManagerProductCollectionValidation.automation(
             mode=data.get("mode", "manual"),
             rule_config=data.get("rule_config") or {},
         )
-        data["slug"] = await ManagerProductCollectionService._unique_slug(
+        data["slug"] = await ManagerProductCollectionValidation.unique_slug(
             session,
             requested=data.get("slug"),
             fallback=data["internal_name"],
+            tenant_scope=tenant_scope,
         )
-        await ManagerProductCollectionService._validate_fallback(
+        await ManagerProductCollectionValidation.fallback(
             session,
             fallback_id=data.get("fallback_collection_id"),
+            tenant_scope=tenant_scope,
         )
-        collection = ProductCollection(**data)
+        collection = ProductCollection(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
+            **data,
+        )
         session.add(collection)
-        await session.commit()
+        await ManagerProductCollectionService._commit_mutation(
+            session,
+            collection=collection,
+            tenant_scope=tenant_scope,
+            actor_username=actor_username,
+            actor_staff_user_id=actor_staff_user_id,
+            action="product_collection.created",
+            change_set={"slug": {"before": None, "after": collection.slug}},
+        )
         return await ManagerProductCollectionService.get_collection(
             session,
             int(collection.id),
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
@@ -92,26 +192,37 @@ class ManagerProductCollectionService:
         session: AsyncSession,
         collection_id: int,
         payload: dict[str, Any],
+        *,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
     ) -> dict:
-        collection = await ProductCollectionDAO.get(session, collection_id)
+        collection = await ProductCollectionDAO.get(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
-        data = ManagerProductCollectionService._clean_fields(payload)
-        ManagerProductCollectionService._validate_required_text(data)
+        data = ManagerProductCollectionValidation.clean_fields(payload)
+        ManagerProductCollectionValidation.required_text(data)
         if "slug" in data:
-            data["slug"] = await ManagerProductCollectionService._unique_slug(
+            data["slug"] = await ManagerProductCollectionValidation.unique_slug(
                 session,
                 requested=data["slug"],
                 fallback=data.get("internal_name") or collection.internal_name,
                 exclude_id=collection_id,
+                tenant_scope=tenant_scope,
             )
         fallback_id = data.get("fallback_collection_id")
         if fallback_id == collection_id:
             raise HTTPException(status_code=400, detail="Подборка не может ссылаться сама на себя.")
         if "fallback_collection_id" in data:
-            await ManagerProductCollectionService._validate_fallback(
+            await ManagerProductCollectionValidation.fallback(
                 session,
                 fallback_id=fallback_id,
+                tenant_scope=tenant_scope,
             )
 
         min_items = int(data.get("min_items", collection.min_items))
@@ -125,65 +236,128 @@ class ManagerProductCollectionService:
         ends_at = data.get("ends_at", collection.ends_at)
         if starts_at and ends_at and ends_at <= starts_at:
             raise HTTPException(status_code=400, detail="Дата окончания должна быть позже начала.")
-        ManagerProductCollectionService._validate_automation(
+        ManagerProductCollectionValidation.automation(
             mode=data.get("mode", collection.mode),
             rule_config=data.get("rule_config", collection.rule_config) or {},
         )
 
+        change_set: dict[str, dict[str, Any]] = {}
         for field, value in data.items():
+            before = getattr(collection, field)
+            if before != value:
+                change_set[field] = {"before": before, "after": value}
             setattr(collection, field, value)
+        if not change_set:
+            return await ManagerProductCollectionService.get_collection(
+                session,
+                collection_id,
+                tenant_scope=tenant_scope,
+            )
         collection.updated_at = utc_now()
         session.add(collection)
-        await session.commit()
-        return await ManagerProductCollectionService.get_collection(session, collection_id)
+        await ManagerProductCollectionService._commit_mutation(
+            session,
+            collection=collection,
+            tenant_scope=tenant_scope,
+            actor_username=actor_username,
+            actor_staff_user_id=actor_staff_user_id,
+            action="product_collection.updated",
+            change_set=change_set,
+        )
+        return await ManagerProductCollectionService.get_collection(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def replace_items(
         session: AsyncSession,
         collection_id: int,
         items: list[dict],
+        *,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
     ) -> dict:
-        collection = await ProductCollectionDAO.get(session, collection_id)
+        collection = await ProductCollectionDAO.get(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
         product_ids = [int(item["product_id"]) for item in items]
         if len(product_ids) != len(set(product_ids)):
             raise HTTPException(status_code=400, detail="Один товар нельзя добавить дважды.")
-        products = await ProductDAO.get_by_ids(session, product_ids)
-        if len(products) != len(product_ids):
-            found_ids = {int(product.id) for product in products}
+        projections = await ProductCollectionCatalogAccess.visible_by_ids(
+            session,
+            tenant_scope=tenant_scope,
+            product_ids=product_ids,
+        )
+        if len(projections) != len(product_ids):
+            found_ids = set(projections)
             missing = [product_id for product_id in product_ids if product_id not in found_ids]
             raise HTTPException(
-                status_code=400,
-                detail=f"Не найдены товары: {', '.join(map(str, missing))}.",
+                status_code=404,
+                detail=f"Товары недоступны для этой витрины: {', '.join(map(str, missing))}.",
             )
-        await ProductCollectionDAO.replace_items(
-            session,
-            collection_id=collection_id,
-            items=items,
-        )
+        before_ids = [
+            int(item.product_id)
+            for item in sorted(collection.items, key=lambda row: (row.position, row.id))
+        ]
+        async def stage_items() -> None:
+            await ProductCollectionDAO.replace_items(
+                session,
+                collection_id=collection_id,
+                tenant_scope=tenant_scope,
+                items=items,
+            )
+
         collection.updated_at = utc_now()
-        await session.commit()
-        return await ManagerProductCollectionService.get_collection(session, collection_id)
+        await ManagerProductCollectionService._commit_mutation(
+            session,
+            collection=collection,
+            tenant_scope=tenant_scope,
+            actor_username=actor_username,
+            actor_staff_user_id=actor_staff_user_id,
+            action="product_collection.items_reordered",
+            change_set={"product_ids": {"before": before_ids, "after": product_ids}},
+            stage_changes=stage_items,
+        )
+        return await ManagerProductCollectionService.get_collection(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def replace_placements(
         session: AsyncSession,
         collection_id: int,
         placements: list[dict],
+        *,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
     ) -> dict:
-        collection = await ProductCollectionDAO.get(session, collection_id)
+        collection = await ProductCollectionDAO.get(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
         seen: set[tuple[str, str]] = set()
         for placement in placements:
-            surface = str(placement["surface_key"]).strip().lower()
-            slot = str(placement["slot_key"]).strip().lower()
-            if not KEY_PATTERN.fullmatch(surface) or not KEY_PATTERN.fullmatch(slot):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Ключи поверхности и слота могут содержать a-z, 0-9, '-' и '_'.",
-                )
+            surface = ManagerProductCollectionValidation.placement_key(
+                placement["surface_key"]
+            )
+            slot = ManagerProductCollectionValidation.placement_key(
+                placement["slot_key"]
+            )
             key = (surface, slot)
             if key in seen:
                 raise HTTPException(
@@ -193,14 +367,44 @@ class ManagerProductCollectionService:
             seen.add(key)
             placement["surface_key"] = surface
             placement["slot_key"] = slot
-        await ProductCollectionDAO.replace_placements(
-            session,
-            collection_id=collection_id,
-            placements=placements,
-        )
+        before_placements = [
+            {
+                "surface_key": row.surface_key,
+                "slot_key": row.slot_key,
+                "position": row.position,
+                "is_enabled": row.is_enabled,
+            }
+            for row in sorted(collection.placements, key=lambda row: (row.position, row.id))
+        ]
+        async def stage_placements() -> None:
+            await ProductCollectionDAO.replace_placements(
+                session,
+                collection_id=collection_id,
+                tenant_scope=tenant_scope,
+                placements=placements,
+            )
+
         collection.updated_at = utc_now()
-        await session.commit()
-        return await ManagerProductCollectionService.get_collection(session, collection_id)
+        await ManagerProductCollectionService._commit_mutation(
+            session,
+            collection=collection,
+            tenant_scope=tenant_scope,
+            actor_username=actor_username,
+            actor_staff_user_id=actor_staff_user_id,
+            action="product_collection.placements_reordered",
+            change_set={
+                "placements": {
+                    "before": before_placements,
+                    "after": placements,
+                }
+            },
+            stage_changes=stage_placements,
+        )
+        return await ManagerProductCollectionService.get_collection(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def preview(
@@ -209,8 +413,13 @@ class ManagerProductCollectionService:
         collection_id: int,
         surface_key: str,
         slot_key: str,
+        tenant_scope: TenantScope,
     ) -> dict:
-        collection = await ProductCollectionDAO.get(session, collection_id)
+        collection = await ProductCollectionDAO.get(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+        )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
         return await ProductCollectionResolver.resolve(
@@ -219,36 +428,71 @@ class ManagerProductCollectionService:
             surface_key=surface_key,
             slot_key=slot_key,
             enforce_publication=False,
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
     async def archive(
         session: AsyncSession,
         collection_id: int,
+        *,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
     ) -> dict:
-        collection = await ProductCollectionDAO.get(session, collection_id)
+        collection = await ProductCollectionDAO.get(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
+        before_status = collection.status
         collection.status = "archived"
         collection.updated_at = utc_now()
         session.add(collection)
-        await session.commit()
-        return await ManagerProductCollectionService.get_collection(session, collection_id)
+        await ManagerProductCollectionService._commit_mutation(
+            session,
+            collection=collection,
+            tenant_scope=tenant_scope,
+            actor_username=actor_username,
+            actor_staff_user_id=actor_staff_user_id,
+            action="product_collection.archived",
+            change_set={"status": {"before": before_status, "after": "archived"}},
+        )
+        return await ManagerProductCollectionService.get_collection(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+        )
 
     @staticmethod
     async def duplicate(
         session: AsyncSession,
         collection_id: int,
+        *,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
     ) -> dict:
-        source = await ProductCollectionDAO.get(session, collection_id)
+        source = await ProductCollectionDAO.get(
+            session,
+            collection_id,
+            tenant_scope=tenant_scope,
+            for_update=True,
+        )
         if source is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
-        slug = await ManagerProductCollectionService._unique_slug(
+        slug = await ManagerProductCollectionValidation.unique_slug(
             session,
             requested=f"{source.slug}-copy",
             fallback=f"{source.internal_name}-copy",
+            tenant_scope=tenant_scope,
         )
         duplicate = ProductCollection(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
             slug=slug,
             internal_name=f"{source.internal_name} — копия",
             public_title=source.public_title,
@@ -266,150 +510,113 @@ class ManagerProductCollectionService:
             fallback_collection_id=source.fallback_collection_id,
         )
         session.add(duplicate)
-        await session.flush()
-        await ProductCollectionDAO.replace_items(
+
+        async def stage_duplicate_items() -> None:
+            await session.flush()
+            source_projections = await ProductCollectionCatalogAccess.visible_by_ids(
+                session,
+                tenant_scope=tenant_scope,
+                product_ids=[int(item.product_id) for item in source.items],
+            )
+            await ProductCollectionDAO.replace_items(
+                session,
+                collection_id=int(duplicate.id),
+                tenant_scope=tenant_scope,
+                items=[
+                    {
+                        "product_id": item.product_id,
+                        "is_pinned": item.is_pinned,
+                        "editorial_note": item.editorial_note,
+                    }
+                    for item in sorted(source.items, key=lambda row: (row.position, row.id))
+                    if int(item.product_id) in source_projections
+                ],
+            )
+
+        await ManagerProductCollectionService._commit_mutation(
             session,
-            collection_id=int(duplicate.id),
-            items=[
-                {
-                    "product_id": item.product_id,
-                    "is_pinned": item.is_pinned,
-                    "editorial_note": item.editorial_note,
+            collection=duplicate,
+            tenant_scope=tenant_scope,
+            actor_username=actor_username,
+            actor_staff_user_id=actor_staff_user_id,
+            action="product_collection.duplicated",
+            change_set={
+                "source_collection_id": {
+                    "before": None,
+                    "after": int(source.id),
                 }
-                for item in sorted(source.items, key=lambda row: (row.position, row.id))
-            ],
+            },
+            stage_changes=stage_duplicate_items,
         )
-        await session.commit()
         return await ManagerProductCollectionService.get_collection(
             session,
             int(duplicate.id),
+            tenant_scope=tenant_scope,
         )
 
     @staticmethod
-    def _serialize(collection: ProductCollection) -> dict:
-        return {
-            "id": int(collection.id),
-            "slug": collection.slug,
-            "internal_name": collection.internal_name,
-            "public_title": collection.public_title,
-            "public_description": collection.public_description,
-            "public_badge": collection.public_badge,
-            "cta_label": collection.cta_label,
-            "cta_url": collection.cta_url,
-            "editorial_note": collection.editorial_note,
-            "status": collection.status,
-            "mode": collection.mode,
-            "sort_mode": collection.sort_mode,
-            "rule_config": dict(collection.rule_config or {}),
-            "min_items": collection.min_items,
-            "max_items": collection.max_items,
-            "fallback_collection_id": collection.fallback_collection_id,
-            "starts_at": collection.starts_at,
-            "ends_at": collection.ends_at,
-            "created_at": collection.created_at,
-            "updated_at": collection.updated_at,
-            "items": [
-                {
-                    "id": int(item.id),
-                    "product_id": int(item.product_id),
-                    "position": item.position,
-                    "is_pinned": item.is_pinned,
-                    "editorial_note": item.editorial_note,
-                    "product_title": item.product.title,
-                    "product_slug": item.product.slug,
-                    "product_kind": item.product.product_kind,
-                    "is_published": item.product.is_published,
-                    "price": item.product.price,
-                    "main_image": item.product.main_image,
-                }
-                for item in sorted(collection.items, key=lambda row: (row.position, row.id))
-            ],
-            "placements": [
-                {
-                    "id": int(placement.id),
-                    "surface_key": placement.surface_key,
-                    "slot_key": placement.slot_key,
-                    "position": placement.position,
-                    "is_enabled": placement.is_enabled,
-                    "starts_at": placement.starts_at,
-                    "ends_at": placement.ends_at,
-                }
-                for placement in sorted(
-                    collection.placements,
-                    key=lambda row: (
-                        row.surface_key,
-                        row.slot_key,
-                        row.position,
-                        row.id,
-                    ),
-                )
-            ],
-        }
-
-    @staticmethod
-    def _clean_fields(payload: dict[str, Any]) -> dict[str, Any]:
-        data = dict(payload)
-        for field in (
-            "slug",
-            "internal_name",
-            "public_title",
-            "public_description",
-            "public_badge",
-            "cta_label",
-            "cta_url",
-            "editorial_note",
-        ):
-            if field in data and data[field] is not None:
-                value = str(data[field]).strip()
-                data[field] = value or None
-        return data
-
-    @staticmethod
-    def _validate_required_text(data: dict[str, Any]) -> None:
-        for field, label in (
-            ("internal_name", "Служебное название"),
-            ("public_title", "Публичный заголовок"),
-        ):
-            if field in data and not data[field]:
-                raise HTTPException(status_code=400, detail=f"{label} не может быть пустым.")
-
-    @staticmethod
-    def _validate_automation(*, mode: str, rule_config: dict[str, Any]) -> None:
-        if mode == "manual":
-            return
-        if not any(value not in (None, [], "") for value in rule_config.values()):
-            raise HTTPException(
-                status_code=400,
-                detail="Для automatic/hybrid задайте хотя бы одно типизированное условие.",
-            )
-
-    @staticmethod
-    async def _unique_slug(
+    async def _stage_mutation(
         session: AsyncSession,
         *,
-        requested: str | None,
-        fallback: str,
-        exclude_id: int | None = None,
-    ) -> str:
-        base = slugify(str(requested or fallback), lowercase=True)
-        if not base:
-            raise HTTPException(status_code=400, detail="Не удалось сформировать slug.")
-        candidate = base
-        suffix = 2
-        while True:
-            existing = await ProductCollectionDAO.get_by_slug(session, candidate)
-            if existing is None or int(existing.id) == exclude_id:
-                return candidate
-            candidate = f"{base}-{suffix}"
-            suffix += 1
-
-    @staticmethod
-    async def _validate_fallback(
-        session: AsyncSession,
-        *,
-        fallback_id: int | None,
+        collection: ProductCollection,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
+        action: str,
+        change_set: dict[str, Any],
     ) -> None:
-        if fallback_id is None:
-            return
-        if await ProductCollectionDAO.get(session, int(fallback_id)) is None:
-            raise HTTPException(status_code=400, detail="Резервная подборка не найдена.")
+        session.add(
+            TenantAuditEvent(
+                tenant_id=tenant_scope.tenant_id,
+                storefront_id=tenant_scope.storefront_id,
+                actor_staff_user_id=actor_staff_user_id,
+                actor_username=actor_username,
+                action=action,
+                entity_type="product_collection",
+                entity_id=int(collection.id),
+                request_id=current_request_id(),
+                change_set=_audit_json_value(change_set),
+            )
+        )
+        await ProductCollectionInvalidationService.stage(
+            session,
+            tenant_scope=tenant_scope,
+            reason=action.replace(".", "_"),
+        )
+        await session.flush()
+
+    @staticmethod
+    async def _commit_mutation(
+        session: AsyncSession,
+        *,
+        collection: ProductCollection,
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
+        action: str,
+        change_set: dict[str, Any],
+        stage_changes: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
+        try:
+            if stage_changes is not None:
+                await stage_changes()
+            await session.flush()
+            await ManagerProductCollectionService._stage_mutation(
+                session,
+                collection=collection,
+                tenant_scope=tenant_scope,
+                actor_username=actor_username,
+                actor_staff_user_id=actor_staff_user_id,
+                action=action,
+                change_set=change_set,
+            )
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Подборка была изменена параллельно. Повторите запрос.",
+            ) from exc
+        except Exception:
+            await session.rollback()
+            raise

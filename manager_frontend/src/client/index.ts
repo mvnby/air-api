@@ -325,6 +325,8 @@ export type { ManagerProductCollectionListResponse } from './models/ManagerProdu
 export type { ManagerProductCollectionPlacementPayload } from './models/ManagerProductCollectionPlacementPayload';
 export type { ManagerProductCollectionPlacementResponse } from './models/ManagerProductCollectionPlacementResponse';
 export type { ManagerProductCollectionPlacementsPayload } from './models/ManagerProductCollectionPlacementsPayload';
+export type { ManagerProductCollectionProductOptionListResponse } from './models/ManagerProductCollectionProductOptionListResponse';
+export type { ManagerProductCollectionProductOptionResponse } from './models/ManagerProductCollectionProductOptionResponse';
 export type { ManagerProductCollectionResponse } from './models/ManagerProductCollectionResponse';
 export type { ManagerProductCollectionUpdate } from './models/ManagerProductCollectionUpdate';
 export type { ManagerProductFeaturesUpdatePayload } from './models/ManagerProductFeaturesUpdatePayload';

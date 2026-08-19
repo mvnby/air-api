@@ -19,12 +19,14 @@ from api_contracts.yandex_business import (
 from core.config import settings
 from crud.product_collection import ProductCollectionDAO
 from models import Product, ProductImage, ServiceTariff
+from models.tenancy import TenantScope
 from services.product_collection_resolver import ProductCollectionResolver, utc_now
 from services.product_image_processing_contract import (
     ProductImageProcessingStatus,
     ProductImageVariantType,
 )
 from services.tariffs_service import TariffsService
+from services.tenant_scope_service import SystemTenantScopeResolver
 from services.yandex_business_feed_text import sanitize_yandex_description
 
 
@@ -278,6 +280,8 @@ class YandexBusinessPriceListService:
         cls,
         session: AsyncSession,
         products: list[Product],
+        *,
+        tenant_scope: TenantScope,
     ) -> ProductCatalogBuild:
         products_by_id = {int(product.id): product for product in products}
         claimed_ids: set[int] = set()
@@ -291,6 +295,7 @@ class YandexBusinessPriceListService:
             surface_key=cls.SURFACE_KEY,
             slot_key=cls.SLOT_KEY,
             now=utc_now(),
+            tenant_scope=tenant_scope,
         )
         for _placement, collection in placements:
             resolved = await ProductCollectionResolver.resolve(
@@ -299,6 +304,7 @@ class YandexBusinessPriceListService:
                 surface_key=cls.SURFACE_KEY,
                 slot_key=cls.SLOT_KEY,
                 enforce_publication=True,
+                tenant_scope=tenant_scope,
             )
             if resolved["below_min_items"]:
                 continue
@@ -468,6 +474,7 @@ class YandexBusinessPriceListService:
 
     @classmethod
     async def _build(cls, session: AsyncSession) -> YandexBusinessFeedBuild:
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
         base_url = cls._normalize_base_url(settings.PUBLIC_SITE_URL)
         products = await cls._load_products(session)
         tariffs = await cls._load_tariffs(session)
@@ -479,6 +486,7 @@ class YandexBusinessPriceListService:
         product_catalog = await cls._build_product_catalog(
             session,
             products,
+            tenant_scope=tenant_scope,
         )
         service_kinds = {tariff.service_kind for tariff in supported_tariffs}
 

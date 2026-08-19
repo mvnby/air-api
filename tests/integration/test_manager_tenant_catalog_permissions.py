@@ -587,4 +587,24 @@ async def test_tenant_manager_me_exposes_only_minimal_server_capabilities(
         "crm.manage",
         "catalog.master.read",
         "storefront.offers.read",
+        "storefront.collections.manage",
     ]
+
+    listed = await async_client.get(
+        "/api/manager/product-collections",
+        headers=_headers(user),
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json() == {"items": []}
+
+    created = await async_client.post(
+        "/api/manager/product-collections",
+        headers=_headers(user),
+        json={
+            "internal_name": "Tenant-owned selection",
+            "public_title": "Tenant-owned selection",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["tenant_id"] == tenant.id
+    assert created.json()["storefront_id"] == storefront.id
