@@ -36,7 +36,10 @@ class EquipmentComponentService:
                 EquipmentComponent.id.asc(),
             )
         )
-        return [EquipmentService._to_component_item(item) for item in result.scalars().all()]
+        return [
+            EquipmentService._to_component_item(item, tenant_scope=tenant_scope)
+            for item in result.scalars().all()
+        ]
 
     @staticmethod
     async def create_component(
@@ -71,7 +74,10 @@ class EquipmentComponentService:
         session.add(component)
         await session.commit()
         await session.refresh(component)
-        return EquipmentService._to_component_item(component)
+        return EquipmentService._to_component_item(
+            component,
+            tenant_scope=tenant_scope,
+        )
     @staticmethod
     async def update_component(
         session: AsyncSession,
@@ -140,4 +146,7 @@ class EquipmentComponentService:
         session.add(component)
         await session.commit()
         await session.refresh(component)
-        return EquipmentService._to_component_item(component)
+        return EquipmentService._to_component_item(
+            component,
+            tenant_scope=tenant_scope,
+        )

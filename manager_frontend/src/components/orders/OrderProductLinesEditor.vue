@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { ProductLine, ProductOption } from './order-editor-types';
 import { formatMoney } from './order-utils';
+import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabilities';
+import { managerSession } from '../../services/manager-session';
 
 type SupplyBadge = { label: string; requestId: number; status: string } | null;
 
@@ -27,6 +30,10 @@ const emit = defineEmits<{
 
 const lines = defineModel<ProductLine[]>('lines', { required: true });
 const searchInStock = defineModel<boolean>('searchInStock', { required: true });
+const canManagePlatform = computed(() => hasManagerCapability(
+  managerSession.auth.value,
+  MANAGER_CAPABILITY.platformManage,
+));
 
 const suggestionsFor = (index: number) => (
   props.activeSuggestionIndex === index ? props.productOptions.slice(0, 10) : []
@@ -44,7 +51,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
     <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-wrap items-center gap-3">
         <h4 class="text-md font-semibold text-gray-800">Товары</h4>
-        <label class="flex cursor-pointer items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 shadow-sm transition-colors hover:bg-gray-50">
+        <label v-if="canManagePlatform" class="flex cursor-pointer items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 shadow-sm transition-colors hover:bg-gray-50">
           <input v-model="searchInStock" type="checkbox" class="h-3 w-3 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
           В наличии
         </label>
@@ -60,7 +67,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           <label class="relative col-span-6 space-y-1 md:col-span-5">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
               <span>Название</span>
-              <button v-if="line.product_id" class="text-xs font-semibold text-teal-700 hover:text-teal-900" type="button" @click="emit('open', index)">
+              <button v-if="line.product_id && canManagePlatform" class="text-xs font-semibold text-teal-700 hover:text-teal-900" type="button" @click="emit('open', index)">
                 Открыть ↗
               </button>
             </span>
@@ -118,7 +125,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           <p v-if="isPriceDifferent(line)" class="col-span-6 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12">
             Цена строки отличается от каталожной ({{ formatMoney(catalogPrice(line.product_id) || 0) }}).
           </p>
-          <div class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
+          <div v-if="canManagePlatform" class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
             <span v-if="supplyBadgeForLine(line)" class="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700">
               Поставка: {{ supplyBadgeForLine(line)?.label }}
             </span>

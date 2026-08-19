@@ -7,12 +7,15 @@ import EquipmentAttachmentsPanel from '../components/equipment/EquipmentAttachme
 import EquipmentWarrantyPanel from '../components/equipment/EquipmentWarrantyPanel.vue';
 import { equipmentWarrantySummary } from '../components/equipment/equipmentWarrantySummary';
 import { listAllCustomerEquipment } from '../components/equipment/loadAllCustomerEquipment';
+import { sanitizeEquipmentComponentPayload } from '../components/equipment/equipment-component-permissions';
 import {
   buildCustomerPatchPayload,
   type CustomerForm,
 } from '../components/customers/customer-profile-form';
 import { api } from '../api';
 import { confirmDialog } from '../services/ui-feedback';
+import { managerSession } from '../services/manager-session';
+import { MANAGER_CAPABILITY, hasManagerCapability } from '../manager-capabilities';
 import {
   ManagerContractsService,
   ManagerDocsService,
@@ -115,6 +118,10 @@ const toast = ref('');
 const editMode = ref(false);
 const showCreateOrder = ref(false);
 const serverErrors = ref<Record<string, string>>({});
+const canManagePlatform = computed(() => hasManagerCapability(
+  managerSession.auth.value,
+  MANAGER_CAPABILITY.platformManage,
+));
 
 const documents = ref<ManagerCustomerDocumentItem[]>([]);
 const docsLoading = ref(false);
@@ -451,19 +458,22 @@ const equipmentFormPayload = (): ManagerEquipmentCreatePayload | ManagerEquipmen
   notes: trimOrNull(equipmentForm.value.notes),
 });
 
-const componentPayload = (): ManagerEquipmentComponentCreatePayload | ManagerEquipmentComponentUpdatePayload => ({
-  catalog_product_id: parseOptionalNumber(componentForm.value.catalog_product_id),
-  supplier_id: parseOptionalNumber(componentForm.value.supplier_id),
-  component_type: trimOrNull(componentForm.value.component_type) || 'other',
-  title: trimOrNull(componentForm.value.title),
-  brand: trimOrNull(componentForm.value.brand),
-  model: trimOrNull(componentForm.value.model),
-  serial: trimOrNull(componentForm.value.serial),
-  inventory_number: trimOrNull(componentForm.value.inventory_number),
-  supplier_invoice_number: trimOrNull(componentForm.value.supplier_invoice_number),
-  supplier_invoice_date: toDateTimePayload(componentForm.value.supplier_invoice_date),
-  notes: trimOrNull(componentForm.value.notes),
-});
+const componentPayload = (): ManagerEquipmentComponentCreatePayload | ManagerEquipmentComponentUpdatePayload => {
+  const payload: ManagerEquipmentComponentCreatePayload | ManagerEquipmentComponentUpdatePayload = {
+    catalog_product_id: parseOptionalNumber(componentForm.value.catalog_product_id),
+    supplier_id: parseOptionalNumber(componentForm.value.supplier_id),
+    component_type: trimOrNull(componentForm.value.component_type) || 'other',
+    title: trimOrNull(componentForm.value.title),
+    brand: trimOrNull(componentForm.value.brand),
+    model: trimOrNull(componentForm.value.model),
+    serial: trimOrNull(componentForm.value.serial),
+    inventory_number: trimOrNull(componentForm.value.inventory_number),
+    supplier_invoice_number: trimOrNull(componentForm.value.supplier_invoice_number),
+    supplier_invoice_date: toDateTimePayload(componentForm.value.supplier_invoice_date),
+    notes: trimOrNull(componentForm.value.notes),
+  };
+  return sanitizeEquipmentComponentPayload(payload, canManagePlatform.value);
+};
 
 const historyPayload = (): EquipmentHistoryPayload => ({
   event_type: historyForm.value.event_type,
@@ -508,9 +518,9 @@ const componentLine = (item: ManagerEquipmentComponentItemResponse) => {
     item.serial ? `SN ${item.serial}` : '',
     item.inventory_number ? `Инв. ${item.inventory_number}` : '',
     item.catalog_product_id ? `Товар #${item.catalog_product_id}` : '',
-    item.supplier_id ? `Поставщик #${item.supplier_id}` : '',
-    item.supplier_invoice_number ? `Накладная ${item.supplier_invoice_number}` : '',
-    item.supplier_invoice_date ? formatDateOnly(item.supplier_invoice_date) : '',
+    canManagePlatform.value && item.supplier_id ? `Поставщик #${item.supplier_id}` : '',
+    canManagePlatform.value && item.supplier_invoice_number ? `Накладная ${item.supplier_invoice_number}` : '',
+    canManagePlatform.value && item.supplier_invoice_date ? formatDateOnly(item.supplier_invoice_date) : '',
   ].map((value) => value?.trim()).filter(Boolean);
   return parts.join(' · ') || 'Паспортные данные не заполнены';
 };
@@ -1911,18 +1921,20 @@ onMounted(() => {
                         ID товара каталога
                         <input v-model="componentForm.catalog_product_id" class="field-input" inputmode="numeric" placeholder="Опционально" />
                       </label>
-                      <label class="field-label">
-                        ID поставщика
-                        <input v-model="componentForm.supplier_id" class="field-input" inputmode="numeric" placeholder="Опционально" />
-                      </label>
-                      <label class="field-label">
-                        Накладная поставщика
-                        <input v-model="componentForm.supplier_invoice_number" class="field-input" placeholder="Номер документа" />
-                      </label>
-                      <label class="field-label">
-                        Дата накладной
-                        <input v-model="componentForm.supplier_invoice_date" class="field-input" type="date" />
-                      </label>
+                      <template v-if="canManagePlatform">
+                        <label class="field-label">
+                          ID поставщика
+                          <input v-model="componentForm.supplier_id" class="field-input" inputmode="numeric" placeholder="Опционально" />
+                        </label>
+                        <label class="field-label">
+                          Накладная поставщика
+                          <input v-model="componentForm.supplier_invoice_number" class="field-input" placeholder="Номер документа" />
+                        </label>
+                        <label class="field-label">
+                          Дата накладной
+                          <input v-model="componentForm.supplier_invoice_date" class="field-input" type="date" />
+                        </label>
+                      </template>
                       <label class="field-label md:col-span-2">
                         Заметки
                         <textarea v-model="componentForm.notes" class="field-input min-h-[58px]" />

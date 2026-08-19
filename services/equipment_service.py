@@ -332,20 +332,31 @@ class EquipmentService:
         }
 
     @staticmethod
-    def _to_component_item(component: EquipmentComponent) -> Dict[str, Any]:
+    def _to_component_item(
+        component: EquipmentComponent,
+        *,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
+        supplier_id = component.supplier_id if tenant_scope.is_system else None
+        supplier_invoice_number = (
+            component.supplier_invoice_number if tenant_scope.is_system else None
+        )
+        supplier_invoice_date = (
+            component.supplier_invoice_date if tenant_scope.is_system else None
+        )
         return {
             "id": int(component.id or 0),
             "equipment_id": int(component.equipment_id),
             "catalog_product_id": component.catalog_product_id,
-            "supplier_id": component.supplier_id,
+            "supplier_id": supplier_id,
             "component_type": component.component_type,
             "title": component.title,
             "brand": component.brand,
             "model": component.model,
             "serial": component.serial,
             "inventory_number": component.inventory_number,
-            "supplier_invoice_number": component.supplier_invoice_number,
-            "supplier_invoice_date": component.supplier_invoice_date,
+            "supplier_invoice_number": supplier_invoice_number,
+            "supplier_invoice_date": supplier_invoice_date,
             "notes": component.notes,
             "is_archived": bool(component.is_archived),
             "created_at": component.created_at,

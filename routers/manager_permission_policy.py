@@ -22,6 +22,9 @@ from routers import manager_operation_ids as operation_ids
 PLATFORM_MANAGER_OPERATION_IDS = frozenset(
     {
         # Catalog products and imports.
+        operation_ids.GET_MANAGER_PRODUCTS,
+        operation_ids.GET_MANAGER_PRODUCT,
+        operation_ids.SMART_SEARCH_PRODUCTS,
         operation_ids.CREATE_MANAGER_PRODUCT,
         operation_ids.DUPLICATE_MANAGER_PRODUCT,
         operation_ids.UPDATE_PRODUCT,
@@ -70,6 +73,9 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         operation_ids.CREATE_MANAGER_BRAND_SHORT_DESCRIPTION_AI_DRAFT,
         operation_ids.BULK_UPDATE_SPECS,
         operation_ids.NORMALIZE_LEGACY_SPECS,
+        # Storefront offer prices and publication remain operator-owned.
+        operation_ids.UPSERT_MANAGER_TENANT_OFFER,
+        operation_ids.UPDATE_MANAGER_TENANT_OFFER,
         operation_ids.CREATE_MANAGER_PRODUCT_COLLECTION,
         operation_ids.UPDATE_MANAGER_PRODUCT_COLLECTION,
         operation_ids.DUPLICATE_MANAGER_PRODUCT_COLLECTION,

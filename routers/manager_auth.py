@@ -6,6 +6,7 @@ from core.database import get_session
 from core.security import AuthenticatedUser, require_manager_access
 from routers.manager_operation_ids import LIST_MANAGER_STOREFRONTS, READ_USER_ME
 from schemas import ManagerAuthStatusResponse
+from services.manager_capability_service import ManagerCapabilityService
 from services.manager_storefront_selector_service import ManagerStorefrontSelector
 
 
@@ -28,6 +29,8 @@ async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_ac
         "tenant_id": auth.tenant_id,
         "storefront_id": auth.storefront_id,
         "tenant_membership_id": auth.tenant_membership_id,
+        "is_system_tenant": auth.is_system_tenant,
+        "capabilities": ManagerCapabilityService.for_auth(auth),
     }
 
 

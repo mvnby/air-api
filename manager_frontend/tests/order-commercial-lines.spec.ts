@@ -1,5 +1,5 @@
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderProductLinesEditor from '../src/components/orders/OrderProductLinesEditor.vue';
 import OrderServiceLinesEditor from '../src/components/orders/OrderServiceLinesEditor.vue';
 import type {
@@ -7,6 +7,7 @@ import type {
   ProductOption,
   ServiceLine,
 } from '../src/components/orders/order-editor-types';
+import { managerSession } from '../src/services/manager-session';
 
 const productLine: ProductLine = {
   link_id: 301,
@@ -58,8 +59,13 @@ const estimate = {
 
 const mountedWrappers: VueWrapper[] = [];
 
+beforeEach(() => {
+  managerSession.auth.value = { capabilities: ['platform.manage'] } as any;
+});
+
 afterEach(() => {
   for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount();
+  managerSession.auth.value = null;
 });
 
 describe('OrderProductLinesEditor', () => {
@@ -106,6 +112,30 @@ describe('OrderProductLinesEditor', () => {
       intent: 'reserve',
     }]]);
     expect(wrapper.emitted('add')).toEqual([[]]);
+  });
+
+  it('hides stock, product workspace and supply controls from tenant managers', () => {
+    managerSession.auth.value = {
+      capabilities: ['crm.manage', 'catalog.master.read', 'storefront.offers.read'],
+    } as any;
+    const wrapper = mount(OrderProductLinesEditor, {
+      props: {
+        lines: [{ ...productLine, product_id: productOption.id }],
+        searchInStock: false,
+        productOptions: [productOption],
+        productLookupById: { [productOption.id]: productOption },
+        productLookupLoading: false,
+        activeSuggestionIndex: null,
+        supplyActionLoadingLineId: null,
+        supplyBadgeForLine: () => null,
+      },
+    });
+    mountedWrappers.push(wrapper);
+
+    expect(wrapper.text()).not.toContain('В наличии');
+    expect(wrapper.text()).not.toContain('Открыть ↗');
+    expect(wrapper.text()).not.toContain('В поставку');
+    expect(wrapper.text()).not.toContain('Забронировать');
   });
 });
 

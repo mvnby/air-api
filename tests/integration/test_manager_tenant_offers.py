@@ -189,7 +189,7 @@ async def test_manager_tenant_offers_are_exactly_storefront_scoped_and_audited(
         json={"price": 1},
     )
     assert foreign_get.status_code == 404
-    assert foreign_patch.status_code == 404
+    assert foreign_patch.status_code == 403
 
     list_b_before = await async_client.get(
         "/api/manager/tenant-offers",
@@ -208,11 +208,7 @@ async def test_manager_tenant_offers_are_exactly_storefront_scoped_and_audited(
             "is_published": True,
         },
     )
-    assert create_b.status_code == 200, create_b.text
-    assert create_b.json()["storefront_id"] == storefront_b.id
-    assert create_b.json()["price"] == 2600
-    assert create_b.json()["status"] == "disabled"
-    assert create_b.json()["is_published"] is False
+    assert create_b.status_code == 403, create_b.text
 
     list_a = await async_client.get(
         "/api/manager/tenant-offers",
@@ -223,7 +219,7 @@ async def test_manager_tenant_offers_are_exactly_storefront_scoped_and_audited(
         headers=_headers(owner_b),
     )
     assert [item["id"] for item in list_a.json()["items"]] == [offer_a["id"]]
-    assert [item["id"] for item in list_b.json()["items"]] == [create_b.json()["id"]]
+    assert list_b.json()["items"] == []
 
     audit_a = await async_client.get(
         "/api/manager/tenant-offers/audit",
@@ -248,8 +244,7 @@ async def test_manager_tenant_offers_are_exactly_storefront_scoped_and_audited(
     assert {item["entity_id"] for item in audit_a.json()["items"]} == {
         offer_a["id"]
     }
-    assert audit_b.json()["total"] == 1
-    assert audit_b.json()["items"][0]["request_id"] == "offer-create-b-123"
+    assert audit_b.json() == {"items": [], "total": 0}
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
-from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND, EQUIPMENT_NOT_FOUND
+from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND, EQUIPMENT_NOT_FOUND, FORBIDDEN
 from core.security import get_current_manager_tenant_scope, get_current_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_EQUIPMENT_COMPONENT,
@@ -38,6 +38,10 @@ from schemas import (
     ManagerEquipmentUpdatePayload,
 )
 from services.equipment_service import EquipmentService
+from services.manager_equipment_permission_service import (
+    ManagerEquipmentPermissionService,
+    TenantEquipmentCommercialFieldsDeniedError,
+)
 from services.tenant_scope_service import TenantScope
 
 
@@ -97,12 +101,24 @@ async def create_manager_equipment(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    equipment_payload = payload.model_dump(exclude_unset=True)
     try:
-        data = await EquipmentService.create_equipment(
-            session=session,
-            payload=payload.model_dump(exclude_unset=True),
+        ManagerEquipmentPermissionService.assert_supplier_fields_allowed(
+            payload=equipment_payload,
             tenant_scope=tenant_scope,
         )
+        data = await EquipmentService.create_equipment(
+            session=session,
+            payload=equipment_payload,
+            tenant_scope=tenant_scope,
+        )
+    except TenantEquipmentCommercialFieldsDeniedError as exc:
+        raise manager_http_error(
+            status_code=403,
+            endpoint=CREATE_MANAGER_EQUIPMENT,
+            error_code=FORBIDDEN,
+            message=str(exc),
+        ) from exc
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -132,13 +148,25 @@ async def create_manager_equipment_from_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    equipment_payload = payload.model_dump(exclude_unset=True)
     try:
+        ManagerEquipmentPermissionService.assert_supplier_fields_allowed(
+            payload=equipment_payload,
+            tenant_scope=tenant_scope,
+        )
         return await EquipmentService.create_equipment_from_order(
             session=session,
             order_id=order_id,
-            payload=payload.model_dump(exclude_unset=True),
+            payload=equipment_payload,
             tenant_scope=tenant_scope,
         )
+    except TenantEquipmentCommercialFieldsDeniedError as exc:
+        raise manager_http_error(
+            status_code=403,
+            endpoint=CREATE_MANAGER_EQUIPMENT_FROM_ORDER,
+            error_code=FORBIDDEN,
+            message=str(exc),
+        ) from exc
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -249,13 +277,25 @@ async def create_manager_equipment_component(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    component_payload = payload.model_dump(exclude_unset=True)
     try:
+        ManagerEquipmentPermissionService.assert_supplier_fields_allowed(
+            payload=component_payload,
+            tenant_scope=tenant_scope,
+        )
         data = await EquipmentService.create_component(
             session=session,
             equipment_id=equipment_id,
-            payload=payload.model_dump(exclude_unset=True),
+            payload=component_payload,
             tenant_scope=tenant_scope,
         )
+    except TenantEquipmentCommercialFieldsDeniedError as exc:
+        raise manager_http_error(
+            status_code=403,
+            endpoint=CREATE_MANAGER_EQUIPMENT_COMPONENT,
+            error_code=FORBIDDEN,
+            message=str(exc),
+        ) from exc
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,
@@ -285,14 +325,26 @@ async def patch_manager_equipment_component(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    component_payload = payload.model_dump(exclude_unset=True)
     try:
+        ManagerEquipmentPermissionService.assert_supplier_fields_allowed(
+            payload=component_payload,
+            tenant_scope=tenant_scope,
+        )
         data = await EquipmentService.update_component(
             session=session,
             equipment_id=equipment_id,
             component_id=component_id,
-            payload=payload.model_dump(exclude_unset=True),
+            payload=component_payload,
             tenant_scope=tenant_scope,
         )
+    except TenantEquipmentCommercialFieldsDeniedError as exc:
+        raise manager_http_error(
+            status_code=403,
+            endpoint=PATCH_MANAGER_EQUIPMENT_COMPONENT,
+            error_code=FORBIDDEN,
+            message=str(exc),
+        ) from exc
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,

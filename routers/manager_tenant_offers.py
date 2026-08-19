@@ -21,11 +21,13 @@ from routers.manager_operation_ids import (
     UPSERT_MANAGER_TENANT_OFFER,
 )
 from services.tenant_offer_service import TenantOfferService
+from routers.manager_permission_policy import ManagerPermissionRoute
 
 
 router = APIRouter(
     prefix="/api/manager/tenant-offers",
     tags=["manager tenant offers"],
+    route_class=ManagerPermissionRoute,
 )
 
 

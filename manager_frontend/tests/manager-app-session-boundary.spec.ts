@@ -109,6 +109,8 @@ const oldAuth = {
   role: 'owner',
   tenant_id: 1,
   storefront_id: 11,
+  is_system_tenant: true,
+  capabilities: ['crm.manage', 'catalog.master.read', 'storefront.offers.read', 'platform.manage', 'staff.manage', 'infrastructure.manage'],
 };
 
 const oldStorefronts = {
@@ -130,6 +132,8 @@ const newAuth = {
   role: 'manager',
   tenant_id: 2,
   storefront_id: 22,
+  is_system_tenant: false,
+  capabilities: ['crm.manage', 'catalog.master.read', 'storefront.offers.read'],
 };
 
 const newStorefronts = {
