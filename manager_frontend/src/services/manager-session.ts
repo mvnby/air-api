@@ -80,6 +80,10 @@ export const loginManagerWithTelegram = (
   () => LoginService.loginTelegram(payload),
 );
 
+export const logoutManager = async (): Promise<void> => {
+  await LoginService.logoutAccessToken();
+};
+
 export const restoreManagerSession = (): Promise<ManagerAuthStatusResponse> => (
   bootstrapManagerSession()
 );

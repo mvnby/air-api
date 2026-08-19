@@ -47,6 +47,21 @@
         }
       }
     },
+    "/login/logout": {
+      "post": {
+        "tags": [
+          "login"
+        ],
+        "summary": "Logout",
+        "description": "End the browser cookie session without requiring a valid token.\n\nAccess tokens are intentionally stateless JWTs, so this endpoint cannot\nrevoke a token that was deliberately copied to an Authorization header.\nThe manager UI uses the HttpOnly cookie only; deleting the cookie is the\nserver-side session boundary for a normal browser logout.",
+        "operationId": "logout_access_token",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/login/telegram": {
       "post": {
         "tags": [

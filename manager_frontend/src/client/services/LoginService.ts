@@ -30,6 +30,23 @@ export class LoginService {
         });
     }
     /**
+     * Logout
+     * End the browser cookie session without requiring a valid token.
+     *
+     * Access tokens are intentionally stateless JWTs, so this endpoint cannot
+     * revoke a token that was deliberately copied to an Authorization header.
+     * The manager UI uses the HttpOnly cookie only; deleting the cookie is the
+     * server-side session boundary for a normal browser logout.
+     * @returns void
+     * @throws ApiError
+     */
+    public static logoutAccessToken(): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/login/logout',
+        });
+    }
+    /**
      * Login Telegram
      * @param requestBody
      * @returns any Successful Response

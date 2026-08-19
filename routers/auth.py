@@ -74,6 +74,27 @@ async def login_access_token(
     return _token_response(response, {"sub": form_data.username, "auth_source": "legacy"})
 
 
+@router.post(
+    "/login/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="logout_access_token",
+)
+async def logout(response: Response) -> None:
+    """End the browser cookie session without requiring a valid token.
+
+    Access tokens are intentionally stateless JWTs, so this endpoint cannot
+    revoke a token that was deliberately copied to an Authorization header.
+    The manager UI uses the HttpOnly cookie only; deleting the cookie is the
+    server-side session boundary for a normal browser logout.
+    """
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+    )
+
+
 @router.post("/login/telegram", operation_id="login_telegram")
 async def login_telegram(
     payload: TelegramLoginPayload,

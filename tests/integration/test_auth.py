@@ -73,6 +73,30 @@ async def test_login_failure(async_client: AsyncClient):
     assert response.status_code == 400
     assert "Incorrect username or password" in response.json()["detail"]
 
+
+@pytest.mark.asyncio
+async def test_logout_clears_browser_cookie_session(async_client: AsyncClient):
+    login_response = await async_client.post(
+        "/login/access-token",
+        data={
+            "username": settings.ADMIN_USERNAME,
+            "password": settings.ADMIN_PASSWORD,
+        },
+    )
+    assert login_response.status_code == 200
+
+    authenticated_response = await async_client.get("/api/manager/me")
+    assert authenticated_response.status_code == 200
+
+    logout_response = await async_client.post("/login/logout")
+    assert logout_response.status_code == 204
+    assert "access_token=\"\"" in logout_response.headers["set-cookie"]
+    assert "Max-Age=0" in logout_response.headers["set-cookie"]
+
+    anonymous_response = await async_client.get("/api/manager/me")
+    assert anonymous_response.status_code == 401
+
+
 @pytest.mark.asyncio
 async def test_access_protected_route_without_token(async_client: AsyncClient):
     """Test accessing a protected admin route without authentication."""
