@@ -12,6 +12,7 @@ from models import (
     CustomerEquipment,
     EquipmentComponent,
     Product,
+    ProductCollection,
     ProductSeries,
     StaffUser,
     Storefront,
@@ -608,3 +609,77 @@ async def test_tenant_manager_me_exposes_only_minimal_server_capabilities(
     assert created.status_code == 200, created.text
     assert created.json()["tenant_id"] == tenant.id
     assert created.json()["storefront_id"] == storefront.id
+
+
+@pytest.mark.asyncio
+async def test_tenant_manager_cannot_write_or_read_internal_stock_collection_rules(
+    async_client: AsyncClient,
+    db: AsyncSession,
+):
+    user, tenant, storefront, _ = await _create_tenant_manager(db)
+    legacy = ProductCollection(
+        tenant_id=int(tenant.id),
+        storefront_id=int(storefront.id),
+        slug="legacy-stock-rule",
+        internal_name="Legacy stock rule",
+        public_title="Legacy stock rule",
+        mode="automatic",
+        rule_config={
+            "product_kinds": ["complete_split_system"],
+            "public_stock_states": ["supplier_stock"],
+        },
+    )
+    db.add(legacy)
+    await db.commit()
+    headers = _headers(user)
+
+    legacy_response = await async_client.get(
+        f"/api/manager/product-collections/{legacy.id}",
+        headers=headers,
+    )
+    assert legacy_response.status_code == 200, legacy_response.text
+    assert legacy_response.json()["rule_config"]["product_kinds"] == [
+        "complete_split_system"
+    ]
+    assert legacy_response.json()["rule_config"]["public_stock_states"] == []
+
+    denied_create = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Denied stock rule",
+            "public_title": "Denied stock rule",
+            "mode": "automatic",
+            "rule_config": {"public_stock_states": ["local_stock"]},
+        },
+    )
+    assert denied_create.status_code == 403, denied_create.text
+
+    safe_create = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Safe tenant rule",
+            "public_title": "Safe tenant rule",
+            "mode": "automatic",
+            "rule_config": {"product_kinds": ["complete_split_system"]},
+        },
+    )
+    assert safe_create.status_code == 200, safe_create.text
+    safe_id = safe_create.json()["id"]
+
+    denied_update = await async_client.patch(
+        f"/api/manager/product-collections/{safe_id}",
+        headers=headers,
+        json={"rule_config": {"public_stock_states": ["out_of_stock"]}},
+    )
+    assert denied_update.status_code == 403, denied_update.text
+    unchanged = await async_client.get(
+        f"/api/manager/product-collections/{safe_id}",
+        headers=headers,
+    )
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["rule_config"]["product_kinds"] == [
+        "complete_split_system"
+    ]
+    assert unchanged.json()["rule_config"]["public_stock_states"] == []

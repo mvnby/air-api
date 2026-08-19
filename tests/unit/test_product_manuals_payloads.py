@@ -10,8 +10,11 @@ from crud.product import ProductDAO
 from models import Product, ProductAttachment
 from services.product_manager_service import ProductManagerService
 from services.product_attachment_service import normalize_manuals
-from services.product_response_mapper import map_product_to_response
+from services.product_response_mapper import (
+    map_product_to_response as map_public_product_projection_to_response,
+)
 from services.product_write_service import ProductWriteService
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from schemas import ProductManualPayload
 
 
@@ -69,7 +72,9 @@ async def test_manuals_are_serialized_for_public_and_manager_payloads(sqlite_ses
 
     refreshed = await ProductDAO.get_by_id(sqlite_session, product.id)
     assert refreshed is not None
-    public_payload = map_product_to_response(refreshed)
+    public_payload = map_public_product_projection_to_response(
+        PublicCatalogVisibilityService.project_product(refreshed)
+    )
     assert len(public_payload.manuals) == 2
     assert {item.title for item in public_payload.manuals} == {
         "Руководство пользователя",
@@ -103,7 +108,9 @@ async def test_manuals_are_serialized_for_public_and_manager_payloads(sqlite_ses
     )
     await sqlite_session.commit()
     refreshed_with_legacy = await ProductDAO.get_by_id(sqlite_session, product.id)
-    public_with_legacy = map_product_to_response(refreshed_with_legacy)
+    public_with_legacy = map_public_product_projection_to_response(
+        PublicCatalogVisibilityService.project_product(refreshed_with_legacy)
+    )
     assert len(public_with_legacy.manuals) == 2
     assert all(manual.url.startswith("https://") for manual in public_with_legacy.manuals)
 

@@ -20,8 +20,17 @@ from models import (
     TagGroup,
 )
 from services.catalog import CatalogService
-from services.product_response_mapper import map_product_to_response
+from services.product_response_mapper import (
+    map_product_to_response as map_public_product_projection_to_response,
+)
 from services.product_series_service import ProductSeriesService
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
+
+
+def map_product_to_response(product: Product):
+    return map_public_product_projection_to_response(
+        PublicCatalogVisibilityService.project_product(product)
+    )
 
 
 @pytest.fixture

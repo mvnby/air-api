@@ -56,6 +56,9 @@ async def _seed_two_scopes(db):
             slug=f"scoped-product-{suffix}",
             price=10_000,
             is_published=True,
+            product_kind="complete_split_system",
+            main_image="/media/products/scoped.webp",
+            specs={"area_m2": 25},
         )
         for suffix in ("a", "b")
     ]
@@ -214,6 +217,108 @@ async def test_collections_and_effective_prices_are_exact_storefront_scoped(db):
             actor_staff_user_id=None,
         )
     assert foreign_product.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_legacy_tenant_stock_rule_fails_closed_for_preview_and_public_resolution(db):
+    scopes, _, _ = await _seed_two_scopes(db)
+    scope = scopes[0]
+    legacy = ProductCollection(
+        tenant_id=scope.tenant_id,
+        storefront_id=scope.storefront_id,
+        slug="legacy-internal-stock-rule",
+        internal_name="Legacy internal stock rule",
+        public_title="Legacy internal stock rule",
+        status="published",
+        mode="automatic",
+        rule_config={"public_stock_states": ["out_of_stock"]},
+        min_items=1,
+        max_items=6,
+    )
+    db.add(legacy)
+    await db.commit()
+
+    preview = await ProductCollectionResolver.resolve(
+        db,
+        collection=legacy,
+        surface_key="home",
+        slot_key="featured_products",
+        enforce_publication=False,
+        tenant_scope=scope,
+    )
+    public = await ProductCollectionResolver.resolve(
+        db,
+        collection=legacy,
+        surface_key="home",
+        slot_key="featured_products",
+        enforce_publication=True,
+        tenant_scope=scope,
+    )
+    assert preview["items"] == []
+    assert preview["below_min_items"] is True
+    assert public["items"] == []
+    assert public["below_min_items"] is True
+
+    manager_projection = await ManagerProductCollectionService.get_collection(
+        db,
+        int(legacy.id),
+        tenant_scope=scope,
+    )
+    assert manager_projection["rule_config"]["public_stock_states"] == []
+
+
+@pytest.mark.asyncio
+async def test_noncanonical_system_storefront_stock_rule_fails_closed(db):
+    scopes, _, _ = await _seed_two_scopes(db)
+    base_scope = scopes[0]
+    legacy = ProductCollection(
+        tenant_id=base_scope.tenant_id,
+        storefront_id=base_scope.storefront_id,
+        slug="system-noncanonical-stock-rule",
+        internal_name="System noncanonical stock rule",
+        public_title="System noncanonical stock rule",
+        status="published",
+        mode="automatic",
+        rule_config={"public_stock_states": ["out_of_stock"]},
+        min_items=1,
+        max_items=1,
+    )
+    db.add(legacy)
+    await db.commit()
+
+    noncanonical_system_scope = TenantScope(
+        tenant_id=base_scope.tenant_id,
+        storefront_id=base_scope.storefront_id,
+        is_system=True,
+        is_canonical_storefront=False,
+    )
+    noncanonical = await ProductCollectionResolver.resolve(
+        db,
+        collection=legacy,
+        surface_key="home",
+        slot_key="featured_products",
+        enforce_publication=True,
+        tenant_scope=noncanonical_system_scope,
+    )
+    assert noncanonical["items"] == []
+    assert noncanonical["below_min_items"] is True
+
+    canonical_scope = TenantScope(
+        tenant_id=base_scope.tenant_id,
+        storefront_id=base_scope.storefront_id,
+        is_system=True,
+        is_canonical_storefront=True,
+    )
+    canonical = await ProductCollectionResolver.resolve(
+        db,
+        collection=legacy,
+        surface_key="home",
+        slot_key="featured_products",
+        enforce_publication=True,
+        tenant_scope=canonical_scope,
+    )
+    assert len(canonical["items"]) == 1
+    assert canonical["below_min_items"] is False
 
 
 @pytest.mark.asyncio

@@ -14,7 +14,28 @@ from services.product_image_processing_contract import (
     ProductImageProcessingStatus,
     ProductImageVariantType,
 )
-from services.product_response_mapper import map_product_to_response
+from services.product_response_mapper import (
+    map_product_to_response as map_public_product_projection_to_response,
+)
+from services.public_catalog_visibility_service import (
+    PublicCatalogVisibilityService,
+    PublicProductProjection,
+)
+from services.public_catalog_disclosure import CANONICAL_PUBLIC_DISCLOSURE
+
+
+def map_product_to_response(
+    product: Product,
+    *,
+    series_siblings: list[Product] | None = None,
+):
+    return map_public_product_projection_to_response(
+        PublicCatalogVisibilityService.project_product(product),
+        series_siblings=[
+            PublicCatalogVisibilityService.project_product(item)
+            for item in series_siblings or []
+        ],
+    )
 
 
 def _product_with_variant(
@@ -369,11 +390,21 @@ def test_map_product_to_response_projects_offer_prices_without_mutating_product(
         is_published=True,
     )
 
-    payload = map_product_to_response(
-        product,
-        series_siblings=[sibling],
-        pricing=(3000, 3500),
-        sibling_pricing={2: (4000, 4500)},
+    payload = map_public_product_projection_to_response(
+        PublicProductProjection(
+            product=product,
+            price=3000,
+            old_price=3500,
+            disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
+        ),
+        series_siblings=[
+            PublicProductProjection(
+                product=sibling,
+                price=4000,
+                old_price=4500,
+                disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
+            )
+        ],
     )
 
     assert (payload.price, payload.old_price) == (3000, 3500)

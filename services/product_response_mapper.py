@@ -1,6 +1,6 @@
 """Helpers to map Product domain models into public API DTOs."""
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Optional
 
 from core.input_validation import validate_public_manual_url
 from models import Product
@@ -20,6 +20,7 @@ from services.product_image_processing_contract import (
 )
 from services.product_series_payloads import build_product_series_response
 from services.product_serialization import parse_legacy_images, sanitize_specs
+from services.public_catalog_visibility_service import PublicProductProjection
 from services.public_taxonomy_service import PublicTaxonomyService
 
 
@@ -130,28 +131,12 @@ def _main_image_public_url(product: Product) -> Optional[str]:
     return _ready_original_variant_url(source_image) or product.main_image
 
 
-def resolve_public_stock_state(
-    availability_status: str | None,
-) -> tuple[str, int | None, int | None]:
-    stock_state_map = {
-        "in_stock_now": ("local_stock", 0, 0),
-        "available_2_3_days": ("supplier_stock", 2, 3),
-        "check_availability": ("available_to_order", None, None),
-        "out_of_stock": ("out_of_stock", None, None),
-    }
-    return stock_state_map.get(
-        availability_status,
-        ("out_of_stock", None, None),
-    )
-
-
 def map_product_to_response(
-    product: Product,
-    series_siblings: Optional[List[Product]] = None,
+    projection: PublicProductProjection,
+    series_siblings: Optional[List[PublicProductProjection]] = None,
     supply_metrics: Optional[Dict[str, Any]] = None,
-    pricing: tuple[int, int | None] | None = None,
-    sibling_pricing: Mapping[int, tuple[int, int | None]] | None = None,
 ) -> ProductResponse:
+    product = projection.product
     tags_payload = []
     if product.tags:
         for tag in PublicTaxonomyService.visible_tags(product.tags):
@@ -197,20 +182,15 @@ def map_product_to_response(
             )
 
     siblings_payload = []
-    for item in series_siblings or []:
-        item_pricing = (sibling_pricing or {}).get(int(item.id or 0))
-        item_price, item_old_price = (
-            item_pricing
-            if item_pricing is not None
-            else (item.price, item.old_price)
-        )
+    for sibling_projection in series_siblings or []:
+        item = sibling_projection.product
         siblings_payload.append(
             ProductSiblingResponse(
                 id=item.id,
                 title=item.title,
                 slug=item.slug,
-                price=item_price,
-                old_price=item_old_price,
+                price=sibling_projection.price,
+                old_price=sibling_projection.old_price,
                 specs=sanitize_specs(item.specs),
                 is_inverter=item.is_inverter,
                 main_image=item.main_image,
@@ -219,7 +199,10 @@ def map_product_to_response(
 
     public_brand = PublicTaxonomyService.public_brand(product)
     series = PublicTaxonomyService.public_series(product)
-    series_payload = build_product_series_response(series)
+    series_payload = build_product_series_response(
+        series,
+        disclosure_policy=projection.disclosure_policy,
+    )
 
     manuals_payload = []
     for item in (product.attachments or []):
@@ -229,29 +212,28 @@ def map_product_to_response(
             public_url = validate_public_manual_url(item.url)
         except ValueError:
             continue
-        manuals_payload.append(
-            ProductManualResponse(
-                id=item.id,
-                kind=item.kind,
-                title=item.title,
-                url=public_url,
-                source=item.source,
-            )
+        manual_payload = ProductManualResponse(
+            id=item.id,
+            kind=item.kind,
+            title=item.title,
+            url=public_url,
+            source=item.source,
         )
+        manual_payload._disclose_source = (
+            projection.disclosure_policy.expose_source_provenance
+        )
+        manuals_payload.append(manual_payload)
 
-    availability_status = (supply_metrics or {}).get("availability_status")
-    public_stock_state, delivery_min_days, delivery_max_days = resolve_public_stock_state(
-        availability_status
+    availability = projection.disclosure_policy.project_availability(
+        supply_metrics
     )
 
-    public_price, public_old_price = pricing or (product.price, product.old_price)
-
-    return ProductResponse(
+    response = ProductResponse(
         id=product.id,
         title=product.title,
         slug=product.slug,
-        price=public_price,
-        old_price=public_old_price,
+        price=projection.price,
+        old_price=projection.old_price,
         product_kind=product.product_kind,
         is_inverter=product.is_inverter,
         power_cooling=product.power_cooling,
@@ -260,12 +242,12 @@ def map_product_to_response(
         full_image=_main_image_variant_or_fallback(product, ProductImageVariantType.FULL),
         is_published=product.is_published,
         created_at=product.created_at,
-        vitebsk_qty=int((supply_metrics or {}).get("vitebsk_qty", 0) or 0),
-        minsk_qty=int((supply_metrics or {}).get("minsk_qty", 0) or 0),
-        availability_status=availability_status,
-        public_stock_state=public_stock_state,
-        delivery_min_days=delivery_min_days,
-        delivery_max_days=delivery_max_days,
+        vitebsk_qty=availability.vitebsk_qty,
+        minsk_qty=availability.minsk_qty,
+        availability_status=availability.availability_status,
+        public_stock_state=availability.public_stock_state,
+        delivery_min_days=availability.delivery_min_days,
+        delivery_max_days=availability.delivery_max_days,
         brand=(
             ProductBrandResponse(
                 id=public_brand.id,
@@ -285,3 +267,7 @@ def map_product_to_response(
         series_siblings=siblings_payload,
         features=list(getattr(product, "__dict__", {}).get("_resolved_features") or []),
     )
+    response._disclose_legacy_availability = (
+        projection.disclosure_policy.expose_legacy_availability
+    )
+    return response

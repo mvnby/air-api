@@ -27,6 +27,9 @@ import {
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
+import { MANAGER_CAPABILITY, hasManagerCapability } from '../manager-capabilities';
+import { managerSession } from '../services/manager-session';
+import { sanitizeProductCollectionRuleConfig } from '../components/product-collections/product-collection-rule-permissions';
 
 type CollectionForm = {
   slug: string;
@@ -58,6 +61,10 @@ const saving = ref(false);
 const searching = ref(false);
 const message = ref('');
 const error = ref('');
+const canManagePlatform = computed(() => hasManagerCapability(
+  managerSession.auth.value,
+  MANAGER_CAPABILITY.platformManage,
+));
 
 const emptyRuleConfig = (): ProductCollectionRuleConfig => ({
   product_kinds: ['complete_split_system'],
@@ -285,7 +292,10 @@ const save = async () => {
       status: form.value.status,
       mode: form.value.mode,
       sort_mode: form.value.sort_mode,
-      rule_config: form.value.rule_config,
+      rule_config: sanitizeProductCollectionRuleConfig(
+        form.value.rule_config,
+        canManagePlatform.value,
+      ),
       min_items: Number(form.value.min_items),
       max_items: Number(form.value.max_items),
       fallback_collection_id: form.value.fallback_collection_id || null,
@@ -470,7 +480,7 @@ onMounted(async () => {
           </div>
           <div class="grid gap-4 md:grid-cols-2">
             <fieldset class="space-y-2"><legend class="text-xs font-semibold text-gray-600 dark:text-slate-300">Wi‑Fi</legend><div class="flex flex-wrap gap-4"><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.wifi_states" type="checkbox" value="builtin" /> Встроенный</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.wifi_states" type="checkbox" value="ready" /> Опциональный</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.wifi_states" type="checkbox" value="none" /> Нет</label></div></fieldset>
-            <fieldset class="space-y-2"><legend class="text-xs font-semibold text-gray-600 dark:text-slate-300">Доступность</legend><div class="flex flex-wrap gap-4"><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="local_stock" /> Локально</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="supplier_stock" /> У поставщика</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="available_to_order" /> Под заказ</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="out_of_stock" /> Нет в наличии</label></div></fieldset>
+            <fieldset v-if="canManagePlatform" class="space-y-2" data-testid="internal-stock-rules"><legend class="text-xs font-semibold text-gray-600 dark:text-slate-300">Доступность</legend><div class="flex flex-wrap gap-4"><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="local_stock" /> Локально</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="supplier_stock" /> У поставщика</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="available_to_order" /> Под заказ</label><label class="flex items-center gap-2 text-xs"><input v-model="form.rule_config.public_stock_states" type="checkbox" value="out_of_stock" /> Нет в наличии</label></div></fieldset>
           </div>
         </div>
 

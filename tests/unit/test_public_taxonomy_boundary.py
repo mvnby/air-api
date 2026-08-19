@@ -17,6 +17,7 @@ from services.public_catalog_visibility_service import (
     PublicCatalogVisibilityService,
     PublicProductProjection,
 )
+from services.public_catalog_disclosure import TENANT_NEUTRAL_PUBLIC_DISCLOSURE
 from services.product_series_service import ProductSeriesService
 
 
@@ -301,16 +302,19 @@ def test_hidden_brand_id_does_not_influence_offer_sibling_order():
         product=_series_sort_product(1, brand_tag_id=10),
         price=1000,
         old_price=None,
+        disclosure_policy=TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
     )
     hidden_id_match = PublicProductProjection(
         product=_series_sort_product(2, brand_tag_id=20),
         price=1000,
         old_price=None,
+        disclosure_policy=TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
     )
     public_tag_match = PublicProductProjection(
         product=_series_sort_product(3, brand_tag_id=10),
         price=1000,
         old_price=None,
+        disclosure_policy=TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
     )
 
     ordered = PublicCatalogService._sort_series_projections(

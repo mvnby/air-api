@@ -152,9 +152,8 @@ async def get_catalog(
     return CatalogResponse(
         items=[
             map_product_to_response(
-                projection.product,
+                projection,
                 supply_metrics=supply_metrics.get(projection.product.id),
-                pricing=projection.pricing,
             )
             for projection in payload["items"]
         ],
@@ -182,9 +181,8 @@ async def get_vitebsk_featured_products(
     await FeatureResolverService.resolve_for_products(session, products)
     return [
         map_product_to_response(
-            projection.product,
+            projection,
             supply_metrics=supply_metrics.get(projection.product.id),
-            pricing=projection.pricing,
         )
         for projection in projections
     ]
@@ -229,13 +227,7 @@ async def get_product_by_identifier(
     supply_metrics = await ProductService.get_supply_metrics_map(session, [product])
     await FeatureResolverService.resolve_for_products(session, [product])
     return map_product_to_response(
-        product,
-        series_siblings=siblings,
+        page.product,
+        series_siblings=page.siblings,
         supply_metrics=supply_metrics.get(product.id),
-        pricing=page.product.pricing,
-        sibling_pricing={
-            int(projection.product.id): projection.pricing
-            for projection in page.siblings
-            if projection.product.id is not None
-        },
     )

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from models import Product
-from services.product_response_mapper import resolve_public_stock_state
+from services.public_catalog_disclosure import resolve_public_stock_state
 
 
 def _as_number(value: Any) -> float | None:

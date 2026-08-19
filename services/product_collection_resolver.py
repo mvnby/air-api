@@ -12,6 +12,7 @@ from models.tenancy import TenantScope
 from services.feature_resolver_service import FeatureResolverService
 from services.product_collection_eligibility import ProductCollectionEligibility
 from services.product_collection_rule_matcher import ProductCollectionRuleMatcher
+from services.product_collection_rule_policy import ProductCollectionRulePolicy
 from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
@@ -160,9 +161,8 @@ class ProductCollectionResolver:
                     "selection_source": selection_source,
                     "position": len(selected),
                     "product": map_product_to_response(
-                        product,
+                        projection,
                         supply_metrics=metrics,
-                        pricing=projection.pricing,
                     ),
                 }
             )
@@ -174,6 +174,10 @@ class ProductCollectionResolver:
             collection.mode in {"automatic", "hybrid"}
             and len(selected) < collection.max_items
             and any(value not in (None, [], "") for value in rule_config.values())
+            and ProductCollectionRulePolicy.allows_automatic_matching(
+                rule_config=rule_config,
+                disclose_internal_stock=not use_offer_projection,
+            )
         ):
             query = {
                 "area_min": rule_config.get("min_area_m2"),
@@ -263,9 +267,8 @@ class ProductCollectionResolver:
                         ),
                         "position": len(selected),
                         "product": map_product_to_response(
-                            product,
+                            projection,
                             supply_metrics=metrics,
-                            pricing=projection.pricing,
                         ),
                     }
                 )

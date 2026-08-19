@@ -635,3 +635,30 @@ async def test_automatic_collection_requires_rules_and_duplicate_keeps_them(asyn
     assert payload["mode"] == "automatic"
     assert payload["sort_mode"] == "area_desc"
     assert payload["rule_config"]["max_area_m2"] == 35
+
+
+@pytest.mark.asyncio
+async def test_system_collection_preserves_internal_stock_rules(async_client):
+    headers = await _auth_headers(async_client)
+    created = await async_client.post(
+        "/api/manager/product-collections",
+        headers=headers,
+        json={
+            "internal_name": "Canonical stock rule",
+            "public_title": "Canonical stock rule",
+            "mode": "automatic",
+            "rule_config": {"public_stock_states": ["out_of_stock"]},
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["rule_config"]["public_stock_states"] == ["out_of_stock"]
+
+    updated = await async_client.patch(
+        f"/api/manager/product-collections/{created.json()['id']}",
+        headers=headers,
+        json={"rule_config": {"public_stock_states": ["supplier_stock"]}},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["rule_config"]["public_stock_states"] == [
+        "supplier_stock"
+    ]

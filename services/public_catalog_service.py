@@ -221,12 +221,9 @@ class PublicCatalogService:
                 PublicCatalogVisibilityService.project_product(item)
                 for item in products
             ]
-        rows = await PublicCatalogDAO.get_vitebsk_featured(
-            session,
-            tenant_scope=tenant_scope,
-            limit=limit,
-        )
-        return [PublicCatalogVisibilityService.project_row(row) for row in rows]
+        # The endpoint name and membership both reveal canonical MVN warehouse
+        # topology. Keep a response-compatible empty list for white-label hosts.
+        return []
 
     @staticmethod
     async def get_products_by_series_id(
@@ -316,11 +313,10 @@ class PublicCatalogService:
         supply_metrics: dict[str, Any],
     ) -> PublicProductSearchItemResponse:
         mapped = map_product_to_response(
-            projection.product,
+            projection,
             supply_metrics=supply_metrics,
-            pricing=projection.pricing,
         )
-        return PublicProductSearchItemResponse(
+        response = PublicProductSearchItemResponse(
             id=mapped.id,
             title=mapped.title,
             slug=mapped.slug,
@@ -340,6 +336,10 @@ class PublicCatalogService:
             delivery_min_days=mapped.delivery_min_days,
             delivery_max_days=mapped.delivery_max_days,
         )
+        response._disclose_legacy_availability = (
+            projection.disclosure_policy.expose_legacy_availability
+        )
+        return response
 
     @staticmethod
     async def get_filters_config(
@@ -523,7 +523,8 @@ class PublicCatalogService:
             )[:limit_per_product]
             payload[product.slug] = ProductSeriesNavigationItemResponse(
                 series=build_product_series_response(
-                    PublicTaxonomyService.public_series(product)
+                    PublicTaxonomyService.public_series(product),
+                    disclosure_policy=projection.disclosure_policy,
                 ),
                 series_siblings=[
                     ProductSiblingResponse(

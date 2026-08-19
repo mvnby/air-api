@@ -9,6 +9,7 @@ from models.tenancy import TenantScope
 from services.feature_resolver_service import FeatureResolverService
 from services.public_catalog_service import PublicCatalogService, PublicProductPage
 from services.public_catalog_visibility_service import PublicProductProjection
+from services.public_catalog_disclosure import CANONICAL_PUBLIC_DISCLOSURE
 from services.product_service import ProductService
 
 
@@ -89,6 +90,7 @@ async def test_public_catalog_includes_city_availability(monkeypatch):
                     product=product,
                     price=product.price,
                     old_price=product.old_price,
+                    disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
                 )
             ],
             "meta": {"total": 1, "page": 1, "limit": 20, "pages": 1},
@@ -151,6 +153,7 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
                 product=product,
                 price=product.price,
                 old_price=product.old_price,
+                disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
             ),
             siblings=[],
         )
