@@ -43,6 +43,12 @@ sources:
 - three LG products remain explicitly blocked with
   `external_rights_review_required`.
 
+The executable subset is therefore exactly 43 products. The three acknowledged
+LG residuals are carried in the signed plan digest but excluded from mutation
+locations. `executable_complete=true` means the 43 reviewed products are
+repaired; `presentation_complete=false` remains explicit while the three LG
+cards continue to use the branded local placeholder.
+
 The blocked LG rule is intentional. Do not change it to `ingest` until the
 operator has a concrete rights-review reference; an external ingest rule also
 requires an exact source/redirect host allowlist.
@@ -71,22 +77,25 @@ python3 scripts/manage_product_media_url_backfill.py plan \
   --manifest config/product_media_url_backfills/polotsk-presentation-v1.json
 ```
 
-At the current review boundary this plan must remain `ready=false` because the
-LG rights blocker is unresolved. Do not execute it and do not remove the
-blocker merely to make the command green.
+The plan may be `ready=true` for the exact 43-product executable subset while
+reporting `deferred_product_count=3` and `presentation_complete=false`. This is
+not permission to ingest LG media: those rows remain unchanged and are not
+included in the execute location list.
 
 ## Reviewed execution after all blockers are resolved
 
 1. Run a fresh `audit` and `plan` on the PostgreSQL primary.
-2. Review counts, every source target/hash, the exact location list, and the
-   absence of blockers.
+2. Review counts, every source target/hash, the exact location list, the absence
+   of unexpected blockers, and the exact three-product LG deferred set.
 3. Capture the JSON plan as the change evidence in a root-only operations log.
 4. Run only the emitted `reviewed_execute_command` before its 15-minute token
    expires. Do not hand-edit the token or command.
 5. Capture the execute JSON, including `execution_id`, plan digest, content
    hashes, changed products, and changed locations.
-6. Run `audit` again. It must show no rejected product media for the completed
-   manifest. Re-running a fresh plan/execute must be an idempotent no-op.
+6. The command performs a bounded post-commit public verification. It must show
+   exactly three residual products / nine fields, all on the acknowledged LG
+   source, and no other blocked URL. Re-running a fresh plan/execute must be an
+   idempotent no-op for the 43-product executable subset.
 7. Verify `/api/health`, `/api/ready`, the public catalog, and a sample of each
    resulting CDN URL before considering the operation complete.
 

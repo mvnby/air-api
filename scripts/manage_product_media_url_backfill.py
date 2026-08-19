@@ -105,6 +105,28 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 plan_token=args.plan_token,
             )
             await session.commit()
+            verification = None
+            for attempt in range(1, 6):
+                try:
+                    verification = (
+                        await ProductMediaUrlBackfillService.verify_public_residual(
+                            manifest
+                        )
+                    )
+                except Exception:
+                    verification = {
+                        "verified": False,
+                        "error": "post_commit_public_verification_failed",
+                    }
+                verification["attempt"] = attempt
+                if verification["verified"]:
+                    break
+                if attempt < 5:
+                    await asyncio.sleep(2)
+            result["post_commit_public_verification"] = verification
+            result["operation_complete"] = bool(
+                verification and verification["verified"]
+            )
             return result
         except Exception:
             await session.rollback()
@@ -153,6 +175,8 @@ def main() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     if args.action == "plan" and not result.get("ready"):
         raise SystemExit(2)
+    if args.action == "execute" and not result.get("operation_complete"):
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

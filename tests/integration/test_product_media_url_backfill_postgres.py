@@ -211,12 +211,122 @@ async def test_exact_plan_updates_only_reviewed_product_and_is_idempotent(
         "mode": "execute",
         "changed": False,
         "complete": True,
+        "executable_complete": True,
+        "presentation_complete": True,
         "reviewed_plan_digest": no_op_plan["plan_digest"],
         "changed_product_count": 0,
         "changed_location_count": 0,
         "changes": [],
         "source_evidence": no_op_plan["source_evidence"],
+        "deferred_sources": [],
+        "requires_post_commit_public_verification": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_reviewed_batch_repairs_43_and_preserves_three_deferred_lg_products(
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = [
+        Product(
+            title=f"Executable {index}",
+            slug=f"media-executable-{index}",
+            price=1000,
+            is_published=True,
+            main_image=OLD_URL,
+        )
+        for index in range(43)
+    ]
+    lg_url = "https://www.lg.com/content/dam/review-required.jpg"
+    deferred = [
+        Product(
+            title=f"Deferred LG {index}",
+            slug=f"media-deferred-lg-{index}",
+            price=1000,
+            is_published=True,
+            main_image=lg_url,
+        )
+        for index in range(3)
+    ]
+    db.add_all([*executable, *deferred])
+    await db.flush()
+    state = await ProductMediaUrlBackfillService._load_state(db, for_update=False)
+    manifest = ProductMediaUrlBackfillManifest.normalize(
+        {
+            "version": 1,
+            "name": "43-plus-3",
+            "public_catalog_url": "https://api.mvn.by/api/v1/products",
+            "expected_public_product_count": 46,
+            "expected_public_snapshot_sha256": "a" * 64,
+            "expected_db_snapshot_sha256": (
+                ProductMediaUrlBackfillService._db_snapshot_hash(state.products)
+            ),
+            "sources": [
+                {
+                    "old_url": OLD_URL,
+                    "action": "reuse",
+                    "expected_product_ids": [int(product.id) for product in executable],
+                    "target_url": TARGET_URL,
+                },
+                {
+                    "old_url": lg_url,
+                    "action": "blocked",
+                    "expected_product_ids": [int(product.id) for product in deferred],
+                    "blocked_reason": "external_rights_review_required",
+                },
+            ],
+        }
+    )
+
+    async def current_audit(*_args, **_kwargs):
+        return {
+            **_public_audit(matches=True),
+            "product_count": 46,
+            "expected_product_count": 46,
+            "manifest_source_count": 2,
+        }
+
+    monkeypatch.setattr(
+        ProductMediaUrlBackfillService,
+        "audit_public",
+        current_audit,
+    )
+    plan = await ProductMediaUrlBackfillService.plan(
+        db,
+        manifest=manifest,
+        downloader=FakeDownloader(),
+        source_storage=_storage(),
+    )
+    assert plan["ready"] is True
+    assert plan["product_count"] == 43
+    assert plan["location_count"] == 43
+    assert plan["deferred_product_count"] == 3
+    assert plan["complete"] is False
+    assert plan["presentation_complete"] is False
+
+    result = await ProductMediaUrlBackfillService.execute(
+        db,
+        manifest=manifest,
+        plan_token=plan["plan_token"],
+        downloader=FakeDownloader(),
+        source_storage=_storage(),
+    )
+    assert result["changed_product_count"] == 43
+    assert result["changed_location_count"] == 43
+    assert result["executable_complete"] is True
+    assert result["presentation_complete"] is False
+    await db.flush()
+    assert all(product.main_image == TARGET_URL for product in executable)
+    assert all(product.main_image == lg_url for product in deferred)
+    assert result["deferred_sources"] == [
+        {
+            "old_url": lg_url,
+            "action": "blocked",
+            "product_ids": [int(product.id) for product in deferred],
+            "blocked_reason": "external_rights_review_required",
+        }
+    ]
 
 
 @pytest.mark.asyncio

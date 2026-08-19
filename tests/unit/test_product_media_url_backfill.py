@@ -20,6 +20,7 @@ from services.product_media_url_backfill_plan_token import (
     ProductMediaUrlBackfillBlockedError,
     ProductMediaUrlBackfillPlanToken,
 )
+from services.product_media_url_backfill_service import ProductMediaUrlBackfillService
 from services.product_media_url_public_audit import ProductMediaUrlPublicAudit
 
 
@@ -196,3 +197,82 @@ async def test_public_audit_paginates_and_hashes_exact_product_fields() -> None:
     assert result["snapshot_sha256"] == expected_hash
     assert result["blocked_product_count"] == 1
     assert result["blocked_field_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_post_execute_verifier_accepts_only_the_three_acknowledged_residuals() -> None:
+    executable_ids = list(range(1, 44))
+    deferred_ids = [44, 45, 46]
+    lg_url = "https://www.lg.com/content/dam/review-required.jpg"
+    manifest = ProductMediaUrlBackfillManifest.normalize(
+        _manifest_payload(
+            expected_public_product_count=46,
+            sources=[
+                {
+                    "old_url": "/media/products/legacy.webp",
+                    "action": "reuse",
+                    "expected_product_ids": executable_ids,
+                    "target_url": "https://cdn.mvn.by/products/variants/original/legacy.webp",
+                },
+                {
+                    "old_url": lg_url,
+                    "action": "blocked",
+                    "expected_product_ids": deferred_ids,
+                    "blocked_reason": "external_rights_review_required",
+                },
+            ],
+        )
+    )
+    products = []
+    for product_id in executable_ids:
+        products.append(
+            {
+                "id": product_id,
+                "slug": f"ready-{product_id}",
+                "main_image": "https://cdn.mvn.by/products/variants/original/legacy.webp",
+                "card_image": "https://cdn.mvn.by/products/variants/original/legacy.webp",
+                "full_image": "https://cdn.mvn.by/products/variants/original/legacy.webp",
+            }
+        )
+    for product_id in deferred_ids:
+        products.append(
+            {
+                "id": product_id,
+                "slug": f"deferred-{product_id}",
+                "main_image": lg_url,
+                "card_image": lg_url,
+                "full_image": lg_url,
+            }
+        )
+
+    def transport_for(items):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "items": items,
+                    "meta": {"total": 46, "page": 1, "limit": 100, "pages": 1},
+                },
+                request=request,
+            )
+
+        return httpx.MockTransport(handler)
+
+    async with httpx.AsyncClient(transport=transport_for(products)) as client:
+        verified = await ProductMediaUrlBackfillService.verify_public_residual(
+            manifest,
+            public_client=client,
+        )
+    assert verified["verified"] is True
+    assert verified["blocked_product_count"] == 3
+    assert verified["blocked_field_count"] == 9
+
+    unexpected = [dict(item) for item in products]
+    unexpected[0]["main_image"] = "/media/products/unexpected.webp"
+    async with httpx.AsyncClient(transport=transport_for(unexpected)) as client:
+        rejected = await ProductMediaUrlBackfillService.verify_public_residual(
+            manifest,
+            public_client=client,
+        )
+    assert rejected["verified"] is False
+    assert rejected["unexpected_or_missing_residuals"]

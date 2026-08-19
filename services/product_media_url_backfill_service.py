@@ -63,6 +63,61 @@ class ProductMediaUrlBackfillService:
         )
 
     @classmethod
+    async def verify_public_residual(
+        cls,
+        manifest: ProductMediaUrlBackfillManifest,
+        *,
+        public_client: httpx.AsyncClient | None = None,
+    ) -> dict[str, Any]:
+        audit = await ProductMediaUrlPublicAudit.run(
+            manifest,
+            client=public_client,
+        )
+        expected = sorted(
+            (
+                product_id,
+                field,
+                source.old_url,
+            )
+            for source in manifest.sources
+            if source.action == "blocked"
+            for product_id in source.expected_product_ids
+            for field in ("card_image", "full_image", "main_image")
+        )
+        actual = sorted(
+            (
+                int(item["product_id"]),
+                str(item["field"]),
+                str(item["url"]),
+            )
+            for item in audit["blocked"]
+        )
+        residual_matches = (
+            audit["product_count"] == manifest.expected_public_product_count
+            and actual == expected
+        )
+        return {
+            "verified": residual_matches,
+            "product_count": audit["product_count"],
+            "expected_product_count": manifest.expected_public_product_count,
+            "blocked_product_count": audit["blocked_product_count"],
+            "blocked_field_count": audit["blocked_field_count"],
+            "expected_blocked_product_ids": sorted(
+                {
+                    product_id
+                    for source in manifest.sources
+                    if source.action == "blocked"
+                    for product_id in source.expected_product_ids
+                }
+            ),
+            "expected_blocked_field_count": len(expected),
+            "unexpected_or_missing_residuals": [
+                {"product_id": item[0], "field": item[1], "url": item[2]}
+                for item in sorted(set(actual) ^ set(expected))
+            ],
+        }
+
+    @classmethod
     async def plan(
         cls,
         session: AsyncSession,
@@ -125,11 +180,15 @@ class ProductMediaUrlBackfillService:
                 "mode": "execute",
                 "changed": False,
                 "complete": True,
+                "executable_complete": True,
+                "presentation_complete": reviewed["presentation_complete"],
                 "reviewed_plan_digest": reviewed["plan_digest"],
                 "changed_product_count": 0,
                 "changed_location_count": 0,
                 "changes": [],
                 "source_evidence": reviewed["source_evidence"],
+                "deferred_sources": reviewed["deferred_sources"],
+                "requires_post_commit_public_verification": True,
             }
 
         target_by_source: dict[str, str] = {}
@@ -188,6 +247,8 @@ class ProductMediaUrlBackfillService:
             "mode": "execute",
             "changed": bool(changes),
             "complete": True,
+            "executable_complete": True,
+            "presentation_complete": not reviewed["deferred_sources"],
             "reviewed_plan_digest": reviewed["plan_digest"],
             "execution_id": "media-url-" + hashlib.sha256(
                 plan_token.encode("utf-8")
@@ -196,6 +257,8 @@ class ProductMediaUrlBackfillService:
             "changed_location_count": len(changes),
             "changes": changes,
             "source_evidence": reviewed["source_evidence"],
+            "deferred_sources": reviewed["deferred_sources"],
+            "requires_post_commit_public_verification": True,
         }
 
     @classmethod
@@ -231,19 +294,17 @@ class ProductMediaUrlBackfillService:
         cls._detect_product_image_collisions(state, manifest, blockers)
 
         source_evidence: list[dict[str, Any]] = []
+        deferred_sources: list[dict[str, Any]] = []
         for source in manifest.sources:
             if source.action == "blocked":
-                blockers.append(
-                    f"{source.old_url}: {source.blocked_reason or 'review required'}"
-                )
-                source_evidence.append(
-                    {
-                        "old_url": source.old_url,
-                        "action": source.action,
-                        "product_ids": list(source.expected_product_ids),
-                        "blocked_reason": source.blocked_reason,
-                    }
-                )
+                deferred = {
+                    "old_url": source.old_url,
+                    "action": source.action,
+                    "product_ids": list(source.expected_product_ids),
+                    "blocked_reason": source.blocked_reason,
+                }
+                source_evidence.append(deferred)
+                deferred_sources.append(deferred)
                 continue
             try:
                 evidence = await cls._resolve_source_evidence(
@@ -262,7 +323,7 @@ class ProductMediaUrlBackfillService:
             source_evidence.append(evidence)
 
         complete = False
-        if not locations and not any(source.action == "blocked" for source in manifest.sources):
+        if not locations:
             target_by_source = {
                 item["old_url"]: item.get("target_url") for item in source_evidence
             }
@@ -284,6 +345,7 @@ class ProductMediaUrlBackfillService:
             "db_snapshot_sha256": db_snapshot_hash,
             "locations": locations,
             "source_evidence": source_evidence,
+            "deferred_sources": deferred_sources,
             "blockers": sorted(set(blockers)),
             "complete": complete,
         }
@@ -296,6 +358,7 @@ class ProductMediaUrlBackfillService:
             ).encode("utf-8")
         ).hexdigest()
         ready = not blockers
+        presentation_complete = complete and not deferred_sources
         result = {
             "mode": "plan",
             "manifest_name": manifest.name,
@@ -307,9 +370,21 @@ class ProductMediaUrlBackfillService:
             "product_count": len({item["product_id"] for item in locations}),
             "locations": locations,
             "source_evidence": source_evidence,
+            "deferred_source_count": len(deferred_sources),
+            "deferred_product_count": len(
+                {
+                    product_id
+                    for source in manifest.sources
+                    if source.action == "blocked"
+                    for product_id in source.expected_product_ids
+                }
+            ),
+            "deferred_sources": deferred_sources,
             "blockers": sorted(set(blockers)),
             "ready": ready,
             "complete": complete,
+            "executable_complete": complete,
+            "presentation_complete": presentation_complete,
             "plan_digest": plan_digest,
         }
         if issue_token and ready:
@@ -504,6 +579,7 @@ class ProductMediaUrlBackfillService:
         source_by_product_id = {
             product_id: source.old_url
             for source in manifest.sources
+            if source.action != "blocked"
             for product_id in source.expected_product_ids
         }
         locations: list[dict[str, Any]] = []
@@ -584,6 +660,8 @@ class ProductMediaUrlBackfillService:
         target_by_source: dict[str, str | None],
     ) -> bool:
         for source in manifest.sources:
+            if source.action == "blocked":
+                continue
             target = target_by_source.get(source.old_url)
             if not target:
                 return False
