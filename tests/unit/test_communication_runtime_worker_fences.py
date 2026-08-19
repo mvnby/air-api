@@ -492,8 +492,10 @@ async def test_terminal_db_timeout_is_recovered_as_ambiguous_attempt(
         telegram_id=191019,
     )
     provider = ImmediateProvider()
+    mark_sent_entered = asyncio.Event()
 
     async def blocked_mark_sent(*_args, **_kwargs):
+        mark_sent_entered.set()
         await asyncio.Event().wait()
 
     monkeypatch.setattr(
@@ -507,15 +509,21 @@ async def test_terminal_db_timeout_is_recovered_as_ambiguous_attempt(
         provider=provider,
         worker_id="terminal-timeout-worker",
         lease_seconds=60,
-        # The timeout must be comfortably above normal SQLite setup/claim
-        # latency so this test deterministically reaches the mocked, blocked
-        # terminal write. Ten milliseconds made the assertion depend on suite
-        # load and could time out before the provider call.
-        db_operation_timeout_seconds=0.5,
     )
+    original_mark_sent = worker._mark_sent
+
+    def mark_sent_with_bounded_timeout(*args, **kwargs):
+        # Select the terminal DB operation explicitly instead of racing every
+        # earlier SQLite operation against one wall-clock timeout. Production
+        # still uses the same bounded operation and fail-closed cancellation.
+        worker._db_operation_timeout_seconds = 0.01
+        return original_mark_sent(*args, **kwargs)
+
+    monkeypatch.setattr(worker, "_mark_sent", mark_sent_with_bounded_timeout)
 
     with pytest.raises(TimeoutError):
         await worker.run_once()
+    assert mark_sent_entered.is_set()
     assert provider.calls == 1
     async with worker_session_factory() as session:
         running = await session.get(CommunicationDelivery, delivery_id)
