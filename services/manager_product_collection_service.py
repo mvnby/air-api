@@ -19,6 +19,7 @@ from services.manager_product_collection_validation import (
     ManagerProductCollectionValidation,
 )
 from services.product_collection_resolver import ProductCollectionResolver
+from services.product_collection_rule_policy import ProductCollectionRulePolicy
 
 
 def utc_now() -> datetime:
@@ -151,6 +152,10 @@ class ManagerProductCollectionService:
     ) -> dict:
         data = ManagerProductCollectionValidation.clean_fields(payload)
         ManagerProductCollectionValidation.required_text(data)
+        ProductCollectionRulePolicy.validate_write(
+            rule_config=data.get("rule_config") or {},
+            tenant_scope=tenant_scope,
+        )
         ManagerProductCollectionValidation.automation(
             mode=data.get("mode", "manual"),
             rule_config=data.get("rule_config") or {},
@@ -207,6 +212,11 @@ class ManagerProductCollectionService:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
         data = ManagerProductCollectionValidation.clean_fields(payload)
         ManagerProductCollectionValidation.required_text(data)
+        if "rule_config" in data:
+            ProductCollectionRulePolicy.validate_write(
+                rule_config=data.get("rule_config") or {},
+                tenant_scope=tenant_scope,
+            )
         if "slug" in data:
             data["slug"] = await ManagerProductCollectionValidation.unique_slug(
                 session,
@@ -504,7 +514,10 @@ class ManagerProductCollectionService:
             status="draft",
             mode=source.mode,
             sort_mode=source.sort_mode,
-            rule_config=dict(source.rule_config or {}),
+            rule_config=ProductCollectionRulePolicy.project_for_manager(
+                dict(source.rule_config or {}),
+                tenant_scope=tenant_scope,
+            ),
             min_items=source.min_items,
             max_items=source.max_items,
             fallback_collection_id=source.fallback_collection_id,

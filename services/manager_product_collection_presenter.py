@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import ProductCollection
 from models.tenancy import TenantScope
 from services.product_collection_catalog_access import ProductCollectionCatalogAccess
+from services.product_collection_rule_policy import ProductCollectionRulePolicy
 
 
 class ManagerProductCollectionPresenter:
@@ -28,10 +29,22 @@ class ManagerProductCollectionPresenter:
             tenant_scope=tenant_scope,
             product_ids=product_ids,
         )
-        return [cls._serialize(collection, projections=projections) for collection in collections]
+        return [
+            cls._serialize(
+                collection,
+                projections=projections,
+                tenant_scope=tenant_scope,
+            )
+            for collection in collections
+        ]
 
     @staticmethod
-    def _serialize(collection: ProductCollection, *, projections: dict[int, Any]) -> dict:
+    def _serialize(
+        collection: ProductCollection,
+        *,
+        projections: dict[int, Any],
+        tenant_scope: TenantScope,
+    ) -> dict:
         return {
             "id": int(collection.id),
             "tenant_id": collection.tenant_id,
@@ -47,7 +60,10 @@ class ManagerProductCollectionPresenter:
             "status": collection.status,
             "mode": collection.mode,
             "sort_mode": collection.sort_mode,
-            "rule_config": dict(collection.rule_config or {}),
+            "rule_config": ProductCollectionRulePolicy.project_for_manager(
+                dict(collection.rule_config or {}),
+                tenant_scope=tenant_scope,
+            ),
             "min_items": collection.min_items,
             "max_items": collection.max_items,
             "fallback_collection_id": collection.fallback_collection_id,
