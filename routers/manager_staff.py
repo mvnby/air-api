@@ -9,6 +9,10 @@ from core.security import AuthenticatedUser, require_owner_access
 from routers.manager_operation_ids import CREATE_MANAGER_STAFF, LIST_MANAGER_STAFF, PATCH_MANAGER_STAFF
 from schemas import ManagerStaffCreatePayload, ManagerStaffListResponse, ManagerStaffResponse, ManagerStaffUpdatePayload
 from services.staff_user_service import StaffUserService
+from services.legacy_owner_managed_identity_service import (
+    LegacyOwnerManagedIdentityError,
+    LegacyOwnerManagedIdentityService,
+)
 
 
 router = APIRouter(prefix="/api/manager/staff", tags=["manager-staff"])
@@ -61,12 +65,23 @@ async def patch_staff(
     auth: AuthenticatedUser = Depends(require_owner_access),
 ):
     try:
+        await LegacyOwnerManagedIdentityService.ensure_generic_mutation_allowed(
+            session,
+            staff_user_id=staff_user_id,
+            tenant_id=auth.tenant_scope().tenant_id,
+        )
         staff_user = await StaffUserService.update_staff(
             session=session,
             staff_user_id=staff_user_id,
             payload=payload,
             tenant_scope=auth.tenant_scope(),
         )
+    except LegacyOwnerManagedIdentityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except IntegrityError as exc:

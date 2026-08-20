@@ -16,6 +16,7 @@ from models import (
     GlobalConfig,
     Installer,
     Lead,
+    LegacyOwnerAuthState,
     Order,
     OrderInstaller,
     OrderStatus,
@@ -82,6 +83,7 @@ async def sqlite_staff_session(tmp_path: Path):
                 is_default=True,
             )
         )
+        session.add(LegacyOwnerAuthState())
         await session.commit()
         yield session
 

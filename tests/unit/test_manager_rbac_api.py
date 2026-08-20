@@ -13,7 +13,13 @@ from core.security import (
     AuthenticatedUser,
     require_manager_access,
 )
-from models import StaffUser, Storefront, Tenant, TenantMembership
+from models import (
+    LegacyOwnerAuthState,
+    StaffUser,
+    Storefront,
+    Tenant,
+    TenantMembership,
+)
 from routers.auth import router as auth_router
 from routers.manager_auth import router as manager_auth_router
 from routers.manager_backups import router as manager_backups_router
@@ -49,6 +55,7 @@ async def rbac_client(tmp_path: Path, monkeypatch):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add(LegacyOwnerAuthState())
         tenant = Tenant(
             slug="mvn",
             display_name="MVN",

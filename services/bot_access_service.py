@@ -7,6 +7,13 @@ from sqlmodel import select
 from core.config import settings
 from models import StaffUser, TenantMembership
 from services.staff_user_service import StaffUserService
+from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
+from services.legacy_owner_auth_state_service import (
+    LegacyOwnerAuthStateUnavailableError,
+)
+from services.legacy_owner_managed_identity_service import (
+    LegacyOwnerManagedIdentityService,
+)
 from services.tenant_scope_service import (
     SystemTenantScopeResolver,
     TenantScopeResolutionError,
@@ -63,19 +70,63 @@ class BotAccessService:
             if not StaffUserService.is_active(user):
                 return context
             try:
+                legacy_owner_state = await LegacyOwnerAuthGuard.state(session)
+            except LegacyOwnerAuthStateUnavailableError:
+                return context
+            is_managed_identity = (
+                LegacyOwnerManagedIdentityService.is_bound(
+                    legacy_owner_state,
+                    staff_user_id=int(user.id or 0),
+                )
+                or LegacyOwnerAuthGuard.configured_username_matches(
+                    str(user.username or "")
+                )
+            )
+            if is_managed_identity:
+                try:
+                    legacy_owner_state = await LegacyOwnerAuthGuard.state(
+                        session,
+                        for_share=True,
+                    )
+                except LegacyOwnerAuthStateUnavailableError:
+                    return context
+            if not LegacyOwnerAuthGuard.allows_staff_identity(
+                legacy_owner_state,
+                staff_user_id=int(user.id or 0),
+                username=str(user.username or ""),
+            ):
+                return context
+            try:
                 tenant_scope = await SystemTenantScopeResolver.resolve(session)
             except TenantScopeResolutionError:
                 return context
-            membership = (
+            memberships = list((
                 await session.execute(
                     select(TenantMembership).where(
                         TenantMembership.staff_user_id == int(user.id or 0),
-                        TenantMembership.tenant_id == tenant_scope.tenant_id,
-                        TenantMembership.status == "active",
                     )
                 )
-            ).scalars().first()
+            ).scalars().all())
+            membership = next(
+                (
+                    item
+                    for item in memberships
+                    if item.tenant_id == tenant_scope.tenant_id
+                    and item.status == "active"
+                ),
+                None,
+            )
             if membership is None:
+                return context
+            is_bound_owner = (
+                legacy_owner_state.owner_staff_user_id is not None
+                and int(legacy_owner_state.owner_staff_user_id) == int(user.id or 0)
+            )
+            if is_bound_owner and not await LegacyOwnerManagedIdentityService.exact_bound_staff_identity_allowed(
+                session,
+                state=legacy_owner_state,
+                user=user,
+            ):
                 return context
             roles = StaffUserService.normalize_roles(user.roles)
             primary_role = StaffUserService.normalize_primary_role(

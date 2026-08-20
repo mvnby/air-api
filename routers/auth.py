@@ -12,10 +12,16 @@ from core.database import get_session
 from schemas import TelegramLoginPayload
 from services.client_address_service import ClientAddressService
 from services.login_throttle_service import (
+    LoginAttemptReservation,
     LoginThrottleExceeded,
     LoginThrottleService,
 )
+from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
+from services.credential_service import CredentialService
 from services.staff_user_service import StaffUserService
+from services.legacy_owner_managed_identity_service import (
+    LegacyOwnerManagedIdentityService,
+)
 
 router = APIRouter(tags=["login"])
 
@@ -48,6 +54,24 @@ def _token_response(response: Response, token_data: dict[str, Any]) -> dict[str,
     }
 
 
+async def _reject_password_login(
+    session: AsyncSession,
+    *,
+    username: str,
+    source: str,
+    reservation: LoginAttemptReservation,
+) -> None:
+    throttle = await LoginThrottleService.record_failure(
+        session,
+        username,
+        source,
+        reservation=reservation,
+    )
+    if throttle.blocked:
+        raise _login_rate_limited(throttle.retry_after_seconds)
+    raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+
 @router.post("/login/access-token", operation_id="login_access_token")
 async def login_access_token(
     request: Request,
@@ -71,12 +95,59 @@ async def login_access_token(
     except LoginThrottleExceeded as exc:
         raise _login_rate_limited(exc.retry_after_seconds) from None
 
+    legacy_username = LegacyOwnerAuthGuard.configured_username_matches(
+        form_data.username
+    )
+    legacy_state = (
+        await LegacyOwnerAuthGuard.state(session, for_update=True)
+        if legacy_username
+        else None
+    )
+
+    if legacy_state is not None and legacy_state.mode == LegacyOwnerAuthGuard.MODE_LEGACY:
+        # Keep bcrypt work cost-matched while the explicit legacy mode gives
+        # the env credential priority over any colliding StaffUser record.
+        await CredentialService.verify_password_async(
+            form_data.password,
+            CredentialService.DUMMY_PASSWORD_HASH,
+        )
+        password_correct = _constant_time_text_equal(
+            form_data.password,
+            settings.ADMIN_PASSWORD,
+        )
+        if not password_correct:
+            await _reject_password_login(
+                session,
+                username=form_data.username,
+                source=source,
+                reservation=reservation,
+            )
+        await LoginThrottleService.clear(session, form_data.username)
+        return _token_response(
+            response,
+            {
+                "sub": form_data.username,
+                "auth_source": "legacy",
+                "legacy_auth_version": int(legacy_state.legacy_token_version),
+            },
+        )
+
     authentication = await StaffUserService.authenticate_password(
-        session,
-        form_data.username,
-        form_data.password,
+        session, form_data.username, form_data.password
     )
     if authentication is not None:
+        current_legacy_state = await LegacyOwnerAuthGuard.state(session)
+        if not LegacyOwnerAuthGuard.allows_staff_identity(
+            current_legacy_state,
+            staff_user_id=int(authentication.user.id or 0),
+            username=str(authentication.user.username or ""),
+        ):
+            await _reject_password_login(
+                session,
+                username=form_data.username,
+                source=source,
+                reservation=reservation,
+            )
         await LoginThrottleService.clear(session, form_data.username)
         staff_user = authentication.user
         username = staff_user.username or str(staff_user.telegram_id or staff_user.id)
@@ -91,29 +162,12 @@ async def login_access_token(
             },
         )
 
-    # Legacy emergency access from env.
-    username_correct = _constant_time_text_equal(
-        form_data.username,
-        settings.ADMIN_USERNAME,
+    await _reject_password_login(
+        session,
+        username=form_data.username,
+        source=source,
+        reservation=reservation,
     )
-    password_correct = _constant_time_text_equal(
-        form_data.password,
-        settings.ADMIN_PASSWORD,
-    )
-
-    if not (username_correct and password_correct):
-        throttle = await LoginThrottleService.record_failure(
-            session,
-            form_data.username,
-            source,
-            reservation=reservation,
-        )
-        if throttle.blocked:
-            raise _login_rate_limited(throttle.retry_after_seconds)
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-
-    await LoginThrottleService.clear(session, form_data.username)
-    return _token_response(response, {"sub": form_data.username, "auth_source": "legacy"})
 
 
 @router.post(
@@ -138,12 +192,35 @@ async def login_telegram(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> Any:
+    telegram_payload = payload.model_dump(exclude_none=True)
+    if (
+        not StaffUserService.verify_telegram_login_payload(telegram_payload)
+        or not await LegacyOwnerManagedIdentityService.telegram_login_allowed(
+            session,
+            telegram_id=payload.id,
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Telegram login is not allowed",
+        )
     staff_user = await StaffUserService.authenticate_telegram_login(
         session,
-        payload.model_dump(exclude_none=True),
+        telegram_payload,
     )
     if staff_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Telegram login is not allowed")
+
+    legacy_owner_state = await LegacyOwnerAuthGuard.state(session)
+    if not LegacyOwnerAuthGuard.allows_staff_identity(
+        legacy_owner_state,
+        staff_user_id=int(staff_user.id or 0),
+        username=str(staff_user.username or ""),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Telegram login is not allowed",
+        )
 
     username = staff_user.username or str(staff_user.telegram_id or staff_user.id)
     return _token_response(

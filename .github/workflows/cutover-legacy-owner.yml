@@ -1,0 +1,169 @@
+name: Cut Over Legacy Owner
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_sha:
+        description: "Exact reviewed 40-character main SHA"
+        type: string
+        required: true
+      operation:
+        description: "Read-only plan, reviewed shadow execute, or reviewed rollback"
+        type: choice
+        required: true
+        default: plan
+        options: [plan, execute, rollback]
+      plan_for:
+        description: "Cutover or rollback plan; used only with operation=plan"
+        type: choice
+        required: true
+        default: cutover
+        options: [cutover, rollback]
+      apply:
+        description: "Must be false for plan and explicitly true for every mutation"
+        type: boolean
+        required: true
+        default: false
+      reviewed_plan_digest:
+        description: "64-character plan_digest from the reviewed artifact; mutation only"
+        type: string
+        required: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-api
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    steps:
+      - name: Require Reviewed Main SHA And Explicit Operation
+        env:
+          APPLY: ${{ inputs.apply }}
+          CONFIRM_SHA: ${{ inputs.confirm_sha }}
+          OPERATION: ${{ inputs.operation }}
+          PLAN_FOR: ${{ inputs.plan_for }}
+          REVIEWED_PLAN_DIGEST: ${{ inputs.reviewed_plan_digest }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Legacy owner cutover may run only from refs/heads/main"
+            exit 64
+          fi
+          if ! [[ "${CONFIRM_SHA}" =~ ^[0-9a-f]{40}$ ]] || [ "${CONFIRM_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "::error::confirm_sha must equal the exact reviewed workflow main SHA"
+            exit 64
+          fi
+          case "${OPERATION}:${APPLY}" in
+            plan:false)
+              test -z "${REVIEWED_PLAN_DIGEST}" || { echo "::error::plan must not receive reviewed_plan_digest"; exit 64; }
+              ;;
+            execute:true|rollback:true)
+              test "${PLAN_FOR}" = "cutover" || { echo "::error::plan_for is only valid for operation=plan"; exit 64; }
+              [[ "${REVIEWED_PLAN_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::mutation requires exact reviewed plan_digest"; exit 64; }
+              ;;
+            *)
+              echo "::error::apply must be false for plan and explicitly true for execute or rollback"
+              exit 64
+              ;;
+          esac
+
+      - name: Require Exact Successful Main CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          successful_run_count="$(
+            gh run list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --workflow ci.yml \
+              --branch main \
+              --commit "${GITHUB_SHA}" \
+              --status success \
+              --limit 100 \
+              --json databaseId \
+              --jq 'length'
+          )"
+          if [ "${successful_run_count}" != "1" ]; then
+            echo "::error::Expected exactly one successful CI run for ${GITHUB_SHA}; found ${successful_run_count}"
+            exit 64
+          fi
+
+      - name: Checkout Exact Reviewed Main SHA
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Prepare Pinned SSH Identity
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${SSH_KEY}" || { echo "::error::Missing required SSH_KEY production secret"; exit 1; }
+          printf '%s\n' "${SSH_KEY}" > "${RUNNER_TEMP}/legacy-owner-cutover-key"
+          unset SSH_KEY
+          chmod 600 "${RUNNER_TEMP}/legacy-owner-cutover-key"
+
+      - name: Authenticate GHCR Metadata Reader
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${GH_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          unset GH_TOKEN
+
+      - name: Run Reviewed Legacy Owner Operation
+        env:
+          OPERATION: ${{ inputs.operation }}
+          PLAN_FOR: ${{ inputs.plan_for }}
+          REVIEWED_PLAN_DIGEST: ${{ inputs.reviewed_plan_digest }}
+        run: |
+          set -euo pipefail
+          command=(python3 -I scripts/ops/legacy_owner_cutover_workflow.py "${OPERATION}" --plan-for "${PLAN_FOR}")
+          if [ -n "${REVIEWED_PLAN_DIGEST}" ]; then
+            command+=(--reviewed-plan-digest "${REVIEWED_PLAN_DIGEST}")
+          fi
+          command+=(--identity-file "${RUNNER_TEMP}/legacy-owner-cutover-key")
+          command+=(--result-file "${GITHUB_WORKSPACE}/legacy-owner-cutover-result.json")
+          "${command[@]}"
+
+      - name: Write Sanitized Summary
+        if: always()
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          {
+            echo "## Legacy Owner Shadow Cutover"
+            echo "- main_sha: ${GITHUB_SHA}"
+            echo "- operation: ${OPERATION}"
+            echo "- target: fixed system tenant mvn / storefront main"
+            echo "- topology: dynamically verified single Patroni primary"
+            echo "- proof: both application nodes after execute"
+            echo "- legacy ADMIN_* removal: not part of this workflow"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Sanitized Operation Result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: legacy-owner-${{ inputs.operation }}-${{ github.run_id }}
+          path: legacy-owner-cutover-result.json
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Remove Ephemeral Inputs
+        if: always()
+        run: |
+          rm -f "${RUNNER_TEMP}/legacy-owner-cutover-key" "${GITHUB_WORKSPACE}/legacy-owner-cutover-result.json"
+          docker logout ghcr.io >/dev/null 2>&1 || true

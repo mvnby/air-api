@@ -50,6 +50,19 @@ class _GoogleServiceStub:
 @pytest.fixture()
 async def google_auth_client(monkeypatch):
     monkeypatch.delenv("GOOGLE_OAUTH_REDIRECT_URI", raising=False)
+
+    async def _legacy_state(_session, *, for_update=False):
+        assert for_update is False
+        return SimpleNamespace(
+            mode="legacy",
+            legacy_token_version=1,
+            owner_staff_user_id=None,
+        )
+
+    monkeypatch.setattr(
+        "routers.manager_google_auth.LegacyOwnerAuthGuard.state",
+        _legacy_state,
+    )
     app = FastAPI()
     app.add_middleware(
         SessionMiddleware,
@@ -293,7 +306,13 @@ async def test_google_auth_exchange_endpoint_is_closed(google_auth_client):
 async def test_google_auth_owner_binding_rejects_demoted_staff(monkeypatch):
     async def fake_get_by_id(_session, staff_user_id):
         assert staff_user_id == 42
-        return SimpleNamespace(status="active", primary_role="manager", roles=["manager"])
+        return SimpleNamespace(
+            id=42,
+            status="active",
+            primary_role="manager",
+            roles=["manager"],
+            auth_version=1,
+        )
 
     monkeypatch.setattr(
         "routers.manager_google_auth.StaffUserService.get_by_id",
@@ -306,6 +325,60 @@ async def test_google_auth_owner_binding_rejects_demoted_staff(monkeypatch):
             "auth_source": "staff",
             "staff_user_id": 42,
             "username": "manager",
+            "auth_version": 1,
+        },
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_google_auth_legacy_binding_is_revoked_by_staff_shadow(monkeypatch):
+    async def fake_state(_session, *, for_update=False):
+        assert for_update is False
+        return SimpleNamespace(
+            mode="staff_shadow",
+            legacy_token_version=2,
+            owner_staff_user_id=42,
+        )
+
+    monkeypatch.setattr(
+        "routers.manager_google_auth.LegacyOwnerAuthGuard.state",
+        fake_state,
+    )
+
+    assert await _oauth_owner_binding_is_active(
+        object(),
+        {
+            "auth_source": "legacy",
+            "username": settings.ADMIN_USERNAME,
+            "auth_version": 1,
+        },
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_google_auth_staff_binding_rejects_stale_auth_version(monkeypatch):
+    async def fake_get_by_id(_session, staff_user_id):
+        assert staff_user_id == 42
+        return SimpleNamespace(
+            id=42,
+            status="active",
+            primary_role="owner",
+            roles=["owner"],
+            auth_version=2,
+        )
+
+    monkeypatch.setattr(
+        "routers.manager_google_auth.StaffUserService.get_by_id",
+        fake_get_by_id,
+    )
+
+    assert await _oauth_owner_binding_is_active(
+        object(),
+        {
+            "auth_source": "staff_password",
+            "staff_user_id": 42,
+            "username": "owner",
+            "auth_version": 1,
         },
     ) is False
 
@@ -322,7 +395,13 @@ async def test_google_auth_owner_binding_requires_active_system_membership(
 ):
     async def fake_get_by_id(_session, staff_user_id):
         assert staff_user_id == 42
-        return SimpleNamespace(status="active", primary_role="owner", roles=["owner"])
+        return SimpleNamespace(
+            id=42,
+            status="active",
+            primary_role="owner",
+            roles=["owner"],
+            auth_version=1,
+        )
 
     class _Result:
         @staticmethod
@@ -348,6 +427,7 @@ async def test_google_auth_owner_binding_requires_active_system_membership(
             "auth_source": "staff_password",
             "staff_user_id": 42,
             "username": "owner",
+            "auth_version": 1,
             "tenant_membership_id": 7,
             "tenant_id": 3,
         },

@@ -29,6 +29,7 @@ from .feature import (
 from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
 from .auth_security import AuthLoginThrottle
+from .legacy_owner_auth import LegacyOwnerAuthState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .catalog_revision import StorefrontCatalogRevision
@@ -166,6 +167,7 @@ __all__ = [
     "LeadSegmentHint",
     "LeadSource",
     "LeadStatus",
+    "LegacyOwnerAuthState",
     "MediaAsset",
     "MediaProcessingJob",
     "OrderAttachmentLink",
