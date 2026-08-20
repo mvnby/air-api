@@ -212,6 +212,7 @@ class LegacyOwnerCutoverService:
         session: AsyncSession,
         *,
         staff_credential: str | None = None,
+        binding_challenge: str,
     ) -> dict[str, Any]:
         runtime = cls._runtime_identity()
         state = await cls._load(session, runtime=runtime, for_update=False)
@@ -267,7 +268,10 @@ class LegacyOwnerCutoverService:
             "system_storefront_id": int(state.storefront.id) if state.storefront and state.storefront.id else None,
             "auth_mode": auth_state.mode if auth_state else "unavailable",
             "legacy_token_version": int(auth_state.legacy_token_version) if auth_state else 0,
-            "runtime_binding": runtime.binding,
+            "runtime_binding": LegacyOwnerRuntimeCredential.bind(
+                runtime,
+                challenge=binding_challenge,
+            ),
             "credential_matches": reported_credential_ready,
             "can_change_password": bool(staff_mode and state.user and state.user.password_hash),
             "auth_source_staff_password": bool(ready and staff_mode),

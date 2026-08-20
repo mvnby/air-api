@@ -34,9 +34,19 @@ def test_execute_stdin_requires_exact_plan_and_one_time_credential() -> None:
 
 
 def test_verify_credential_stdin_accepts_only_one_time_credential() -> None:
+    challenge = "c" * 64
     assert read_credential_input(
-        BytesIO(b'{"new_password":"long-password"}')
-    ) == "long-password"
+        BytesIO(
+            (
+                '{"binding_challenge":"'
+                + challenge
+                + '","new_password":"long-password"}'
+            ).encode()
+        )
+    ) == ("long-password", challenge)
+    assert read_credential_input(
+        BytesIO(('{"binding_challenge":"' + challenge + '"}').encode())
+    ) == (None, challenge)
     with pytest.raises(ValueError, match="unexpected schema"):
         read_credential_input(
             BytesIO(b'{"new_password":"long-password","plan_token":"no"}')

@@ -18,9 +18,12 @@ BuildKit provenance names exactly this repository and revision. It refuses
 unless both active Patroni application containers run that exact digest and
 expose the reviewed CLI capability. During both staff-shadow and rollback proof, each
 container returns a domain-separated HMAC binding of its retained local legacy runtime
-credential. The controller compares the bindings only in memory, then removes
-them before every artifact and summary; a different local `ADMIN_*` value on
-either node blocks the operation.
+credential. A fresh random challenge makes the two bindings comparable without
+depending on each node's local `SECRET_KEY`. The controller compares the
+bindings only in memory, then removes both the challenge and bindings before
+every artifact and summary; a different local `ADMIN_*` value on either node
+blocks the operation. The read-only plan performs this dual-node recovery proof
+before it can report `ready=true`, so a mismatch blocks before mutation.
 
 1. Run `operation=plan`, `plan_for=cutover`, `apply=false`, and record the
    exact `plan_digest`. To review a manual rollback instead, use
@@ -33,14 +36,17 @@ either node blocks the operation.
    environment. Run `operation=execute`, `apply=true`, with that digest and the
    same exact current `main` SHA. The password must satisfy the shared minimum
    of 9 characters and bcrypt maximum of 72 UTF-8 bytes.
-4. The workflow re-plans and re-proves topology before mutation. After a
+4. The workflow re-plans, repeats the dual-node recovery proof, and re-proves
+   topology before mutation. After a
    successful shadow transition it invokes read-only `verify` inside the
    active container on both Patroni nodes. The retained runtime password remains
    inside those containers. Verification proves the exact bound system owner,
    membership, a bcrypt match against the one-time credential supplied again
    over stdin, self-service availability, and rejected legacy
    JWT and Google callback paths.
-5. If either proof fails, the controller obtains a fresh rollback-bound plan,
+5. Standby proof briefly retries read-only verification while PostgreSQL
+   replication catches up. If either proof still fails, the controller obtains
+   a fresh rollback-bound plan,
    returns the state to `legacy` on the primary, and proves that rollback before
    failing the run. Manual `rollback` has the same reviewed-digest guard.
    Its artifact includes the same two-node legacy proof. In that proof,
