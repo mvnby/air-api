@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import event
 from sqlmodel import select
 
 from models import Product, ProductTagLink, Tag, TagGroup
@@ -63,3 +64,31 @@ async def test_catalog_decision_filters_use_normalized_power_and_form_factor(db)
 async def test_catalog_decision_rejects_tenant_scope_before_query(db):
     with pytest.raises(CatalogDecisionScopeError):
         await CatalogDecisionQueryService.list_system_products(db, tenant_scope=TenantScope(tenant_id=99, storefront_id=99, is_system=False), filters=CatalogDecisionFilters(), page=1, limit=10, sort="title", direction="asc")
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_projection_has_a_bounded_query_count(db):
+    """The number of rows must not turn supplier metrics into N+1 queries."""
+    statements: list[str] = []
+
+    def collect(_connection, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    engine = db.bind
+    assert engine is not None
+    event.listen(engine.sync_engine, "after_cursor_execute", collect)
+    try:
+        await CatalogDecisionQueryService.list_system_products(
+            db,
+            tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+            filters=CatalogDecisionFilters(),
+            page=1,
+            limit=100,
+            sort="purchase_cost",
+            direction="asc",
+        )
+    finally:
+        event.remove(engine.sync_engine, "after_cursor_execute", collect)
+
+    # Cold FX configuration needs at most three reads; count + page query add two.
+    assert len(statements) <= 5
