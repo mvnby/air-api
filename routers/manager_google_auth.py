@@ -26,6 +26,7 @@ from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse
 from services.google_service import get_google_service
 from services.staff_user_service import StaffUserService
+from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,7 @@ def _consume_google_oauth_state(request: Request, received_state: str) -> dict[s
     return {
         "redirect_uri": redirect_uri,
         "auth_source": str(pending.get("auth_source") or ""),
+        "auth_version": pending.get("auth_version"),
         "staff_user_id": pending.get("staff_user_id"),
         "username": str(pending.get("username") or ""),
     }
@@ -129,7 +131,13 @@ async def _oauth_owner_binding_is_active(
     staff_user_id = pending.get("staff_user_id")
 
     if auth_source == "legacy":
-        return bool(username) and secrets.compare_digest(username, settings.ADMIN_USERNAME)
+        if not LegacyOwnerAuthGuard.configured_username_matches(username):
+            return False
+        state = await LegacyOwnerAuthGuard.state(session)
+        return LegacyOwnerAuthGuard.allows_legacy_token(
+            state,
+            token_version=pending.get("auth_version"),
+        )
     if staff_user_id is None:
         return False
     try:
@@ -138,6 +146,19 @@ async def _oauth_owner_binding_is_active(
         return False
     if staff_user is None or not StaffUserService.is_active(staff_user):
         return False
+    try:
+        pending_auth_version = int(pending.get("auth_version"))
+    except (TypeError, ValueError):
+        return False
+    if pending_auth_version != int(staff_user.auth_version):
+        return False
+    if LegacyOwnerAuthGuard.configured_username_matches(username):
+        state = await LegacyOwnerAuthGuard.state(session)
+        if not LegacyOwnerAuthGuard.allows_bound_staff(
+            state,
+            staff_user_id=int(staff_user.id or 0),
+        ):
+            return False
     if StaffUserService.primary_role(staff_user).strip().lower() not in OWNER_ACCESS_ROLES:
         return False
 
@@ -196,6 +217,7 @@ async def get_manager_google_auth_url(
             "issued_at": _oauth_now(),
             "redirect_uri": redirect_uri,
             "auth_source": auth.auth_source,
+            "auth_version": auth.auth_version,
             "staff_user_id": auth.staff_user_id,
             "username": auth.username,
             "tenant_membership_id": auth.tenant_membership_id,

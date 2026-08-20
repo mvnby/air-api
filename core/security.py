@@ -20,6 +20,7 @@ from services.manager_storefront_selector_service import (
     ManagerStorefrontSelector,
 )
 from services.staff_user_service import StaffUserService
+from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.tenant_scope_service import SystemTenantScopeResolver
 
 # JWT CONFIG
@@ -144,6 +145,13 @@ async def get_current_auth_context(
                 raise HTTPException(status_code=401, detail="Credential has changed")
             if username != staff_user.username and username != str(staff_user.telegram_id or ""):
                 raise HTTPException(status_code=401, detail="Invalid user")
+            legacy_owner_state = await LegacyOwnerAuthGuard.state(session)
+            if not LegacyOwnerAuthGuard.allows_staff_identity(
+                legacy_owner_state,
+                staff_user_id=int(staff_user.id or 0),
+                username=str(staff_user.username or ""),
+            ):
+                raise HTTPException(status_code=401, detail="Invalid user")
             try:
                 access = await ManagerTenantAccessResolver.resolve(
                     session,
@@ -174,8 +182,15 @@ async def get_current_auth_context(
                 can_change_password=bool(staff_user.password_hash),
             )
 
-        if username != settings.ADMIN_USERNAME:
+        if not LegacyOwnerAuthGuard.configured_username_matches(username):
              raise HTTPException(status_code=401, detail="Invalid user")
+
+        legacy_owner_state = await LegacyOwnerAuthGuard.state(session)
+        if not LegacyOwnerAuthGuard.allows_legacy_token(
+            legacy_owner_state,
+            token_version=payload.get("legacy_auth_version"),
+        ):
+            raise HTTPException(status_code=401, detail="Invalid user")
 
         tenant_scope = await SystemTenantScopeResolver.resolve(session)
         tenant_scope = await _resolve_requested_manager_storefront(
@@ -190,6 +205,7 @@ async def get_current_auth_context(
             tenant_id=tenant_scope.tenant_id,
             storefront_id=tenant_scope.storefront_id,
             is_system_tenant=tenant_scope.is_system,
+            auth_version=int(legacy_owner_state.legacy_token_version),
         )
 
     except jwt.ExpiredSignatureError:

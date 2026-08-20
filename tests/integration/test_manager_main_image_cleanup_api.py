@@ -19,7 +19,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./manager_cleanup_api
 from core.database import get_session
 from core.config import settings
 from core.app_factory import create_app
-from models import Product, ProductImage, Storefront, Tenant
+from models import LegacyOwnerAuthState, Product, ProductImage, Storefront, Tenant
 
 
 def _image_bytes() -> bytes:
@@ -47,6 +47,7 @@ async def db(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add(LegacyOwnerAuthState())
         tenant = Tenant(
             slug="mvn",
             display_name="MVN",

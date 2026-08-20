@@ -9,6 +9,10 @@ from core.request_context import current_request_id
 from models import StaffUser, TenantAuditEvent, TenantMembership
 from models.tenancy import TenantScope
 from services.credential_service import CredentialPolicyError, CredentialService
+from services.legacy_owner_managed_identity_service import (
+    LegacyOwnerManagedIdentityError,
+    LegacyOwnerManagedIdentityService,
+)
 
 
 class ManagerAccountCredentialError(ValueError):
@@ -31,6 +35,16 @@ class ManagerAccountCredentialService:
         current_password: str,
         new_password: str,
     ) -> None:
+        try:
+            await LegacyOwnerManagedIdentityService.ensure_self_service_allowed(
+                session,
+                staff_user_id=staff_user_id,
+            )
+        except LegacyOwnerManagedIdentityError as exc:
+            raise ManagerAccountCredentialError(
+                "self_service_unavailable",
+                "Для legacy-владельца смена пароля сейчас недоступна",
+            ) from exc
         staff_user = (
             await session.execute(
                 select(StaffUser)

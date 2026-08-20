@@ -132,6 +132,18 @@ async def _seed_system_scope(connection) -> None:
     await connection.execute(
         text(
             """
+            INSERT INTO legacy_owner_auth_state (
+                id, mode, legacy_token_version, owner_staff_user_id,
+                created_at, updated_at
+            ) VALUES (
+                1, 'legacy', 1, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    await connection.execute(
+        text(
+            """
             INSERT INTO storefront (
                 id, tenant_id, slug, display_name, status, city,
                 default_locale, currency, is_default, created_at, updated_at
