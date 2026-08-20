@@ -138,7 +138,10 @@ def configure_http(app: FastAPI) -> None:
     app.exception_handler(RequestValidationError)(manager_validation_exception_handler)
     app.exception_handler(Exception)(global_exception_handler)
 
-    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+    app.add_middleware(
+        ProxyHeadersMiddleware,
+        trusted_hosts=settings.proxy_trusted_hosts,
+    )
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.SECRET_KEY,

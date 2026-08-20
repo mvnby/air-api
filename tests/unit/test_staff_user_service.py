@@ -12,6 +12,7 @@ from sqlmodel import SQLModel
 
 from core.config import settings
 from models import Installer, StaffUser, TenantMembership
+from services.credential_service import CredentialService
 from services.staff_user_service import StaffUserService
 
 from models.tenancy import TenantScope
@@ -73,6 +74,54 @@ def test_staff_password_hash_and_verify():
     assert password_hash != "secret-12345"
     assert StaffUserService.verify_password("secret-12345", password_hash)
     assert not StaffUserService.verify_password("wrong", password_hash)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "password_hash"),
+    [
+        (None, None),
+        ("inactive", "unused-inactive-hash"),
+        ("active", None),
+    ],
+)
+async def test_password_authentication_uses_dummy_bcrypt_without_usable_credential(
+    sqlite_staff_session,
+    monkeypatch,
+    status,
+    password_hash,
+):
+    if status is not None:
+        sqlite_staff_session.add(
+            StaffUser(
+                display_name="Timing-safe staff",
+                status=status,
+                username="timing-safe-staff",
+                password_hash=password_hash,
+            )
+        )
+        await sqlite_staff_session.commit()
+
+    checked_hashes: list[str | None] = []
+
+    def fake_verify(cls, password, candidate_hash):
+        checked_hashes.append(candidate_hash)
+        return False
+
+    monkeypatch.setattr(
+        CredentialService,
+        "verify_password",
+        classmethod(fake_verify),
+    )
+
+    authenticated = await StaffUserService.authenticate_password(
+        sqlite_staff_session,
+        "timing-safe-staff",
+        "incorrect-password",
+    )
+
+    assert authenticated is None
+    assert checked_hashes == [CredentialService.DUMMY_PASSWORD_HASH]
 
 
 def test_telegram_login_payload_signature(monkeypatch):

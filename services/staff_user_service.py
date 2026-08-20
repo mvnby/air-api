@@ -202,13 +202,24 @@ class StaffUserService:
     ) -> StaffPasswordAuthentication | None:
         normalized_username = cls.normalize_username(username)
         if not normalized_username:
+            await CredentialService.verify_password_async(
+                password,
+                CredentialService.DUMMY_PASSWORD_HASH,
+            )
             return None
 
         result = await session.execute(select(StaffUser).where(StaffUser.username == normalized_username))
         user = result.scalar_one_or_none()
-        if user is None or not cls.is_active(user):
+        if user is None or not cls.is_active(user) or not user.password_hash:
+            await CredentialService.verify_password_async(
+                password,
+                CredentialService.DUMMY_PASSWORD_HASH,
+            )
             return None
-        if not CredentialService.verify_password(password, user.password_hash):
+        if not await CredentialService.verify_password_async(
+            password,
+            user.password_hash,
+        ):
             return None
 
         verified_auth_version = int(user.auth_version)

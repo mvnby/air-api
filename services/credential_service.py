@@ -1,5 +1,7 @@
 """Shared password policy and bcrypt operations for staff credentials."""
 
+import asyncio
+
 import bcrypt
 
 
@@ -12,6 +14,9 @@ class CredentialPolicyError(ValueError):
 class CredentialService:
     MIN_PASSWORD_CHARACTERS = 9
     MAX_PASSWORD_UTF8_BYTES = 72
+    # Cost-matched non-credential hash used to avoid revealing whether a staff
+    # username has a usable password through response timing.
+    DUMMY_PASSWORD_HASH = "$2b$12$vUbirU34FCJ9Ki/.2IXnLOKGyNOPfEcwT6hk9crUkMMZ2r.1Oat5a"
 
     @classmethod
     def validate_password(cls, password: str) -> str:
@@ -55,6 +60,14 @@ class CredentialService:
             return bcrypt.checkpw(encoded, password_hash.encode("utf-8"))
         except (TypeError, ValueError):
             return False
+
+    @classmethod
+    async def verify_password_async(
+        cls,
+        password: str,
+        password_hash: str | None,
+    ) -> bool:
+        return await asyncio.to_thread(cls.verify_password, password, password_hash)
 
 
 __all__ = ["CredentialPolicyError", "CredentialService"]

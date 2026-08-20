@@ -1,7 +1,8 @@
+import secrets
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -9,10 +10,32 @@ from core.auth_cookie import clear_auth_cookie, set_auth_cookie
 from core.config import settings
 from core.database import get_session
 from schemas import TelegramLoginPayload
+from services.client_address_service import ClientAddressService
+from services.login_throttle_service import (
+    LoginThrottleExceeded,
+    LoginThrottleService,
+)
 from services.staff_user_service import StaffUserService
-import secrets
 
 router = APIRouter(tags=["login"])
+
+
+def _constant_time_text_equal(left: str, right: str) -> bool:
+    return secrets.compare_digest(
+        left.encode("utf-8", errors="surrogatepass"),
+        right.encode("utf-8", errors="surrogatepass"),
+    )
+
+
+def _login_rate_limited(retry_after_seconds: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "code": "login_rate_limited",
+            "message": "Too many login attempts. Try again later.",
+        },
+        headers={"Retry-After": str(max(1, int(retry_after_seconds)))},
+    )
 
 
 def _token_response(response: Response, token_data: dict[str, Any]) -> dict[str, str]:
@@ -24,8 +47,10 @@ def _token_response(response: Response, token_data: dict[str, Any]) -> dict[str,
         "token_type": "bearer",
     }
 
+
 @router.post("/login/access-token", operation_id="login_access_token")
 async def login_access_token(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_session),
@@ -34,12 +59,25 @@ async def login_access_token(
     OAuth2 compatible token login, get an access token for future requests.
     Sets 'access_token' cookie as well.
     """
+    source = ClientAddressService.normalize(
+        request.client.host if request.client is not None else None
+    )
+    try:
+        reservation = await LoginThrottleService.reserve_attempt(
+            session,
+            form_data.username,
+            source,
+        )
+    except LoginThrottleExceeded as exc:
+        raise _login_rate_limited(exc.retry_after_seconds) from None
+
     authentication = await StaffUserService.authenticate_password(
         session,
         form_data.username,
         form_data.password,
     )
     if authentication is not None:
+        await LoginThrottleService.clear(session, form_data.username)
         staff_user = authentication.user
         username = staff_user.username or str(staff_user.telegram_id or staff_user.id)
         return _token_response(
@@ -54,18 +92,27 @@ async def login_access_token(
         )
 
     # Legacy emergency access from env.
-    username_correct = secrets.compare_digest(
-        form_data.username.encode("utf8"),
-        settings.ADMIN_USERNAME.encode("utf8")
+    username_correct = _constant_time_text_equal(
+        form_data.username,
+        settings.ADMIN_USERNAME,
     )
-    password_correct = secrets.compare_digest(
-        form_data.password.encode("utf8"),
-        settings.ADMIN_PASSWORD.encode("utf8")
+    password_correct = _constant_time_text_equal(
+        form_data.password,
+        settings.ADMIN_PASSWORD,
     )
-    
+
     if not (username_correct and password_correct):
+        throttle = await LoginThrottleService.record_failure(
+            session,
+            form_data.username,
+            source,
+            reservation=reservation,
+        )
+        if throttle.blocked:
+            raise _login_rate_limited(throttle.retry_after_seconds)
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
+    await LoginThrottleService.clear(session, form_data.username)
     return _token_response(response, {"sub": form_data.username, "auth_source": "legacy"})
 
 
