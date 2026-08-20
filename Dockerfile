@@ -30,4 +30,4 @@ COPY . .
 COPY manager_frontend/dist /app/manager_frontend/dist
 
 # Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

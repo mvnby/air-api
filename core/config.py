@@ -1,3 +1,4 @@
+import ipaddress
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
@@ -50,6 +51,45 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ENVIRONMENT: str = "local"
     APP_ROLE: str = "primary"
+    # Keep synchronized with Cloudflare's published origin ranges:
+    # https://www.cloudflare.com/ips/
+    PROXY_TRUSTED_HOSTS: str = (
+        "127.0.0.1,::1,172.16.0.0/12,"
+        "173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,"
+        "141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,"
+        "197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,"
+        "104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,"
+        "2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,"
+        "2a06:98c0::/29,2c0f:f248::/32"
+    )
+
+    @field_validator("PROXY_TRUSTED_HOSTS")
+    @classmethod
+    def _validate_proxy_trusted_hosts(cls, value: str) -> str:
+        hosts = [item.strip() for item in str(value or "").split(",") if item.strip()]
+        if not hosts:
+            raise ValueError("PROXY_TRUSTED_HOSTS must contain at least one host or network")
+        if "*" in hosts:
+            raise ValueError("PROXY_TRUSTED_HOSTS must not trust every source")
+        canonical_hosts: list[str] = []
+        for host in hosts:
+            try:
+                if "/" in host:
+                    network = ipaddress.ip_network(host, strict=False)
+                    if network.prefixlen == 0:
+                        raise ValueError("trust-all network is not allowed")
+                    canonical_hosts.append(network.with_prefixlen)
+                else:
+                    canonical_hosts.append(ipaddress.ip_address(host).compressed)
+            except ValueError as exc:
+                raise ValueError(
+                    "PROXY_TRUSTED_HOSTS accepts only IP addresses and networks"
+                ) from exc
+        return ",".join(canonical_hosts)
+
+    @property
+    def proxy_trusted_hosts(self) -> list[str]:
+        return [item for item in self.PROXY_TRUSTED_HOSTS.split(",") if item]
     
     # CORS Settings
     @property

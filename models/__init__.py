@@ -28,6 +28,7 @@ from .feature import (
 )
 from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
+from .auth_security import AuthLoginThrottle
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .catalog_revision import StorefrontCatalogRevision
@@ -112,6 +113,7 @@ from .supplier import (
 
 __all__ = [
     "Article",
+    "AuthLoginThrottle",
     "BankReceipt",
     "Cart",
     "CartItem",
