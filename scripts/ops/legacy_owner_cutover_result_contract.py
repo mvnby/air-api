@@ -168,8 +168,8 @@ def _validate_proof(result: dict[str, Any], *, expected_mode: str, ready: bool) 
         "legacy_jwt_rejected", "legacy_google_auth_rejected",
     )):
         raise WorkflowError("legacy-owner verification flags are invalid")
-    # In legacy mode this means the local canonical ADMIN_* credential is
-    # present and policy-valid.  It intentionally does not mean equality with
+    # In legacy mode this means the retained local canonical ADMIN_* credential
+    # is present.  It intentionally does not mean policy compliance or equality with
     # the retained StaffUser bcrypt hash: that hash can change before a later
     # manual rollback and must not make the legacy recovery unverifiable.
     if not result["credential_matches"]:

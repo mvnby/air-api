@@ -26,6 +26,9 @@ from services.legacy_owner_cutover_service import (
 )
 
 
+CUTOVER_PASSWORD = "one-time-owner-password-2026"
+
+
 async def _state(db) -> LegacyOwnerAuthState:
     return await db.get(LegacyOwnerAuthState, 1)
 
@@ -112,7 +115,11 @@ async def test_cutover_is_atomic_secret_free_idempotent_and_tenant_b_unchanged(d
     assert "password_hash" not in serialized_plan
     assert "secret" not in serialized_plan.casefold()
 
-    result = await LegacyOwnerCutoverService.execute(db, plan_token=plan["plan_token"])
+    result = await LegacyOwnerCutoverService.execute(
+        db,
+        plan_token=plan["plan_token"],
+        new_password=CUTOVER_PASSWORD,
+    )
     assert result["changed"] is True
     assert result["auth_mode"] == "staff_shadow"
     assert result["legacy_token_version"] == 2
@@ -130,7 +137,10 @@ async def test_cutover_is_atomic_secret_free_idempotent_and_tenant_b_unchanged(d
     assert user.roles == ["owner"]
     assert user.must_change_password is False
     assert user.password_changed_at is not None
-    assert CredentialService.verify_password(settings.ADMIN_PASSWORD, user.password_hash)
+    assert CredentialService.verify_password(CUTOVER_PASSWORD, user.password_hash)
+    assert not CredentialService.verify_password(
+        settings.ADMIN_PASSWORD, user.password_hash
+    )
     assert (membership.tenant_id, membership.role, membership.status) == (1, "owner", "active")
     assert state.owner_staff_user_id == user.id
 
@@ -152,13 +162,26 @@ async def test_cutover_is_atomic_secret_free_idempotent_and_tenant_b_unchanged(d
 
     no_op_plan = await LegacyOwnerCutoverService.plan(db)
     no_op = await LegacyOwnerCutoverService.execute(
-        db, plan_token=no_op_plan["plan_token"]
+        db,
+        plan_token=no_op_plan["plan_token"],
+        new_password=CUTOVER_PASSWORD,
     )
     assert no_op_plan["changes"] == []
     assert no_op["changed"] is False
     assert int(await db.scalar(select(func.count(TenantAuditEvent.id)))) == 1
 
-    verification = await LegacyOwnerCutoverService.verify(db)
+    unproved = await LegacyOwnerCutoverService.verify(db)
+    wrong = await LegacyOwnerCutoverService.verify(
+        db, staff_credential="wrong-one-time-password"
+    )
+    assert unproved["ready"] is False
+    assert unproved["credential_matches"] is False
+    assert wrong["ready"] is False
+    assert wrong["credential_matches"] is False
+
+    verification = await LegacyOwnerCutoverService.verify(
+        db, staff_credential=CUTOVER_PASSWORD
+    )
     assert verification["ready"] is True
     assert verification["credential_matches"] is True
     assert len(verification["runtime_binding"]) == 64
@@ -173,7 +196,11 @@ async def test_cutover_is_atomic_secret_free_idempotent_and_tenant_b_unchanged(d
 @pytest.mark.asyncio
 async def test_transaction_rollback_restores_initial_state(db) -> None:
     plan = await LegacyOwnerCutoverService.plan(db)
-    await LegacyOwnerCutoverService.execute(db, plan_token=plan["plan_token"])
+    await LegacyOwnerCutoverService.execute(
+        db,
+        plan_token=plan["plan_token"],
+        new_password=CUTOVER_PASSWORD,
+    )
     assert await db.scalar(select(StaffUser.id)) is not None
     await db.rollback()
 
@@ -189,7 +216,9 @@ async def test_transaction_rollback_restores_initial_state(db) -> None:
 async def test_rollback_after_self_service_change_keeps_owner_and_invalidates_staff_jwt(db) -> None:
     cutover_plan = await LegacyOwnerCutoverService.plan(db)
     result = await LegacyOwnerCutoverService.execute(
-        db, plan_token=cutover_plan["plan_token"]
+        db,
+        plan_token=cutover_plan["plan_token"],
+        new_password=CUTOVER_PASSWORD,
     )
     user = await db.get(StaffUser, result["staff_user_id"])
     user.password_hash = CredentialService.hash_password("self-service-password-2026")
@@ -307,11 +336,17 @@ async def test_blocks_casefold_collision_and_shared_tenant_identity(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_stale_plan_and_wrong_existing_credential_do_not_mutate(db, monkeypatch) -> None:
+async def test_stale_plan_does_not_mutate_and_one_time_credential_rotates_retained_owner(
+    db, monkeypatch
+) -> None:
     plan = await LegacyOwnerCutoverService.plan(db)
     monkeypatch.setattr(settings, "ADMIN_PASSWORD", "rotated-runtime-password-2026")
     with pytest.raises(LegacyOwnerCutoverBlockedError, match="stale"):
-        await LegacyOwnerCutoverService.execute(db, plan_token=plan["plan_token"])
+        await LegacyOwnerCutoverService.execute(
+            db,
+            plan_token=plan["plan_token"],
+            new_password=CUTOVER_PASSWORD,
+        )
     assert await db.scalar(select(StaffUser.id)) is None
     state = await _state(db)
     assert (state.mode, state.legacy_token_version, state.owner_staff_user_id) == (
@@ -323,9 +358,55 @@ async def test_stale_plan_and_wrong_existing_credential_do_not_mutate(db, monkey
     owner.password_hash = CredentialService.hash_password("different-password-2026")
     db.add(owner)
     await db.flush()
-    blocked = await LegacyOwnerCutoverService.plan(db)
-    assert blocked["ready"] is False
-    assert "existing_staff_identity_not_exact" in blocked["blockers"]
+    reviewed = await LegacyOwnerCutoverService.plan(db)
+    assert reviewed["ready"] is True
+    result = await LegacyOwnerCutoverService.execute(
+        db,
+        plan_token=reviewed["plan_token"],
+        new_password=CUTOVER_PASSWORD,
+    )
+    await db.refresh(owner)
+    assert result["auth_mode"] == "staff_shadow"
+    assert CredentialService.verify_password(CUTOVER_PASSWORD, owner.password_hash)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_password", ["short", "я" * 37])
+async def test_invalid_one_time_credential_is_rejected_without_mutation(
+    db, invalid_password
+) -> None:
+    plan = await LegacyOwnerCutoverService.plan(db)
+    with pytest.raises(LegacyOwnerCutoverBlockedError, match="password policy"):
+        await LegacyOwnerCutoverService.execute(
+            db,
+            plan_token=plan["plan_token"],
+            new_password=invalid_password,
+        )
+    assert await db.scalar(select(StaffUser.id)) is None
+    state = await _state(db)
+    assert (state.mode, state.owner_staff_user_id, state.legacy_token_version) == (
+        "legacy",
+        None,
+        1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_short_retained_runtime_credential_does_not_block_long_db_credential(
+    db, monkeypatch
+) -> None:
+    monkeypatch.setattr(settings, "ADMIN_PASSWORD", "legacy")
+    plan = await LegacyOwnerCutoverService.plan(db)
+    assert plan["ready"] is True
+    assert plan["blockers"] == []
+    result = await LegacyOwnerCutoverService.execute(
+        db,
+        plan_token=plan["plan_token"],
+        new_password=CUTOVER_PASSWORD,
+    )
+    user = await db.get(StaffUser, result["staff_user_id"])
+    assert CredentialService.verify_password(CUTOVER_PASSWORD, user.password_hash)
+    assert not CredentialService.verify_password("legacy", user.password_hash)
 
 
 @pytest.mark.asyncio
@@ -341,7 +422,9 @@ async def test_advisory_lock_serializes_cutover(db_engine) -> None:
         )
         with pytest.raises(LegacyOwnerCutoverBlockedError, match="owns the lock"):
             await LegacyOwnerCutoverService.execute(
-                contender, plan_token=plan["plan_token"]
+                contender,
+                plan_token=plan["plan_token"],
+                new_password=CUTOVER_PASSWORD,
             )
         await contender.rollback()
         await holder.rollback()

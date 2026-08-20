@@ -52,6 +52,7 @@ ARTIFACT_KEYS = {
     "schema_version", "operation", "reviewed_main_sha", "primary_node",
     "patroni_timeline", "runtime", "result", "proof", "outcome", "recovery",
 }
+MAX_ONE_TIME_CREDENTIAL_BYTES = 256
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("operation", choices=("plan", "execute", "rollback"))
     parser.add_argument("--plan-for", choices=("cutover", "rollback"), default="cutover")
     parser.add_argument("--reviewed-plan-digest")
+    parser.add_argument(
+        "--credential-stdin",
+        action="store_true",
+        help="Read the execute-only one-time staff credential from stdin.",
+    )
     parser.add_argument("--identity-file", type=Path, required=True)
     parser.add_argument("--result-file", type=Path, required=True)
     return parser
@@ -79,8 +85,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def validate_arguments(args: argparse.Namespace) -> None:
     if args.operation == "plan":
-        if args.reviewed_plan_digest:
+        if args.reviewed_plan_digest or args.credential_stdin:
             raise WorkflowError("plan does not accept a reviewed plan digest")
+    elif args.operation == "execute" and not args.credential_stdin:
+        raise WorkflowError("execute requires the protected credential on stdin")
+    elif args.operation == "rollback" and args.credential_stdin:
+        raise WorkflowError("rollback does not accept a staff credential")
     elif args.plan_for != "cutover":
         raise WorkflowError("mutation does not accept a plan-for override")
     elif not DIGEST_RE.fullmatch(args.reviewed_plan_digest or ""):
@@ -99,6 +109,20 @@ def _validate_private_file(path: Path, *, description: str) -> None:
             or metadata.st_uid != os.geteuid() or metadata.st_nlink != 1
             or stat.S_IMODE(metadata.st_mode) & 0o077):
         raise WorkflowError(f"{description} must be an owner-only regular file")
+
+
+def _read_one_time_credential(stream: Any | None = None) -> str:
+    source = stream if stream is not None else sys.stdin.buffer
+    payload = source.read(MAX_ONE_TIME_CREDENTIAL_BYTES + 1)
+    if len(payload) > MAX_ONE_TIME_CREDENTIAL_BYTES:
+        raise WorkflowError("one-time credential input is too large")
+    try:
+        credential = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise WorkflowError("one-time credential input is not UTF-8") from exc
+    if not credential:
+        raise WorkflowError("one-time credential input is empty")
+    return credential
 
 
 def _subprocess_runner(command: Sequence[str], stdin: str | None) -> subprocess.CompletedProcess[str]:
@@ -210,12 +234,15 @@ def _cutover_command(
     role: str,
     action: str,
     token: str | None = None,
+    prove_credential: bool = False,
 ) -> str:
     command = ["python3", "scripts/cutover_legacy_owner.py", action]
     if action == "plan" and token:
         command.extend(["--for-action", token])
     elif action in {"execute", "rollback"}:
         command.append("--execution-json-stdin")
+    elif action == "verify" and prove_credential:
+        command.append("--credential-json-stdin")
     lines = _remote_prelude(node, role=role, expected_runtime=runtime)
     lines.append(f"docker exec -i {shlex.quote(runtime.container_id)} {shlex.join(command)}")
     return "; ".join(lines)
@@ -225,7 +252,10 @@ def _capability_command(node: PatroniNode, *, runtime: RuntimeTarget, role: str)
     lines = _remote_prelude(node, role=role, expected_runtime=runtime)
     lines.append(
         f"docker exec -i {shlex.quote(runtime.container_id)} python3 scripts/cutover_legacy_owner.py --help "
-        "| grep -F -- '--execution-json-stdin' >/dev/null"
+        "| grep -F -- '--execution-json-stdin' >/dev/null "
+        "&& docker exec -i "
+        f"{shlex.quote(runtime.container_id)} python3 scripts/cutover_legacy_owner.py --help "
+        "| grep -F -- '--credential-json-stdin' >/dev/null"
     )
     return "; ".join(lines)
 
@@ -261,7 +291,11 @@ def _fresh_plan(primary: PatroniNode, context: PinnedSshContext, runtime: Runtim
 
 
 def _proof_all_nodes(
-    context: PinnedSshContext, topology: ClusterTopology, *, expected_image: str
+    context: PinnedSshContext,
+    topology: ClusterTopology,
+    *,
+    expected_image: str,
+    staff_credential: str,
 ) -> dict[str, dict[str, Any]]:
     proof: dict[str, dict[str, Any]] = {}
     bindings: set[str] = set()
@@ -272,8 +306,22 @@ def _proof_all_nodes(
         )
         if runtime.image != expected_image:
             raise WorkflowError("cutover proof runtime image differs from reviewed primary image")
-        output = _run_remote(node, context, _cutover_command(node, runtime=runtime, role=role, action="verify"),
-                             accepted_statuses=frozenset({0, 2}))
+        payload = json.dumps(
+            {"new_password": staff_credential}, separators=(",", ":")
+        )
+        output = _run_remote(
+            node,
+            context,
+            _cutover_command(
+                node,
+                runtime=runtime,
+                role=role,
+                action="verify",
+                prove_credential=True,
+            ),
+            stdin=payload,
+            accepted_statuses=frozenset({0, 2}),
+        )
         result = load_result(output.stdout, expected_mode="verify")
         validate_result_semantics(result, expected_mode="verify", remote_status=output.status)
         if result["auth_mode"] not in {"staff_shadow", "staff"}:
@@ -318,6 +366,9 @@ def _write_result(path: Path, payload: dict[str, Any]) -> None:
 
 def execute(args: argparse.Namespace) -> dict[str, Any]:
     validate_arguments(args)
+    staff_credential = (
+        _read_one_time_credential() if args.operation == "execute" else None
+    )
     with tempfile.TemporaryDirectory(prefix="legacy-owner-cutover-ssh-") as name:
         directory = Path(name)
         directory.chmod(0o700)
@@ -350,7 +401,10 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 raise WorkflowError("fresh plan differs from the reviewed plan digest")
             if discover_cluster_topology(context=context, runner=_subprocess_runner) != topology:
                 raise WorkflowError("Patroni topology changed after plan; run a fresh operation")
-            payload = json.dumps({"plan_token": plan_token}, separators=(",", ":"))
+            execution_payload: dict[str, str] = {"plan_token": plan_token}
+            if args.operation == "execute":
+                execution_payload["new_password"] = str(staff_credential or "")
+            payload = json.dumps(execution_payload, separators=(",", ":"))
             try:
                 output = _run_remote(
                     primary,
@@ -366,7 +420,12 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                     result, expected_mode=args.operation, remote_status=output.status
                 )
                 if args.operation == "execute":
-                    proof = _proof_all_nodes(context, topology, expected_image=runtime.image)
+                    proof = _proof_all_nodes(
+                        context,
+                        topology,
+                        expected_image=runtime.image,
+                        staff_credential=str(staff_credential or ""),
+                    )
                 elif args.operation == "rollback":
                     proof = _verify_legacy_after_rollback(
                         context, topology, expected_image=runtime.image
@@ -376,7 +435,10 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                     raise
                 try:
                     recovery_proof = _recover_after_uncertain_execute(
-                        context, topology, runtime.image
+                        context,
+                        topology,
+                        runtime.image,
+                        staff_credential=str(staff_credential or ""),
                     )
                 except Exception as recovery_error:
                     raise WorkflowError(
@@ -455,7 +517,11 @@ def _automatic_rollback(
 
 
 def _recover_after_uncertain_execute(
-    context: PinnedSshContext, reviewed_topology: ClusterTopology, expected_image: str
+    context: PinnedSshContext,
+    reviewed_topology: ClusterTopology,
+    expected_image: str,
+    *,
+    staff_credential: str,
 ) -> dict[str, dict[str, Any]]:
     topology = discover_cluster_topology(context=context, runner=_subprocess_runner)
     if topology != reviewed_topology:
@@ -470,7 +536,16 @@ def _recover_after_uncertain_execute(
     output = _run_remote(
         primary,
         context,
-        _cutover_command(primary, runtime=runtime, role="primary", action="verify"),
+        _cutover_command(
+            primary,
+            runtime=runtime,
+            role="primary",
+            action="verify",
+            prove_credential=True,
+        ),
+        stdin=json.dumps(
+            {"new_password": staff_credential}, separators=(",", ":")
+        ),
         accepted_statuses=frozenset({0, 2}),
     )
     result = load_result(output.stdout, expected_mode="verify")

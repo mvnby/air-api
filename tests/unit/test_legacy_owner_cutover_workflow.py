@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ def _arguments(tmp_path: Path, *, operation: str = "plan") -> argparse.Namespace
         operation=operation,
         plan_for="cutover",
         reviewed_plan_digest=("a" * 64 if operation != "plan" else None),
+        credential_stdin=operation == "execute",
         identity_file=identity,
         result_file=tmp_path / "result.json",
     )
@@ -61,6 +63,15 @@ def test_remote_commands_are_fixed_to_active_immutable_container_and_cli():
     assert "--for-action rollback" in workflow._cutover_command(
         node, runtime=_runtime(), role="primary", action="plan", token="rollback"
     )
+    credential_proof = workflow._cutover_command(
+        node,
+        runtime=_runtime(),
+        role="primary",
+        action="verify",
+        prove_credential=True,
+    )
+    assert "--credential-json-stdin" in credential_proof
+    assert "new_password" not in credential_proof
 
 
 def test_runtime_rejects_nonimmutable_or_malformed_container_identity():
@@ -70,6 +81,16 @@ def test_runtime_rejects_nonimmutable_or_malformed_container_identity():
     assert parsed.service == "app-green"
     with pytest.raises(workflow.WorkflowError, match="reviewed immutable"):
         workflow._parse_runtime_target("app-blue|" + "c" * 64 + "|backend:latest")
+
+
+def test_one_time_credential_reader_is_bounded_and_does_not_normalize_bytes():
+    assert workflow._read_one_time_credential(BytesIO("Пароль-2026".encode())) == (
+        "Пароль-2026"
+    )
+    with pytest.raises(workflow.WorkflowError, match="too large"):
+        workflow._read_one_time_credential(
+            BytesIO(b"x" * (workflow.MAX_ONE_TIME_CREDENTIAL_BYTES + 1))
+        )
 
 
 def test_reviewed_sha_tag_is_resolved_to_exact_immutable_backend_digest(monkeypatch):
@@ -189,7 +210,45 @@ def test_dual_node_proof_refuses_standby_image_different_from_reviewed_primary(m
     ])
     monkeypatch.setattr(workflow, "_run_remote", lambda *args, **kwargs: next(outputs))
     with pytest.raises(workflow.WorkflowError, match="image differs"):
-        workflow._proof_all_nodes(object(), topology, expected_image=_runtime().image)
+        workflow._proof_all_nodes(
+            object(),
+            topology,
+            expected_image=_runtime().image,
+            staff_credential="one-time-owner-password-2026",
+        )
+
+
+def test_dual_node_staff_proof_sends_credential_only_over_stdin_and_sanitizes_it(
+    monkeypatch,
+):
+    topology = ClusterTopology(
+        primary=PATRONI_NODES[0], standby=PATRONI_NODES[1],
+        system_identifier="1234567890123456789", timeline=1,
+    )
+    password = "one-time-owner-password-2026"
+    runtime = "app-blue|" + "a" * 64 + "|" + _runtime().image
+    verified = _verify_payload(mode="staff_shadow")
+    outputs = iter([
+        workflow.RemoteOutput(0, runtime), workflow.RemoteOutput(0, verified),
+        workflow.RemoteOutput(0, runtime), workflow.RemoteOutput(0, verified),
+    ])
+    calls: list[dict] = []
+
+    def run_remote(*args, **kwargs):
+        calls.append(kwargs)
+        return next(outputs)
+
+    monkeypatch.setattr(workflow, "_run_remote", run_remote)
+    proof = workflow._proof_all_nodes(
+        object(),
+        topology,
+        expected_image=_runtime().image,
+        staff_credential=password,
+    )
+    credential_inputs = [call["stdin"] for call in calls if call.get("stdin")]
+    assert len(credential_inputs) == 2
+    assert all(json.loads(value) == {"new_password": password} for value in credential_inputs)
+    assert password not in json.dumps(proof)
 
 
 def _plan_payload() -> dict:
@@ -256,6 +315,11 @@ def test_malformed_execute_result_runs_recovery_for_already_committed_shadow(mon
     monkeypatch.setattr(workflow, "discover_cluster_topology", lambda **kwargs: topology)
     monkeypatch.setattr(workflow, "_reviewed_backend_image_for_sha", lambda *args: _runtime().image)
     monkeypatch.setattr(workflow, "_fresh_plan", lambda *args, **kwargs: (_plan_payload(), "signed-token"))
+    monkeypatch.setattr(
+        workflow,
+        "_read_one_time_credential",
+        lambda: "one-time-owner-password-2026",
+    )
     monkeypatch.setattr(workflow, "_run_remote", lambda *args, **kwargs: next(outputs))
     monkeypatch.setattr(
         workflow,

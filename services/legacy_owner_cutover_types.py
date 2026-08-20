@@ -12,7 +12,6 @@ from models import LegacyOwnerAuthState, StaffUser, Storefront, Tenant, TenantMe
 class LegacyOwnerRuntimeIdentity:
     normalized_name: str | None
     credential: str
-    policy_compliant: bool
     identity_canonical: bool
     binding: str
 
@@ -24,7 +23,6 @@ class LegacyOwnerCutoverState:
     storefronts: list[Storefront]
     candidates: list[StaffUser]
     memberships: list[TenantMembership]
-    credential_matches: bool
 
     @property
     def tenant(self) -> Tenant | None:

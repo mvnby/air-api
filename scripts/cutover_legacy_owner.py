@@ -39,22 +39,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--execution-json-stdin",
         action="store_true",
-        help="Read an exact JSON object containing only plan_token from stdin.",
+        help=(
+            "Read reviewed execution JSON from stdin. Execute requires "
+            "plan_token and new_password; rollback accepts only plan_token."
+        ),
+    )
+    parser.add_argument(
+        "--credential-json-stdin",
+        action="store_true",
+        help="Verify a staff credential supplied only through stdin.",
     )
     return parser
 
 
 def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if args.action == "plan":
-        if args.plan_token or args.execution_json_stdin:
+        if args.plan_token or args.execution_json_stdin or args.credential_json_stdin:
             parser.error("plan does not accept execution input")
         return
     if args.action == "verify":
         if args.plan_token or args.execution_json_stdin or args.for_action != "cutover":
             parser.error("verify does not accept plan or execution input")
         return
+    if args.credential_json_stdin:
+        parser.error("credential verification input is accepted only by verify")
     if args.for_action != "cutover":
         parser.error("--for-action is accepted only by plan")
+    if args.action == "execute" and not args.execution_json_stdin:
+        parser.error("execute requires protected execution JSON on stdin")
     if args.execution_json_stdin:
         if args.plan_token:
             parser.error(
@@ -65,7 +77,7 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         parser.error("execute requires --plan-token from a fresh plan")
 
 
-def read_execution_input(stream: Any | None = None) -> str:
+def _read_json_input(stream: Any | None = None) -> dict[str, Any]:
     source = stream if stream is not None else sys.stdin.buffer
     payload = source.read(MAX_EXECUTION_INPUT_BYTES + 1)
     if len(payload) > MAX_EXECUTION_INPUT_BYTES:
@@ -74,18 +86,51 @@ def read_execution_input(stream: Any | None = None) -> str:
         decoded = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("Execution input must be valid UTF-8 JSON") from exc
-    if not isinstance(decoded, dict) or set(decoded) != {"plan_token"}:
-        raise ValueError("Execution input must contain exactly plan_token")
+    if not isinstance(decoded, dict):
+        raise ValueError("Execution input must be a JSON object")
+    return decoded
+
+
+def read_execution_input(
+    stream: Any | None = None,
+    *,
+    require_password: bool,
+) -> tuple[str, str | None]:
+    decoded = _read_json_input(stream)
+    expected = {"plan_token", "new_password"} if require_password else {"plan_token"}
+    if set(decoded) != expected:
+        raise ValueError("Execution input has an unexpected schema")
     token = decoded["plan_token"]
     if not isinstance(token, str) or not token or len(token) > 512:
         raise ValueError("Execution input plan token is invalid")
-    return token
+    password = decoded.get("new_password")
+    if require_password and (not isinstance(password, str) or not password):
+        raise ValueError("Execution input credential is invalid")
+    return token, password
+
+
+def read_credential_input(stream: Any | None = None) -> str:
+    decoded = _read_json_input(stream)
+    if set(decoded) != {"new_password"}:
+        raise ValueError("Credential input has an unexpected schema")
+    password = decoded["new_password"]
+    if not isinstance(password, str) or not password:
+        raise ValueError("Credential input is invalid")
+    return password
 
 
 async def run(args: argparse.Namespace) -> dict[str, Any]:
     from core.database import async_session_maker
 
-    execution_token = read_execution_input() if args.execution_json_stdin else args.plan_token
+    execution_token = args.plan_token
+    new_password: str | None = None
+    if args.execution_json_stdin:
+        execution_token, new_password = read_execution_input(
+            require_password=args.action == "execute"
+        )
+    verification_credential = (
+        read_credential_input() if args.credential_json_stdin else None
+    )
     async with async_session_maker() as session:
         try:
             if args.action == "plan":
@@ -94,13 +139,18 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     for_action=args.for_action,
                 )
             if args.action == "verify":
-                return await LegacyOwnerCutoverService.verify(session)
+                return await LegacyOwnerCutoverService.verify(
+                    session, staff_credential=verification_credential
+                )
             operation = (
                 LegacyOwnerCutoverService.rollback
                 if args.action == "rollback"
                 else LegacyOwnerCutoverService.execute
             )
-            result = await operation(session, plan_token=str(execution_token or ""))
+            operation_kwargs = {"plan_token": str(execution_token or "")}
+            if args.action == "execute":
+                operation_kwargs["new_password"] = str(new_password or "")
+            result = await operation(session, **operation_kwargs)
             await session.commit()
             return result
         except Exception:

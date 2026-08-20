@@ -43,8 +43,9 @@ def test_workflow_requires_exactly_one_successful_ci_run_for_reviewed_sha():
     assert '"${successful_run_count}" != "1"' in gate["run"]
 
 
-def test_workflow_has_no_target_or_secret_credential_inputs():
-    inputs = _workflow()["on"]["workflow_dispatch"]["inputs"]
+def test_workflow_has_no_target_input_and_uses_one_static_execute_secret():
+    config = _workflow()
+    inputs = config["on"]["workflow_dispatch"]["inputs"]
     assert set(inputs) == {"confirm_sha", "operation", "plan_for", "apply", "reviewed_plan_digest"}
     assert inputs["operation"]["options"] == ["plan", "execute", "rollback"]
     assert inputs["plan_for"]["options"] == ["cutover", "rollback"]
@@ -55,6 +56,19 @@ def test_workflow_has_no_target_or_secret_credential_inputs():
     assert "--password-env" not in source
     assert "ssh-keyscan" not in source
     assert "secrets[" not in source
+    execute = _step(config, "Execute Reviewed Legacy Owner Cutover")
+    assert execute["if"] == "${{ inputs.operation == 'execute' }}"
+    assert execute["env"] == {
+        "LEGACY_OWNER_ONE_TIME_PASSWORD": (
+            "${{ secrets.LEGACY_OWNER_ONE_TIME_PASSWORD }}"
+        ),
+        "PLAN_FOR": "${{ inputs.plan_for }}",
+        "REVIEWED_PLAN_DIGEST": "${{ inputs.reviewed_plan_digest }}",
+    }
+    assert "printf '%s' \"${LEGACY_OWNER_ONE_TIME_PASSWORD}\" |" in execute["run"]
+    assert "--credential-stdin" in execute["run"]
+    assert "::add-mask::" in execute["run"]
+    assert "--password" not in execute["run"]
 
 
 def test_workflow_uses_pinned_checkout_and_short_lived_sanitized_artifact():

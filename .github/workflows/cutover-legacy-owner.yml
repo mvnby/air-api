@@ -123,7 +123,8 @@ jobs:
           printf '%s' "${GH_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
           unset GH_TOKEN
 
-      - name: Run Reviewed Legacy Owner Operation
+      - name: Run Reviewed Legacy Owner Plan Or Rollback
+        if: ${{ inputs.operation != 'execute' }}
         env:
           OPERATION: ${{ inputs.operation }}
           PLAN_FOR: ${{ inputs.plan_for }}
@@ -138,6 +139,33 @@ jobs:
           command+=(--result-file "${GITHUB_WORKSPACE}/legacy-owner-cutover-result.json")
           "${command[@]}"
 
+      - name: Execute Reviewed Legacy Owner Cutover
+        if: ${{ inputs.operation == 'execute' }}
+        env:
+          LEGACY_OWNER_ONE_TIME_PASSWORD: ${{ secrets.LEGACY_OWNER_ONE_TIME_PASSWORD }}
+          PLAN_FOR: ${{ inputs.plan_for }}
+          REVIEWED_PLAN_DIGEST: ${{ inputs.reviewed_plan_digest }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [ -z "${LEGACY_OWNER_ONE_TIME_PASSWORD}" ]; then
+            echo "::error::Missing temporary LEGACY_OWNER_ONE_TIME_PASSWORD production secret"
+            exit 1
+          fi
+          mask_value="${LEGACY_OWNER_ONE_TIME_PASSWORD//'%'/'%25'}"
+          mask_value="${mask_value//$'\r'/'%0D'}"
+          mask_value="${mask_value//$'\n'/'%0A'}"
+          printf '::add-mask::%s\n' "${mask_value}"
+          unset mask_value
+          printf '%s' "${LEGACY_OWNER_ONE_TIME_PASSWORD}" | \
+            python3 -I scripts/ops/legacy_owner_cutover_workflow.py execute \
+              --plan-for "${PLAN_FOR}" \
+              --reviewed-plan-digest "${REVIEWED_PLAN_DIGEST}" \
+              --credential-stdin \
+              --identity-file "${RUNNER_TEMP}/legacy-owner-cutover-key" \
+              --result-file "${GITHUB_WORKSPACE}/legacy-owner-cutover-result.json"
+          unset LEGACY_OWNER_ONE_TIME_PASSWORD
+
       - name: Write Sanitized Summary
         if: always()
         env:
@@ -150,6 +178,7 @@ jobs:
             echo "- target: fixed system tenant mvn / storefront main"
             echo "- topology: dynamically verified single Patroni primary"
             echo "- proof: both application nodes after execute"
+            echo "- execute credential: protected one-time secret over stdin only"
             echo "- legacy ADMIN_* removal: not part of this workflow"
           } >> "${GITHUB_STEP_SUMMARY}"
 
