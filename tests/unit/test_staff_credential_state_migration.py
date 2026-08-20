@@ -22,9 +22,9 @@ def _load_migration():
     return migration
 
 
-def test_staff_credential_state_is_the_single_alembic_head() -> None:
+def test_staff_credential_state_is_in_the_single_alembic_head_chain() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert_revision_in_single_head_chain(scripts, REVISION)
 
 
 def test_staff_credential_state_migration_upgrades_existing_rows_and_downgrades(monkeypatch):
