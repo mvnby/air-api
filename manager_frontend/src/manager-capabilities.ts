@@ -18,7 +18,7 @@ export const hasManagerCapability = (
 ): boolean => Boolean(auth?.capabilities?.includes(capability));
 
 export const requiredCapabilityForManagerPath = (path: string): ManagerCapability | null => {
-  if (path === '/manager' || path === '/manager/') return null;
+  if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
   if (
     path.startsWith('/manager/leads')
     || path.startsWith('/manager/orders')

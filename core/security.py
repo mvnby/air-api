@@ -45,6 +45,9 @@ class AuthenticatedUser:
     storefront_id: int | None = None
     tenant_membership_id: int | None = None
     is_system_tenant: bool = False
+    auth_version: int | None = None
+    must_change_password: bool = False
+    can_change_password: bool = False
 
     def tenant_scope(self) -> TenantScope:
         if not self.tenant_id or not self.storefront_id:
@@ -133,6 +136,12 @@ async def get_current_auth_context(
             staff_user = await StaffUserService.get_by_id(session, int(staff_user_id))
             if staff_user is None or not StaffUserService.is_active(staff_user):
                 raise HTTPException(status_code=401, detail="Invalid user")
+            try:
+                token_auth_version = int(payload["auth_version"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(status_code=401, detail="Invalid credential version") from exc
+            if token_auth_version != int(staff_user.auth_version):
+                raise HTTPException(status_code=401, detail="Credential has changed")
             if username != staff_user.username and username != str(staff_user.telegram_id or ""):
                 raise HTTPException(status_code=401, detail="Invalid user")
             try:
@@ -160,6 +169,9 @@ async def get_current_auth_context(
                 storefront_id=tenant_scope.storefront_id,
                 tenant_membership_id=access.membership_id,
                 is_system_tenant=tenant_scope.is_system,
+                auth_version=token_auth_version,
+                must_change_password=bool(staff_user.must_change_password),
+                can_change_password=bool(staff_user.password_hash),
             )
 
         if username != settings.ADMIN_USERNAME:

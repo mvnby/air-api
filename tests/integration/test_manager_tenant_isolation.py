@@ -89,6 +89,7 @@ def _headers(user: StaffUser, *, claimed_role: str = "owner") -> dict[str, str]:
         {
             "sub": user.username,
             "staff_user_id": user.id,
+            "auth_version": user.auth_version,
             "role": claimed_role,
             "auth_source": "tenant-isolation-test",
         },

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import BigInteger, Column, JSON, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, JSON, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -22,6 +22,18 @@ class StaffUser(SQLModel, table=True):
 
     username: Optional[str] = Field(default=None, sa_column=Column(String, unique=True, nullable=True))
     password_hash: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    auth_version: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1"),
+    )
+    password_changed_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    must_change_password: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="false"),
+    )
 
     phone: Optional[str] = Field(default=None, index=True)
     email: Optional[str] = Field(default=None, index=True)

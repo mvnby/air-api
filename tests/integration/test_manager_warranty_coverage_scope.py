@@ -50,6 +50,7 @@ def _headers(owner: StaffUser) -> dict[str, str]:
         {
             "sub": owner.username,
             "staff_user_id": owner.id,
+            "auth_version": owner.auth_version,
             "auth_source": "warranty-coverage-scope-test",
         },
         expires_delta=timedelta(minutes=10),

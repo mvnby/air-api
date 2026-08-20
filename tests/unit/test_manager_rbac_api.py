@@ -24,7 +24,7 @@ from routers.manager_staff import router as manager_staff_router
 from services.staff_user_service import StaffUserService
 
 
-TEST_PASSWORD = "secret123"
+TEST_PASSWORD = "secret-12345"
 
 
 class _GoogleServiceStub:

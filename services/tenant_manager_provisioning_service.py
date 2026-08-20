@@ -7,6 +7,7 @@ import hmac
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, text
@@ -16,6 +17,7 @@ from sqlmodel import select
 from core.input_validation import normalize_phone_digits
 from models import StaffUser, Storefront, Tenant, TenantAuditEvent, TenantMembership
 from services.staff_user_service import StaffUserService
+from services.credential_service import CredentialService
 from services.storefront_onboarding_plan_token import StorefrontOnboardingPlanToken
 
 
@@ -156,7 +158,8 @@ class TenantManagerProvisioningService:
                 primary_role=StaffUserService.ROLE_MANAGER,
                 roles=[StaffUserService.ROLE_MANAGER],
                 username=request.username,
-                password_hash=StaffUserService.hash_password(str(password)),
+                password_hash=CredentialService.hash_password(str(password)),
+                password_changed_at=datetime.now(timezone.utc),
                 phone=request.phone,
             )
             session.add(staff_user)
@@ -439,11 +442,7 @@ class TenantManagerProvisioningService:
 
     @staticmethod
     def _validate_password(password: str) -> None:
-        value = str(password or "")
-        if len(value) < 12:
-            raise ValueError("Password must be at least 12 characters long")
-        if len(value.encode("utf-8")) > 72:
-            raise ValueError("Password must be at most 72 UTF-8 bytes")
+        CredentialService.validate_password(password)
 
     @staticmethod
     def _add_audit_event(

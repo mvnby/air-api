@@ -88,6 +88,7 @@ def _headers(user: StaffUser, *, request_id: str | None = None) -> dict[str, str
         {
             "sub": user.username,
             "staff_user_id": user.id,
+            "auth_version": user.auth_version,
             "auth_source": "tenant-offer-test",
         },
         expires_delta=timedelta(minutes=10),

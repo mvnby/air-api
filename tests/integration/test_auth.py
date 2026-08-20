@@ -29,7 +29,7 @@ async def test_login_success_with_staff_user(async_client: AsyncClient, db):
         primary_role="manager",
         roles=["manager"],
         username="manager",
-        password_hash=StaffUserService.hash_password("secret123"),
+        password_hash=StaffUserService.hash_password("secret-12345"),
     )
     db.add(staff_user)
     await db.flush()
@@ -45,7 +45,7 @@ async def test_login_success_with_staff_user(async_client: AsyncClient, db):
 
     response = await async_client.post(
         "/login/access-token",
-        data={"username": "manager", "password": "secret123"},
+        data={"username": "manager", "password": "secret-12345"},
     )
 
     assert response.status_code == 200

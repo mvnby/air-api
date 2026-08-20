@@ -1,6 +1,7 @@
 """Stable operationId constants for manager API routes."""
 
 READ_USER_ME = "read_user_me"
+CHANGE_MANAGER_ACCOUNT_PASSWORD = "change_manager_account_password"
 LIST_MANAGER_STOREFRONTS = "list_manager_storefronts"
 GET_MANAGER_CALENDAR_EVENTS = "get_manager_calendar_events"
 
@@ -323,6 +324,7 @@ GENERATE_SUPPLY_LOGISTICS_MESSAGE = "generate_supply_logistics_message"
 
 ALL_MANAGER_OPERATION_IDS = (
     READ_USER_ME,
+    CHANGE_MANAGER_ACCOUNT_PASSWORD,
     LIST_MANAGER_STOREFRONTS,
     GET_MANAGER_CALENDAR_EVENTS,
     GET_MANAGER_PRODUCTS,

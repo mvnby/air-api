@@ -47,6 +47,7 @@ def _headers(
         {
             "sub": owner.username,
             "staff_user_id": owner.id,
+            "auth_version": owner.auth_version,
             "auth_source": "manager-storefront-selector-test",
         },
         expires_delta=timedelta(minutes=10),
