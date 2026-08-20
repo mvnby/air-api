@@ -14,5 +14,7 @@ export type ManagerAuthStatusResponse = {
     tenant_membership_id?: (number | null);
     is_system_tenant?: boolean;
     capabilities?: Array<string>;
+    can_change_password?: boolean;
+    must_change_password?: boolean;
 };
 

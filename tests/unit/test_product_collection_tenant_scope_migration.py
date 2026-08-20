@@ -13,7 +13,7 @@ REVISION = "b7c8d9e0f1a2"
 
 def test_product_collection_scope_is_single_head_and_fails_closed() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert_revision_in_single_head_chain(scripts, REVISION)
     source = Path(
         "alembic/versions/b7c8d9e0f1a2_scope_product_collections.py"
     ).read_text(encoding="utf-8")

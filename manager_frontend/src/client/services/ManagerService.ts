@@ -49,6 +49,7 @@ import type { ManagerMediaReuseSearchItemResponse } from '../models/ManagerMedia
 import type { ManagerMediaSetMainImageResponse } from '../models/ManagerMediaSetMainImageResponse';
 import type { ManagerMediaUploadLocalImagesResponse } from '../models/ManagerMediaUploadLocalImagesResponse';
 import type { ManagerNormalizeLegacySpecsResponse } from '../models/ManagerNormalizeLegacySpecsResponse';
+import type { ManagerPasswordChangePayload } from '../models/ManagerPasswordChangePayload';
 import type { ManagerStorefrontListResponse } from '../models/ManagerStorefrontListResponse';
 import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse';
 import type { MdvCatalogImportPayload } from '../models/MdvCatalogImportPayload';
@@ -1541,6 +1542,25 @@ export class ManagerService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/me',
+        });
+    }
+    /**
+     * Change Account Password
+     * @param requestBody
+     * @returns void
+     * @throws ApiError
+     */
+    public static changeManagerAccountPassword(
+        requestBody: ManagerPasswordChangePayload,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/account/change-password',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

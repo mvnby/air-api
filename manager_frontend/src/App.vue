@@ -57,6 +57,7 @@ const SupplierMappingView = defineAsyncComponent(() => import('./views/SupplierM
 const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQualityView.vue'));
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
+const ProfileSecurityView = defineAsyncComponent(() => import('./views/ProfileSecurityView.vue'));
 const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const showLoginModal = ref(false);
@@ -155,6 +156,7 @@ const toggleNavSection = (sectionId: NavSectionId) => {
 const currentView = computed(() => {
   const path = currentPath.value;
   if (path === '/manager' || path === '/manager/') return 'home';
+  if (path === '/manager/profile') return 'profile-security';
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
@@ -635,6 +637,7 @@ watch(currentPath, () => {
 
     <main class="flex-1 overflow-auto md:ml-0">
       <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
+      <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />
       <LeadsView v-else-if="authorizedView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="authorizedView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="authorizedView === 'calendar'" :key="currentLocation" />

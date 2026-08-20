@@ -20,6 +20,7 @@ import {
   ShoppingCart,
   Tags,
   Truck,
+  UserRound,
   UserPlus,
   Users,
   Wallet,
@@ -43,6 +44,7 @@ export type NavSection = {
 
 export const coreNavItems: NavItem[] = [
   { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
+  { path: '/manager/profile', label: 'Профиль / Безопасность', icon: UserRound, match: 'exact' },
   { path: '/manager/leads', label: 'Лиды', icon: UserPlus, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },

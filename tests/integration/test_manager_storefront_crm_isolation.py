@@ -53,6 +53,7 @@ def _headers(
         {
             "sub": owner.username,
             "staff_user_id": owner.id,
+            "auth_version": owner.auth_version,
             "auth_source": "storefront-crm-isolation-test",
         },
         expires_delta=timedelta(minutes=10),

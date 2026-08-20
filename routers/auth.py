@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from core.auth_cookie import clear_auth_cookie, set_auth_cookie
 from core.config import settings
 from core.database import get_session
 from schemas import TelegramLoginPayload
@@ -14,22 +15,10 @@ import secrets
 router = APIRouter(tags=["login"])
 
 
-def _set_auth_cookie(response: Response, access_token: str, expires_delta: timedelta) -> None:
-    response.set_cookie(
-        key="access_token",
-        value=f"Bearer {access_token}",
-        httponly=True,
-        max_age=int(expires_delta.total_seconds()),
-        expires=int(expires_delta.total_seconds()),
-        samesite="lax",
-        secure=settings.is_production,
-    )
-
-
 def _token_response(response: Response, token_data: dict[str, Any]) -> dict[str, str]:
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
-    _set_auth_cookie(response, access_token, access_token_expires)
+    set_auth_cookie(response, access_token, access_token_expires)
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -45,8 +34,13 @@ async def login_access_token(
     OAuth2 compatible token login, get an access token for future requests.
     Sets 'access_token' cookie as well.
     """
-    staff_user = await StaffUserService.authenticate_password(session, form_data.username, form_data.password)
-    if staff_user is not None:
+    authentication = await StaffUserService.authenticate_password(
+        session,
+        form_data.username,
+        form_data.password,
+    )
+    if authentication is not None:
+        staff_user = authentication.user
         username = staff_user.username or str(staff_user.telegram_id or staff_user.id)
         return _token_response(
             response,
@@ -55,6 +49,7 @@ async def login_access_token(
                 "staff_user_id": staff_user.id,
                 "role": StaffUserService.primary_role(staff_user),
                 "auth_source": "staff_password",
+                "auth_version": authentication.auth_version,
             },
         )
 
@@ -87,12 +82,7 @@ async def logout(response: Response) -> None:
     The manager UI uses the HttpOnly cookie only; deleting the cookie is the
     server-side session boundary for a normal browser logout.
     """
-    response.delete_cookie(
-        key="access_token",
-        httponly=True,
-        samesite="lax",
-        secure=settings.is_production,
-    )
+    clear_auth_cookie(response)
 
 
 @router.post("/login/telegram", operation_id="login_telegram")
@@ -116,5 +106,6 @@ async def login_telegram(
             "staff_user_id": staff_user.id,
             "role": StaffUserService.primary_role(staff_user),
             "auth_source": "telegram",
+            "auth_version": staff_user.auth_version,
         },
     )

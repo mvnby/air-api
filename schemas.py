@@ -771,6 +771,13 @@ class ManagerAuthStatusResponse(BaseModel):
     tenant_membership_id: Optional[int] = None
     is_system_tenant: bool = False
     capabilities: List[str] = Field(default_factory=list)
+    can_change_password: bool = False
+    must_change_password: bool = False
+
+
+class ManagerPasswordChangePayload(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class ManagerCatalogProductImageResponse(BaseModel):

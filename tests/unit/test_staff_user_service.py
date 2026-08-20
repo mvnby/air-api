@@ -68,10 +68,10 @@ def test_staff_role_and_status_helpers():
 
 
 def test_staff_password_hash_and_verify():
-    password_hash = StaffUserService.hash_password("secret123")
+    password_hash = StaffUserService.hash_password("secret-12345")
 
-    assert password_hash != "secret123"
-    assert StaffUserService.verify_password("secret123", password_hash)
+    assert password_hash != "secret-12345"
+    assert StaffUserService.verify_password("secret-12345", password_hash)
     assert not StaffUserService.verify_password("wrong", password_hash)
 
 

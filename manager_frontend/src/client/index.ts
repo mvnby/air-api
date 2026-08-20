@@ -317,6 +317,7 @@ export type { ManagerOrderTransferServiceLine } from './models/ManagerOrderTrans
 export type { ManagerOrderTransferServiceRef } from './models/ManagerOrderTransferServiceRef';
 export type { ManagerOrderTransferWorkStage } from './models/ManagerOrderTransferWorkStage';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
+export type { ManagerPasswordChangePayload } from './models/ManagerPasswordChangePayload';
 export type { ManagerProductCollectionCreate } from './models/ManagerProductCollectionCreate';
 export type { ManagerProductCollectionItemPayload } from './models/ManagerProductCollectionItemPayload';
 export type { ManagerProductCollectionItemResponse } from './models/ManagerProductCollectionItemResponse';

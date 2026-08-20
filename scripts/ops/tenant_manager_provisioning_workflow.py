@@ -48,6 +48,10 @@ from scripts.ops.tenant_manager_result_contract import (  # noqa: E402
     sanitize_plan,
     validate_result_semantics as _validate_result_semantics,
 )
+from services.credential_service import (  # noqa: E402
+    CredentialPolicyError,
+    CredentialService,
+)
 
 
 SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -323,8 +327,10 @@ def _read_password(stream: Any | None = None) -> str:
         raise WorkflowError("one-time password must be UTF-8") from exc
     if not password:
         raise WorkflowError("one-time password is required for execute")
-    if len(password.encode("utf-8")) > 72:
-        raise WorkflowError("one-time password exceeds the bcrypt byte limit")
+    try:
+        CredentialService.validate_password(password)
+    except CredentialPolicyError as exc:
+        raise WorkflowError(f"one-time password violates credential policy: {exc.code}") from exc
     return password
 
 

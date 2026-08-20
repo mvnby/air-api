@@ -10567,6 +10567,45 @@
         ]
       }
     },
+    "/api/manager/account/change-password": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Change Account Password",
+        "operationId": "change_manager_account_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerPasswordChangePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/storefronts": {
       "get": {
         "tags": [
@@ -30468,6 +30507,16 @@
             },
             "type": "array",
             "title": "Capabilities"
+          },
+          "can_change_password": {
+            "type": "boolean",
+            "title": "Can Change Password",
+            "default": false
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password",
+            "default": false
           }
         },
         "type": "object",
@@ -42917,6 +42966,24 @@
         },
         "type": "object",
         "title": "ManagerOrderUpdatePayload"
+      },
+      "ManagerPasswordChangePayload": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "ManagerPasswordChangePayload"
       },
       "ManagerProductCollectionCreate": {
         "properties": {

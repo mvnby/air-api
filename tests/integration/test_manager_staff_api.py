@@ -23,7 +23,7 @@ async def test_manager_staff_crud_hides_password_hash_and_changes_password(async
             "primary_role": "manager",
             "status": "active",
             "username": "office",
-            "password": "secret123",
+            "password": "secret-12345",
             "phone": "+375291112233",
             "email": "office@example.com",
             "telegram_id": 123456,
@@ -42,7 +42,7 @@ async def test_manager_staff_crud_hides_password_hash_and_changes_password(async
 
     login_response = await async_client.post(
         "/login/access-token",
-        data={"username": "office", "password": "secret123"},
+        data={"username": "office", "password": "secret-12345"},
     )
     assert login_response.status_code == 200
 
@@ -65,7 +65,7 @@ async def test_manager_staff_crud_hides_password_hash_and_changes_password(async
 
     old_login = await async_client.post(
         "/login/access-token",
-        data={"username": "office", "password": "secret123"},
+        data={"username": "office", "password": "secret-12345"},
     )
     assert old_login.status_code == 400
 

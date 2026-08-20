@@ -1,12 +1,12 @@
 import logging
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 from typing import Iterable, Optional
 from urllib.parse import parse_qsl
 
-import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func, or_
 
@@ -17,8 +17,15 @@ from schemas import ManagerStaffCreatePayload, ManagerStaffUpdatePayload, Manage
 from services.staff_tenant_membership_service import (
     StaffTenantMembershipService,
 )
+from services.credential_service import CredentialService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class StaffPasswordAuthentication:
+    user: StaffUser
+    auth_version: int
 
 
 class StaffUserService:
@@ -147,21 +154,10 @@ class StaffUserService:
         value = str(username or "").strip().lower()
         return value or None
 
-    @staticmethod
-    def hash_password(password: str) -> str:
-        value = str(password or "")
-        if len(value) < 6:
-            raise ValueError("Пароль должен быть не короче 6 символов")
-        return bcrypt.hashpw(value.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-    @staticmethod
-    def verify_password(password: str, password_hash: str | None) -> bool:
-        if not password_hash:
-            return False
-        try:
-            return bcrypt.checkpw(str(password or "").encode("utf-8"), password_hash.encode("utf-8"))
-        except ValueError:
-            return False
+    # Compatibility facade for existing call sites; the policy lives only in
+    # CredentialService and all mutations below use that service directly.
+    hash_password = staticmethod(CredentialService.hash_password)
+    verify_password = staticmethod(CredentialService.verify_password)
 
     @classmethod
     def _response(
@@ -198,7 +194,12 @@ class StaffUserService:
         )
 
     @classmethod
-    async def authenticate_password(cls, session: AsyncSession, username: str, password: str) -> StaffUser | None:
+    async def authenticate_password(
+        cls,
+        session: AsyncSession,
+        username: str,
+        password: str,
+    ) -> StaffPasswordAuthentication | None:
         normalized_username = cls.normalize_username(username)
         if not normalized_username:
             return None
@@ -207,15 +208,18 @@ class StaffUserService:
         user = result.scalar_one_or_none()
         if user is None or not cls.is_active(user):
             return None
-        if not cls.verify_password(password, user.password_hash):
+        if not CredentialService.verify_password(password, user.password_hash):
             return None
 
+        verified_auth_version = int(user.auth_version)
         user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
         user.primary_role = cls.primary_role(user)
         session.add(user)
         await session.commit()
-        await session.refresh(user)
-        return user
+        return StaffPasswordAuthentication(
+            user=user,
+            auth_version=verified_auth_version,
+        )
 
     @classmethod
     async def authenticate_telegram_login(
@@ -345,13 +349,21 @@ class StaffUserService:
         display_name = payload.display_name.strip()
         if not display_name:
             raise ValueError("Имя сотрудника обязательно")
+        password_hash = (
+            CredentialService.hash_password(payload.password)
+            if payload.password
+            else None
+        )
         staff_user = StaffUser(
             display_name=display_name,
             status=cls.normalize_status(payload.status),
             primary_role=primary_role,
             roles=cls.roles_for_primary(primary_role, assignable_as_installer=assignable),
             username=username,
-            password_hash=cls.hash_password(payload.password) if payload.password else None,
+            password_hash=password_hash,
+            password_changed_at=(
+                datetime.now(timezone.utc) if password_hash is not None else None
+            ),
             phone=payload.phone,
             email=payload.email,
             telegram_id=payload.telegram_id,
@@ -440,7 +452,10 @@ class StaffUserService:
         if "username" in changed_fields:
             staff_user.username = cls.normalize_username(payload.username)
         if payload.password:
-            staff_user.password_hash = cls.hash_password(payload.password)
+            staff_user.password_hash = CredentialService.hash_password(payload.password)
+            staff_user.password_changed_at = datetime.now(timezone.utc)
+            staff_user.auth_version = int(staff_user.auth_version) + 1
+            staff_user.must_change_password = False
         if "phone" in changed_fields:
             staff_user.phone = payload.phone or None
         if "email" in changed_fields:

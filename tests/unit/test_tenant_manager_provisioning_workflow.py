@@ -263,7 +263,7 @@ def test_password_is_read_only_from_bounded_stdin():
     assert workflow._read_password(io.BytesIO(b"generated-password-2026\n")) == (
         "generated-password-2026"
     )
-    with pytest.raises(workflow.WorkflowError, match="bcrypt"):
+    with pytest.raises(workflow.WorkflowError, match="password_too_long"):
         workflow._read_password(io.BytesIO(b"x" * 73))
 
 

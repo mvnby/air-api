@@ -104,9 +104,9 @@ def test_password_byte_limit_matches_bcrypt_with_unicode() -> None:
 
     TenantManagerProvisioningService._validate_password(valid_unicode)
     TenantManagerProvisioningService._validate_password("a" * 72)
-    with pytest.raises(ValueError, match="72 UTF-8 bytes"):
+    with pytest.raises(ValueError, match="72 UTF-8"):
         TenantManagerProvisioningService._validate_password("Ж" * 37)
-    with pytest.raises(ValueError, match="72 UTF-8 bytes"):
+    with pytest.raises(ValueError, match="72 UTF-8"):
         TenantManagerProvisioningService._validate_password("a" * 73)
 
 
