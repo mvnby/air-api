@@ -10,7 +10,7 @@ class CredentialPolicyError(ValueError):
 
 
 class CredentialService:
-    MIN_PASSWORD_CHARACTERS = 12
+    MIN_PASSWORD_CHARACTERS = 9
     MAX_PASSWORD_UTF8_BYTES = 72
 
     @classmethod
