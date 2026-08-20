@@ -32,6 +32,9 @@ from services.manager_account_credential_service import (
 from services.staff_user_service import StaffUserService
 
 
+CUTOVER_PASSWORD = "one-time-owner-password-2026"
+
+
 async def _client_with_independent_sessions(db_engine):
     from main import app
 
@@ -247,6 +250,7 @@ async def test_cutover_waits_for_login_state_lock(db_engine) -> None:
                 result = await LegacyOwnerCutoverService.execute(
                     operation_session,
                     plan_token=plan["plan_token"],
+                    new_password=CUTOVER_PASSWORD,
                 )
                 await operation_session.commit()
                 return result
@@ -304,6 +308,7 @@ async def test_real_legacy_login_race_with_cutover_issues_only_stale_token(
                     result = await LegacyOwnerCutoverService.execute(
                         session,
                         plan_token=plan["plan_token"],
+                        new_password=CUTOVER_PASSWORD,
                     )
                     await session.commit()
                     return result
@@ -332,7 +337,11 @@ async def test_rollback_waits_for_staff_login_state_lock(db_engine) -> None:
     factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as seed:
         cutover_plan = await LegacyOwnerCutoverService.plan(seed)
-        await LegacyOwnerCutoverService.execute(seed, plan_token=cutover_plan["plan_token"])
+        await LegacyOwnerCutoverService.execute(
+            seed,
+            plan_token=cutover_plan["plan_token"],
+            new_password=CUTOVER_PASSWORD,
+        )
         await seed.commit()
     async with factory() as planner:
         rollback_plan = await LegacyOwnerCutoverService.plan(
@@ -371,6 +380,7 @@ async def test_real_staff_login_race_with_rollback_cannot_survive_rollback(
         await LegacyOwnerCutoverService.execute(
             seed,
             plan_token=cutover_plan["plan_token"],
+            new_password=CUTOVER_PASSWORD,
         )
         await seed.commit()
     async with factory() as planner:
@@ -404,7 +414,7 @@ async def test_real_staff_login_race_with_rollback_cannot_survive_rollback(
                     "/login/access-token",
                     data={
                         "username": settings.ADMIN_USERNAME,
-                        "password": settings.ADMIN_PASSWORD,
+                        "password": CUTOVER_PASSWORD,
                     },
                 )
             )
@@ -447,7 +457,9 @@ async def test_self_service_race_stales_rollback_then_fresh_rollback_preserves_c
     async with factory() as seed:
         cutover_plan = await LegacyOwnerCutoverService.plan(seed)
         cutover = await LegacyOwnerCutoverService.execute(
-            seed, plan_token=cutover_plan["plan_token"]
+            seed,
+            plan_token=cutover_plan["plan_token"],
+            new_password=CUTOVER_PASSWORD,
         )
         await seed.commit()
         owner_id = int(cutover["staff_user_id"])
@@ -479,7 +491,7 @@ async def test_self_service_race_stales_rollback_then_fresh_rollback_preserves_c
             staff_user_id=owner_id,
             actor_username=settings.ADMIN_USERNAME,
             tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
-            current_password=settings.ADMIN_PASSWORD,
+            current_password=CUTOVER_PASSWORD,
             new_password="raced-self-service-password-2026",
         )
         with pytest.raises(LegacyOwnerCutoverBlockedError, match="stale"):

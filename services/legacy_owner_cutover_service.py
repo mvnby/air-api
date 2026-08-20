@@ -18,7 +18,6 @@ from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from core.config import settings
 from models import (
     LegacyOwnerAuthState,
     StaffUser,
@@ -38,6 +37,7 @@ from services.legacy_owner_cutover_types import (
     LegacyOwnerPlanAction as PlanAction,
     LegacyOwnerRuntimeIdentity as _RuntimeIdentity,
 )
+from services.legacy_owner_runtime_credential import LegacyOwnerRuntimeCredential
 from services.staff_user_service import StaffUserService
 
 
@@ -72,7 +72,19 @@ class LegacyOwnerCutoverService:
         }
 
     @classmethod
-    async def execute(cls, session: AsyncSession, *, plan_token: str) -> dict[str, Any]:
+    async def execute(
+        cls,
+        session: AsyncSession,
+        *,
+        plan_token: str,
+        new_password: str,
+    ) -> dict[str, Any]:
+        try:
+            CredentialService.validate_password(new_password)
+        except CredentialPolicyError as exc:
+            raise LegacyOwnerCutoverBlockedError(
+                "One-time credential violates the reviewed password policy"
+            ) from exc
         verified = LegacyOwnerPlanToken.verify(plan_token)
         runtime = cls._runtime_identity()
         if not await cls._try_acquire_advisory_lock(session):
@@ -86,9 +98,11 @@ class LegacyOwnerCutoverService:
         user = state.user
         membership = state.membership
         if auth_state.mode == LegacyOwnerAuthStateService.MODE_LEGACY:
+            encoded = await asyncio.to_thread(
+                CredentialService.hash_password, new_password
+            )
             if user is None:
                 tenant, _ = cls._require_scope(state)
-                encoded = await asyncio.to_thread(CredentialService.hash_password, runtime.credential)
                 user = StaffUser(
                     display_name=cls.CREATED_DISPLAY_NAME,
                     status=StaffUserService.STATUS_ACTIVE,
@@ -111,6 +125,9 @@ class LegacyOwnerCutoverService:
                 session.add(membership)
                 await session.flush()
             else:
+                user.password_hash = encoded
+                user.password_changed_at = datetime.now(timezone.utc)
+                user.must_change_password = False
                 user.auth_version = int(user.auth_version) + 1
                 session.add(user)
             auth_state.mode = LegacyOwnerAuthStateService.MODE_STAFF_SHADOW
@@ -131,7 +148,11 @@ class LegacyOwnerCutoverService:
 
         await session.flush()
         after = await cls._load(session, runtime=runtime, for_update=False)
-        cls._assert_exact_after(after, expected_mode=LegacyOwnerAuthStateService.MODE_STAFF_SHADOW)
+        await cls._assert_exact_after(
+            after,
+            expected_mode=LegacyOwnerAuthStateService.MODE_STAFF_SHADOW,
+            staff_credential=new_password,
+        )
         return cls._mutation_result(
             mode="execute",
             changed=changed,
@@ -175,7 +196,9 @@ class LegacyOwnerCutoverService:
 
         await session.flush()
         after = await cls._load(session, runtime=runtime, for_update=False)
-        cls._assert_exact_after(after, expected_mode=LegacyOwnerAuthStateService.MODE_LEGACY)
+        await cls._assert_exact_after(
+            after, expected_mode=LegacyOwnerAuthStateService.MODE_LEGACY
+        )
         return cls._mutation_result(
             mode="rollback",
             changed=changed,
@@ -184,7 +207,12 @@ class LegacyOwnerCutoverService:
         )
 
     @classmethod
-    async def verify(cls, session: AsyncSession) -> dict[str, Any]:
+    async def verify(
+        cls,
+        session: AsyncSession,
+        *,
+        staff_credential: str | None = None,
+    ) -> dict[str, Any]:
         runtime = cls._runtime_identity()
         state = await cls._load(session, runtime=runtime, for_update=False)
         blockers = cls._scope_and_runtime_blockers(runtime=runtime, state=state)
@@ -196,14 +224,23 @@ class LegacyOwnerCutoverService:
         legacy_mode = bool(
             auth_state and auth_state.mode == LegacyOwnerAuthStateService.MODE_LEGACY
         )
+        credential_matches = False
         if staff_mode:
             blockers.extend(cls._exact_identity_blockers(runtime=runtime, state=state))
+            credential_matches = bool(
+                staff_credential
+                and state.user
+                and await CredentialService.verify_password_async(
+                    staff_credential, state.user.password_hash
+                )
+            )
+            if not credential_matches:
+                blockers.append("staff_credential_unproved")
         elif legacy_mode and auth_state and auth_state.owner_staff_user_id is not None:
             blockers.extend(
                 cls._exact_identity_blockers(
                     runtime=runtime,
                     state=state,
-                    require_runtime_credential=False,
                 )
             )
         elif legacy_mode and state.candidates:
@@ -212,13 +249,13 @@ class LegacyOwnerCutoverService:
             blockers.append("auth_state_invalid")
         ready = (staff_mode or legacy_mode) and not cls._deduplicate(blockers)
         reported_credential_ready = (
-            bool(state.credential_matches)
+            credential_matches
             if staff_mode
             else bool(
                 legacy_mode
                 and runtime.normalized_name
                 and runtime.identity_canonical
-                and runtime.policy_compliant
+                and runtime.credential
             )
         )
         return {
@@ -280,7 +317,6 @@ class LegacyOwnerCutoverService:
             candidates = list((await session.execute(statement)).scalars().all())
 
         memberships: list[TenantMembership] = []
-        credential_matches = False
         if len(candidates) == 1 and candidates[0].id is not None:
             statement = (
                 select(TenantMembership)
@@ -290,16 +326,12 @@ class LegacyOwnerCutoverService:
             if for_update:
                 statement = statement.with_for_update(of=TenantMembership)
             memberships = list((await session.execute(statement)).scalars().all())
-            credential_matches = await CredentialService.verify_password_async(
-                runtime.credential, candidates[0].password_hash
-            )
         return _CutoverState(
             auth_state=auth_state,
             tenants=tenants,
             storefronts=storefronts,
             candidates=candidates,
             memberships=memberships,
-            credential_matches=credential_matches,
         )
 
     @classmethod
@@ -327,7 +359,7 @@ class LegacyOwnerCutoverService:
                 changes.append("restore_legacy_auth")
         current = cls._public_state(runtime=runtime, state=state)
         digest_payload = {
-            "version": 2,
+            "version": 3,
             "for_action": for_action,
             "runtime_binding": runtime.binding,
             "current": current,
@@ -387,7 +419,6 @@ class LegacyOwnerCutoverService:
                     cls._exact_identity_blockers(
                         runtime=runtime,
                         state=state,
-                        require_runtime_credential=False,
                     )
                 )
             elif auth_state.owner_staff_user_id is None:
@@ -397,7 +428,6 @@ class LegacyOwnerCutoverService:
                     cls._exact_identity_blockers(
                         runtime=runtime,
                         state=state,
-                        require_runtime_credential=False,
                     )
                 )
         return cls._deduplicate(blockers)
@@ -411,8 +441,8 @@ class LegacyOwnerCutoverService:
             blockers.append("runtime_identity_missing")
         if not runtime.identity_canonical:
             blockers.append("runtime_identity_not_canonical")
-        if not runtime.policy_compliant:
-            blockers.append("runtime_credential_policy_incompatible")
+        if not runtime.credential:
+            blockers.append("runtime_credential_missing")
         tenant = state.tenant
         storefront = state.storefront
         if len(state.tenants) != 1:
@@ -445,7 +475,6 @@ class LegacyOwnerCutoverService:
         *,
         runtime: _RuntimeIdentity,
         state: _CutoverState,
-        require_runtime_credential: bool = True,
     ) -> list[str]:
         auth_state = state.auth_state
         user = state.user
@@ -467,7 +496,6 @@ class LegacyOwnerCutoverService:
             and user.auth_version >= 1
             and user.password_changed_at is not None
             and not user.must_change_password
-            and (state.credential_matches or not require_runtime_credential)
         ):
             blockers.append("existing_staff_identity_not_exact")
         if len(state.memberships) != 1:
@@ -499,6 +527,7 @@ class LegacyOwnerCutoverService:
             "bound_staff_user_id": int(auth_state.owner_staff_user_id) if auth_state and auth_state.owner_staff_user_id else None,
             "candidate_count": len(state.candidates),
             "staff_user_id": int(user.id) if user and user.id else None,
+            "auth_version": int(user.auth_version) if user else None,
             "membership_count": len(state.memberships),
             "membership_id": int(membership.id) if membership and membership.id else None,
             "active": bool(user and user.status == StaffUserService.STATUS_ACTIVE),
@@ -508,7 +537,6 @@ class LegacyOwnerCutoverService:
                 and StaffUserService.normalize_roles(user.roles) == [StaffUserService.ROLE_OWNER]
             ),
             "normalized_identity_exact": bool(user and user.username == runtime.normalized_name),
-            "credential_matches": bool(user and state.credential_matches),
             "credential_timestamp_set": bool(user and user.password_changed_at),
             "forced_change_disabled": bool(user) and not user.must_change_password,
             "membership_exact": bool(
@@ -522,25 +550,7 @@ class LegacyOwnerCutoverService:
 
     @classmethod
     def _runtime_identity(cls) -> _RuntimeIdentity:
-        normalized_name = StaffUserService.normalize_username(settings.ADMIN_USERNAME)
-        credential = str(settings.ADMIN_PASSWORD or "")
-        compliant = True
-        try:
-            CredentialService.validate_password(credential)
-        except CredentialPolicyError:
-            compliant = False
-        binding = hmac.new(
-            cls._binding_key(),
-            (str(normalized_name or "") + "\0" + credential).encode("utf-8", errors="surrogatepass"),
-            hashlib.sha256,
-        ).hexdigest()
-        return _RuntimeIdentity(
-            normalized_name,
-            credential,
-            compliant,
-            str(settings.ADMIN_USERNAME or "") == normalized_name,
-            binding,
-        )
+        return LegacyOwnerRuntimeCredential.load()
 
     @classmethod
     async def _try_acquire_advisory_lock(cls, session: AsyncSession) -> bool:
@@ -625,18 +635,30 @@ class LegacyOwnerCutoverService:
             raise LegacyOwnerCutoverBlockedError("Legacy-owner operation preflight is blocked")
 
     @classmethod
-    def _assert_exact_after(cls, state: _CutoverState, *, expected_mode: str) -> None:
+    async def _assert_exact_after(
+        cls,
+        state: _CutoverState,
+        *,
+        expected_mode: str,
+        staff_credential: str | None = None,
+    ) -> None:
         runtime = cls._runtime_identity()
         blockers = cls._scope_and_runtime_blockers(runtime=runtime, state=state)
         blockers.extend(
             cls._exact_identity_blockers(
                 runtime=runtime,
                 state=state,
-                require_runtime_credential=(
-                    expected_mode != LegacyOwnerAuthStateService.MODE_LEGACY
-                ),
             )
         )
+        if expected_mode != LegacyOwnerAuthStateService.MODE_LEGACY:
+            if not (
+                staff_credential
+                and state.user
+                and await CredentialService.verify_password_async(
+                    staff_credential, state.user.password_hash
+                )
+            ):
+                blockers.append("staff_credential_unproved")
         if state.auth_state is None or state.auth_state.mode != expected_mode:
             blockers.append("auth_mode_not_reached")
         if cls._deduplicate(blockers):
@@ -664,14 +686,6 @@ class LegacyOwnerCutoverService:
     @staticmethod
     def _deduplicate(values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
-
-    @classmethod
-    def _binding_key(cls) -> bytes:
-        return hashlib.sha256(
-            b"mvn:legacy-owner-cutover:runtime-binding:v1\0"
-            + settings.SECRET_KEY.encode("utf-8")
-        ).digest()
-
 
 __all__ = [
     "LegacyOwnerCutoverBlockedError",
