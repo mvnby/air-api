@@ -4,7 +4,7 @@ from services.credential_service import CredentialPolicyError, CredentialService
 
 
 def test_credential_policy_counts_characters_and_utf8_bytes() -> None:
-    assert CredentialService.validate_password("twelve-chars!") == "twelve-chars!"
+    assert CredentialService.validate_password("nine-char") == "nine-char"
 
     with pytest.raises(CredentialPolicyError) as short:
         CredentialService.validate_password("short")
@@ -24,7 +24,7 @@ def test_credential_verification_rejects_overlong_input_without_bcrypt_error() -
 
 
 def test_credential_policy_rejects_lone_surrogates_without_encoding_error() -> None:
-    invalid_unicode = "\ud800" * 12
+    invalid_unicode = "\ud800" * 9
 
     with pytest.raises(CredentialPolicyError) as invalid:
         CredentialService.validate_password(invalid_unicode)

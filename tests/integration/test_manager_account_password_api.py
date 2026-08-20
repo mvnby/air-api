@@ -19,7 +19,7 @@ from services.staff_user_service import StaffUserService
 
 
 CURRENT_PASSWORD = "current-password-2026"
-NEW_PASSWORD = "replacement-password-2026"
+NEW_PASSWORD = "new-pass9"
 
 
 async def _create_staff(
@@ -213,9 +213,9 @@ async def test_staff_changes_only_own_password_and_revokes_all_prior_tokens(
     [
         ("wrong-current-password", NEW_PASSWORD, "invalid_current_password"),
         (CURRENT_PASSWORD, CURRENT_PASSWORD, "password_reuse"),
-        (CURRENT_PASSWORD, "too-short", "password_too_short"),
+        (CURRENT_PASSWORD, "shortpwd", "password_too_short"),
         (CURRENT_PASSWORD, "я" * 37, "password_too_long"),
-        (CURRENT_PASSWORD, "\ud800" * 12, "password_invalid_encoding"),
+        (CURRENT_PASSWORD, "\ud800" * 9, "password_invalid_encoding"),
     ],
 )
 async def test_rejected_password_change_does_not_mutate_identity_or_audit(

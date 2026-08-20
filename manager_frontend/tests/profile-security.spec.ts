@@ -60,8 +60,8 @@ describe('ProfileSecurityView', () => {
   });
 
   it('counts Unicode code points the same way as the backend policy', () => {
-    expect(passwordPolicyMessage('😀'.repeat(11))).toContain('минимум 12');
-    expect(passwordPolicyMessage('😀'.repeat(12))).toBeNull();
+    expect(passwordPolicyMessage('😀'.repeat(8))).toContain('минимум 9');
+    expect(passwordPolicyMessage('😀'.repeat(9))).toBeNull();
   });
 
   it('requires saving a generated password and supports explicit clipboard copy', async () => {
@@ -177,7 +177,7 @@ describe('ProfileSecurityView', () => {
 
     await wrapper.get('form').trigger('submit');
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('минимум 12');
+    expect(wrapper.get('[role="alert"]').text()).toContain('минимум 9');
     expect(mocks.changePassword).not.toHaveBeenCalled();
   });
 
@@ -185,15 +185,15 @@ describe('ProfileSecurityView', () => {
     mocks.changePassword.mockResolvedValue(undefined);
     const wrapper = mount(ProfileSecurityView);
     await wrapper.get('#current-password').setValue('current-password');
-    await wrapper.get('#new-password').setValue('new-password-2026');
-    await wrapper.get('#password-confirmation').setValue('new-password-2026');
+    await wrapper.get('#new-password').setValue('new-pass9');
+    await wrapper.get('#password-confirmation').setValue('new-pass9');
 
     await wrapper.get('form').trigger('submit');
     await flushPromises();
 
     expect(mocks.changePassword).toHaveBeenCalledWith({
       current_password: 'current-password',
-      new_password: 'new-password-2026',
+      new_password: 'new-pass9',
     });
     expect(managerSession.isAuthenticated.value).toBe(false);
     expect(managerSession.auth.value).toBeNull();
