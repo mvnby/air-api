@@ -163,7 +163,9 @@ def test_automatic_rollback_refuses_to_mutate_after_patroni_failover(monkeypatch
     )
     monkeypatch.setattr(workflow, "_run_remote", lambda *args, **kwargs: calls.append(args))
     with pytest.raises(workflow.WorkflowError, match="topology changed"):
-        workflow._automatic_rollback(object(), reviewed, _runtime().image)
+        workflow._automatic_rollback(
+            object(), reviewed, _runtime().image, binding_challenge="c" * 64
+        )
     assert calls == []
 
 
@@ -184,7 +186,9 @@ def test_automatic_rollback_refuses_changed_runtime_image(monkeypatch):
         ),
     )
     with pytest.raises(workflow.WorkflowError, match="runtime image changed"):
-        workflow._automatic_rollback(object(), topology, _runtime().image)
+        workflow._automatic_rollback(
+            object(), topology, _runtime().image, binding_challenge="c" * 64
+        )
 
 
 def test_dual_node_proof_refuses_standby_image_different_from_reviewed_primary(monkeypatch):
@@ -215,6 +219,7 @@ def test_dual_node_proof_refuses_standby_image_different_from_reviewed_primary(m
             topology,
             expected_image=_runtime().image,
             staff_credential="one-time-owner-password-2026",
+            binding_challenge="c" * 64,
         )
 
 
@@ -244,11 +249,46 @@ def test_dual_node_staff_proof_sends_credential_only_over_stdin_and_sanitizes_it
         topology,
         expected_image=_runtime().image,
         staff_credential=password,
+        binding_challenge="c" * 64,
     )
     credential_inputs = [call["stdin"] for call in calls if call.get("stdin")]
     assert len(credential_inputs) == 2
-    assert all(json.loads(value) == {"new_password": password} for value in credential_inputs)
+    assert all(
+        json.loads(value)
+        == {"binding_challenge": "c" * 64, "new_password": password}
+        for value in credential_inputs
+    )
     assert password not in json.dumps(proof)
+
+
+def test_standby_verification_retries_until_replication_reaches_shadow(
+    monkeypatch,
+) -> None:
+    outputs = iter([
+        workflow.RemoteOutput(0, _verify_payload(mode="legacy")),
+        workflow.RemoteOutput(0, _verify_payload(mode="staff_shadow")),
+    ])
+    calls: list[object] = []
+    monkeypatch.setattr(
+        workflow,
+        "_run_remote",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or next(outputs),
+    )
+    monkeypatch.setattr(workflow.time, "sleep", lambda _seconds: None)
+
+    result = workflow._verify_node(
+        node=PATRONI_NODES[1],
+        context=object(),
+        runtime=_runtime(),
+        role="standby",
+        payload=json.dumps(
+            {"binding_challenge": "c" * 64, "new_password": "long-password"}
+        ),
+        expected_modes=frozenset({"staff_shadow"}),
+    )
+
+    assert result["auth_mode"] == "staff_shadow"
+    assert len(calls) == 2
 
 
 def _plan_payload() -> dict:
@@ -305,6 +345,8 @@ def test_malformed_execute_result_runs_recovery_for_already_committed_shadow(mon
         workflow.RemoteOutput(0, good_runtime),  # initial primary runtime
         workflow.RemoteOutput(0, good_runtime), workflow.RemoteOutput(0, ""),
         workflow.RemoteOutput(0, "app-green|" + "b" * 64 + "|" + _runtime().image), workflow.RemoteOutput(0, ""),
+        workflow.RemoteOutput(0, good_runtime), workflow.RemoteOutput(0, _verify_payload(mode="legacy")),
+        workflow.RemoteOutput(0, "app-green|" + "b" * 64 + "|" + _runtime().image), workflow.RemoteOutput(0, _verify_payload(mode="legacy")),
         workflow.RemoteOutput(0, "malformed-after-commit"),
         workflow.RemoteOutput(0, good_runtime), workflow.RemoteOutput(0, ""),
         workflow.RemoteOutput(0, _verify_payload(mode="staff_shadow")),
@@ -314,7 +356,11 @@ def test_malformed_execute_result_runs_recovery_for_already_committed_shadow(mon
     monkeypatch.setattr(workflow, "validate_effective_config", lambda *args: None)
     monkeypatch.setattr(workflow, "discover_cluster_topology", lambda **kwargs: topology)
     monkeypatch.setattr(workflow, "_reviewed_backend_image_for_sha", lambda *args: _runtime().image)
-    monkeypatch.setattr(workflow, "_fresh_plan", lambda *args, **kwargs: (_plan_payload(), "signed-token"))
+    monkeypatch.setattr(
+        workflow,
+        "_fresh_plan",
+        lambda *args, **kwargs: (_plan_payload(), "signed-token"),
+    )
     monkeypatch.setattr(
         workflow,
         "_read_one_time_credential",
@@ -324,11 +370,12 @@ def test_malformed_execute_result_runs_recovery_for_already_committed_shadow(mon
     monkeypatch.setattr(
         workflow,
         "_automatic_rollback",
-        lambda *args: recovered.append(args) or {"zakup": {"result": {}}, "mvn-api": {"result": {}}},
+        lambda *args, **kwargs: recovered.append((args, kwargs))
+        or {"zakup": {"result": {}}, "mvn-api": {"result": {}}},
     )
     with pytest.raises(workflow.WorkflowError, match="automatic recovery completed"):
         workflow.execute(args)
-    assert recovered and recovered[0][1] == topology
+    assert recovered and recovered[0][0][1] == topology
     failure_artifact = json.loads(args.result_file.read_text(encoding="utf-8"))
     assert failure_artifact["outcome"] == "recovered"
     assert failure_artifact["recovery"] == "legacy_restored"
@@ -348,7 +395,10 @@ def test_rollback_proof_checks_legacy_mode_on_both_primary_and_standby(monkeypat
     ])
     monkeypatch.setattr(workflow, "_run_remote", lambda *args, **kwargs: next(outputs))
     proof = workflow._verify_legacy_after_rollback(
-        object(), topology, expected_image=_runtime().image
+        object(),
+        topology,
+        expected_image=_runtime().image,
+        binding_challenge="c" * 64,
     )
     assert set(proof) == {node.alias for node in PATRONI_NODES}
 
@@ -374,7 +424,10 @@ def test_initial_legacy_recovery_proof_allows_no_bound_staff_identity(monkeypatc
     ])
     monkeypatch.setattr(workflow, "_run_remote", lambda *args, **kwargs: next(outputs))
     proof = workflow._verify_legacy_after_rollback(
-        object(), topology, expected_image=_runtime().image
+        object(),
+        topology,
+        expected_image=_runtime().image,
+        binding_challenge="c" * 64,
     )
     assert all(
         item["result"]["staff_user_id"] is None
@@ -397,7 +450,10 @@ def test_rollback_proof_refuses_different_secret_safe_runtime_bindings(monkeypat
     monkeypatch.setattr(workflow, "_run_remote", lambda *args, **kwargs: next(outputs))
     with pytest.raises(workflow.WorkflowError, match="different local credential bindings"):
         workflow._verify_legacy_after_rollback(
-            object(), topology, expected_image=_runtime().image
+            object(),
+            topology,
+            expected_image=_runtime().image,
+            binding_challenge="c" * 64,
         )
 
 
@@ -421,7 +477,13 @@ def test_manual_rollback_writes_dual_node_legacy_proof_to_artifact(monkeypatch, 
     monkeypatch.setattr(workflow, "validate_effective_config", lambda *args: None)
     monkeypatch.setattr(workflow, "discover_cluster_topology", lambda **kwargs: topology)
     monkeypatch.setattr(workflow, "_reviewed_backend_image_for_sha", lambda *args: _runtime().image)
-    monkeypatch.setattr(workflow, "_fresh_plan", lambda *args, **kwargs: (_plan_payload(), "signed-token"))
+    rollback_plan = _plan_payload()
+    rollback_plan["current"] = {"auth_mode": "staff_shadow"}
+    monkeypatch.setattr(
+        workflow,
+        "_fresh_plan",
+        lambda *args, **kwargs: (rollback_plan, "signed-token"),
+    )
     monkeypatch.setattr(workflow, "_run_remote", lambda *args, **kwargs: next(outputs))
     artifact = workflow.execute(args)
     assert set(artifact["proof"]) == {node.alias for node in PATRONI_NODES}

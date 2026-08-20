@@ -71,7 +71,9 @@ async def _seed_bound_owner(
 
 @pytest.mark.asyncio
 async def test_initial_legacy_verify_is_ready_without_a_bound_staff_identity(db) -> None:
-    verification = await LegacyOwnerCutoverService.verify(db)
+    verification = await LegacyOwnerCutoverService.verify(
+        db, binding_challenge="c" * 64
+    )
     assert verification["ready"] is True
     assert verification["auth_mode"] == "legacy"
     assert verification["staff_user_id"] is None
@@ -170,9 +172,13 @@ async def test_cutover_is_atomic_secret_free_idempotent_and_tenant_b_unchanged(d
     assert no_op["changed"] is False
     assert int(await db.scalar(select(func.count(TenantAuditEvent.id)))) == 1
 
-    unproved = await LegacyOwnerCutoverService.verify(db)
+    unproved = await LegacyOwnerCutoverService.verify(
+        db, binding_challenge="c" * 64
+    )
     wrong = await LegacyOwnerCutoverService.verify(
-        db, staff_credential="wrong-one-time-password"
+        db,
+        staff_credential="wrong-one-time-password",
+        binding_challenge="c" * 64,
     )
     assert unproved["ready"] is False
     assert unproved["credential_matches"] is False
@@ -180,7 +186,9 @@ async def test_cutover_is_atomic_secret_free_idempotent_and_tenant_b_unchanged(d
     assert wrong["credential_matches"] is False
 
     verification = await LegacyOwnerCutoverService.verify(
-        db, staff_credential=CUTOVER_PASSWORD
+        db,
+        staff_credential=CUTOVER_PASSWORD,
+        binding_challenge="c" * 64,
     )
     assert verification["ready"] is True
     assert verification["credential_matches"] is True
@@ -243,7 +251,9 @@ async def test_rollback_after_self_service_change_keeps_owner_and_invalidates_st
     assert user.auth_version == self_service_auth_version + 1
     assert CredentialService.verify_password("self-service-password-2026", user.password_hash)
     assert not CredentialService.verify_password(settings.ADMIN_PASSWORD, user.password_hash)
-    verification = await LegacyOwnerCutoverService.verify(db)
+    verification = await LegacyOwnerCutoverService.verify(
+        db, binding_challenge="c" * 64
+    )
     assert verification["ready"] is True
     assert verification["credential_matches"] is True
     assert len(verification["runtime_binding"]) == 64

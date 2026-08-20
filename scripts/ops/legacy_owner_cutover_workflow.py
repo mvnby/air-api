@@ -13,11 +13,13 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -296,6 +298,7 @@ def _proof_all_nodes(
     *,
     expected_image: str,
     staff_credential: str,
+    binding_challenge: str,
 ) -> dict[str, dict[str, Any]]:
     proof: dict[str, dict[str, Any]] = {}
     bindings: set[str] = set()
@@ -307,8 +310,36 @@ def _proof_all_nodes(
         if runtime.image != expected_image:
             raise WorkflowError("cutover proof runtime image differs from reviewed primary image")
         payload = json.dumps(
-            {"new_password": staff_credential}, separators=(",", ":")
+            {
+                "binding_challenge": binding_challenge,
+                "new_password": staff_credential,
+            },
+            separators=(",", ":"),
         )
+        result = _verify_node(
+            node=node,
+            context=context,
+            runtime=runtime,
+            role=role,
+            payload=payload,
+            expected_modes=frozenset({"staff_shadow", "staff"}),
+        )
+        sanitized, binding = sanitize_verify(result)
+        bindings.add(binding)
+        proof[node.alias] = {"runtime_service": runtime.service, "runtime_image": runtime.image, "result": sanitized}
+    if set(proof) != {node.alias for node in PATRONI_NODES}:
+        raise WorkflowError("cutover proof did not cover both Patroni nodes")
+    if len(bindings) != 1:
+        raise WorkflowError("cutover proof found different local legacy credential bindings")
+    return proof
+
+
+def _verify_node(
+    *, node: PatroniNode, context: PinnedSshContext, runtime: RuntimeTarget,
+    role: str, payload: str, expected_modes: frozenset[str],
+) -> dict[str, Any]:
+    attempts = 10 if role == "standby" else 1
+    for attempt in range(attempts):
         output = _run_remote(
             node,
             context,
@@ -322,18 +353,20 @@ def _proof_all_nodes(
             stdin=payload,
             accepted_statuses=frozenset({0, 2}),
         )
-        result = load_result(output.stdout, expected_mode="verify")
-        validate_result_semantics(result, expected_mode="verify", remote_status=output.status)
-        if result["auth_mode"] not in {"staff_shadow", "staff"}:
-            raise WorkflowError("staff-shadow proof did not reach the staff owner mode")
-        sanitized, binding = sanitize_verify(result)
-        bindings.add(binding)
-        proof[node.alias] = {"runtime_service": runtime.service, "runtime_image": runtime.image, "result": sanitized}
-    if set(proof) != {node.alias for node in PATRONI_NODES}:
-        raise WorkflowError("cutover proof did not cover both Patroni nodes")
-    if len(bindings) != 1:
-        raise WorkflowError("cutover proof found different local legacy credential bindings")
-    return proof
+        try:
+            result = load_result(output.stdout, expected_mode="verify")
+            validate_result_semantics(
+                result,
+                expected_mode="verify",
+                remote_status=output.status,
+            )
+            if result["auth_mode"] in expected_modes:
+                return result
+        except WorkflowError:
+            pass
+        if attempt + 1 < attempts:
+            time.sleep(2)
+    raise WorkflowError(f"legacy-owner {role} verification did not reach the reviewed mode")
 
 
 def _assert_dual_node_runtime_capability(
@@ -366,6 +399,7 @@ def _write_result(path: Path, payload: dict[str, Any]) -> None:
 
 def execute(args: argparse.Namespace) -> dict[str, Any]:
     validate_arguments(args)
+    binding_challenge = secrets.token_hex(32)
     staff_credential = (
         _read_one_time_credential() if args.operation == "execute" else None
     )
@@ -394,6 +428,31 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         sanitized_plan, _ = sanitize_plan(plan)
         result: dict[str, Any] = sanitized_plan
         proof: dict[str, dict[str, Any]] | None = None
+        if plan["current"].get("auth_mode") == "legacy":
+            try:
+                legacy_proof = _verify_legacy_after_rollback(
+                    context,
+                    topology,
+                    expected_image=runtime.image,
+                    binding_challenge=binding_challenge,
+                )
+            except WorkflowError:
+                if args.operation != "plan":
+                    raise WorkflowError(
+                        "cross-node legacy recovery preflight is not proved"
+                    )
+                result = {
+                    **sanitized_plan,
+                    "ready": False,
+                    "blockers": [
+                        *sanitized_plan["blockers"],
+                        "cross_node_legacy_recovery_unproved",
+                    ],
+                    "changes": [],
+                }
+            else:
+                if args.operation == "plan":
+                    proof = legacy_proof
         if args.operation != "plan":
             if not plan["ready"]:
                 raise WorkflowError("fresh legacy-owner plan is blocked")
@@ -425,10 +484,14 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                         topology,
                         expected_image=runtime.image,
                         staff_credential=str(staff_credential or ""),
+                        binding_challenge=binding_challenge,
                     )
                 elif args.operation == "rollback":
                     proof = _verify_legacy_after_rollback(
-                        context, topology, expected_image=runtime.image
+                        context,
+                        topology,
+                        expected_image=runtime.image,
+                        binding_challenge=binding_challenge,
                     )
             except Exception as mutation_error:
                 if args.operation != "execute":
@@ -439,6 +502,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                         topology,
                         runtime.image,
                         staff_credential=str(staff_credential or ""),
+                        binding_challenge=binding_challenge,
                     )
                 except Exception as recovery_error:
                     raise WorkflowError(
@@ -493,7 +557,11 @@ def _artifact(
 
 
 def _automatic_rollback(
-    context: PinnedSshContext, reviewed_topology: ClusterTopology, expected_image: str
+    context: PinnedSshContext,
+    reviewed_topology: ClusterTopology,
+    expected_image: str,
+    *,
+    binding_challenge: str,
 ) -> dict[str, dict[str, Any]]:
     topology = discover_cluster_topology(context=context, runner=_subprocess_runner)
     if topology != reviewed_topology:
@@ -513,7 +581,12 @@ def _automatic_rollback(
                          accepted_statuses=frozenset({0, 2}))
     result = load_result(output.stdout, expected_mode="rollback")
     validate_result_semantics(result, expected_mode="rollback", remote_status=output.status)
-    return _verify_legacy_after_rollback(context, topology, expected_image=expected_image)
+    return _verify_legacy_after_rollback(
+        context,
+        topology,
+        expected_image=expected_image,
+        binding_challenge=binding_challenge,
+    )
 
 
 def _recover_after_uncertain_execute(
@@ -522,6 +595,7 @@ def _recover_after_uncertain_execute(
     expected_image: str,
     *,
     staff_credential: str,
+    binding_challenge: str,
 ) -> dict[str, dict[str, Any]]:
     topology = discover_cluster_topology(context=context, runner=_subprocess_runner)
     if topology != reviewed_topology:
@@ -533,32 +607,43 @@ def _recover_after_uncertain_execute(
     if runtime.image != expected_image:
         raise WorkflowError("automatic recovery refused after reviewed runtime image changed")
     _run_remote(primary, context, _capability_command(primary, runtime=runtime, role="primary"))
-    output = _run_remote(
-        primary,
-        context,
-        _cutover_command(
-            primary,
-            runtime=runtime,
-            role="primary",
-            action="verify",
-            prove_credential=True,
+    result = _verify_node(
+        node=primary,
+        context=context,
+        runtime=runtime,
+        role="primary",
+        payload=json.dumps(
+            {
+                "binding_challenge": binding_challenge,
+                "new_password": staff_credential,
+            },
+            separators=(",", ":"),
         ),
-        stdin=json.dumps(
-            {"new_password": staff_credential}, separators=(",", ":")
-        ),
-        accepted_statuses=frozenset({0, 2}),
+        expected_modes=frozenset({"legacy", "staff_shadow"}),
     )
-    result = load_result(output.stdout, expected_mode="verify")
-    validate_result_semantics(result, expected_mode="verify", remote_status=output.status)
     if result["auth_mode"] == "legacy":
-        return _verify_legacy_after_rollback(context, topology, expected_image=expected_image)
+        return _verify_legacy_after_rollback(
+            context,
+            topology,
+            expected_image=expected_image,
+            binding_challenge=binding_challenge,
+        )
     if result["auth_mode"] == "staff_shadow":
-        return _automatic_rollback(context, topology, expected_image)
+        return _automatic_rollback(
+            context,
+            topology,
+            expected_image,
+            binding_challenge=binding_challenge,
+        )
     raise WorkflowError("automatic recovery found an unsupported legacy-owner mode")
 
 
 def _verify_legacy_after_rollback(
-    context: PinnedSshContext, topology: ClusterTopology, *, expected_image: str
+    context: PinnedSshContext,
+    topology: ClusterTopology,
+    *,
+    expected_image: str,
+    binding_challenge: str,
 ) -> dict[str, dict[str, Any]]:
     proof: dict[str, dict[str, Any]] = {}
     bindings: set[str] = set()
@@ -569,16 +654,17 @@ def _verify_legacy_after_rollback(
         )
         if runtime.image != expected_image:
             raise WorkflowError("legacy rollback proof runtime image differs from reviewed primary image")
-        output = _run_remote(
-            node,
-            context,
-            _cutover_command(node, runtime=runtime, role=role, action="verify"),
-            accepted_statuses=frozenset({0, 2}),
+        result = _verify_node(
+            node=node,
+            context=context,
+            runtime=runtime,
+            role=role,
+            payload=json.dumps(
+                {"binding_challenge": binding_challenge},
+                separators=(",", ":"),
+            ),
+            expected_modes=frozenset({"legacy"}),
         )
-        result = load_result(output.stdout, expected_mode="verify")
-        validate_result_semantics(result, expected_mode="verify", remote_status=output.status)
-        if result["auth_mode"] != "legacy":
-            raise WorkflowError("automatic rollback did not restore legacy mode")
         sanitized, binding = sanitize_verify(result)
         bindings.add(binding)
         proof[node.alias] = {

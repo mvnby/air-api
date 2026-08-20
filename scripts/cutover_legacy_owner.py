@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--credential-json-stdin",
         action="store_true",
-        help="Verify a staff credential supplied only through stdin.",
+        help="Verify the runtime binding and optional staff credential via stdin.",
     )
     return parser
 
@@ -109,14 +109,26 @@ def read_execution_input(
     return token, password
 
 
-def read_credential_input(stream: Any | None = None) -> str:
+def read_credential_input(
+    stream: Any | None = None,
+) -> tuple[str | None, str]:
     decoded = _read_json_input(stream)
-    if set(decoded) != {"new_password"}:
+    if set(decoded) not in (
+        {"binding_challenge"},
+        {"binding_challenge", "new_password"},
+    ):
         raise ValueError("Credential input has an unexpected schema")
-    password = decoded["new_password"]
-    if not isinstance(password, str) or not password:
+    password = decoded.get("new_password")
+    if password is not None and (not isinstance(password, str) or not password):
         raise ValueError("Credential input is invalid")
-    return password
+    challenge = decoded["binding_challenge"]
+    if (
+        not isinstance(challenge, str)
+        or len(challenge) != 64
+        or any(character not in "0123456789abcdef" for character in challenge)
+    ):
+        raise ValueError("Credential binding challenge is invalid")
+    return password, challenge
 
 
 async def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -128,9 +140,10 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         execution_token, new_password = read_execution_input(
             require_password=args.action == "execute"
         )
-    verification_credential = (
-        read_credential_input() if args.credential_json_stdin else None
-    )
+    verification_credential: str | None = None
+    binding_challenge: str | None = None
+    if args.credential_json_stdin:
+        verification_credential, binding_challenge = read_credential_input()
     async with async_session_maker() as session:
         try:
             if args.action == "plan":
@@ -139,8 +152,12 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     for_action=args.for_action,
                 )
             if args.action == "verify":
+                if binding_challenge is None:
+                    raise ValueError("Credential binding challenge is required")
                 return await LegacyOwnerCutoverService.verify(
-                    session, staff_credential=verification_credential
+                    session,
+                    staff_credential=verification_credential,
+                    binding_challenge=binding_challenge,
                 )
             operation = (
                 LegacyOwnerCutoverService.rollback
