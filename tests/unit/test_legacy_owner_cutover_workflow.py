@@ -198,7 +198,7 @@ def test_dual_node_proof_refuses_standby_image_different_from_reviewed_primary(m
     )
     verified = json.dumps(
         {
-            "mode": "verify", "ready": True, "staff_user_id": 1,
+            "mode": "verify", "ready": True, "blockers": [], "staff_user_id": 1,
             "membership_id": 2, "system_tenant_id": 3, "system_storefront_id": 4,
             "auth_mode": "staff_shadow", "legacy_token_version": 2,
                 "credential_matches": True, "can_change_password": True,
@@ -306,10 +306,13 @@ def _verify_payload(
     mode: str,
     binding: str = "e" * 64,
     has_bound_identity: bool = True,
+    ready: bool = True,
+    blockers: list[str] | None = None,
 ) -> str:
     return json.dumps(
         {
-            "mode": "verify", "ready": True,
+            "mode": "verify", "ready": ready,
+            "blockers": blockers or [],
             "staff_user_id": 1 if has_bound_identity else None,
             "membership_id": 2 if has_bound_identity else None,
             "system_tenant_id": 3, "system_storefront_id": 4,
@@ -321,6 +324,30 @@ def _verify_payload(
             "runtime_binding": binding,
         }
     )
+
+
+def test_failed_node_verification_logs_only_safe_blocker_codes(
+    monkeypatch, capsys,
+) -> None:
+    blocked = _verify_payload(
+        mode="staff_shadow",
+        ready=False,
+        blockers=["staff_credential_unproved"],
+    )
+    monkeypatch.setattr(
+        workflow,
+        "_run_remote",
+        lambda *args, **kwargs: workflow.RemoteOutput(2, blocked),
+    )
+    with pytest.raises(workflow.WorkflowError, match="did not reach"):
+        workflow._verify_node(
+            node=PATRONI_NODES[0], context=object(), runtime=_runtime(),
+            role="primary", payload="{}",
+            expected_modes=frozenset({"staff_shadow"}),
+        )
+    error = capsys.readouterr().err
+    assert "blockers=staff_credential_unproved" in error
+    assert "password" not in error
 
 
 def _rollback_payload() -> str:

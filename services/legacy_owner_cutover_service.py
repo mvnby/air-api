@@ -248,7 +248,8 @@ class LegacyOwnerCutoverService:
             blockers.append("unreviewed_existing_identity_collision")
         elif not legacy_mode:
             blockers.append("auth_state_invalid")
-        ready = (staff_mode or legacy_mode) and not cls._deduplicate(blockers)
+        public_blockers = cls._deduplicate(blockers)
+        ready = (staff_mode or legacy_mode) and not public_blockers
         reported_credential_ready = (
             credential_matches
             if staff_mode
@@ -262,6 +263,7 @@ class LegacyOwnerCutoverService:
         return {
             "mode": "verify",
             "ready": ready,
+            "blockers": public_blockers,
             "staff_user_id": int(state.user.id) if state.user and state.user.id else None,
             "membership_id": int(state.membership.id) if state.membership and state.membership.id else None,
             "system_tenant_id": int(state.tenant.id) if state.tenant and state.tenant.id else None,

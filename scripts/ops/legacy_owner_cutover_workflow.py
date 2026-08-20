@@ -332,13 +332,12 @@ def _proof_all_nodes(
     if len(bindings) != 1:
         raise WorkflowError("cutover proof found different local legacy credential bindings")
     return proof
-
-
 def _verify_node(
     *, node: PatroniNode, context: PinnedSshContext, runtime: RuntimeTarget,
     role: str, payload: str, expected_modes: frozenset[str],
 ) -> dict[str, Any]:
     attempts = 10 if role == "standby" else 1
+    last_result: dict[str, Any] | None = None
     for attempt in range(attempts):
         output = _run_remote(
             node,
@@ -360,15 +359,19 @@ def _verify_node(
                 expected_mode="verify",
                 remote_status=output.status,
             )
-            if result["auth_mode"] in expected_modes:
+            last_result = result
+            if result["ready"] and result["auth_mode"] in expected_modes:
                 return result
         except WorkflowError:
             pass
         if attempt + 1 < attempts:
             time.sleep(2)
+    if last_result is not None:
+        safe_codes = ",".join(last_result["blockers"]) or "unexpected_mode"
+        message = (f"legacy_owner_cutover_verification status=blocked node={node.alias} "
+                   f"role={role} auth_mode={last_result['auth_mode']} blockers={safe_codes}")
+        print(message, file=sys.stderr)
     raise WorkflowError(f"legacy-owner {role} verification did not reach the reviewed mode")
-
-
 def _assert_dual_node_runtime_capability(
     context: PinnedSshContext, topology: ClusterTopology, *, expected_image: str
 ) -> None:

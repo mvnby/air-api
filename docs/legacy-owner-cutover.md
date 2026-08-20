@@ -55,6 +55,11 @@ before it can report `ready=true`, so a mismatch blocks before mutation.
    compliance or that this
    legacy password still equals the retained StaffUser bcrypt hash.
 
+Failed node verification logs only fixed blocker codes (for example,
+`staff_credential_unproved`) together with the node alias, role, and auth mode.
+It never logs the supplied credential, bcrypt hash, runtime binding, challenge,
+username, or raw remote output.
+
 The execute credential is masked before use and passes from the protected
 workflow to the fixed controller, exact primary container, and dual-node
 read-only proof only over stdin. It is never a workflow input, command argument,
