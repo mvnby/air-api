@@ -19,7 +19,7 @@ MUTATION_KEYS = {
     "legacy_token_version", "plan_digest",
 }
 VERIFY_KEYS = {
-    "mode", "ready", "staff_user_id", "membership_id",
+    "mode", "ready", "blockers", "staff_user_id", "membership_id",
     "system_tenant_id", "system_storefront_id", "auth_mode",
     "legacy_token_version", "credential_matches", "can_change_password",
     "auth_source_staff_password", "legacy_jwt_rejected", "legacy_google_auth_rejected",
@@ -148,8 +148,9 @@ def _validate_mutation(result: dict[str, Any], *, expected_mode: str, ready: boo
 
 
 def _validate_proof(result: dict[str, Any], *, expected_mode: str, ready: bool) -> None:
-    if ready is not True:
-        raise WorkflowError("legacy-owner verification is not ready")
+    blockers = result["blockers"]
+    if not _string_list(blockers) or ready == bool(blockers):
+        raise WorkflowError("legacy-owner verification blockers are invalid")
     if result["auth_mode"] not in {"legacy", "staff_shadow", "staff"}:
         raise WorkflowError("legacy-owner verification mode is invalid")
     _validate_scope_ids(result)
@@ -172,13 +173,13 @@ def _validate_proof(result: dict[str, Any], *, expected_mode: str, ready: bool) 
     # is present.  It intentionally does not mean policy compliance or equality with
     # the retained StaffUser bcrypt hash: that hash can change before a later
     # manual rollback and must not make the legacy recovery unverifiable.
-    if not result["credential_matches"]:
+    if ready and not result["credential_matches"]:
         raise WorkflowError("legacy-owner verification proof is incomplete")
-    if result["auth_mode"] in {"staff_shadow", "staff"} and not all(
+    if ready and result["auth_mode"] in {"staff_shadow", "staff"} and not all(
         result[key] for key in ("can_change_password", "legacy_jwt_rejected", "legacy_google_auth_rejected")
     ):
         raise WorkflowError("legacy-owner verification proof is incomplete")
-    if result["auth_mode"] in {"staff_shadow", "staff"} and result["auth_source_staff_password"] is not True:
+    if ready and result["auth_mode"] in {"staff_shadow", "staff"} and result["auth_source_staff_password"] is not True:
         raise WorkflowError("legacy-owner verification did not prove staff password authentication")
     if not isinstance(result["runtime_binding"], str) or not BINDING_RE.fullmatch(result["runtime_binding"]):
         raise WorkflowError("legacy-owner runtime binding is invalid")

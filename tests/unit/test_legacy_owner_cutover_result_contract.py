@@ -17,7 +17,8 @@ def _plan(*, ready: bool = True) -> dict:
 
 def _verify(*, mode: str = "staff_shadow") -> dict:
     return {
-        "mode": "verify", "ready": True, "staff_user_id": 1, "membership_id": 2,
+        "mode": "verify", "ready": True, "blockers": [],
+        "staff_user_id": 1, "membership_id": 2,
         "system_tenant_id": 3, "system_storefront_id": 4, "auth_mode": mode,
         "legacy_token_version": 2, "credential_matches": True, "can_change_password": True,
         "auth_source_staff_password": True,
@@ -52,6 +53,21 @@ def test_verification_requires_real_staff_proofs_not_just_shape():
     value["credential_matches"] = False
     with pytest.raises(contract.WorkflowError, match="proof is incomplete"):
         contract.validate_result_semantics(value, expected_mode="verify", remote_status=0)
+
+
+def test_blocked_verification_preserves_only_safe_reason_codes():
+    value = _verify()
+    value.update(
+        ready=False,
+        blockers=["staff_credential_unproved"],
+        credential_matches=False,
+        auth_source_staff_password=False,
+        legacy_jwt_rejected=False,
+        legacy_google_auth_rejected=False,
+    )
+    contract.validate_result_semantics(value, expected_mode="verify", remote_status=2)
+    sanitized, _ = contract.sanitize_verify(value)
+    assert sanitized["blockers"] == ["staff_credential_unproved"]
 
 
 def test_legacy_rollback_verification_is_allowed_only_with_env_credential_proof():
