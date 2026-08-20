@@ -24,6 +24,7 @@ export class ManagerCatalogDecisionService {
      * @param page
      * @param limit
      * @param search
+     * @param coolingBtuClasses
      * @param coolingMinKw
      * @param coolingMaxKw
      * @param areaMin
@@ -33,6 +34,7 @@ export class ManagerCatalogDecisionService {
      * @param brandIds
      * @param seriesIds
      * @param isInverter
+     * @param hasWifi
      * @param wifi
      * @param availability
      * @param isPublished
@@ -45,6 +47,7 @@ export class ManagerCatalogDecisionService {
         page: number = 1,
         limit: number = 40,
         search?: (string | null),
+        coolingBtuClasses?: (Array<number> | null),
         coolingMinKw?: (number | null),
         coolingMaxKw?: (number | null),
         areaMin?: (number | null),
@@ -54,6 +57,7 @@ export class ManagerCatalogDecisionService {
         brandIds?: (Array<number> | null),
         seriesIds?: (Array<number> | null),
         isInverter?: (boolean | null),
+        hasWifi?: (boolean | null),
         wifi?: ('builtin' | 'ready' | 'none' | null),
         availability?: ('in_stock' | 'out_of_stock' | null),
         isPublished?: (boolean | null),
@@ -67,6 +71,7 @@ export class ManagerCatalogDecisionService {
                 'page': page,
                 'limit': limit,
                 'search': search,
+                'cooling_btu_classes': coolingBtuClasses,
                 'cooling_min_kw': coolingMinKw,
                 'cooling_max_kw': coolingMaxKw,
                 'area_min': areaMin,
@@ -76,6 +81,7 @@ export class ManagerCatalogDecisionService {
                 'brand_ids': brandIds,
                 'series_ids': seriesIds,
                 'is_inverter': isInverter,
+                'has_wifi': hasWifi,
                 'wifi': wifi,
                 'availability': availability,
                 'is_published': isPublished,

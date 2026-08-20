@@ -5,5 +5,6 @@
 export type CatalogDecisionFilterOption = {
     id: number;
     title: string;
+    brand_id?: (number | null);
 };
 
