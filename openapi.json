@@ -7181,6 +7181,341 @@
         }
       }
     },
+    "/api/manager/catalog-decision/products": {
+      "get": {
+        "tags": [
+          "manager catalog decision"
+        ],
+        "summary": "List Catalog Decision Products",
+        "operationId": "list_manager_catalog_decision_products",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "cooling_min_kw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cooling Min Kw"
+            }
+          },
+          {
+            "name": "cooling_max_kw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cooling Max Kw"
+            }
+          },
+          {
+            "name": "area_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area Min"
+            }
+          },
+          {
+            "name": "area_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area Max"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "household",
+                    "multi",
+                    "semi_industrial"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "indoor_form_factor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "wall",
+                    "cassette",
+                    "duct",
+                    "floor_ceiling",
+                    "column"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Indoor Form Factor"
+            }
+          },
+          {
+            "name": "brand_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Brand Ids"
+            }
+          },
+          {
+            "name": "series_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Series Ids"
+            }
+          },
+          {
+            "name": "is_inverter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Inverter"
+            }
+          },
+          {
+            "name": "wifi",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "builtin",
+                    "ready",
+                    "none"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Wifi"
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "in_stock",
+                    "out_of_stock"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Availability"
+            }
+          },
+          {
+            "name": "is_published",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Published"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "retail_price",
+                "purchase_cost",
+                "rrc",
+                "margin_abs",
+                "margin_pct",
+                "availability",
+                "cooling_power",
+                "title"
+              ],
+              "type": "string",
+              "default": "title",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string",
+              "default": "asc",
+              "title": "Direction"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDecisionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/catalog-quality/report": {
       "get": {
         "tags": [
@@ -26565,6 +26900,241 @@
         "additionalProperties": false,
         "type": "object",
         "title": "CartItemPayload"
+      },
+      "CatalogDecisionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDecisionProductResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "CatalogDecisionListResponse"
+      },
+      "CatalogDecisionProductResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "brand_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Title"
+          },
+          "series_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Title"
+          },
+          "retail_price_byn": {
+            "type": "number",
+            "title": "Retail Price Byn"
+          },
+          "purchase_cost_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Cost Byn"
+          },
+          "recommended_price_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Price Byn"
+          },
+          "margin_abs_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Abs Byn"
+          },
+          "margin_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Pct"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "supplier_qty": {
+            "type": "integer",
+            "title": "Supplier Qty",
+            "default": 0
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "in_stock",
+              "out_of_stock"
+            ],
+            "title": "Availability"
+          },
+          "cooling_power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Power Kw"
+          },
+          "cooling_min_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Min Kw"
+          },
+          "cooling_max_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Max Kw"
+          },
+          "area_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area M2"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "indoor_form_factor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Form Factor"
+          },
+          "is_inverter": {
+            "type": "boolean",
+            "title": "Is Inverter"
+          },
+          "wifi": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "ready",
+              "none"
+            ],
+            "title": "Wifi",
+            "default": "none"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug",
+          "retail_price_byn",
+          "availability",
+          "is_inverter",
+          "is_published"
+        ],
+        "title": "CatalogDecisionProductResponse"
       },
       "CatalogImportJobStartResponse": {
         "properties": {

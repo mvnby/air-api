@@ -19,6 +19,7 @@ from routers import (
     manager_backups,
     manager_brands,
     manager_catalog,
+    manager_catalog_decision,
     manager_catalog_quality,
     manager_content_ai,
     manager_crm,
@@ -64,6 +65,7 @@ from services.tenant_offer_service import TenantOfferService
 
 PLATFORM_ROUTERS = (
     manager_catalog.router,
+    manager_catalog_decision.router,
     manager_brands.router,
     manager_tags.router,
     manager_features.router,

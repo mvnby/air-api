@@ -29,6 +29,9 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   if (/^\/manager\/products\/\d+(?:\/|$)/.test(path)) {
     return MANAGER_CAPABILITY.platformManage;
   }
+  if (path === '/manager/catalog-decision' || path === '/manager/catalog-decision/') {
+    return MANAGER_CAPABILITY.platformManage;
+  }
   if (path === '/manager/products' || path === '/manager/products/') {
     return MANAGER_CAPABILITY.catalogMasterRead;
   }

@@ -32,6 +32,7 @@ import {
 } from './manager-capabilities';
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const TenantCatalogView = defineAsyncComponent(() => import('./views/TenantCatalogView.vue'));
+const CatalogDecisionWorkspaceView = defineAsyncComponent(() => import('./views/CatalogDecisionWorkspaceView.vue'));
 const ProductCollectionsView = defineAsyncComponent(() => import('./views/ProductCollectionsView.vue'));
 const ProductWorkspaceView = defineAsyncComponent(() => import('./views/ProductWorkspaceView.vue'));
 const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibraryView.vue'));
@@ -163,6 +164,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/equipment')) return 'equipment';
   if (path.startsWith('/manager/media')) return 'media-library';
   if (path.startsWith('/manager/catalog-quality')) return 'catalog-quality';
+  if (path.startsWith('/manager/catalog-decision')) return 'catalog-decision';
   if (path.startsWith('/manager/product-collections')) return 'product-collections';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
@@ -644,6 +646,7 @@ watch(currentPath, () => {
       <EquipmentRegistryView v-else-if="authorizedView === 'equipment'" :key="currentLocation" />
       <MediaLibraryView v-else-if="authorizedView === 'media-library'" :key="currentLocation" />
       <CatalogQualityView v-else-if="authorizedView === 'catalog-quality'" :key="currentLocation" />
+      <CatalogDecisionWorkspaceView v-else-if="authorizedView === 'catalog-decision' && canManagePlatform" :key="currentLocation" />
       <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="currentLocation" />
       <CustomerProfileView v-else-if="authorizedView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="authorizedView === 'customers'" :key="currentLocation" />
