@@ -84,6 +84,22 @@ def _headers(user: StaffUser) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_tenant_manager_cannot_call_system_catalog_decision_projection(
+    async_client: AsyncClient,
+    db: AsyncSession,
+):
+    user, _tenant, _storefront, _other_storefront = await _create_tenant_manager(db)
+    await db.commit()
+
+    response = await async_client.get(
+        "/api/manager/catalog-decision/products",
+        headers=_headers(user),
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_tenant_catalog_is_published_supplier_free_and_exactly_storefront_scoped(
     async_client: AsyncClient,
     db: AsyncSession,

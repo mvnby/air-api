@@ -401,6 +401,8 @@ def _normalize_indoor_type_kind(*values: Any) -> str | None:
             return "floor_ceiling"
         if "колонн" in text or "column" in text or "console" in text:
             return "column"
+        if "настенн" in text or "wall" in text:
+            return "wall"
     return None
 
 
