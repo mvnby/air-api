@@ -7181,6 +7181,32 @@
         }
       }
     },
+    "/api/manager/catalog-decision/filter-options": {
+      "get": {
+        "tags": [
+          "manager catalog decision"
+        ],
+        "summary": "List Catalog Decision Filter Options",
+        "operationId": "list_manager_catalog_decision_filter_options",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDecisionFilterOptionsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/catalog-decision/products": {
       "get": {
         "tags": [
@@ -26900,6 +26926,44 @@
         "additionalProperties": false,
         "type": "object",
         "title": "CartItemPayload"
+      },
+      "CatalogDecisionFilterOption": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "CatalogDecisionFilterOption"
+      },
+      "CatalogDecisionFilterOptionsResponse": {
+        "properties": {
+          "brands": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDecisionFilterOption"
+            },
+            "type": "array",
+            "title": "Brands"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDecisionFilterOption"
+            },
+            "type": "array",
+            "title": "Series"
+          }
+        },
+        "type": "object",
+        "title": "CatalogDecisionFilterOptionsResponse"
       },
       "CatalogDecisionListResponse": {
         "properties": {

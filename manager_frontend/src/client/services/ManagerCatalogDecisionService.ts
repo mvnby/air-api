@@ -2,11 +2,23 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CatalogDecisionFilterOptionsResponse } from '../models/CatalogDecisionFilterOptionsResponse';
 import type { CatalogDecisionListResponse } from '../models/CatalogDecisionListResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerCatalogDecisionService {
+    /**
+     * List Catalog Decision Filter Options
+     * @returns CatalogDecisionFilterOptionsResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerCatalogDecisionFilterOptions(): CancelablePromise<CatalogDecisionFilterOptionsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/catalog-decision/filter-options',
+        });
+    }
     /**
      * List Catalog Decision Products
      * @param page

@@ -110,6 +110,8 @@ export type { BulkSpecUpdate } from './models/BulkSpecUpdate';
 export type { CalendarEventResponse } from './models/CalendarEventResponse';
 export type { CalendarEventType } from './models/CalendarEventType';
 export type { CartItemPayload } from './models/CartItemPayload';
+export type { CatalogDecisionFilterOption } from './models/CatalogDecisionFilterOption';
+export type { CatalogDecisionFilterOptionsResponse } from './models/CatalogDecisionFilterOptionsResponse';
 export type { CatalogDecisionListResponse } from './models/CatalogDecisionListResponse';
 export type { CatalogDecisionProductResponse } from './models/CatalogDecisionProductResponse';
 export type { CatalogImportJobStartResponse } from './models/CatalogImportJobStartResponse';

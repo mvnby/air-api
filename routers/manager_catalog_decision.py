@@ -3,15 +3,25 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api_contracts.catalog_decision import CatalogDecisionListResponse, CatalogDecisionSort
+from api_contracts.catalog_decision import CatalogDecisionFilterOptionsResponse, CatalogDecisionListResponse, CatalogDecisionSort
 from core.database import get_session
 from core.security import get_current_manager_tenant_scope
 from models.tenancy import TenantScope
-from routers.manager_operation_ids import LIST_MANAGER_CATALOG_DECISION_PRODUCTS
+from routers.manager_operation_ids import (
+    LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS,
+    LIST_MANAGER_CATALOG_DECISION_PRODUCTS,
+)
 from routers.manager_permission_policy import ManagerPermissionRoute
 from services.catalog_decision_projection import CatalogDecisionFilters, CatalogDecisionQueryService
 
 router = APIRouter(prefix="/api/manager/catalog-decision", tags=["manager catalog decision"], route_class=ManagerPermissionRoute)
+
+
+@router.get("/filter-options", response_model=CatalogDecisionFilterOptionsResponse, operation_id=LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS)
+async def list_catalog_decision_filter_options(
+    session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    return await CatalogDecisionQueryService.list_system_filter_options(session, tenant_scope=tenant_scope)
 
 
 @router.get("/products", response_model=CatalogDecisionListResponse, operation_id=LIST_MANAGER_CATALOG_DECISION_PRODUCTS)

@@ -47,3 +47,13 @@ class CatalogDecisionProductResponse(BaseModel):
 class CatalogDecisionListResponse(BaseModel):
     items: list[CatalogDecisionProductResponse] = Field(default_factory=list)
     meta: Meta
+
+
+class CatalogDecisionFilterOption(BaseModel):
+    id: int
+    title: str
+
+
+class CatalogDecisionFilterOptionsResponse(BaseModel):
+    brands: list[CatalogDecisionFilterOption] = Field(default_factory=list)
+    series: list[CatalogDecisionFilterOption] = Field(default_factory=list)

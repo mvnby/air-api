@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive } from 'vue';
 import type { CatalogDecisionFilters as FilterState } from '../../services/catalog-decision-api';
+defineProps<{ brands: Array<{ id: number; title: string }>; series: Array<{ id: number; title: string }> }>();
 
 const emit = defineEmits<{ apply: [filters: FilterState]; reset: [] }>();
 const filters = reactive<FilterState>({ isPublished: true });
@@ -27,6 +28,8 @@ const reset = () => {
     </div>
     <select v-model="filters.category" class="rounded-lg border border-gray-200 px-3 py-2 text-sm"><option :value="undefined">Любая категория</option><option value="household">Бытовой</option><option value="multi">Мультисплит</option><option value="semi_industrial">Полупромышленный</option></select>
     <select v-model="filters.indoorFormFactor" class="rounded-lg border border-gray-200 px-3 py-2 text-sm"><option :value="undefined">Любой блок</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option></select>
+    <select v-model="filters.brandIds" class="rounded-lg border border-gray-200 px-3 py-2 text-sm"><option :value="undefined">Любой бренд</option><option v-for="brand in brands" :key="brand.id" :value="[brand.id]">{{ brand.title }}</option></select>
+    <select v-model="filters.seriesIds" class="rounded-lg border border-gray-200 px-3 py-2 text-sm"><option :value="undefined">Любая серия</option><option v-for="item in series" :key="item.id" :value="[item.id]">{{ item.title }}</option></select>
     <select v-model="filters.wifi" class="rounded-lg border border-gray-200 px-3 py-2 text-sm"><option :value="undefined">Любой Wi‑Fi</option><option value="builtin">Встроен</option><option value="ready">Подготовлен</option><option value="none">Нет</option></select>
     <select v-model="filters.availability" class="rounded-lg border border-gray-200 px-3 py-2 text-sm"><option :value="undefined">Любой остаток</option><option value="in_stock">В наличии</option><option value="out_of_stock">Нет в наличии</option></select>
     <select v-model="filters.isInverter" class="rounded-lg border border-gray-200 px-3 py-2 text-sm"><option :value="undefined">Любой компрессор</option><option :value="true">Инвертор</option><option :value="false">On/off</option></select>

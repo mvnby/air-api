@@ -26,6 +26,7 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         # Catalog products and imports.
         operation_ids.GET_MANAGER_PRODUCTS,
         operation_ids.LIST_MANAGER_CATALOG_DECISION_PRODUCTS,
+        operation_ids.LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS,
         operation_ids.GET_MANAGER_PRODUCT,
         operation_ids.SMART_SEARCH_PRODUCTS,
         operation_ids.CREATE_MANAGER_PRODUCT,

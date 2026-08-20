@@ -251,3 +251,24 @@ class CatalogDecisionQueryService:
             })
         total = count
         return {"items": items, "meta": {"page": page, "limit": limit, "total": total, "pages": max(1, (total + limit - 1) // limit)}}
+
+    @classmethod
+    async def list_system_filter_options(cls, session: AsyncSession, *, tenant_scope: TenantScope) -> dict:
+        """Small master-catalog dictionaries for the workspace filter controls."""
+        SystemCatalogDecisionProjection.require_scope(tenant_scope)
+        brands = list((await session.execute(
+            select(Brand.id, Brand.title)
+            .join(Product, Product.brand_id == Brand.id)
+            .group_by(Brand.id, Brand.title)
+            .order_by(Brand.title.asc())
+        )).all())
+        series = list((await session.execute(
+            select(ProductSeries.id, ProductSeries.title)
+            .join(Product, Product.series_id == ProductSeries.id)
+            .group_by(ProductSeries.id, ProductSeries.title)
+            .order_by(ProductSeries.title.asc())
+        )).all())
+        return {
+            "brands": [{"id": int(item.id), "title": item.title} for item in brands],
+            "series": [{"id": int(item.id), "title": item.title} for item in series],
+        }
