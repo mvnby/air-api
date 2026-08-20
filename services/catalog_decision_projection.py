@@ -15,8 +15,8 @@ from sqlalchemy import Float, and_, case, cast, exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from crud.product import ProductDAO
 from models import Brand, Product, ProductSeries, ProductTagLink, Tag
+from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
@@ -29,6 +29,7 @@ class CatalogDecisionScopeError(PermissionError):
 @dataclass(frozen=True)
 class CatalogDecisionFilters:
     search: str | None = None
+    cooling_btu_classes: tuple[int, ...] = ()
     cooling_min_kw: float | None = None
     cooling_max_kw: float | None = None
     area_min: float | None = None
@@ -38,6 +39,7 @@ class CatalogDecisionFilters:
     brand_ids: tuple[int, ...] = ()
     series_ids: tuple[int, ...] = ()
     is_inverter: bool | None = None
+    has_wifi: bool | None = None
     wifi: Literal["builtin", "ready", "none"] | None = None
     availability: Literal["in_stock", "out_of_stock"] | None = None
     is_published: bool | None = None
@@ -88,7 +90,16 @@ class CatalogDecisionQueryService:
         if session.bind is not None and session.bind.dialect.name == "sqlite":
             return cast(func.json_extract(Product.specs, f"$.{key}"), Float)
         from sqlalchemy.dialects.postgresql import JSONB
-        return cast(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key), Float)
+        raw_value = func.jsonb_extract_path_text(cast(Product.specs, JSONB), key)
+        # Production catalog history includes values such as "0.88 кВт".  A
+        # direct PostgreSQL cast makes one legacy value fail the whole page.
+        # Cast only canonical numeric strings; malformed values stay NULL.
+        normalized = func.replace(func.btrim(raw_value), ",", ".")
+        numeric = case(
+            (normalized.op("~")(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$"), normalized),
+            else_=None,
+        )
+        return cast(numeric, Float)
 
     @staticmethod
     def _json_text(session: AsyncSession, key: str):
@@ -143,17 +154,40 @@ class CatalogDecisionQueryService:
         )
 
     @classmethod
-    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, cooling_min, cooling_max):
+    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, cooling_min, cooling_max, area):
         conditions = []
         search = (filters.search or "").strip()
         if search:
-            pattern = f"%{search}%"
-            conditions.append(or_(Product.title.ilike(pattern), Product.slug.ilike(pattern), Brand.title.ilike(pattern), ProductSeries.title.ilike(pattern)))
+            for token in search.split():
+                if token.isdigit() and token in BTU_MAPPING:
+                    ranges = BTU_MAPPING[token]
+                    conditions.append(or_(
+                        area.between(ranges["area"][0], ranges["area"][1]),
+                        and_(cooling_min <= ranges["power"][1], cooling_max >= ranges["power"][0]),
+                        Product.title.ilike(f"%{token}%"),
+                    ))
+                else:
+                    pattern = f"%{token}%"
+                    conditions.append(or_(
+                        Product.title.ilike(pattern), Product.slug.ilike(pattern), Brand.title.ilike(pattern), ProductSeries.title.ilike(pattern),
+                        Product.tags.any(Tag.title.ilike(pattern)),
+                    ))
+        if filters.cooling_btu_classes:
+            btu_conditions = []
+            for btu in filters.cooling_btu_classes:
+                ranges = BTU_MAPPING.get(str(btu))
+                if ranges:
+                    btu_conditions.append(or_(
+                        area.between(ranges["area"][0], ranges["area"][1]),
+                        and_(cooling_min <= ranges["power"][1], cooling_max >= ranges["power"][0]),
+                        Product.title.ilike(f"%{btu}%"),
+                    ))
+            if btu_conditions:
+                conditions.append(or_(*btu_conditions))
         if filters.cooling_min_kw is not None:
             conditions.append(cooling_max >= filters.cooling_min_kw)
         if filters.cooling_max_kw is not None:
             conditions.append(cooling_min <= filters.cooling_max_kw)
-        area = ProductDAO.area_expr(session)
         if filters.area_min is not None:
             conditions.append(area >= filters.area_min)
         if filters.area_max is not None:
@@ -168,6 +202,9 @@ class CatalogDecisionQueryService:
             conditions.append(Product.series_id.in_(filters.series_ids))
         if filters.is_inverter is not None:
             conditions.append(Product.is_inverter.is_(filters.is_inverter))
+        if filters.has_wifi:
+            wifi = cls._json_text(session, "wifi_ready")
+            conditions.append(wifi.in_((True, "true", "True", "1", "ready")))
         if filters.wifi:
             wifi = cls._json_text(session, "wifi_ready")
             if filters.wifi == "builtin":
@@ -197,16 +234,17 @@ class CatalogDecisionQueryService:
         margin_pct = case((and_(purchase.is_not(None), retail > 0), (retail - purchase) / retail), else_=None).label("margin_pct")
         total_qty = func.coalesce(metrics.c.supplier_qty, 0) + func.coalesce(local_stock.c.local_qty, 0)
         availability = case((total_qty > 0, "in_stock"), else_="out_of_stock").label("availability")
+        area = cls._json_float(session, "area_m2")
         cooling_nominal = func.coalesce(Product.power_cooling, cls._json_float(session, "capacity_cooling_kw")).label("cooling_power_kw")
         cooling_min = func.coalesce(cls._json_float(session, "capacity_cooling_min_kw"), cooling_nominal).label("cooling_min_kw")
         cooling_max = func.coalesce(cls._json_float(session, "capacity_cooling_max_kw"), cooling_nominal).label("cooling_max_kw")
-        conditions = cls._conditions(session, filters, availability=availability, cooling_min=cooling_min, cooling_max=cooling_max)
+        conditions = cls._conditions(session, filters, availability=availability, cooling_min=cooling_min, cooling_max=cooling_max, area=area)
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
                 purchase, metrics.c.recommended_price_byn, metrics.c.supplier_name, metrics.c.supplier_qty,
                 margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max,
-                ProductDAO.area_expr(session).label("area_m2"),
+                area.label("area_m2"),
                 cls._json_text(session, "__filter_indoor_type").label("indoor_form_factor"),
                 cls._json_text(session, "wifi_ready").label("wifi_raw"),
             )
@@ -263,12 +301,12 @@ class CatalogDecisionQueryService:
             .order_by(Brand.title.asc())
         )).all())
         series = list((await session.execute(
-            select(ProductSeries.id, ProductSeries.title)
+            select(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
             .join(Product, Product.series_id == ProductSeries.id)
-            .group_by(ProductSeries.id, ProductSeries.title)
-            .order_by(ProductSeries.title.asc())
+            .group_by(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
+            .order_by(ProductSeries.brand_id.asc(), ProductSeries.title.asc())
         )).all())
         return {
             "brands": [{"id": int(item.id), "title": item.title} for item in brands],
-            "series": [{"id": int(item.id), "title": item.title} for item in series],
+            "series": [{"id": int(item.id), "title": item.title, "brand_id": int(item.brand_id) if item.brand_id is not None else None} for item in series],
         }

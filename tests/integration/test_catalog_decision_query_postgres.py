@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import event
 from sqlmodel import select
 
-from models import Product, ProductTagLink, Tag, TagGroup
+from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
 from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
 from services.catalog_decision_projection import (
@@ -92,3 +92,68 @@ async def test_catalog_decision_projection_has_a_bounded_query_count(db):
 
     # Cold FX configuration needs at most three reads; count + page query add two.
     assert len(statements) <= 5
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_ignores_legacy_unit_suffixes_without_failing_the_page(db):
+    """A malformed historical spec must become NULL, never a 500 for every manager."""
+    legacy = Product(
+        title="DECISION legacy suffix", slug="decision-legacy-suffix", price=1000,
+        specs={"capacity_cooling_kw": "0.88 кВт", "capacity_cooling_min_kw": "0.88 кВт", "area_m2": "35"},
+    )
+    canonical = Product(
+        title="DECISION canonical numeric", slug="decision-canonical-numeric", price=1000,
+        specs={"capacity_cooling_kw": "3.5", "capacity_cooling_min_kw": "3.2", "capacity_cooling_max_kw": "3.8", "area_m2": "35"},
+    )
+    db.add_all([legacy, canonical])
+    await db.commit()
+
+    result = await CatalogDecisionQueryService.list_system_products(
+        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        filters=CatalogDecisionFilters(search="DECISION"), page=1, limit=20, sort="title", direction="asc",
+    )
+
+    by_id = {item["id"]: item for item in result["items"]}
+    assert set(by_id) == {legacy.id, canonical.id}
+    assert by_id[legacy.id]["cooling_power_kw"] is None
+    assert by_id[canonical.id]["cooling_power_kw"] == 3.5
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_smart_search_and_multiple_btu_classes(db):
+    brand = Brand(title="Decision Gree", slug="decision-gree")
+    db.add(brand)
+    await db.flush()
+    series = ProductSeries(title="Decision Elite", slug="decision-elite", brand_id=brand.id)
+    db.add(series)
+    await db.flush()
+    nine = Product(title="DECISION indoor 09", slug="decision-09", price=900, brand_id=brand.id, series_id=series.id, power_cooling=2.6, specs={"area_m2": 28})
+    twelve = Product(title="DECISION indoor 12", slug="decision-12", price=1000, brand_id=brand.id, series_id=series.id, power_cooling=3.5, specs={"area_m2": 35})
+    db.add_all([nine, twelve])
+    await db.commit()
+
+    result = await CatalogDecisionQueryService.list_system_products(
+        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        filters=CatalogDecisionFilters(search="Gree 12", cooling_btu_classes=(9, 12)), page=1, limit=20, sort="title", direction="asc",
+    )
+
+    # Text and nominal tokens are ANDed, exactly as in the public smart search.
+    assert [item["id"] for item in result["items"]] == [twelve.id]
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_filter_options_keep_series_owner(db):
+    brand = Brand(title="Decision option brand", slug="decision-option-brand")
+    db.add(brand)
+    await db.flush()
+    series = ProductSeries(title="Decision shared-name", slug="decision-shared-name", brand_id=brand.id)
+    db.add(series)
+    await db.flush()
+    db.add(Product(title="DECISION option product", slug="decision-option-product", price=1000, brand_id=brand.id, series_id=series.id))
+    await db.commit()
+
+    options = await CatalogDecisionQueryService.list_system_filter_options(
+        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+    )
+
+    assert {item["id"]: item["brand_id"] for item in options["series"]}[series.id] == brand.id

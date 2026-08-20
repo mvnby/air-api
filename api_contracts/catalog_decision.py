@@ -52,6 +52,9 @@ class CatalogDecisionListResponse(BaseModel):
 class CatalogDecisionFilterOption(BaseModel):
     id: int
     title: str
+    # A series title is not globally unique ("Elite" is a common example).
+    # The UI uses this ownership link to show series only beneath chosen brands.
+    brand_id: int | None = None
 
 
 class CatalogDecisionFilterOptionsResponse(BaseModel):

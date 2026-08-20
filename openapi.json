@@ -7261,6 +7261,25 @@
             }
           },
           {
+            "name": "cooling_btu_classes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cooling Btu Classes"
+            }
+          },
+          {
             "name": "cooling_min_kw",
             "in": "query",
             "required": false,
@@ -7427,6 +7446,22 @@
             }
           },
           {
+            "name": "has_wifi",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Wifi"
+            }
+          },
+          {
             "name": "wifi",
             "in": "query",
             "required": false,
@@ -7464,6 +7499,7 @@
                   "type": "null"
                 }
               ],
+              "default": "in_stock",
               "title": "Availability"
             }
           },
@@ -26936,6 +26972,17 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
           }
         },
         "type": "object",
