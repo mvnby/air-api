@@ -10,7 +10,8 @@ import {
 describe('catalog decision selection persistence', () => {
   beforeEach(() => window.sessionStorage.clear());
 
-  it('restores the compact selection for five minutes across workspace mounts', () => {
+  it('restores the compact selection for 24 hours across workspace mounts', () => {
+    expect(CATALOG_DECISION_SELECTION_TTL_MS).toBe(24 * 60 * 60 * 1000);
     saveCatalogDecisionSelection([
       { id: 11, title: 'Gree Pular 12' },
       { id: 22, title: 'MDV Infini 18' },

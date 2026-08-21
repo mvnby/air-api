@@ -10,7 +10,7 @@ type StoredSelection = {
 };
 
 export const CATALOG_DECISION_SELECTION_STORAGE_KEY = 'manager:catalog-decision:selection:v1';
-export const CATALOG_DECISION_SELECTION_TTL_MS = 5 * 60 * 1000;
+export const CATALOG_DECISION_SELECTION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const browserStorage = (): SelectionStorage | null => {
   try {
