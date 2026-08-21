@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import event
 from sqlmodel import select
 
-from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from models import Brand, Order, Product, ProductSeries, ProductTagLink, Tag, TagGroup
 from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
 from services.catalog_decision_projection import (
@@ -10,6 +10,7 @@ from services.catalog_decision_projection import (
     CatalogDecisionQueryService,
     CatalogDecisionScopeError,
 )
+from services.catalog_decision_quick_order_service import CatalogDecisionQuickOrderService
 
 
 async def _category(session, slug: str) -> Tag:
@@ -129,6 +130,78 @@ async def test_catalog_decision_order_snapshots_are_batched(db):
     assert set(snapshots) == {int(product.id) for product in products}
     # Cold FX configuration needs at most three reads; all product metrics use one query.
     assert len(statements) <= 4
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_quick_order_is_anonymous_atomic_and_idempotent(db):
+    products = [
+        Product(title="DECISION quick 12", slug="decision-quick-12", price=2200),
+        Product(title="DECISION quick 18", slug="decision-quick-18", price=3100),
+    ]
+    db.add_all(products)
+    await db.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    ids = [int(product.id) for product in products]
+
+    first = await CatalogDecisionQuickOrderService.create(
+        db,
+        product_ids=ids,
+        idempotency_key="quick-order-retry-1",
+        prospect_type="company",
+        tenant_scope=scope,
+    )
+    retry = await CatalogDecisionQuickOrderService.create(
+        db,
+        product_ids=list(reversed(ids)),
+        idempotency_key="quick-order-retry-1",
+        prospect_type="individual",
+        tenant_scope=scope,
+    )
+
+    assert retry["id"] == first["id"]
+    assert first["customer"] is None
+    assert first["status"] == "negotiation"
+    assert len(first["proposals"]) == 1
+    assert first["proposals"][0]["is_selected"] is True
+    assert {line["product_id"] for line in first["proposals"][0]["product_lines"]} == set(ids)
+    order = await db.get(Order, first["id"])
+    assert order is not None
+    assert order.technical_meta["customer_state"] == "unidentified"
+    assert order.technical_meta["prospect_type"] == "company"
+    assert len((await db.execute(select(Order).where(Order.source_fingerprint == order.source_fingerprint))).scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_quick_order_rolls_back_when_any_product_is_missing(db):
+    product = Product(title="DECISION rollback", slug="decision-quick-rollback", price=1500)
+    db.add(product)
+    await db.commit()
+    before = len((await db.execute(select(Order))).scalars().all())
+
+    with pytest.raises(ValueError, match="Товары не найдены"):
+        await CatalogDecisionQuickOrderService.create(
+            db,
+            product_ids=[int(product.id), 987654321],
+            idempotency_key="quick-order-rollback-1",
+            prospect_type="individual",
+            tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        )
+
+    assert len((await db.execute(select(Order))).scalars().all()) == before
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_quick_order_rejects_tenant_projection_before_creating_order(db):
+    before = len((await db.execute(select(Order))).scalars().all())
+    with pytest.raises(CatalogDecisionScopeError):
+        await CatalogDecisionQuickOrderService.create(
+            db,
+            product_ids=[1],
+            idempotency_key="tenant-quick-order-blocked",
+            prospect_type="individual",
+            tenant_scope=TenantScope(tenant_id=99, storefront_id=99, is_system=False),
+        )
+    assert len((await db.execute(select(Order))).scalars().all()) == before
 
 
 @pytest.mark.asyncio

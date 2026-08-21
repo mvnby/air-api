@@ -1,3 +1,5 @@
+import type { ManagerAuthStatusResponse } from '../client';
+
 export type CatalogDecisionSelectionItem = {
   id: number;
   title: string;
@@ -9,12 +11,24 @@ type StoredSelection = {
   items: CatalogDecisionSelectionItem[];
 };
 
-export const CATALOG_DECISION_SELECTION_STORAGE_KEY = 'manager:catalog-decision:selection:v1';
-export const CATALOG_DECISION_SELECTION_TTL_MS = 5 * 60 * 1000;
+type SelectionIdentity = Pick<
+  ManagerAuthStatusResponse,
+  'tenant_id' | 'staff_user_id' | 'username'
+>;
+
+export const CATALOG_DECISION_SELECTION_STORAGE_KEY_PREFIX = 'manager:catalog-decision:selection:v2';
+export const CATALOG_DECISION_SELECTION_TTL_MS = 24 * 60 * 60 * 1000;
+
+export const catalogDecisionSelectionStorageKey = (identity: SelectionIdentity): string => {
+  const userKey = identity.staff_user_id
+    ? `staff-${identity.staff_user_id}`
+    : `user-${encodeURIComponent(identity.username.trim().toLowerCase())}`;
+  return `${CATALOG_DECISION_SELECTION_STORAGE_KEY_PREFIX}:${identity.tenant_id}:${userKey}`;
+};
 
 const browserStorage = (): SelectionStorage | null => {
   try {
-    return typeof window === 'undefined' ? null : window.sessionStorage;
+    return typeof window === 'undefined' ? null : window.localStorage;
   } catch {
     return null;
   }
@@ -33,22 +47,23 @@ const normalizedItems = (value: unknown): CatalogDecisionSelectionItem[] => {
 };
 
 export const loadCatalogDecisionSelection = (
+  storageKey: string,
   storage: SelectionStorage | null = browserStorage(),
   now = Date.now(),
 ): CatalogDecisionSelectionItem[] => {
   try {
-    const raw = storage?.getItem(CATALOG_DECISION_SELECTION_STORAGE_KEY);
+    const raw = storage?.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Partial<StoredSelection>;
     const expiresAt = Number(parsed.expiresAt);
     if (!Number.isFinite(expiresAt) || expiresAt <= now) {
-      storage?.removeItem(CATALOG_DECISION_SELECTION_STORAGE_KEY);
+      storage?.removeItem(storageKey);
       return [];
     }
     return normalizedItems(parsed.items);
   } catch {
     try {
-      storage?.removeItem(CATALOG_DECISION_SELECTION_STORAGE_KEY);
+      storage?.removeItem(storageKey);
     } catch {
       // The workspace remains usable when browser storage is unavailable.
     }
@@ -58,16 +73,17 @@ export const loadCatalogDecisionSelection = (
 
 export const saveCatalogDecisionSelection = (
   items: CatalogDecisionSelectionItem[],
+  storageKey: string,
   storage: SelectionStorage | null = browserStorage(),
   now = Date.now(),
 ): void => {
   const normalized = normalizedItems(items);
   try {
     if (!normalized.length) {
-      storage?.removeItem(CATALOG_DECISION_SELECTION_STORAGE_KEY);
+      storage?.removeItem(storageKey);
       return;
     }
-    storage?.setItem(CATALOG_DECISION_SELECTION_STORAGE_KEY, JSON.stringify({
+    storage?.setItem(storageKey, JSON.stringify({
       expiresAt: now + CATALOG_DECISION_SELECTION_TTL_MS,
       items: normalized,
     } satisfies StoredSelection));

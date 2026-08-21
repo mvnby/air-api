@@ -82,6 +82,40 @@ async def test_manager_orders_list_segment_filter(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_catalog_decision_quick_order_api_can_attach_real_customer_later(async_client, db):
+    product = Product(title="Quick order API product", slug="quick-order-api-product", price=2400)
+    customer = Customer(tenant_id=1, name="Known later", phone="+375291234567")
+    db.add_all([product, customer])
+    await db.commit()
+    await db.refresh(product)
+    await db.refresh(customer)
+    headers = await _auth_headers(async_client)
+
+    created = await async_client.post(
+        "/api/manager/catalog-decision/orders",
+        headers=headers,
+        json={
+            "product_ids": [product.id],
+            "idempotency_key": "manager-api-quick-order-1",
+            "prospect_type": "individual",
+        },
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["customer"] is None
+    assert body["status"] == "negotiation"
+    assert body["proposals"][0]["product_lines"][0]["product_id"] == product.id
+
+    linked = await async_client.patch(
+        f"/api/manager/orders/{body['id']}",
+        headers=headers,
+        json={"customer_id": customer.id},
+    )
+    assert linked.status_code == 200, linked.text
+    assert linked.json()["customer"]["id"] == customer.id
+
+
+@pytest.mark.asyncio
 async def test_manager_orders_list_excludes_leads_before_pagination(async_client, db):
     customer = Customer(tenant_id=1, name="Real Order", phone="+375291010101", type=CustomerType.individual)
     db.add(customer)

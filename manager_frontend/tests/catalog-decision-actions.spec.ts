@@ -3,6 +3,7 @@ import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 
 import { ManagerCatalogDecisionService } from '../src/client';
 import CatalogDecisionCollectionDialog from '../src/components/catalog-decision/CatalogDecisionCollectionDialog.vue';
+import CatalogDecisionQuickOrderDialog from '../src/components/catalog-decision/CatalogDecisionQuickOrderDialog.vue';
 import CatalogDecisionSelectionTray from '../src/components/catalog-decision/CatalogDecisionSelectionTray.vue';
 import { defaultCatalogDecisionAttachMode, hasActiveOrderProducts } from '../src/services/catalog-decision-order';
 
@@ -22,10 +23,34 @@ describe('catalog decision basket actions', () => {
     const buttons = wrapper.findAll('button');
 
     await buttons.find(button => button.text() === 'Создать подборку')!.trigger('click');
-    await buttons.find(button => button.text() === 'К заказу')!.trigger('click');
+    await buttons.find(button => button.text() === 'К существующему')!.trigger('click');
+    await buttons.find(button => button.text() === 'Новый заказ')!.trigger('click');
 
     expect(wrapper.emitted('createCollection')).toHaveLength(1);
     expect(wrapper.emitted('attachOrder')).toHaveLength(1);
+    expect(wrapper.emitted('createOrder')).toHaveLength(1);
+  });
+
+  it('creates one anonymous negotiation order from every selected product', async () => {
+    const create = vi.spyOn(ManagerCatalogDecisionService, 'createManagerCatalogDecisionOrder')
+      .mockResolvedValue({ id: 88 } as never);
+    const wrapper = mount(CatalogDecisionQuickOrderDialog, {
+      props: { open: true, items: selection },
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    });
+    const body = new DOMWrapper(document.body);
+    await body.findAll('button').find(button => button.text() === 'Юрлицу')!.trigger('click');
+    await body.findAll('button').find(button => button.text() === 'Создать заказ')!.trigger('click');
+    await flushPromises();
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0]).toMatchObject({
+      product_ids: [11, 22],
+      prospect_type: 'company',
+    });
+    expect(create.mock.calls[0][0].idempotency_key.length).toBeGreaterThanOrEqual(8);
+    expect(wrapper.emitted('created')).toEqual([[88]]);
   });
 
   it('creates one draft collection from all selected product ids', async () => {

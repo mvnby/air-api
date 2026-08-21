@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_contracts.catalog_decision import (
     CatalogDecisionAttachToOrderPayload,
     CatalogDecisionCreateCollectionPayload,
+    CatalogDecisionCreateOrderPayload,
     CatalogDecisionFilterOptionsResponse,
     CatalogDecisionListResponse,
     CatalogDecisionSort,
@@ -17,6 +18,7 @@ from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     ATTACH_MANAGER_CATALOG_DECISION_TO_ORDER,
     CREATE_MANAGER_CATALOG_DECISION_COLLECTION,
+    CREATE_MANAGER_CATALOG_DECISION_ORDER,
     LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS,
     LIST_MANAGER_CATALOG_DECISION_PRODUCTS,
 )
@@ -27,6 +29,7 @@ from services.catalog_decision_order_service import (
     CatalogDecisionOrderConflict,
     CatalogDecisionOrderService,
 )
+from services.catalog_decision_quick_order_service import CatalogDecisionQuickOrderService
 from schemas import ManagerOrderDetailResponse
 
 router = APIRouter(prefix="/api/manager/catalog-decision", tags=["manager catalog decision"], route_class=ManagerPermissionRoute)
@@ -99,5 +102,27 @@ async def attach_catalog_decision_to_order(
         )
     except CatalogDecisionOrderConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/orders",
+    response_model=ManagerOrderDetailResponse,
+    operation_id=CREATE_MANAGER_CATALOG_DECISION_ORDER,
+)
+async def create_catalog_decision_order(
+    payload: CatalogDecisionCreateOrderPayload,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    try:
+        return await CatalogDecisionQuickOrderService.create(
+            session,
+            product_ids=payload.product_ids,
+            idempotency_key=payload.idempotency_key,
+            prospect_type=payload.prospect_type,
+            tenant_scope=tenant_scope,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
