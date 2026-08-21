@@ -60,3 +60,20 @@ class CatalogDecisionFilterOption(BaseModel):
 class CatalogDecisionFilterOptionsResponse(BaseModel):
     brands: list[CatalogDecisionFilterOption] = Field(default_factory=list)
     series: list[CatalogDecisionFilterOption] = Field(default_factory=list)
+
+
+class CatalogDecisionCreateCollectionPayload(BaseModel):
+    title: str = Field(min_length=1, max_length=180)
+    product_ids: list[int] = Field(min_length=1, max_length=24)
+
+
+CatalogDecisionOrderAttachMode = Literal[
+    "auto",
+    "replace_selected",
+    "new_alternative",
+]
+
+
+class CatalogDecisionAttachToOrderPayload(BaseModel):
+    product_ids: list[int] = Field(min_length=1, max_length=24)
+    mode: CatalogDecisionOrderAttachMode = "auto"
