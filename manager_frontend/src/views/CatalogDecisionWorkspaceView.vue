@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import CatalogDecisionFilters from '../components/catalog-decision/CatalogDecisionFilters.vue';
 import CatalogDecisionCollectionDialog from '../components/catalog-decision/CatalogDecisionCollectionDialog.vue';
 import CatalogDecisionOrderDialog from '../components/catalog-decision/CatalogDecisionOrderDialog.vue';
@@ -8,10 +8,12 @@ import CatalogDecisionSelectionTray from '../components/catalog-decision/Catalog
 import CatalogDecisionTable from '../components/catalog-decision/CatalogDecisionTable.vue';
 import { catalogDecisionApi, defaultCatalogDecisionFilters, type CatalogDecisionFilters as Filters, type CatalogDecisionItem, type CatalogDecisionSort } from '../services/catalog-decision-api';
 import {
+  catalogDecisionSelectionStorageKey,
   loadCatalogDecisionSelection,
   saveCatalogDecisionSelection,
   type CatalogDecisionSelectionItem,
 } from '../services/catalog-decision-selection';
+import { managerSession } from '../services/manager-session';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const items = ref<CatalogDecisionItem[]>([]);
@@ -27,6 +29,10 @@ const orderDialogOpen = ref(false);
 const quickOrderDialogOpen = ref(false);
 const success = ref<{ message: string; href: string; label: string } | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
+const selectionStorageKey = computed(() => {
+  const auth = managerSession.auth.value;
+  return auth ? catalogDecisionSelectionStorageKey(auth) : null;
+});
 
 const load = async () => {
   loading.value = true; error.value = '';
@@ -55,8 +61,8 @@ const orderCreated = (orderId: number) => {
   success.value = { message: `Быстрый заказ #${orderId} создан. Клиента можно привязать позже.`, href: `/manager/orders/kanban?orderId=${orderId}`, label: 'Открыть заказ' };
 };
 watch(filters, (next, previous) => { if (next.search !== previous.search) { clearTimeout(searchTimer); searchTimer = setTimeout(() => void load(), 220); } else void load(); }, { deep: true });
-watch(selected, (next) => saveCatalogDecisionSelection(Object.values(next)), { deep: true });
-onMounted(async () => { selected.value = Object.fromEntries(loadCatalogDecisionSelection().map(item => [item.id, item])); try { const options = await catalogDecisionApi.filterOptions(); brands.value = options.brands ?? []; series.value = (options.series ?? []).map(item => ({ id: item.id, title: item.title, brandId: item.brand_id })); } catch { /* The list request shows the actionable error. */ } void load(); });
+watch(selected, (next) => { const key = selectionStorageKey.value; if (key) saveCatalogDecisionSelection(Object.values(next), key); }, { deep: true });
+onMounted(async () => { const key = selectionStorageKey.value; if (key) selected.value = Object.fromEntries(loadCatalogDecisionSelection(key).map(item => [item.id, item])); try { const options = await catalogDecisionApi.filterOptions(); brands.value = options.brands ?? []; series.value = (options.series ?? []).map(item => ({ id: item.id, title: item.title, brandId: item.brand_id })); } catch { /* The list request shows the actionable error. */ } void load(); });
 </script>
 
 <template>
