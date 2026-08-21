@@ -637,7 +637,7 @@ watch(currentPath, () => {
       />
     </aside>
 
-    <main class="flex-1 overflow-auto md:ml-0">
+    <main class="flex-1 overflow-auto pt-14 md:ml-0 md:pt-0">
       <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
       <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />
       <LeadsView v-else-if="authorizedView === 'leads'" :key="currentLocation" />
