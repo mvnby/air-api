@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
 import CatalogDecisionFilters from '../src/components/catalog-decision/CatalogDecisionFilters.vue';
+import { defaultCatalogDecisionFilters } from '../src/services/catalog-decision-api';
 
 const brands = [{ id: 1, title: 'MDV' }, { id: 2, title: 'Gree' }];
 const series = [{ id: 10, title: 'MDSAG', brandId: 1 }, { id: 20, title: 'Pular', brandId: 2 }];
@@ -26,5 +27,14 @@ describe('CatalogDecisionFilters', () => {
 
     await buttonByText(wrapper, '12').trigger('click');
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ coolingBtuClasses: [9, 12] });
+  });
+
+  it('uses household mode by default and keeps the quick switches compact', () => {
+    const wrapper = mount(CatalogDecisionFilters, { props: { modelValue: defaultCatalogDecisionFilters(), brands, series } });
+
+    expect(wrapper.findAll('button').find(button => button.text().includes('Бытовой'))!.classes()).toContain('border-teal-600');
+    expect(wrapper.text()).toContain('Включать заказные');
+    expect(wrapper.text()).not.toContain('Искать заказные');
+    expect(buttonByText(wrapper, 'MDV').element.parentElement?.className).toContain('flex-wrap');
   });
 });

@@ -26,6 +26,11 @@ export type CatalogDecisionFilters = {
   isPublished?: boolean;
 };
 
+export const defaultCatalogDecisionFilters = (): CatalogDecisionFilters => ({
+  isPublished: true,
+  category: 'household',
+});
+
 export const catalogDecisionApi = {
   filterOptions(): Promise<CatalogDecisionFilterOptionsResponse> {
     return ManagerCatalogDecisionService.listManagerCatalogDecisionFilterOptions();
