@@ -8,6 +8,7 @@ from sqlmodel import select
 from models import (
     IntegrationOutboxEvent,
     Product,
+    ProductCollection,
     StorefrontCatalogRevision,
     TenantAuditEvent,
 )
@@ -45,6 +46,45 @@ def _product(
         main_image=main_image,
         specs=specs if specs is not None else {"area_m2": 25},
     )
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_creates_draft_collection_with_items_atomically(async_client, db):
+    headers = await _auth_headers(async_client)
+    products = [
+        _product(title="Gree 12", slug="collection-from-cart-gree"),
+        _product(title="MDV 18", slug="collection-from-cart-mdv"),
+    ]
+    db.add_all(products)
+    await db.commit()
+
+    created = await async_client.post(
+        "/api/manager/catalog-decision/collections",
+        headers=headers,
+        json={
+            "title": "Предложение для офиса",
+            "product_ids": [int(product.id) for product in products],
+        },
+    )
+
+    assert created.status_code == 200, created.text
+    payload = created.json()
+    assert payload["status"] == "draft"
+    assert payload["mode"] == "manual"
+    assert payload["public_title"] == "Предложение для офиса"
+    assert [item["product_id"] for item in payload["items"]] == [
+        int(product.id) for product in products
+    ]
+
+    before = len((await db.execute(select(ProductCollection))).scalars().all())
+    rejected = await async_client.post(
+        "/api/manager/catalog-decision/collections",
+        headers=headers,
+        json={"title": "Не должна сохраниться", "product_ids": [2_147_483_647]},
+    )
+    assert rejected.status_code == 404
+    after = len((await db.execute(select(ProductCollection))).scalars().all())
+    assert after == before
 
 
 @pytest.mark.asyncio

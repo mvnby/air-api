@@ -65,6 +65,13 @@ async def test_catalog_decision_rejects_tenant_scope_before_query(db):
     with pytest.raises(CatalogDecisionScopeError):
         await CatalogDecisionQueryService.list_system_products(db, tenant_scope=TenantScope(tenant_id=99, storefront_id=99, is_system=False), filters=CatalogDecisionFilters(), page=1, limit=10, sort="title", direction="asc")
 
+    with pytest.raises(CatalogDecisionScopeError):
+        await CatalogDecisionQueryService.get_system_product_snapshots(
+            db,
+            tenant_scope=TenantScope(tenant_id=99, storefront_id=99, is_system=False),
+            product_ids=[1],
+        )
+
 
 @pytest.mark.asyncio
 async def test_catalog_decision_projection_has_a_bounded_query_count(db):
@@ -92,6 +99,36 @@ async def test_catalog_decision_projection_has_a_bounded_query_count(db):
 
     # Cold FX configuration needs at most three reads; count + page query add two.
     assert len(statements) <= 5
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_order_snapshots_are_batched(db):
+    products = [
+        Product(title=f"DECISION snapshot {index}", slug=f"decision-snapshot-{index}", price=1000 + index)
+        for index in range(8)
+    ]
+    db.add_all(products)
+    await db.commit()
+    statements: list[str] = []
+
+    def collect(_connection, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    engine = db.bind
+    assert engine is not None
+    event.listen(engine.sync_engine, "after_cursor_execute", collect)
+    try:
+        snapshots = await CatalogDecisionQueryService.get_system_product_snapshots(
+            db,
+            tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+            product_ids=[int(product.id) for product in products],
+        )
+    finally:
+        event.remove(engine.sync_engine, "after_cursor_execute", collect)
+
+    assert set(snapshots) == {int(product.id) for product in products}
+    # Cold FX configuration needs at most three reads; all product metrics use one query.
+    assert len(statements) <= 4
 
 
 @pytest.mark.asyncio

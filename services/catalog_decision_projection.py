@@ -45,6 +45,13 @@ class CatalogDecisionFilters:
     is_published: bool | None = None
 
 
+@dataclass(frozen=True)
+class CatalogDecisionProductSnapshot:
+    product: Product
+    retail_price_byn: int
+    purchase_cost_byn: int
+
+
 class CatalogDecisionProjection:
     """Projection policy interface.  It controls eligible supplier offers only."""
 
@@ -289,6 +296,43 @@ class CatalogDecisionQueryService:
             })
         total = count
         return {"items": items, "meta": {"page": page, "limit": limit, "total": total, "pages": max(1, (total + limit - 1) // limit)}}
+
+    @classmethod
+    async def get_system_product_snapshots(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        product_ids: list[int] | tuple[int, ...],
+    ) -> dict[int, CatalogDecisionProductSnapshot]:
+        """Resolve authoritative order-line price/cost snapshots in one query."""
+        SystemCatalogDecisionProjection.require_scope(tenant_scope)
+        ids = tuple(dict.fromkeys(int(product_id) for product_id in product_ids))
+        if not ids:
+            return {}
+        usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session)
+        metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate)
+        rows = list(
+            (
+                await session.execute(
+                    select(Product, metrics.c.purchase_cost_byn)
+                    .outerjoin(metrics, metrics.c.product_id == Product.id)
+                    .where(Product.id.in_(ids))
+                )
+            ).all()
+        )
+        return {
+            int(row[0].id): CatalogDecisionProductSnapshot(
+                product=row[0],
+                retail_price_byn=int(round(float(row[0].price or 0))),
+                purchase_cost_byn=(
+                    int(round(float(row.purchase_cost_byn)))
+                    if row.purchase_cost_byn is not None
+                    else 0
+                ),
+            )
+            for row in rows
+        }
 
     @classmethod
     async def list_system_filter_options(cls, session: AsyncSession, *, tenant_scope: TenantScope) -> dict:

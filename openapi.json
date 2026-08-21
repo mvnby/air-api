@@ -7578,6 +7578,109 @@
         }
       }
     },
+    "/api/manager/catalog-decision/collections": {
+      "post": {
+        "tags": [
+          "manager catalog decision"
+        ],
+        "summary": "Create Catalog Decision Collection",
+        "operationId": "create_manager_catalog_decision_collection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogDecisionCreateCollectionPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/catalog-decision/orders/{order_id}/attach": {
+      "post": {
+        "tags": [
+          "manager catalog decision"
+        ],
+        "summary": "Attach Catalog Decision To Order",
+        "operationId": "attach_manager_catalog_decision_to_order",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogDecisionAttachToOrderPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/catalog-quality/report": {
       "get": {
         "tags": [
@@ -26962,6 +27065,59 @@
         "additionalProperties": false,
         "type": "object",
         "title": "CartItemPayload"
+      },
+      "CatalogDecisionAttachToOrderPayload": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Product Ids"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "replace_selected",
+              "new_alternative"
+            ],
+            "title": "Mode",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids"
+        ],
+        "title": "CatalogDecisionAttachToOrderPayload"
+      },
+      "CatalogDecisionCreateCollectionPayload": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Product Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "product_ids"
+        ],
+        "title": "CatalogDecisionCreateCollectionPayload"
       },
       "CatalogDecisionFilterOption": {
         "properties": {

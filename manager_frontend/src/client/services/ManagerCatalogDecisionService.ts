@@ -2,8 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CatalogDecisionAttachToOrderPayload } from '../models/CatalogDecisionAttachToOrderPayload';
+import type { CatalogDecisionCreateCollectionPayload } from '../models/CatalogDecisionCreateCollectionPayload';
 import type { CatalogDecisionFilterOptionsResponse } from '../models/CatalogDecisionFilterOptionsResponse';
 import type { CatalogDecisionListResponse } from '../models/CatalogDecisionListResponse';
+import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
+import type { ManagerProductCollectionResponse } from '../models/ManagerProductCollectionResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -88,6 +92,49 @@ export class ManagerCatalogDecisionService {
                 'sort': sort,
                 'direction': direction,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Catalog Decision Collection
+     * @param requestBody
+     * @returns ManagerProductCollectionResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerCatalogDecisionCollection(
+        requestBody: CatalogDecisionCreateCollectionPayload,
+    ): CancelablePromise<ManagerProductCollectionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog-decision/collections',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Attach Catalog Decision To Order
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static attachManagerCatalogDecisionToOrder(
+        orderId: number,
+        requestBody: CatalogDecisionAttachToOrderPayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog-decision/orders/{order_id}/attach',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
