@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CatalogDecisionAttachToOrderPayload } from '../models/CatalogDecisionAttachToOrderPayload';
 import type { CatalogDecisionCreateCollectionPayload } from '../models/CatalogDecisionCreateCollectionPayload';
+import type { CatalogDecisionCreateOrderPayload } from '../models/CatalogDecisionCreateOrderPayload';
 import type { CatalogDecisionFilterOptionsResponse } from '../models/CatalogDecisionFilterOptionsResponse';
 import type { CatalogDecisionListResponse } from '../models/CatalogDecisionListResponse';
 import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
@@ -133,6 +134,25 @@ export class ManagerCatalogDecisionService {
             path: {
                 'order_id': orderId,
             },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Catalog Decision Order
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerCatalogDecisionOrder(
+        requestBody: CatalogDecisionCreateOrderPayload,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/catalog-decision/orders',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

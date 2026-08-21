@@ -7681,6 +7681,52 @@
         }
       }
     },
+    "/api/manager/catalog-decision/orders": {
+      "post": {
+        "tags": [
+          "manager catalog decision"
+        ],
+        "summary": "Create Catalog Decision Order",
+        "operationId": "create_manager_catalog_decision_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogDecisionCreateOrderPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/catalog-quality/report": {
       "get": {
         "tags": [
@@ -27118,6 +27164,40 @@
           "product_ids"
         ],
         "title": "CatalogDecisionCreateCollectionPayload"
+      },
+      "CatalogDecisionCreateOrderPayload": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Product Ids"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Idempotency Key"
+          },
+          "prospect_type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "company"
+            ],
+            "title": "Prospect Type",
+            "default": "individual"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids",
+          "idempotency_key"
+        ],
+        "title": "CatalogDecisionCreateOrderPayload"
       },
       "CatalogDecisionFilterOption": {
         "properties": {

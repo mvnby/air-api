@@ -1,13 +1,12 @@
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
-from models import OrderProductLink, OrderProposal
+from models import OrderProposal
 from models.tenancy import TenantScope
 from services.catalog_decision_projection import CatalogDecisionQueryService
+from services.catalog_decision_order_lines import CatalogDecisionOrderLineService
 from services.command_transaction import command_transaction
-from services.order_product_line_service import OrderProductLineService
 from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
 
@@ -75,38 +74,13 @@ class CatalogDecisionOrderService:
             else:
                 raise ValueError("Неизвестный режим добавления товаров")
 
-            await OrderProductLineService.reconcile(
+            await CatalogDecisionOrderLineService.replace(
                 session,
                 order_id=order_id,
                 proposal_id=int(proposal.id),
-                lines=[
-                    {
-                        "product_id": product_id,
-                        "quantity": 1,
-                        "price": snapshots[product_id].retail_price_byn,
-                        "cost": snapshots[product_id].purchase_cost_byn,
-                        "logistics_components": None,
-                    }
-                    for product_id in ids
-                ],
+                product_ids=ids,
+                snapshots=snapshots,
             )
-            await session.flush()
-            target_links = list(
-                (
-                    await session.execute(
-                        select(OrderProductLink).where(
-                            OrderProductLink.order_id == order_id,
-                            OrderProductLink.proposal_id == int(proposal.id),
-                        )
-                    )
-                ).scalars().all()
-            )
-            for link in target_links:
-                snapshot = snapshots[int(link.product_id)]
-                link.title_snapshot = snapshot.product.title
-                link.currency_snapshot = "BYN"
-                session.add(link)
-
             await OrderService._refresh_order_financials(session, order)
             session.add(order)
 

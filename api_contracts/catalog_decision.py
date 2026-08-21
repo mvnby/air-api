@@ -77,3 +77,9 @@ CatalogDecisionOrderAttachMode = Literal[
 class CatalogDecisionAttachToOrderPayload(BaseModel):
     product_ids: list[int] = Field(min_length=1, max_length=24)
     mode: CatalogDecisionOrderAttachMode = "auto"
+
+
+class CatalogDecisionCreateOrderPayload(BaseModel):
+    product_ids: list[int] = Field(min_length=1, max_length=24)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+    prospect_type: Literal["individual", "company"] = "individual"
