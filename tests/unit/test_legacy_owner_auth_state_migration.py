@@ -42,7 +42,7 @@ def _base_connection():
 
 def test_legacy_owner_auth_state_is_single_alembic_head() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert_revision_in_single_head_chain(scripts, REVISION)
 
 
 def test_upgrade_seeds_legacy_singleton_and_clean_downgrade() -> None:

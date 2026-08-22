@@ -4225,6 +4225,78 @@
         }
       }
     },
+    "/api/manager/analytics-connections": {
+      "get": {
+        "tags": [
+          "manager-analytics-connections"
+        ],
+        "summary": "List Manager Analytics Connections",
+        "operationId": "list_manager_analytics_connections",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsConnectionListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/analytics-connections/yandex-metrika": {
+      "put": {
+        "tags": [
+          "manager-analytics-connections"
+        ],
+        "summary": "Upsert Manager Yandex Metrika Connection",
+        "operationId": "upsert_manager_yandex_metrika_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexMetrikaConnectionUpsertPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsConnectionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/backups": {
       "get": {
         "tags": [
@@ -23055,6 +23127,138 @@
           "value"
         ],
         "title": "AddressSuggestionItem"
+      },
+      "AnalyticsConnectionItem": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "yandex_metrika",
+              "yandex_direct",
+              "google_analytics",
+              "google_ads"
+            ],
+            "title": "Provider"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "connected",
+              "not_configured",
+              "coming_soon",
+              "error"
+            ],
+            "title": "State"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "credentials_configured": {
+            "type": "boolean",
+            "title": "Credentials Configured",
+            "default": false
+          },
+          "counter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counter Id"
+          },
+          "counter_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counter Name"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "label",
+          "description",
+          "state",
+          "available"
+        ],
+        "title": "AnalyticsConnectionItem"
+      },
+      "AnalyticsConnectionListResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "storefront_id": {
+            "type": "integer",
+            "title": "Storefront Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsConnectionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "storefront_id",
+          "items"
+        ],
+        "title": "AnalyticsConnectionListResponse"
       },
       "ArticleResponse": {
         "properties": {
@@ -60227,6 +60431,34 @@
           "reason"
         ],
         "title": "YandexBusinessProductImageIssue"
+      },
+      "YandexMetrikaConnectionUpsertPayload": {
+        "properties": {
+          "counter_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Counter Id"
+          },
+          "oauth_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counter_id"
+        ],
+        "title": "YandexMetrikaConnectionUpsertPayload"
       }
     },
     "securitySchemes": {

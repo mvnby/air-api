@@ -51,6 +51,7 @@ async def test_dashboard_marketing_is_fail_soft():
     service = DashboardOverviewService(marketing_provider=provider)
 
     result = await service._safe_marketing(
+        None,
         TenantScope(tenant_id=1, storefront_id=1, is_system=True),
         start=datetime(2026, 8, 1).date(),
         end_exclusive=datetime(2026, 8, 2).date(),

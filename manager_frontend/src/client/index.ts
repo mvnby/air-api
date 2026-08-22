@@ -9,6 +9,8 @@ export type { OpenAPIConfig } from './core/OpenAPI';
 
 export type { AddressSuggestionItem } from './models/AddressSuggestionItem';
 export type { AddressSuggestResponse } from './models/AddressSuggestResponse';
+export type { AnalyticsConnectionItem } from './models/AnalyticsConnectionItem';
+export type { AnalyticsConnectionListResponse } from './models/AnalyticsConnectionListResponse';
 export type { ArticleResponse } from './models/ArticleResponse';
 export type { BankReceiptAllocationDetailResponse } from './models/BankReceiptAllocationDetailResponse';
 export type { BankReceiptAllocationOrderResponse } from './models/BankReceiptAllocationOrderResponse';
@@ -585,6 +587,7 @@ export type { YandexBusinessCollectionConflict } from './models/YandexBusinessCo
 export type { YandexBusinessEditorialCategoryQuality } from './models/YandexBusinessEditorialCategoryQuality';
 export type { YandexBusinessFeedQualityReport } from './models/YandexBusinessFeedQualityReport';
 export type { YandexBusinessProductImageIssue } from './models/YandexBusinessProductImageIssue';
+export type { YandexMetrikaConnectionUpsertPayload } from './models/YandexMetrikaConnectionUpsertPayload';
 
 export { ApiService } from './services/ApiService';
 export { InternalBotV1Service } from './services/InternalBotV1Service';
@@ -595,6 +598,7 @@ export { InternalBotV1StaffNotificationsService } from './services/InternalBotV1
 export { InternalBotV1VoiceService } from './services/InternalBotV1VoiceService';
 export { LoginService } from './services/LoginService';
 export { ManagerService } from './services/ManagerService';
+export { ManagerAnalyticsConnectionsService } from './services/ManagerAnalyticsConnectionsService';
 export { ManagerBackupsService } from './services/ManagerBackupsService';
 export { ManagerBrandsService } from './services/ManagerBrandsService';
 export { ManagerCalendarService } from './services/ManagerCalendarService';
