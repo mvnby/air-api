@@ -8,9 +8,11 @@ from time import monotonic
 from typing import Awaitable, Callable, Literal
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from models.tenancy import TenantScope
+from services.analytics_connection_service import AnalyticsConnectionService
 
 
 MarketingStatus = Literal["unconfigured", "fresh", "stale", "error"]
@@ -141,24 +143,40 @@ class YandexMetrikaMarketingProvider:
     async def get_snapshot(
         self,
         *,
+        session: AsyncSession | None = None,
         tenant_scope: TenantScope,
         start: date,
         end_exclusive: date,
     ) -> MarketingSnapshot:
+        oauth_token = self._oauth_token
         counter_id = resolve_metrika_counter_id(
             tenant_scope,
             scoped_counters_json=self._scoped_counters_json,
         )
-        if not self._oauth_token or not counter_id:
+        fingerprint = "environment"
+        if session is not None:
+            stored = await AnalyticsConnectionService.get_metrika_runtime_credentials(
+                session,
+                tenant_scope=tenant_scope,
+            )
+            if stored is not None:
+                oauth_token = stored.oauth_token
+                counter_id = stored.counter_id
+                fingerprint = stored.fingerprint
+        if not oauth_token or not counter_id:
             return MarketingSnapshot(
                 status="unconfigured",
                 message="Yandex Metrika is not configured for this storefront.",
             )
-        key = f"{counter_id}:{start.isoformat()}:{end_exclusive.isoformat()}"
+        key = (
+            f"{tenant_scope.tenant_id}:{tenant_scope.storefront_id}:"
+            f"{counter_id}:{fingerprint}:{start.isoformat()}:{end_exclusive.isoformat()}"
+        )
         return await self._cache.get_or_fetch(
             key,
             lambda: self._fetch_snapshot(
                 counter_id=counter_id,
+                oauth_token=oauth_token,
                 start=start,
                 end_exclusive=end_exclusive,
             ),
@@ -168,6 +186,7 @@ class YandexMetrikaMarketingProvider:
         self,
         *,
         counter_id: str,
+        oauth_token: str,
         start: date,
         end_exclusive: date,
     ) -> MarketingSnapshot:
@@ -186,7 +205,7 @@ class YandexMetrikaMarketingProvider:
             response = await client.get(
                 self.API_URL,
                 params=params,
-                headers={"Authorization": f"OAuth {self._oauth_token}"},
+                headers={"Authorization": f"OAuth {oauth_token}"},
             )
             response.raise_for_status()
             payload = response.json()

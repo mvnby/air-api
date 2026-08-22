@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -188,20 +187,22 @@ class DashboardOverviewService:
             session, tenant_scope, previous_bounds
         )
 
-        current_marketing, previous_marketing = await asyncio.gather(
-            self._safe_marketing(
-                tenant_scope,
-                start=period.current_start.date(),
-                end_exclusive=min(
-                    period.current_end.date(),
-                    period.generated_at.date() + timedelta(days=1),
-                ),
+        # AsyncSession is intentionally not shared across concurrent tasks.
+        # Each provider call resolves the exact storefront connection first.
+        current_marketing = await self._safe_marketing(
+            session,
+            tenant_scope,
+            start=period.current_start.date(),
+            end_exclusive=min(
+                period.current_end.date(),
+                period.generated_at.date() + timedelta(days=1),
             ),
-            self._safe_marketing(
-                tenant_scope,
-                start=period.previous_start.date(),
-                end_exclusive=period.previous_end.date(),
-            ),
+        )
+        previous_marketing = await self._safe_marketing(
+            session,
+            tenant_scope,
+            start=period.previous_start.date(),
+            end_exclusive=period.previous_end.date(),
         )
 
         series = _build_daily_series(
@@ -388,9 +389,10 @@ class DashboardOverviewService:
             await _average_cycle(session, Order.proposal_sent_at, conditions),
         )
 
-    async def _safe_marketing(self, tenant_scope, *, start, end_exclusive):
+    async def _safe_marketing(self, session, tenant_scope, *, start, end_exclusive):
         try:
             return await self._marketing_provider.get_snapshot(
+                session=session,
                 tenant_scope=tenant_scope,
                 start=start,
                 end_exclusive=end_exclusive,

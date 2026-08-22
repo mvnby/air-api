@@ -37,5 +37,6 @@ def test_non_system_owner_does_not_gain_platform_capabilities():
         _auth(role="owner", is_system=False)
     )
     assert "staff.manage" in capabilities
+    assert "analytics.manage" in capabilities
     assert "platform.manage" not in capabilities
     assert "infrastructure.manage" not in capabilities

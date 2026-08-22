@@ -1,4 +1,5 @@
 from datetime import date
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -11,6 +12,7 @@ from services.dashboard_marketing import (
     YandexMetrikaMarketingProvider,
     resolve_metrika_counter_id,
 )
+from services.analytics_connection_service import AnalyticsRuntimeCredentials
 
 
 SYSTEM_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
@@ -134,6 +136,45 @@ async def test_provider_parses_visits_and_sources():
         ("Search", 6, 60.0),
         ("Direct", 4, 40.0),
     ]
+
+
+@pytest.mark.asyncio
+async def test_storefront_connection_overrides_legacy_environment(monkeypatch):
+    credentials = AsyncMock(
+        return_value=AnalyticsRuntimeCredentials(
+            counter_id="777",
+            oauth_token="stored-token",
+            fingerprint="stored-fingerprint",
+        )
+    )
+    monkeypatch.setattr(
+        dashboard_marketing.AnalyticsConnectionService,
+        "get_metrika_runtime_credentials",
+        credentials,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "OAuth stored-token"
+        assert request.url.params["ids"] == "777"
+        return httpx.Response(200, json={"totals": [3.0], "data": []})
+
+    provider = YandexMetrikaMarketingProvider(
+        oauth_token="legacy-token",
+        scoped_counters_json='{"2:7": "111"}',
+        cache=MarketingSnapshotCache(ttl_seconds=0),
+        client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    snapshot = await provider.get_snapshot(
+        session=object(),
+        tenant_scope=TENANT_SCOPE,
+        start=date(2026, 8, 1),
+        end_exclusive=date(2026, 8, 2),
+    )
+
+    assert snapshot.status == "fresh"
+    assert snapshot.visits == 3
+    credentials.assert_awaited_once()
 
 
 @pytest.mark.asyncio

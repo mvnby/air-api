@@ -29,6 +29,7 @@ from .feature import (
 from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
 from .auth_security import AuthLoginThrottle
+from .analytics_connection import AnalyticsConnection
 from .legacy_owner_auth import LegacyOwnerAuthState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
@@ -114,6 +115,7 @@ from .supplier import (
 
 __all__ = [
     "Article",
+    "AnalyticsConnection",
     "AuthLoginThrottle",
     "BankReceipt",
     "Cart",

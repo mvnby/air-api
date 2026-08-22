@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from routers import manager_auth
+from routers import manager_analytics_connections
 from routers import manager_backups
 from routers import manager_brands
 from routers import manager_calendar
@@ -40,6 +41,7 @@ from routers import manager_warranties
 
 
 router = APIRouter()
+router.include_router(manager_analytics_connections.router)
 router.include_router(manager_backups.router)
 router.include_router(manager_google_auth.router)
 router.include_router(manager_features.router)

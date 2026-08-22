@@ -14,6 +14,7 @@ from fastapi.routing import APIRoute
 from core.security import (
     AuthenticatedUser,
     require_manager_access,
+    require_owner_access,
     require_system_manager_tenant_scope,
     require_system_owner_access,
 )
@@ -227,7 +228,17 @@ SYSTEM_OWNER_OPERATION_IDS = frozenset(
 )
 
 
+STOREFRONT_OWNER_OPERATION_IDS = frozenset(
+    {
+        operation_ids.LIST_MANAGER_ANALYTICS_CONNECTIONS,
+        operation_ids.UPSERT_MANAGER_YANDEX_METRIKA_CONNECTION,
+    }
+)
+
+
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in STOREFRONT_OWNER_OPERATION_IDS:
+        return require_owner_access
     if operation_id in STOREFRONT_COLLECTION_OPERATION_IDS:
         return require_storefront_collections_manage
     if operation_id in PLATFORM_MANAGER_OPERATION_IDS:

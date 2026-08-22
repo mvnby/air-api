@@ -8,6 +8,7 @@ export const MANAGER_CAPABILITY = {
   platformManage: 'platform.manage',
   staffManage: 'staff.manage',
   infrastructureManage: 'infrastructure.manage',
+  analyticsManage: 'analytics.manage',
 } as const;
 
 export type ManagerCapability = typeof MANAGER_CAPABILITY[keyof typeof MANAGER_CAPABILITY];
@@ -19,6 +20,9 @@ export const hasManagerCapability = (
 
 export const requiredCapabilityForManagerPath = (path: string): ManagerCapability | null => {
   if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
+  if (path.startsWith('/manager/integrations')) {
+    return MANAGER_CAPABILITY.analyticsManage;
+  }
   if (
     path.startsWith('/manager/leads')
     || path.startsWith('/manager/orders')

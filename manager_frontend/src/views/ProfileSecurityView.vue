@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Check, Clipboard, Eye, EyeOff, KeyRound, Loader2, RefreshCw } from 'lucide-vue-next';
+import { Check, Clipboard, Eye, EyeOff, KeyRound, Loader2, RefreshCw, UserRound } from 'lucide-vue-next';
 
 import { ManagerService } from '../client';
 import { clearManagerSession, managerSession } from '../services/manager-session';
+import { managerStorefrontSelection } from '../services/manager-storefront-selection';
 import {
   generateManagerPassword,
   passwordPolicyMessage,
@@ -23,6 +24,18 @@ const generatedPasswordSaved = ref(false);
 const copySucceeded = ref(false);
 const copyingPassword = ref(false);
 const canChangePassword = computed(() => managerSession.auth.value?.can_change_password === true);
+const account = computed(() => managerSession.auth.value);
+const storefrontName = computed(() => {
+  const selected = managerStorefrontSelection.selectedSlug.value;
+  return managerStorefrontSelection.storefronts.value.find(
+    storefront => storefront.slug === selected,
+  )?.display_name || 'Текущий филиал';
+});
+const roleLabel = computed(() => ({
+  owner: 'Владелец',
+  admin: 'Администратор',
+  manager: 'Менеджер',
+}[String(account.value?.role || '').toLowerCase()] || account.value?.role || 'Не указана'));
 
 const generatePassword = () => {
   const generated = generateManagerPassword();
@@ -124,6 +137,22 @@ const submit = async () => {
           <h1 class="text-xl font-semibold text-gray-900">Профиль / Безопасность</h1>
           <p class="mt-1 text-sm text-gray-600">После смены пароля потребуется войти заново.</p>
         </div>
+      </div>
+
+      <div class="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 text-teal-700">
+            <UserRound class="h-5 w-5" />
+          </div>
+          <div class="min-w-0">
+            <p class="truncate font-semibold text-gray-900">{{ account?.display_name || account?.username }}</p>
+            <p class="truncate text-xs text-gray-500">{{ account?.username }}</p>
+          </div>
+        </div>
+        <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div><dt class="text-xs text-gray-500">Роль</dt><dd class="mt-0.5 font-medium text-gray-800">{{ roleLabel }}</dd></div>
+          <div><dt class="text-xs text-gray-500">Филиал</dt><dd class="mt-0.5 font-medium text-gray-800">{{ storefrontName }}</dd></div>
+        </dl>
       </div>
 
       <div v-if="!canChangePassword" data-testid="password-change-unavailable" class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

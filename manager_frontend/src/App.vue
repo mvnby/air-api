@@ -5,8 +5,8 @@ import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './client';
 import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
+import ManagerAccountMenu from './components/manager/ManagerAccountMenu.vue';
 import ManagerLoginModal from './components/manager/ManagerLoginModal.vue';
-import ManagerLogoutButton from './components/manager/ManagerLogoutButton.vue';
 import ManagerSessionRecoveryModal from './components/manager/ManagerSessionRecoveryModal.vue';
 import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
 import { confirmDialog } from './services/ui-feedback';
@@ -59,6 +59,7 @@ const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQua
 const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
 const ProfileSecurityView = defineAsyncComponent(() => import('./views/ProfileSecurityView.vue'));
+const AnalyticsConnectionsView = defineAsyncComponent(() => import('./views/AnalyticsConnectionsView.vue'));
 const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const showLoginModal = ref(false);
@@ -158,6 +159,7 @@ const currentView = computed(() => {
   const path = currentPath.value;
   if (path === '/manager' || path === '/manager/') return 'home';
   if (path === '/manager/profile') return 'profile-security';
+  if (path.startsWith('/manager/integrations')) return 'analytics-connections';
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
@@ -630,16 +632,22 @@ watch(currentPath, () => {
         </button>
       </div>
 
-      <ManagerLogoutButton
-        :collapsed="isDesktopNavCollapsed"
-        @logged-out="handleLogoutSuccess"
-        @error="handleLogoutError"
-      />
     </aside>
 
-    <main class="flex-1 overflow-auto pt-14 md:ml-0 md:pt-0">
+    <main class="min-w-0 flex-1 overflow-auto pt-0 md:ml-0">
+      <header class="sticky top-0 z-30 flex h-16 items-center justify-end border-b border-gray-200 bg-white/95 px-4 pl-16 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 md:px-6">
+        <ManagerAccountMenu
+          v-if="auth"
+          :auth="auth"
+          @navigate="navigate"
+          @logged-out="handleLogoutSuccess"
+          @error="handleLogoutError"
+        />
+      </header>
+
       <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
       <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />
+      <AnalyticsConnectionsView v-else-if="authorizedView === 'analytics-connections'" :key="currentLocation" />
       <LeadsView v-else-if="authorizedView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="authorizedView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="authorizedView === 'calendar'" :key="currentLocation" />

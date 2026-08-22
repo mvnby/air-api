@@ -6,6 +6,7 @@ from sqlmodel import select
 
 from core.security import create_access_token
 from models import (
+    AnalyticsConnection,
     Customer,
     CustomerEquipment,
     CustomerRequisitesRecognition,
@@ -22,6 +23,7 @@ from models import (
     TenantMembership,
 )
 from models.common import CustomerType
+from services.analytics_connection_service import AnalyticsCredentialCipher
 
 
 async def _create_tenant(
@@ -96,6 +98,87 @@ def _headers(user: StaffUser, *, claimed_role: str = "owner") -> dict[str, str]:
         expires_delta=timedelta(minutes=10),
     )
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_analytics_connections_require_owner_and_isolate_exact_scope(
+    async_client: AsyncClient,
+    db,
+):
+    unauthorized = await async_client.get("/api/manager/analytics-connections")
+    assert unauthorized.status_code == 401
+
+    tenant_b, storefront_b = await _create_tenant(db, slug="analytics-b")
+    owner_a = await _create_staff(db, tenant_id=1, username="analytics-owner-a")
+    manager_a = await _create_staff(
+        db,
+        tenant_id=1,
+        username="analytics-manager-a",
+        membership_role="manager",
+        global_role="manager",
+    )
+    owner_b = await _create_staff(
+        db,
+        tenant_id=int(tenant_b.id),
+        username="analytics-owner-b",
+    )
+    db.add_all(
+        [
+            AnalyticsConnection(
+                tenant_id=1,
+                storefront_id=1,
+                provider="yandex_metrika",
+                public_config={
+                    "counter_id": "111",
+                    "counter_name": "MVN",
+                    "site": "mvn.by",
+                },
+                encrypted_credentials=AnalyticsCredentialCipher.encrypt(
+                    {"oauth_token": "token-a-secret-value"}
+                ),
+                credentials_fingerprint="fingerprint-a",
+            ),
+            AnalyticsConnection(
+                tenant_id=int(tenant_b.id),
+                storefront_id=int(storefront_b.id),
+                provider="yandex_metrika",
+                public_config={
+                    "counter_id": "222",
+                    "counter_name": "Tenant B",
+                    "site": "tenant-b.example",
+                },
+                encrypted_credentials=AnalyticsCredentialCipher.encrypt(
+                    {"oauth_token": "token-b-secret-value"}
+                ),
+                credentials_fingerprint="fingerprint-b",
+            ),
+        ]
+    )
+    await db.commit()
+
+    forbidden = await async_client.get(
+        "/api/manager/analytics-connections",
+        headers=_headers(manager_a, claimed_role="owner"),
+    )
+    owner_a_response = await async_client.get(
+        "/api/manager/analytics-connections",
+        params={"tenant_id": tenant_b.id, "storefront_id": storefront_b.id},
+        headers=_headers(owner_a),
+    )
+    owner_b_response = await async_client.get(
+        "/api/manager/analytics-connections",
+        headers=_headers(owner_b),
+    )
+
+    assert forbidden.status_code == 403
+    assert owner_a_response.status_code == 200
+    assert owner_b_response.status_code == 200
+    item_a = owner_a_response.json()["items"][0]
+    item_b = owner_b_response.json()["items"][0]
+    assert item_a["counter_id"] == "111"
+    assert item_b["counter_id"] == "222"
+    assert "token" not in str(owner_a_response.json()).lower()
+    assert "token" not in str(owner_b_response.json()).lower()
 
 
 @pytest.mark.asyncio
