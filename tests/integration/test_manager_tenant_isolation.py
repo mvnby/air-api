@@ -99,6 +99,142 @@ def _headers(user: StaffUser, *, claimed_role: str = "owner") -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_dashboard_overview_requires_auth_and_isolates_exact_storefront_scope(
+    async_client: AsyncClient,
+    db,
+):
+    unauthorized = await async_client.get("/api/manager/dashboard/overview")
+    assert unauthorized.status_code == 401
+
+    tenant_b, storefront_b = await _create_tenant(db, slug="overview-b")
+    owner_a = await _create_staff(db, tenant_id=1, username="overview-owner-a")
+    owner_b = await _create_staff(
+        db,
+        tenant_id=int(tenant_b.id),
+        username="overview-owner-b",
+    )
+    now = datetime.now()
+    lead_a = Lead(
+        tenant_id=1,
+        storefront_id=1,
+        source="site",
+        request_text="Scope A lead",
+        next_followup_date=now + timedelta(days=60),
+        created_at=now,
+    )
+    lead_b = Lead(
+        tenant_id=int(tenant_b.id),
+        storefront_id=int(storefront_b.id),
+        source="site",
+        request_text="Scope B lead",
+        next_followup_date=now - timedelta(days=60),
+        created_at=now,
+    )
+    sale_a = Order(
+        tenant_id=1,
+        storefront_id=1,
+        status=OrderStatus.CLOSED,
+        closing_result="won",
+        closed_at=now,
+        created_at=now - timedelta(days=2),
+        updated_at=now,
+    )
+    sale_b = Order(
+        tenant_id=int(tenant_b.id),
+        storefront_id=int(storefront_b.id),
+        status=OrderStatus.CLOSED,
+        closing_result="won",
+        closed_at=now,
+        created_at=now - timedelta(days=3),
+        updated_at=now,
+    )
+    receivable_a = Order(
+        tenant_id=1,
+        storefront_id=1,
+        status=OrderStatus.NEGOTIATION,
+        balance_due=250,
+        created_at=now - timedelta(days=90),
+    )
+    receivable_b = Order(
+        tenant_id=int(tenant_b.id),
+        storefront_id=int(storefront_b.id),
+        status=OrderStatus.EXECUTION,
+        balance_due=900,
+        created_at=now - timedelta(days=90),
+    )
+    db.add_all([lead_a, lead_b, sale_a, sale_b, receivable_a, receivable_b])
+    await db.flush()
+    db.add_all(
+        [
+            Payment(order_id=int(sale_a.id), amount=100, date=now),
+            Payment(order_id=int(sale_b.id), amount=700, date=now),
+            OrderWorkStage(
+                order_id=int(sale_a.id),
+                name="Монтаж",
+                status="completed",
+                end_time=now,
+            ),
+            OrderWorkStage(
+                order_id=int(sale_b.id),
+                name="Монтаж",
+                status="completed",
+                end_time=now,
+            ),
+            OrderWorkStage(
+                order_id=int(sale_a.id),
+                name="Закладка трассы",
+                status="completed",
+                end_time=now,
+            ),
+        ]
+    )
+    await db.commit()
+
+    overview_a = await async_client.get(
+        "/api/manager/dashboard/overview",
+        params={"tenant_id": tenant_b.id, "storefront_id": storefront_b.id},
+        headers=_headers(owner_a),
+    )
+    overview_b = await async_client.get(
+        "/api/manager/dashboard/overview",
+        headers=_headers(owner_b),
+    )
+
+    assert overview_a.status_code == 200
+    assert overview_b.status_code == 200
+    data_a = overview_a.json()
+    data_b = overview_b.json()
+    assert data_a["kpis"]["revenue"]["current"] == 100
+    assert data_b["kpis"]["revenue"]["current"] == 700
+    assert data_a["kpis"]["new_leads"]["current"] == 1
+    assert data_b["kpis"]["new_leads"]["current"] == 1
+    assert data_a["kpis"]["receivables"]["current"] == 250
+    assert data_b["kpis"]["receivables"]["current"] == 900
+    assert data_a["kpis"]["receivables"]["previous"] is None
+    assert data_a["kpis"]["receivables"]["trend"] == "unavailable"
+    assert data_a["kpis"]["active_tasks"]["previous"] is None
+    assert data_a["kpis"]["active_tasks"]["trend"] == "unavailable"
+    assert data_a["kpis"]["active_tasks"]["current"] == 1
+    assert data_b["kpis"]["active_tasks"]["current"] == 1
+    assert data_a["kpis"]["installations"]["current"] == 1
+    assert data_b["kpis"]["installations"]["current"] == 1
+    assert data_a["marketing"]["status"] == "unconfigured"
+    assert [item["stage"] for item in data_a["funnel"]] == [
+        "visitors",
+        "leads",
+        "measurements",
+        "proposals",
+        "sales",
+        "installations",
+    ]
+    assert data_a["funnel"][0]["current"] is None
+    today_a = next(
+        item for item in data_a["sales_series"] if item["date"] == now.date().isoformat()
+    )
+    assert today_a == {"date": now.date().isoformat(), "revenue": 100, "sales": 1}
+
+
+@pytest.mark.asyncio
 async def test_customer_api_isolates_tenants(
     async_client: AsyncClient,
     db,

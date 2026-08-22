@@ -2,11 +2,23 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DashboardOverviewResponse } from '../models/DashboardOverviewResponse';
 import type { DashboardStatsResponse } from '../models/DashboardStatsResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerDashboardService {
+    /**
+     * Get Dashboard Overview
+     * @returns DashboardOverviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerDashboardOverview(): CancelablePromise<DashboardOverviewResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/dashboard/overview',
+        });
+    }
     /**
      * Get Dashboard Stats
      * @returns DashboardStatsResponse Successful Response

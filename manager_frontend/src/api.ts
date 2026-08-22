@@ -317,6 +317,10 @@ export const api = {
         return await ManagerDashboardService.getDashboardStats();
     },
 
+    async getDashboardOverview() {
+        return await ManagerDashboardService.getManagerDashboardOverview();
+    },
+
     async getCatalogQualityReport(params: CatalogQualityReportParams = {}): Promise<ManagerCatalogQualityReportResponse> {
         return await ManagerCatalogQualityService.getManagerCatalogQualityReport(
             params.page ?? 1,

@@ -132,6 +132,15 @@ export type { CustomerRequisitesExtractedData } from './models/CustomerRequisite
 export type { CustomerRequisitesRecognitionResponse } from './models/CustomerRequisitesRecognitionResponse';
 export type { DashboardBankReceiptReviewItem } from './models/DashboardBankReceiptReviewItem';
 export type { DashboardContractExpiry } from './models/DashboardContractExpiry';
+export type { DashboardFunnelStage } from './models/DashboardFunnelStage';
+export type { DashboardKpi } from './models/DashboardKpi';
+export type { DashboardKpis } from './models/DashboardKpis';
+export type { DashboardMarketing } from './models/DashboardMarketing';
+export type { DashboardMarketingSource } from './models/DashboardMarketingSource';
+export type { DashboardOverviewResponse } from './models/DashboardOverviewResponse';
+export type { DashboardPeriod } from './models/DashboardPeriod';
+export type { DashboardPeriodRange } from './models/DashboardPeriodRange';
+export type { DashboardSalesSeriesPoint } from './models/DashboardSalesSeriesPoint';
 export type { DashboardStatsResponse } from './models/DashboardStatsResponse';
 export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
 export type { DocumentTemplateFileItem } from './models/DocumentTemplateFileItem';
