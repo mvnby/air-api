@@ -1,5 +1,6 @@
 from urllib.parse import parse_qs, urlencode, urlparse
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -13,8 +14,10 @@ from core.security import (
     get_current_owner_username,
     require_owner_access,
 )
+from models.tenancy import TenantScope
 from routers.manager_google_auth import (
     GOOGLE_OAUTH_STATE_TTL_SECONDS,
+    _complete_analytics_google_oauth,
     _oauth_owner_binding_is_active,
 )
 from routers.manager_google_auth import router as manager_google_auth_router
@@ -290,6 +293,103 @@ async def test_google_auth_callback_redacts_provider_query_error(google_auth_cli
     assert response.status_code == 400
     assert "secret-provider-error" not in response.text
     assert service.finish_calls == []
+
+
+@pytest.mark.asyncio
+async def test_analytics_google_oauth_persists_verified_storefront_connection(monkeypatch):
+    scope = TenantScope(tenant_id=4, storefront_id=9)
+    credentials = {"access_token": "temporary", "refresh_token": "encrypted-later"}
+    persist = AsyncMock()
+
+    class _AnalyticsProviderStub:
+        async def verify(self, access_token, public_config, developer_token=None):
+            assert access_token == "temporary"
+            assert public_config == {"property_id": "123456"}
+            assert developer_token is None
+            return {"property_id": "123456", "property_name": "Витебск"}
+
+    monkeypatch.setattr(
+        "routers.manager_google_auth.pending_actor_scope",
+        AsyncMock(return_value=scope),
+    )
+    monkeypatch.setattr(
+        "routers.manager_google_auth.exchange_code",
+        lambda provider, redirect_uri, code: credentials,
+    )
+    monkeypatch.setattr(
+        "routers.manager_google_auth.GoogleAnalyticsProvider",
+        _AnalyticsProviderStub,
+    )
+    monkeypatch.setattr(
+        "routers.manager_google_auth.AnalyticsConnectionService.persist_google_connection",
+        persist,
+    )
+    request = SimpleNamespace(
+        url_for=lambda _name: "http://test/api/manager/google-auth/callback"
+    )
+    session = object()
+
+    response = await _complete_analytics_google_oauth(
+        request=request,
+        session=session,
+        pending={
+            "provider": "google_analytics",
+            "redirect_uri": "http://test/api/manager/google-auth/callback",
+            "public_config": {"property_id": "123456"},
+            "staff_user_id": 42,
+            "username": "owner",
+        },
+        code="one-time-code",
+        error="",
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("oauth_connected=google_analytics")
+    persist.assert_awaited_once_with(
+        session,
+        tenant_scope=scope,
+        provider="google_analytics",
+        public_config={"property_id": "123456", "property_name": "Витебск"},
+        credentials=credentials,
+        actor_staff_user_id=42,
+        actor_username="owner",
+    )
+
+
+@pytest.mark.asyncio
+async def test_analytics_google_oauth_redirect_redacts_provider_failure(monkeypatch):
+    monkeypatch.setattr(
+        "routers.manager_google_auth.pending_actor_scope",
+        AsyncMock(return_value=TenantScope(tenant_id=4, storefront_id=9)),
+    )
+    monkeypatch.setattr(
+        "routers.manager_google_auth.exchange_code",
+        lambda *_args: (_ for _ in ()).throw(
+            RuntimeError("client_secret=must-never-appear")
+        ),
+    )
+    request = SimpleNamespace(
+        url_for=lambda _name: "http://test/api/manager/google-auth/callback"
+    )
+
+    response = await _complete_analytics_google_oauth(
+        request=request,
+        session=object(),
+        pending={
+            "provider": "google_analytics",
+            "redirect_uri": "http://test/api/manager/google-auth/callback",
+            "public_config": {"property_id": "123456"},
+            "username": "owner",
+        },
+        code="one-time-code",
+        error="",
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith(
+        "oauth_error=provider_verification_failed"
+    )
+    assert "must-never-appear" not in response.headers["location"]
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ import type { DashboardKpis } from './DashboardKpis';
 import type { DashboardMarketing } from './DashboardMarketing';
 import type { DashboardPeriod } from './DashboardPeriod';
 import type { DashboardSalesSeriesPoint } from './DashboardSalesSeriesPoint';
+import type { DashboardSearchDemand } from './DashboardSearchDemand';
 export type DashboardOverviewResponse = {
     generated_at: string;
     period: DashboardPeriod;
@@ -14,5 +15,6 @@ export type DashboardOverviewResponse = {
     sales_series: Array<DashboardSalesSeriesPoint>;
     funnel: Array<DashboardFunnelStage>;
     marketing: DashboardMarketing;
+    search_demand: DashboardSearchDemand;
 };
 

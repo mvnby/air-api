@@ -59,5 +59,5 @@ async def test_dashboard_marketing_is_fail_soft():
 
     assert result == MarketingSnapshot(
         status="error",
-        message="Yandex Metrika is temporarily unavailable.",
+        message="Marketing analytics is temporarily unavailable.",
     )

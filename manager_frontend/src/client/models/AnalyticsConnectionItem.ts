@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type AnalyticsConnectionItem = {
-    provider: 'yandex_metrika' | 'yandex_direct' | 'google_analytics' | 'google_ads';
+    provider: 'yandex_metrika' | 'yandex_direct' | 'yandex_webmaster' | 'google_analytics' | 'google_ads' | 'google_search_console';
     label: string;
     description: string;
     state: 'connected' | 'not_configured' | 'coming_soon' | 'error';
@@ -14,5 +14,7 @@ export type AnalyticsConnectionItem = {
     site?: (string | null);
     last_verified_at?: (string | null);
     last_error_code?: (string | null);
+    connection_method?: 'token' | 'oauth';
+    configuration?: Record<string, string>;
 };
 

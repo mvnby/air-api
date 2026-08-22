@@ -9,6 +9,7 @@ import DashboardMarketing from '../components/dashboard/DashboardMarketing.vue';
 import DashboardModeSwitch from '../components/dashboard/DashboardModeSwitch.vue';
 import DashboardQuickActions from '../components/dashboard/DashboardQuickActions.vue';
 import DashboardSalesChart from '../components/dashboard/DashboardSalesChart.vue';
+import DashboardSearchDemand from '../components/dashboard/DashboardSearchDemand.vue';
 import {
   formatDashboardCurrency,
   loadDashboardMode,
@@ -127,6 +128,7 @@ const shortText = (value?: string | null, limit = 120) => {
         <DashboardFunnel :stages="overview.funnel" />
       </div>
       <div class="mt-4"><DashboardMarketing :marketing="overview.marketing" /></div>
+      <div class="mt-4"><DashboardSearchDemand :demand="overview.search_demand" /></div>
     </template>
 
     <section v-if="stats && (stats.bank_receipts_review_count || 0) > 0" class="mt-8">

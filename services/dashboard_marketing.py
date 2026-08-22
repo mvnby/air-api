@@ -13,6 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from models.tenancy import TenantScope
 from services.analytics_connection_service import AnalyticsConnectionService
+from services.analytics_google_providers import (
+    GoogleAdsProvider,
+    GoogleAnalyticsProvider,
+    access_token as google_access_token,
+)
+from services.analytics_provider_types import AdvertisingSnapshot
+from services.analytics_yandex_providers import YandexDirectProvider
 
 
 MarketingStatus = Literal["unconfigured", "fresh", "stale", "error"]
@@ -31,6 +38,27 @@ class MarketingSnapshot:
     visits: int | None = None
     sources: tuple[MarketingSourceSnapshot, ...] = ()
     updated_at: datetime | None = None
+    message: str | None = None
+    ad_spend: float | None = None
+    clicks: int | None = None
+    impressions: int | None = None
+    ctr: float | None = None
+    platform_conversions: float | None = None
+    currency: str | None = None
+    providers: tuple["MarketingProviderSnapshot", ...] = ()
+
+
+@dataclass(frozen=True)
+class MarketingProviderSnapshot:
+    provider: str
+    status: MarketingStatus
+    visits: int | None = None
+    ad_spend: float | None = None
+    clicks: int | None = None
+    impressions: int | None = None
+    ctr: float | None = None
+    platform_conversions: float | None = None
+    currency: str | None = None
     message: str | None = None
 
 
@@ -69,11 +97,17 @@ class MarketingSnapshotCache:
                     return replace(
                         cached.snapshot,
                         status="stale",
-                        message="Yandex Metrika is temporarily unavailable; cached data is shown.",
+                        message="Analytics providers are temporarily unavailable; cached data is shown.",
                     )
                 return MarketingSnapshot(
                     status="error",
-                    message="Yandex Metrika is temporarily unavailable.",
+                    message="Analytics providers are temporarily unavailable.",
+                )
+            if snapshot.status == "error" and cached:
+                return replace(
+                    cached.snapshot,
+                    status="stale",
+                    message="Analytics providers are temporarily unavailable; cached data is shown.",
                 )
             self._entries[key] = _CacheEntry(
                 stored_at=monotonic(),
@@ -240,6 +274,251 @@ class YandexMetrikaMarketingProvider:
         )
 
 
+class IntegratedMarketingProvider:
+    """Combine traffic and advertising sources after exact storefront resolution."""
+
+    def __init__(
+        self,
+        *,
+        metrika_provider: YandexMetrikaMarketingProvider | None = None,
+        cache: MarketingSnapshotCache | None = None,
+    ) -> None:
+        self._metrika = metrika_provider or YandexMetrikaMarketingProvider()
+        self._cache = cache or _INTEGRATED_CACHE
+
+    async def get_snapshot(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_scope: TenantScope,
+        start: date,
+        end_exclusive: date,
+    ) -> MarketingSnapshot:
+        connections = await AnalyticsConnectionService.get_runtime_connections(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        fingerprints = ":".join(
+            f"{provider}={connection.fingerprint}"
+            for provider, connection in sorted(connections.items())
+        )
+        key = (
+            f"integrated:{tenant_scope.tenant_id}:{tenant_scope.storefront_id}:"
+            f"{fingerprints}:{start.isoformat()}:{end_exclusive.isoformat()}"
+        )
+        return await self._cache.get_or_fetch(
+            key,
+            lambda: self._fetch_snapshot(
+                session=session,
+                tenant_scope=tenant_scope,
+                connections=connections,
+                start=start,
+                end_exclusive=end_exclusive,
+            ),
+        )
+
+    async def _fetch_snapshot(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_scope: TenantScope,
+        connections,
+        start: date,
+        end_exclusive: date,
+    ) -> MarketingSnapshot:
+        metrika = await self._metrika.get_snapshot(
+            session=session,
+            tenant_scope=tenant_scope,
+            start=start,
+            end_exclusive=end_exclusive,
+        )
+        provider_rows: list[MarketingProviderSnapshot] = [
+            MarketingProviderSnapshot(
+                provider="yandex_metrika",
+                status=metrika.status,
+                visits=metrika.visits,
+                message=metrika.message,
+            )
+        ]
+        end = end_exclusive - timedelta(days=1)
+
+        direct_connection = connections.get("yandex_direct")
+        direct_snapshot: AdvertisingSnapshot | None = None
+        if direct_connection is None:
+            provider_rows.append(
+                MarketingProviderSnapshot(provider="yandex_direct", status="unconfigured")
+            )
+        else:
+            try:
+                direct_snapshot = await asyncio.wait_for(
+                    YandexDirectProvider().fetch(
+                        str(direct_connection.credentials.get("oauth_token") or ""),
+                        direct_connection.public_config,
+                        start,
+                        end,
+                    ),
+                    timeout=settings.ANALYTICS_PROVIDER_TIMEOUT_SECONDS,
+                )
+                provider_rows.append(_advertising_provider_row(direct_snapshot))
+            except Exception:
+                provider_rows.append(
+                    MarketingProviderSnapshot(
+                        provider="yandex_direct",
+                        status="error",
+                        message="Яндекс Директ временно недоступен.",
+                    )
+                )
+
+        ga_connection = connections.get("google_analytics")
+        ga_sources: dict[str, int] | None = None
+        if ga_connection is None:
+            provider_rows.append(
+                MarketingProviderSnapshot(provider="google_analytics", status="unconfigured")
+            )
+        else:
+            original = dict(ga_connection.credentials)
+            try:
+                token = await google_access_token(ga_connection.credentials)
+                ga_sources = await asyncio.wait_for(
+                    GoogleAnalyticsProvider().fetch(
+                        token,
+                        ga_connection.public_config,
+                        start,
+                        end,
+                    ),
+                    timeout=settings.ANALYTICS_PROVIDER_TIMEOUT_SECONDS,
+                )
+                provider_rows.append(
+                    MarketingProviderSnapshot(
+                        provider="google_analytics",
+                        status="fresh",
+                        visits=sum(ga_sources.values()),
+                    )
+                )
+                if ga_connection.credentials != original:
+                    await AnalyticsConnectionService.persist_refreshed_credentials(
+                        session,
+                        tenant_scope=tenant_scope,
+                        provider="google_analytics",
+                        credentials=ga_connection.credentials,
+                    )
+            except Exception:
+                provider_rows.append(
+                    MarketingProviderSnapshot(
+                        provider="google_analytics",
+                        status="error",
+                        message="Google Analytics временно недоступен.",
+                    )
+                )
+
+        ads_connection = connections.get("google_ads")
+        ads_snapshot: AdvertisingSnapshot | None = None
+        if ads_connection is None:
+            provider_rows.append(
+                MarketingProviderSnapshot(provider="google_ads", status="unconfigured")
+            )
+        elif not settings.GOOGLE_ADS_DEVELOPER_TOKEN.strip():
+            provider_rows.append(
+                MarketingProviderSnapshot(
+                    provider="google_ads",
+                    status="error",
+                    message="Google Ads не настроен на стороне CRM.",
+                )
+            )
+        else:
+            original = dict(ads_connection.credentials)
+            try:
+                token = await google_access_token(ads_connection.credentials)
+                ads_snapshot = await asyncio.wait_for(
+                    GoogleAdsProvider(
+                        developer_token=settings.GOOGLE_ADS_DEVELOPER_TOKEN.strip()
+                    ).fetch(token, ads_connection.public_config, start, end),
+                    timeout=settings.ANALYTICS_PROVIDER_TIMEOUT_SECONDS,
+                )
+                provider_rows.append(_advertising_provider_row(ads_snapshot))
+                if ads_connection.credentials != original:
+                    await AnalyticsConnectionService.persist_refreshed_credentials(
+                        session,
+                        tenant_scope=tenant_scope,
+                        provider="google_ads",
+                        credentials=ads_connection.credentials,
+                    )
+            except Exception:
+                provider_rows.append(
+                    MarketingProviderSnapshot(
+                        provider="google_ads",
+                        status="error",
+                        message="Google Ads временно недоступен.",
+                    )
+                )
+
+        traffic_sources = metrika.sources
+        visits = metrika.visits
+        if visits is None and ga_sources is not None:
+            visits = sum(ga_sources.values())
+            traffic_sources = tuple(
+                MarketingSourceSnapshot(
+                    name=name,
+                    visits=value,
+                    share_pct=round(value * 100 / visits, 2) if visits else 0.0,
+                )
+                for name, value in sorted(
+                    ga_sources.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )[:20]
+            )
+
+        advertising = [item for item in (direct_snapshot, ads_snapshot) if item is not None]
+        currencies = {item.currency for item in advertising if item.currency}
+        currency = next(iter(currencies)) if len(currencies) == 1 else None
+        currencies_are_compatible = bool(currency) and all(
+            item.currency == currency for item in advertising
+        )
+        spend = (
+            round(sum(item.spend for item in advertising), 2)
+            if advertising and currencies_are_compatible
+            else None
+        )
+        clicks = sum(item.clicks for item in advertising) if advertising else None
+        impressions = sum(item.impressions for item in advertising) if advertising else None
+        conversions = (
+            round(sum(item.conversions for item in advertising), 2)
+            if advertising
+            else None
+        )
+        statuses = {row.status for row in provider_rows}
+        status: MarketingStatus = "fresh" if "fresh" in statuses else metrika.status
+        if status == "unconfigured" and "error" in statuses:
+            status = "error"
+        return MarketingSnapshot(
+            status=status,
+            visits=visits,
+            sources=traffic_sources,
+            ad_spend=spend,
+            clicks=clicks,
+            impressions=impressions,
+            ctr=(round(clicks * 100 / impressions, 2) if clicks is not None and impressions else None),
+            platform_conversions=conversions,
+            currency=currency if currencies_are_compatible else None,
+            providers=tuple(provider_rows),
+            updated_at=datetime.now().astimezone(),
+        )
+
+
+def _advertising_provider_row(snapshot: AdvertisingSnapshot) -> MarketingProviderSnapshot:
+    return MarketingProviderSnapshot(
+        provider=snapshot.provider,
+        status="fresh",
+        ad_spend=snapshot.spend,
+        clicks=snapshot.clicks,
+        impressions=snapshot.impressions,
+        ctr=snapshot.ctr,
+        platform_conversions=snapshot.conversions,
+        currency=snapshot.currency,
+    )
+
+
 def _nonnegative_int(value: object) -> int:
     try:
         return max(0, int(round(float(value))))
@@ -249,4 +528,8 @@ def _nonnegative_int(value: object) -> int:
 
 _PROCESS_CACHE = MarketingSnapshotCache(
     ttl_seconds=settings.DASHBOARD_METRIKA_CACHE_TTL_SECONDS,
+)
+
+_INTEGRATED_CACHE = MarketingSnapshotCache(
+    ttl_seconds=settings.ANALYTICS_PROVIDER_CACHE_TTL_SECONDS,
 )

@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { DashboardKpi } from '../src/client';
 import DashboardKpiCard from '../src/components/dashboard/DashboardKpiCard.vue';
 import DashboardMarketing from '../src/components/dashboard/DashboardMarketing.vue';
+import DashboardSearchDemand from '../src/components/dashboard/DashboardSearchDemand.vue';
 import {
   DASHBOARD_MODE_STORAGE_KEY,
   dashboardKpiOrder,
   dashboardMarketingStatus,
   formatMarketingProvider,
   formatMarketingValue,
+  formatSearchDemandProvider,
   getDashboardTrend,
   loadDashboardMode,
   saveDashboardMode,
@@ -75,5 +77,43 @@ describe('dashboard overview presentation rules', () => {
     expect(wrapper.text()).toContain('Яндекс Метрика');
     expect(wrapper.text()).toContain('Интеграция аналитики временно недоступна');
     expect(wrapper.text()).not.toContain('yandex API request failed');
+  });
+
+  it('keeps advertising-platform conversions distinct from CRM CPL and CAC', () => {
+    const wrapper = mount(DashboardMarketing, {
+      props: {
+        marketing: {
+          status: 'fresh', provider: 'yandex_direct', ad_spend: 350, clicks: 120,
+          platform_conversions: 18, leads: 7, cost_per_lead: 50, customer_acquisition_cost: 175,
+          providers: [{ provider: 'yandex_direct', status: 'fresh', ad_spend: 350, clicks: 120, platform_conversions: 18 }],
+        },
+      },
+    });
+    expect(wrapper.text()).toContain('Рекламные платформы');
+    expect(wrapper.text()).toContain('Конверсии платформ');
+    expect(wrapper.text()).toContain('Результат в CRM');
+    expect(wrapper.text()).toContain('CPL по CRM');
+    expect(formatMarketingProvider('google_ads')).toBe('Google Ads');
+  });
+
+  it('filters search demand by provider and gives mobile-safe query content', async () => {
+    const wrapper = mount(DashboardSearchDemand, {
+      props: {
+        demand: {
+          status: 'stale',
+          providers: [{ provider: 'yandex_webmaster', status: 'fresh' }, { provider: 'google_search_console', status: 'stale' }],
+          queries: [
+            { provider: 'yandex_webmaster', query: 'купить кондиционер витебск', clicks: 12, impressions: 100, ctr: 12, avg_position: 3.4 },
+            { provider: 'google_search_console', query: 'монтаж кондиционера', clicks: 4, impressions: 80, ctr: 5, avg_position: 7.1 },
+          ],
+        },
+      },
+    });
+    expect(wrapper.text()).toContain('задержкой');
+    expect(wrapper.text()).toContain('приватности');
+    await wrapper.findAll('button').find(button => button.text() === 'Яндекс Вебмастер')!.trigger('click');
+    expect(wrapper.text()).toContain('купить кондиционер витебск');
+    expect(wrapper.text()).not.toContain('монтаж кондиционера');
+    expect(formatSearchDemandProvider('google_search_console')).toBe('Google Search Console');
   });
 });

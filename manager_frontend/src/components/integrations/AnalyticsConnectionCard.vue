@@ -15,6 +15,23 @@ const stateLabel = (state: AnalyticsConnectionItem['state']) => ({
   coming_soon: 'Скоро',
   error: 'Нужна проверка',
 }[state]);
+
+const configurationLabels: Record<string, string> = {
+  client_login: 'Логин клиента',
+  site_url: 'Сайт',
+  primary_hostname: 'Домен',
+  property_id: 'Property ID',
+  customer_id: 'Customer ID',
+  login_customer_id: 'MCC',
+  site_property: 'Ресурс',
+  currency: 'Валюта',
+};
+const hiddenConfiguration = new Set(['user_id', 'host_id', 'campaigns_checked']);
+const configurationEntries = (connection: AnalyticsConnectionItem) => (
+  Object.entries(connection.configuration || {})
+    .filter(([key, value]) => Boolean(value) && !hiddenConfiguration.has(key))
+    .map(([key, value]) => [configurationLabels[key] || key, value])
+);
 </script>
 
 <template>
@@ -41,7 +58,7 @@ const stateLabel = (state: AnalyticsConnectionItem['state']) => ({
     <h2 class="mt-5 text-lg font-bold text-slate-950 dark:text-white">{{ connection.label }}</h2>
     <p class="mt-1.5 text-sm leading-6 text-slate-500 dark:text-slate-400">{{ connection.description }}</p>
 
-    <div v-if="connection.state === 'connected'" class="mt-4 rounded-xl bg-slate-50 px-3.5 py-3 text-sm dark:bg-slate-800">
+    <div v-if="connection.state === 'connected' && (connection.counter_name || connection.counter_id)" class="mt-4 rounded-xl bg-slate-50 px-3.5 py-3 text-sm dark:bg-slate-800">
       <p class="font-semibold text-slate-800 dark:text-slate-100">
         {{ connection.counter_name || `Счётчик ${connection.counter_id}` }}
       </p>
@@ -49,18 +66,24 @@ const stateLabel = (state: AnalyticsConnectionItem['state']) => ({
         {{ connection.site || 'Сайт не указан' }} · ID {{ connection.counter_id }}
       </p>
     </div>
+    <dl v-else-if="connection.state === 'connected' && configurationEntries(connection).length" class="mt-4 space-y-1.5 rounded-xl bg-slate-50 px-3.5 py-3 text-sm dark:bg-slate-800">
+      <div v-for="([label, value]) in configurationEntries(connection)" :key="label" class="flex items-baseline justify-between gap-3">
+        <dt class="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400">{{ label }}</dt>
+        <dd class="min-w-0 truncate text-right font-semibold text-slate-800 dark:text-slate-100">{{ value }}</dd>
+      </div>
+    </dl>
 
-    <div class="mt-auto flex items-center gap-2 pt-5">
+    <div class="mt-auto flex flex-wrap items-center gap-2 pt-5">
       <button
         v-if="connection.available"
         type="button"
-        class="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-700"
+        class="min-w-0 flex-1 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-700 sm:flex-none"
         @click="$emit('configure', connection)"
       >
         {{ connection.state === 'connected' ? 'Изменить' : 'Подключить' }}
       </button>
       <button
-        v-if="connection.provider === 'yandex_metrika'"
+        v-if="connection.available"
         data-testid="analytics-help-button"
         type="button"
         class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
