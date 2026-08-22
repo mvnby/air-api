@@ -554,6 +554,15 @@ class Settings(BaseSettings):
     GOOGLE_VISION_CREDENTIALS_FILE: str = ""
     GOOGLE_VISION_PROJECT_ID: str = ""
 
+    # Dashboard analytics. The OAuth token is environment-only and must never
+    # be persisted in tenant/storefront records. Every storefront, including
+    # the canonical system storefront, must have an exact fail-closed mapping
+    # in the form {"tenant_id:storefront_id": counter_id}.
+    DASHBOARD_METRIKA_OAUTH_TOKEN: str = ""
+    DASHBOARD_METRIKA_STOREFRONT_COUNTERS_JSON: str = "{}"
+    DASHBOARD_METRIKA_TIMEOUT_SECONDS: float = Field(default=5.0, ge=0.1, le=15.0)
+    DASHBOARD_METRIKA_CACHE_TTL_SECONDS: int = Field(default=300, ge=5, le=3600)
+
     # GitHub Actions (for Turbo Rebuilds)
     GITHUB_TOKEN: str = ""
     GITHUB_OWNER: str = "mvnby"

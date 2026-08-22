@@ -16483,6 +16483,32 @@
         }
       }
     },
+    "/api/manager/dashboard/overview": {
+      "get": {
+        "tags": [
+          "manager_dashboard"
+        ],
+        "summary": "Get Dashboard Overview",
+        "operationId": "get_manager_dashboard_overview",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOverviewResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/dashboard/stats": {
       "get": {
         "tags": [
@@ -28353,6 +28379,469 @@
           "valid_until"
         ],
         "title": "DashboardContractExpiry"
+      },
+      "DashboardFunnelStage": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "visitors",
+              "leads",
+              "measurements",
+              "proposals",
+              "sales",
+              "installations"
+            ],
+            "title": "Stage"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "conversion_from_previous_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversion From Previous Pct"
+          },
+          "avg_cycle_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Cycle Days",
+            "description": "Average days from Order.created_at to this stage event."
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "label"
+        ],
+        "title": "DashboardFunnelStage",
+        "description": "Monthly stage events, not a cohort funnel.\n\nMeasurements require a recorded measurement_result and use measurement_date;\nproposals use proposal_sent_at; sales use closed_at on closed/won orders;\ninstallations use completed stages named \"\u041c\u043e\u043d\u0442\u0430\u0436\" and the timestamp policy\ndocumented by the KPI.\nCycle time is measured from Order.created_at to the stage event."
+      },
+      "DashboardKpi": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "byn",
+              "count"
+            ],
+            "title": "Unit"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Current"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous",
+            "description": "Previous-period value; null for current-state snapshots without historical state."
+          },
+          "delta_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta Pct",
+            "description": "Percentage change; null when the previous value is zero."
+          },
+          "trend": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "flat",
+              "unavailable"
+            ],
+            "title": "Trend"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "unit",
+          "current",
+          "previous",
+          "trend"
+        ],
+        "title": "DashboardKpi"
+      },
+      "DashboardKpis": {
+        "properties": {
+          "revenue": {
+            "$ref": "#/components/schemas/DashboardKpi",
+            "description": "Actual BYN Payment.amount grouped by Payment.date."
+          },
+          "new_leads": {
+            "$ref": "#/components/schemas/DashboardKpi",
+            "description": "Canonical Lead rows grouped by Lead.created_at; legacy order inbox rows are not double-counted."
+          },
+          "sales": {
+            "$ref": "#/components/schemas/DashboardKpi",
+            "description": "Orders closed as won, grouped strictly by Order.closed_at."
+          },
+          "installations": {
+            "$ref": "#/components/schemas/DashboardKpi",
+            "description": "Completed work stages named '\u041c\u043e\u043d\u0442\u0430\u0436' (trimmed, case-insensitive), grouped by end_time and falling back to the parent order updated_at proxy."
+          },
+          "active_tasks": {
+            "$ref": "#/components/schemas/DashboardKpi",
+            "description": "Current active lead/order touchpoint backlog; historical snapshot is unavailable."
+          },
+          "receivables": {
+            "$ref": "#/components/schemas/DashboardKpi",
+            "description": "Current positive balance_due snapshot across all BYN negotiation/execution orders; historical snapshot is unavailable."
+          }
+        },
+        "type": "object",
+        "required": [
+          "revenue",
+          "new_leads",
+          "sales",
+          "installations",
+          "active_tasks",
+          "receivables"
+        ],
+        "title": "DashboardKpis"
+      },
+      "DashboardMarketing": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "unconfigured",
+              "fresh",
+              "stale",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "provider": {
+            "type": "string",
+            "const": "yandex_metrika",
+            "title": "Provider",
+            "default": "yandex_metrika"
+          },
+          "visits": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visits"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardMarketingSource"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "ad_spend": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ad Spend"
+          },
+          "clicks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clicks"
+          },
+          "impressions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impressions"
+          },
+          "ctr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ctr"
+          },
+          "leads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leads"
+          },
+          "cost_per_lead": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Lead"
+          },
+          "customer_acquisition_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Acquisition Cost"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "DashboardMarketing"
+      },
+      "DashboardMarketingSource": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "visits": {
+            "type": "integer",
+            "title": "Visits"
+          },
+          "share_pct": {
+            "type": "number",
+            "title": "Share Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "visits",
+          "share_pct"
+        ],
+        "title": "DashboardMarketingSource"
+      },
+      "DashboardOverviewResponse": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "period": {
+            "$ref": "#/components/schemas/DashboardPeriod"
+          },
+          "kpis": {
+            "$ref": "#/components/schemas/DashboardKpis"
+          },
+          "sales_series": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardSalesSeriesPoint"
+            },
+            "type": "array",
+            "title": "Sales Series"
+          },
+          "funnel": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardFunnelStage"
+            },
+            "type": "array",
+            "title": "Funnel"
+          },
+          "marketing": {
+            "$ref": "#/components/schemas/DashboardMarketing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "period",
+          "kpis",
+          "sales_series",
+          "funnel",
+          "marketing"
+        ],
+        "title": "DashboardOverviewResponse"
+      },
+      "DashboardPeriod": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "current_month",
+            "title": "Kind",
+            "default": "current_month"
+          },
+          "timezone": {
+            "type": "string",
+            "const": "Europe/Minsk",
+            "title": "Timezone",
+            "default": "Europe/Minsk"
+          },
+          "current": {
+            "$ref": "#/components/schemas/DashboardPeriodRange"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/DashboardPeriodRange"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current",
+          "previous"
+        ],
+        "title": "DashboardPeriod"
+      },
+      "DashboardPeriodRange": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "DashboardPeriodRange"
+      },
+      "DashboardSalesSeriesPoint": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "revenue": {
+            "type": "number",
+            "title": "Revenue"
+          },
+          "sales": {
+            "type": "integer",
+            "title": "Sales"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "revenue",
+          "sales"
+        ],
+        "title": "DashboardSalesSeriesPoint"
       },
       "DashboardStatsResponse": {
         "properties": {

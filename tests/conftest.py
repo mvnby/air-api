@@ -32,6 +32,8 @@ os.environ.update(
         "DEEPSEEK_TOKEN": "",
         "GOOGLE_VISION_CREDENTIALS_FILE": "",
         "GOOGLE_VISION_PROJECT_ID": "",
+        "DASHBOARD_METRIKA_OAUTH_TOKEN": "",
+        "DASHBOARD_METRIKA_STOREFRONT_COUNTERS_JSON": "{}",
         "GITHUB_TOKEN": "",
         "BACKUP_FOLDER_ID": "",
         "MEDIA_WORKER_TOKEN": "",
