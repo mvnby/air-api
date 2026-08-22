@@ -14,7 +14,6 @@ export type AnalyticsConnectionItem = {
     site?: (string | null);
     last_verified_at?: (string | null);
     last_error_code?: (string | null);
-    connection_method?: 'token' | 'oauth';
     configuration?: Record<string, string>;
 };
 

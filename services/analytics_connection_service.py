@@ -77,7 +77,7 @@ class AnalyticsConnectionService:
         ).scalars().all()
         by_provider = {row.provider: row for row in rows}
         items: list[AnalyticsConnectionItem] = []
-        for provider, label, description, available, connection_method in PROVIDER_DEFINITIONS:
+        for provider, label, description, available in PROVIDER_DEFINITIONS:
             row = by_provider.get(provider)
             public = row.public_config if row and isinstance(row.public_config, dict) else {}
             state = "coming_soon"
@@ -98,7 +98,6 @@ class AnalyticsConnectionService:
                     site=str(public.get("site") or "") or None,
                     last_verified_at=row.last_verified_at if row else None,
                     last_error_code=row.last_error_code if row else None,
-                    connection_method=connection_method,
                     configuration={
                         str(key): str(value)
                         for key, value in public.items()

@@ -23448,15 +23448,6 @@
             ],
             "title": "Last Error Code"
           },
-          "connection_method": {
-            "type": "string",
-            "enum": [
-              "token",
-              "oauth"
-            ],
-            "title": "Connection Method",
-            "default": "token"
-          },
           "configuration": {
             "additionalProperties": {
               "type": "string"

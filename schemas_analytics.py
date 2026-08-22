@@ -26,7 +26,6 @@ class AnalyticsConnectionItem(BaseModel):
     site: str | None = None
     last_verified_at: datetime | None = None
     last_error_code: str | None = None
-    connection_method: Literal["token", "oauth"] = "token"
     configuration: dict[str, str] = Field(default_factory=dict)
 
 
