@@ -2239,6 +2239,7 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
         storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.CLOSED,
+        closing_result="won",
         title="Старый заказ",
         total_amount=300,
         balance_due=100,
@@ -2250,6 +2251,7 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
         storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.CLOSED,
+        closing_result="won",
         title="Монтаж",
         total_amount=1200,
         balance_due=700,
@@ -2257,7 +2259,29 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
         contract_date=datetime(2026, 2, 1),
         delivery_address="Витебск, ул. Ленина, д. 1",
     )
-    db.add_all([order_before, order_inside])
+    rejected_order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=customer.id,
+        status=OrderStatus.CLOSED,
+        closing_result="lost",
+        title="Отказ после расчета",
+        total_amount=750,
+        created_at=datetime(2026, 2, 3),
+        contract_date=datetime(2026, 2, 3),
+    )
+    awaiting_payment = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=customer.id,
+        status=OrderStatus.NEGOTIATION,
+        negotiation_status="awaiting_payment",
+        title="Счет ожидает оплаты",
+        total_amount=650,
+        created_at=datetime(2026, 2, 4),
+        contract_date=datetime(2026, 2, 4),
+    )
+    db.add_all([order_before, order_inside, rejected_order, awaiting_payment])
     await db.commit()
     await db.refresh(order_before)
     await db.refresh(order_inside)
@@ -2365,6 +2389,7 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
             storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.CLOSED,
+            closing_result="won",
             title="Акт 1",
             total_amount=500,
             created_at=datetime(2026, 7, 1),
@@ -2374,6 +2399,7 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
             storefront_id=1,
             customer_id=customer.id,
             status=OrderStatus.CLOSED,
+            closing_result="won",
             title="Акт 2",
             total_amount=880,
             created_at=datetime(2026, 7, 2),
@@ -2457,6 +2483,7 @@ async def test_manager_customer_reconciliation_document_generation(async_client,
         storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.CLOSED,
+        closing_result="won",
         title="Поставка и монтаж",
         total_amount=900,
         created_at=datetime(2026, 3, 1),
