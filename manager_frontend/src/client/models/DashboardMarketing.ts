@@ -2,10 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DashboardMarketingProvider } from './DashboardMarketingProvider';
 import type { DashboardMarketingSource } from './DashboardMarketingSource';
 export type DashboardMarketing = {
     status: 'unconfigured' | 'fresh' | 'stale' | 'error';
-    provider?: string;
+    provider?: 'integrated' | 'yandex_metrika';
     visits?: (number | null);
     sources?: Array<DashboardMarketingSource>;
     ad_spend?: (number | null);
@@ -15,6 +16,9 @@ export type DashboardMarketing = {
     leads?: (number | null);
     cost_per_lead?: (number | null);
     customer_acquisition_cost?: (number | null);
+    platform_conversions?: (number | null);
+    currency?: (string | null);
+    providers?: Array<DashboardMarketingProvider>;
     updated_at?: (string | null);
     message?: (string | null);
 };

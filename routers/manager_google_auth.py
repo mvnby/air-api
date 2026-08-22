@@ -5,7 +5,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -25,6 +25,17 @@ from routers.manager_operation_ids import (
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse
 from services.google_service import get_google_service
+from services.analytics_connection_service import AnalyticsConnectionService
+from services.analytics_google_providers import (
+    GoogleAdsProvider,
+    GoogleAnalyticsProvider,
+    GoogleSearchConsoleProvider,
+    exchange_code,
+)
+from services.analytics_oauth_state import (
+    consume_google_oauth_state as consume_analytics_google_oauth_state,
+    pending_actor_scope,
+)
 from services.staff_user_service import StaffUserService
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 
@@ -247,6 +258,16 @@ async def manager_google_auth_callback(
     state: str = "",
     error: str = "",
 ):
+    analytics_pending = consume_analytics_google_oauth_state(request, state)
+    if analytics_pending is not None:
+        return await _complete_analytics_google_oauth(
+            request=request,
+            session=session,
+            pending=analytics_pending,
+            code=code,
+            error=error,
+        )
+
     try:
         pending = _consume_google_oauth_state(request, state)
     except GoogleOAuthConfigurationError:
@@ -304,4 +325,99 @@ async def manager_google_auth_callback(
         title="Google authentication updated",
         message="You can close this tab and return to manager settings.",
         status_code=200,
+    )
+
+
+async def _complete_analytics_google_oauth(
+    *,
+    request: Request,
+    session: AsyncSession,
+    pending: dict[str, object],
+    code: str,
+    error: str,
+):
+    provider_name = str(pending.get("provider") or "")
+    failure_url = "/manager/integrations?oauth_error="
+    if provider_name not in {
+        "google_analytics",
+        "google_search_console",
+        "google_ads",
+    }:
+        return RedirectResponse(f"{failure_url}unsupported_provider", status_code=303)
+    scope = await pending_actor_scope(session, pending)
+    if scope is None:
+        return RedirectResponse(f"{failure_url}authorization_expired", status_code=303)
+    if error:
+        return RedirectResponse(f"{failure_url}access_denied", status_code=303)
+    normalized_code = str(code or "").strip()
+    redirect_uri = str(pending.get("redirect_uri") or "")
+    try:
+        current_redirect_uri = _google_oauth_redirect_uri(request)
+    except GoogleOAuthConfigurationError:
+        return RedirectResponse(f"{failure_url}system_not_configured", status_code=303)
+    if (
+        not normalized_code
+        or not redirect_uri
+        or not _constant_time_equal(redirect_uri, current_redirect_uri)
+    ):
+        return RedirectResponse(f"{failure_url}authorization_invalid", status_code=303)
+
+    public_config_raw = pending.get("public_config")
+    public_config = {
+        str(key): str(value)
+        for key, value in (
+            public_config_raw.items()
+            if isinstance(public_config_raw, dict)
+            else []
+        )
+    }
+    try:
+        credentials = await run_in_threadpool(
+            lambda: exchange_code(provider_name, redirect_uri, normalized_code)
+        )
+        access = str(credentials.get("access_token") or "")
+        if provider_name == "google_analytics":
+            provider = GoogleAnalyticsProvider()
+        elif provider_name == "google_search_console":
+            provider = GoogleSearchConsoleProvider()
+        else:
+            developer_token = settings.GOOGLE_ADS_DEVELOPER_TOKEN.strip()
+            if not developer_token:
+                return RedirectResponse(f"{failure_url}system_not_configured", status_code=303)
+            provider = GoogleAdsProvider(developer_token=developer_token)
+        verified = await provider.verify(
+            access,
+            public_config,
+            developer_token=(
+                settings.GOOGLE_ADS_DEVELOPER_TOKEN.strip()
+                if provider_name == "google_ads"
+                else None
+            ),
+        )
+        public_config.update(
+            {str(key): str(value) for key, value in verified.items() if value is not None}
+        )
+        await AnalyticsConnectionService.persist_google_connection(
+            session,
+            tenant_scope=scope,
+            provider=provider_name,
+            public_config=public_config,
+            credentials=credentials,
+            actor_staff_user_id=(
+                int(pending["staff_user_id"])
+                if pending.get("staff_user_id") is not None
+                else None
+            ),
+            actor_username=str(pending.get("username") or ""),
+        )
+    except Exception as exc:
+        logger.warning(
+            "Analytics Google OAuth completion failed provider=%s error_type=%s",
+            provider_name,
+            type(exc).__name__,
+        )
+        return RedirectResponse(f"{failure_url}provider_verification_failed", status_code=303)
+    return RedirectResponse(
+        f"/manager/integrations?oauth_connected={provider_name}",
+        status_code=303,
     )

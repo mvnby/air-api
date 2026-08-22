@@ -5,10 +5,16 @@ import { CheckCircle2, Link2, Loader2, RefreshCw, Store } from 'lucide-vue-next'
 import {
   ManagerAnalyticsConnectionsService,
   type AnalyticsConnectionItem,
+  type GoogleAdsAuthorizationPayload,
+  type GoogleAnalyticsAuthorizationPayload,
+  type YandexDirectConnectionUpsertPayload,
   type YandexMetrikaConnectionUpsertPayload,
+  type YandexWebmasterConnectionUpsertPayload,
 } from '../client';
 import AnalyticsConnectionCard from '../components/integrations/AnalyticsConnectionCard.vue';
+import GoogleAuthorizationDialog from '../components/integrations/GoogleAuthorizationDialog.vue';
 import YandexMetrikaDialog from '../components/integrations/YandexMetrikaDialog.vue';
+import YandexProviderDialog from '../components/integrations/YandexProviderDialog.vue';
 import { managerStorefrontSelection } from '../services/manager-storefront-selection';
 import { getApiErrorMessage } from '../utils/api-errors';
 
@@ -21,6 +27,15 @@ const selectedConnection = ref<AnalyticsConnectionItem | null>(null);
 const saving = ref(false);
 const saveError = ref('');
 const savedMessage = ref('');
+
+const providerLabel = (provider: string) => ({
+  yandex_metrika: 'Яндекс Метрика',
+  yandex_direct: 'Яндекс Директ',
+  yandex_webmaster: 'Яндекс Вебмастер',
+  google_analytics: 'Google Analytics 4',
+  google_ads: 'Google Ads',
+  google_search_console: 'Google Search Console',
+}[provider] || 'Интеграция');
 
 const currentStorefrontName = () => {
   const selected = managerStorefrontSelection.selectedSlug.value;
@@ -68,7 +83,67 @@ const saveMetrika = async (payload: YandexMetrikaConnectionUpsertPayload) => {
   }
 };
 
-onMounted(loadConnections);
+const saveYandexProvider = async (
+  provider: 'yandex_direct' | 'yandex_webmaster',
+  payload: YandexDirectConnectionUpsertPayload | YandexWebmasterConnectionUpsertPayload,
+) => {
+  if (saving.value) return;
+  saving.value = true;
+  saveError.value = '';
+  try {
+    const updated = provider === 'yandex_direct'
+      ? await ManagerAnalyticsConnectionsService.upsertManagerYandexDirectConnection(payload as YandexDirectConnectionUpsertPayload)
+      : await ManagerAnalyticsConnectionsService.upsertManagerYandexWebmasterConnection(payload as YandexWebmasterConnectionUpsertPayload);
+    connections.value = connections.value.map(item => item.provider === updated.provider ? updated : item);
+    dialogOpen.value = false;
+    savedMessage.value = `${providerLabel(provider)} подключён для филиала «${currentStorefrontName()}»`;
+  } catch (error) {
+    saveError.value = getApiErrorMessage(error) || 'Не удалось проверить подключение';
+  } finally {
+    saving.value = false;
+  }
+};
+
+const startGoogleAuthorization = async (
+  provider: 'google_analytics' | 'google_ads' | 'google_search_console',
+  payload: { property_id?: string; customer_id?: string; login_customer_id?: string | null },
+) => {
+  if (saving.value) return;
+  saving.value = true;
+  saveError.value = '';
+  try {
+    const response = provider === 'google_analytics'
+      ? await ManagerAnalyticsConnectionsService.startManagerGoogleAnalyticsAuthorization(payload as GoogleAnalyticsAuthorizationPayload)
+      : provider === 'google_ads'
+        ? await ManagerAnalyticsConnectionsService.startManagerGoogleAdsAuthorization(payload as GoogleAdsAuthorizationPayload)
+        : await ManagerAnalyticsConnectionsService.startManagerGoogleSearchConsoleAuthorization();
+    window.location.assign(response.url);
+  } catch (error) {
+    saveError.value = getApiErrorMessage(error) || 'Не удалось начать авторизацию Google';
+  } finally {
+    saving.value = false;
+  }
+};
+
+const handleOAuthResult = () => {
+  const url = new URL(window.location.href);
+  const connected = url.searchParams.get('oauth_connected');
+  const oauthError = url.searchParams.get('oauth_error');
+  if (!connected && !oauthError) return;
+  url.searchParams.delete('oauth_connected');
+  url.searchParams.delete('oauth_error');
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  if (connected) {
+    savedMessage.value = `${providerLabel(connected)} подключён для филиала «${currentStorefrontName()}»`;
+  } else {
+    saveError.value = 'Не удалось завершить авторизацию Google. Проверьте доступ к нужному ресурсу и попробуйте ещё раз.';
+  }
+};
+
+onMounted(() => {
+  handleOAuthResult();
+  void loadConnections();
+});
 </script>
 
 <template>
@@ -112,10 +187,10 @@ onMounted(loadConnections);
         {{ loadError }}
       </div>
 
-      <div v-if="loading && !connections.length" class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div v-for="index in 4" :key="index" class="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900" />
+      <div v-if="loading && !connections.length" class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div v-for="index in 6" :key="index" class="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900" />
       </div>
-      <div v-else class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div v-else class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <AnalyticsConnectionCard
           v-for="connection in connections"
           :key="connection.provider"
@@ -127,6 +202,7 @@ onMounted(loadConnections);
     </div>
 
     <YandexMetrikaDialog
+      v-if="selectedConnection?.provider === 'yandex_metrika'"
       :open="dialogOpen"
       :mode="dialogMode"
       :connection="selectedConnection"
@@ -135,6 +211,28 @@ onMounted(loadConnections);
       @close="dialogOpen = false"
       @change-mode="dialogMode = $event"
       @save="saveMetrika"
+    />
+    <YandexProviderDialog
+      v-if="selectedConnection?.provider === 'yandex_direct' || selectedConnection?.provider === 'yandex_webmaster'"
+      :open="dialogOpen"
+      :mode="dialogMode"
+      :connection="selectedConnection"
+      :saving="saving"
+      :error="saveError"
+      @close="dialogOpen = false"
+      @change-mode="dialogMode = $event"
+      @save="saveYandexProvider"
+    />
+    <GoogleAuthorizationDialog
+      v-if="selectedConnection?.provider === 'google_analytics' || selectedConnection?.provider === 'google_ads' || selectedConnection?.provider === 'google_search_console'"
+      :open="dialogOpen"
+      :mode="dialogMode"
+      :connection="selectedConnection"
+      :saving="saving"
+      :error="saveError"
+      @close="dialogOpen = false"
+      @change-mode="dialogMode = $event"
+      @authorize="startGoogleAuthorization"
     />
   </section>
 </template>

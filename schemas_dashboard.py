@@ -91,9 +91,27 @@ class DashboardMarketingSource(BaseModel):
     share_pct: float
 
 
+class DashboardMarketingProvider(BaseModel):
+    provider: Literal[
+        "yandex_metrika",
+        "yandex_direct",
+        "google_analytics",
+        "google_ads",
+    ]
+    status: Literal["unconfigured", "fresh", "stale", "error"]
+    visits: int | None = None
+    ad_spend: float | None = None
+    clicks: int | None = None
+    impressions: int | None = None
+    ctr: float | None = None
+    platform_conversions: float | None = None
+    currency: str | None = None
+    message: str | None = None
+
+
 class DashboardMarketing(BaseModel):
     status: Literal["unconfigured", "fresh", "stale", "error"]
-    provider: Literal["yandex_metrika"] = "yandex_metrika"
+    provider: Literal["integrated", "yandex_metrika"] = "integrated"
     visits: int | None = None
     sources: list[DashboardMarketingSource] = Field(default_factory=list)
     ad_spend: float | None = None
@@ -103,6 +121,32 @@ class DashboardMarketing(BaseModel):
     leads: int | None = None
     cost_per_lead: float | None = None
     customer_acquisition_cost: float | None = None
+    platform_conversions: float | None = None
+    currency: str | None = None
+    providers: list[DashboardMarketingProvider] = Field(default_factory=list)
+    updated_at: datetime | None = None
+    message: str | None = None
+
+
+class DashboardSearchQuery(BaseModel):
+    provider: Literal["yandex_webmaster", "google_search_console"]
+    query: str
+    clicks: float
+    impressions: float
+    ctr: float
+    avg_position: float | None = None
+
+
+class DashboardSearchDemandProvider(BaseModel):
+    provider: Literal["yandex_webmaster", "google_search_console"]
+    status: Literal["unconfigured", "fresh", "stale", "error"]
+    message: str | None = None
+
+
+class DashboardSearchDemand(BaseModel):
+    status: Literal["unconfigured", "fresh", "stale", "error"]
+    queries: list[DashboardSearchQuery] = Field(default_factory=list)
+    providers: list[DashboardSearchDemandProvider] = Field(default_factory=list)
     updated_at: datetime | None = None
     message: str | None = None
 
@@ -114,3 +158,4 @@ class DashboardOverviewResponse(BaseModel):
     sales_series: list[DashboardSalesSeriesPoint]
     funnel: list[DashboardFunnelStage]
     marketing: DashboardMarketing
+    search_demand: DashboardSearchDemand

@@ -16,13 +16,21 @@ from schemas_dashboard import (
     DashboardKpi,
     DashboardKpis,
     DashboardMarketing,
+    DashboardMarketingProvider,
     DashboardMarketingSource,
     DashboardOverviewResponse,
     DashboardPeriod,
     DashboardPeriodRange,
+    DashboardSearchDemand,
+    DashboardSearchDemandProvider,
+    DashboardSearchQuery,
     DashboardSalesSeriesPoint,
 )
-from services.dashboard_marketing import MarketingSnapshot, YandexMetrikaMarketingProvider
+from services.dashboard_marketing import IntegratedMarketingProvider, MarketingSnapshot
+from services.dashboard_search_demand import (
+    IntegratedSearchDemandProvider,
+    SearchDemandSnapshot,
+)
 from services.tenant_scope_service import storefront_scope_clause
 
 
@@ -137,9 +145,11 @@ class DashboardOverviewService:
     def __init__(
         self,
         *,
-        marketing_provider: YandexMetrikaMarketingProvider | None = None,
+        marketing_provider: IntegratedMarketingProvider | None = None,
+        search_demand_provider: IntegratedSearchDemandProvider | None = None,
     ) -> None:
-        self._marketing_provider = marketing_provider or YandexMetrikaMarketingProvider()
+        self._marketing_provider = marketing_provider or IntegratedMarketingProvider()
+        self._search_demand_provider = search_demand_provider or IntegratedSearchDemandProvider()
 
     async def get_overview(
         self,
@@ -186,6 +196,11 @@ class DashboardOverviewService:
         proposals_previous, _ = await self._proposals(
             session, tenant_scope, previous_bounds
         )
+        acquired_customers_current = await self._acquired_customers(
+            session,
+            tenant_scope,
+            current_bounds,
+        )
 
         # AsyncSession is intentionally not shared across concurrent tasks.
         # Each provider call resolves the exact storefront connection first.
@@ -203,6 +218,15 @@ class DashboardOverviewService:
             tenant_scope,
             start=period.previous_start.date(),
             end_exclusive=period.previous_end.date(),
+        )
+        current_search_demand = await self._safe_search_demand(
+            session,
+            tenant_scope,
+            start=period.current_start.date(),
+            end_exclusive=min(
+                period.current_end.date(),
+                period.generated_at.date() + timedelta(days=1),
+            ),
         )
 
         series = _build_daily_series(
@@ -246,7 +270,12 @@ class DashboardOverviewService:
             ),
             sales_series=series,
             funnel=_build_funnel(funnel_counts),
-            marketing=_marketing_schema(current_marketing),
+            marketing=_marketing_schema(
+                current_marketing,
+                leads=leads_current,
+                acquired_customers=acquired_customers_current,
+            ),
+            search_demand=_search_demand_schema(current_search_demand),
         )
 
     async def _revenue(self, session, *, tenant_scope, bounds, by_day):
@@ -305,6 +334,21 @@ class DashboardOverviewService:
             )
             daily = {row[0]: int(row[1] or 0) for row in result.all()}
         return count, daily, cycle
+
+    async def _acquired_customers(self, session, tenant_scope, bounds):
+        return await _scalar(
+            session,
+            select(func.count(func.distinct(Order.customer_id))).where(
+                storefront_scope_clause(Order, tenant_scope),
+                Order.customer_id.is_not(None),
+                Order.status == OrderStatus.CLOSED,
+                Order.closing_result == ClosingResult.WON.value,
+                Order.closed_at.is_not(None),
+                Order.closed_at >= bounds[0],
+                Order.closed_at < bounds[1],
+            ),
+            int,
+        )
 
     async def _installations(self, session, tenant_scope, bounds):
         completed_at = func.coalesce(OrderWorkStage.end_time, Order.updated_at)
@@ -400,7 +444,21 @@ class DashboardOverviewService:
         except Exception:
             return MarketingSnapshot(
                 status="error",
-                message="Yandex Metrika is temporarily unavailable.",
+                message="Marketing analytics is temporarily unavailable.",
+            )
+
+    async def _safe_search_demand(self, session, tenant_scope, *, start, end_exclusive):
+        try:
+            return await self._search_demand_provider.get_snapshot(
+                session=session,
+                tenant_scope=tenant_scope,
+                start=start,
+                end_exclusive=end_exclusive,
+            )
+        except Exception:
+            return SearchDemandSnapshot(
+                status="error",
+                message="Search analytics is temporarily unavailable.",
             )
 
 
@@ -460,7 +518,13 @@ def _build_funnel(counts):
     return result
 
 
-def _marketing_schema(snapshot: MarketingSnapshot) -> DashboardMarketing:
+def _marketing_schema(
+    snapshot: MarketingSnapshot,
+    *,
+    leads: int,
+    acquired_customers: int,
+) -> DashboardMarketing:
+    spend = snapshot.ad_spend
     return DashboardMarketing(
         status=snapshot.status,
         visits=snapshot.visits,
@@ -472,14 +536,61 @@ def _marketing_schema(snapshot: MarketingSnapshot) -> DashboardMarketing:
             )
             for item in snapshot.sources
         ],
-        # Metrika's traffic report is not a Yandex Direct cost source.
-        ad_spend=None,
-        clicks=None,
-        impressions=None,
-        ctr=None,
-        leads=None,
-        cost_per_lead=None,
-        customer_acquisition_cost=None,
+        ad_spend=spend,
+        clicks=snapshot.clicks,
+        impressions=snapshot.impressions,
+        ctr=snapshot.ctr,
+        leads=leads,
+        cost_per_lead=(round(spend / leads, 2) if spend is not None and leads else None),
+        customer_acquisition_cost=(
+            round(spend / acquired_customers, 2)
+            if spend is not None and acquired_customers
+            else None
+        ),
+        platform_conversions=snapshot.platform_conversions,
+        currency=snapshot.currency,
+        providers=[
+            DashboardMarketingProvider(
+                provider=item.provider,
+                status=item.status,
+                visits=item.visits,
+                ad_spend=item.ad_spend,
+                clicks=item.clicks,
+                impressions=item.impressions,
+                ctr=item.ctr,
+                platform_conversions=item.platform_conversions,
+                currency=item.currency,
+                message=item.message,
+            )
+            for item in snapshot.providers
+        ],
+        updated_at=snapshot.updated_at,
+        message=snapshot.message,
+    )
+
+
+def _search_demand_schema(snapshot: SearchDemandSnapshot) -> DashboardSearchDemand:
+    return DashboardSearchDemand(
+        status=snapshot.status,
+        queries=[
+            DashboardSearchQuery(
+                provider=item.provider,
+                query=item.query,
+                clicks=item.clicks,
+                impressions=item.impressions,
+                ctr=item.ctr,
+                avg_position=item.avg_position,
+            )
+            for item in snapshot.queries
+        ],
+        providers=[
+            DashboardSearchDemandProvider(
+                provider=item.provider,
+                status=item.status,
+                message=item.message,
+            )
+            for item in snapshot.providers
+        ],
         updated_at=snapshot.updated_at,
         message=snapshot.message,
     )

@@ -67,7 +67,7 @@ export const getDashboardTrend = (key: DashboardKpiKey, kpi: DashboardKpi): Dash
   return { label, tone: kpi.trend === 'up' ? 'positive' : 'negative' };
 };
 
-export const dashboardMarketingStatus = (marketing: DashboardMarketing) => {
+export const dashboardMarketingStatus = (marketing: Pick<DashboardMarketing, 'status'>) => {
   const messages = {
     fresh: 'Данные аналитики обновлены и готовы к работе.',
     stale: 'Данные аналитики обновлялись давно и могут быть неактуальны.',
@@ -85,7 +85,16 @@ export const dashboardMarketingStatus = (marketing: DashboardMarketing) => {
 
 export const formatMarketingProvider = (provider: string | null | undefined) => {
   if (provider === 'yandex_metrika') return 'Яндекс Метрика';
+  if (provider === 'yandex_direct') return 'Яндекс Директ';
+  if (provider === 'google_analytics') return 'Google Analytics 4';
+  if (provider === 'google_ads') return 'Google Ads';
   return provider || 'Веб-аналитика и реклама';
+};
+
+export const formatSearchDemandProvider = (provider: string) => {
+  if (provider === 'yandex_webmaster') return 'Яндекс Вебмастер';
+  if (provider === 'google_search_console') return 'Google Search Console';
+  return provider;
 };
 
 export const formatMarketingValue = (
@@ -96,4 +105,21 @@ export const formatMarketingValue = (
   if (kind === 'currency') return formatDashboardCurrency(value);
   if (kind === 'percent') return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)}%`;
   return formatDashboardNumber(value);
+};
+
+export const formatMarketingCurrency = (
+  value: number | null | undefined,
+  currency: string | null | undefined,
+) => {
+  if (value == null) return '—';
+  if (!currency) return formatDashboardNumber(value);
+  try {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `${formatDashboardNumber(value)} ${currency}`;
+  }
 };

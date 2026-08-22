@@ -4297,6 +4297,216 @@
         ]
       }
     },
+    "/api/manager/analytics-connections/yandex-direct": {
+      "put": {
+        "tags": [
+          "manager-analytics-connections"
+        ],
+        "summary": "Upsert Manager Yandex Direct Connection",
+        "operationId": "upsert_manager_yandex_direct_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexDirectConnectionUpsertPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsConnectionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/analytics-connections/yandex-webmaster": {
+      "put": {
+        "tags": [
+          "manager-analytics-connections"
+        ],
+        "summary": "Upsert Manager Yandex Webmaster Connection",
+        "operationId": "upsert_manager_yandex_webmaster_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexWebmasterConnectionUpsertPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsConnectionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/analytics-connections/google-analytics/authorization-url": {
+      "post": {
+        "tags": [
+          "manager-analytics-connections"
+        ],
+        "summary": "Start Manager Google Analytics Authorization",
+        "operationId": "start_manager_google_analytics_authorization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleAnalyticsAuthorizationPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsAuthorizationUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/analytics-connections/google-search-console/authorization-url": {
+      "post": {
+        "tags": [
+          "manager-analytics-connections"
+        ],
+        "summary": "Start Manager Google Search Console Authorization",
+        "operationId": "start_manager_google_search_console_authorization",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsAuthorizationUrlResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/analytics-connections/google-ads/authorization-url": {
+      "post": {
+        "tags": [
+          "manager-analytics-connections"
+        ],
+        "summary": "Start Manager Google Ads Authorization",
+        "operationId": "start_manager_google_ads_authorization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleAdsAuthorizationPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsAuthorizationUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/backups": {
       "get": {
         "tags": [
@@ -23128,6 +23338,19 @@
         ],
         "title": "AddressSuggestionItem"
       },
+      "AnalyticsAuthorizationUrlResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "AnalyticsAuthorizationUrlResponse"
+      },
       "AnalyticsConnectionItem": {
         "properties": {
           "provider": {
@@ -23135,8 +23358,10 @@
             "enum": [
               "yandex_metrika",
               "yandex_direct",
+              "yandex_webmaster",
               "google_analytics",
-              "google_ads"
+              "google_ads",
+              "google_search_console"
             ],
             "title": "Provider"
           },
@@ -23222,6 +23447,13 @@
               }
             ],
             "title": "Last Error Code"
+          },
+          "configuration": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Configuration"
           }
         },
         "type": "object",
@@ -28781,9 +29013,12 @@
           },
           "provider": {
             "type": "string",
-            "const": "yandex_metrika",
+            "enum": [
+              "integrated",
+              "yandex_metrika"
+            ],
             "title": "Provider",
-            "default": "yandex_metrika"
+            "default": "integrated"
           },
           "visits": {
             "anyOf": [
@@ -28880,6 +29115,35 @@
             ],
             "title": "Customer Acquisition Cost"
           },
+          "platform_conversions": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Conversions"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardMarketingProvider"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
           "updated_at": {
             "anyOf": [
               {
@@ -28909,6 +29173,124 @@
           "status"
         ],
         "title": "DashboardMarketing"
+      },
+      "DashboardMarketingProvider": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "yandex_metrika",
+              "yandex_direct",
+              "google_analytics",
+              "google_ads"
+            ],
+            "title": "Provider"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unconfigured",
+              "fresh",
+              "stale",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "visits": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visits"
+          },
+          "ad_spend": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ad Spend"
+          },
+          "clicks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clicks"
+          },
+          "impressions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impressions"
+          },
+          "ctr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ctr"
+          },
+          "platform_conversions": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Conversions"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "status"
+        ],
+        "title": "DashboardMarketingProvider"
       },
       "DashboardMarketingSource": {
         "properties": {
@@ -28962,6 +29344,9 @@
           },
           "marketing": {
             "$ref": "#/components/schemas/DashboardMarketing"
+          },
+          "search_demand": {
+            "$ref": "#/components/schemas/DashboardSearchDemand"
           }
         },
         "type": "object",
@@ -28971,7 +29356,8 @@
           "kpis",
           "sales_series",
           "funnel",
-          "marketing"
+          "marketing",
+          "search_demand"
         ],
         "title": "DashboardOverviewResponse"
       },
@@ -29046,6 +29432,149 @@
           "sales"
         ],
         "title": "DashboardSalesSeriesPoint"
+      },
+      "DashboardSearchDemand": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "unconfigured",
+              "fresh",
+              "stale",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardSearchQuery"
+            },
+            "type": "array",
+            "title": "Queries"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardSearchDemandProvider"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "DashboardSearchDemand"
+      },
+      "DashboardSearchDemandProvider": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "yandex_webmaster",
+              "google_search_console"
+            ],
+            "title": "Provider"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unconfigured",
+              "fresh",
+              "stale",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "status"
+        ],
+        "title": "DashboardSearchDemandProvider"
+      },
+      "DashboardSearchQuery": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "yandex_webmaster",
+              "google_search_console"
+            ],
+            "title": "Provider"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "clicks": {
+            "type": "number",
+            "title": "Clicks"
+          },
+          "impressions": {
+            "type": "number",
+            "title": "Impressions"
+          },
+          "ctr": {
+            "type": "number",
+            "title": "Ctr"
+          },
+          "avg_position": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Position"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "query",
+          "clicks",
+          "impressions",
+          "ctr"
+        ],
+        "title": "DashboardSearchQuery"
       },
       "DashboardStatsResponse": {
         "properties": {
@@ -30984,6 +31513,48 @@
         },
         "type": "object",
         "title": "FxRateResponse"
+      },
+      "GoogleAdsAuthorizationPayload": {
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Customer Id"
+          },
+          "login_customer_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login Customer Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_id"
+        ],
+        "title": "GoogleAdsAuthorizationPayload"
+      },
+      "GoogleAnalyticsAuthorizationPayload": {
+        "properties": {
+          "property_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Property Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "property_id"
+        ],
+        "title": "GoogleAnalyticsAuthorizationPayload"
       },
       "HTTPValidationError": {
         "properties": {
@@ -60432,6 +61003,37 @@
         ],
         "title": "YandexBusinessProductImageIssue"
       },
+      "YandexDirectConnectionUpsertPayload": {
+        "properties": {
+          "client_login": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Login"
+          },
+          "oauth_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Token"
+          }
+        },
+        "type": "object",
+        "title": "YandexDirectConnectionUpsertPayload"
+      },
       "YandexMetrikaConnectionUpsertPayload": {
         "properties": {
           "counter_id": {
@@ -60459,6 +61061,25 @@
           "counter_id"
         ],
         "title": "YandexMetrikaConnectionUpsertPayload"
+      },
+      "YandexWebmasterConnectionUpsertPayload": {
+        "properties": {
+          "oauth_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oauth Token"
+          }
+        },
+        "type": "object",
+        "title": "YandexWebmasterConnectionUpsertPayload"
       }
     },
     "securitySchemes": {
