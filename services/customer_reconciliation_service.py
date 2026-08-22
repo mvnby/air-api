@@ -13,6 +13,7 @@ from models import Customer, Order, OrderDocument, Payment
 from models.tenancy import TenantScope
 from services.documents.base import DOC_NAMES
 from services.google_service import get_google_service
+from services.order_financial_eligibility import is_successful_order
 from services.settings_service import SettingsService
 from services.tenant_scope_service import (
     storefront_scope_clause,
@@ -405,7 +406,7 @@ class CustomerReconciliationService:
             order_date = cls._order_date(order, delivery_docs)
             order_amount = cls._money(order.total_amount)
 
-            if order_amount > 0:
+            if order_amount > 0 and is_successful_order(order):
                 if order_date < period.start:
                     opening_documents_total += order_amount
                 elif order_date <= period.end:

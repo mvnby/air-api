@@ -235,6 +235,7 @@ async def test_dashboard_overview_requires_auth_and_isolates_exact_storefront_sc
         tenant_id=1,
         storefront_id=1,
         status=OrderStatus.NEGOTIATION,
+        negotiation_status="awaiting_payment",
         balance_due=250,
         created_at=now - timedelta(days=90),
     )
@@ -245,7 +246,34 @@ async def test_dashboard_overview_requires_auth_and_isolates_exact_storefront_sc
         balance_due=900,
         created_at=now - timedelta(days=90),
     )
-    db.add_all([lead_a, lead_b, sale_a, sale_b, receivable_a, receivable_b])
+    rejected_balance = Order(
+        tenant_id=1,
+        storefront_id=1,
+        status=OrderStatus.CLOSED,
+        closing_result="lost",
+        balance_due=5_000,
+        created_at=now - timedelta(days=90),
+    )
+    early_negotiation_balance = Order(
+        tenant_id=1,
+        storefront_id=1,
+        status=OrderStatus.NEGOTIATION,
+        negotiation_status="awaiting_offer",
+        balance_due=4_000,
+        created_at=now - timedelta(days=90),
+    )
+    db.add_all(
+        [
+            lead_a,
+            lead_b,
+            sale_a,
+            sale_b,
+            receivable_a,
+            receivable_b,
+            rejected_balance,
+            early_negotiation_balance,
+        ]
+    )
     await db.flush()
     db.add_all(
         [

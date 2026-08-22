@@ -31,6 +31,7 @@ from services.dashboard_search_demand import (
     IntegratedSearchDemandProvider,
     SearchDemandSnapshot,
 )
+from services.order_financial_eligibility import collectible_order_clause
 from services.tenant_scope_service import storefront_scope_clause
 
 
@@ -251,7 +252,12 @@ class DashboardOverviewService:
                 previous=DashboardPeriodRange(start=period.previous_start, end=period.previous_end),
             ),
             kpis=DashboardKpis(
-                revenue=_kpi(label="Выручка", unit="byn", current=revenue_current, previous=revenue_previous),
+                revenue=_kpi(
+                    label="Оплаты за месяц",
+                    unit="byn",
+                    current=revenue_current,
+                    previous=revenue_previous,
+                ),
                 new_leads=_kpi(label="Новые лиды", unit="count", current=leads_current, previous=leads_previous),
                 sales=_kpi(label="Продажи", unit="count", current=sales_current, previous=sales_previous),
                 installations=_kpi(label="Монтажи", unit="count", current=installations_current, previous=installations_previous),
@@ -401,7 +407,7 @@ class DashboardOverviewService:
             session,
             select(func.coalesce(func.sum(Order.balance_due), 0.0)).where(
                 storefront_scope_clause(Order, tenant_scope),
-                Order.status.in_([OrderStatus.NEGOTIATION, OrderStatus.EXECUTION]),
+                collectible_order_clause(),
                 Order.balance_due > 0,
                 or_(Order.target_currency.is_(None), Order.target_currency == PaymentCurrency.BYN),
             ),
