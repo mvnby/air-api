@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from time import monotonic
@@ -18,8 +19,15 @@ from services.analytics_google_providers import (
     GoogleAnalyticsProvider,
     access_token as google_access_token,
 )
-from services.analytics_provider_types import AdvertisingSnapshot, GoogleAnalyticsSnapshot
+from services.analytics_provider_types import (
+    AdvertisingSnapshot,
+    AnalyticsProviderError,
+    GoogleAnalyticsSnapshot,
+)
 from services.analytics_yandex_providers import YandexDirectProvider
+
+
+logger = logging.getLogger(__name__)
 
 
 MarketingStatus = Literal["unconfigured", "fresh", "stale", "error"]
@@ -121,6 +129,22 @@ class MarketingSnapshotCache:
                 snapshot=snapshot,
             )
             return snapshot
+
+
+def _log_google_provider_failure(provider: str, error: Exception) -> None:
+    if isinstance(error, AnalyticsProviderError):
+        logger.warning(
+            "DASHBOARD_GOOGLE_PROVIDER_FAILED provider=%s error_code=%s retryable=%s",
+            provider,
+            error.code,
+            error.retryable,
+        )
+        return
+    logger.warning(
+        "DASHBOARD_GOOGLE_PROVIDER_FAILED provider=%s error_code=unexpected error_type=%s",
+        provider,
+        type(error).__name__,
+    )
 
 
 def resolve_metrika_counter_id(
@@ -418,7 +442,8 @@ class IntegratedMarketingProvider:
                         provider="google_analytics",
                         credentials=ga_connection.credentials,
                     )
-            except Exception:
+            except Exception as exc:
+                _log_google_provider_failure("google_analytics", exc)
                 provider_rows.append(
                     MarketingProviderSnapshot(
                         provider="google_analytics",
@@ -459,7 +484,8 @@ class IntegratedMarketingProvider:
                         provider="google_ads",
                         credentials=ads_connection.credentials,
                     )
-            except Exception:
+            except Exception as exc:
+                _log_google_provider_failure("google_ads", exc)
                 provider_rows.append(
                     MarketingProviderSnapshot(
                         provider="google_ads",

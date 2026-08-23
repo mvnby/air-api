@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from time import monotonic
@@ -15,8 +16,11 @@ from services.analytics_google_providers import (
     GoogleSearchConsoleProvider,
     access_token as google_access_token,
 )
-from services.analytics_provider_types import SearchQueryRow
+from services.analytics_provider_types import AnalyticsProviderError, SearchQueryRow
 from services.analytics_yandex_providers import YandexWebmasterProvider
+
+
+logger = logging.getLogger(__name__)
 
 
 SearchDemandStatus = Literal["unconfigured", "fresh", "stale", "error"]
@@ -94,6 +98,22 @@ class SearchDemandCache:
                 )
             self._entries[key] = _CacheEntry(monotonic(), snapshot)
             return snapshot
+
+
+def _log_google_provider_failure(provider: str, error: Exception) -> None:
+    if isinstance(error, AnalyticsProviderError):
+        logger.warning(
+            "DASHBOARD_GOOGLE_PROVIDER_FAILED provider=%s error_code=%s retryable=%s",
+            provider,
+            error.code,
+            error.retryable,
+        )
+        return
+    logger.warning(
+        "DASHBOARD_GOOGLE_PROVIDER_FAILED provider=%s error_code=unexpected error_type=%s",
+        provider,
+        type(error).__name__,
+    )
 
 
 class IntegratedSearchDemandProvider:
@@ -206,7 +226,8 @@ class IntegratedSearchDemandProvider:
                         provider="google_search_console",
                         credentials=search_console.credentials,
                     )
-            except Exception:
+            except Exception as exc:
+                _log_google_provider_failure("google_search_console", exc)
                 provider_states.append(
                     SearchDemandProviderState(
                         "google_search_console",

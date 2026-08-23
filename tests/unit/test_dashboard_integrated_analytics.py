@@ -233,3 +233,99 @@ async def test_search_demand_merges_exact_storefront_provider_rows(monkeypatch):
     ]
     assert snapshot.providers[1].provider == "google_search_console"
     assert snapshot.providers[1].status == "unconfigured"
+
+
+@pytest.mark.asyncio
+async def test_integrated_marketing_logs_safe_google_provider_error_code(monkeypatch, caplog):
+    metrika = AsyncMock()
+    metrika.get_snapshot.return_value = MarketingSnapshot(status="fresh", visits=120)
+    connection = AnalyticsRuntimeConnection(
+        provider="google_analytics",
+        public_config={"property_id": "123456"},
+        credentials={"access_token": "must-not-appear", "refresh_token": "refresh-secret"},
+        fingerprint="ga",
+    )
+    monkeypatch.setattr(
+        dashboard_marketing.AnalyticsConnectionService,
+        "get_runtime_connections",
+        AsyncMock(return_value={"google_analytics": connection}),
+    )
+    monkeypatch.setattr(
+        dashboard_marketing,
+        "google_access_token",
+        AsyncMock(return_value="must-not-appear"),
+    )
+
+    class AnalyticsStub:
+        async def fetch(self, _token, _config, _start, _end):
+            raise dashboard_marketing.AnalyticsProviderError(
+                "google_analytics_access_denied",
+                "must-not-appear",
+            )
+
+    monkeypatch.setattr(dashboard_marketing, "GoogleAnalyticsProvider", AnalyticsStub)
+
+    with caplog.at_level("WARNING", logger="services.dashboard_marketing"):
+        snapshot = await IntegratedMarketingProvider(
+            metrika_provider=metrika,
+            cache=MarketingSnapshotCache(ttl_seconds=0),
+        ).get_snapshot(
+            session=object(),
+            tenant_scope=SCOPE,
+            start=date(2026, 8, 1),
+            end_exclusive=date(2026, 8, 3),
+        )
+
+    assert snapshot.status == "fresh"
+    assert "provider=google_analytics" in caplog.text
+    assert "error_code=google_analytics_access_denied" in caplog.text
+    assert "must-not-appear" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_search_demand_logs_safe_google_provider_error_code(monkeypatch, caplog):
+    connection = AnalyticsRuntimeConnection(
+        provider="google_search_console",
+        public_config={"site_property": "sc-domain:mvn.by"},
+        credentials={"access_token": "must-not-appear", "refresh_token": "refresh-secret"},
+        fingerprint="gsc",
+    )
+    monkeypatch.setattr(
+        dashboard_search_demand.AnalyticsConnectionService,
+        "get_runtime_connections",
+        AsyncMock(return_value={"google_search_console": connection}),
+    )
+    monkeypatch.setattr(
+        dashboard_search_demand,
+        "google_access_token",
+        AsyncMock(return_value="must-not-appear"),
+    )
+
+    class SearchConsoleStub:
+        async def fetch(self, _token, _config, _start, _end, *, limit):
+            assert limit == 500
+            raise dashboard_search_demand.AnalyticsProviderError(
+                "google_search_console_access_denied",
+                "must-not-appear",
+            )
+
+    monkeypatch.setattr(
+        dashboard_search_demand,
+        "GoogleSearchConsoleProvider",
+        SearchConsoleStub,
+    )
+
+    with caplog.at_level("WARNING", logger="services.dashboard_search_demand"):
+        snapshot = await IntegratedSearchDemandProvider(
+            cache=SearchDemandCache(ttl_seconds=0)
+        ).get_snapshot(
+            session=object(),
+            tenant_scope=SCOPE,
+            start=date(2026, 8, 1),
+            end_exclusive=date(2026, 8, 3),
+        )
+
+    assert snapshot.status == "error"
+    assert "provider=google_search_console" in caplog.text
+    assert "error_code=google_search_console_access_denied" in caplog.text
+    assert "must-not-appear" not in caplog.text
