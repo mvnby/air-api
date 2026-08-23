@@ -56,15 +56,40 @@ class GoogleOAuthProvider:
     @staticmethod
     def build_authorization_url(*, client_secret_path: str | Path, redirect_uri: str, state: str, scopes: tuple[str, ...] = GOOGLE_MARKETING_SCOPES) -> str:
         flow = Flow.from_client_secrets_file(str(client_secret_path), scopes=scopes, redirect_uri=redirect_uri)
-        url, _ = flow.authorization_url(access_type="offline", include_granted_scopes="true", prompt="consent", state=state)
+        url, _ = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
+            state=state,
+        )
         return url
 
     @staticmethod
     def exchange_authorization_code(*, client_secret_path: str | Path, redirect_uri: str, code: str, scopes: tuple[str, ...] = GOOGLE_MARKETING_SCOPES, flow_factory: Callable[..., Flow] = Flow.from_client_secrets_file) -> GoogleOAuthCredentialPayload:
         try:
             flow = flow_factory(str(client_secret_path), scopes=scopes, redirect_uri=redirect_uri)
-            flow.fetch_token(code=code)
+            granted_scope_override: tuple[str, ...] | None = None
+            try:
+                flow.fetch_token(code=code)
+            except Warning as scope_warning:
+                # Incremental authorization returns the union of scopes already
+                # granted to this Google account. Accept only a safe superset
+                # which still contains every permission required here.
+                granted_scopes = set(getattr(scope_warning, "new_scope", ()) or ())
+                token = getattr(scope_warning, "token", None)
+                if not token or not set(scopes).issubset(granted_scopes):
+                    raise AnalyticsProviderError(
+                        "google_oauth_scope_mismatch",
+                        "Google did not grant the required permissions",
+                    ) from scope_warning
+                flow.oauth2session.token = dict(token)
+                granted_scope_override = tuple(sorted(granted_scopes))
             credentials = flow.credentials
+            if not credentials.refresh_token:
+                raise AnalyticsProviderError(
+                    "google_oauth_refresh_token_missing",
+                    "Google did not return an offline refresh token",
+                )
             return GoogleOAuthCredentialPayload(
                 access_token=credentials.token or "",
                 refresh_token=credentials.refresh_token,
@@ -72,8 +97,10 @@ class GoogleOAuthProvider:
                 client_secret=credentials.client_secret or "",
                 token_uri=credentials.token_uri or "https://oauth2.googleapis.com/token",
                 expiry=credentials.expiry,
-                scopes=tuple(credentials.scopes or scopes),
+                scopes=granted_scope_override or tuple(credentials.scopes or scopes),
             )
+        except AnalyticsProviderError:
+            raise
         except Exception as exc:
             raise AnalyticsProviderError("google_oauth_exchange_failed", "Google authorization code exchange failed") from exc
 

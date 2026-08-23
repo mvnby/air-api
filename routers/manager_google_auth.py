@@ -39,6 +39,7 @@ from services.analytics_oauth_state import (
     consume_google_oauth_state as consume_analytics_google_oauth_state,
     pending_actor_scope,
 )
+from services.analytics_provider_types import AnalyticsProviderError
 from services.staff_user_service import StaffUserService
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 
@@ -415,10 +416,16 @@ async def _complete_analytics_google_oauth(
             actor_username=str(pending.get("username") or ""),
         )
     except Exception as exc:
+        error_code = (
+            exc.code
+            if isinstance(exc, AnalyticsProviderError)
+            else "unexpected_error"
+        )
         logger.warning(
-            "Analytics Google OAuth completion failed provider=%s error_type=%s",
+            "Analytics Google OAuth completion failed provider=%s error_type=%s error_code=%s",
             provider_name,
             type(exc).__name__,
+            error_code,
         )
         return RedirectResponse(f"{failure_url}provider_verification_failed", status_code=303)
     return RedirectResponse(

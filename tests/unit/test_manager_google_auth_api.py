@@ -21,6 +21,7 @@ from routers.manager_google_auth import (
     _oauth_owner_binding_is_active,
 )
 from routers.manager_google_auth import router as manager_google_auth_router
+from services.analytics_provider_types import AnalyticsProviderError
 
 
 class _GoogleServiceStub:
@@ -391,6 +392,46 @@ async def test_analytics_google_oauth_redirect_redacts_provider_failure(monkeypa
         "oauth_error=provider_verification_failed"
     )
     assert "must-never-appear" not in response.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_analytics_google_oauth_logs_only_safe_provider_error_code(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr(
+        "routers.manager_google_auth.pending_actor_scope",
+        AsyncMock(return_value=TenantScope(tenant_id=4, storefront_id=9)),
+    )
+    monkeypatch.setattr(
+        "routers.manager_google_auth.exchange_code",
+        lambda *_args: (_ for _ in ()).throw(
+            AnalyticsProviderError(
+                "google_oauth_exchange_failed",
+                "token=must-never-appear",
+            )
+        ),
+    )
+    request = SimpleNamespace(
+        url_for=lambda _name: "http://test/api/manager/google-auth/callback"
+    )
+
+    with caplog.at_level("WARNING", logger="routers.manager_google_auth"):
+        response = await _complete_analytics_google_oauth(
+            request=request,
+            session=object(),
+            pending={
+                "provider": "google_search_console",
+                "redirect_uri": "http://test/api/manager/google-auth/callback",
+                "public_config": {},
+                "username": "owner",
+            },
+            code="one-time-code",
+            error="",
+        )
+
+    assert response.status_code == 303
+    assert "error_code=google_oauth_exchange_failed" in caplog.text
+    assert "must-never-appear" not in caplog.text
 
 
 @pytest.mark.asyncio
