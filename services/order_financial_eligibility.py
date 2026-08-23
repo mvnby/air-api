@@ -1,9 +1,8 @@
 """Shared financial eligibility rules for CRM orders.
 
 Order totals are commercial expectations until the order reaches an explicit
-financially meaningful state.  Actual ``Payment`` rows are deliberately not
-gated by these rules: received money remains part of the customer's settlement
-history even when the related order is later lost or cancelled.
+financially meaningful state. Payments tied to rejected orders are excluded
+from management revenue and reconciliation figures as failed sales.
 """
 
 from __future__ import annotations
@@ -41,5 +40,17 @@ def collectible_order_clause():
         and_(
             Order.status == OrderStatus.NEGOTIATION,
             Order.negotiation_status == AWAITING_PAYMENT,
+        ),
+    )
+
+
+def financially_committed_order_clause():
+    """SQL condition for payments that count as management revenue."""
+
+    return or_(
+        collectible_order_clause(),
+        and_(
+            Order.status == OrderStatus.CLOSED,
+            Order.closing_result == ClosingResult.WON.value,
         ),
     )

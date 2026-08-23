@@ -1,5 +1,4 @@
 import logging
-import os
 import secrets
 import time
 
@@ -25,6 +24,10 @@ from routers.manager_operation_ids import (
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import ManagerGoogleAuthStatusResponse, ManagerGoogleAuthUrlResponse
 from services.google_service import get_google_service
+from services.google_oauth_redirect import (
+    GoogleOAuthRedirectConfigurationError,
+    resolve_google_oauth_redirect_uri,
+)
 from services.analytics_connection_service import AnalyticsConnectionService
 from services.analytics_google_providers import (
     GoogleAdsProvider,
@@ -60,12 +63,13 @@ router = APIRouter(
 
 
 def _google_oauth_redirect_uri(request: Request) -> str:
-    configured = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "").strip()
-    if configured:
-        return configured
-    if settings.is_production:
-        raise GoogleOAuthConfigurationError(GOOGLE_OAUTH_CONFIGURATION_MESSAGE)
-    return str(request.url_for("manager_google_auth_callback"))
+    try:
+        return resolve_google_oauth_redirect_uri(
+            request_callback_uri=str(request.url_for("manager_google_auth_callback")),
+            runtime_settings=settings,
+        )
+    except GoogleOAuthRedirectConfigurationError as exc:
+        raise GoogleOAuthConfigurationError(GOOGLE_OAUTH_CONFIGURATION_MESSAGE) from exc
 
 
 def _oauth_now() -> float:

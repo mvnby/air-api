@@ -19,6 +19,10 @@ from services.google_oauth_credentials import (
     GoogleTokenPersistenceError,
     GoogleTokenUnavailableError,
 )
+from services.google_oauth_redirect import (
+    LOCAL_GOOGLE_OAUTH_REDIRECT_URI,
+    resolve_google_oauth_redirect_uri,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +34,11 @@ SCOPES = [
 TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json").strip() or "token.json"
 CLIENT_SECRET_FILE = 'client_secret.json'
 DESTINATION_FOLDER_ID = '1kLK6Vque3V5iPV1i1HjeH_su-TmyCzQt' 
-DEFAULT_OAUTH_REDIRECT_URI = "http://127.0.0.1:8000/api/manager/google-auth/callback"
+DEFAULT_OAUTH_REDIRECT_URI = LOCAL_GOOGLE_OAUTH_REDIRECT_URI
 
 
 def get_default_oauth_redirect_uri() -> str:
-    return os.getenv("GOOGLE_OAUTH_REDIRECT_URI", DEFAULT_OAUTH_REDIRECT_URI)
+    return resolve_google_oauth_redirect_uri()
 
 class GoogleDocsService:
     def __init__(self):

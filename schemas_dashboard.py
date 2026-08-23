@@ -100,6 +100,11 @@ class DashboardMarketingProvider(BaseModel):
     ]
     status: Literal["unconfigured", "fresh", "stale", "error"]
     visits: int | None = None
+    sessions: int | None = None
+    active_users: int | None = None
+    bounce_rate: float | None = None
+    engagement_rate: float | None = None
+    average_session_duration_seconds: float | None = None
     ad_spend: float | None = None
     clicks: int | None = None
     impressions: int | None = None

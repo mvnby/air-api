@@ -279,6 +279,9 @@ async def test_dashboard_overview_requires_auth_and_isolates_exact_storefront_sc
         [
             Payment(order_id=int(sale_a.id), amount=100, date=now),
             Payment(order_id=int(sale_b.id), amount=700, date=now),
+            Payment(order_id=int(receivable_a.id), amount=50, date=now),
+            Payment(order_id=int(rejected_balance.id), amount=5_000, date=now),
+            Payment(order_id=int(early_negotiation_balance.id), amount=4_000, date=now),
             OrderWorkStage(
                 order_id=int(sale_a.id),
                 name="Монтаж",
@@ -315,7 +318,7 @@ async def test_dashboard_overview_requires_auth_and_isolates_exact_storefront_sc
     assert overview_b.status_code == 200
     data_a = overview_a.json()
     data_b = overview_b.json()
-    assert data_a["kpis"]["revenue"]["current"] == 100
+    assert data_a["kpis"]["revenue"]["current"] == 150
     assert data_b["kpis"]["revenue"]["current"] == 700
     assert data_a["kpis"]["new_leads"]["current"] == 1
     assert data_b["kpis"]["new_leads"]["current"] == 1
@@ -342,7 +345,7 @@ async def test_dashboard_overview_requires_auth_and_isolates_exact_storefront_sc
     today_a = next(
         item for item in data_a["sales_series"] if item["date"] == now.date().isoformat()
     )
-    assert today_a == {"date": now.date().isoformat(), "revenue": 100, "sales": 1}
+    assert today_a == {"date": now.date().isoformat(), "revenue": 150, "sales": 1}
 
 
 @pytest.mark.asyncio

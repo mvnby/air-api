@@ -392,6 +392,7 @@ class CustomerReconciliationService:
         payment_rows: list[Dict[str, Any]] = []
         seen_bank_receipt_ids: set[int] = set()
         allocated_by_bank_receipt: dict[int, float] = {}
+        eligible_allocated_by_bank_receipt: dict[int, float] = {}
         for order in orders:
             for payment in order.payments:
                 if not payment.bank_receipt_id:
@@ -400,13 +401,20 @@ class CustomerReconciliationService:
                 allocated_by_bank_receipt[receipt_id] = cls._money(
                     allocated_by_bank_receipt.get(receipt_id, 0) + payment.amount
                 )
+                if is_successful_order(order):
+                    eligible_allocated_by_bank_receipt[receipt_id] = cls._money(
+                        eligible_allocated_by_bank_receipt.get(receipt_id, 0)
+                        + payment.amount
+                    )
 
         for order in orders:
+            if not is_successful_order(order):
+                continue
             delivery_docs = [doc for doc in order.documents if doc.doc_type in DELIVERY_DOC_TYPES]
             order_date = cls._order_date(order, delivery_docs)
             order_amount = cls._money(order.total_amount)
 
-            if order_amount > 0 and is_successful_order(order):
+            if order_amount > 0:
                 if order_date < period.start:
                     opening_documents_total += order_amount
                 elif order_date <= period.end:
@@ -430,8 +438,15 @@ class CustomerReconciliationService:
                     if receipt_id in seen_bank_receipt_ids:
                         continue
                     seen_bank_receipt_ids.add(receipt_id)
-                    amount = cls._money(receipt.amount)
-                    allocated_amount = allocated_by_bank_receipt.get(receipt_id, 0.0)
+                    allocated_amount = eligible_allocated_by_bank_receipt.get(
+                        receipt_id, 0.0
+                    )
+                    all_allocated = allocated_by_bank_receipt.get(receipt_id, 0.0)
+                    amount = (
+                        cls._money(receipt.amount)
+                        if allocated_amount == all_allocated
+                        else allocated_amount
+                    )
                 else:
                     amount = cls._money(payment.amount)
                     allocated_amount = amount

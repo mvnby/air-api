@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -14,6 +15,7 @@ from google_auth_oauthlib.flow import Flow
 from services.analytics_provider_types import (
     AdvertisingSnapshot,
     AnalyticsProviderError,
+    GoogleAnalyticsSnapshot,
     GoogleOAuthCredentialPayload,
     SearchQueryRow,
     SearchDemandProviderSnapshot,
@@ -200,16 +202,75 @@ class GoogleAnalyticsProvider:
             return {str(row["dimensionValues"][0].get("value") or "(not set)"): int(row["metricValues"][0].get("value") or 0) for row in response.json().get("rows", [])}
         except (IndexError, KeyError, TypeError, ValueError) as exc: raise AnalyticsProviderError("google_analytics_invalid_response", "Provider returned an invalid response") from exc
 
+    async def fetch_summary(self, *, access_token: str, property_id: str, period_start: date, period_end: date) -> GoogleAnalyticsSnapshot:
+        body = {
+            "dateRanges": [{"startDate": period_start.isoformat(), "endDate": period_end.isoformat()}],
+            "metrics": [
+                {"name": "sessions"},
+                {"name": "activeUsers"},
+                {"name": "engagementRate"},
+                {"name": "averageSessionDuration"},
+            ],
+        }
+        async with self._client_factory() as client:
+            response = await client.post(
+                f"{self.BASE_URL}/properties/{property_id}:runReport",
+                headers=_headers(access_token),
+                json=body,
+            )
+        if response.status_code != 200:
+            raise _error(response, "google_analytics")
+        try:
+            rows = response.json().get("rows", [])
+            values = (
+                rows[0]["metricValues"]
+                if rows
+                else [{"value": "0"} for _ in range(4)]
+            )
+            return GoogleAnalyticsSnapshot(
+                sessions=int(float(values[0].get("value") or 0)),
+                active_users=int(float(values[1].get("value") or 0)),
+                engagement_rate=round(float(values[2].get("value") or 0) * 100, 2),
+                average_session_duration_seconds=round(float(values[3].get("value") or 0), 2),
+                sources={},
+            )
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise AnalyticsProviderError(
+                "google_analytics_invalid_response",
+                "Provider returned an invalid response",
+            ) from exc
+
     async def verify(self, access_token: str, public_config: Mapping[str, Any], developer_token: str | None = None) -> dict[str, str]:
         property_id = str(public_config.get("property_id") or "")
         if not property_id:
             raise AnalyticsProviderError("google_analytics_config_invalid", "GA4 property ID is required")
         today = date.today()
-        await self.fetch_sessions_by_source(access_token=access_token, property_id=property_id, period_start=today, period_end=today)
+        await self.fetch_summary(access_token=access_token, property_id=property_id, period_start=today, period_end=today)
         return {"property_id": property_id}
 
-    async def fetch(self, access_token: str, public_config: Mapping[str, Any], period_start: date, period_end: date) -> dict[str, int]:
-        return await self.fetch_sessions_by_source(access_token=access_token, property_id=str(public_config["property_id"]), period_start=period_start, period_end=period_end)
+    async def fetch(self, access_token: str, public_config: Mapping[str, Any], period_start: date, period_end: date) -> GoogleAnalyticsSnapshot:
+        property_id = str(public_config["property_id"])
+        summary, sources = await asyncio.gather(
+            self.fetch_summary(
+                access_token=access_token,
+                property_id=property_id,
+                period_start=period_start,
+                period_end=period_end,
+            ),
+            self.fetch_sessions_by_source(
+                access_token=access_token,
+                property_id=property_id,
+                period_start=period_start,
+                period_end=period_end,
+            ),
+        )
+        return GoogleAnalyticsSnapshot(
+            sessions=summary.sessions,
+            active_users=summary.active_users,
+            engagement_rate=summary.engagement_rate,
+            average_session_duration_seconds=summary.average_session_duration_seconds,
+            sources=sources,
+        )
 
 
 class GoogleSearchConsoleProvider:

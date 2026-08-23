@@ -10,6 +10,7 @@ x-api-app: &api-app
   environment:
     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
     ENVIRONMENT: production
+    GOOGLE_OAUTH_REDIRECT_URI: https://api.mvn.by/api/manager/google-auth/callback
     GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
     GOOGLE_VISION_CREDENTIALS_FILE: /app/g-vision-ocr.json
     SERVICE_ATTACHMENT_STORAGE_PROVIDER: r2

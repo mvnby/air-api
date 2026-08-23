@@ -100,10 +100,13 @@ async def test_provider_parses_visits_and_sources():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "OAuth test-token"
         assert request.url.params["date2"] == "2026-08-02"
+        assert request.url.params["metrics"] == (
+            "ym:s:visits,ym:s:bounceRate,ym:s:avgVisitDurationSeconds"
+        )
         return httpx.Response(
             200,
             json={
-                "totals": [10.0],
+                "totals": [10.0, 24.5, 93.0],
                 "data": [
                     {
                         "dimensions": [{"id": "organic", "name": "Search"}],
@@ -132,6 +135,8 @@ async def test_provider_parses_visits_and_sources():
 
     assert snapshot.status == "fresh"
     assert snapshot.visits == 10
+    assert snapshot.bounce_rate == 24.5
+    assert snapshot.average_session_duration_seconds == 93.0
     assert [(source.name, source.visits, source.share_pct) for source in snapshot.sources] == [
         ("Search", 6, 60.0),
         ("Direct", 4, 40.0),

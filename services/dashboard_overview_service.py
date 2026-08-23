@@ -31,7 +31,10 @@ from services.dashboard_search_demand import (
     IntegratedSearchDemandProvider,
     SearchDemandSnapshot,
 )
-from services.order_financial_eligibility import collectible_order_clause
+from services.order_financial_eligibility import (
+    collectible_order_clause,
+    financially_committed_order_clause,
+)
 from services.tenant_scope_service import storefront_scope_clause
 
 
@@ -287,6 +290,7 @@ class DashboardOverviewService:
     async def _revenue(self, session, *, tenant_scope, bounds, by_day):
         conditions = (
             storefront_scope_clause(Order, tenant_scope),
+            financially_committed_order_clause(),
             Payment.currency == PaymentCurrency.BYN,
             Payment.date >= bounds[0],
             Payment.date < bounds[1],
@@ -560,6 +564,11 @@ def _marketing_schema(
                 provider=item.provider,
                 status=item.status,
                 visits=item.visits,
+                sessions=item.sessions,
+                active_users=item.active_users,
+                bounce_rate=item.bounce_rate,
+                engagement_rate=item.engagement_rate,
+                average_session_duration_seconds=item.average_session_duration_seconds,
                 ad_spend=item.ad_spend,
                 clicks=item.clicks,
                 impressions=item.impressions,

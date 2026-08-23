@@ -18,7 +18,7 @@ from services.analytics_google_providers import (
     GoogleAnalyticsProvider,
     access_token as google_access_token,
 )
-from services.analytics_provider_types import AdvertisingSnapshot
+from services.analytics_provider_types import AdvertisingSnapshot, GoogleAnalyticsSnapshot
 from services.analytics_yandex_providers import YandexDirectProvider
 
 
@@ -46,6 +46,8 @@ class MarketingSnapshot:
     platform_conversions: float | None = None
     currency: str | None = None
     providers: tuple["MarketingProviderSnapshot", ...] = ()
+    bounce_rate: float | None = None
+    average_session_duration_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,11 @@ class MarketingProviderSnapshot:
     provider: str
     status: MarketingStatus
     visits: int | None = None
+    sessions: int | None = None
+    active_users: int | None = None
+    bounce_rate: float | None = None
+    engagement_rate: float | None = None
+    average_session_duration_seconds: float | None = None
     ad_spend: float | None = None
     clicks: int | None = None
     impressions: int | None = None
@@ -229,7 +236,7 @@ class YandexMetrikaMarketingProvider:
             "date1": start.isoformat(),
             "date2": (end_exclusive - timedelta(days=1)).isoformat(),
             "dimensions": "ym:s:lastTrafficSource",
-            "metrics": "ym:s:visits",
+            "metrics": "ym:s:visits,ym:s:bounceRate,ym:s:avgVisitDurationSeconds",
             "accuracy": "full",
             "lang": "ru",
             "sort": "-ym:s:visits",
@@ -246,6 +253,8 @@ class YandexMetrikaMarketingProvider:
 
         totals = payload.get("totals") if isinstance(payload, dict) else None
         visits = _nonnegative_int(totals[0] if isinstance(totals, list) and totals else 0)
+        bounce_rate = _optional_nonnegative_float(totals, 1)
+        average_duration = _optional_nonnegative_float(totals, 2)
         sources: list[MarketingSourceSnapshot] = []
         for row in payload.get("data", []) if isinstance(payload, dict) else []:
             if not isinstance(row, dict):
@@ -271,6 +280,8 @@ class YandexMetrikaMarketingProvider:
             visits=visits,
             sources=tuple(sources),
             updated_at=datetime.now().astimezone(),
+            bounce_rate=bounce_rate,
+            average_session_duration_seconds=average_duration,
         )
 
 
@@ -337,6 +348,8 @@ class IntegratedMarketingProvider:
                 provider="yandex_metrika",
                 status=metrika.status,
                 visits=metrika.visits,
+                bounce_rate=metrika.bounce_rate,
+                average_session_duration_seconds=metrika.average_session_duration_seconds,
                 message=metrika.message,
             )
         ]
@@ -370,7 +383,7 @@ class IntegratedMarketingProvider:
                 )
 
         ga_connection = connections.get("google_analytics")
-        ga_sources: dict[str, int] | None = None
+        ga_snapshot: GoogleAnalyticsSnapshot | None = None
         if ga_connection is None:
             provider_rows.append(
                 MarketingProviderSnapshot(provider="google_analytics", status="unconfigured")
@@ -379,7 +392,7 @@ class IntegratedMarketingProvider:
             original = dict(ga_connection.credentials)
             try:
                 token = await google_access_token(ga_connection.credentials)
-                ga_sources = await asyncio.wait_for(
+                ga_snapshot = await asyncio.wait_for(
                     GoogleAnalyticsProvider().fetch(
                         token,
                         ga_connection.public_config,
@@ -392,7 +405,10 @@ class IntegratedMarketingProvider:
                     MarketingProviderSnapshot(
                         provider="google_analytics",
                         status="fresh",
-                        visits=sum(ga_sources.values()),
+                        sessions=ga_snapshot.sessions,
+                        active_users=ga_snapshot.active_users,
+                        engagement_rate=ga_snapshot.engagement_rate,
+                        average_session_duration_seconds=ga_snapshot.average_session_duration_seconds,
                     )
                 )
                 if ga_connection.credentials != original:
@@ -454,8 +470,8 @@ class IntegratedMarketingProvider:
 
         traffic_sources = metrika.sources
         visits = metrika.visits
-        if visits is None and ga_sources is not None:
-            visits = sum(ga_sources.values())
+        if visits is None and ga_snapshot is not None:
+            visits = ga_snapshot.sessions
             traffic_sources = tuple(
                 MarketingSourceSnapshot(
                     name=name,
@@ -463,7 +479,7 @@ class IntegratedMarketingProvider:
                     share_pct=round(value * 100 / visits, 2) if visits else 0.0,
                 )
                 for name, value in sorted(
-                    ga_sources.items(),
+                    ga_snapshot.sources.items(),
                     key=lambda item: item[1],
                     reverse=True,
                 )[:20]
@@ -524,6 +540,15 @@ def _nonnegative_int(value: object) -> int:
         return max(0, int(round(float(value))))
     except (TypeError, ValueError):
         return 0
+
+
+def _optional_nonnegative_float(values: object, index: int) -> float | None:
+    if not isinstance(values, list) or len(values) <= index:
+        return None
+    try:
+        return round(max(0.0, float(values[index])), 2)
+    except (TypeError, ValueError):
+        return None
 
 
 _PROCESS_CACHE = MarketingSnapshotCache(
