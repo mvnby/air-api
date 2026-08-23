@@ -42,6 +42,15 @@ AdvertisingProviderSnapshot = AdvertisingSnapshot
 
 
 @dataclass(frozen=True)
+class GoogleAnalyticsSnapshot:
+    sessions: int
+    active_users: int
+    engagement_rate: float
+    average_session_duration_seconds: float
+    sources: Mapping[str, int]
+
+
+@dataclass(frozen=True)
 class SearchQueryRow:
     query: str
     clicks: int

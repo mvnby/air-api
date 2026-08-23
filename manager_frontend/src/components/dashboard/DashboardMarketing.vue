@@ -3,6 +3,7 @@ import type { DashboardMarketing, DashboardMarketingProvider } from '../../clien
 import {
   dashboardMarketingStatus,
   formatMarketingCurrency,
+  formatDurationSeconds,
   formatMarketingProvider,
   formatMarketingValue,
 } from '../../services/dashboard-overview';
@@ -22,6 +23,30 @@ const crmMetrics = () => [
   ['CAC по CRM', formatMarketingCurrency(props.marketing.customer_acquisition_cost, props.marketing.currency)],
 ];
 const providerStatus = (provider: DashboardMarketingProvider) => dashboardMarketingStatus(provider);
+const providerMetrics = (provider: DashboardMarketingProvider) => {
+  if (provider.provider === 'yandex_metrika') {
+    return [
+      ['Визиты', formatMarketingValue(provider.visits)],
+      ['Отказы', formatMarketingValue(provider.bounce_rate, 'percent')],
+      ['Среднее время на сайте', formatDurationSeconds(provider.average_session_duration_seconds)],
+    ];
+  }
+  if (provider.provider === 'google_analytics') {
+    return [
+      ['Сеансы', formatMarketingValue(provider.sessions)],
+      ['Активные пользователи', formatMarketingValue(provider.active_users)],
+      ['Вовлечённость', formatMarketingValue(provider.engagement_rate, 'percent')],
+      ['Средняя длительность', formatDurationSeconds(provider.average_session_duration_seconds)],
+    ];
+  }
+  return [
+    ['Расход', formatMarketingCurrency(provider.ad_spend, provider.currency)],
+    ['Клики', formatMarketingValue(provider.clicks)],
+    ['Показы', formatMarketingValue(provider.impressions)],
+    ['CTR', formatMarketingValue(provider.ctr, 'percent')],
+    ['Конверсии', formatMarketingValue(provider.platform_conversions)],
+  ];
+};
 </script>
 
 <template>
@@ -38,7 +63,7 @@ const providerStatus = (provider: DashboardMarketingProvider) => dashboardMarket
     <div v-if="marketing.providers?.length" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <article v-for="provider in marketing.providers" :key="provider.provider" class="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
         <div class="flex items-start justify-between gap-2"><h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ formatMarketingProvider(provider.provider) }}</h3><span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="{ 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300': provider.status === 'fresh', 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300': provider.status === 'stale', 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300': provider.status === 'error', 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300': provider.status === 'unconfigured' }">{{ providerStatus(provider).label }}</span></div>
-        <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs"><div><dt class="text-slate-500 dark:text-slate-400">Визиты</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ formatMarketingValue(provider.visits) }}</dd></div><div><dt class="text-slate-500 dark:text-slate-400">Расход</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ formatMarketingCurrency(provider.ad_spend, provider.currency) }}</dd></div><div><dt class="text-slate-500 dark:text-slate-400">Клики</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ formatMarketingValue(provider.clicks) }}</dd></div><div><dt class="text-slate-500 dark:text-slate-400">Конверсии</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ formatMarketingValue(provider.platform_conversions) }}</dd></div></dl>
+        <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs"><div v-for="([label, value]) in providerMetrics(provider)" :key="label"><dt class="text-slate-500 dark:text-slate-400">{{ label }}</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ value }}</dd></div></dl>
       </article>
     </div>
 

@@ -123,3 +123,11 @@ export const formatMarketingCurrency = (
     return `${formatDashboardNumber(value)} ${currency}`;
   }
 };
+
+export const formatDurationSeconds = (value: number | null | undefined) => {
+  if (value == null) return '—';
+  const totalSeconds = Math.max(0, Math.round(value));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes ? `${minutes} мин ${seconds.toString().padStart(2, '0')} с` : `${seconds} с`;
+};

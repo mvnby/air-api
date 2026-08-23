@@ -31,7 +31,10 @@ from services.analytics_oauth_state import (
     ANALYTICS_GOOGLE_OAUTH_SESSION_KEY,
     start_google_oauth_state,
 )
-from services.google_service import get_default_oauth_redirect_uri
+from services.google_oauth_redirect import (
+    GoogleOAuthRedirectConfigurationError,
+    resolve_google_oauth_redirect_uri,
+)
 from services.analytics_connection_service import (
     AnalyticsConnectionError,
     AnalyticsConnectionService,
@@ -161,7 +164,19 @@ def _start_google_authorization(
                 "message": "Google Ads ещё не настроен на стороне CRM",
             },
         )
-    redirect_uri = get_default_oauth_redirect_uri()
+    try:
+        redirect_uri = resolve_google_oauth_redirect_uri(
+            request_callback_uri=str(request.url_for("manager_google_auth_callback")),
+            runtime_settings=settings,
+        )
+    except GoogleOAuthRedirectConfigurationError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error_code": "google_oauth_redirect_not_configured",
+                "message": "Google OAuth не настроен для рабочего адреса CRM",
+            },
+        ) from exc
     state = start_google_oauth_state(
         request,
         auth=auth,

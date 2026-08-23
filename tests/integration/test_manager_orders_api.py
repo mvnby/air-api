@@ -2372,7 +2372,7 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
 
 
 @pytest.mark.asyncio
-async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(async_client, db):
+async def test_manager_customer_reconciliation_excludes_lost_split_allocation(async_client, db):
     customer = Customer(
         tenant_id=1,
         name='ООО "Сверка распределения"',
@@ -2403,6 +2403,16 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
             title="Акт 2",
             total_amount=880,
             created_at=datetime(2026, 7, 2),
+        ),
+        Order(
+            tenant_id=1,
+            storefront_id=1,
+            customer_id=customer.id,
+            status=OrderStatus.CLOSED,
+            closing_result="lost",
+            title="Отказ",
+            total_amount=20,
+            created_at=datetime(2026, 7, 3),
         ),
     ]
     db.add_all(orders)
@@ -2442,6 +2452,13 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
                 currency=PaymentCurrency.BYN,
                 date=receipt.received_at,
             ),
+            Payment(
+                order_id=orders[2].id,
+                bank_receipt_id=receipt.id,
+                amount=20,
+                currency=PaymentCurrency.BYN,
+                date=receipt.received_at,
+            ),
         ]
     )
     await db.commit()
@@ -2456,10 +2473,10 @@ async def test_manager_customer_reconciliation_counts_split_bank_receipt_once(as
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["documents_total"] == 1380
-    assert data["payments_total"] == 1400
-    assert data["closing_balance"] == -20
+    assert data["payments_total"] == 1380
+    assert data["closing_balance"] == 0
     assert len(data["payments"]) == 1
-    assert data["payments"][0]["amount"] == 1400
+    assert data["payments"][0]["amount"] == 1380
     assert data["payments"][0]["allocated_amount"] == 1380
 
 

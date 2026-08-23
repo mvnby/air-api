@@ -5,6 +5,7 @@ import pytest
 
 from services.analytics_google_providers import (
     GoogleAdsProvider,
+    GoogleAnalyticsProvider,
     GoogleOAuthProvider,
     GoogleSearchConsoleProvider,
     access_token,
@@ -15,6 +16,46 @@ from services.analytics_yandex_providers import YandexDirectProvider, YandexWebm
 
 def _client(handler):
     return lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+@pytest.mark.asyncio
+async def test_google_analytics_fetches_summary_without_summing_unique_users():
+    def handler(request: httpx.Request):
+        body = request.read().decode()
+        if "sessionSourceMedium" in body:
+            return httpx.Response(200, json={"rows": [
+                {"dimensionValues": [{"value": "google / organic"}], "metricValues": [{"value": "7"}]},
+                {"dimensionValues": [{"value": "direct / none"}], "metricValues": [{"value": "3"}]},
+            ]})
+        assert '"activeUsers"' in body
+        assert '"engagementRate"' in body
+        return httpx.Response(200, json={"rows": [{"metricValues": [
+            {"value": "10"}, {"value": "8"}, {"value": "0.625"}, {"value": "93.4"},
+        ]}]})
+
+    snapshot = await GoogleAnalyticsProvider(client_factory=_client(handler)).fetch(
+        "google-access",
+        {"property_id": "123456"},
+        date(2026, 8, 1),
+        date(2026, 8, 2),
+    )
+
+    assert snapshot.sessions == 10
+    assert snapshot.active_users == 8
+    assert snapshot.engagement_rate == 62.5
+    assert snapshot.average_session_duration_seconds == 93.4
+    assert snapshot.sources == {"google / organic": 7, "direct / none": 3}
+
+
+@pytest.mark.asyncio
+async def test_google_analytics_verifies_an_empty_property():
+    provider = GoogleAnalyticsProvider(
+        client_factory=_client(lambda _request: httpx.Response(200, json={}))
+    )
+
+    assert await provider.verify("google-access", {"property_id": "123456"}) == {
+        "property_id": "123456"
+    }
 
 
 @pytest.mark.asyncio

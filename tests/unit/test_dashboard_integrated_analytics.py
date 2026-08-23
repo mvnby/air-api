@@ -149,6 +149,40 @@ def test_marketing_schema_uses_crm_counts_for_cpl_and_cac():
     assert result.platform_conversions == 9.0
 
 
+def test_marketing_schema_keeps_web_analytics_metrics_provider_specific():
+    result = _marketing_schema(
+        MarketingSnapshot(
+            status="fresh",
+            providers=(
+                dashboard_marketing.MarketingProviderSnapshot(
+                    provider="yandex_metrika",
+                    status="fresh",
+                    visits=120,
+                    bounce_rate=18.5,
+                    average_session_duration_seconds=82.0,
+                ),
+                dashboard_marketing.MarketingProviderSnapshot(
+                    provider="google_analytics",
+                    status="fresh",
+                    sessions=95,
+                    active_users=71,
+                    engagement_rate=64.2,
+                    average_session_duration_seconds=77.0,
+                ),
+            ),
+        ),
+        leads=0,
+        acquired_customers=0,
+    )
+
+    metrika, ga4 = result.providers
+    assert metrika.bounce_rate == 18.5
+    assert metrika.ad_spend is None
+    assert ga4.sessions == 95
+    assert ga4.active_users == 71
+    assert ga4.engagement_rate == 64.2
+
+
 @pytest.mark.asyncio
 async def test_search_demand_merges_exact_storefront_provider_rows(monkeypatch):
     connection = AnalyticsRuntimeConnection(
@@ -169,6 +203,7 @@ async def test_search_demand_merges_exact_storefront_provider_rows(monkeypatch):
             assert config["host_id"] == "https:mvn.by:443"
             assert period_start == date(2026, 8, 1)
             assert period_end == date(2026, 8, 2)
+            assert limit == 500
             return SearchDemandProviderSnapshot(
                 "yandex_webmaster",
                 (

@@ -564,6 +564,7 @@ class Settings(BaseSettings):
     DASHBOARD_METRIKA_CACHE_TTL_SECONDS: int = Field(default=300, ge=5, le=3600)
     ANALYTICS_PROVIDER_TIMEOUT_SECONDS: float = Field(default=8.0, ge=0.1, le=30.0)
     ANALYTICS_PROVIDER_CACHE_TTL_SECONDS: int = Field(default=900, ge=30, le=86400)
+    GOOGLE_OAUTH_REDIRECT_URI: str = ""
     GOOGLE_ADS_DEVELOPER_TOKEN: str = Field(default="", repr=False, exclude=True)
 
     # GitHub Actions (for Turbo Rebuilds)

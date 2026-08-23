@@ -159,7 +159,7 @@ class IntegratedSearchDemandProvider:
                     YandexWebmasterProvider().fetch(
                         str(webmaster.credentials.get("oauth_token") or ""),
                         webmaster.public_config,
-                        limit=100,
+                        limit=500,
                         period_start=start,
                         period_end=end_exclusive - timedelta(days=1),
                     ),
@@ -191,7 +191,7 @@ class IntegratedSearchDemandProvider:
                         search_console.public_config,
                         start,
                         end_exclusive - timedelta(days=1),
-                        limit=100,
+                        limit=500,
                     ),
                     timeout=settings.ANALYTICS_PROVIDER_TIMEOUT_SECONDS,
                 )
@@ -226,7 +226,7 @@ class IntegratedSearchDemandProvider:
             status = "unconfigured"
         return SearchDemandSnapshot(
             status=status,
-            queries=tuple(queries[:100]),
+            queries=tuple(queries[:1000]),
             providers=tuple(provider_states),
             updated_at=datetime.now().astimezone() if status == "fresh" else None,
             message=(
