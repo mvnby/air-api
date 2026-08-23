@@ -10,12 +10,162 @@ from services.analytics_google_providers import (
     GoogleSearchConsoleProvider,
     access_token,
 )
-from services.analytics_provider_types import GoogleOAuthCredentialPayload
+from services.analytics_provider_types import (
+    AnalyticsProviderError,
+    GoogleOAuthCredentialPayload,
+)
 from services.analytics_yandex_providers import YandexDirectProvider, YandexWebmasterProvider
 
 
 def _client(handler):
     return lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def test_google_oauth_keeps_provider_scopes_isolated(monkeypatch):
+    seen = {}
+
+    class _FlowStub:
+        def authorization_url(self, **kwargs):
+            seen.update(kwargs)
+            return "https://accounts.google.com/o/oauth2/auth", "state"
+
+    def from_client_secrets_file(path, *, scopes, redirect_uri):
+        seen.update(path=path, scopes=scopes, redirect_uri=redirect_uri)
+        return _FlowStub()
+
+    monkeypatch.setattr(
+        "services.analytics_google_providers.Flow.from_client_secrets_file",
+        from_client_secrets_file,
+    )
+
+    url = GoogleOAuthProvider.build_authorization_url(
+        client_secret_path="google-client.json",
+        redirect_uri="https://api.mvn.by/api/manager/google-auth/callback",
+        state="one-time-state",
+        scopes=("https://www.googleapis.com/auth/analytics.readonly",),
+    )
+
+    assert url == "https://accounts.google.com/o/oauth2/auth"
+    assert seen["scopes"] == (
+        "https://www.googleapis.com/auth/analytics.readonly",
+    )
+    assert seen["access_type"] == "offline"
+    assert seen["prompt"] == "consent"
+    assert seen["state"] == "one-time-state"
+    assert seen["include_granted_scopes"] == "true"
+
+
+def test_google_oauth_accepts_incremental_scope_superset():
+    required = "https://www.googleapis.com/auth/analytics.readonly"
+    extra = "https://www.googleapis.com/auth/webmasters.readonly"
+
+    class _FlowStub:
+        oauth2session = type("OAuthSession", (), {"token": {}})()
+
+        def fetch_token(self, *, code):
+            assert code == "one-time-code"
+            warning = Warning("scope changed")
+            warning.new_scope = [required, extra]
+            warning.token = {
+                "access_token": "temporary-access",
+                "refresh_token": "offline-refresh",
+                "token_type": "Bearer",
+                "scope": [required, extra],
+            }
+            raise warning
+
+        @property
+        def credentials(self):
+            token = self.oauth2session.token
+            return type(
+                "Credentials",
+                (),
+                {
+                    "token": token["access_token"],
+                    "refresh_token": token["refresh_token"],
+                    "client_id": "client-id",
+                    "client_secret": "client-secret",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "expiry": None,
+                    # google-auth-oauthlib reports the scopes configured on the
+                    # Flow here, not necessarily the actual granted superset.
+                    "scopes": [required],
+                },
+            )()
+
+    payload = GoogleOAuthProvider.exchange_authorization_code(
+        client_secret_path="google-client.json",
+        redirect_uri="https://api.mvn.by/api/manager/google-auth/callback",
+        code="one-time-code",
+        scopes=(required,),
+        flow_factory=lambda *_args, **_kwargs: _FlowStub(),
+    )
+
+    assert payload.access_token == "temporary-access"
+    assert payload.refresh_token == "offline-refresh"
+    assert set(payload.scopes) == {required, extra}
+
+
+@pytest.mark.parametrize(
+    ("granted_scopes", "refresh_token", "expected_code"),
+    [
+        (
+            ("https://www.googleapis.com/auth/webmasters.readonly",),
+            "offline-refresh",
+            "google_oauth_scope_mismatch",
+        ),
+        (
+            ("https://www.googleapis.com/auth/analytics.readonly",),
+            None,
+            "google_oauth_refresh_token_missing",
+        ),
+    ],
+)
+def test_google_oauth_rejects_missing_required_scope_or_refresh_token(
+    granted_scopes, refresh_token, expected_code
+):
+    required = "https://www.googleapis.com/auth/analytics.readonly"
+
+    class _FlowStub:
+        oauth2session = type("OAuthSession", (), {"token": {}})()
+
+        def fetch_token(self, *, code):
+            warning = Warning("scope changed")
+            warning.new_scope = list(granted_scopes)
+            warning.token = {
+                "access_token": "temporary-access",
+                "refresh_token": refresh_token,
+                "scope": list(granted_scopes),
+            }
+            raise warning
+
+        @property
+        def credentials(self):
+            token = self.oauth2session.token
+            return type(
+                "Credentials",
+                (),
+                {
+                    "token": token.get("access_token"),
+                    "refresh_token": token.get("refresh_token"),
+                    "client_id": "client-id",
+                    "client_secret": "client-secret",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "expiry": None,
+                    "scopes": token.get("scope"),
+                },
+            )()
+
+    with pytest.raises(AnalyticsProviderError) as error:
+        GoogleOAuthProvider.exchange_authorization_code(
+            client_secret_path="google-client.json",
+            redirect_uri="https://api.mvn.by/api/manager/google-auth/callback",
+            code="one-time-code",
+            scopes=(required,),
+            flow_factory=lambda *_args, **_kwargs: _FlowStub(),
+        )
+
+    assert error.value.code == expected_code
 
 
 @pytest.mark.asyncio
