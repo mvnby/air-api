@@ -154,7 +154,7 @@ async def test_google_auth_url_uses_configured_redirect_uri_in_production(
 
 
 @pytest.mark.asyncio
-async def test_google_auth_url_rejects_derived_redirect_in_production(
+async def test_google_auth_url_derives_canonical_redirect_in_production(
     google_auth_client,
     monkeypatch,
 ):
@@ -168,9 +168,10 @@ async def test_google_auth_url_rejects_derived_redirect_in_production(
 
     response = await google_auth_client.get("/api/manager/google-auth/url")
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == "Google OAuth redirect URI is not configured"
-    assert service.auth_calls == []
+    assert response.status_code == 200
+    assert service.auth_calls[0]["redirect_uri"] == (
+        "https://api.mvn.by/api/manager/google-auth/callback"
+    )
 
 
 @pytest.mark.asyncio

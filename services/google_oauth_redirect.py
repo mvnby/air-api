@@ -34,7 +34,11 @@ def resolve_google_oauth_redirect_uri(
         str(getattr(active_settings, "MANAGER_BASE_URL", "https://api.mvn.by/manager")).strip()
     )
     canonical = urlunsplit((manager.scheme, manager.netloc, GOOGLE_OAUTH_CALLBACK_PATH, "", ""))
-    if not configured or configured != canonical or manager.scheme != "https" or not manager.hostname:
+    if manager.scheme != "https" or not manager.hostname:
+        raise GoogleOAuthRedirectConfigurationError(
+            "Google OAuth redirect URI is not configured for the production manager origin"
+        )
+    if configured and configured != canonical:
         raise GoogleOAuthRedirectConfigurationError(
             "Google OAuth redirect URI is not configured for the production manager origin"
         )

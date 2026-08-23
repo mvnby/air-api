@@ -54,6 +54,38 @@ def test_analytics_google_oauth_starts_with_production_callback(monkeypatch):
     assert request.session[ANALYTICS_GOOGLE_OAUTH_SESSION_KEY]["redirect_uri"] == expected
 
 
+def test_analytics_google_oauth_derives_production_callback(monkeypatch):
+    runtime_settings = SimpleNamespace(
+        is_production=True,
+        MANAGER_BASE_URL="https://api.mvn.by/manager",
+        GOOGLE_OAUTH_REDIRECT_URI="",
+        GOOGLE_ADS_DEVELOPER_TOKEN="",
+    )
+    request = SimpleNamespace(
+        session={},
+        url_for=lambda _name: "http://internal/api/manager/google-auth/callback",
+    )
+    seen = {}
+
+    def build_url(provider, redirect_uri, state):
+        seen.update(provider=provider, redirect_uri=redirect_uri, state=state)
+        return "https://accounts.google.com/o/oauth2/auth"
+
+    monkeypatch.setattr(manager_analytics_connections, "settings", runtime_settings)
+    monkeypatch.setattr(manager_analytics_connections, "build_authorization_url", build_url)
+
+    manager_analytics_connections._start_google_authorization(
+        request,
+        auth=_auth(),
+        provider="google_analytics",
+        public_config={"property_id": "123456"},
+    )
+
+    expected = "https://api.mvn.by/api/manager/google-auth/callback"
+    assert seen["redirect_uri"] == expected
+    assert request.session[ANALYTICS_GOOGLE_OAUTH_SESSION_KEY]["redirect_uri"] == expected
+
+
 def test_analytics_google_oauth_rejects_localhost_in_production(monkeypatch):
     runtime_settings = SimpleNamespace(
         is_production=True,

@@ -13,7 +13,6 @@ x-api-app: &api-app
     API_READY_ENABLED: "true"
     DB_BOOTSTRAP_ENABLED: "true"
     GOOGLE_TOKEN_FILE: /app/google-oauth/token.json
-    GOOGLE_OAUTH_REDIRECT_URI: https://api.mvn.by/api/manager/google-auth/callback
     GOOGLE_VISION_CREDENTIALS_FILE: /app/g-vision-ocr.json
   volumes:
     - ./media:/app/media
