@@ -7,7 +7,7 @@ contain no database concerns so adapters can be exercised with ``httpx.MockTrans
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Mapping
 
 
@@ -101,7 +101,7 @@ class GoogleOAuthCredentialPayload:
     def from_payload(cls, payload: Mapping[str, Any]) -> "GoogleOAuthCredentialPayload":
         try:
             expiry_raw = payload.get("expiry")
-            expiry = datetime.fromisoformat(expiry_raw) if isinstance(expiry_raw, str) else None
+            expiry = _normalize_google_expiry(expiry_raw)
             scopes_raw = payload.get("scopes") or ()
             if not isinstance(scopes_raw, (list, tuple)):
                 raise TypeError("scopes")
@@ -118,3 +118,14 @@ class GoogleOAuthCredentialPayload:
             raise AnalyticsProviderError(
                 "google_credentials_invalid", "Google connection needs to be connected again"
             ) from exc
+
+
+def _normalize_google_expiry(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError("expiry")
+    expiry = datetime.fromisoformat(value)
+    if expiry.tzinfo is None:
+        return expiry.replace(tzinfo=timezone.utc)
+    return expiry

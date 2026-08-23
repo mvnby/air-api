@@ -106,6 +106,38 @@ def test_google_oauth_accepts_incremental_scope_superset():
     assert set(payload.scopes) == {required, extra}
 
 
+def test_google_oauth_payload_normalizes_naive_expiry_to_utc():
+    payload = GoogleOAuthCredentialPayload.from_payload(
+        {
+            "access_token": "token",
+            "refresh_token": "refresh",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "expiry": "2026-08-23T15:22:00",
+            "scopes": ["scope-a"],
+        }
+    )
+
+    assert payload.expiry == datetime(2026, 8, 23, 15, 22, tzinfo=timezone.utc)
+
+
+def test_google_oauth_payload_preserves_explicit_expiry_offset():
+    payload = GoogleOAuthCredentialPayload.from_payload(
+        {
+            "access_token": "token",
+            "refresh_token": "refresh",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "expiry": "2026-08-23T18:22:00+03:00",
+            "scopes": ["scope-a"],
+        }
+    )
+
+    assert payload.expiry == datetime.fromisoformat("2026-08-23T18:22:00+03:00")
+
+
 @pytest.mark.parametrize(
     ("granted_scopes", "refresh_token", "expected_code"),
     [
@@ -300,6 +332,30 @@ async def test_google_oauth_refresh_keeps_secret_out_of_error_and_marks_payload_
     assert token == "fresh-access"
     assert provider.last_refreshed_payload is not None
     assert provider.last_refreshed_payload["refresh_token"] == "refresh-secret"
+
+
+@pytest.mark.asyncio
+async def test_google_oauth_access_token_accepts_naive_future_expiry_without_refresh():
+    provider = GoogleOAuthProvider(
+        client_factory=lambda: (_ for _ in ()).throw(
+            AssertionError("refresh should not run for a still-valid token")
+        )
+    )
+
+    token = await provider.access_token(
+        GoogleOAuthCredentialPayload(
+            access_token="still-valid",
+            refresh_token="refresh-secret",
+            client_id="client-id",
+            client_secret="client-secret",
+            token_uri="https://oauth2.googleapis.com/token",
+            expiry=datetime.now() + timedelta(minutes=5),
+            scopes=("scope-a",),
+        ).to_payload()
+    )
+
+    assert token == "still-valid"
+    assert provider.last_refreshed_payload is None
 
 
 @pytest.mark.asyncio
