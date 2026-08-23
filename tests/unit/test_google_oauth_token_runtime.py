@@ -18,6 +18,9 @@ PRODUCTION_COMPOSE_FILES = (
     "deploy/ha/zakup/docker-compose.standby.yml",
     "deploy/ha/zakup/docker-compose.patroni.yml",
 )
+PRODUCTION_GOOGLE_OAUTH_REDIRECT_URI = (
+    "https://api.mvn.by/api/manager/google-auth/callback"
+)
 
 
 def _token_payload(marker: str = "secret-marker") -> str:
@@ -74,6 +77,16 @@ def test_no_repo_compose_reintroduces_single_file_oauth_token_mount():
     assert compose_files
     for path in compose_files:
         assert not forbidden.search(path.read_text(encoding="utf-8")), path
+
+
+def test_all_production_composes_use_the_canonical_google_oauth_callback():
+    for relative_path in PRODUCTION_COMPOSE_FILES:
+        text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+        assert (
+            f"GOOGLE_OAUTH_REDIRECT_URI: {PRODUCTION_GOOGLE_OAUTH_REDIRECT_URI}"
+            in text
+        ), relative_path
+        assert "GOOGLE_OAUTH_REDIRECT_URI: http://" not in text, relative_path
 
 
 def test_prepare_migrates_legacy_token_atomically_and_retains_source(tmp_path):
