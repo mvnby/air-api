@@ -25,22 +25,10 @@ from schemas import (
     ManagerTariffServiceKind,
 )
 from services.tariffs_service import TariffsService
+from services.cooling_capacity import BTU_TO_KW_MAP
 
 
 class ServiceEstimateService:
-    BTU_TO_KW_MAP = {
-        7: 2.1,
-        9: 2.6,
-        12: 3.5,
-        18: 5.3,
-        24: 7.0,
-        30: 8.8,
-        36: 10.5,
-        42: 12.3,
-        48: 14.0,
-        60: 17.6,
-    }
-
     @staticmethod
     def _round_money(value: float) -> float:
         return round(float(value), 2)
@@ -83,9 +71,9 @@ class ServiceEstimateService:
         else:
             btu_classes = [int(round(num)) for num in numbers]
             mapped_values = [
-                ServiceEstimateService.BTU_TO_KW_MAP[btu]
+                BTU_TO_KW_MAP[btu]
                 for btu in btu_classes
-                if btu in ServiceEstimateService.BTU_TO_KW_MAP
+                if btu in BTU_TO_KW_MAP
             ]
             if mapped_values:
                 kw_value = max(mapped_values)
