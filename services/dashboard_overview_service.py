@@ -69,14 +69,23 @@ def current_month_window(now: datetime | None = None) -> DashboardPeriodWindow:
         time.min,
         tzinfo=DASHBOARD_TIMEZONE,
     )
-    current_end = _next_month(current_start)
+    next_month = _next_month(current_start)
+    current_end = min(
+        next_month,
+        datetime.combine(
+            generated_at.date() + timedelta(days=1),
+            time.min,
+            tzinfo=DASHBOARD_TIMEZONE,
+        ),
+    )
     previous_start = _previous_month(current_start)
+    previous_end = min(current_start, previous_start + (current_end - current_start))
     return DashboardPeriodWindow(
         generated_at=generated_at,
         current_start=current_start,
         current_end=current_end,
         previous_start=previous_start,
-        previous_end=current_start,
+        previous_end=previous_end,
     )
 
 

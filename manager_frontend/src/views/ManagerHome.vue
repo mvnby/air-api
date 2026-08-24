@@ -12,6 +12,7 @@ import DashboardSalesChart from '../components/dashboard/DashboardSalesChart.vue
 import DashboardSearchDemand from '../components/dashboard/DashboardSearchDemand.vue';
 import {
   formatDashboardCurrency,
+  formatDashboardComparisonPeriod,
   loadDashboardMode,
   saveDashboardMode,
   type DashboardMode,
@@ -100,6 +101,16 @@ const shortText = (value?: string | null, limit = 120) => {
   const text = (value || '').trim();
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
 };
+
+const isOverdue = (dateStr: string) => new Date(dateStr).getTime() < Date.now();
+const hasOverdueContracts = computed(() => stats.value?.expiring_contracts?.some(contract => isOverdue(contract.valid_until)) || false);
+const hasOverdueTouchpoints = computed(() => stats.value?.upcoming_touchpoints?.some(touch => isOverdue(touch.next_followup_date)) || false);
+const deadlineLabel = (dateStr: string) => {
+  const date = new Date(dateStr);
+  if (!isOverdue(dateStr)) return `до ${formatDate(dateStr)}`;
+  const days = Math.max(1, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+  return `просрочено ${days} дн.`;
+};
 </script>
 
 <template>
@@ -109,6 +120,7 @@ const shortText = (value?: string | null, limit = 120) => {
         <p class="text-sm font-semibold text-teal-700 dark:text-teal-300">Центр управления</p>
         <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-950 dark:text-white">Мастер Воздуха</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ modeSubtitle }}</p>
+        <p v-if="overview" class="mt-1 text-xs text-slate-400 dark:text-slate-500">{{ formatDashboardComparisonPeriod(overview.period) }}</p>
       </div>
       <DashboardModeSwitch :model-value="mode" @update:model-value="setMode" />
     </header>
@@ -127,8 +139,10 @@ const shortText = (value?: string | null, limit = 120) => {
         <DashboardSalesChart :series="overview.sales_series" />
         <DashboardFunnel :stages="overview.funnel" />
       </div>
-      <div class="mt-4"><DashboardMarketing :marketing="overview.marketing" /></div>
-      <div class="mt-4"><DashboardSearchDemand :demand="overview.search_demand" /></div>
+      <template v-if="mode === 'owner'">
+        <div class="mt-4"><DashboardMarketing :marketing="overview.marketing" /></div>
+        <div class="mt-4"><DashboardSearchDemand :demand="overview.search_demand" /></div>
+      </template>
     </template>
 
     <section v-if="stats && (stats.bank_receipts_review_count || 0) > 0" class="mt-8">
@@ -161,12 +175,12 @@ const shortText = (value?: string | null, limit = 120) => {
     </section>
 
     <section v-if="stats && stats.expiring_contracts?.length" class="mt-8">
-      <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">Договоры к продлению</h2>
+      <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">{{ hasOverdueContracts ? 'Договоры требуют внимания' : 'Договоры к продлению' }}</h2>
       <div class="flex flex-col gap-3">
         <div v-for="contract in stats.expiring_contracts" :key="contract.contract_id" class="flex items-center justify-between rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-500/30 dark:bg-[#1e293b]">
           <button class="text-left" type="button" @click="openCustomer(contract.customer_id)">
             <div class="font-medium text-slate-800 dark:text-gray-200">{{ contract.customer_name }} · {{ contract.number }}</div>
-            <div class="mt-1 flex items-center gap-1 text-sm text-amber-600 dark:text-amber-400"><span class="material-icons-round text-[16px]">event_busy</span>до {{ formatDate(contract.valid_until) }}</div>
+            <div class="mt-1 flex items-center gap-1 text-sm" :class="isOverdue(contract.valid_until) ? 'font-semibold text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'"><span class="material-icons-round text-[16px]">event_busy</span>{{ deadlineLabel(contract.valid_until) }}</div>
           </button>
           <a v-if="contract.edit_url" :href="contract.edit_url" target="_blank" class="material-icons-round text-slate-400 hover:text-teal-500" title="Открыть договор">open_in_new</a>
         </div>
@@ -174,7 +188,7 @@ const shortText = (value?: string | null, limit = 120) => {
     </section>
 
     <section class="mt-8">
-      <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">Ближайшие касания</h2>
+      <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">{{ hasOverdueTouchpoints ? 'Касания требуют внимания' : 'Ближайшие касания' }}</h2>
       <div v-if="operationalLoading" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-700 dark:bg-[#1e293b] dark:text-slate-400">Загрузка задач...</div>
       <div v-else-if="operationalError" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-700 dark:bg-[#1e293b] dark:text-slate-400">Операционные данные временно недоступны.</div>
       <div v-else-if="stats && stats.upcoming_touchpoints.length > 0" class="flex flex-col gap-3">
@@ -183,7 +197,7 @@ const shortText = (value?: string | null, limit = 120) => {
             <div class="font-medium text-slate-800 dark:text-gray-200">Заказ #{{ touch.order_id }} — {{ touch.customer_name }}<span v-if="touch.title" class="ml-2 text-sm font-normal text-slate-500 dark:text-gray-400">({{ touch.title }})</span></div>
             <div class="mt-1 flex flex-wrap gap-4 text-sm text-slate-500 dark:text-gray-400">
               <span v-if="touch.phone" class="flex items-center gap-1"><span class="material-icons-round text-[16px]">call</span>{{ touch.phone }}</span>
-              <span class="flex items-center gap-1 text-rose-500 dark:text-rose-400"><span class="material-icons-round text-[16px]">event</span>{{ formatDate(touch.next_followup_date) }}</span>
+              <span class="flex items-center gap-1" :class="isOverdue(touch.next_followup_date) ? 'font-semibold text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'"><span class="material-icons-round text-[16px]">event</span>{{ deadlineLabel(touch.next_followup_date) }}</span>
             </div>
           </div>
           <span class="material-icons-round text-slate-400 dark:text-gray-500">chevron_right</span>
