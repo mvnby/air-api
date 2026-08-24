@@ -26,6 +26,7 @@ from routers import manager_orders
 from routers import manager_repair_complaints
 from routers import manager_specs
 from routers import manager_installers
+from routers import manager_installation_rates
 from routers import manager_settings
 from routers import manager_service_estimates
 from routers import manager_service_attachments
@@ -68,6 +69,7 @@ router.include_router(manager_installers.router)
 router.include_router(manager_staff.router)
 router.include_router(manager_brands.router)
 router.include_router(manager_settings.router)
+router.include_router(manager_installation_rates.router)
 router.include_router(manager_tariffs.router)
 router.include_router(manager_service_estimates.router)
 router.include_router(manager_service_attachments.router)

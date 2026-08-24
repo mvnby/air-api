@@ -10,6 +10,7 @@ import {
     ManagerSettingsService,
     ManagerGoogleAuthService,
     ManagerBackupsService,
+    ManagerInstallationRatesService,
     ManagerTariffsService,
     ManagerServiceEstimatesService,
     ManagerBrandsService,
@@ -42,6 +43,7 @@ import {
     type ManagerTariffRuleUpdatePayload,
     type ManagerTariffServiceKind,
     type ManagerTariffUpdatePayload,
+    type ManagerInstallationRateUpdatePayload,
     type ManagerInstallEstimateCalculatePayload,
     type ManagerInstallEstimateSavePayload,
     type ManagerServiceEstimateListResponse,
@@ -527,7 +529,16 @@ export const api = {
         return await ManagerBackupsService.getManagerBackupRestoreStatus(jobId);
     },
 
-    // Tariffs
+    // Public checkout installation rates
+    async listManagerInstallationRates() {
+        return await ManagerInstallationRatesService.listManagerInstallationRates();
+    },
+
+    async updateManagerInstallationRate(id: number, payload: ManagerInstallationRateUpdatePayload) {
+        return await ManagerInstallationRatesService.updateManagerInstallationRate(id, payload);
+    },
+
+    // Estimate tariffs
     async listManagerTariffs() {
         return await ManagerTariffsService.listManagerTariffs();
     },

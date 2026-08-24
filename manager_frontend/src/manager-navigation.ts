@@ -72,7 +72,8 @@ export const navSections: NavSection[] = [
     label: 'Услуги',
     items: [
       { path: '/manager/equipment', label: 'Оборудование', icon: Boxes, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
-      { path: '/manager/tariffs', label: 'Тарифы услуг', icon: Wallet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/installation-rates', label: 'Публичный монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/tariffs', label: 'Тарифы смет', icon: Wallet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
     ],
   },

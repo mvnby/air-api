@@ -277,6 +277,10 @@ export type { ManagerFeatureSeriesMigrationPreviewResponse } from './models/Mana
 export type { ManagerFeatureSuggestionsApplyPayload } from './models/ManagerFeatureSuggestionsApplyPayload';
 export type { ManagerGoogleAuthStatusResponse } from './models/ManagerGoogleAuthStatusResponse';
 export type { ManagerGoogleAuthUrlResponse } from './models/ManagerGoogleAuthUrlResponse';
+export type { ManagerInstallationRateListResponse } from './models/ManagerInstallationRateListResponse';
+export type { ManagerInstallationRateResponse } from './models/ManagerInstallationRateResponse';
+export type { ManagerInstallationRateSelectionStatus } from './models/ManagerInstallationRateSelectionStatus';
+export type { ManagerInstallationRateUpdatePayload } from './models/ManagerInstallationRateUpdatePayload';
 export type { ManagerInstallerCreatePayload } from './models/ManagerInstallerCreatePayload';
 export type { ManagerInstallerListResponse } from './models/ManagerInstallerListResponse';
 export type { ManagerInstallerResponse } from './models/ManagerInstallerResponse';
@@ -622,6 +626,7 @@ export { ManagerEquipmentService } from './services/ManagerEquipmentService';
 export { ManagerEquipmentLinksService } from './services/ManagerEquipmentLinksService';
 export { ManagerFeaturesService } from './services/ManagerFeaturesService';
 export { ManagerGoogleAuthService } from './services/ManagerGoogleAuthService';
+export { ManagerInstallationRatesService } from './services/ManagerInstallationRatesService';
 export { ManagerInstallersService } from './services/ManagerInstallersService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';
 export { ManagerLeadsInboxService } from './services/ManagerLeadsInboxService';

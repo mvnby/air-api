@@ -167,7 +167,7 @@ const submit = async () => {
         <div class="modal-content bg-white dark:bg-[#1e293b] rounded-xl shadow-xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-slate-700/60 flex flex-col">
           <div class="px-6 py-4 border-b border-gray-200 dark:border-slate-700/50 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ tariff ? 'Редактировать базовый тариф' : 'Новый базовый тариф' }}
+              {{ tariff ? 'Редактировать тариф сметы' : 'Новый тариф сметы' }}
             </h3>
             <button
               @click="close"
@@ -236,7 +236,7 @@ const submit = async () => {
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <label class="block">
-                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Категория</span>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Группа в смете</span>
                 <input
                   v-model="formData.category"
                   type="text"
@@ -246,7 +246,7 @@ const submit = async () => {
                 />
               </label>
               <label class="block">
-                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Диапазон мощности</span>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Уточнение для сметы</span>
                 <input
                   v-model="formData.power_range"
                   type="text"
