@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import dataclass
 from typing import Any, Sequence
 
 from sqlalchemy.orm import selectinload
@@ -11,7 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import GlobalConfig, InstallationRate, Product, Service
-from services.product_area import area_from_specs
+from services.cooling_capacity import power_range_capacity_bounds
+from services.installation_product_profile import (
+    InstallationProductProfile,
+    build_installation_product_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,42 +27,117 @@ class InstallationPricingError(ValueError):
         self.code = code
 
 
+@dataclass(frozen=True)
+class InstallationRateMatch:
+    rate: InstallationRate | None
+    profile: InstallationProductProfile
+    reason: str | None
+
+
 class InstallationPricingService:
     PRICING_VERSION = "installation-v1"
     BUNDLE_DISCOUNT_CONFIG_KEY = "install_discount"
     MAX_BUNDLE_DISCOUNT = 10_000
     DEFAULT_METERS = 3.0
-    PRODUCT_CATEGORY_SLUGS = ("wall", "cassette", "duct", "ceiling", "multisplit")
-
     @staticmethod
     def _normalize(value: Any) -> str:
         return str(value or "").strip().lower()
 
     @classmethod
-    def _area_range_max(cls, power_range: str) -> int | None:
-        key = cls._normalize(power_range)
-        if "07-12" in key:
-            return 35
-        if "18-24" in key:
-            return 70
-        if "30-36" in key:
-            return 100
-        if any(value in key for value in ("area-20", "area-25", "area-35")):
-            return 35
-        if any(value in key for value in ("area-50", "area-70")):
-            return 70
-        if any(value in key for value in ("area-80", "area-100")):
-            return 100
-        return None
+    def _normalized_rate_category(cls, value: str) -> str:
+        normalized = cls._normalize(value).replace("_", "-")
+        if normalized in {"floor-ceiling", "floor ceiling"}:
+            return "ceiling"
+        if normalized in {"cassette/ceiling", "cassette-ceiling"}:
+            return "cassette/ceiling"
+        return normalized
 
     @classmethod
-    def _category_matches_rate(cls, rate_category: str, product_category: str) -> bool:
-        rate = cls._normalize(rate_category)
-        if product_category in {"wall", "duct", "multisplit"}:
-            return rate == product_category
-        if product_category in {"cassette", "ceiling"}:
-            return rate in {"cassette", "ceiling", "cassette/ceiling"}
-        return rate == product_category
+    def _rate_power_tokens(cls, rate: InstallationRate) -> set[str]:
+        return {
+            token.strip()
+            for token in cls._normalize(rate.power_range).split(",")
+            if token.strip() and token.strip() != "all"
+        }
+
+    @classmethod
+    def _select_rate(
+        cls,
+        rates: Sequence[InstallationRate],
+        *,
+        profile: InstallationProductProfile,
+        match_capacity: bool,
+    ) -> InstallationRate | None:
+        for rate in rates:
+            if cls._rate_power_tokens(rate) & profile.tag_slugs:
+                return rate
+
+        if profile.cooling_capacity_kw is not None:
+            for rate in rates:
+                bounds = power_range_capacity_bounds(rate.power_range)
+                if bounds is None:
+                    continue
+                lower, upper = bounds
+                if lower <= profile.cooling_capacity_kw <= upper:
+                    return rate
+
+        if match_capacity:
+            return None
+
+        return next(
+            (rate for rate in rates if cls._normalize(rate.power_range) == "all"),
+            None,
+        )
+
+    @classmethod
+    def resolve_product_rate(
+        cls,
+        product: Product,
+        rates: Sequence[InstallationRate],
+    ) -> InstallationRateMatch:
+        profile = build_installation_product_profile(product)
+        if not profile.eligible or profile.equipment_category is None:
+            return InstallationRateMatch(rate=None, profile=profile, reason=profile.reason)
+
+        category_rates = [
+            rate
+            for rate in rates
+            if cls._normalized_rate_category(rate.category) == profile.equipment_category
+        ]
+        rate = cls._select_rate(
+            category_rates,
+            profile=profile,
+            match_capacity=profile.equipment_category == "wall",
+        )
+
+        if rate is None and profile.equipment_category in {"cassette", "ceiling"}:
+            combined_manual_rates = [
+                rate
+                for rate in rates
+                if cls._normalized_rate_category(rate.category) == "cassette/ceiling"
+                and not rate.is_fixed
+            ]
+            rate = cls._select_rate(
+                combined_manual_rates,
+                profile=profile,
+                match_capacity=False,
+            )
+
+        if rate is not None:
+            reason = None if rate.is_fixed else "rate_requires_manual_quote"
+            return InstallationRateMatch(rate=rate, profile=profile, reason=reason)
+        if profile.equipment_category == "wall" and profile.cooling_capacity_kw is None:
+            has_exact_power_tag = any(
+                cls._rate_power_tokens(candidate) & profile.tag_slugs
+                for candidate in category_rates
+            )
+            if not has_exact_power_tag:
+                return InstallationRateMatch(
+                    rate=None,
+                    profile=profile,
+                    reason="missing_cooling_capacity",
+                )
+        return InstallationRateMatch(rate=None, profile=profile, reason="no_matching_rate")
 
     @classmethod
     def match_product_rate(
@@ -65,46 +145,7 @@ class InstallationPricingService:
         product: Product,
         rates: Sequence[InstallationRate],
     ) -> InstallationRate | None:
-        tag_slugs = {
-            cls._normalize(getattr(tag, "slug", ""))
-            for tag in (getattr(product, "tags", None) or [])
-        }
-        product_category = next(
-            (slug for slug in cls.PRODUCT_CATEGORY_SLUGS if slug in tag_slugs),
-            "wall",
-        )
-        category_rates = [
-            rate
-            for rate in rates
-            if cls._category_matches_rate(rate.category, product_category)
-        ]
-        if not category_rates:
-            return None
-
-        for rate in category_rates:
-            power_range = cls._normalize(rate.power_range)
-            if power_range == "all":
-                return rate
-            rate_slugs = {item.strip() for item in power_range.split(",") if item.strip()}
-            if rate_slugs & tag_slugs:
-                return rate
-
-        product_area = area_from_specs(product.specs)
-        if product_area is not None:
-            area_rates = sorted(
-                (
-                    (rate, max_area)
-                    for rate in category_rates
-                    if (max_area := cls._area_range_max(rate.power_range)) is not None
-                ),
-                key=lambda item: item[1],
-            )
-            if area_rates:
-                return next(
-                    (rate for rate, max_area in area_rates if product_area <= max_area),
-                    area_rates[-1][0],
-                )
-        return None
+        return cls.resolve_product_rate(product, rates).rate
 
     @classmethod
     async def _bundle_discount(cls, session: AsyncSession) -> int:
@@ -310,8 +351,11 @@ class InstallationPricingService:
                 )
 
             product = products.get(product_id) if product_id is not None else None
+            resolver_reason: str | None = None
             if product is not None:
-                rate = cls.match_product_rate(product, rates)
+                rate_match = cls.resolve_product_rate(product, rates)
+                rate = rate_match.rate
+                resolver_reason = rate_match.reason
                 if client_rate_id is not None and (
                     rate is None or int(rate.id) != client_rate_id
                 ):
@@ -331,7 +375,9 @@ class InstallationPricingService:
             client_hint = float(item.installation_price or 0)
 
             if rate is None or not rate.is_fixed:
-                reason = "no_matching_rate" if rate is None else "rate_requires_manual_quote"
+                reason = resolver_reason or (
+                    "no_matching_rate" if rate is None else "rate_requires_manual_quote"
+                )
                 snapshot = cls._snapshot_meta(
                     source=source,
                     rate=rate,

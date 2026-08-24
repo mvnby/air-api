@@ -67,7 +67,13 @@ async def _seed_checkout_pricing(session: AsyncSession):
         title="Canonical Product",
         slug="canonical-product",
         price=2000,
-        specs={"area_m2": 50},
+        product_kind="complete_split_system",
+        specs={
+            "type": "сплит-система",
+            "indoor_type": "настенный",
+            "capacity_cooling_kw": 5.3,
+            "area_m2": 50,
+        },
         is_published=True,
     )
     product.tags.append(wall)
@@ -351,3 +357,129 @@ async def test_non_fixed_service_rate_creates_manual_quote_without_client_price(
     assert priced_items[0]["installation_options"] == []
     assert priced_items[0]["installation_meta"]["pricing_status"] == "manual_quote"
     assert priced_items[0]["installation_meta"]["requires_manager_quote"] is True
+    assert (
+        priced_items[0]["installation_meta"]["pricing_breakdown"]["reason"]
+        == "rate_requires_manual_quote"
+    )
+
+
+def _matching_rate(
+    category: str,
+    power_range: str = "All",
+    *,
+    is_fixed: bool = True,
+) -> InstallationRate:
+    return InstallationRate(
+        category=category,
+        power_range=power_range,
+        base_price=1000,
+        extra_pipe_price=50,
+        included_pipe_meters=3,
+        is_fixed=is_fixed,
+    )
+
+
+@pytest.mark.asyncio
+async def test_manual_quote_snapshot_preserves_diagnostic_resolver_reasons(
+    sqlite_checkout_session,
+):
+    duct_tag = Tag(title="Канальный", slug="duct")
+    products = [
+        Product(
+            title="Separate indoor block",
+            slug="separate-indoor-block",
+            price=1000,
+            product_kind="indoor_unit",
+            specs={"indoor_type": "канальный"},
+            is_published=True,
+            tags=[duct_tag],
+        ),
+        Product(
+            title="Missing form factor",
+            slug="missing-form-factor",
+            price=1000,
+            product_kind="complete_split_system",
+            specs={"type": "сплит-система", "capacity_cooling_kw": 3.5},
+            is_published=True,
+        ),
+        Product(
+            title="Missing capacity",
+            slug="missing-capacity",
+            price=1000,
+            product_kind="complete_split_system",
+            specs={"type": "сплит-система", "indoor_type": "настенный", "area_m2": 111},
+            is_published=True,
+        ),
+        Product(
+            title="Unsupported column",
+            slug="unsupported-column",
+            price=1000,
+            product_kind="complete_split_system",
+            specs={"type": "сплит-система", "indoor_type": "колонный", "capacity_cooling_kw": 7.0},
+            is_published=True,
+        ),
+        Product(
+            title="Unknown equipment",
+            slug="unknown-equipment",
+            price=1000,
+            product_kind="unknown",
+            specs={},
+            is_published=True,
+        ),
+        Product(
+            title="Legacy combined quote",
+            slug="legacy-combined-quote",
+            price=1000,
+            product_kind="complete_split_system",
+            specs={"type": "сплит-система", "indoor_type": "кассетный"},
+            is_published=True,
+        ),
+    ]
+    sqlite_checkout_session.add_all(
+        [
+            *products,
+            _matching_rate("Wall", "07-12"),
+            _matching_rate("Duct"),
+            _matching_rate("Cassette/Ceiling", is_fixed=False),
+        ]
+    )
+    await sqlite_checkout_session.commit()
+    for product in products:
+        await sqlite_checkout_session.refresh(product)
+
+    payload = OrderPayload.model_validate(
+        {
+            "customer": {"name": "Reasons", "phone": "+375291112237"},
+            "items": [
+                {
+                    "product_id": product.id,
+                    "quantity": 1,
+                    "with_installation": True,
+                    "installation_meta": {"meters": 3},
+                }
+                for product in products
+            ],
+        }
+    )
+
+    priced_items = await InstallationPricingService.price_public_items(
+        sqlite_checkout_session,
+        payload.items,
+    )
+
+    assert [item["installation_price"] for item in priced_items] == [0, 0, 0, 0, 0, 0]
+    assert [
+        item["installation_meta"]["pricing_breakdown"]["reason"]
+        for item in priced_items
+    ] == [
+        "ineligible_product_kind",
+        "missing_equipment_type",
+        "missing_cooling_capacity",
+        "no_matching_rate",
+        "ineligible_product_kind",
+        "rate_requires_manual_quote",
+    ]
+    assert all(
+        item["installation_meta"]["pricing_status"] == "manual_quote"
+        for item in priced_items
+    )

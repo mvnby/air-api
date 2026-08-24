@@ -17,6 +17,7 @@ from schemas import (
     ManagerTariffServiceKind,
     ManagerTariffUpdatePayload,
 )
+from services.cooling_capacity import BTU_TO_KW_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +26,6 @@ class TariffsService:
     ROUTE_AWARE_SERVICE_KINDS = {
         ManagerTariffServiceKind.installation.value,
         ManagerTariffServiceKind.pre_install.value,
-    }
-
-    BTU_TO_KW_MAP = {
-        7: 2.1,
-        9: 2.6,
-        12: 3.5,
-        18: 5.3,
-        24: 7.0,
-        30: 8.8,
-        36: 10.5,
-        42: 12.3,
-        48: 14.0,
-        60: 17.6,
     }
 
     @staticmethod
@@ -67,9 +55,9 @@ class TariffsService:
             kw_value = max(numbers)
         else:
             mapped = [
-                TariffsService.BTU_TO_KW_MAP[int(round(number))]
+                BTU_TO_KW_MAP[int(round(number))]
                 for number in numbers
-                if int(round(number)) in TariffsService.BTU_TO_KW_MAP
+                if int(round(number)) in BTU_TO_KW_MAP
             ]
             if mapped:
                 kw_value = max(mapped)
