@@ -1,4 +1,4 @@
-import type { DashboardKpi, DashboardMarketing } from '../client';
+import type { DashboardKpi, DashboardMarketing, DashboardPeriod } from '../client';
 
 export type DashboardMode = 'manager' | 'owner';
 export type DashboardKpiKey = 'revenue' | 'new_leads' | 'sales' | 'installations' | 'active_tasks' | 'receivables';
@@ -45,6 +45,28 @@ export const formatDashboardCurrency = (value: number | null | undefined) => (
     : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'BYN', maximumFractionDigits: 0 }).format(value)
 );
 
+const inclusivePeriodEnd = (endExclusive: string) => new Date(new Date(endExclusive).getTime() - 1);
+const dashboardDateParts = (value: Date) => Object.fromEntries(
+  new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'Europe/Minsk',
+  }).formatToParts(value).map(part => [part.type, part.value]),
+);
+const formatPeriodRange = (start: string, endExclusive: string) => {
+  const startDate = new Date(start);
+  const endDate = inclusivePeriodEnd(endExclusive);
+  const startParts = dashboardDateParts(startDate);
+  const endParts = dashboardDateParts(endDate);
+  const dateFormatter = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', timeZone: 'Europe/Minsk' });
+  const endLabel = dateFormatter.format(endDate);
+  return startParts.month === endParts.month && startParts.year === endParts.year
+    ? `${Number(startParts.day)}–${endLabel}`
+    : `${dateFormatter.format(startDate)}–${endLabel}`;
+};
+
+export const formatDashboardComparisonPeriod = (period: DashboardPeriod) => (
+  `${formatPeriodRange(period.current.start, period.current.end)} · сравнение: ${formatPeriodRange(period.previous.start, period.previous.end)}`
+);
+
 export const formatDashboardKpi = (key: DashboardKpiKey, kpi: DashboardKpi) => (
   kpi.unit === 'byn' || key === 'revenue' || key === 'receivables'
     ? formatDashboardCurrency(kpi.current)
@@ -60,7 +82,7 @@ export const getDashboardTrend = (key: DashboardKpiKey, kpi: DashboardKpi): Dash
   if (kpi.trend === 'flat') return { label: 'Без изменений', tone: 'neutral' };
 
   const prefix = kpi.delta_pct > 0 ? '+' : '';
-  const label = `${prefix}${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(kpi.delta_pct)}% к прошлому месяцу`;
+  const label = `${prefix}${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(kpi.delta_pct)}% к тому же периоду`;
   if (key === 'receivables') {
     return { label, tone: kpi.trend === 'down' ? 'positive' : 'negative' };
   }
@@ -84,6 +106,7 @@ export const dashboardMarketingStatus = (marketing: Pick<DashboardMarketing, 'st
 };
 
 export const formatMarketingProvider = (provider: string | null | undefined) => {
+  if (provider === 'integrated') return 'Сводка по подключённым источникам';
   if (provider === 'yandex_metrika') return 'Яндекс Метрика';
   if (provider === 'yandex_direct') return 'Яндекс Директ';
   if (provider === 'google_analytics') return 'Google Analytics 4';

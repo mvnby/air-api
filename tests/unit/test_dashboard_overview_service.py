@@ -13,15 +13,15 @@ from services.dashboard_overview_service import (
 )
 
 
-def test_current_month_window_includes_previous_calendar_month():
+def test_current_month_window_compares_equal_month_to_date_ranges():
     window = current_month_window(
         datetime(2026, 1, 17, 12, 30, tzinfo=ZoneInfo("Europe/Minsk"))
     )
 
     assert window.current_start.isoformat() == "2026-01-01T00:00:00+03:00"
-    assert window.current_end.isoformat() == "2026-02-01T00:00:00+03:00"
+    assert window.current_end.isoformat() == "2026-01-18T00:00:00+03:00"
     assert window.previous_start.isoformat() == "2025-12-01T00:00:00+03:00"
-    assert window.previous_end == window.current_start
+    assert window.previous_end.isoformat() == "2025-12-18T00:00:00+03:00"
 
 
 @pytest.mark.parametrize(

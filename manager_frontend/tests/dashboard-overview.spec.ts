@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DashboardKpi } from '../src/client';
 import DashboardKpiCard from '../src/components/dashboard/DashboardKpiCard.vue';
+import DashboardFunnel from '../src/components/dashboard/DashboardFunnel.vue';
 import DashboardMarketing from '../src/components/dashboard/DashboardMarketing.vue';
 import DashboardSearchDemand from '../src/components/dashboard/DashboardSearchDemand.vue';
 import {
@@ -10,6 +11,7 @@ import {
   dashboardMarketingStatus,
   formatMarketingProvider,
   formatDurationSeconds,
+  formatDashboardComparisonPeriod,
   formatMarketingValue,
   formatSearchDemandProvider,
   getDashboardTrend,
@@ -39,6 +41,13 @@ describe('dashboard overview presentation rules', () => {
     expect(getDashboardTrend('active_tasks', kpi({ previous: null, delta_pct: null, trend: 'unavailable' }))).toEqual({
       label: 'Срез на сейчас', tone: 'neutral',
     });
+  });
+
+  it('labels the exact equal month-to-date comparison period', () => {
+    expect(formatDashboardComparisonPeriod({
+      current: { start: '2026-08-01T00:00:00+03:00', end: '2026-08-25T00:00:00+03:00' },
+      previous: { start: '2026-07-01T00:00:00+03:00', end: '2026-07-25T00:00:00+03:00' },
+    })).toBe('1–24 авг. · сравнение: 1–24 июл.');
   });
 
   it('does not describe receivables growth as positive', () => {
@@ -94,8 +103,60 @@ describe('dashboard overview presentation rules', () => {
     expect(wrapper.text()).toContain('Рекламные платформы');
     expect(wrapper.text()).toContain('Конверсии платформ');
     expect(wrapper.text()).toContain('Результат в CRM');
-    expect(wrapper.text()).toContain('CPL по CRM');
+    expect(wrapper.text()).toContain('Расход / CRM-лид');
+    expect(wrapper.text()).toContain('Расход / продажу');
+    expect(wrapper.text()).toContain('Без сквозной атрибуции');
     expect(formatMarketingProvider('google_ads')).toBe('Google Ads');
+    expect(formatMarketingProvider('integrated')).toBe('Сводка по подключённым источникам');
+  });
+
+  it('surfaces a partial integration outage and hides unconfigured provider noise', () => {
+    const wrapper = mount(DashboardMarketing, {
+      props: {
+        marketing: {
+          status: 'fresh', provider: 'integrated', sources: [], updated_at: '2026-08-24T10:00:00+03:00',
+          providers: [
+            { provider: 'yandex_metrika', status: 'error' },
+            { provider: 'google_analytics', status: 'fresh', sessions: 540 },
+            { provider: 'google_ads', status: 'unconfigured' },
+          ],
+        },
+      },
+    });
+    expect(wrapper.text()).toContain('Частично доступно');
+    expect(wrapper.text()).toContain('1 источник требует внимания');
+    expect(wrapper.text()).toContain('Обновлено 24 авг.');
+    expect(wrapper.get('a').attributes('href')).toBe('/manager/integrations');
+    expect(wrapper.text()).not.toContain('Google Ads');
+  });
+
+  it('keeps acquisition sources compact until the direct two-state toggle is used', async () => {
+    const wrapper = mount(DashboardMarketing, {
+      props: {
+        marketing: {
+          status: 'fresh', provider: 'integrated',
+          sources: Array.from({ length: 8 }, (_, index) => ({ name: `source-${index + 1}`, visits: 10, share_pct: 1 })),
+        },
+      },
+    });
+    expect(wrapper.text()).toContain('source-6');
+    expect(wrapper.text()).not.toContain('source-7');
+    await wrapper.get('button').trigger('click');
+    expect(wrapper.text()).toContain('source-8');
+    expect(wrapper.get('button').text()).toBe('Свернуть');
+  });
+
+  it('does not present a cross-period ratio above 100 percent as funnel conversion', () => {
+    const wrapper = mount(DashboardFunnel, {
+      props: {
+        stages: [
+          { stage: 'proposals', label: 'Предложения', current: 1, conversion_from_previous_pct: 50 },
+          { stage: 'sales', label: 'Продажи', current: 5, conversion_from_previous_pct: 500 },
+        ],
+      },
+    });
+    expect(wrapper.text()).toContain('Конверсия: не сопоставимо');
+    expect(wrapper.text()).not.toContain('500%');
   });
 
   it('shows provider-specific web analytics instead of advertising placeholders', () => {

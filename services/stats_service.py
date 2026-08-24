@@ -60,7 +60,7 @@ class StatsService:
         # Find orders with next_followup_date <= 7 days from now, not in closed statuses
         end_of_window = now + timedelta(days=7)
         
-        touchpoints_stmt = (
+        touchpoints_base = (
             select(Order)
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .options(selectinload(Order.customer))
@@ -68,14 +68,27 @@ class StatsService:
                 order_scope,
                 order_customer_scope,
                 Order.next_followup_date.is_not(None),
-                Order.next_followup_date <= end_of_window,
                 Order.status != OrderStatus.CLOSED
+            )
+        )
+        overdue_touchpoints_stmt = (
+            touchpoints_base
+            .where(Order.next_followup_date < now)
+            .order_by(Order.next_followup_date.asc())
+            .limit(5)
+        )
+        upcoming_touchpoints_stmt = (
+            touchpoints_base
+            .where(
+                Order.next_followup_date >= now,
+                Order.next_followup_date <= end_of_window,
             )
             .order_by(Order.next_followup_date.asc())
             .limit(5)
         )
-        touchpoints_result = await session.execute(touchpoints_stmt)
-        orders = touchpoints_result.scalars().all()
+        overdue_orders = (await session.execute(overdue_touchpoints_stmt)).scalars().all()
+        upcoming_orders = (await session.execute(upcoming_touchpoints_stmt)).scalars().all()
+        orders = [*overdue_orders, *upcoming_orders]
 
         touchpoints = []
         for order in orders:
@@ -92,20 +105,33 @@ class StatsService:
                 )
             )
 
-        contracts_stmt = (
+        contracts_base = (
             select(CustomerContract)
             .join(Customer, Customer.id == CustomerContract.customer_id)
             .options(selectinload(CustomerContract.customer))
             .where(
                 tenant_scope_clause(Customer, tenant_scope),
                 CustomerContract.status == "active",
+            )
+        )
+        overdue_contracts_stmt = (
+            contracts_base
+            .where(CustomerContract.valid_until < now)
+            .order_by(CustomerContract.valid_until.asc())
+            .limit(5)
+        )
+        upcoming_contracts_stmt = (
+            contracts_base
+            .where(
+                CustomerContract.valid_until >= now,
                 CustomerContract.valid_until <= end_of_window,
             )
             .order_by(CustomerContract.valid_until.asc())
-            .limit(10)
+            .limit(5)
         )
-        contracts_result = await session.execute(contracts_stmt)
-        contracts = contracts_result.scalars().all()
+        overdue_contracts = (await session.execute(overdue_contracts_stmt)).scalars().all()
+        upcoming_contracts = (await session.execute(upcoming_contracts_stmt)).scalars().all()
+        contracts = [*overdue_contracts, *upcoming_contracts]
         expiring_contracts = [
             DashboardContractExpiry(
                 contract_id=int(contract.id or 0),
