@@ -18241,6 +18241,286 @@
         }
       }
     },
+    "/api/manager/installation-discounts": {
+      "get": {
+        "tags": [
+          "manager/installation-discounts"
+        ],
+        "summary": "List Manager Installation Discount Rules",
+        "operationId": "list_manager_installation_discount_rules",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationDiscountRuleListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/installation-discounts/products/search": {
+      "get": {
+        "tags": [
+          "manager/installation-discounts"
+        ],
+        "summary": "Search Manager Installation Discount Products",
+        "operationId": "search_manager_installation_discount_products",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationDiscountProductSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/installation-discounts/policy": {
+      "put": {
+        "tags": [
+          "manager/installation-discounts"
+        ],
+        "summary": "Update Manager Installation Discount Policy",
+        "operationId": "update_manager_installation_discount_policy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallationDiscountPolicyUpdatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationDiscountPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/installation-discounts/products/{product_id}": {
+      "put": {
+        "tags": [
+          "manager/installation-discounts"
+        ],
+        "summary": "Upsert Manager Installation Discount Rule",
+        "operationId": "upsert_manager_installation_discount_rule",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallationDiscountRuleUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationDiscountProductResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager/installation-discounts"
+        ],
+        "summary": "Delete Manager Installation Discount Rule",
+        "operationId": "delete_manager_installation_discount_rule",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tariffs": {
       "get": {
         "tags": [
@@ -40091,6 +40371,220 @@
         ],
         "title": "ManagerInstallEstimateSavePayload"
       },
+      "ManagerInstallationDiscountPolicyResponse": {
+        "properties": {
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled"
+          },
+          "default_discount": {
+            "type": "integer",
+            "title": "Default Discount"
+          },
+          "minimum_margin": {
+            "type": "integer",
+            "title": "Minimum Margin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_enabled",
+          "default_discount",
+          "minimum_margin"
+        ],
+        "title": "ManagerInstallationDiscountPolicyResponse"
+      },
+      "ManagerInstallationDiscountPolicyUpdatePayload": {
+        "properties": {
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled"
+          },
+          "default_discount": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Default Discount"
+          },
+          "minimum_margin": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Minimum Margin"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_enabled",
+          "default_discount",
+          "minimum_margin"
+        ],
+        "title": "ManagerInstallationDiscountPolicyUpdatePayload"
+      },
+      "ManagerInstallationDiscountProductResponse": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "retail_price": {
+            "type": "integer",
+            "title": "Retail Price"
+          },
+          "purchase_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Cost"
+          },
+          "margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin"
+          },
+          "configured_discount": {
+            "type": "integer",
+            "title": "Configured Discount"
+          },
+          "applied_discount": {
+            "type": "integer",
+            "title": "Applied Discount"
+          },
+          "has_override": {
+            "type": "boolean",
+            "title": "Has Override"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManagerInstallationDiscountStatus"
+          },
+          "status_note": {
+            "type": "string",
+            "title": "Status Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "title",
+          "slug",
+          "retail_price",
+          "configured_discount",
+          "applied_discount",
+          "has_override",
+          "status",
+          "status_note"
+        ],
+        "title": "ManagerInstallationDiscountProductResponse"
+      },
+      "ManagerInstallationDiscountProductSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationDiscountProductResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerInstallationDiscountProductSearchResponse"
+      },
+      "ManagerInstallationDiscountRuleListResponse": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/ManagerInstallationDiscountPolicyResponse"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationDiscountProductResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policy",
+          "items",
+          "page",
+          "limit",
+          "total"
+        ],
+        "title": "ManagerInstallationDiscountRuleListResponse"
+      },
+      "ManagerInstallationDiscountRuleUpdatePayload": {
+        "properties": {
+          "discount_amount": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Discount Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "discount_amount"
+        ],
+        "title": "ManagerInstallationDiscountRuleUpdatePayload"
+      },
+      "ManagerInstallationDiscountStatus": {
+        "type": "string",
+        "enum": [
+          "legacy",
+          "active",
+          "disabled",
+          "blocked_low_margin",
+          "blocked_missing_cost"
+        ],
+        "title": "ManagerInstallationDiscountStatus"
+      },
       "ManagerInstallationRateListResponse": {
         "properties": {
           "items": {
@@ -54843,6 +55337,11 @@
             "format": "date-time",
             "title": "Created At"
           },
+          "installation_discount": {
+            "type": "integer",
+            "title": "Installation Discount",
+            "default": 0
+          },
           "vitebsk_qty": {
             "type": "integer",
             "title": "Vitebsk Qty",
@@ -56398,6 +56897,11 @@
               }
             ],
             "title": "Old Price"
+          },
+          "installation_discount": {
+            "type": "integer",
+            "title": "Installation Discount",
+            "default": 0
           },
           "product_kind": {
             "type": "string",

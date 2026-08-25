@@ -7,6 +7,7 @@ from sqlmodel import SQLModel, select
 
 from models import (
     GlobalConfig,
+    InstallationDiscountPolicy,
     InstallationRate,
     Order,
     OrderProductLink,
@@ -22,16 +23,22 @@ from services.installation_pricing_service import (
     InstallationPricingError,
     InstallationPricingService,
 )
+from services.order_product_link_command import OrderProductCatalogSnapshot
+from services.product_supply_metrics_service import ProductSupplyMetricsService
 from services.website_order_service import WebsiteOrderService
 
 
 @pytest.fixture
 async def sqlite_checkout_session(tmp_path: Path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'checkout-pricing.db'}")
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'checkout-pricing.db'}"
+    )
     async with engine.begin() as connection:
         await connection.run_sync(SQLModel.metadata.create_all)
 
-    session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
     async with session_factory() as session:
         session.add(
             Tenant(
@@ -118,7 +125,14 @@ async def _seed_checkout_pricing(session: AsyncSession):
         base_price=10,
     )
     session.add(product)
-    session.add_all([*rates, option, inactive_option, GlobalConfig(key="install_discount", value="100")])
+    session.add_all(
+        [
+            *rates,
+            option,
+            inactive_option,
+            GlobalConfig(key="install_discount", value="100"),
+        ]
+    )
     await session.commit()
     await session.refresh(product)
     for rate in rates:
@@ -127,7 +141,9 @@ async def _seed_checkout_pricing(session: AsyncSession):
     return product, rates, option
 
 
-def _product_checkout_payload(*, product_id: int, rate_id: int | None, quote_hint: float) -> OrderPayload:
+def _product_checkout_payload(
+    *, product_id: int, rate_id: int | None, quote_hint: float
+) -> OrderPayload:
     return OrderPayload.model_validate(
         {
             "customer": {
@@ -189,13 +205,18 @@ async def test_public_product_installation_uses_server_rate_discount_and_meters(
             await sqlite_checkout_session.execute(
                 select(OrderServiceLink).where(OrderServiceLink.order_id == response.id)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
     # 750 base + 2 extra meters * 65 - 100 bundle discount + 50 option.
     assert product_link.installation_price == 830
     assert product_link.installation_details["installation_rate_id"] == matching_rate.id
-    assert product_link.installation_details["pricing_version"] == "installation-v1"
+    assert (
+        product_link.installation_details["pricing_version"]
+        == "installation-v1-discount-v1"
+    )
     assert product_link.installation_details["type"] == "Wall"
     assert product_link.installation_details["power_range"] == "18-24"
     assert product_link.installation_details["pricing_breakdown"] == {
@@ -207,6 +228,19 @@ async def test_public_product_installation_uses_server_rate_discount_and_meters(
         "extra_meter_unit_price": 65,
         "extra_meters_price": 130,
         "bundle_discount": 100,
+        "discount_policy": {
+            "policy_version": "installation-discount-v1",
+            "source": "legacy_global",
+            "status": "legacy",
+            "reason": "margin_policy_disabled",
+            "effective_product_price": 2000,
+            "purchase_cost": None,
+            "product_margin": None,
+            "minimum_margin": 350,
+            "configured_discount": 100,
+            "applied_discount": 100,
+            "capped_by_installation_subtotal": False,
+        },
         "options": [
             {
                 "service_id": _option.id,
@@ -262,16 +296,110 @@ async def test_service_only_installation_uses_selected_server_rate_without_bundl
             await sqlite_checkout_session.execute(
                 select(OrderServiceLink).where(OrderServiceLink.order_id == response.id)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
     assert sorted(link.price for link in service_links) == [50, 650]
     assert response.total_amount == 700
     order = await sqlite_checkout_session.get(Order, response.id)
-    assert order.technical_meta["public_installation_pricing"]["pricing_version"] == "installation-v1"
-    snapshot = order.technical_meta["public_installation_pricing"]["items"][0]["installation_meta"]
+    assert (
+        order.technical_meta["public_installation_pricing"]["pricing_version"]
+        == "installation-v1-discount-v1"
+    )
+    snapshot = order.technical_meta["public_installation_pricing"]["items"][0][
+        "installation_meta"
+    ]
     assert snapshot["pricing_breakdown"]["bundle_discount"] == 0
+    assert snapshot["pricing_breakdown"]["discount_policy"] is None
     assert snapshot["pricing_breakdown"]["total"] == 700
+
+
+@pytest.mark.asyncio
+async def test_active_discount_policy_uses_storefront_price_and_snapshots_decision(
+    sqlite_checkout_session,
+    monkeypatch,
+):
+    product, rates, _option = await _seed_checkout_pricing(sqlite_checkout_session)
+    sqlite_checkout_session.add(
+        InstallationDiscountPolicy(
+            id=1,
+            is_enabled=True,
+            default_discount=100,
+            minimum_margin=350,
+        )
+    )
+    await sqlite_checkout_session.commit()
+
+    async def fake_metrics(_session, products):
+        assert [int(item.id) for item in products] == [int(product.id)]
+        return {int(product.id): {"min_cost_byn": 1_500}}
+
+    monkeypatch.setattr(
+        ProductSupplyMetricsService,
+        "compute_for_products",
+        fake_metrics,
+    )
+    payload = _product_checkout_payload(
+        product_id=int(product.id),
+        rate_id=int(rates[1].id),
+        quote_hint=0,
+    )
+    low_price_snapshot = OrderProductCatalogSnapshot(
+        product_id=int(product.id),
+        title=product.title,
+        unit_price=1_800,
+        currency="BYN",
+        pricing_source="tenant_offer",
+    )
+
+    blocked = await InstallationPricingService.price_public_items(
+        sqlite_checkout_session,
+        payload.items,
+        catalog_snapshots={int(product.id): low_price_snapshot},
+    )
+
+    assert blocked[0]["installation_price"] == 930
+    blocked_breakdown = blocked[0]["installation_meta"]["pricing_breakdown"]
+    assert blocked_breakdown["bundle_discount"] == 0
+    assert blocked_breakdown["discount_policy"] == {
+        "policy_version": "installation-discount-v1",
+        "source": "default",
+        "status": "blocked_low_margin",
+        "reason": "margin_below_threshold",
+        "effective_product_price": 1800,
+        "purchase_cost": 1500.0,
+        "product_margin": 300.0,
+        "minimum_margin": 350,
+        "configured_discount": 100,
+        "applied_discount": 0,
+        "capped_by_installation_subtotal": False,
+    }
+
+    canonical_price_snapshot = OrderProductCatalogSnapshot(
+        product_id=int(product.id),
+        title=product.title,
+        unit_price=2_000,
+        currency="BYN",
+        pricing_source="shared_product",
+    )
+    eligible = await InstallationPricingService.price_public_items(
+        sqlite_checkout_session,
+        payload.items,
+        catalog_snapshots={int(product.id): canonical_price_snapshot},
+    )
+
+    assert eligible[0]["installation_price"] == 830
+    assert (
+        eligible[0]["installation_meta"]["pricing_breakdown"]["bundle_discount"] == 100
+    )
+    assert (
+        eligible[0]["installation_meta"]["pricing_breakdown"]["discount_policy"][
+            "status"
+        ]
+        == "active"
+    )
 
 
 @pytest.mark.asyncio
@@ -307,7 +435,9 @@ async def test_public_installation_rejects_unknown_rate_or_option(
     )
 
     with pytest.raises(InstallationPricingError) as exc_info:
-        await InstallationPricingService.price_public_items(sqlite_checkout_session, payload.items)
+        await InstallationPricingService.price_public_items(
+            sqlite_checkout_session, payload.items
+        )
 
     assert exc_info.value.code == expected_code
 
@@ -322,7 +452,9 @@ async def test_product_rejects_existing_but_inapplicable_rate(sqlite_checkout_se
     )
 
     with pytest.raises(InstallationPricingError) as exc_info:
-        await InstallationPricingService.price_public_items(sqlite_checkout_session, payload.items)
+        await InstallationPricingService.price_public_items(
+            sqlite_checkout_session, payload.items
+        )
 
     assert exc_info.value.code == "installation_rate_mismatch"
 
@@ -415,7 +547,11 @@ async def test_manual_quote_snapshot_preserves_diagnostic_resolver_reasons(
             slug="unsupported-column",
             price=1000,
             product_kind="complete_split_system",
-            specs={"type": "сплит-система", "indoor_type": "колонный", "capacity_cooling_kw": 7.0},
+            specs={
+                "type": "сплит-система",
+                "indoor_type": "колонный",
+                "capacity_cooling_kw": 7.0,
+            },
             is_published=True,
         ),
         Product(

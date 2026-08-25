@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, inspect, text
 from tests.unit.alembic_chain_test_support import assert_revision_in_single_head_chain
 
 
-REVISION = "d4e5f6a7b8c9"
+HEAD_REVISION = "e5f6a7b8c9d0"
 
 
 def _migration():
@@ -26,7 +26,10 @@ def _migration():
 
 def test_analytics_connection_is_single_alembic_head() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert (
+        assert_revision_in_single_head_chain(scripts, "e3c4d5e6f7a8")
+        == HEAD_REVISION
+    )
 
 
 def test_upgrade_creates_encrypted_storefront_connection_table() -> None:

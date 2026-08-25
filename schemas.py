@@ -447,6 +447,7 @@ class ProductSeriesNavigationResponse(BaseModel):
 
 
 class ProductResponse(ProductBase):
+    installation_discount: int = 0
     vitebsk_qty: int = 0
     minsk_qty: int = 0
     availability_status: Optional[str] = None

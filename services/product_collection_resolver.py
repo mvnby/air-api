@@ -10,6 +10,7 @@ from crud.public_catalog import PublicCatalogDAO
 from models import ProductCollection
 from models.tenancy import TenantScope
 from services.feature_resolver_service import FeatureResolverService
+from services.installation_discount_service import InstallationDiscountService
 from services.product_collection_eligibility import ProductCollectionEligibility
 from services.product_collection_rule_matcher import ProductCollectionRuleMatcher
 from services.product_collection_rule_policy import ProductCollectionRulePolicy
@@ -112,14 +113,19 @@ class ProductCollectionResolver:
                 PublicCatalogVisibilityService.project_product(product)
                 for product in products
             ]
-        product_map = {
-            int(projection.product.id): projection
-            for projection in projections
-        }
         products = [projection.product for projection in projections]
         if products:
             await FeatureResolverService.resolve_for_products(session, products)
         supply_metrics = await ProductReadService.get_supply_metrics_map(session, products)
+        projections = await InstallationDiscountService.decorate_public_projections(
+            session,
+            projections,
+            supply_metrics=supply_metrics,
+        )
+        product_map = {
+            int(projection.product.id): projection
+            for projection in projections
+        }
 
         selected: list[dict] = []
         excluded: list[dict] = []
@@ -221,6 +227,13 @@ class ProductCollectionResolver:
             automatic_metrics = await ProductReadService.get_supply_metrics_map(
                 session,
                 automatic_products,
+            )
+            automatic_projections = (
+                await InstallationDiscountService.decorate_public_projections(
+                    session,
+                    automatic_projections,
+                    supply_metrics=automatic_metrics,
+                )
             )
             selected_ids = {
                 int(item["product"].id)

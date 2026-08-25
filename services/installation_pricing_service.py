@@ -5,24 +5,31 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import GlobalConfig, InstallationRate, Product, Service
+from models import InstallationRate, Product, Service
 from services.cooling_capacity import power_range_capacity_bounds
+from services.installation_discount_service import (
+    InstallationDiscountDecision,
+    InstallationDiscountService,
+)
 from services.installation_product_profile import (
     InstallationProductProfile,
     build_installation_product_profile,
 )
+from services.order_product_link_command import OrderProductCatalogSnapshot
 
 logger = logging.getLogger(__name__)
 
 
 class InstallationPricingError(ValueError):
-    def __init__(self, message: str, *, code: str = "installation_pricing_invalid") -> None:
+    def __init__(
+        self, message: str, *, code: str = "installation_pricing_invalid"
+    ) -> None:
         super().__init__(message)
         self.code = code
 
@@ -35,10 +42,9 @@ class InstallationRateMatch:
 
 
 class InstallationPricingService:
-    PRICING_VERSION = "installation-v1"
-    BUNDLE_DISCOUNT_CONFIG_KEY = "install_discount"
-    MAX_BUNDLE_DISCOUNT = 10_000
+    PRICING_VERSION = "installation-v1-discount-v1"
     DEFAULT_METERS = 3.0
+
     @staticmethod
     def _normalize(value: Any) -> str:
         return str(value or "").strip().lower()
@@ -97,12 +103,15 @@ class InstallationPricingService:
     ) -> InstallationRateMatch:
         profile = build_installation_product_profile(product)
         if not profile.eligible or profile.equipment_category is None:
-            return InstallationRateMatch(rate=None, profile=profile, reason=profile.reason)
+            return InstallationRateMatch(
+                rate=None, profile=profile, reason=profile.reason
+            )
 
         category_rates = [
             rate
             for rate in rates
-            if cls._normalized_rate_category(rate.category) == profile.equipment_category
+            if cls._normalized_rate_category(rate.category)
+            == profile.equipment_category
         ]
         rate = cls._select_rate(
             category_rates,
@@ -137,7 +146,9 @@ class InstallationPricingService:
                     profile=profile,
                     reason="missing_cooling_capacity",
                 )
-        return InstallationRateMatch(rate=None, profile=profile, reason="no_matching_rate")
+        return InstallationRateMatch(
+            rate=None, profile=profile, reason="no_matching_rate"
+        )
 
     @classmethod
     def match_product_rate(
@@ -146,31 +157,6 @@ class InstallationPricingService:
         rates: Sequence[InstallationRate],
     ) -> InstallationRate | None:
         return cls.resolve_product_rate(product, rates).rate
-
-    @classmethod
-    async def _bundle_discount(cls, session: AsyncSession) -> int:
-        result = await session.execute(
-            select(GlobalConfig).where(GlobalConfig.key == cls.BUNDLE_DISCOUNT_CONFIG_KEY)
-        )
-        config = result.scalar_one_or_none()
-        if config is None:
-            return 0
-        try:
-            discount = int(str(config.value).strip())
-        except (TypeError, ValueError):
-            logger.warning(
-                "PUBLIC_INSTALLATION_CONFIG_INVALID key=%s",
-                cls.BUNDLE_DISCOUNT_CONFIG_KEY,
-            )
-            return 0
-        if not 0 <= discount <= cls.MAX_BUNDLE_DISCOUNT:
-            logger.warning(
-                "PUBLIC_INSTALLATION_CONFIG_OUT_OF_RANGE key=%s value=%s",
-                cls.BUNDLE_DISCOUNT_CONFIG_KEY,
-                discount,
-            )
-            return 0
-        return discount
 
     @staticmethod
     def _option_snapshot(option: Service) -> dict[str, Any]:
@@ -195,6 +181,7 @@ class InstallationPricingService:
         extra_meters: float,
         extra_meters_price: int,
         bundle_discount: int,
+        discount_policy: dict[str, object] | None,
         options_total: int,
         total: int,
     ) -> dict[str, Any]:
@@ -204,7 +191,9 @@ class InstallationPricingService:
             "type": rate.category if rate else "General",
             "power_range": rate.power_range if rate else "",
             "meters": normalized_meters,
-            "installation_rate_id": int(rate.id) if rate and rate.id is not None else None,
+            "installation_rate_id": int(rate.id)
+            if rate and rate.id is not None
+            else None,
             "pricing_version": cls.PRICING_VERSION,
             "pricing_status": status,
             "requires_manager_quote": status != "fixed",
@@ -217,6 +206,7 @@ class InstallationPricingService:
                 "extra_meter_unit_price": int(rate.extra_pipe_price) if rate else 0,
                 "extra_meters_price": extra_meters_price,
                 "bundle_discount": bundle_discount,
+                "discount_policy": discount_policy,
                 "options": [cls._option_snapshot(option) for option in options],
                 "options_total": options_total,
                 "total": total,
@@ -247,9 +237,12 @@ class InstallationPricingService:
         cls,
         session: AsyncSession,
         items: Sequence[Any],
+        catalog_snapshots: Mapping[int, OrderProductCatalogSnapshot] | None = None,
     ) -> list[dict[str, Any]]:
         has_installation = any(item.with_installation for item in items)
-        product_ids = {int(item.product_id) for item in items if item.product_id is not None}
+        product_ids = {
+            int(item.product_id) for item in items if item.product_id is not None
+        }
         products: dict[int, Product] = {}
         if product_ids:
             result = await session.execute(
@@ -276,7 +269,9 @@ class InstallationPricingService:
 
         rates: list[InstallationRate] = []
         if has_installation:
-            rates_result = await session.execute(select(InstallationRate).order_by(InstallationRate.id))
+            rates_result = await session.execute(
+                select(InstallationRate).order_by(InstallationRate.id)
+            )
             rates = list(rates_result.scalars().all())
         rates_by_id = {int(rate.id): rate for rate in rates if rate.id is not None}
 
@@ -302,17 +297,22 @@ class InstallationPricingService:
                 )
             )
             options_by_slug = {
-                option.slug: option
-                for option in options_result.scalars().all()
+                option.slug: option for option in options_result.scalars().all()
             }
-            unknown_options = sorted(set(requested_option_slugs) - options_by_slug.keys())
+            unknown_options = sorted(
+                set(requested_option_slugs) - options_by_slug.keys()
+            )
             if unknown_options:
                 raise InstallationPricingError(
                     f"Неизвестная или недоступная опция монтажа: {unknown_options[0]}",
                     code="installation_option_not_available",
                 )
             invalid_option = next(
-                (option for option in options_by_slug.values() if int(option.base_price) < 0),
+                (
+                    option
+                    for option in options_by_slug.values()
+                    if int(option.base_price) < 0
+                ),
                 None,
             )
             if invalid_option is not None:
@@ -322,10 +322,23 @@ class InstallationPricingService:
                 )
 
         has_product_installation = any(
-            item.with_installation and item.product_id is not None
-            for item in items
+            item.with_installation and item.product_id is not None for item in items
         )
-        bundle_discount = await cls._bundle_discount(session) if has_product_installation else 0
+        discount_decisions: dict[int, InstallationDiscountDecision] = {}
+        if has_product_installation:
+            effective_prices = {
+                product_id: (
+                    int(catalog_snapshots[product_id].unit_price)
+                    if catalog_snapshots is not None
+                    else int(products[product_id].price)
+                )
+                for product_id in product_ids
+            }
+            discount_decisions = await InstallationDiscountService.resolve_for_products(
+                session,
+                products=list(products.values()),
+                effective_prices=effective_prices,
+            )
         priced_items: list[dict[str, Any]] = []
 
         for item in items:
@@ -343,7 +356,9 @@ class InstallationPricingService:
                 priced_items.append(priced_item)
                 continue
 
-            client_rate_id = int(item.installation_rate_id) if item.installation_rate_id else None
+            client_rate_id = (
+                int(item.installation_rate_id) if item.installation_rate_id else None
+            )
             if client_rate_id is not None and client_rate_id not in rates_by_id:
                 raise InstallationPricingError(
                     f"Неизвестный тариф монтажа #{client_rate_id}",
@@ -364,7 +379,11 @@ class InstallationPricingService:
                         code="installation_rate_mismatch",
                     )
             else:
-                rate = rates_by_id.get(client_rate_id) if client_rate_id is not None else None
+                rate = (
+                    rates_by_id.get(client_rate_id)
+                    if client_rate_id is not None
+                    else None
+                )
 
             meta = item.installation_meta
             meters = float(meta.meters if meta is not None else cls.DEFAULT_METERS)
@@ -389,6 +408,7 @@ class InstallationPricingService:
                     extra_meters=0,
                     extra_meters_price=0,
                     bundle_discount=0,
+                    discount_policy=None,
                     options_total=option_total,
                     total=0,
                 )
@@ -416,7 +436,28 @@ class InstallationPricingService:
 
             extra_meters = max(0.0, meters - included_meters)
             extra_meters_price = int(round(extra_meters * extra_meter_price))
-            discount = min(bundle_discount, base_price + extra_meters_price) if product else 0
+            discount_decision = (
+                discount_decisions.get(product_id) if product_id is not None else None
+            )
+            discount = (
+                min(
+                    discount_decision.applied_discount,
+                    base_price + extra_meters_price,
+                )
+                if discount_decision is not None
+                else 0
+            )
+            discount_policy = (
+                {
+                    **discount_decision.snapshot(),
+                    "applied_discount": discount,
+                    "capped_by_installation_subtotal": (
+                        discount < discount_decision.applied_discount
+                    ),
+                }
+                if discount_decision is not None
+                else None
+            )
             server_total = base_price + extra_meters_price - discount + option_total
             snapshot = cls._snapshot_meta(
                 source=source,
@@ -429,6 +470,7 @@ class InstallationPricingService:
                 extra_meters=extra_meters,
                 extra_meters_price=extra_meters_price,
                 bundle_discount=discount,
+                discount_policy=discount_policy,
                 options_total=option_total,
                 total=server_total,
             )

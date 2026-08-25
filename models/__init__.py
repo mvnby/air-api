@@ -42,6 +42,10 @@ from .communication_runtime import (
     CommunicationWebsiteCanaryRun,
 )
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
+from .installation_discount import (
+    InstallationDiscountPolicy,
+    InstallationDiscountProductRule,
+)
 from .media import MediaAsset, MediaProcessingJob
 from .service_asset import (
     EquipmentAttachmentLink,
@@ -162,6 +166,8 @@ __all__ = [
     "InstallationRate",
     "IntegrationOutboxEvent",
     "ImportMediaCache",
+    "InstallationDiscountPolicy",
+    "InstallationDiscountProductRule",
     "Installer",
     "Lead",
     "LeadIntakeSource",

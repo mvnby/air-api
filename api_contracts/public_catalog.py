@@ -19,6 +19,7 @@ class PublicProductSearchItemResponse(BaseModel):
     slug: str | None = None
     price: int
     old_price: int | None = None
+    installation_discount: int = 0
     product_kind: ProductKind = "unknown"
     is_inverter: bool
     power_cooling: float | None = None

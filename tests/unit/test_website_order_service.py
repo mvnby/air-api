@@ -56,7 +56,8 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
         captured_event["session"] = event_session
         captured_event.update(kwargs)
 
-    async def fake_price_items(_session, items):
+    async def fake_price_items(_session, items, *, catalog_snapshots):
+        assert catalog_snapshots[7].unit_price == 3000
         return [item.model_dump() for item in items]
 
     async def fake_checkout_snapshots(_session, *, tenant_scope, product_ids):
@@ -73,7 +74,9 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
         }
 
     monkeypatch.setattr(OrderService, "create_from_website", fake_create_from_website)
-    monkeypatch.setattr(InstallationPricingService, "price_public_items", fake_price_items)
+    monkeypatch.setattr(
+        InstallationPricingService, "price_public_items", fake_price_items
+    )
     monkeypatch.setattr(
         PublicCatalogVisibilityService,
         "get_checkout_snapshots",
@@ -134,7 +137,7 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
                 "currency_snapshot": "BYN",
                 "source": "shared_product",
             }
-        ]
+        ],
     }
     assert captured_kwargs["tenant_scope"] == tenant_scope
     assert captured_kwargs["commit"] is False
@@ -195,7 +198,9 @@ async def test_website_checkout_replay_does_not_repeat_mutation_or_enqueue(
 
 
 @pytest.mark.asyncio
-async def test_unoffered_checkout_fails_before_order_mutation(monkeypatch, tenant_scope):
+async def test_unoffered_checkout_fails_before_order_mutation(
+    monkeypatch, tenant_scope
+):
     mutation_calls = 0
     pricing_calls = 0
 

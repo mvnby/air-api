@@ -108,6 +108,7 @@ class WebsiteOrderService:
         items = await InstallationPricingService.price_public_items(
             session,
             payload.items,
+            catalog_snapshots=storefront_snapshots,
         )
         pricing_snapshots = [
             {

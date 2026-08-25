@@ -26,6 +26,7 @@ class PublicProductProjection:
     price: int
     old_price: int | None
     disclosure_policy: PublicCatalogDisclosurePolicy
+    installation_discount: int = 0
 
     @property
     def pricing(self) -> tuple[int, int | None]:
