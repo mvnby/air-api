@@ -18158,6 +18158,89 @@
         }
       }
     },
+    "/api/manager/installation-rates": {
+      "get": {
+        "tags": [
+          "manager/installation-rates"
+        ],
+        "summary": "List Manager Installation Rates",
+        "operationId": "list_manager_installation_rates",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationRateListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/installation-rates/{rate_id}": {
+      "put": {
+        "tags": [
+          "manager/installation-rates"
+        ],
+        "summary": "Update Manager Installation Rate",
+        "operationId": "update_manager_installation_rate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallationRateUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationRateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tariffs": {
       "get": {
         "tags": [
@@ -40007,6 +40090,151 @@
           "tariff_id"
         ],
         "title": "ManagerInstallEstimateSavePayload"
+      },
+      "ManagerInstallationRateListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationRateResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerInstallationRateListResponse"
+      },
+      "ManagerInstallationRateResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "power_range": {
+            "type": "string",
+            "title": "Power Range"
+          },
+          "base_price": {
+            "type": "integer",
+            "title": "Base Price"
+          },
+          "extra_pipe_price": {
+            "type": "integer",
+            "title": "Extra Pipe Price"
+          },
+          "included_pipe_meters": {
+            "type": "integer",
+            "title": "Included Pipe Meters"
+          },
+          "is_fixed": {
+            "type": "boolean",
+            "title": "Is Fixed"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "equipment_label": {
+            "type": "string",
+            "title": "Equipment Label"
+          },
+          "power_label": {
+            "type": "string",
+            "title": "Power Label"
+          },
+          "selection_status": {
+            "$ref": "#/components/schemas/ManagerInstallationRateSelectionStatus"
+          },
+          "selection_note": {
+            "type": "string",
+            "title": "Selection Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "power_range",
+          "base_price",
+          "extra_pipe_price",
+          "included_pipe_meters",
+          "is_fixed",
+          "title",
+          "equipment_label",
+          "power_label",
+          "selection_status",
+          "selection_note"
+        ],
+        "title": "ManagerInstallationRateResponse",
+        "description": "A public checkout rate with read-only resolver presentation metadata."
+      },
+      "ManagerInstallationRateSelectionStatus": {
+        "type": "string",
+        "enum": [
+          "automatic_fixed",
+          "matched_manual_quote",
+          "legacy_manual_quote",
+          "unsupported"
+        ],
+        "title": "ManagerInstallationRateSelectionStatus"
+      },
+      "ManagerInstallationRateUpdatePayload": {
+        "properties": {
+          "base_price": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Price"
+          },
+          "extra_pipe_price": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Extra Pipe Price"
+          },
+          "included_pipe_meters": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Included Pipe Meters"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_price",
+          "extra_pipe_price",
+          "included_pipe_meters"
+        ],
+        "title": "ManagerInstallationRateUpdatePayload",
+        "description": "Only checkout prices and explanatory text are editable from Manager."
       },
       "ManagerInstallerCreatePayload": {
         "properties": {

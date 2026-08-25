@@ -46,6 +46,7 @@ const InstallersView = defineAsyncComponent(() => import('./views/InstallersView
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
 const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
+const InstallationRatesView = defineAsyncComponent(() => import('./views/InstallationRatesView.vue'));
 const ServiceEstimatesView = defineAsyncComponent(() => import('./views/ServiceEstimatesView.vue'));
 const BankReceiptsView = defineAsyncComponent(() => import('./views/BankReceiptsView.vue'));
 const OutgoingEmailsView = defineAsyncComponent(() => import('./views/OutgoingEmailsView.vue'));
@@ -173,6 +174,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
   if (path.startsWith('/manager/settings/backup')) return 'settings-backup';
   if (path.startsWith('/manager/settings')) return 'settings';
+  if (path.startsWith('/manager/installation-rates')) return 'installation-rates';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
   if (path.startsWith('/manager/service-estimates')) return 'service-estimates';
   if (path.startsWith('/manager/mail/outbox')) return 'outgoing-emails';
@@ -661,6 +663,7 @@ watch(currentPath, () => {
       <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />
       <SettingsBackupView v-else-if="authorizedView === 'settings-backup' && canManageInfrastructure" :key="currentLocation" />
       <SettingsView v-else-if="authorizedView === 'settings' && canManageInfrastructure" :key="currentLocation" />
+      <InstallationRatesView v-else-if="authorizedView === 'installation-rates'" :key="currentLocation" />
       <TariffsView v-else-if="authorizedView === 'tariffs'" :key="currentLocation" />
       <ServiceEstimatesView v-else-if="authorizedView === 'service-estimates'" :key="currentLocation" />
       <OutgoingEmailsView v-else-if="authorizedView === 'outgoing-emails'" :key="currentLocation" />

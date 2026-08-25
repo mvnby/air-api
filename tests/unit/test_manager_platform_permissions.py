@@ -35,6 +35,7 @@ from routers import (
     manager_media_library,
     manager_media_processing,
     manager_media_worker,
+    manager_installation_rates,
     manager_orders,
     manager_product_collections,
     manager_repair_complaints,
@@ -78,6 +79,7 @@ PLATFORM_ROUTERS = (
     manager_media_library.router,
     manager_media_processing.router,
     manager_media_cleanup.router,
+    manager_installation_rates.router,
     manager_tariffs.router,
     manager_repair_complaints.router,
     manager_catalog_quality.router,
@@ -103,6 +105,7 @@ PURE_GLOBAL_MUTATION_ROUTERS = (
     manager_media_library.router,
     manager_media_processing.router,
     manager_media_cleanup.router,
+    manager_installation_rates.router,
     manager_tenant_offers.router,
 )
 FULLY_SYSTEM_SCOPED_ROUTERS = (

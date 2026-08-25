@@ -85,6 +85,8 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         operation_ids.UPSERT_MANAGER_TENANT_OFFER,
         operation_ids.UPDATE_MANAGER_TENANT_OFFER,
         # Platform-owned service dictionaries.
+        operation_ids.LIST_MANAGER_INSTALLATION_RATES,
+        operation_ids.UPDATE_MANAGER_INSTALLATION_RATE,
         operation_ids.CREATE_MANAGER_TARIFF,
         operation_ids.UPDATE_MANAGER_TARIFF,
         operation_ids.DELETE_MANAGER_TARIFF,

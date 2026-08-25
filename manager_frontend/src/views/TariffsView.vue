@@ -146,10 +146,10 @@ onMounted(loadTariffs);
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
           <span class="material-icons-round text-teal-600 dark:text-teal-400">payments</span>
-          Тарифы услуг
+          Тарифы смет
         </h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
-          Базовые тарифы, направления и правила подуслуг для смет
+          Работы и правила для внутренних смет менеджера
         </p>
       </div>
 
@@ -176,6 +176,25 @@ onMounted(loadTariffs);
           Добавить тариф
         </button>
       </div>
+    </div>
+
+    <div class="mb-6 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-start gap-3">
+        <span class="material-icons-round mt-0.5 text-blue-600 dark:text-blue-300">info</span>
+        <div>
+          <div class="text-sm font-semibold">Эти тарифы используются только во внутренних сметах</div>
+          <div class="mt-0.5 text-xs text-blue-800/80 dark:text-blue-200/80">
+            Цена монтажа на сайте и правило подбора по типу кондиционера настраиваются отдельно.
+          </div>
+        </div>
+      </div>
+      <a
+        href="/manager/installation-rates"
+        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+      >
+        Публичный монтаж
+        <span class="material-icons-round text-base">arrow_forward</span>
+      </a>
     </div>
 
     <div
