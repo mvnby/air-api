@@ -28,8 +28,8 @@ def _legacy_default_discount() -> int:
     try:
         parsed = int(str(value).strip())
     except (TypeError, ValueError):
-        return 100
-    return parsed if 0 <= parsed <= 10_000 else 100
+        return 0
+    return parsed if 0 <= parsed <= 10_000 else 0
 
 
 def upgrade() -> None:

@@ -96,6 +96,25 @@ async def test_disabled_policy_preserves_live_legacy_discount(discount_session):
 
 
 @pytest.mark.asyncio
+async def test_disabled_policy_fails_closed_when_legacy_discount_is_missing(
+    discount_session,
+):
+    product = (await _products(discount_session, 1))[0]
+
+    decision = (
+        await InstallationDiscountService.resolve_for_products(
+            discount_session,
+            products=[product],
+            effective_prices={int(product.id): int(product.price)},
+        )
+    )[int(product.id)]
+
+    assert decision.status == ManagerInstallationDiscountStatus.legacy
+    assert decision.applied_discount == 0
+    assert decision.configured_discount == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("invalid_cost", [None, -1, float("nan"), "bad-cost"])
 async def test_enabled_policy_gates_default_discount_by_margin_and_cost(
     discount_session,

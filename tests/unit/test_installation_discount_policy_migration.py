@@ -117,7 +117,7 @@ def test_upgrade_falls_back_safely_for_invalid_legacy_discount() -> None:
                     "WHERE id = 1"
                 )
             ).scalar_one()
-            == 100
+            == 0
         )
     finally:
         connection.close()

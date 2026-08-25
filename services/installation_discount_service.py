@@ -92,8 +92,8 @@ class InstallationDiscountService:
         try:
             discount = int(str(raw_discount).strip())
         except (TypeError, ValueError):
-            return cls.DEFAULT_DISCOUNT
-        return discount if 0 <= discount <= cls.MAX_DISCOUNT else cls.DEFAULT_DISCOUNT
+            return 0
+        return discount if 0 <= discount <= cls.MAX_DISCOUNT else 0
 
     @classmethod
     async def _policy(
