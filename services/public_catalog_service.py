@@ -20,6 +20,7 @@ from schemas import (
 )
 from services.catalog import CatalogService
 from services.feature_resolver_service import FeatureResolverService
+from services.installation_discount_service import InstallationDiscountService
 from services.product_area import area_from_specs
 from services.product_filter_service import ProductFilterService
 from services.product_read_service import ProductReadService
@@ -42,6 +43,16 @@ class PublicProductPage:
 
 
 class PublicCatalogService:
+    @staticmethod
+    async def _with_installation_discounts(
+        session: AsyncSession,
+        projections: list[PublicProductProjection],
+    ) -> list[PublicProductProjection]:
+        return await InstallationDiscountService.decorate_public_projections(
+            session,
+            projections,
+        )
+
     @staticmethod
     async def _resolve_filter_ids(
         session: AsyncSession,
@@ -99,11 +110,15 @@ class PublicCatalogService:
                 is_inverter=is_inverter,
                 search=search,
             )
+            projections = [
+                PublicCatalogVisibilityService.project_product(product)
+                for product in payload["items"]
+            ]
             return {
-                "items": [
-                    PublicCatalogVisibilityService.project_product(product)
-                    for product in payload["items"]
-                ],
+                "items": await PublicCatalogService._with_installation_discounts(
+                    session,
+                    projections,
+                ),
                 "meta": payload["meta"],
             }
 
@@ -137,10 +152,12 @@ class PublicCatalogService:
             load_image_variants=True,
         )
         total = await PublicCatalogDAO.count_filtered(session, **query)
+        projections = [PublicCatalogVisibilityService.project_row(row) for row in rows]
         return {
-            "items": [
-                PublicCatalogVisibilityService.project_row(row) for row in rows
-            ],
+            "items": await PublicCatalogService._with_installation_discounts(
+                session,
+                projections,
+            ),
             "meta": {
                 "total": total,
                 "page": page,
@@ -172,12 +189,19 @@ class PublicCatalogService:
                 product,
                 limit=sibling_limit,
             )
-            return PublicProductPage(
-                product=PublicCatalogVisibilityService.project_product(product),
-                siblings=[
-                    PublicCatalogVisibilityService.project_product(sibling)
-                    for sibling in siblings
+            projections = await PublicCatalogService._with_installation_discounts(
+                session,
+                [
+                    PublicCatalogVisibilityService.project_product(product),
+                    *[
+                        PublicCatalogVisibilityService.project_product(sibling)
+                        for sibling in siblings
+                    ],
                 ],
+            )
+            return PublicProductPage(
+                product=projections[0],
+                siblings=projections[1:],
             )
 
         row = await PublicCatalogDAO.get_by_identifier(
@@ -200,7 +224,11 @@ class PublicCatalogService:
                 for candidate in visible_rows
             ],
         )[:sibling_limit]
-        return PublicProductPage(product=projection, siblings=ordered)
+        decorated = await PublicCatalogService._with_installation_discounts(
+            session,
+            [projection, *ordered],
+        )
+        return PublicProductPage(product=decorated[0], siblings=decorated[1:])
 
     @staticmethod
     async def get_vitebsk_featured_products(
@@ -217,10 +245,14 @@ class PublicCatalogService:
                 session,
                 limit=limit,
             )
-            return [
+            projections = [
                 PublicCatalogVisibilityService.project_product(item)
                 for item in products
             ]
+            return await PublicCatalogService._with_installation_discounts(
+                session,
+                projections,
+            )
         # The endpoint name and membership both reveal canonical MVN warehouse
         # topology. Keep a response-compatible empty list for white-label hosts.
         return []
@@ -242,17 +274,24 @@ class PublicCatalogService:
                 series_id,
                 load_image_variants=load_image_variants,
             )
-            return [
+            projections = [
                 PublicCatalogVisibilityService.project_product(item)
                 for item in products
             ]
+            return await PublicCatalogService._with_installation_discounts(
+                session,
+                projections,
+            )
         rows = await PublicCatalogDAO.get_by_series_id(
             session,
             tenant_scope=tenant_scope,
             series_id=series_id,
             load_image_variants=load_image_variants,
         )
-        return [PublicCatalogVisibilityService.project_row(row) for row in rows]
+        return await PublicCatalogService._with_installation_discounts(
+            session,
+            [PublicCatalogVisibilityService.project_row(row) for row in rows],
+        )
 
     @staticmethod
     async def search(
@@ -299,6 +338,11 @@ class PublicCatalogService:
             session,
             [projection.product for projection in projections],
         )
+        projections = await InstallationDiscountService.decorate_public_projections(
+            session,
+            projections,
+            supply_metrics=supply_metrics,
+        )
         return [
             PublicCatalogService._to_public_search_item(
                 projection,
@@ -322,6 +366,7 @@ class PublicCatalogService:
             slug=mapped.slug,
             price=mapped.price,
             old_price=mapped.old_price,
+            installation_discount=mapped.installation_discount,
             product_kind=mapped.product_kind,
             is_inverter=mapped.is_inverter,
             power_cooling=mapped.power_cooling,

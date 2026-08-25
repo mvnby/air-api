@@ -11,6 +11,7 @@ export type PublicProductSearchItemResponse = {
     slug?: (string | null);
     price: number;
     old_price?: (number | null);
+    installation_discount?: number;
     product_kind?: 'unknown' | 'complete_split_system' | 'indoor_unit' | 'outdoor_unit' | 'panel' | 'accessory' | 'consumable' | 'other';
     is_inverter: boolean;
     power_cooling?: (number | null);

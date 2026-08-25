@@ -56,6 +56,7 @@ export const navSections: NavSection[] = [
     items: [
       { path: '/manager/catalog-decision', label: 'Подбор оборудования', icon: Calculator, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.catalogMasterRead },
+      { path: '/manager/installation-discounts', label: 'Скидки на монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/product-collections', label: 'Подборки', icon: GalleryVerticalEnd, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.storefrontCollectionsManage },
       { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/features', label: 'Фичи', icon: Sparkles, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },

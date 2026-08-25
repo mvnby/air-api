@@ -36,6 +36,9 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   if (path === '/manager/catalog-decision' || path === '/manager/catalog-decision/') {
     return MANAGER_CAPABILITY.platformManage;
   }
+  if (path.startsWith('/manager/installation-discounts')) {
+    return MANAGER_CAPABILITY.platformManage;
+  }
   if (path === '/manager/products' || path === '/manager/products/') {
     return MANAGER_CAPABILITY.catalogMasterRead;
   }

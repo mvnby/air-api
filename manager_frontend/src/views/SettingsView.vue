@@ -522,6 +522,7 @@ const loadSettings = async () => {
         settings.value = res.items.filter(
             (setting) =>
                 setting.key !== 'contract_templates' &&
+                setting.key !== 'install_discount' &&
                 setting.key !== BOT_SELECTION_RULES_KEY &&
                 !COMPANY_REQUISITE_KEYS.includes(setting.key as (typeof COMPANY_REQUISITE_KEYS)[number]) &&
                 !EMAIL_LEAD_SETTING_KEYS.has(setting.key),

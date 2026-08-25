@@ -234,6 +234,7 @@ def map_product_to_response(
         slug=product.slug,
         price=projection.price,
         old_price=projection.old_price,
+        installation_discount=projection.installation_discount,
         product_kind=product.product_kind,
         is_inverter=product.is_inverter,
         power_cooling=product.power_cooling,

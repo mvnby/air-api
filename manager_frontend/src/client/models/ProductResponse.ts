@@ -23,6 +23,7 @@ export type ProductResponse = {
     full_image?: (string | null);
     is_published: boolean;
     created_at: string;
+    installation_discount?: number;
     vitebsk_qty?: number;
     minsk_qty?: number;
     availability_status?: (string | null);
