@@ -243,6 +243,13 @@ Production server intentionally runs from Docker images only (no git checkout in
 ## Notes
 
 - `docker-compose.yml` service names are `app`, `db`, `web`, `bot` (not `mvn-app`).
+- Production API node display names:
+  - `mvn-api-nl` is the Netherlands node previously shown as `mvn-api`.
+  - `mvn-api-by` is the Belarus node previously shown as `zakup`.
+  - These are operator-facing names only. Until a separately reviewed
+    infrastructure migration changes them, keep the existing internal Patroni
+    member names, SSH aliases, GitHub variables, paths, and compose directories
+    (`mvn-api` and `zakup`) unchanged.
 - `scripts/normalize_legacy.py` uses shared normalization logic from `services/spec_normalizer.py`; keep both in sync.
 - Legacy SQLAdmin was removed; manager app (`manager_frontend/`, Vue) is the internal admin UI.
 - Manager list endpoints enforce pagination limits (`limit <= 100`); keep frontend requests within this bound.
