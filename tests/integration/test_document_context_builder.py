@@ -265,19 +265,18 @@ async def test_legacy_invoice_without_explicit_offer_role_is_never_a_basis(db):
     db.add(legacy_invoice)
     await db.commit()
 
-    snapshot = await DocumentContextBuilder.build(
-        db,
-        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
-        selection=DocumentContextSelection(
-            order_id=order.id,
-            legal_entity_id=issuer.id,
-            document_type="act",
-            issue_date=date(2026, 8, 26),
-        ),
-    )
+    with pytest.raises(DocumentContextError, match="нужен договор"):
+        await DocumentContextBuilder.build(
+            db,
+            tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+            selection=DocumentContextSelection(
+                order_id=order.id,
+                legal_entity_id=issuer.id,
+                document_type="act",
+                issue_date=date(2026, 8, 26),
+            ),
+        )
 
-    assert snapshot["meta"]["base_document_id"] is None
-    assert snapshot["values"]["basis.number"] == ""
     with pytest.raises(DocumentContextError, match="не является основанием"):
         await DocumentContextBuilder.build(
             db,
