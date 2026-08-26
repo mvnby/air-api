@@ -16,9 +16,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 
-BACKEND_IMAGE_RE = re.compile(
-    r"^ghcr\.io/mvnby/air-api/backend@sha256:[0-9a-f]{64}$"
-)
+BACKEND_IMAGE_RE = re.compile(r"^ghcr\.io/mvnby/air-api/backend@sha256:[0-9a-f]{64}$")
 APP_SERVICES = ("app", "app-blue", "app-green")
 RUNTIME_SERVICES = APP_SERVICES
 PUBLIC_PITR_ENV_POLICIES = ("runtime-only", "configured", "operational")
@@ -27,10 +25,10 @@ PITR_ENV_POLICIES = (*PUBLIC_PITR_ENV_POLICIES, *MIGRATION_PITR_ENV_POLICIES)
 SECRETS_FILE = Path("/etc/mvn-postgres-pitr.secrets.env")
 EXPECTED_COMPOSE_DIGESTS = {
     "/opt/air-api/docker-compose.patroni.yml": (
-        "5b8c2b532eac642d3bb9c4fd568f622efc84b68e6316c9eff5394cba59e4d0fd"
+        "e2e4fa4426fb0e2a04c3359824a5f98cde6016e87773b9fa8f1c355bc3877766"
     ),
     "/opt/mvn-reserve/docker-compose.patroni.yml": (
-        "94f625870ce4373a26861afb153ef544a9cbd1aff9912002973854de6d0b1905"
+        "bf8077fd5ceccd97331eb75ca7bf0008895b5bed5d5f4dd4ae7311ac6c08a5f7"
     ),
 }
 EXPECTED_PITR_CLUSTERS = {
@@ -85,6 +83,7 @@ def _read_controlled_file(
         metadata = path.lstat()
     except FileNotFoundError as exc:
         raise RuntimeError(f"{label} is missing") from exc
+
     def unsafe(value: os.stat_result) -> bool:
         return (
             not stat.S_ISREG(value.st_mode)
@@ -93,10 +92,7 @@ def _read_controlled_file(
             or stat.S_IMODE(value.st_mode) != mode
         )
 
-    if (
-        stat.S_ISLNK(metadata.st_mode)
-        or unsafe(metadata)
-    ):
+    if stat.S_ISLNK(metadata.st_mode) or unsafe(metadata):
         raise RuntimeError(f"{label} metadata is unsafe")
     descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     try:
@@ -182,15 +178,18 @@ def _validate_secret_values(
         raise RuntimeError(f"{label} does not contain the exact secret key set")
     if values["POSTGRES_PITR_CLUSTER"] != expected_cluster:
         raise RuntimeError(f"{label} uses an unreviewed logical namespace")
-    destination = "\n".join(
-        values[key]
-        for key in (
-            "POSTGRES_PITR_S3_BUCKET",
-            "POSTGRES_PITR_S3_ENDPOINT_URL",
-            "POSTGRES_PITR_S3_REGION",
-            "POSTGRES_PITR_S3_KEY_PREFIX",
+    destination = (
+        "\n".join(
+            values[key]
+            for key in (
+                "POSTGRES_PITR_S3_BUCKET",
+                "POSTGRES_PITR_S3_ENDPOINT_URL",
+                "POSTGRES_PITR_S3_REGION",
+                "POSTGRES_PITR_S3_KEY_PREFIX",
+            )
         )
-    ) + "\n"
+        + "\n"
+    )
     if hashlib.sha256(destination.encode("utf-8")).hexdigest() != (
         expected_destination_fingerprint
     ):
@@ -213,9 +212,7 @@ def _validate_project_env(
     )
     if values.get("MVN_RESERVE_ENV_FILE", ".env") != ".env":
         raise RuntimeError("reserve app does not use the canonical project env")
-    secret_values = {
-        key: values[key] for key in SECRET_PITR_KEYS if key in values
-    }
+    secret_values = {key: values[key] for key in SECRET_PITR_KEYS if key in values}
     if policy == "legacy-migration":
         secret_values = _validate_secret_values(
             secret_values,
@@ -308,14 +305,14 @@ def _validate_runtime_secret_exposure(
     label: str,
     canonical_compose: bool,
 ) -> None:
-    exposed = {
-        key: environment[key] for key in SECRET_PITR_KEYS if key in environment
-    }
+    exposed = {key: environment[key] for key in SECRET_PITR_KEYS if key in environment}
     if policy == "legacy-migration":
         if not exposed and not canonical_compose:
             return
         if exposed != expected_secrets or set(exposed) != SECRET_PITR_KEYS:
-            raise RuntimeError(f"{label} does not expose the exact reviewed legacy secrets")
+            raise RuntimeError(
+                f"{label} does not expose the exact reviewed legacy secrets"
+            )
         return
     if not exposed:
         return
@@ -337,8 +334,7 @@ def _mount_references_wal_archive(mount: object) -> bool:
     else:
         raise RuntimeError("API mount definition is invalid")
     return any(
-        value == FORBIDDEN_WAL_ARCHIVE_TARGET
-        or FORBIDDEN_WAL_ARCHIVE_MARKER in value
+        value == FORBIDDEN_WAL_ARCHIVE_TARGET or FORBIDDEN_WAL_ARCHIVE_MARKER in value
         for value in candidates
     )
 
@@ -364,9 +360,7 @@ def _validate_runtime_wal_archive_mounts(
     if not isinstance(mounts, list):
         raise RuntimeError(f"{label} mount inventory is invalid")
 
-    archive_mounts = [
-        mount for mount in mounts if _mount_references_wal_archive(mount)
-    ]
+    archive_mounts = [mount for mount in mounts if _mount_references_wal_archive(mount)]
     if not archive_mounts:
         return
     if policy not in MIGRATION_PITR_ENV_POLICIES:
@@ -429,7 +423,9 @@ def _configured_backend_image(
                 str(environment_name).startswith("POSTGRES_PITR_")
                 and environment_name not in KNOWN_PITR_KEYS
             ):
-                raise RuntimeError("resolved API environment has an unexpected PITR key")
+                raise RuntimeError(
+                    "resolved API environment has an unexpected PITR key"
+                )
         _validate_runtime_secret_exposure(
             {str(key): str(value) for key, value in environment.items()},
             policy=policy,
@@ -499,11 +495,15 @@ def _inspect_runtime_containers(
             raise RuntimeError("API container state is invalid")
         service = labels.get("com.docker.compose.service")
         if service not in RUNTIME_SERVICES or service in seen_services:
-            raise RuntimeError("all-state API service identity is unexpected or ambiguous")
+            raise RuntimeError(
+                "all-state API service identity is unexpected or ambiguous"
+            )
         seen_services.add(service)
 
         if not BACKEND_IMAGE_RE.fullmatch(configured_ref):
-            raise RuntimeError("API container image is not an immutable reviewed digest")
+            raise RuntimeError(
+                "API container image is not an immutable reviewed digest"
+            )
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", running_id):
             raise RuntimeError("API container image ID is invalid")
         if state["Running"]:
@@ -587,7 +587,9 @@ def verify_runtime_contract(
     )
     secrets_present = secrets_file.exists() or secrets_file.is_symlink()
     if pitr_env_policy == "legacy-migration" and secrets_present:
-        raise RuntimeError("legacy migration requires the root PITR secrets file to be absent")
+        raise RuntimeError(
+            "legacy migration requires the root PITR secrets file to be absent"
+        )
     secrets_values: Mapping[str, str] = {}
     if pitr_env_policy not in {"runtime-only", "legacy-migration"} or secrets_present:
         secrets_payload = _read_controlled_file(

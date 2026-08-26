@@ -40,6 +40,7 @@ from routers import manager_supply
 from routers import manager_supplier_mapping
 from routers import manager_yandex_business
 from routers import manager_warranties
+from modules.documents.api import router as manager_document_system_router
 
 
 router = APIRouter()
@@ -56,6 +57,7 @@ router.include_router(manager_mdv_catalog.router)
 router.include_router(manager_specs.router)
 router.include_router(manager_auth.router)
 router.include_router(manager_docs.router)
+router.include_router(manager_document_system_router)
 router.include_router(manager_orders.router)
 router.include_router(manager_equipment.router)
 router.include_router(manager_equipment_links.router)

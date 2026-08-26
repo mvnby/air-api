@@ -87,7 +87,7 @@ def test_migration_script_requires_primary_and_never_manages_database_service(tm
     _executable(fake_bin / "flock", "#!/usr/bin/env bash\nexit 0\n")
     _executable(
         fake_bin / "curl",
-        "#!/usr/bin/env bash\nprintf '{\"state\":\"running\",\"role\":\"primary\"}\\n'\n",
+        '#!/usr/bin/env bash\nprintf \'{"state":"running","role":"primary"}\\n\'\n',
     )
     _executable(
         fake_bin / "docker",
@@ -139,7 +139,7 @@ def test_migration_refuses_low_memory_before_docker_mutation(tmp_path):
     fake_bin.mkdir()
     _executable(
         fake_bin / "curl",
-        "#!/usr/bin/env bash\nprintf '{\"state\":\"running\",\"role\":\"primary\"}\\n'\n",
+        '#!/usr/bin/env bash\nprintf \'{"state":"running","role":"primary"}\\n\'\n',
     )
     _executable(
         fake_bin / "docker",
@@ -184,7 +184,7 @@ def test_migration_rechecks_memory_after_image_pull_before_container_start(tmp_p
     fake_bin.mkdir()
     _executable(
         fake_bin / "curl",
-        "#!/usr/bin/env bash\nprintf '{\"state\":\"running\",\"role\":\"primary\"}\\n'\n",
+        '#!/usr/bin/env bash\nprintf \'{"state":"running","role":"primary"}\\n\'\n',
     )
     _executable(
         fake_bin / "docker",
@@ -232,7 +232,7 @@ def test_deploy_and_migration_scripts_reject_unknown_running_patroni_role(tmp_pa
     _executable(fake_bin / "flock", "#!/usr/bin/env bash\nexit 0\n")
     _executable(
         fake_bin / "curl",
-        "#!/usr/bin/env bash\nprintf '{\"state\":\"running\",\"role\":\"mystery\"}\\n'\n",
+        '#!/usr/bin/env bash\nprintf \'{"state":"running","role":"mystery"}\\n\'\n',
     )
     _executable(
         fake_bin / "docker",
@@ -281,6 +281,9 @@ def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fenc
     assert '"${COMPOSE[@]}" stop bot' in text
     assert "standby image updated without enabling traffic" in text
     assert "alembic upgrade head" not in text
+    assert "ensure_document_pdf_runtime" in text
+    assert 'pull "${DOCUMENT_PDF_SERVICE}"' in text
+    assert "up -d --no-deps --wait --wait-timeout" in text
     assert 'up -d --no-deps --force-recreate "${active_service}"' in text
     assert "reconcile_standby_proxy" in text
     assert 'run -T --rm --no-deps "${PROXY_SERVICE}" nginx -t' in text
@@ -288,6 +291,27 @@ def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fenc
     assert 'up -d --no-deps --force-recreate "${PROXY_SERVICE}"' in text
     assert "running proxy has stale mounts" in text
     assert "up -d db" not in text
+    standby_runtime = text.index(
+        'log standby "updating fenced service ${active_service}"'
+    )
+    converter_ready = text.index("ensure_document_pdf_runtime", standby_runtime)
+    app_recreate = text.index(
+        'up -d --no-deps --force-recreate "${active_service}"', converter_ready
+    )
+    assert standby_runtime < converter_ready < app_recreate
+
+
+def test_patroni_compose_keeps_document_pdf_converter_private_and_gated():
+    for path in (
+        REPO_ROOT / "deploy/ha/mvn-api/docker-compose.patroni.yml",
+        REPO_ROOT / "deploy/ha/zakup/docker-compose.patroni.yml",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "gotenberg:" in text
+        assert "gotenberg/gotenberg:8.34.0-libreoffice@sha256:" in text
+        assert "DOCUMENT_PDF_CONVERTER_URL: http://gotenberg:3000" in text
+        assert "gotenberg:\n      condition: service_healthy" in text
+        assert '"3000:3000"' not in text
 
 
 def test_replication_env_updater_replaces_keys_atomically_and_preserves_mode(tmp_path):
@@ -322,7 +346,9 @@ def test_replication_env_updater_replaces_keys_atomically_and_preserves_mode(tmp
 
 def test_patroni_image_updater_requires_digest_and_preserves_env_file(tmp_path):
     env_file = tmp_path / ".env"
-    env_file.write_text("POSTGRES_USER=postgres\nPATRONI_IMAGE=invalid\n", encoding="utf-8")
+    env_file.write_text(
+        "POSTGRES_USER=postgres\nPATRONI_IMAGE=invalid\n", encoding="utf-8"
+    )
     env_file.chmod(0o600)
 
     result = subprocess.run(

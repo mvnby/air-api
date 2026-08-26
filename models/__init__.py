@@ -7,13 +7,18 @@ from .common import (
     LeadSegmentHint,
     LeadSource,
     LeadStatus,
-    LeadStatus,
     OrderStageStatus,
     OrderStatus,
     PaymentCurrency,
     PaymentType,
 )
-from .customer import Customer, CustomerBranch, CustomerContract, CustomerRequisitesRecognition, Lead
+from .customer import (
+    Customer,
+    CustomerBranch,
+    CustomerContract,
+    CustomerRequisitesRecognition,
+    Lead,
+)
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
 from .brand import Brand, ProductSeries
 from .feature import (
@@ -35,6 +40,14 @@ from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
 from .catalog_revision import StorefrontCatalogRevision
 from .content import Article, GlobalConfig
+from .document import (
+    DocumentArtifact,
+    DocumentLegalEntity,
+    DocumentNumberPolicy,
+    DocumentNumberReservation,
+    DocumentNumberSequence,
+    DocumentTemplateVersion,
+)
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
 from .communication_runtime import (
     CommunicationRuntimeState,
@@ -77,7 +90,6 @@ from .order import (
     ServiceEstimateItem,
     ServiceTariff,
     ServiceTariffRule,
-    OrderServiceLink,
     OrderServiceLink,
     OrderWorkStage,
     OutgoingEmail,
@@ -149,7 +161,13 @@ __all__ = [
     "CustomerRequisitesRecognition",
     "CustomerType",
     "DocumentRoleType",
+    "DocumentArtifact",
+    "DocumentLegalEntity",
+    "DocumentNumberPolicy",
+    "DocumentNumberReservation",
+    "DocumentNumberSequence",
     "DocumentTemplate",
+    "DocumentTemplateVersion",
     "DocumentTemplateActLink",
     "DocumentTemplateCustomerLink",
     "CustomerEquipment",

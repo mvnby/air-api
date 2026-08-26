@@ -30,16 +30,31 @@ services:
     build: .
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_started
+      gotenberg:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db/${POSTGRES_DB:-air_conditioners}
       SCHEDULER_ENABLED: "false"
+      DOCUMENT_PDF_CONVERTER_URL: http://gotenberg:3000
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+  gotenberg:
+    image: gotenberg/gotenberg:8.34.0-libreoffice@sha256:3c23aeb3a027a63d7c71745fc9d83724bd58cf9dfa470396ac82c0896028db2a
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
   bot:
     build: .
     restart: always

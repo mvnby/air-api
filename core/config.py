@@ -68,7 +68,9 @@ class Settings(BaseSettings):
     def _validate_proxy_trusted_hosts(cls, value: str) -> str:
         hosts = [item.strip() for item in str(value or "").split(",") if item.strip()]
         if not hosts:
-            raise ValueError("PROXY_TRUSTED_HOSTS must contain at least one host or network")
+            raise ValueError(
+                "PROXY_TRUSTED_HOSTS must contain at least one host or network"
+            )
         if "*" in hosts:
             raise ValueError("PROXY_TRUSTED_HOSTS must not trust every source")
         canonical_hosts: list[str] = []
@@ -90,7 +92,7 @@ class Settings(BaseSettings):
     @property
     def proxy_trusted_hosts(self) -> list[str]:
         return [item for item in self.PROXY_TRUSTED_HOSTS.split(",") if item]
-    
+
     # CORS Settings
     @property
     def CORS_ORIGINS(self) -> list[str]:
@@ -105,15 +107,15 @@ class Settings(BaseSettings):
             "http://localhost:4321",
             "http://localhost:3000",
         ]
-    
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
-    
+
     # HTTP Basic Auth
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
-    
+
     @property
     def admin_list(self) -> list[int]:
         ids = []
@@ -134,17 +136,17 @@ class Settings(BaseSettings):
 
     def is_admin_user(self, user_id: int | None) -> bool:
         return user_id is not None and int(user_id) in self.admin_list
-    
+
     # Database Settings
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "air_conditioners"
-    
+
     # DATABASE_URL can be set directly or will be constructed from POSTGRES_* vars
     DATABASE_URL: str = ""
-    
+
     def __init__(self, **kwargs):
         redacted_error: ValidationError | None = None
         try:
@@ -156,7 +158,7 @@ class Settings(BaseSettings):
         # If DATABASE_URL not provided, construct it from POSTGRES_* settings
         if not self.DATABASE_URL:
             self.DATABASE_URL = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-    
+
     # Static Files
     STATIC_DIR: str = "static"
     UPLOAD_DIR: str = "static/uploads"
@@ -271,15 +273,9 @@ class Settings(BaseSettings):
             raw_json=self.STOREFRONT_CONTEXT_SIGNING_KEYRING_JSON,
             legacy_primary_key_id=self.STOREFRONT_CONTEXT_SIGNING_KEY_ID,
             legacy_primary_secret=self.STOREFRONT_CONTEXT_SIGNING_SECRET,
-            legacy_previous_key_id=(
-                self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID
-            ),
-            legacy_previous_secret=(
-                self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET
-            ),
-            legacy_allowed_hosts=(
-                self.STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS
-            ),
+            legacy_previous_key_id=(self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_KEY_ID),
+            legacy_previous_secret=(self.STOREFRONT_CONTEXT_PREVIOUS_SIGNING_SECRET),
+            legacy_allowed_hosts=(self.STOREFRONT_CONTEXT_LEGACY_ALLOWED_HOSTS),
             public_site_url=self.PUBLIC_SITE_URL,
         )
 
@@ -325,6 +321,12 @@ class Settings(BaseSettings):
     SERVICE_ATTACHMENT_ACCESS_TTL_SECONDS: int = 300
     SERVICE_ATTACHMENT_MAX_SIZE_BYTES: int = 25 * 1024 * 1024
 
+    # Native CRM documents use an explicit DOCX-to-PDF adapter. Empty keeps
+    # Google/legacy documents operational while native issuing reports a clear
+    # unavailable state instead of silently emitting DOCX without PDF.
+    DOCUMENT_PDF_CONVERTER_URL: str = ""
+    DOCUMENT_PDF_CONVERTER_TIMEOUT_SECONDS: float = 30.0
+
     @model_validator(mode="after")
     def _validate_private_attachment_storage(self):
         if not self.is_production:
@@ -341,9 +343,14 @@ class Settings(BaseSettings):
             "SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID": self.SERVICE_ATTACHMENT_S3_ACCESS_KEY_ID,
             "SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY": self.SERVICE_ATTACHMENT_S3_SECRET_ACCESS_KEY,
         }
-        missing = [name for name, value in required.items() if not str(value or "").strip()]
+        missing = [
+            name for name, value in required.items() if not str(value or "").strip()
+        ]
         if missing:
-            raise ValueError("Production private attachment storage is missing: " + ", ".join(missing))
+            raise ValueError(
+                "Production private attachment storage is missing: "
+                + ", ".join(missing)
+            )
 
         endpoint = self.SERVICE_ATTACHMENT_S3_ENDPOINT_URL.strip()
         try:
@@ -386,13 +393,13 @@ class Settings(BaseSettings):
     PRODUCT_MEDIA_LOCAL_ORIGINAL_PUBLIC_PREFIX: str = "/media/products/shared"
     PRODUCT_MEDIA_ORIGINAL_S3_KEY_PREFIX: str = "products/shared"
     MEDIA_WORKER_TOKEN: str = ""
-    
+
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "logs/app.log"
-    
+
     # Automation
-    SCHEDULER_INTERVAL: int = 6 # hours
+    SCHEDULER_INTERVAL: int = 6  # hours
     SCHEDULER_ENABLED: bool | None = None
     BOT_ENABLED: bool | None = None
     BOT_DROP_PENDING_UPDATES: bool = False
@@ -422,7 +429,9 @@ class Settings(BaseSettings):
             if parsed.scheme != "https":
                 raise ValueError("production Bot API access requires an HTTPS base URL")
             if parsed.hostname in {"app", "app-blue", "app-green"}:
-                raise ValueError("production Bot API access requires a stable host across blue-green slots")
+                raise ValueError(
+                    "production Bot API access requires a stable host across blue-green slots"
+                )
         return self
 
     # Durable communications runtime. The process is deliberately inert unless
@@ -458,8 +467,7 @@ class Settings(BaseSettings):
         normalized = float(value)
         if normalized < 0.1 or normalized > 300:
             raise ValueError(
-                "CATALOG_INVALIDATION_WORKER_POLL_SECONDS must be between "
-                "0.1 and 300"
+                "CATALOG_INVALIDATION_WORKER_POLL_SECONDS must be between 0.1 and 300"
             )
         return normalized
 
@@ -469,8 +477,7 @@ class Settings(BaseSettings):
         normalized = int(value)
         if normalized < 30 or normalized > 3600:
             raise ValueError(
-                "CATALOG_INVALIDATION_WORKER_LEASE_SECONDS must be between "
-                "30 and 3600"
+                "CATALOG_INVALIDATION_WORKER_LEASE_SECONDS must be between 30 and 3600"
             )
         return normalized
 
@@ -480,8 +487,7 @@ class Settings(BaseSettings):
         normalized = int(value)
         if normalized < 1 or normalized > 1000:
             raise ValueError(
-                "CATALOG_INVALIDATION_WORKER_RECOVERY_LIMIT must be between "
-                "1 and 1000"
+                "CATALOG_INVALIDATION_WORKER_RECOVERY_LIMIT must be between 1 and 1000"
             )
         return normalized
 
@@ -605,7 +611,7 @@ class Settings(BaseSettings):
     MAIL_SMTP_PASSWORD: str = ""
     MAIL_FROM_EMAIL: str = ""
     MAIL_FROM_NAME: str = "Мастер Воздуха"
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
