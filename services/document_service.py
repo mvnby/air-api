@@ -44,6 +44,7 @@ class DocumentService:
         "ttn1",
     }
     PROPOSAL_SCOPED_DOC_TYPES = {"offer", "retail_receipt", "service_act", "maintenance_service_act", "tn2", "ttn1"}
+    PROPOSAL_LINE_SCOPED_DOC_TYPES = PROPOSAL_SCOPED_DOC_TYPES | {"contract", "invoice", "act"}
     CLOSING_DOC_TYPES = {"act", "tn2", "ttn1"}
     BASE_DOC_TYPES = {"offer", "contract", "invoice"}
     DOC_NUMBER_PREFIXES = {
@@ -1005,7 +1006,7 @@ class DocumentService:
         await strategy.fetch_order()
         effective_proposal_id = (
             DocumentService._apply_proposal_lines(strategy.order, proposal_id)
-            if doc_type in DocumentService.PROPOSAL_SCOPED_DOC_TYPES or doc_type == "act"
+            if doc_type in DocumentService.PROPOSAL_LINE_SCOPED_DOC_TYPES
             else None
         )
         document_scope = await DocumentService._build_document_scope(
