@@ -9,6 +9,7 @@ export const MANAGER_CAPABILITY = {
   staffManage: 'staff.manage',
   infrastructureManage: 'infrastructure.manage',
   analyticsManage: 'analytics.manage',
+  documentsManage: 'documents.manage',
 } as const;
 
 export type ManagerCapability = typeof MANAGER_CAPABILITY[keyof typeof MANAGER_CAPABILITY];
@@ -22,6 +23,9 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
   if (path.startsWith('/manager/integrations')) {
     return MANAGER_CAPABILITY.analyticsManage;
+  }
+  if (path.startsWith('/manager/settings/documents')) {
+    return MANAGER_CAPABILITY.documentsManage;
   }
   if (
     path.startsWith('/manager/leads')

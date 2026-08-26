@@ -41,6 +41,8 @@ SERVICE_STOP_TIMEOUT_SECONDS="${API_SERVICE_STOP_TIMEOUT_SECONDS:-5}"
 DRAIN_SECONDS="${API_DRAIN_SECONDS:-5}"
 SUMMARY_FILE="${API_BLUE_GREEN_SUMMARY_FILE:-/tmp/backend_blue_green_summary.txt}"
 GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/prepare_google_oauth_token_dir.sh}"
+DOCUMENT_PDF_SERVICE="${DOCUMENT_PDF_SERVICE:-gotenberg}"
+DOCUMENT_PDF_WAIT_TIMEOUT="${DOCUMENT_PDF_WAIT_TIMEOUT:-90}"
 
 active_slot="legacy"
 active_service="app"
@@ -57,6 +59,15 @@ TMP_DIR=""
 
 log() {
   printf '[blue-green][%s] %s\n' "$1" "$2"
+}
+
+ensure_document_pdf_runtime() {
+  log document-pdf "pulling and waiting for private ${DOCUMENT_PDF_SERVICE} runtime"
+  "${COMPOSE[@]}" pull "${DOCUMENT_PDF_SERVICE}"
+  require_deploy_capacity
+  "${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout \
+    "${DOCUMENT_PDF_WAIT_TIMEOUT}" "${DOCUMENT_PDF_SERVICE}"
+  log document-pdf "private ${DOCUMENT_PDF_SERVICE} runtime is healthy"
 }
 if [[ "${API_DEPLOY_LOCK_ALREADY_HELD:-false}" == "true" && -z "${DEPLOY_LOCK_FD}" ]]; then
   log error "legacy deploy-lock boolean cannot replace an inherited descriptor"
@@ -516,6 +527,15 @@ if [[ ! "${SERVICE_STOP_TIMEOUT_SECONDS}" =~ ^([1-9]|10)$ ]]; then
   log error "API_SERVICE_STOP_TIMEOUT_SECONDS must be an integer from 1 to 10"
   exit 1
 fi
+[[ "${DOCUMENT_PDF_SERVICE}" == "gotenberg" ]] || {
+  log error "DOCUMENT_PDF_SERVICE must be gotenberg"
+  exit 1
+}
+[[ "${DOCUMENT_PDF_WAIT_TIMEOUT}" =~ ^[1-9][0-9]*$ ]] \
+  && (( DOCUMENT_PDF_WAIT_TIMEOUT <= 300 )) || {
+  log error "DOCUMENT_PDF_WAIT_TIMEOUT must be an integer from 1 to 300"
+  exit 1
+}
 is_immutable_image "${BACKEND_IMAGE}" || {
   log error "BACKEND_IMAGE must use a Git SHA tag or sha256 digest"
   exit 1
@@ -609,6 +629,7 @@ if [[ "${configured_image}" != "${previous_image}" ]]; then
 fi
 mkdir -p media model-cache/u2net
 ensure_proxy
+ensure_document_pdf_runtime
 
 if [[ "${active_slot}" != "legacy" \
   && "${BACKEND_IMAGE}" == "${previous_image}" \

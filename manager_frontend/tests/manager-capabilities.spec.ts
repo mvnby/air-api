@@ -116,6 +116,26 @@ describe('tenant manager capabilities', () => {
     ]);
   });
 
+  it('lets a partner owner configure only their document contour', () => {
+    const partnerOwnerAuth = {
+      capabilities: [
+        ...tenantManagerAuth.capabilities,
+        MANAGER_CAPABILITY.staffManage,
+        MANAGER_CAPABILITY.analyticsManage,
+        MANAGER_CAPABILITY.documentsManage,
+      ],
+    };
+
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/documents')).toBe(true);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings')).toBe(false);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/backup')).toBe(false);
+    expect(
+      navSections.flatMap(section => section.items)
+        .filter(item => !item.requiredCapability || partnerOwnerAuth.capabilities.includes(item.requiredCapability))
+        .map(item => item.label),
+    ).toContain('Документы CRM');
+  });
+
   it('renders the safe projection without edit, supplier or price controls', async () => {
     const wrapper = mount(TenantCatalogView);
     await flushPromises();

@@ -85,7 +85,7 @@ jobs:
             scripts/post_deploy_smoke_check.sh scripts/compose_candidate_transaction.sh
             scripts/reconcile_backend_compose_runtime.sh
             scripts/deploy_backend_candidate_transaction.sh
-            scripts/ha/safe_deploy_lock.py
+            scripts/ha/safe_deploy_lock.py scripts/ha/require_deploy_capacity.sh
           )
           lock_helper_sha256="$(sha256sum scripts/ha/safe_deploy_lock.py | awk '{print $1}')"
 
@@ -106,6 +106,7 @@ jobs:
             --env API_IN_PLACE_DEPLOY_SCRIPT=__MVN_BUNDLE__/deploy.sh \
             --env API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh \
             --env API_RECONCILE_SCRIPT=__MVN_BUNDLE__/reconcile_backend_compose_runtime.sh \
+            --env API_DEPLOY_CAPACITY_HELPER=__MVN_BUNDLE__/require_deploy_capacity.sh \
             --env API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py \
             --env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}" \
             --env COMPOSE_CANDIDATE_TRANSACTION_SCRIPT=__MVN_BUNDLE__/compose_candidate_transaction.sh \

@@ -22,6 +22,11 @@ def _fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
     fake_bin.mkdir()
     docker_log = tmp_path / "docker.log"
     docker_log.touch()
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(
+        "MemAvailable: 2097152 kB\nSwapTotal: 524288 kB\nSwapFree: 524288 kB\n",
+        encoding="utf-8",
+    )
 
     _executable(
         fake_bin / "flock",
@@ -29,7 +34,7 @@ def _fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
     )
     _executable(
         fake_bin / "curl",
-        "#!/usr/bin/env bash\nprintf '{\"status\":\"ready\"}\\n'\n",
+        '#!/usr/bin/env bash\nprintf \'{"status":"ready"}\\n\'\n',
     )
     _executable(
         fake_bin / "docker",
@@ -62,6 +67,7 @@ exit 0
             "GOOGLE_OAUTH_TOKEN_REQUIRED": "false",
             "API_DEPLOY_LOCK_HELPER": str(LOCK_HELPER),
             "API_DEPLOY_LOCK_HELPER_SHA256": LOCK_HELPER_SHA256,
+            "API_DEPLOY_MEMINFO_FILE": str(meminfo),
         }
     )
     return fake_bin, env, docker_log
@@ -82,7 +88,9 @@ def _project(tmp_path: Path, image: str = OLD_IMAGE) -> Path:
         "    image: ${BACKEND_IMAGE}\n",
         encoding="utf-8",
     )
-    (project / ".env").write_text(f"KEEP=value\nBACKEND_IMAGE={image}\n", encoding="utf-8")
+    (project / ".env").write_text(
+        f"KEEP=value\nBACKEND_IMAGE={image}\n", encoding="utf-8"
+    )
     return project
 
 
@@ -106,13 +114,28 @@ def test_deploy_changes_only_application_services_and_records_rollback(tmp_path)
     assert result.returncode == 0, result.stderr
     calls = docker_log.read_text(encoding="utf-8")
     assert "compose -f docker-compose.prod.yml pull app" in calls
-    assert "compose -f docker-compose.prod.yml run -T --rm --no-deps app alembic upgrade head" in calls
-    assert "compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app" in calls
+    assert "compose -f docker-compose.prod.yml pull gotenberg" in calls
+    assert (
+        "compose -f docker-compose.prod.yml up -d --no-deps --wait --wait-timeout 90 gotenberg"
+        in calls
+    )
+    assert (
+        "compose -f docker-compose.prod.yml run -T --rm --no-deps app alembic upgrade head"
+        in calls
+    )
+    assert (
+        "compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app"
+        in calls
+    )
     assert " pull db" not in calls
     assert " stop " not in calls
     assert "system prune" not in calls
-    assert (project / ".previous-backend-image").read_text(encoding="utf-8").strip() == OLD_IMAGE
-    assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+    assert (project / ".previous-backend-image").read_text(
+        encoding="utf-8"
+    ).strip() == OLD_IMAGE
+    assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_deploy_rejects_forged_legacy_lock_boolean_before_lock_or_docker(tmp_path):
@@ -149,7 +172,9 @@ def test_failed_migration_does_not_activate_candidate(tmp_path):
     result = _run("scripts/deploy.sh", env)
 
     assert result.returncode == 42
-    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(
+        encoding="utf-8"
+    )
     assert " up -d " not in docker_log.read_text(encoding="utf-8")
 
 
@@ -285,7 +310,9 @@ def test_dockerfile_declares_directory_token_contract():
 def test_automatic_rollback_is_noop_when_candidate_was_not_activated(tmp_path):
     _, env, docker_log = _fake_environment(tmp_path)
     project = _project(tmp_path)
-    (project / ".previous-backend-image").write_text(OTHER_IMAGE + "\n", encoding="utf-8")
+    (project / ".previous-backend-image").write_text(
+        OTHER_IMAGE + "\n", encoding="utf-8"
+    )
     env.update(
         {
             "API_PROJECT_DIR": str(project),
@@ -298,7 +325,9 @@ def test_automatic_rollback_is_noop_when_candidate_was_not_activated(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "Candidate was not activated" in result.stdout
-    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(
+        encoding="utf-8"
+    )
     assert docker_log.read_text(encoding="utf-8") == ""
 
 
@@ -317,9 +346,15 @@ def test_rollback_restores_previous_immutable_image(tmp_path):
     result = _run("scripts/rollback_backend.sh", env)
 
     assert result.returncode == 0, result.stderr
-    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
-    assert (project / ".previous-backend-image").read_text(encoding="utf-8").strip() == NEW_IMAGE
-    assert "up -d --no-deps --force-recreate app" in docker_log.read_text(encoding="utf-8")
+    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(
+        encoding="utf-8"
+    )
+    assert (project / ".previous-backend-image").read_text(
+        encoding="utf-8"
+    ).strip() == NEW_IMAGE
+    assert "up -d --no-deps --force-recreate app" in docker_log.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_rollback_delegates_to_blue_green_when_active_slot_exists(tmp_path):
@@ -331,7 +366,7 @@ def test_rollback_delegates_to_blue_green_when_active_slot_exists(tmp_path):
     delegate = tmp_path / "blue-green.sh"
     _executable(
         delegate,
-        "#!/usr/bin/env bash\nprintf '%s|%s|%s|%s|%s\\n' \"$BACKEND_IMAGE\" \"$API_RUN_MIGRATIONS\" \"${API_DEPLOY_LOCK_FD:-}\" \"${API_DEPLOY_LOCK_HELPER:-}\" \"${API_DEPLOY_LOCK_HELPER_SHA256:-}\" > \"$DELEGATE_LOG\"\n",
+        '#!/usr/bin/env bash\nprintf \'%s|%s|%s|%s|%s\\n\' "$BACKEND_IMAGE" "$API_RUN_MIGRATIONS" "${API_DEPLOY_LOCK_FD:-}" "${API_DEPLOY_LOCK_HELPER:-}" "${API_DEPLOY_LOCK_HELPER_SHA256:-}" > "$DELEGATE_LOG"\n',
     )
     env.update(
         {
@@ -364,7 +399,7 @@ def test_rollback_probe_failure_reactivates_previous_blue_green_image(tmp_path):
     delegate = tmp_path / "blue-green.sh"
     _executable(
         delegate,
-        "#!/usr/bin/env bash\nprintf '%s\\n' \"$BACKEND_IMAGE\" >> \"$DELEGATE_LOG\"\n",
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$BACKEND_IMAGE" >> "$DELEGATE_LOG"\n',
     )
     env.update(
         {
@@ -384,7 +419,9 @@ def test_rollback_probe_failure_reactivates_previous_blue_green_image(tmp_path):
         OLD_IMAGE,
         NEW_IMAGE,
     ]
-    assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+    assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_rollback_reports_critical_when_probe_and_reactivation_both_fail(tmp_path):
@@ -423,7 +460,7 @@ def test_rollback_probe_requires_durable_auth_and_atomic_directory_write():
     script = (REPO_ROOT / "scripts/rollback_backend.sh").read_text(encoding="utf-8")
     assert "google.auth_error is not None" in script
     assert 'status.get("persistence_ok") is not True' in script
-    assert 'os.replace(temporary, probe_path)' in script
+    assert "os.replace(temporary, probe_path)" in script
     assert "Google backup probe returned no backup objects" in script
     list_index = script.index("items = backup_service.list_backups(limit=1)")
     status_index = script.index("status = google.get_token_status()")

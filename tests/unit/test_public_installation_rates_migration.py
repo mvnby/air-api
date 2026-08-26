@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from tests.unit.alembic_chain_test_support import assert_revision_in_single_head_chain
 
 
-HEAD_REVISION = "e5f6a7b8c9d0"
+HEAD_REVISION = "e6f7a8b9c0d1"
 
 
 def _migration():
@@ -31,8 +31,7 @@ def _migration():
 def test_public_installation_rate_correction_is_the_single_alembic_head() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
     assert (
-        assert_revision_in_single_head_chain(scripts, "d4e5f6a7b8c9")
-        == HEAD_REVISION
+        assert_revision_in_single_head_chain(scripts, "d4e5f6a7b8c9") == HEAD_REVISION
     )
 
 

@@ -32,9 +32,7 @@ def test_rollback_routes_ready_buffer_before_stopping_candidate():
         'rollback_route_slot "${rollback_buffer_slot}" "${candidate_slot}"'
     )
     candidate_stop = rollback.index('rollback_stop_service "${candidate_service}"')
-    old_start = rollback.index(
-        '"${COMPOSE[@]}" up -d --no-deps "${active_service}"'
-    )
+    old_start = rollback.index('"${COMPOSE[@]}" up -d --no-deps "${active_service}"')
     old_ready = rollback.index('"rollback_old"')
     old_route = rollback.index('rollback_route_slot "${active_slot}"')
     buffer_stop = rollback.index("rollback_buffer_stop", old_route)
@@ -92,7 +90,9 @@ def test_zero_gap_buffer_covers_every_slot_and_proxy_combination(
     )
     old_start = next(
         index
-        for index, line in enumerate(lines[candidate_stop + 1 :], start=candidate_stop + 1)
+        for index, line in enumerate(
+            lines[candidate_stop + 1 :], start=candidate_stop + 1
+        )
         if line.endswith(f" up -d --no-deps {services[active_slot]}")
     )
     old_ready = next(
@@ -119,7 +119,9 @@ def test_zero_gap_buffer_covers_every_slot_and_proxy_combination(
     if active_slot == "legacy":
         assert not (project / ".active-api-slot").exists()
     else:
-        assert (project / ".active-api-slot").read_text(encoding="utf-8").strip() == active_slot
+        assert (project / ".active-api-slot").read_text(
+            encoding="utf-8"
+        ).strip() == active_slot
     assert old_target in upstream.read_text(encoding="utf-8")
 
 
@@ -130,6 +132,8 @@ def test_first_deploy_activates_blue_without_touching_database(tmp_path):
 
     assert result.returncode == 0, result.stderr
     commands = command_log.read_text(encoding="utf-8")
+    assert "pull gotenberg" in commands
+    assert "up -d --no-deps --wait --wait-timeout 90 gotenberg" in commands
     assert "pull app-blue" in commands
     assert "run -T --rm --no-deps app-blue alembic upgrade head" in commands
     assert "up -d --no-deps --force-recreate app-blue" in commands
@@ -141,7 +145,9 @@ def test_first_deploy_activates_blue_without_touching_database(tmp_path):
     ]
     assert len(candidate_ready_calls) >= 7
     lines = commands.splitlines()
-    old_remove = next(index for index, line in enumerate(lines) if line.endswith(" rm -f app"))
+    old_remove = next(
+        index for index, line in enumerate(lines) if line.endswith(" rm -f app")
+    )
     post_stop_scheduler_samples = [
         index
         for index, line in enumerate(lines)
@@ -150,9 +156,17 @@ def test_first_deploy_activates_blue_without_touching_database(tmp_path):
     assert len(post_stop_scheduler_samples) >= 6
     assert " pull db" not in commands
     assert " up -d db" not in commands
+    assert commands.index("pull gotenberg") < commands.index("pull app-blue")
+    assert commands.index(
+        "up -d --no-deps --wait --wait-timeout 90 gotenberg"
+    ) < commands.index("up -d --no-deps --force-recreate app-blue")
     assert (project / ".active-api-slot").read_text(encoding="utf-8").strip() == "blue"
-    assert (project / ".previous-backend-image").read_text(encoding="utf-8").strip() == OLD_IMAGE
-    assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+    assert (project / ".previous-backend-image").read_text(
+        encoding="utf-8"
+    ).strip() == OLD_IMAGE
+    assert f"BACKEND_IMAGE={NEW_IMAGE}" in (project / ".env").read_text(
+        encoding="utf-8"
+    )
     assert "proxy_pass http://127.0.0.1:18001;" in (
         tmp_path / "nginx/snippets/mvn-api-upstream.conf"
     ).read_text(encoding="utf-8")
@@ -186,7 +200,9 @@ def test_canonical_pitr_marker_has_only_narrow_attested_scrub_exception():
     deploy_source = SCRIPT.read_text(encoding="utf-8")
     safety_source = SAFETY_SCRIPT.read_text(encoding="utf-8")
 
-    assert 'PITR_MAINTENANCE_MARKER="/run/mvn-postgres-pitr-maintenance"' in deploy_source
+    assert (
+        'PITR_MAINTENANCE_MARKER="/run/mvn-postgres-pitr-maintenance"' in deploy_source
+    )
     assert "API_PITR_MAINTENANCE_MARKER:-" not in deploy_source
     lock_verify = deploy_source.index(
         'python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"'
@@ -212,8 +228,7 @@ def test_canonical_pitr_marker_has_only_narrow_attested_scrub_exception():
         assert f'"${{pinned_root}}/{pinned_path}"' in safety_source
     assert '"${DEPLOY_LOCK_FD}" == "9"' in safety_source
     assert (
-        'python3 "${PITR_MARKER_VALIDATOR}" marker "${transaction_id}"'
-        in safety_source
+        'python3 "${PITR_MARKER_VALIDATOR}" marker "${transaction_id}"' in safety_source
     )
 
 
@@ -247,7 +262,9 @@ def test_bootstrap_only_installs_stable_proxy_without_container_changes(tmp_path
     assert " up " not in commands
     assert " stop " not in commands
     assert not (project / ".active-api-slot").exists()
-    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(encoding="utf-8")
+    assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(
+        encoding="utf-8"
+    )
     assert "listen 127.0.0.1:18080;" in Path(env["API_NGINX_INTERNAL_FILE"]).read_text(
         encoding="utf-8"
     )
@@ -343,9 +360,7 @@ def test_runtime_image_reconciles_env_and_remains_rollback_source_of_truth(tmp_p
     assert f"BACKEND_IMAGE={OLD_IMAGE}" in (project / ".env").read_text(
         encoding="utf-8"
     )
-    assert "proxy_pass http://127.0.0.1:18001;" in upstream.read_text(
-        encoding="utf-8"
-    )
+    assert "proxy_pass http://127.0.0.1:18001;" in upstream.read_text(encoding="utf-8")
     summary = Path(env["API_BLUE_GREEN_SUMMARY_FILE"]).read_text(encoding="utf-8")
     assert "status=rolled_back" in summary
     assert f"failed_candidate={NEW_IMAGE}" in summary
@@ -361,7 +376,10 @@ def test_external_bot_runtime_does_not_affect_api_already_active_shortcut(tmp_pa
 
     assert result.returncode == 0, result.stderr
     commands = command_log.read_text(encoding="utf-8")
-    assert " pull " not in commands
+    assert "pull gotenberg" in commands
+    assert "up -d --no-deps --wait --wait-timeout 90 gotenberg" in commands
+    assert "pull app-blue" not in commands
+    assert "pull app-green" not in commands
     summary = Path(env["API_BLUE_GREEN_SUMMARY_FILE"]).read_text(encoding="utf-8")
     assert "status=already_active" in summary
 
@@ -375,7 +393,10 @@ def test_matching_api_runtime_can_use_already_active_shortcut(tmp_path):
 
     assert result.returncode == 0, result.stderr
     commands = command_log.read_text(encoding="utf-8")
-    assert " pull " not in commands
+    assert "pull gotenberg" in commands
+    assert "up -d --no-deps --wait --wait-timeout 90 gotenberg" in commands
+    assert "pull app-blue" not in commands
+    assert "pull app-green" not in commands
     summary = Path(env["API_BLUE_GREEN_SUMMARY_FILE"]).read_text(encoding="utf-8")
     assert "status=already_active" in summary
 

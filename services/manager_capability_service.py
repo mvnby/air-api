@@ -14,6 +14,7 @@ class ManagerCapabilityService:
     STAFF_MANAGE = "staff.manage"
     INFRASTRUCTURE_MANAGE = "infrastructure.manage"
     ANALYTICS_MANAGE = "analytics.manage"
+    DOCUMENTS_MANAGE = "documents.manage"
 
     ORDERED_CAPABILITIES = (
         CRM_MANAGE,
@@ -24,6 +25,7 @@ class ManagerCapabilityService:
         STAFF_MANAGE,
         INFRASTRUCTURE_MANAGE,
         ANALYTICS_MANAGE,
+        DOCUMENTS_MANAGE,
     )
 
     @classmethod
@@ -44,6 +46,7 @@ class ManagerCapabilityService:
         if role in OWNER_ACCESS_ROLES:
             capabilities.add(cls.STAFF_MANAGE)
             capabilities.add(cls.ANALYTICS_MANAGE)
+            capabilities.add(cls.DOCUMENTS_MANAGE)
             if auth.is_system_tenant:
                 capabilities.add(cls.INFRASTRUCTURE_MANAGE)
         return [

@@ -9,8 +9,12 @@ GET_MANAGER_PRODUCTS = "get_manager_products"
 GET_MANAGER_PRODUCT = "get_manager_product"
 LIST_MANAGER_TENANT_CATALOG_PRODUCTS = "list_manager_tenant_catalog_products"
 LIST_MANAGER_CATALOG_DECISION_PRODUCTS = "list_manager_catalog_decision_products"
-LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS = "list_manager_catalog_decision_filter_options"
-CREATE_MANAGER_CATALOG_DECISION_COLLECTION = "create_manager_catalog_decision_collection"
+LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS = (
+    "list_manager_catalog_decision_filter_options"
+)
+CREATE_MANAGER_CATALOG_DECISION_COLLECTION = (
+    "create_manager_catalog_decision_collection"
+)
 ATTACH_MANAGER_CATALOG_DECISION_TO_ORDER = "attach_manager_catalog_decision_to_order"
 CREATE_MANAGER_CATALOG_DECISION_ORDER = "create_manager_catalog_decision_order"
 GET_MANAGER_CATALOG_QUALITY_REPORT = "get_manager_catalog_quality_report"
@@ -18,7 +22,9 @@ GET_MANAGER_CUSTOMERS = "get_manager_customers"
 GET_MANAGER_CUSTOMER_DETAIL = "get_manager_customer_detail"
 GET_MANAGER_CUSTOMER_DOCS = "get_manager_customer_docs"
 GET_MANAGER_CUSTOMER_RECONCILIATION = "get_manager_customer_reconciliation"
-CREATE_MANAGER_CUSTOMER_RECONCILIATION_DOCUMENT = "create_manager_customer_reconciliation_document"
+CREATE_MANAGER_CUSTOMER_RECONCILIATION_DOCUMENT = (
+    "create_manager_customer_reconciliation_document"
+)
 RECOGNIZE_MANAGER_CUSTOMER_REQUISITES = "recognize_manager_customer_requisites"
 CONFIRM_MANAGER_CUSTOMER_REQUISITES = "confirm_manager_customer_requisites"
 GET_MANAGER_CUSTOMER_BRANCHES = "get_manager_customer_branches"
@@ -35,7 +41,9 @@ CREATE_MANAGER_EQUIPMENT_COMPONENT = "create_manager_equipment_component"
 PATCH_MANAGER_EQUIPMENT_COMPONENT = "patch_manager_equipment_component"
 LIST_MANAGER_EQUIPMENT_HISTORY = "list_manager_equipment_history"
 CREATE_MANAGER_EQUIPMENT_HISTORY = "create_manager_equipment_history"
-CREATE_MANAGER_EQUIPMENT_HISTORY_FROM_REPAIR_ORDER = "create_manager_equipment_history_from_repair_order"
+CREATE_MANAGER_EQUIPMENT_HISTORY_FROM_REPAIR_ORDER = (
+    "create_manager_equipment_history_from_repair_order"
+)
 LIST_MANAGER_ORDER_ATTACHMENTS = "list_manager_order_attachments"
 LIST_MANAGER_EQUIPMENT_ATTACHMENTS = "list_manager_equipment_attachments"
 UPLOAD_MANAGER_ORDER_ATTACHMENT = "upload_manager_order_attachment"
@@ -179,16 +187,44 @@ LIST_MANAGER_DOCUMENT_TEMPLATE_FILES = "list_manager_document_template_files"
 CREATE_MANAGER_DOCUMENT_TEMPLATE = "create_manager_document_template"
 PATCH_MANAGER_DOCUMENT_TEMPLATE = "patch_manager_document_template"
 DELETE_MANAGER_DOCUMENT_TEMPLATE = "delete_manager_document_template"
+LIST_MANAGER_DOCUMENT_LEGAL_ENTITIES = "list_manager_document_legal_entities"
+CREATE_MANAGER_DOCUMENT_LEGAL_ENTITY = "create_manager_document_legal_entity"
+PATCH_MANAGER_DOCUMENT_LEGAL_ENTITY = "patch_manager_document_legal_entity"
+LIST_MANAGER_DOCUMENT_NUMBER_POLICIES = "list_manager_document_number_policies"
+UPSERT_MANAGER_DOCUMENT_NUMBER_POLICY = "upsert_manager_document_number_policy"
+LIST_MANAGER_NATIVE_DOCUMENT_TEMPLATES = "list_manager_native_document_templates"
+GET_MANAGER_NATIVE_PLACEHOLDER_CATALOG = "get_manager_native_placeholder_catalog"
+CREATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE = "create_manager_native_document_template"
+LIST_MANAGER_NATIVE_TEMPLATE_VERSIONS = "list_manager_native_template_versions"
+UPLOAD_MANAGER_NATIVE_TEMPLATE_VERSION = "upload_manager_native_template_version"
+ACTIVATE_MANAGER_NATIVE_TEMPLATE_VERSION = "activate_manager_native_template_version"
+DOWNLOAD_MANAGER_NATIVE_TEMPLATE_VERSION_SOURCE = (
+    "download_manager_native_template_version_source"
+)
+GET_MANAGER_DOCUMENT_PDF_RUNTIME = "get_manager_document_pdf_runtime"
+LIST_MANAGER_MANAGED_ORDER_DOCUMENTS = "list_manager_managed_order_documents"
+CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT = "create_manager_managed_document_draft"
+ISSUE_MANAGER_MANAGED_DOCUMENT = "issue_manager_managed_document"
+VOID_MANAGER_MANAGED_DOCUMENT = "void_manager_managed_document"
+LIST_MANAGER_DOCUMENT_ARTIFACTS = "list_manager_document_artifacts"
+GET_MANAGER_DOCUMENT_ARTIFACT_ACCESS = "get_manager_document_artifact_access"
+DOWNLOAD_MANAGER_DOCUMENT_ARTIFACT = "download_manager_document_artifact"
 GET_MANAGER_CRM_HEALTH_REPORT = "get_manager_crm_health_report"
 GET_MANAGER_DASHBOARD_OVERVIEW = "get_manager_dashboard_overview"
 GET_DASHBOARD_STATS = "get_dashboard_stats"
 LIST_MANAGER_ANALYTICS_CONNECTIONS = "list_manager_analytics_connections"
 UPSERT_MANAGER_YANDEX_METRIKA_CONNECTION = "upsert_manager_yandex_metrika_connection"
 UPSERT_MANAGER_YANDEX_DIRECT_CONNECTION = "upsert_manager_yandex_direct_connection"
-UPSERT_MANAGER_YANDEX_WEBMASTER_CONNECTION = "upsert_manager_yandex_webmaster_connection"
-START_MANAGER_GOOGLE_ANALYTICS_AUTHORIZATION = "start_manager_google_analytics_authorization"
+UPSERT_MANAGER_YANDEX_WEBMASTER_CONNECTION = (
+    "upsert_manager_yandex_webmaster_connection"
+)
+START_MANAGER_GOOGLE_ANALYTICS_AUTHORIZATION = (
+    "start_manager_google_analytics_authorization"
+)
 START_MANAGER_GOOGLE_ADS_AUTHORIZATION = "start_manager_google_ads_authorization"
-START_MANAGER_GOOGLE_SEARCH_CONSOLE_AUTHORIZATION = "start_manager_google_search_console_authorization"
+START_MANAGER_GOOGLE_SEARCH_CONSOLE_AUTHORIZATION = (
+    "start_manager_google_search_console_authorization"
+)
 IMPORT_ONLINER = "import_onliner"
 CATALOG_IMPORT = "catalog_import"
 START_CATALOG_IMPORT_JOB = "start_catalog_import_job"
@@ -223,8 +259,12 @@ LIST_MANAGER_QUICK_TARIFFS = "list_manager_quick_tariffs"
 LIST_MANAGER_INSTALLATION_RATES = "list_manager_installation_rates"
 UPDATE_MANAGER_INSTALLATION_RATE = "update_manager_installation_rate"
 LIST_MANAGER_INSTALLATION_DISCOUNT_RULES = "list_manager_installation_discount_rules"
-SEARCH_MANAGER_INSTALLATION_DISCOUNT_PRODUCTS = "search_manager_installation_discount_products"
-UPDATE_MANAGER_INSTALLATION_DISCOUNT_POLICY = "update_manager_installation_discount_policy"
+SEARCH_MANAGER_INSTALLATION_DISCOUNT_PRODUCTS = (
+    "search_manager_installation_discount_products"
+)
+UPDATE_MANAGER_INSTALLATION_DISCOUNT_POLICY = (
+    "update_manager_installation_discount_policy"
+)
 UPSERT_MANAGER_INSTALLATION_DISCOUNT_RULE = "upsert_manager_installation_discount_rule"
 DELETE_MANAGER_INSTALLATION_DISCOUNT_RULE = "delete_manager_installation_discount_rule"
 CREATE_MANAGER_TARIFF = "create_manager_tariff"
@@ -293,10 +333,16 @@ UPDATE_MANAGER_PRODUCT_COLLECTION = "update_manager_product_collection"
 DUPLICATE_MANAGER_PRODUCT_COLLECTION = "duplicate_manager_product_collection"
 ARCHIVE_MANAGER_PRODUCT_COLLECTION = "archive_manager_product_collection"
 REPLACE_MANAGER_PRODUCT_COLLECTION_ITEMS = "replace_manager_product_collection_items"
-REPLACE_MANAGER_PRODUCT_COLLECTION_PLACEMENTS = "replace_manager_product_collection_placements"
+REPLACE_MANAGER_PRODUCT_COLLECTION_PLACEMENTS = (
+    "replace_manager_product_collection_placements"
+)
 PREVIEW_MANAGER_PRODUCT_COLLECTION = "preview_manager_product_collection"
-GET_MANAGER_PRODUCT_COLLECTION_RULE_OPTIONS = "get_manager_product_collection_rule_options"
-SEARCH_MANAGER_PRODUCT_COLLECTION_PRODUCTS = "search_manager_product_collection_products"
+GET_MANAGER_PRODUCT_COLLECTION_RULE_OPTIONS = (
+    "get_manager_product_collection_rule_options"
+)
+SEARCH_MANAGER_PRODUCT_COLLECTION_PRODUCTS = (
+    "search_manager_product_collection_products"
+)
 LIST_MANAGER_TENANT_OFFERS = "list_manager_tenant_offers"
 UPSERT_MANAGER_TENANT_OFFER = "upsert_manager_tenant_offer"
 GET_MANAGER_TENANT_OFFER = "get_manager_tenant_offer"
@@ -322,7 +368,9 @@ ANALYZE_SUPPLIER_SOURCE = "analyze_supplier_source"
 SYNC_SUPPLIER_SOURCE = "sync_supplier_source"
 LIST_UNMAPPED_SUPPLIER_OFFERS = "list_unmapped_supplier_offers"
 LIST_PRODUCT_SUPPLIER_OFFER_CANDIDATES = "list_product_supplier_offer_candidates"
-LIST_SUPPLIER_SOURCE_URL_IMPORT_CANDIDATES = "list_supplier_source_url_import_candidates"
+LIST_SUPPLIER_SOURCE_URL_IMPORT_CANDIDATES = (
+    "list_supplier_source_url_import_candidates"
+)
 START_SUPPLIER_SOURCE_URL_IMPORT = "start_supplier_source_url_import"
 CREATE_SUPPLIER_MAPPING = "create_supplier_mapping"
 DELETE_SUPPLIER_MAPPING = "delete_supplier_mapping"
@@ -512,6 +560,26 @@ ALL_MANAGER_OPERATION_IDS = (
     CREATE_MANAGER_DOCUMENT_TEMPLATE,
     PATCH_MANAGER_DOCUMENT_TEMPLATE,
     DELETE_MANAGER_DOCUMENT_TEMPLATE,
+    LIST_MANAGER_DOCUMENT_LEGAL_ENTITIES,
+    CREATE_MANAGER_DOCUMENT_LEGAL_ENTITY,
+    PATCH_MANAGER_DOCUMENT_LEGAL_ENTITY,
+    LIST_MANAGER_DOCUMENT_NUMBER_POLICIES,
+    UPSERT_MANAGER_DOCUMENT_NUMBER_POLICY,
+    LIST_MANAGER_NATIVE_DOCUMENT_TEMPLATES,
+    GET_MANAGER_NATIVE_PLACEHOLDER_CATALOG,
+    CREATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE,
+    LIST_MANAGER_NATIVE_TEMPLATE_VERSIONS,
+    UPLOAD_MANAGER_NATIVE_TEMPLATE_VERSION,
+    ACTIVATE_MANAGER_NATIVE_TEMPLATE_VERSION,
+    DOWNLOAD_MANAGER_NATIVE_TEMPLATE_VERSION_SOURCE,
+    GET_MANAGER_DOCUMENT_PDF_RUNTIME,
+    LIST_MANAGER_MANAGED_ORDER_DOCUMENTS,
+    CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT,
+    ISSUE_MANAGER_MANAGED_DOCUMENT,
+    VOID_MANAGER_MANAGED_DOCUMENT,
+    LIST_MANAGER_DOCUMENT_ARTIFACTS,
+    GET_MANAGER_DOCUMENT_ARTIFACT_ACCESS,
+    DOWNLOAD_MANAGER_DOCUMENT_ARTIFACT,
     GET_MANAGER_CRM_HEALTH_REPORT,
     GET_MANAGER_DASHBOARD_OVERVIEW,
     GET_DASHBOARD_STATS,

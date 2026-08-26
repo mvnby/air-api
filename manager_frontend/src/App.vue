@@ -45,6 +45,7 @@ const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.v
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
 const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
+const DocumentsSettingsView = defineAsyncComponent(() => import('./views/DocumentsSettingsView.vue'));
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
 const InstallationRatesView = defineAsyncComponent(() => import('./views/InstallationRatesView.vue'));
 const InstallationDiscountsView = defineAsyncComponent(() => import('./views/InstallationDiscountsView.vue'));
@@ -111,6 +112,7 @@ const normalizePath = (path: string) => {
 const currentPath = computed(() => normalizePath(currentLocation.value.split('?')[0] || '/manager'));
 const canManagePlatform = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.platformManage));
 const canManageInfrastructure = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.infrastructureManage));
+const canManageDocuments = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.documentsManage));
 const visibleCoreNavItems = computed(() => coreNavItems.filter(
   item => !item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability),
 ));
@@ -174,6 +176,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
   if (path.startsWith('/manager/settings/backup')) return 'settings-backup';
+  if (path.startsWith('/manager/settings/documents')) return 'settings-documents';
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/installation-rates')) return 'installation-rates';
   if (path.startsWith('/manager/installation-discounts')) return 'installation-discounts';
@@ -196,9 +199,7 @@ const authorizedView = computed(() => (
 ));
 const webRebuildNeedsAttention = computed(() => Boolean(webRebuildStatus.value?.needs_rebuild));
 const webRebuildQueued = computed(() => webRebuildStatus.value?.state === 'queued');
-const webRebuildNoticeVisible = computed(() => (
-  webRebuildNeedsAttention.value || Boolean(webRebuildStatus.value?.last_error)
-));
+const webRebuildNoticeVisible = computed(() => webRebuildNeedsAttention.value || Boolean(webRebuildStatus.value?.last_error));
 const webRebuildNoticeClass = computed(() => {
   if (webRebuildQueued.value) return 'border-blue-200 bg-blue-50 text-blue-900';
   if (webRebuildNeedsAttention.value || webRebuildStatus.value?.last_error) {
@@ -664,6 +665,7 @@ watch(currentPath, () => {
       <CustomersView v-else-if="authorizedView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />
       <SettingsBackupView v-else-if="authorizedView === 'settings-backup' && canManageInfrastructure" :key="currentLocation" />
+      <DocumentsSettingsView v-else-if="authorizedView === 'settings-documents' && canManageDocuments" :key="currentLocation" />
       <SettingsView v-else-if="authorizedView === 'settings' && canManageInfrastructure" :key="currentLocation" />
       <InstallationRatesView v-else-if="authorizedView === 'installation-rates'" :key="currentLocation" />
       <InstallationDiscountsView v-else-if="authorizedView === 'installation-discounts'" :key="currentLocation" />

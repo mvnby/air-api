@@ -28,6 +28,8 @@ COMMUNICATIONS_WORKER_SERVICE="${API_COMMUNICATIONS_WORKER_SERVICE:-communicatio
 COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER:-${SCRIPT_DIR}/communications_worker_release_contract.sh}"
 EXPECTED_COMMUNICATIONS_WORKER_PROFILE="${API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE:-}"
 ROLLBACK_COMMUNICATIONS_WORKER_PROFILE="${API_COMMUNICATIONS_WORKER_ROLLBACK_PROFILE:-}"
+DOCUMENT_PDF_SERVICE="${DOCUMENT_PDF_SERVICE:-gotenberg}"
+DOCUMENT_PDF_WAIT_TIMEOUT="${DOCUMENT_PDF_WAIT_TIMEOUT:-90}"
 
 previous_image=""
 active_service="app"
@@ -38,6 +40,15 @@ worker_gate_profile=""
 
 log() {
   printf '[patroni-node-deploy][%s] %s\n' "$1" "$2"
+}
+
+ensure_document_pdf_runtime() {
+  log document-pdf "pulling and waiting for private ${DOCUMENT_PDF_SERVICE} runtime"
+  "${COMPOSE[@]}" pull "${DOCUMENT_PDF_SERVICE}"
+  require_deploy_capacity
+  "${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout \
+    "${DOCUMENT_PDF_WAIT_TIMEOUT}" "${DOCUMENT_PDF_SERVICE}"
+  log document-pdf "private ${DOCUMENT_PDF_SERVICE} runtime is healthy"
 }
 
 [[ -f "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" \
@@ -214,6 +225,15 @@ source "${CAPACITY_HELPER}"
   log error "BACKEND_IMAGE must be immutable"
   exit 1
 }
+[[ "${DOCUMENT_PDF_SERVICE}" == "gotenberg" ]] || {
+  log error "DOCUMENT_PDF_SERVICE must be gotenberg"
+  exit 1
+}
+[[ "${DOCUMENT_PDF_WAIT_TIMEOUT}" =~ ^[1-9][0-9]*$ ]] \
+  && (( DOCUMENT_PDF_WAIT_TIMEOUT <= 300 )) || {
+  log error "DOCUMENT_PDF_WAIT_TIMEOUT must be an integer from 1 to 300"
+  exit 1
+}
 [[ ! -e "${MAINTENANCE_MARKER}" ]] || {
   log error "Patroni maintenance marker exists: ${MAINTENANCE_MARKER}"
   exit 1
@@ -312,6 +332,7 @@ reconcile_standby_proxy
 communications_worker_require_contract "${EXPECTED_COMMUNICATIONS_WORKER_PROFILE}"
 worker_gate_profile="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
 log standby "updating fenced service ${active_service}"
+ensure_document_pdf_runtime
 "${COMPOSE[@]}" pull "${active_service}"
 "${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
 require_deploy_capacity

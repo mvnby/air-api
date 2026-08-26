@@ -1,9 +1,13 @@
+from datetime import date as DateValue
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     Column,
+    Date,
+    DateTime,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -15,7 +19,16 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, Relationship, SQLModel
 
-from .common import ClosingResult, DocumentRoleType, EquipmentStatus, LeadSource, OrderStageStatus, OrderStatus, PaymentCurrency, PaymentType
+from .common import (
+    DocumentRoleType,
+    EquipmentStatus,
+    LeadSource,
+    OrderStageStatus,
+    OrderStatus,
+    PaymentCurrency,
+    PaymentType,
+)
+
 
 class Installer(SQLModel, table=True):
     __tablename__ = "installers"
@@ -24,7 +37,9 @@ class Installer(SQLModel, table=True):
     is_active: bool = Field(default=True)
     default_rate: Optional[float] = Field(default=None)
 
-    telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, unique=True, nullable=True))
+    telegram_id: Optional[int] = Field(
+        default=None, sa_column=Column(BigInteger, unique=True, nullable=True)
+    )
 
 
 class OrderInstaller(SQLModel, table=True):
@@ -73,9 +88,13 @@ class ServiceTariff(SQLModel, table=True):
     # Legacy columns remain during the expand/contract rollout so the previous
     # application image can keep serving traffic while migrations run.
     selector_label: str = Field(index=True)
-    estimate_template: str = Field(default="Монтаж кондиционера, включая расходные материалы")
+    estimate_template: str = Field(
+        default="Монтаж кондиционера, включая расходные материалы"
+    )
     short_name: Optional[str] = Field(default=None, index=True)
-    full_description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    full_description: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True)
+    )
     category: str = Field(default="", index=True)
     power_range: str = Field(default="", index=True)
 
@@ -107,9 +126,7 @@ class ServiceTariff(SQLModel, table=True):
     @property
     def effective_full_description(self) -> str:
         return (
-            self.full_description
-            or self.estimate_template
-            or self.effective_short_name
+            self.full_description or self.estimate_template or self.effective_short_name
         ).strip()
 
 
@@ -194,7 +211,9 @@ class ServiceEstimate(SQLModel, table=True):
     subtotal: float = Field(default=0.0)
     discount_amount: float = Field(default=0.0)
     total: float = Field(default=0.0)
-    calculation_payload: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    calculation_payload: Optional[Dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON)
+    )
 
     status: str = Field(default="draft", index=True)
     created_by: Optional[str] = Field(default=None, index=True)
@@ -230,7 +249,9 @@ class ServiceEstimateItem(SQLModel, table=True):
     )
     name: str
     short_name: Optional[str] = Field(default=None)
-    full_description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    full_description: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True)
+    )
 
     qty: float = Field(default=1.0)
     unit: str = Field(default="шт")
@@ -257,7 +278,9 @@ class OrderProposal(SQLModel, table=True):
     sort_order: int = Field(default=0, index=True)
 
     created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now}
+    )
 
     order: "Order" = Relationship(back_populates="proposals")
     product_links: List["OrderProductLink"] = Relationship(back_populates="proposal")
@@ -268,7 +291,9 @@ class OrderProductLink(SQLModel, table=True):
     __tablename__ = "order_product_link"
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: Optional[int] = Field(default=None, foreign_key="order.id")
-    proposal_id: Optional[int] = Field(default=None, foreign_key="order_proposal.id", index=True)
+    proposal_id: Optional[int] = Field(
+        default=None, foreign_key="order_proposal.id", index=True
+    )
     product_id: Optional[int] = Field(default=None, foreign_key="product.id")
     quantity: int = Field(default=1)
 
@@ -285,8 +310,12 @@ class OrderProductLink(SQLModel, table=True):
 
     is_installation_included: bool = Field(default=False)
     installation_price: int = Field(default=0)
-    installation_details: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
-    logistics_components: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))
+    installation_details: Optional[Dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON)
+    )
+    logistics_components: Optional[List[Dict[str, Any]]] = Field(
+        default=None, sa_column=Column(JSON)
+    )
 
     order: "Order" = Relationship(back_populates="product_links")
     proposal: Optional[OrderProposal] = Relationship(back_populates="product_links")
@@ -297,7 +326,9 @@ class OrderServiceLink(SQLModel, table=True):
     __tablename__ = "order_service_link"
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: Optional[int] = Field(default=None, foreign_key="order.id")
-    proposal_id: Optional[int] = Field(default=None, foreign_key="order_proposal.id", index=True)
+    proposal_id: Optional[int] = Field(
+        default=None, foreign_key="order_proposal.id", index=True
+    )
     service_id: Optional[int] = Field(default=None, foreign_key="service.id")
     quantity: int = Field(default=1)
 
@@ -321,20 +352,43 @@ class DocumentTemplateCustomerLink(SQLModel, table=True):
 class DocumentTemplateActLink(SQLModel, table=True):
     __tablename__ = "document_template_act_link"
 
-    contract_template_id: int = Field(foreign_key="document_template.id", primary_key=True)
+    contract_template_id: int = Field(
+        foreign_key="document_template.id", primary_key=True
+    )
     act_template_id: int = Field(foreign_key="document_template.id", primary_key=True)
 
 
 class DocumentTemplate(SQLModel, table=True):
     __tablename__ = "document_template"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["legal_entity_id", "tenant_id"],
+            ["document_legal_entity.id", "document_legal_entity.tenant_id"],
+            name="fk_document_template_legal_entity_tenant",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "legal_entity_id IS NULL OR tenant_id IS NOT NULL",
+            name="ck_document_template_legal_entity_requires_tenant",
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    # Nullable only for legacy templates during the expand phase.
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id", index=True)
+    legal_entity_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, nullable=True, index=True)
+    )
     name: str = Field(index=True)
     doc_type: str = Field(index=True)
-    google_template_id: str = Field(index=True)
-    document_role_type: Optional[DocumentRoleType] = Field(default=None, sa_column=Column(String, nullable=True))
+    google_template_id: Optional[str] = Field(default=None, index=True)
+    document_role_type: Optional[DocumentRoleType] = Field(
+        default=None, sa_column=Column(String, nullable=True)
+    )
     description: Optional[str] = None
-    base_document_type_label: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    base_document_type_label: Optional[str] = Field(
+        default=None, sa_column=Column(String, nullable=True)
+    )
 
     is_default: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)
@@ -343,7 +397,9 @@ class DocumentTemplate(SQLModel, table=True):
     sort_order: int = Field(default=0, index=True)
 
     created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now}
+    )
 
     customers: List["Customer"] = Relationship(
         link_model=DocumentTemplateCustomerLink,
@@ -390,7 +446,9 @@ class OrderWorkStage(SQLModel, table=True):
     order_id: int = Field(foreign_key="order.id", index=True)
 
     name: str  # "Закладка трассы", "Монтаж"
-    status: OrderStageStatus = Field(default=OrderStageStatus.PLANNED, sa_column=Column(String, index=True))
+    status: OrderStageStatus = Field(
+        default=OrderStageStatus.PLANNED, sa_column=Column(String, index=True)
+    )
 
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
@@ -421,7 +479,12 @@ class Order(SQLModel, table=True):
             sqlite_where=text("source_fingerprint IS NOT NULL"),
         ),
         Index("ix_order_tenant_status_created_at", "tenant_id", "status", "created_at"),
-        Index("ix_order_storefront_status_created_at", "storefront_id", "status", "created_at"),
+        Index(
+            "ix_order_storefront_status_created_at",
+            "storefront_id",
+            "status",
+            "created_at",
+        ),
         ForeignKeyConstraint(
             ["storefront_id", "tenant_id"],
             ["storefront.id", "storefront.tenant_id"],
@@ -449,10 +512,14 @@ class Order(SQLModel, table=True):
         ondelete="SET NULL",
         index=True,
     )
-    customer_contract_id: Optional[int] = Field(default=None, foreign_key="customer_contract.id", index=True)
+    customer_contract_id: Optional[int] = Field(
+        default=None, foreign_key="customer_contract.id", index=True
+    )
 
     delivery_address: Optional[str] = None
-    document_role_type: Optional[DocumentRoleType] = Field(default=None, sa_column=Column(String, nullable=True))
+    document_role_type: Optional[DocumentRoleType] = Field(
+        default=None, sa_column=Column(String, nullable=True)
+    )
 
     user_id: Optional[int] = Field(default=None, index=True)
 
@@ -460,7 +527,9 @@ class Order(SQLModel, table=True):
         default=OrderStatus.NEW_LEAD,
         sa_column=Column(String, index=True, nullable=False),
     )
-    lead_source: LeadSource = Field(default=LeadSource.MANAGER, sa_column=Column(String, index=True))
+    lead_source: LeadSource = Field(
+        default=LeadSource.MANAGER, sa_column=Column(String, index=True)
+    )
     title: Optional[str] = Field(default=None)
     comment: Optional[str] = Field(default=None)
     workflow_type: str = Field(default="sales_installation", index=True)
@@ -478,19 +547,24 @@ class Order(SQLModel, table=True):
     # Financials
     total_payments: float = Field(default=0.0)
     balance_due: float = Field(default=0.0)
-    is_paid: bool = Field(default=False) # Will be deprecated but left for now
+    is_paid: bool = Field(default=False)  # Will be deprecated but left for now
 
     # Currency tracking
     target_currency: Optional[PaymentCurrency] = Field(
         default=None,
         sa_column=Column(String, nullable=True),
     )  # 'USD' or 'EUR'
-    target_currency_amount: Optional[float] = Field(default=None) # The fixed total price in chosen currency
-    target_currency_payments: Optional[float] = Field(default=0.0) # Payments made in chosen currency
-
+    target_currency_amount: Optional[float] = Field(
+        default=None
+    )  # The fixed total price in chosen currency
+    target_currency_payments: Optional[float] = Field(
+        default=0.0
+    )  # Payments made in chosen currency
 
     # --- Closing ---
-    closing_result: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True, index=True))
+    closing_result: Optional[str] = Field(
+        default=None, sa_column=Column(String, nullable=True, index=True)
+    )
     reject_reason: Optional[str] = Field(default=None)
 
     # --- Pause / On Hold ---
@@ -499,10 +573,12 @@ class Order(SQLModel, table=True):
 
     # --- Internal: Negotiation stage ---
     measurement_required: bool = Field(default=False)
-    measurement_date: Optional[datetime] = None   # renamed from assessment_date
+    measurement_date: Optional[datetime] = None  # renamed from assessment_date
     measurer_id: Optional[int] = Field(default=None, index=True)
     measurement_result: Optional[str] = Field(default=None)
-    additional_conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    additional_conditions: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True)
+    )
     negotiation_status: str = Field(
         default="awaiting_offer",
         sa_column=Column(
@@ -513,7 +589,9 @@ class Order(SQLModel, table=True):
         ),
     )
     negotiation_status_changed_at: Optional[datetime] = None
-    proposal_status: str = Field(default="draft", sa_column=Column(String, default="draft", index=True))
+    proposal_status: str = Field(
+        default="draft", sa_column=Column(String, default="draft", index=True)
+    )
     proposal_sent_at: Optional[datetime] = None
     execution_without_payment: bool = Field(default=False, index=True)
     execution_without_payment_reason: Optional[str] = Field(default=None)
@@ -534,22 +612,32 @@ class Order(SQLModel, table=True):
     works_plan: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
     # Store equipment state
-    equipment_status: EquipmentStatus = Field(default=EquipmentStatus.PENDING, sa_column=Column(String, default="pending", index=True))
+    equipment_status: EquipmentStatus = Field(
+        default=EquipmentStatus.PENDING,
+        sa_column=Column(String, default="pending", index=True),
+    )
     standard_install_kit_issued: bool = Field(default=False)
 
-
     created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now}
+    )
     installation_date: Optional[datetime] = None
-    next_followup_date: Optional[datetime] = Field(default=None, description="Дата следующего касания")
+    next_followup_date: Optional[datetime] = Field(
+        default=None, description="Дата следующего касания"
+    )
     status_changed_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
 
-    contract_date: Optional[datetime] = Field(default_factory=datetime.now, description="Дата заключения договора")
+    contract_date: Optional[datetime] = Field(
+        default_factory=datetime.now, description="Дата заключения договора"
+    )
 
     customer: Optional["Customer"] = Relationship(back_populates="orders")
     customer_branch: Optional["CustomerBranch"] = Relationship(back_populates="orders")
-    customer_contract: Optional["CustomerContract"] = Relationship(back_populates="orders")
+    customer_contract: Optional["CustomerContract"] = Relationship(
+        back_populates="orders"
+    )
 
     proposals: List[OrderProposal] = Relationship(
         back_populates="order",
@@ -602,14 +690,42 @@ class Order(SQLModel, table=True):
     )
 
     def calculate_totals(self):
-        selected_proposal = next((proposal for proposal in self.proposals if proposal.is_selected and not proposal.is_archived), None)
+        selected_proposal = next(
+            (
+                proposal
+                for proposal in self.proposals
+                if proposal.is_selected and not proposal.is_archived
+            ),
+            None,
+        )
         if not selected_proposal:
-            selected_proposal = next((proposal for proposal in sorted(self.proposals, key=lambda item: item.sort_order) if not proposal.is_archived), None)
-        selected_proposal_id = selected_proposal.id if selected_proposal and selected_proposal.id is not None else None
+            selected_proposal = next(
+                (
+                    proposal
+                    for proposal in sorted(
+                        self.proposals, key=lambda item: item.sort_order
+                    )
+                    if not proposal.is_archived
+                ),
+                None,
+            )
+        selected_proposal_id = (
+            selected_proposal.id
+            if selected_proposal and selected_proposal.id is not None
+            else None
+        )
 
         if selected_proposal_id is not None:
-            product_links = [item for item in self.product_links if item.proposal_id == selected_proposal_id]
-            service_links = [item for item in self.service_links if item.proposal_id == selected_proposal_id]
+            product_links = [
+                item
+                for item in self.product_links
+                if item.proposal_id == selected_proposal_id
+            ]
+            service_links = [
+                item
+                for item in self.service_links
+                if item.proposal_id == selected_proposal_id
+            ]
         else:
             product_links = list(self.product_links)
             service_links = list(self.service_links)
@@ -628,7 +744,11 @@ class Order(SQLModel, table=True):
 
         # Infer rate for currency logic if a fixed price is set.
         rate = 1.0
-        if self.target_currency and self.target_currency_amount and self.target_currency_amount > 0:
+        if (
+            self.target_currency
+            and self.target_currency_amount
+            and self.target_currency_amount > 0
+        ):
             rate = self.total_amount / self.target_currency_amount
 
         # Foreign-currency payments only affect totals when the order is fixed in
@@ -636,7 +756,9 @@ class Order(SQLModel, table=True):
         byn_amounts = []
         target_amounts = []
         for payment in self.payments:
-            curr = getattr(payment, "currency", PaymentCurrency.BYN) or PaymentCurrency.BYN
+            curr = (
+                getattr(payment, "currency", PaymentCurrency.BYN) or PaymentCurrency.BYN
+            )
             if curr == PaymentCurrency.BYN:
                 byn_amounts.append(payment.amount)
                 if self.target_currency and rate > 0:
@@ -657,38 +779,197 @@ class Order(SQLModel, table=True):
 
 class OrderDocument(SQLModel, table=True):
     __tablename__ = "order_document"
+    __table_args__ = (
+        Index("uq_order_document_id_tenant", "id", "tenant_id", unique=True),
+        Index(
+            "uq_order_document_id_tenant_legal_entity",
+            "id",
+            "tenant_id",
+            "legal_entity_id",
+            unique=True,
+        ),
+        Index(
+            "uq_order_document_active_replacement",
+            "tenant_id",
+            "replaces_document_id",
+            unique=True,
+            postgresql_where=text(
+                "replaces_document_id IS NOT NULL AND status IN ('draft', 'issued', 'sent', 'signed')"
+            ),
+            sqlite_where=text(
+                "replaces_document_id IS NOT NULL AND status IN ('draft', 'issued', 'sent', 'signed')"
+            ),
+        ),
+        ForeignKeyConstraint(
+            ["legal_entity_id", "tenant_id"],
+            ["document_legal_entity.id", "document_legal_entity.tenant_id"],
+            name="fk_order_document_legal_entity_tenant",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "legal_entity_id IS NULL OR tenant_id IS NOT NULL",
+            name="ck_order_document_legal_entity_requires_tenant",
+        ),
+        CheckConstraint(
+            "status IS NULL OR status IN ('draft', 'issued', 'sent', 'signed', 'void', 'replaced')",
+            name="ck_order_document_status_valid",
+        ),
+        CheckConstraint(
+            "status IS NULL OR (tenant_id IS NOT NULL AND legal_entity_id IS NOT NULL "
+            "AND internal_reference IS NOT NULL)",
+            name="ck_order_document_managed_scope_complete",
+        ),
+        CheckConstraint(
+            "official_number IS NULL OR (tenant_id IS NOT NULL AND legal_entity_id IS NOT NULL "
+            "AND official_series IS NOT NULL AND official_period_key IS NOT NULL "
+            "AND official_date IS NOT NULL)",
+            name="ck_order_document_official_identity_complete",
+        ),
+        CheckConstraint(
+            "business_role IS NULL OR business_role IN ('payment_request', 'offer')",
+            name="ck_order_document_business_role_valid",
+        ),
+        Index(
+            "uq_order_document_internal_reference",
+            "tenant_id",
+            "internal_reference",
+            unique=True,
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND internal_reference IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "tenant_id IS NOT NULL AND internal_reference IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_order_document_official_identity",
+            "tenant_id",
+            "legal_entity_id",
+            "doc_type",
+            "official_series",
+            "official_period_key",
+            "official_number",
+            unique=True,
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND legal_entity_id IS NOT NULL "
+                "AND official_number IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "tenant_id IS NOT NULL AND legal_entity_id IS NOT NULL "
+                "AND official_number IS NOT NULL"
+            ),
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    # Nullable only for legacy documents during the expand phase.
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id", index=True)
+    legal_entity_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, nullable=True, index=True)
+    )
     order_id: int = Field(foreign_key="order.id", index=True)
-    proposal_id: Optional[int] = Field(default=None, foreign_key="order_proposal.id", index=True)
-    base_document_id: Optional[int] = Field(default=None, foreign_key="order_document.id", index=True)
-    base_customer_contract_id: Optional[int] = Field(default=None, foreign_key="customer_contract.id", index=True)
-    document_template_id: Optional[int] = Field(default=None, foreign_key="document_template.id", index=True)
+    proposal_id: Optional[int] = Field(
+        default=None, foreign_key="order_proposal.id", index=True
+    )
+    base_document_id: Optional[int] = Field(
+        default=None, foreign_key="order_document.id", index=True
+    )
+    base_customer_contract_id: Optional[int] = Field(
+        default=None, foreign_key="customer_contract.id", index=True
+    )
+    document_template_id: Optional[int] = Field(
+        default=None, foreign_key="document_template.id", index=True
+    )
     template_id: Optional[str] = Field(default=None, index=True)
-    scope_customer_branch_id: Optional[int] = Field(default=None, foreign_key="customer_branches.id", index=True)
-    scope_title: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
-    scope_address: Optional[str] = Field(default=None, sa_column=Column(String, nullable=True))
+    scope_customer_branch_id: Optional[int] = Field(
+        default=None, foreign_key="customer_branches.id", index=True
+    )
+    scope_title: Optional[str] = Field(
+        default=None, sa_column=Column(String, nullable=True)
+    )
+    scope_address: Optional[str] = Field(
+        default=None, sa_column=Column(String, nullable=True)
+    )
     scope_meta: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     doc_type: str = Field(index=True)
+    status: Optional[str] = Field(
+        default=None, sa_column=Column(String(24), nullable=True, index=True)
+    )
+    internal_reference: Optional[str] = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )
+    official_series: Optional[str] = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )
+    official_period_key: Optional[str] = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )
+    official_number: Optional[str] = Field(
+        default=None, sa_column=Column(String(160), nullable=True)
+    )
+    official_date: Optional[DateValue] = Field(
+        default=None, sa_column=Column(Date(), nullable=True)
+    )
+    business_role: Optional[str] = Field(
+        default=None, sa_column=Column(String(32), nullable=True, index=True)
+    )
+    snapshot_version: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, nullable=True)
+    )
+    render_snapshot: Optional[Dict[str, Any]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
+    template_version_id: Optional[int] = Field(
+        default=None,
+        foreign_key="document_template_version.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    replaces_document_id: Optional[int] = Field(
+        default=None,
+        foreign_key="order_document.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    issued_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    sent_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    signed_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    voided_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    void_reason: Optional[str] = Field(
+        default=None, sa_column=Column(String(1000), nullable=True)
+    )
     number: str
     date: datetime = Field(default_factory=datetime.now)
 
-    google_file_id: str
-    google_edit_url: str
+    google_file_id: Optional[str] = None
+    google_edit_url: Optional[str] = None
 
     created_at: datetime = Field(default_factory=datetime.now)
 
     order: "Order" = Relationship(back_populates="documents")
     proposal: Optional[OrderProposal] = Relationship()
     base_document: Optional["OrderDocument"] = Relationship(
-        sa_relationship_kwargs={"remote_side": "OrderDocument.id"}
+        sa_relationship_kwargs={
+            "remote_side": "OrderDocument.id",
+            "foreign_keys": "OrderDocument.base_document_id",
+        }
     )
     base_customer_contract: Optional["CustomerContract"] = Relationship()
     document_template: Optional["DocumentTemplate"] = Relationship()
     scope_customer_branch: Optional["CustomerBranch"] = Relationship()
 
     def __str__(self):
-        return f"{self.doc_type.upper()} {self.number} от {self.date.strftime('%d.%m.%Y')}"
+        return (
+            f"{self.doc_type.upper()} {self.number} от {self.date.strftime('%d.%m.%Y')}"
+        )
 
 
 class BankReceipt(SQLModel, table=True):
@@ -697,7 +978,9 @@ class BankReceipt(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     status: str = Field(default="new", sa_column=Column(String, index=True))
 
-    operation_type: str = Field(default="incoming_funds", sa_column=Column(String, index=True))
+    operation_type: str = Field(
+        default="incoming_funds", sa_column=Column(String, index=True)
+    )
     sender_email: str = Field(index=True)
     subject: str
     message_id: Optional[str] = Field(default=None, index=True, unique=True)
@@ -707,7 +990,10 @@ class BankReceipt(SQLModel, table=True):
     received_at: Optional[datetime] = Field(default=None, index=True)
     our_account: Optional[str] = Field(default=None, index=True)
     amount: float = Field(default=0.0, index=True)
-    currency: PaymentCurrency = Field(default=PaymentCurrency.BYN, sa_column=Column(String, nullable=False, default=PaymentCurrency.BYN.value))
+    currency: PaymentCurrency = Field(
+        default=PaymentCurrency.BYN,
+        sa_column=Column(String, nullable=False, default=PaymentCurrency.BYN.value),
+    )
     payer_name: Optional[str] = Field(default=None, index=True)
     payer_unp: Optional[str] = Field(default=None, index=True)
     payer_account: Optional[str] = Field(default=None, index=True)
@@ -718,12 +1004,16 @@ class BankReceipt(SQLModel, table=True):
 
     raw_body: str
     parse_error: Optional[str] = None
-    matched_order_id: Optional[int] = Field(default=None, foreign_key="order.id", index=True)
+    matched_order_id: Optional[int] = Field(
+        default=None, foreign_key="order.id", index=True
+    )
     matched_payment_id: Optional[int] = Field(default=None, index=True)
     match_meta: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
     created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now}
+    )
 
     matched_order: Optional["Order"] = Relationship()
 
@@ -733,9 +1023,13 @@ class OutgoingEmail(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     status: str = Field(default="pending", sa_column=Column(String, index=True))
-    retry_of_email_id: Optional[int] = Field(default=None, foreign_key="outgoing_email.id", index=True)
+    retry_of_email_id: Optional[int] = Field(
+        default=None, foreign_key="outgoing_email.id", index=True
+    )
     order_id: Optional[int] = Field(default=None, foreign_key="order.id", index=True)
-    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+    customer_id: Optional[int] = Field(
+        default=None, foreign_key="customer.id", index=True
+    )
 
     recipient_email: str = Field(index=True)
     subject: str
@@ -744,12 +1038,16 @@ class OutgoingEmail(SQLModel, table=True):
     from_email: Optional[str] = None
     from_name: Optional[str] = None
     reply_to: Optional[str] = None
-    attachments: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))
+    attachments: Optional[List[Dict[str, Any]]] = Field(
+        default=None, sa_column=Column(JSON)
+    )
     error: Optional[str] = None
 
     sent_at: Optional[datetime] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now}
+    )
 
     order: Optional["Order"] = Relationship()
     customer: Optional["Customer"] = Relationship()
@@ -760,17 +1058,26 @@ class Payment(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
-    bank_receipt_id: Optional[int] = Field(default=None, foreign_key="bank_receipt.id", index=True)
+    bank_receipt_id: Optional[int] = Field(
+        default=None, foreign_key="bank_receipt.id", index=True
+    )
 
     amount: float = Field(default=0.0)
-    currency: PaymentCurrency = Field(default=PaymentCurrency.BYN, sa_column=Column(String, nullable=False, default=PaymentCurrency.BYN.value))
+    currency: PaymentCurrency = Field(
+        default=PaymentCurrency.BYN,
+        sa_column=Column(String, nullable=False, default=PaymentCurrency.BYN.value),
+    )
     date: datetime = Field(default_factory=datetime.now)
-    type: PaymentType = Field(default=PaymentType.PREPAYMENT, sa_column=Column(String, index=True))
+    type: PaymentType = Field(
+        default=PaymentType.PREPAYMENT, sa_column=Column(String, index=True)
+    )
 
     comment: Optional[str] = Field(default=None)
 
     created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
+    updated_at: Optional[datetime] = Field(
+        default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now}
+    )
 
     order: "Order" = Relationship(back_populates="payments")
     bank_receipt: Optional[BankReceipt] = Relationship()

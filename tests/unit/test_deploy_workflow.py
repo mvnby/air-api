@@ -7,7 +7,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _workflow(path: str) -> dict:
-    return yaml.load((REPO_ROOT / path).read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    return yaml.load(
+        (REPO_ROOT / path).read_text(encoding="utf-8"), Loader=yaml.BaseLoader
+    )
 
 
 def _step(job: dict, step_name: str) -> dict:
@@ -22,14 +24,20 @@ def test_deploy_workflow_checks_active_passive_after_standby_deploy():
     artifact_step = _step(standby_job, "Upload Standby Deploy Logs")
     summary_step = _step(standby_job, "Standby Deploy Summary")
 
-    assert standby_job["env"]["API_PRIMARY_ORIGIN"] == "${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}"
-    assert standby_job["env"]["API_STANDBY_ORIGIN"] == "${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}"
+    assert (
+        standby_job["env"]["API_PRIMARY_ORIGIN"]
+        == "${{ vars.API_PRIMARY_ORIGIN || '185.250.45.54' }}"
+    )
+    assert (
+        standby_job["env"]["API_STANDBY_ORIGIN"]
+        == "${{ vars.API_STANDBY_ORIGIN || '193.47.42.213' }}"
+    )
     assert step_names.index("Deploy standby API app image") < step_names.index(
         "Post-Standby Active-Passive Invariant Check"
     )
-    assert step_names.index("Post-Standby Active-Passive Invariant Check") < step_names.index(
-        "Prune Unused Standby Docker Images"
-    )
+    assert step_names.index(
+        "Post-Standby Active-Passive Invariant Check"
+    ) < step_names.index("Prune Unused Standby Docker Images")
     assert invariant_step["id"] == "standby_active_passive"
     assert "CHECK_PUBLIC_READY=false" in invariant_step["run"]
     assert 'PRIMARY_ORIGIN="${API_PRIMARY_ORIGIN}"' in invariant_step["run"]
@@ -90,25 +98,44 @@ def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
     assert standby_call["uses"] == "./.github/workflows/deploy-api-standby.yml"
     assert "always()" in standby_call["if"]
     assert "needs.backend-release.result == 'success'" in standby_call["if"]
-    assert standby_call["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
-    assert standby_call["with"]["backend_image"] == "${{ needs.backend-release.outputs.backend_image }}"
+    assert (
+        standby_call["with"]["deploy_sha"]
+        == "${{ needs.release-gate.outputs.deploy_sha }}"
+    )
+    assert (
+        standby_call["with"]["backend_image"]
+        == "${{ needs.backend-release.outputs.backend_image }}"
+    )
     assert standby_call["secrets"] == "inherit"
 
     assert "deploy-frontend" not in jobs
     assert "detect-frontend-changes" not in jobs
 
-    workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
+    workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(
+        encoding="utf-8"
+    )
     assert "backend:latest" not in workflow_text
     assert "backend:${{ github.sha }}" not in workflow_text
     assert "backend:${GITHUB_SHA}" not in workflow_text
-    assert "tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}" in workflow_text
-    assert "BACKEND_IMAGE=${{ steps.resolve_backend_image.outputs.reference }}" in workflow_text
-    assert 'reference="ghcr.io/${{ steps.prep.outputs.repo }}/backend@${digest}"' in workflow_text
+    assert (
+        "tags: ghcr.io/${{ steps.prep.outputs.repo }}/backend:${{ needs.release-gate.outputs.deploy_sha }}"
+        in workflow_text
+    )
+    assert (
+        "BACKEND_IMAGE=${{ steps.resolve_backend_image.outputs.reference }}"
+        in workflow_text
+    )
+    assert (
+        'reference="ghcr.io/${{ steps.prep.outputs.repo }}/backend@${digest}"'
+        in workflow_text
+    )
 
 
 def test_backend_release_cannot_publish_the_legacy_storefront():
     workflow = _workflow(".github/workflows/deploy.yml")
-    workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
+    workflow_text = (REPO_ROOT / ".github/workflows/deploy.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "deploy-frontend" not in workflow["jobs"]
     assert "detect-frontend-changes" not in workflow["jobs"]
@@ -136,7 +163,7 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "EXPECTED_CURRENT_IMAGE=" in rollback["run"]
     assert "API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true" in rollback["run"]
     assert "scripts/rollback_backend.sh" in rollback["run"]
-    assert '.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in primary_copy["run"]
+    assert ".candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" in primary_copy["run"]
     assert "scp \\" in primary_copy["run"]
     assert "scripts/ha/run_verified_remote_bundle.py" in primary_deploy["run"]
     assert "deploy_backend_blue_green.sh" in primary_deploy["run"]
@@ -148,16 +175,17 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert "API_CANONICAL_COMPOSE_FILE=" in primary_deploy["run"]
     assert "API_CANDIDATE_COMPOSE_FILE=" in primary_deploy["run"]
     assert "API_COMPOSE_TRANSACTIONAL=" in primary_deploy["run"]
-    assert "API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh" in primary_deploy["run"]
+    assert (
+        "API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh"
+        in primary_deploy["run"]
+    )
     assert "--entry deploy_backend_candidate_transaction.sh" in primary_deploy["run"]
     assert '--env "API_RUN_MIGRATIONS=${API_RUN_MIGRATIONS}"' in primary_deploy["run"]
     assert "smoke_status=passed" in primary_smoke["run"]
     assert "compose promotion completed" in primary_smoke["run"]
     assert "scripts/deploy_backend_blue_green.sh" in rollback["run"]
     assert "scripts/deploy_backend_blue_green_safety.sh" in rollback["run"]
-    safety_helper_env = (
-        "API_BLUE_GREEN_SAFETY_HELPER=__MVN_BUNDLE__/deploy_backend_blue_green_safety.sh"
-    )
+    safety_helper_env = "API_BLUE_GREEN_SAFETY_HELPER=__MVN_BUNDLE__/deploy_backend_blue_green_safety.sh"
     assert safety_helper_env in primary_deploy["run"]
     assert safety_helper_env in rollback["run"]
     capacity_helper_env = (
@@ -167,32 +195,68 @@ def test_backend_release_is_scoped_and_has_guarded_rollback():
     assert capacity_helper_env in rollback["run"]
     assert "scripts/ha/require_deploy_capacity.sh" in rollback["run"]
     assert "scripts/deploy.sh" in standby_deploy["run"]
-    assert '.candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' in standby_deploy["run"]
+    assert ".candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" in standby_deploy["run"]
     assert "scripts/deploy_backend_candidate_transaction.sh" in standby_deploy["run"]
-    assert '--env "API_COMPOSE_TRANSACTIONAL=${API_STANDBY_COPY_COMPOSE}"' in standby_deploy["run"]
-    assert "API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh" in standby_deploy["run"]
+    assert (
+        '--env "API_COMPOSE_TRANSACTIONAL=${API_STANDBY_COPY_COMPOSE}"'
+        in standby_deploy["run"]
+    )
+    assert (
+        "API_SMOKE_SCRIPT=__MVN_BUNDLE__/post_deploy_smoke_check.sh"
+        in standby_deploy["run"]
+    )
     assert "--entry deploy_backend_candidate_transaction.sh" in standby_deploy["run"]
     assert "--env API_DEPLOY_SERVICES=app" in standby_deploy["run"]
     assert "scripts/ha/safe_deploy_lock.py" in standby_deploy["run"]
-    assert "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py" in standby_deploy["run"]
-    assert '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"' in standby_deploy["run"]
-    assert '--env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled"' in standby_deploy["run"]
+    assert "scripts/ha/require_deploy_capacity.sh" in standby_deploy["run"]
+    assert (
+        "API_DEPLOY_CAPACITY_HELPER=__MVN_BUNDLE__/require_deploy_capacity.sh"
+        in standby_deploy["run"]
+    )
+    assert (
+        "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py"
+        in standby_deploy["run"]
+    )
+    assert (
+        '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"'
+        in standby_deploy["run"]
+    )
+    assert (
+        '--env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled"'
+        in standby_deploy["run"]
+    )
     assert "--env API_RUN_MIGRATIONS=false" in standby_deploy["run"]
     assert "steps.deploy_standby.outcome == 'failure'" in standby_rollback["if"]
     assert "--env API_DEPLOY_SERVICES=app" in standby_rollback["run"]
-    assert '--env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled"' in standby_rollback["run"]
+    assert (
+        '--env "API_ACTIVE_SLOT_FILE=${API_STANDBY_PROJECT_DIR}/.standby-api-slot-disabled"'
+        in standby_rollback["run"]
+    )
     assert "API_FORCE_COMPOSE_RECONCILE_ON_NOOP=true" in standby_rollback["run"]
     assert "scripts/ha/safe_deploy_lock.py" in standby_rollback["run"]
-    assert "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py" in standby_rollback["run"]
-    assert '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"' in standby_rollback["run"]
+    assert (
+        "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py"
+        in standby_rollback["run"]
+    )
+    assert (
+        '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"'
+        in standby_rollback["run"]
+    )
     assert "scripts/ha/safe_deploy_lock.py" in rollback["run"]
-    assert "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py" in rollback["run"]
-    assert '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"' in rollback["run"]
+    assert (
+        "API_DEPLOY_LOCK_HELPER=__MVN_BUNDLE__/safe_deploy_lock.py" in rollback["run"]
+    )
+    assert (
+        '--env "API_DEPLOY_LOCK_HELPER_SHA256=${lock_helper_sha256}"' in rollback["run"]
+    )
     assert primary_prune["continue-on-error"] == "true"
     assert standby_prune["continue-on-error"] == "true"
     workflow_text = "\n".join(
         (REPO_ROOT / path).read_text(encoding="utf-8")
-        for path in (".github/workflows/deploy.yml", ".github/workflows/deploy-api-standby.yml")
+        for path in (
+            ".github/workflows/deploy.yml",
+            ".github/workflows/deploy-api-standby.yml",
+        )
     )
     assert "GHCR_PAT='${{ secrets.GHCR_PAT }}'" not in workflow_text
     assert "--secret-env GHCR_PAT" in workflow_text

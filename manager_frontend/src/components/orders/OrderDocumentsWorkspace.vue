@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import type { ManagerOrderDetailResponse } from '../../client';
 import type { ProductLine } from './order-editor-types';
+import NativeDocumentsWorkspace from '../../features/documents/components/NativeDocumentsWorkspace.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 
@@ -22,6 +23,7 @@ const emit = defineEmits<{
 
 const expanded = defineModel<boolean>('expanded', { required: true });
 const panelRef = ref<InstanceType<typeof OrderDocumentsPanel> | null>(null);
+const activeProvider = ref<'native' | 'google'>('native');
 
 const documents = computed(() => props.order.documents || []);
 const isCompanyOrder = computed(() => props.order.customer?.type === 'company' || Boolean(props.order.customer?.inn));
@@ -57,8 +59,14 @@ const whatsappUrl = computed(() => {
 });
 const viberUrl = computed(() => `viber://chat?number=%2B${customerPhoneDigits.value}`);
 
-const openSend = () => panelRef.value?.openSend();
-const openCreate = () => panelRef.value?.openCreate();
+const openSend = () => {
+  activeProvider.value = 'google';
+  panelRef.value?.openSend();
+};
+const openCreate = () => {
+  activeProvider.value = 'google';
+  panelRef.value?.openCreate();
+};
 
 defineExpose({ openSend, openCreate });
 </script>
@@ -83,7 +91,35 @@ defineExpose({ openSend, openCreate });
       </div>
     </div>
 
+    <div class="mb-3 inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" data-testid="document-provider-toggle">
+      <button
+        type="button"
+        class="rounded-lg px-3 py-1.5 text-sm font-semibold transition"
+        :class="activeProvider === 'native' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-600 hover:text-teal-700 dark:text-slate-300'"
+        @click="activeProvider = 'native'"
+      >
+        В CRM
+      </button>
+      <button
+        type="button"
+        class="rounded-lg px-3 py-1.5 text-sm font-semibold transition"
+        :class="activeProvider === 'google' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-600 hover:text-teal-700 dark:text-slate-300'"
+        @click="activeProvider = 'google'"
+      >
+        Google Docs
+      </button>
+    </div>
+
+    <NativeDocumentsWorkspace
+      v-show="activeProvider === 'native'"
+      :order="order"
+      :active-proposal-id="activeProposalId"
+      @refresh="emit('refresh')"
+      @toast="emit('toast', $event)"
+    />
+
     <OrderDocumentsPanel
+      v-show="activeProvider === 'google'"
       ref="panelRef"
       :order="order"
       :active-proposal-id="activeProposalId"

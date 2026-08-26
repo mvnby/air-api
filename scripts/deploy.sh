@@ -17,6 +17,9 @@ DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/ha/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
 GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT="${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT:-${SCRIPT_DIR}/prepare_google_oauth_token_dir.sh}"
+CAPACITY_HELPER="${API_DEPLOY_CAPACITY_HELPER:-${SCRIPT_DIR}/ha/require_deploy_capacity.sh}"
+DOCUMENT_PDF_SERVICE="${DOCUMENT_PDF_SERVICE:-gotenberg}"
+DOCUMENT_PDF_WAIT_TIMEOUT="${DOCUMENT_PDF_WAIT_TIMEOUT:-90}"
 
 if [[ ! "${BACKEND_IMAGE}" =~ (@sha256:[0-9a-f]{64}|:[0-9a-f]{40})$ ]]; then
     echo "❌ BACKEND_IMAGE must use a 40-character Git SHA tag or sha256 digest" >&2
@@ -76,6 +79,21 @@ if [[ ! -f "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" ]]; then
     echo "❌ Google OAuth token preparation script not found: ${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" >&2
     exit 1
 fi
+[[ -f "${CAPACITY_HELPER}" && ! -L "${CAPACITY_HELPER}" ]] || {
+    echo "❌ Deploy capacity helper is missing or unsafe: ${CAPACITY_HELPER}" >&2
+    exit 1
+}
+# shellcheck disable=SC1090
+source "${CAPACITY_HELPER}"
+[[ "${DOCUMENT_PDF_SERVICE}" == "gotenberg" ]] || {
+    echo "❌ DOCUMENT_PDF_SERVICE must be gotenberg" >&2
+    exit 1
+}
+[[ "${DOCUMENT_PDF_WAIT_TIMEOUT}" =~ ^[1-9][0-9]*$ ]] \
+    && (( DOCUMENT_PDF_WAIT_TIMEOUT <= 300 )) || {
+    echo "❌ DOCUMENT_PDF_WAIT_TIMEOUT must be an integer from 1 to 300" >&2
+    exit 1
+}
 GOOGLE_OAUTH_PROJECT_DIR="${PROJECT_DIR}" \
     bash "${GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT}" prepare
 
@@ -123,6 +141,15 @@ if [[ "${RUN_DEFAULTS}" == "true" ]]; then
 else
     echo "⏭️ Skipping default global settings (API_RUN_DEFAULTS=${RUN_DEFAULTS})"
 fi
+
+# The API is recreated with --no-deps, so its private DOCX-to-PDF runtime must
+# be explicitly running and healthy first.  This deliberately never touches DB.
+echo "📄 Pulling and waiting for private ${DOCUMENT_PDF_SERVICE} runtime..."
+"${COMPOSE[@]}" pull "${DOCUMENT_PDF_SERVICE}"
+require_deploy_capacity
+"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout \
+    "${DOCUMENT_PDF_WAIT_TIMEOUT}" "${DOCUMENT_PDF_SERVICE}"
+require_deploy_capacity
 
 # Persist the candidate only after pre-deploy work succeeds. Keep the previous
 # image reference for an immediate code rollback.

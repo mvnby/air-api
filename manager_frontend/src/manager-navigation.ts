@@ -104,6 +104,7 @@ export const navSections: NavSection[] = [
     label: 'Системное',
     items: [
       { path: '/manager/settings', label: 'Настройки сайта', icon: Settings, match: 'exact', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
+      { path: '/manager/settings/documents', label: 'Документы CRM', icon: ReceiptText, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.documentsManage },
       { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
     ],
   },
