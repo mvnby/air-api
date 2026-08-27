@@ -945,7 +945,7 @@ class OrderService:
         lead_source: LeadSource = LeadSource.SITE,
         initial_status: OrderStatus = OrderStatus.NEW_LEAD,
         comment: Optional[str] = None,
-        customer_type: str = "individual",
+        customer_type: Optional[str] = None,
         customer_inn: Optional[str] = None,
         customer_full_legal_name: Optional[str] = None,
         customer_legal_address: Optional[str] = None,
@@ -2281,7 +2281,7 @@ class OrderService:
             return None
 
         customer_type = customer.type.value if hasattr(customer.type, "value") else str(customer.type or "")
-        if customer_type in {"individual", "individual_entrepreneur", "company"}:
+        if customer_type in {"individual_entrepreneur", "company"}:
             return customer_type
 
         meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}

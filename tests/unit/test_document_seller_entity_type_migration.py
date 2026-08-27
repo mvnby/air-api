@@ -15,6 +15,7 @@ from tests.unit.alembic_chain_test_support import assert_revision_in_single_head
 
 
 REVISION = "e7a8b9c0d1e2"
+HEAD_REVISION = "e8b9c0d1e2f3"
 
 
 def _migration():
@@ -33,7 +34,7 @@ def _migration():
 
 def test_document_seller_entity_type_is_single_alembic_head() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert assert_revision_in_single_head_chain(scripts, REVISION) == HEAD_REVISION
 
 
 def test_migration_infers_existing_individual_entrepreneurs_on_sqlite() -> None:
