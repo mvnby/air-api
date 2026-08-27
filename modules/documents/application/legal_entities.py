@@ -58,12 +58,14 @@ class DocumentLegalEntityService:
         is_vat_payer: bool,
         is_default: bool,
         requisites: Mapping[str, Any],
+        entity_type: str = "organization",
     ) -> DocumentLegalEntity:
         normalized_name = cls._required_text(display_name, "Название", 200)
         normalized_slug = cls._slug(slug or normalized_name)
         normalized_legal_name = cls._optional_text(legal_name, 500)
         normalized_unp = cls._optional_text(unp, 32)
         normalized_requisites = cls._requisites(requisites)
+        normalized_entity_type = cls._entity_type(entity_type)
 
         await cls._lock_tenant(session, tenant_scope.tenant_id)
         existing = await cls.list(session, tenant_scope=tenant_scope)
@@ -77,6 +79,7 @@ class DocumentLegalEntityService:
             display_name=normalized_name,
             legal_name=normalized_legal_name,
             unp=normalized_unp,
+            entity_type=normalized_entity_type,
             is_vat_payer=bool(is_vat_payer),
             is_default=make_default,
             requisites=normalized_requisites,
@@ -118,6 +121,8 @@ class DocumentLegalEntityService:
             entity.legal_name = cls._optional_text(changes["legal_name"], 500)
         if "unp" in changes:
             entity.unp = cls._optional_text(changes["unp"], 32)
+        if "entity_type" in changes:
+            entity.entity_type = cls._entity_type(changes["entity_type"])
         if "is_vat_payer" in changes:
             entity.is_vat_payer = bool(changes["is_vat_payer"])
         if "requisites" in changes:
@@ -238,6 +243,13 @@ class DocumentLegalEntityService:
         normalized = slugify(str(value or ""), max_length=80).strip("-")
         if not normalized:
             raise DocumentLegalEntityError("Не удалось сформировать идентификатор")
+        return normalized
+
+    @staticmethod
+    def _entity_type(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in {"organization", "individual_entrepreneur"}:
+            raise DocumentLegalEntityError("Недопустимый тип продавца")
         return normalized
 
     @staticmethod

@@ -8,6 +8,7 @@ export type DocumentLegalEntityCreatePayload = {
     slug?: (string | null);
     legal_name?: (string | null);
     unp?: (string | null);
+    entity_type?: string;
     is_vat_payer?: boolean;
     is_default?: boolean;
     requisites?: DocumentLegalEntityRequisites;

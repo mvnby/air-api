@@ -82,6 +82,7 @@ async def create_document_legal_entity(
             slug=payload.slug,
             legal_name=payload.legal_name,
             unp=payload.unp,
+            entity_type=payload.entity_type,
             is_vat_payer=payload.is_vat_payer,
             is_default=payload.is_default,
             requisites=payload.requisites.model_dump(exclude_none=True),

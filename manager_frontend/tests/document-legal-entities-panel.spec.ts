@@ -1,0 +1,125 @@
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DocumentLegalEntityItem } from '../src/client';
+import { api } from '../src/api';
+import DocumentLegalEntitiesPanel from '../src/features/documents/settings/DocumentLegalEntitiesPanel.vue';
+
+
+const NOW = '2026-08-27T00:00:00Z';
+const wrappers: VueWrapper[] = [];
+
+const entity = (overrides: Partial<DocumentLegalEntityItem> = {}): DocumentLegalEntityItem => ({
+  id: 7,
+  tenant_id: 1,
+  slug: 'seller',
+  display_name: 'ООО Продавец',
+  legal_name: null,
+  unp: null,
+  entity_type: 'organization',
+  is_vat_payer: false,
+  is_default: true,
+  requisites: {},
+  status: 'active',
+  created_at: NOW,
+  updated_at: NOW,
+  ...overrides,
+});
+
+const mountPanel = (item: DocumentLegalEntityItem = entity()) => {
+  const wrapper = mount(DocumentLegalEntitiesPanel, {
+    props: {
+      items: [item],
+      selectedId: item.id,
+      loading: false,
+      saving: false,
+    },
+  });
+  wrappers.push(wrapper);
+  return wrapper;
+};
+
+beforeEach(() => {
+  vi.spyOn(api, 'getCompanyByUnp').mockResolvedValue({
+    row: {
+      vnaimp: 'Индивидуальный предприниматель Иванов Иван Иванович',
+      vpadres: '210000, г. Витебск, ул. Тестовая, 1',
+    },
+  });
+  vi.spyOn(api, 'getBankBySearch').mockResolvedValue({
+    name: 'ОАО Тест Банк',
+    address: 'г. Минск',
+    bic: 'TESTBY2X',
+  });
+});
+
+afterEach(() => {
+  for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+  vi.restoreAllMocks();
+});
+
+describe('DocumentLegalEntitiesPanel', () => {
+  it('persists the direct Organization / IP switch', async () => {
+    const wrapper = mountPanel();
+    const typeButtons = wrapper.get('[data-testid="seller-entity-type"]').findAll('button');
+
+    expect(typeButtons.map((button) => button.text())).toEqual(['Организация', 'ИП']);
+    await typeButtons[1]!.trigger('click');
+    expect(wrapper.text()).toContain('Адрес регистрации');
+    expect(wrapper.text()).toContain('ФИО предпринимателя');
+    await wrapper.get('form.grid').trigger('submit');
+
+    expect(wrapper.emitted('update')?.[0]).toEqual([
+      7,
+      expect.objectContaining({ entity_type: 'individual_entrepreneur' }),
+    ]);
+  });
+
+  it('normalizes UNP and IBAN and fills blank requisites from shared lookups', async () => {
+    const wrapper = mountPanel();
+
+    await wrapper.get('[data-testid="seller-unp"]').setValue('123 456 789');
+    await wrapper.get('[data-testid="seller-unp"]').trigger('blur');
+    await wrapper.get('[data-testid="seller-iban"]').setValue('by12 test 0000 0000');
+    await wrapper.get('[data-testid="seller-iban"]').trigger('blur');
+    await flushPromises();
+
+    expect(api.getCompanyByUnp).toHaveBeenCalledWith('123456789');
+    expect(api.getBankBySearch).toHaveBeenCalledWith('BY12TEST00000000');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-legal-name"]').element.value)
+      .toBe('Индивидуальный предприниматель Иванов Иван Иванович');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-legal-address"]').element.value)
+      .toBe('210000, г. Витебск, ул. Тестовая, 1');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-bank-name"]').element.value)
+      .toBe('ОАО Тест Банк, г. Минск');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-bic"]').element.value)
+      .toBe('TESTBY2X');
+    expect(wrapper.text()).toContain('Наименование и адрес найдены в ЕГР');
+    expect(wrapper.text()).toContain('Банк и BIC определены по IBAN');
+  });
+
+  it('does not overwrite manually entered legal and bank details', async () => {
+    const wrapper = mountPanel(entity({
+      legal_name: 'Уточнённое наименование',
+      requisites: {
+        legal_address: 'Уточнённый адрес',
+        bank_name: 'Уточнённый банк',
+        bic: 'MANUALBIC',
+      },
+    }));
+
+    await wrapper.get('[data-testid="seller-unp"]').setValue('123456789');
+    await wrapper.get('[data-testid="seller-unp"]').trigger('blur');
+    await wrapper.get('[data-testid="seller-iban"]').setValue('BY12TEST00000000');
+    await wrapper.get('[data-testid="seller-iban"]').trigger('blur');
+    await flushPromises();
+
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-legal-name"]').element.value)
+      .toBe('Уточнённое наименование');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-legal-address"]').element.value)
+      .toBe('Уточнённый адрес');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-bank-name"]').element.value)
+      .toBe('Уточнённый банк');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-bic"]').element.value)
+      .toBe('MANUALBIC');
+  });
+});

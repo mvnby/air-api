@@ -44,7 +44,7 @@ const loadEntities = async (preferId?: number) => {
       ? preferred
       : legalEntities.value.find((item) => item.is_default)?.id || legalEntities.value[0]?.id || null;
   } catch (error) {
-    notify(`Не удалось загрузить юрлица: ${getApiErrorMessage(error)}`, 'error');
+    notify(`Не удалось загрузить продавцов: ${getApiErrorMessage(error)}`, 'error');
   } finally {
     loadingEntities.value = false;
   }
@@ -79,11 +79,17 @@ watch(selectedLegalEntityId, () => void loadPolicies());
 const createEntity = async (displayName: string) => {
   savingEntity.value = true;
   try {
-    const created = await ManagerDocumentSystemService.createManagerDocumentLegalEntity({ display_name: displayName });
+    const entityType = /^(ип\b|индивидуальный предприниматель)/i.test(displayName.trim())
+      ? 'individual_entrepreneur'
+      : 'organization';
+    const created = await ManagerDocumentSystemService.createManagerDocumentLegalEntity({
+      display_name: displayName,
+      entity_type: entityType,
+    });
     await loadEntities(created.id);
-    notify('Юридическое лицо создано');
+    notify('Продавец добавлен');
   } catch (error) {
-    notify(`Не удалось создать юрлицо: ${getApiErrorMessage(error)}`, 'error');
+    notify(`Не удалось добавить продавца: ${getApiErrorMessage(error)}`, 'error');
   } finally {
     savingEntity.value = false;
   }

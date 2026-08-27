@@ -174,6 +174,12 @@ class DocumentContextBuilder:
             "seller.display_name": legal_entity.display_name,
             "seller.legal_name": legal_entity.legal_name or legal_entity.display_name,
             "seller.unp": legal_entity.unp or "",
+            "seller.entity_type": legal_entity.entity_type,
+            "seller.entity_type_label": (
+                "Индивидуальный предприниматель"
+                if legal_entity.entity_type == "individual_entrepreneur"
+                else "Организация"
+            ),
             "seller.is_vat_payer": "Да" if legal_entity.is_vat_payer else "Нет",
             "customer.display_name": str(getattr(customer, "name", "") or ""),
             "customer.full_name": str(

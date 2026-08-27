@@ -51,6 +51,10 @@ class DocumentLegalEntity(SQLModel, table=True):
             "status IN ('active', 'disabled')",
             name="ck_document_legal_entity_status_valid",
         ),
+        CheckConstraint(
+            "entity_type IN ('organization', 'individual_entrepreneur')",
+            name="ck_document_legal_entity_type_valid",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -62,6 +66,12 @@ class DocumentLegalEntity(SQLModel, table=True):
     )
     unp: Optional[str] = Field(
         default=None, sa_column=Column(String(32), nullable=True)
+    )
+    entity_type: str = Field(
+        default="organization",
+        sa_column=Column(
+            String(32), nullable=False, server_default="organization", index=True
+        ),
     )
     is_vat_payer: bool = Field(default=False, sa_column=Column(Boolean, nullable=False))
     is_default: bool = Field(default=False, sa_column=Column(Boolean, nullable=False))

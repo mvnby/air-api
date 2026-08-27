@@ -9,6 +9,7 @@ export type DocumentLegalEntityItem = {
     display_name: string;
     legal_name?: (string | null);
     unp?: (string | null);
+    entity_type: string;
     is_vat_payer: boolean;
     is_default: boolean;
     requisites: Record<string, string>;

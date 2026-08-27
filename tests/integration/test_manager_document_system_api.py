@@ -201,6 +201,9 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     assert "document.official_full_number" in {
         item["name"] for item in catalog.json()["fields"]
     }
+    assert "seller.entity_type_label" in {
+        item["name"] for item in catalog.json()["fields"]
+    }
     assert catalog.json()["tables"][0]["anchor_syntax"] == "{{ lines }}"
     waybill_catalog = await async_client.get(
         f"{BASE}/placeholder-catalog",
@@ -246,6 +249,30 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     assert source.content.startswith(b"PK")
     assert source.headers["cache-control"] == "private, no-store"
     assert "filename*=UTF-8''" in source.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_document_system_persists_seller_entity_type(async_client: AsyncClient):
+    headers = await _legacy_owner_headers(async_client)
+
+    created = await async_client.post(
+        f"{BASE}/legal-entities",
+        headers=headers,
+        json={
+            "display_name": "ИП API Продавец",
+            "entity_type": "individual_entrepreneur",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["entity_type"] == "individual_entrepreneur"
+
+    updated = await async_client.patch(
+        f"{BASE}/legal-entities/{created.json()['id']}",
+        headers=headers,
+        json={"entity_type": "organization"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["entity_type"] == "organization"
 
 
 @pytest.mark.asyncio
