@@ -10,6 +10,13 @@ class PlaceholderDescriptor:
     group: str
 
 
+@dataclass(frozen=True, slots=True)
+class ConditionDescriptor:
+    name: str
+    label: str
+    group: str
+
+
 SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor(
         "document.internal_reference", "Внутренний номер CRM", "Документ"
@@ -22,6 +29,7 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
         "document.official_full_number", "Серия и официальный номер", "Документ"
     ),
     PlaceholderDescriptor("document.issued_on", "Дата документа", "Документ"),
+    PlaceholderDescriptor("document.issue_city", "Город документа", "Документ"),
     PlaceholderDescriptor("document.type", "Тип документа", "Документ"),
     PlaceholderDescriptor("document.business_role", "Роль счета", "Документ"),
     PlaceholderDescriptor(
@@ -43,11 +51,13 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
         "seller.legal_name", "Полное наименование продавца", "Продавец"
     ),
     PlaceholderDescriptor("seller.unp", "УНП продавца", "Продавец"),
+    PlaceholderDescriptor("seller.city", "Город продавца", "Продавец"),
     PlaceholderDescriptor("seller.entity_type", "Тип продавца (код)", "Продавец"),
-    PlaceholderDescriptor(
-        "seller.entity_type_label", "Тип продавца", "Продавец"
-    ),
+    PlaceholderDescriptor("seller.entity_type_label", "Тип продавца", "Продавец"),
     PlaceholderDescriptor("seller.is_vat_payer", "Признак плательщика НДС", "Продавец"),
+    PlaceholderDescriptor(
+        "seller.signing_mode", "Способ подписания продавцом (код)", "Продавец"
+    ),
     PlaceholderDescriptor(
         "seller.legal_address", "Юридический адрес продавца", "Продавец"
     ),
@@ -66,6 +76,13 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor(
         "seller.acts_on_basis", "Основание полномочий продавца", "Продавец"
     ),
+    PlaceholderDescriptor(
+        "seller.signer_position", "Должность подписанта продавца", "Продавец"
+    ),
+    PlaceholderDescriptor("seller.signer_name", "ФИО подписанта продавца", "Продавец"),
+    PlaceholderDescriptor(
+        "seller.acting_basis", "Основание полномочий продавца", "Продавец"
+    ),
     PlaceholderDescriptor("seller.phone", "Телефон продавца", "Продавец"),
     PlaceholderDescriptor("seller.email", "Email продавца", "Продавец"),
     PlaceholderDescriptor(
@@ -77,6 +94,12 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("customer.phone", "Телефон клиента", "Клиент"),
     PlaceholderDescriptor("customer.email", "Email клиента", "Клиент"),
     PlaceholderDescriptor("customer.unp", "УНП клиента", "Клиент"),
+    PlaceholderDescriptor("customer.city", "Город клиента", "Клиент"),
+    PlaceholderDescriptor("customer.entity_type", "Тип клиента (код)", "Клиент"),
+    PlaceholderDescriptor("customer.entity_type_label", "Тип клиента", "Клиент"),
+    PlaceholderDescriptor(
+        "customer.signing_mode", "Способ подписания клиентом (код)", "Клиент"
+    ),
     PlaceholderDescriptor(
         "customer.legal_address", "Юридический адрес клиента", "Клиент"
     ),
@@ -105,6 +128,56 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     ),
     PlaceholderDescriptor("totals.weight", "Общая масса", "Итоги"),
     PlaceholderDescriptor("totals.weight_in_words", "Общая масса прописью", "Итоги"),
+)
+
+
+CONDITIONAL_FLAGS: tuple[ConditionDescriptor, ...] = tuple(
+    ConditionDescriptor(name, label, group)
+    for group, prefix, party_label in (
+        ("Условия · продавец", "seller", "продавец"),
+        ("Условия · клиент", "customer", "клиент"),
+    )
+    for name, label in (
+        (f"{prefix}.is_organization", f"{party_label.capitalize()} — организация"),
+        (
+            f"{prefix}.is_individual_entrepreneur",
+            f"{party_label.capitalize()} — ИП",
+        ),
+        (f"{prefix}.is_individual", f"{party_label.capitalize()} — физлицо"),
+        (f"{prefix}.signs_self", f"{party_label.capitalize()} подписывает лично"),
+        (
+            f"{prefix}.signs_as_statutory_body",
+            f"{party_label.capitalize()} подписывает через руководителя",
+        ),
+        (
+            f"{prefix}.signs_by_power_of_attorney",
+            f"{party_label.capitalize()} подписывает по доверенности",
+        ),
+        (
+            f"{prefix}.organization_statutory_body",
+            f"Организация-{party_label} подписывает через руководителя",
+        ),
+        (
+            f"{prefix}.organization_power_of_attorney",
+            f"Организация-{party_label} подписывает по доверенности",
+        ),
+        (
+            f"{prefix}.individual_entrepreneur_self",
+            f"ИП-{party_label} подписывает лично",
+        ),
+        (
+            f"{prefix}.individual_entrepreneur_power_of_attorney",
+            f"ИП-{party_label} подписывает по доверенности",
+        ),
+        (
+            f"{prefix}.individual_self",
+            f"Физлицо-{party_label} подписывает лично",
+        ),
+        (
+            f"{prefix}.individual_power_of_attorney",
+            f"Физлицо-{party_label} подписывает по доверенности",
+        ),
+    )
 )
 
 LINE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (

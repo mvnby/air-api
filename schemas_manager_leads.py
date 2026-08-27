@@ -136,6 +136,22 @@ class LeadQualifyPayload(BaseModel):
     customer_type: Optional[str] = None
     order_comment: Optional[str] = None
 
+    @field_validator("customer_type")
+    @classmethod
+    def _validate_customer_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized not in {
+            "individual",
+            "individual_entrepreneur",
+            "company",
+        }:
+            raise ValueError(
+                "Тип клиента должен быть individual, individual_entrepreneur или company"
+            )
+        return normalized
+
     @field_validator("phone")
     @classmethod
     def _validate_phone(cls, value: Optional[str]) -> Optional[str]:

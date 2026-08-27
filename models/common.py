@@ -3,6 +3,7 @@ from enum import Enum
 
 class CustomerType(str, Enum):
     individual = "individual"
+    individual_entrepreneur = "individual_entrepreneur"
     company = "company"
 
 

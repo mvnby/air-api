@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models import Order, OrderDocument
+from services.customer_party import is_business_customer_type
 
 
 @dataclass(frozen=True)
@@ -116,20 +117,38 @@ class OrderEmailTemplateService:
             ("email", "контактный e-mail", customer.email),
             ("phone", "контактный телефон", customer.phone),
         ]
-        customer_type = getattr(customer.type, "value", customer.type)
-        if customer_type == "company":
-            required = [
-                ("full_legal_name", "полное наименование организации", customer.full_legal_name),
+        if is_business_customer_type(customer.type):
+            customer_type = getattr(customer.type, "value", customer.type)
+            is_entrepreneur = customer_type == "individual_entrepreneur"
+            business_required = [
+                (
+                    "full_legal_name",
+                    "полное наименование ИП" if is_entrepreneur else "полное наименование организации",
+                    customer.full_legal_name,
+                ),
                 ("inn", "УНП", customer.inn),
-                ("legal_address", "юридический адрес", customer.legal_address),
+                (
+                    "legal_address",
+                    "адрес регистрации" if is_entrepreneur else "юридический адрес",
+                    customer.legal_address,
+                ),
                 ("bank_name", "наименование банка", customer.bank_name),
                 ("bic", "BIC банка", customer.bic),
                 ("iban", "расчётный счёт IBAN", customer.iban),
                 ("signer_name", "ФИО подписанта", customer.signer_name),
-                ("signer_position", "должность подписанта", customer.signer_position),
-                ("acting_basis", "основание полномочий подписанта", customer.acting_basis),
-                *required,
             ]
+            signs_personally = (
+                is_entrepreneur
+                and str(customer.signing_mode or "").strip() == "self"
+            )
+            if not signs_personally:
+                business_required.extend(
+                    [
+                        ("signer_position", "должность подписанта", customer.signer_position),
+                        ("acting_basis", "основание полномочий подписанта", customer.acting_basis),
+                    ]
+                )
+            required = [*business_required, *required]
         return [
             {"key": key, "label": label}
             for key, label, value in required

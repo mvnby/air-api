@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     ForeignKeyConstraint,
     Index,
@@ -22,6 +23,10 @@ class Customer(SQLModel, table=True):
         Index("ix_customer_tenant_created_at", "tenant_id", "created_at"),
         Index("ix_customer_tenant_phone", "tenant_id", "phone"),
         Index("ix_customer_tenant_inn", "tenant_id", "inn"),
+        CheckConstraint(
+            "signing_mode IN ('self', 'statutory_body', 'power_of_attorney')",
+            name="ck_customer_signing_mode_valid",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -41,6 +46,7 @@ class Customer(SQLModel, table=True):
     kpp: Optional[str] = None
     legal_address: Optional[str] = None
     actual_address: Optional[str] = None
+    city: Optional[str] = None
 
     bank_name: Optional[str] = None
     bic: Optional[str] = None
@@ -49,6 +55,7 @@ class Customer(SQLModel, table=True):
     signer_position: str = Field(default="директора")
     signer_name: Optional[str] = None
     acting_basis: str = Field(default="Устава")
+    signing_mode: str = Field(default="self", sa_column=Column(String, nullable=False))
 
     created_at: datetime = Field(default_factory=datetime.now)
     is_archived: bool = Field(default=False, index=True)

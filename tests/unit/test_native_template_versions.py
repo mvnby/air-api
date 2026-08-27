@@ -176,6 +176,7 @@ async def test_uploads_increment_versions_and_private_source_readback_is_verifie
             assert first.status == second.status == "draft"
             assert second.placeholder_schema == {
                 "fields": ["document.official_number"],
+                "conditions": [],
                 "tables": [],
             }
             assert (

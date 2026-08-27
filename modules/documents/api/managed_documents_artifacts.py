@@ -100,6 +100,7 @@ async def create_managed_document_draft(
                 document_type=payload.document_type,
                 legal_entity_id=payload.legal_entity_id,
                 issue_date=payload.issue_date,
+                issue_city=payload.issue_city,
                 proposal_id=payload.proposal_id,
                 base_document_id=payload.base_document_id,
                 base_customer_contract_id=payload.base_customer_contract_id,
@@ -366,6 +367,13 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         official_number=document.official_number,
         official_full_number=official_full_number,
         official_date=document.official_date,
+        issue_city=str(
+            ((document.render_snapshot or {}).get("values") or {}).get(
+                "document.issue_city", ""
+            )
+            or ""
+        )
+        or None,
         display_number=official_full_number or document.number,
         date=document.date,
         document_template_id=document.document_template_id,

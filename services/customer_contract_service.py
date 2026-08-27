@@ -10,6 +10,7 @@ from models import Customer, CustomerContract, CustomerType, GlobalConfig, Order
 from models.tenancy import TenantScope
 from services.document_role_service import DocumentRoleService
 from services.google_service import get_google_service
+from services.customer_party import is_business_customer_type
 from services.tenant_scope_service import tenant_scope_clause
 
 
@@ -19,6 +20,10 @@ OPEN_SERVICE_CONTRACT_TEMPLATE_ID = "1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9th
 class CustomerContractService:
     ACTIVE_STATUS = "active"
     ARCHIVED_STATUS = "archived"
+
+    @staticmethod
+    def _is_business_customer(customer: Customer) -> bool:
+        return is_business_customer_type(customer.type)
 
     @staticmethod
     def _normalize_naive_datetime(value: Optional[datetime]) -> Optional[datetime]:
@@ -70,16 +75,21 @@ class CustomerContractService:
 
     @staticmethod
     def _build_replacements(customer: Customer, contract: CustomerContract) -> Dict[str, str]:
-        client_name = customer.full_legal_name if customer.type == CustomerType.company and customer.full_legal_name else customer.name
+        is_business = CustomerContractService._is_business_customer(customer)
+        signs_personally = (
+            customer.type == CustomerType.individual_entrepreneur
+            and customer.signing_mode == "self"
+        )
+        client_name = customer.full_legal_name if is_business and customer.full_legal_name else customer.name
         return {
             "{{client_name}}": client_name or "Клиент",
             "{{phone}}": f"Тел: {customer.phone or ''}",
             "{{email}}": f"email: {customer.email or '-'}",
             "{{inn}}": customer.inn or "-",
             "{{address}}": customer.legal_address or customer.actual_address or "-",
-            "{{signer_position}}": customer.signer_position or "директора",
+            "{{signer_position}}": "" if signs_personally else customer.signer_position or "директора",
             "{{signer_name}}": customer.signer_name or "_______________________________________",
-            "{{acting_basis}}": customer.acting_basis or "Устава",
+            "{{acting_basis}}": "" if signs_personally else customer.acting_basis or "Устава",
             "{{bank_name}}": customer.bank_name or "-",
             "{{iban}}": customer.iban or "-",
             "{{bic}}": customer.bic or "-",
@@ -222,8 +232,8 @@ class CustomerContractService:
         )
         if not customer:
             return None
-        if customer.type != CustomerType.company:
-            raise ValueError("Открытые договоры доступны только для юрлиц")
+        if not CustomerContractService._is_business_customer(customer):
+            raise ValueError("Открытые договоры доступны для организаций и ИП")
 
         contract_date = CustomerContractService._normalize_naive_datetime(payload.get("contract_date")) or datetime.now()
         valid_until = CustomerContractService._normalize_naive_datetime(payload.get("valid_until")) or CustomerContractService._default_valid_until(contract_date)
@@ -279,8 +289,8 @@ class CustomerContractService:
         )
         if not customer:
             return None
-        if customer.type != CustomerType.company:
-            raise ValueError("Открытые договоры доступны только для юрлиц")
+        if not CustomerContractService._is_business_customer(customer):
+            raise ValueError("Открытые договоры доступны для организаций и ИП")
 
         cleaned_number = str(number or "").strip()
         if not cleaned_number:

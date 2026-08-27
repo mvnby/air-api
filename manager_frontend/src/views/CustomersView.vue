@@ -76,6 +76,7 @@ function setToast(msg: string) {
 
 const TYPE_MAP: Record<string, { label: string; icon: string }> = {
   individual: { label: 'Физ. лицо', icon: '👤' },
+  individual_entrepreneur: { label: 'ИП', icon: '💼' },
   company: { label: 'Юр. лицо', icon: '🏢' },
 };
 
@@ -139,13 +140,13 @@ onMounted(() => {
 
   const sQuery = sessionStorage.getItem('customers_search');
   if (sQuery) searchQuery.value = sQuery;
-  
+
   const sType = sessionStorage.getItem('customers_type');
   if (sType !== null) typeFilter.value = sType;
-  
+
   const sOrders = sessionStorage.getItem('customers_orders');
   if (sOrders) onlyWithOrders.value = sOrders === 'true';
-  
+
   const sPage = sessionStorage.getItem('customers_page');
   if (sPage) page.value = Number(sPage) || 1;
 
@@ -205,17 +206,22 @@ onUnmounted(() => {
           />
         </div>
         <div class="flex bg-gray-100 dark:bg-slate-700 p-1 rounded-lg">
-          <button 
+          <button
               @click="typeFilter = ''; onTypeChange()"
               class="px-3 py-1.5 text-sm rounded-md transition-all"
               :class="!typeFilter ? 'bg-white dark:bg-slate-600 text-teal-700 dark:text-teal-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
           >Все</button>
-          <button 
+          <button
               @click="typeFilter = 'individual'; onTypeChange()"
               class="px-3 py-1.5 text-sm rounded-md transition-all"
               :class="typeFilter === 'individual' ? 'bg-white dark:bg-slate-600 text-teal-700 dark:text-teal-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
           >Физ. лица</button>
-          <button 
+          <button
+              @click="typeFilter = 'individual_entrepreneur'; onTypeChange()"
+              class="px-3 py-1.5 text-sm rounded-md transition-all"
+              :class="typeFilter === 'individual_entrepreneur' ? 'bg-white dark:bg-slate-600 text-teal-700 dark:text-teal-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
+          >ИП</button>
+          <button
               @click="typeFilter = 'company'; onTypeChange()"
               class="px-3 py-1.5 text-sm rounded-md transition-all"
               :class="typeFilter === 'company' ? 'bg-white dark:bg-slate-600 text-teal-700 dark:text-teal-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
@@ -518,6 +524,10 @@ onUnmounted(() => {
   background: #eef2ff;
   color: #6366f1;
 }
+.type-badge.individual_entrepreneur {
+  background: #fff7ed;
+  color: #c2410c;
+}
 
 /* Details */
 .card-details {
@@ -740,6 +750,10 @@ onUnmounted(() => {
 :global(.dark) .customers-view .type-badge.company {
   background: rgba(99, 102, 241, 0.2);
   color: #a5b4fc;
+}
+:global(.dark) .customers-view .type-badge.individual_entrepreneur {
+  background: rgba(194, 65, 12, 0.2);
+  color: #fdba74;
 }
 
 /* :global(.dark) .customers-view .view-header h1 {

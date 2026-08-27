@@ -6,6 +6,7 @@ export type ManagedDocumentDraftPayload = {
     legal_entity_id: number;
     document_type: string;
     issue_date: string;
+    issue_city?: (string | null);
     template_id?: (number | null);
     proposal_id?: (number | null);
     base_document_id?: (number | null);

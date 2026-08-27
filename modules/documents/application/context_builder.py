@@ -19,6 +19,13 @@ from models import (
     OrderServiceLink,
 )
 from models.tenancy import TenantScope
+from modules.documents.domain.party import (
+    SELF,
+    customer_document_entity_type,
+    entity_type_label,
+    normalize_signing_mode,
+    party_conditions,
+)
 
 from .logistics_rows import build_logistics_rows
 
@@ -33,6 +40,7 @@ class DocumentContextSelection:
     document_type: str
     legal_entity_id: int
     issue_date: date
+    issue_city: str | None = None
     proposal_id: int | None = None
     base_document_id: int | None = None
     base_customer_contract_id: int | None = None
@@ -48,7 +56,7 @@ class DocumentContextSelection:
 class DocumentContextBuilder:
     """Build a JSON-safe immutable source snapshot without mutating ORM state."""
 
-    SNAPSHOT_VERSION = 1
+    SNAPSHOT_VERSION = 2
     NATIVE_TYPES = frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1"})
     BASE_TYPES = frozenset({"offer", "invoice", "contract"})
     CLOSING_TYPES = frozenset({"act", "tn2", "ttn1"})
@@ -134,7 +142,27 @@ class DocumentContextBuilder:
             Decimal("0"),
         )
         issue_date = selection.issue_date
+        seller_requisites = {
+            str(key or "").strip().lower(): str(value or "").strip()
+            for key, value in (legal_entity.requisites or {}).items()
+            if str(key or "").strip()
+        }
+        seller_entity_type = legal_entity.entity_type
+        seller_signing_mode = normalize_signing_mode(
+            seller_entity_type,
+            seller_requisites.get("signing_mode"),
+        )
         customer = order.customer
+        customer_entity_type = customer_document_entity_type(
+            getattr(customer, "type", None)
+        )
+        customer_signing_mode = normalize_signing_mode(
+            customer_entity_type,
+            getattr(customer, "signing_mode", None),
+        )
+        issue_city = str(selection.issue_city or "").strip() or seller_requisites.get(
+            "city", ""
+        )
         branch = order.customer_branch
         scope_title = (
             str(selection.scope_title or "").strip()
@@ -161,6 +189,7 @@ class DocumentContextBuilder:
             "document.official_number": "",
             "document.official_full_number": "",
             "document.issued_on": issue_date.strftime("%d.%m.%Y"),
+            "document.issue_city": issue_city,
             "document.type": document_type,
             "document.business_role": business_role or "",
             "document.act_sequence_number": "",
@@ -174,12 +203,10 @@ class DocumentContextBuilder:
             "seller.display_name": legal_entity.display_name,
             "seller.legal_name": legal_entity.legal_name or legal_entity.display_name,
             "seller.unp": legal_entity.unp or "",
-            "seller.entity_type": legal_entity.entity_type,
-            "seller.entity_type_label": (
-                "Индивидуальный предприниматель"
-                if legal_entity.entity_type == "individual_entrepreneur"
-                else "Организация"
-            ),
+            "seller.city": seller_requisites.get("city", ""),
+            "seller.entity_type": seller_entity_type,
+            "seller.entity_type_label": entity_type_label(seller_entity_type),
+            "seller.signing_mode": seller_signing_mode,
             "seller.is_vat_payer": "Да" if legal_entity.is_vat_payer else "Нет",
             "customer.display_name": str(getattr(customer, "name", "") or ""),
             "customer.full_name": str(
@@ -190,6 +217,10 @@ class DocumentContextBuilder:
             "customer.phone": str(getattr(customer, "phone", "") or ""),
             "customer.email": str(getattr(customer, "email", "") or ""),
             "customer.unp": str(getattr(customer, "inn", "") or ""),
+            "customer.city": str(getattr(customer, "city", "") or ""),
+            "customer.entity_type": customer_entity_type,
+            "customer.entity_type_label": entity_type_label(customer_entity_type),
+            "customer.signing_mode": customer_signing_mode,
             "customer.legal_address": str(
                 getattr(customer, "legal_address", "")
                 or getattr(customer, "actual_address", "")
@@ -202,9 +233,7 @@ class DocumentContextBuilder:
                 getattr(customer, "signer_position", "") or "директора"
             ),
             "customer.signer_name": str(getattr(customer, "signer_name", "") or ""),
-            "customer.acting_basis": str(
-                getattr(customer, "acting_basis", "") or "Устава"
-            ),
+            "customer.acting_basis": str(getattr(customer, "acting_basis", "") or ""),
             "order.id": str(order.id),
             "order.title": str(order.title or ""),
             "order.object_title": scope_title,
@@ -219,10 +248,50 @@ class DocumentContextBuilder:
             "totals.weight": cls._quantity(total_weight),
             "totals.weight_in_words": num2words(total_weight, lang="ru"),
         }
-        for key, value in (legal_entity.requisites or {}).items():
-            normalized_key = str(key or "").strip().lower()
+        for normalized_key, value in seller_requisites.items():
             if normalized_key and normalized_key.replace("_", "").isalnum():
                 values[f"seller.{normalized_key}"] = str(value or "")
+        values["seller.signer_position"] = (
+            seller_requisites.get("signer_position")
+            or seller_requisites.get("director_title")
+            or ""
+        )
+        values["seller.signer_name"] = (
+            seller_requisites.get("signer_name")
+            or seller_requisites.get("director_name")
+            or ""
+        )
+        values["seller.acting_basis"] = (
+            seller_requisites.get("acting_basis")
+            or seller_requisites.get("acts_on_basis")
+            or ""
+        )
+        # Keep the first-release aliases stable for already uploaded templates.
+        values["seller.director_title"] = values["seller.signer_position"]
+        values["seller.director_name"] = values["seller.signer_name"]
+        values["seller.acts_on_basis"] = values["seller.acting_basis"]
+
+        if seller_signing_mode == SELF:
+            values["seller.signer_position"] = ""
+            values["seller.acting_basis"] = ""
+            values["seller.director_title"] = ""
+            values["seller.acts_on_basis"] = ""
+        if customer_signing_mode == SELF:
+            values["customer.signer_position"] = ""
+            values["customer.acting_basis"] = ""
+
+        conditions = {
+            **party_conditions(
+                "seller",
+                entity_type=seller_entity_type,
+                signing_mode=seller_signing_mode,
+            ),
+            **party_conditions(
+                "customer",
+                entity_type=customer_entity_type,
+                signing_mode=customer_signing_mode,
+            ),
+        }
 
         public_rows = [
             {key: value for key, value in row.items() if not key.endswith("_raw")}
@@ -241,8 +310,10 @@ class DocumentContextBuilder:
                 if base_contract
                 else None,
                 "business_role": business_role,
+                "issue_city": issue_city,
             },
             "values": values,
+            "conditions": conditions,
             "table_rows": {"lines": public_rows},
         }
 

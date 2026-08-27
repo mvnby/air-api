@@ -18,6 +18,7 @@ export type ManagedDocumentItem = {
     official_number?: (string | null);
     official_full_number?: (string | null);
     official_date?: (string | null);
+    issue_city?: (string | null);
     display_number: string;
     date: string;
     document_template_id?: (number | null);

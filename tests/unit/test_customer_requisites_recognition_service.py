@@ -51,6 +51,14 @@ def test_normalize_unknown_landline_returns_none():
     assert CustomerRequisitesRecognitionService.normalize_phone("69-73-29", context="") is None
 
 
+def test_recognized_company_defaults_to_statutory_body_signing() -> None:
+    payload = CustomerRequisitesRecognitionService._customer_payload(
+        {"name": "ООО Тест"}
+    )
+
+    assert payload["signing_mode"] == "statutory_body"
+
+
 @pytest.mark.parametrize(
     ("status", "code", "retryable"),
     [

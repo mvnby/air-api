@@ -4,6 +4,7 @@ import {
   ManagerDocumentSystemService,
   OpenAPI,
   type NativeDocumentTemplateItem,
+  type NativePlaceholderConditionItem,
   type NativePlaceholderDescriptorItem,
   type NativePlaceholderCatalogResponse,
   type NativeTemplateVersionItem,
@@ -34,6 +35,14 @@ const selectedTemplate = computed(() => templates.value.find((item) => item.id =
 const groupedFields = computed(() => {
   const groups = new Map<string, NativePlaceholderDescriptorItem[]>();
   for (const item of catalog.value?.fields || []) {
+    const items = groups.get(item.group) || [];
+    groups.set(item.group, [...items, item]);
+  }
+  return [...groups.entries()];
+});
+const groupedConditions = computed(() => {
+  const groups = new Map<string, NativePlaceholderConditionItem[]>();
+  for (const item of catalog.value?.conditions || []) {
     const items = groups.get(item.group) || [];
     groups.set(item.group, [...items, item]);
   }
@@ -184,6 +193,9 @@ const downloadVersion = async (version: NativeTemplateVersionItem) => {
 const versionFields = (version: NativeTemplateVersionItem) => (
   Array.isArray(version.placeholder_schema?.fields) ? version.placeholder_schema.fields : []
 );
+const versionConditions = (version: NativeTemplateVersionItem) => (
+  Array.isArray(version.placeholder_schema?.conditions) ? version.placeholder_schema.conditions : []
+);
 </script>
 
 <template>
@@ -191,7 +203,7 @@ const versionFields = (version: NativeTemplateVersionItem) => (
     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div>
         <h2 class="settings-title">DOCX-шаблоны</h2>
-        <p class="settings-help">Меняйте Word-файл как обычно. CRM сама найдёт <code v-text="'{{ seller.legal_name }}'" /> и другие поля, проверит их и создаст новую неизменяемую версию.</p>
+        <p class="settings-help">Меняйте Word-файл как обычно. CRM найдёт поля и безопасные условные секции, проверит их и создаст новую неизменяемую версию.</p>
       </div>
       <select v-model="documentType" class="settings-input w-full lg:w-72">
         <option v-for="type in NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
@@ -221,7 +233,7 @@ const versionFields = (version: NativeTemplateVersionItem) => (
           <h3 class="font-semibold text-slate-900 dark:text-white">Новая версия · {{ selectedTemplate.name }}</h3>
           <div class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
             <label class="settings-field"><span>DOCX до 5 МБ</span><input ref="uploadInput" class="settings-input py-2" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" @change="selectUploadFile" /></label>
-            <label class="settings-field"><span>Что изменилось</span><input v-model="changeNote" class="settings-input" placeholder="Добавлен пунк 4.3" /></label>
+            <label class="settings-field"><span>Что изменилось</span><input v-model="changeNote" class="settings-input" placeholder="Добавлен пункт 4.3" /></label>
             <button class="settings-button-primary" type="submit" :disabled="saving || !uploadFile">Загрузить</button>
           </div>
         </form>
@@ -242,6 +254,9 @@ const versionFields = (version: NativeTemplateVersionItem) => (
             <div v-if="versionFields(version).length" class="mt-3 flex flex-wrap gap-1.5">
               <code v-for="field in versionFields(version)" :key="String(field)" class="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-300" v-text="'{{ ' + field + ' }}'" />
             </div>
+            <div v-if="versionConditions(version).length" class="mt-2 flex flex-wrap gap-1.5">
+              <code v-for="condition in versionConditions(version)" :key="String(condition)" class="rounded bg-violet-100 px-2 py-1 text-[11px] text-violet-800 dark:bg-violet-950/50 dark:text-violet-200" v-text="'{{#if ' + condition + '}} … {{/if ' + condition + '}}'" />
+            </div>
           </article>
           <p v-if="selectedTemplate && !versions.length && !loading" class="text-sm text-amber-700 dark:text-amber-300">У шаблона ещё нет DOCX-версий.</p>
         </div>
@@ -249,7 +264,7 @@ const versionFields = (version: NativeTemplateVersionItem) => (
 
       <aside class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
         <h3 class="font-semibold text-slate-900 dark:text-white">Каталог плейсхолдеров</h3>
-        <p class="mt-1 text-xs text-slate-500">Вставляйте синтаксис в Word обычным текстом. Для таблицы добавьте строку с <code v-text="'{{ lines }}'" />.</p>
+        <p class="mt-1 text-xs text-slate-500">Вставляйте синтаксис в Word обычным текстом. Условные маркеры ставьте отдельными абзацами или строками таблицы.</p>
         <div class="mt-4 max-h-[560px] space-y-4 overflow-auto pr-1">
           <div v-for="[group, fields] in groupedFields" :key="group">
             <h4 class="text-xs font-bold uppercase tracking-wide text-slate-400">{{ group }}</h4>
@@ -264,9 +279,19 @@ const versionFields = (version: NativeTemplateVersionItem) => (
             <h4 class="text-xs font-bold uppercase tracking-wide text-slate-400">Таблица · {{ table.anchor_syntax }}</h4>
             <div class="mt-2 flex flex-wrap gap-1.5"><code v-for="field in table.row_fields" :key="field.name" class="rounded bg-slate-100 px-2 py-1 text-[11px] dark:bg-slate-800">{{ field.syntax }}</code></div>
           </div>
+          <div v-for="[group, conditions] in groupedConditions" :key="group">
+            <h4 class="text-xs font-bold uppercase tracking-wide text-slate-400">{{ group }}</h4>
+            <div class="mt-2 space-y-2">
+              <div v-for="condition in conditions" :key="condition.name" class="rounded-lg bg-violet-50 p-2 dark:bg-violet-950/30">
+                <code class="block text-xs font-semibold text-violet-800 dark:text-violet-200">{{ condition.start_syntax }}</code>
+                <code class="block text-xs font-semibold text-violet-800 dark:text-violet-200">{{ condition.end_syntax }}</code>
+                <p class="mt-1 text-xs text-slate-500">{{ condition.label }}. Маркеры ставятся отдельными абзацами или строками таблицы.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
     </div>
-    <p v-else class="mt-5 text-sm text-slate-500">Шаблоны привязаны к юрлицу. Сначала создайте его выше.</p>
+    <p v-else class="mt-5 text-sm text-slate-500">Шаблоны привязаны к организации или ИП. Сначала добавьте продавца выше.</p>
   </section>
 </template>

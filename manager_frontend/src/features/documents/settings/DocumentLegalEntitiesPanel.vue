@@ -5,6 +5,7 @@ import { useB2BLookup } from '../../../composables/useB2BLookup';
 import { normalizeIban, normalizeUnp } from '../../../utils/legal-requisites';
 
 type SellerEntityType = 'organization' | 'individual_entrepreneur';
+type SigningMode = 'self' | 'statutory_body' | 'power_of_attorney';
 
 const props = defineProps<{
   items: DocumentLegalEntityItem[];
@@ -24,12 +25,15 @@ const legalName = ref('');
 const unp = ref('');
 const entityType = ref<SellerEntityType>('organization');
 const isVatPayer = ref(false);
+const city = ref('');
 const legalAddress = ref('');
 const bankName = ref('');
 const iban = ref('');
 const bic = ref('');
-const directorName = ref('');
-const actsOnBasis = ref('');
+const signingMode = ref<SigningMode>('statutory_body');
+const signerPosition = ref('');
+const signerName = ref('');
+const actingBasis = ref('');
 const egrLookupSucceeded = ref(false);
 const bankLookupSucceeded = ref(false);
 const {
@@ -42,6 +46,19 @@ const {
 } = useB2BLookup();
 
 const isIndividualEntrepreneur = computed(() => entityType.value === 'individual_entrepreneur');
+const isPowerOfAttorney = computed(() => signingMode.value === 'power_of_attorney');
+const showsSignerFields = computed(() => !isIndividualEntrepreneur.value || isPowerOfAttorney.value);
+
+const selectEntityType = (value: SellerEntityType) => {
+  entityType.value = value;
+  if (value === 'organization' && signingMode.value === 'self') signingMode.value = 'statutory_body';
+  if (value === 'individual_entrepreneur' && signingMode.value === 'statutory_body') signingMode.value = 'self';
+};
+
+const selectSigningMode = (value: SigningMode) => {
+  signingMode.value = value;
+  if (value === 'statutory_body' && !actingBasis.value.trim()) actingBasis.value = 'Устава';
+};
 
 const syncForm = () => {
   const entity = props.items.find((item) => item.id === props.selectedId);
@@ -51,12 +68,21 @@ const syncForm = () => {
     ? 'individual_entrepreneur'
     : 'organization';
   isVatPayer.value = Boolean(entity?.is_vat_payer);
+  city.value = entity?.requisites.city || '';
   legalAddress.value = entity?.requisites.legal_address || '';
   bankName.value = entity?.requisites.bank_name || '';
   iban.value = entity?.requisites.iban || '';
   bic.value = entity?.requisites.bic || '';
-  directorName.value = entity?.requisites.director_name || '';
-  actsOnBasis.value = entity?.requisites.acts_on_basis || '';
+  const defaultMode: SigningMode = entityType.value === 'individual_entrepreneur' ? 'self' : 'statutory_body';
+  const storedMode = entity?.requisites.signing_mode;
+  signingMode.value = storedMode === 'power_of_attorney' || storedMode === 'self' || storedMode === 'statutory_body'
+    ? storedMode
+    : defaultMode;
+  if (entityType.value === 'organization' && signingMode.value === 'self') signingMode.value = 'statutory_body';
+  if (entityType.value === 'individual_entrepreneur' && signingMode.value === 'statutory_body') signingMode.value = 'self';
+  signerPosition.value = entity?.requisites.signer_position || entity?.requisites.director_title || '';
+  signerName.value = entity?.requisites.signer_name || entity?.requisites.director_name || '';
+  actingBasis.value = entity?.requisites.acting_basis || entity?.requisites.acts_on_basis || '';
   egrError.value = '';
   bankError.value = '';
   egrLookupSucceeded.value = false;
@@ -115,11 +141,14 @@ const save = () => {
     is_vat_payer: isVatPayer.value,
     requisites: {
       legal_address: legalAddress.value.trim() || null,
+      city: city.value.trim() || null,
       bank_name: bankName.value.trim() || null,
       iban: iban.value.trim() || null,
       bic: bic.value.trim() || null,
-      director_name: directorName.value.trim() || null,
-      acts_on_basis: actsOnBasis.value.trim() || null,
+      signing_mode: signingMode.value,
+      signer_position: signerPosition.value.trim() || null,
+      signer_name: signerName.value.trim() || null,
+      acting_basis: actingBasis.value.trim() || null,
     },
   });
 };
@@ -172,7 +201,7 @@ const save = () => {
               class="h-9 rounded-lg px-3 text-sm font-semibold transition"
               :class="entityType === option.value ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-800 dark:text-teal-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
               :aria-pressed="entityType === option.value"
-              @click="entityType = option.value"
+              @click="selectEntityType(option.value)"
             >{{ option.label }}</button>
           </div>
         </div>
@@ -198,6 +227,7 @@ const save = () => {
           <span>Плательщик НДС</span>
           <span class="material-icons-round text-[20px]">{{ isVatPayer ? 'toggle_on' : 'toggle_off' }}</span>
         </button>
+        <label class="settings-field"><span>Город</span><input v-model="city" data-testid="seller-city" class="settings-input" placeholder="Например, Витебск" /></label>
         <label class="settings-field sm:col-span-2"><span>{{ isIndividualEntrepreneur ? 'Адрес регистрации' : 'Юридический адрес' }}</span><input v-model="legalAddress" data-testid="seller-legal-address" class="settings-input" /></label>
         <label class="settings-field sm:col-span-2"><span>Банк</span><input v-model="bankName" data-testid="seller-bank-name" class="settings-input" /></label>
         <label class="settings-field">
@@ -210,8 +240,31 @@ const save = () => {
           <span v-else-if="bankLookupSucceeded" class="font-normal text-emerald-700">Банк и BIC определены по IBAN</span>
         </label>
         <label class="settings-field"><span>BIC</span><input v-model="bic" data-testid="seller-bic" class="settings-input" /></label>
-        <label class="settings-field"><span>{{ isIndividualEntrepreneur ? 'ФИО предпринимателя' : 'ФИО подписанта' }}</span><input v-model="directorName" class="settings-input" /></label>
-        <label class="settings-field"><span>Действует на основании</span><input v-model="actsOnBasis" class="settings-input" :placeholder="isIndividualEntrepreneur ? 'Укажите основание' : 'Устава'" /></label>
+        <div class="settings-field sm:col-span-2">
+          <span>Кто подписывает</span>
+          <div data-testid="seller-signing-mode" class="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-950">
+            <button
+              type="button"
+              class="h-9 rounded-lg px-3 text-sm font-semibold transition"
+              :class="!isPowerOfAttorney ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-800 dark:text-teal-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
+              :aria-pressed="!isPowerOfAttorney"
+              @click="selectSigningMode(isIndividualEntrepreneur ? 'self' : 'statutory_body')"
+            >{{ isIndividualEntrepreneur ? 'Лично' : 'Руководитель' }}</button>
+            <button
+              type="button"
+              class="h-9 rounded-lg px-3 text-sm font-semibold transition"
+              :class="isPowerOfAttorney ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-800 dark:text-teal-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
+              :aria-pressed="isPowerOfAttorney"
+              @click="selectSigningMode('power_of_attorney')"
+            >Представитель</button>
+          </div>
+          <span v-if="isIndividualEntrepreneur && !isPowerOfAttorney" class="font-normal text-slate-500">ИП действует от собственного имени — отдельное основание не требуется.</span>
+        </div>
+        <label class="settings-field sm:col-span-2"><span>{{ isIndividualEntrepreneur && !isPowerOfAttorney ? 'ФИО предпринимателя' : 'ФИО подписанта' }}</span><input v-model="signerName" data-testid="seller-signer-name" class="settings-input" /></label>
+        <template v-if="showsSignerFields">
+          <label class="settings-field"><span>Должность подписанта</span><input v-model="signerPosition" data-testid="seller-signer-position" class="settings-input" :placeholder="isPowerOfAttorney ? 'Представитель' : 'Директор'" /></label>
+          <label class="settings-field"><span>Основание полномочий</span><input v-model="actingBasis" data-testid="seller-acting-basis" class="settings-input" :placeholder="isPowerOfAttorney ? 'доверенности № 4 от 01.08.2026' : 'Устава'" /></label>
+        </template>
         <div class="flex flex-wrap gap-2 sm:col-span-2">
           <button class="settings-button-primary" type="submit" :disabled="saving">{{ saving ? 'Сохраняем…' : 'Сохранить реквизиты' }}</button>
           <button

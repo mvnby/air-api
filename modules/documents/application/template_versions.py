@@ -72,6 +72,7 @@ class NativeTemplatePlaceholderContract:
     """
 
     field_catalog: frozenset[str]
+    condition_catalog: frozenset[str] = frozenset()
     table_blocks: tuple[TableBlockSpec, ...] = ()
 
     @classmethod
@@ -79,11 +80,17 @@ class NativeTemplatePlaceholderContract:
         cls,
         *,
         field_catalog: Iterable[str],
+        condition_catalog: Iterable[str] = (),
         table_blocks: Iterable[TableBlockSpec | Mapping[str, object]] = (),
     ) -> "NativeTemplatePlaceholderContract":
         fields = tuple(_placeholder_name(value, "Поле") for value in field_catalog)
         if len(fields) != len(set(fields)):
             raise TemplateVersionError("Каталог полей содержит дубли")
+        conditions = tuple(
+            _placeholder_name(value, "Условие") for value in condition_catalog
+        )
+        if len(conditions) != len(set(conditions)):
+            raise TemplateVersionError("Каталог условий содержит дубли")
 
         blocks = tuple(_table_block(value) for value in table_blocks)
         names = [block.name for block in blocks]
@@ -101,11 +108,20 @@ class NativeTemplatePlaceholderContract:
                 "Каталог полей не может включать маркеры таблиц: "
                 + ", ".join(sorted(overlap))
             )
-        return cls(field_catalog=frozenset(fields), table_blocks=blocks)
+        if set(fields) & set(conditions):
+            raise TemplateVersionError(
+                "Условия и обычные поля должны иметь разные имена"
+            )
+        return cls(
+            field_catalog=frozenset(fields),
+            condition_catalog=frozenset(conditions),
+            table_blocks=blocks,
+        )
 
     def as_persisted_schema(self) -> dict[str, object]:
         return {
             "fields": sorted(self.field_catalog),
+            "conditions": sorted(self.condition_catalog),
             "tables": [
                 {"name": block.name, "row_fields": sorted(block.row_fields)}
                 for block in self.table_blocks
@@ -227,6 +243,7 @@ class NativeTemplateVersionService:
             version=version_number,
             source=content,
             field_catalog=placeholder_contract.field_catalog,
+            condition_catalog=placeholder_contract.condition_catalog,
             table_blocks=placeholder_contract.table_blocks,
             filename=filename,
         )

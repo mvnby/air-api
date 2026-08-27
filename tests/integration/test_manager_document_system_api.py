@@ -113,6 +113,9 @@ def _template_docx() -> bytes:
     document = Document()
     document.add_paragraph("Договор № {{ document.official_full_number }}")
     document.add_paragraph("Заказчик: {{ customer.full_name }}")
+    document.add_paragraph("{{#if seller.is_individual_entrepreneur}}")
+    document.add_paragraph("Продавец действует как ИП")
+    document.add_paragraph("{{/if seller.is_individual_entrepreneur}}")
     output = BytesIO()
     document.save(output)
     return output.getvalue()
@@ -204,6 +207,21 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     assert "seller.entity_type_label" in {
         item["name"] for item in catalog.json()["fields"]
     }
+    assert "document.issue_city" in {item["name"] for item in catalog.json()["fields"]}
+    assert "seller.is_individual_entrepreneur" in {
+        item["name"] for item in catalog.json()["conditions"]
+    }
+    seller_ip_condition = next(
+        item
+        for item in catalog.json()["conditions"]
+        if item["name"] == "seller.is_individual_entrepreneur"
+    )
+    assert seller_ip_condition["start_syntax"] == (
+        "{{#if seller.is_individual_entrepreneur}}"
+    )
+    assert seller_ip_condition["end_syntax"] == (
+        "{{/if seller.is_individual_entrepreneur}}"
+    )
     assert catalog.json()["tables"][0]["anchor_syntax"] == "{{ lines }}"
     waybill_catalog = await async_client.get(
         f"{BASE}/placeholder-catalog",
@@ -238,6 +256,7 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     assert version["renderer"] == "docx"
     assert version["placeholder_schema"] == {
         "fields": ["customer.full_name", "document.official_full_number"],
+        "conditions": ["seller.is_individual_entrepreneur"],
         "tables": [],
     }
     source = await async_client.get(
@@ -336,6 +355,7 @@ async def test_document_system_draft_issue_is_idempotent_and_artifacts_are_tenan
             "legal_entity_id": issuer_id,
             "document_type": "contract",
             "issue_date": "2026-08-26",
+            "issue_city": "Минск",
             "template_id": template_id,
         },
     )
@@ -343,6 +363,7 @@ async def test_document_system_draft_issue_is_idempotent_and_artifacts_are_tenan
     document_id = int(draft.json()["id"])
     assert draft.json()["status"] == "draft"
     assert draft.json()["official_number"] is None
+    assert draft.json()["issue_city"] == "Минск"
 
     issued = await async_client.post(
         f"{BASE}/documents/{document_id}/issue", headers=headers

@@ -58,6 +58,7 @@ async def test_legal_entities_are_tenant_scoped_and_first_one_becomes_default(
             )
 
             assert first.is_default is True
+            assert first.requisites["signing_mode"] == "statutory_body"
             assert [
                 row.display_name
                 for row in await DocumentLegalEntityService.list(
@@ -121,6 +122,33 @@ async def test_switching_default_is_atomic_and_default_cannot_be_disabled(
             assert sum(row.is_default for row in rows) == 1
             assert next(row for row in rows if row.id == first.id).is_default is False
             assert first.entity_type == "individual_entrepreneur"
+            assert first.requisites["signing_mode"] == "self"
+
+            represented = await DocumentLegalEntityService.update(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(first.id),
+                changes={
+                    "requisites": {
+                        "city": "Витебск",
+                        "signing_mode": "power_of_attorney",
+                        "signer_position": "Представитель",
+                        "signer_name": "Иванов И.И.",
+                        "acting_basis": "доверенности № 4 от 01.08.2026",
+                    }
+                },
+            )
+            assert represented.requisites["city"] == "Витебск"
+            assert represented.requisites["director_name"] == "Иванов И.И."
+            assert represented.requisites["acts_on_basis"].startswith("доверенности")
+
+            with pytest.raises(DocumentLegalEntityError, match="Режим подписания"):
+                await DocumentLegalEntityService.update(
+                    session,
+                    tenant_scope=scope,
+                    legal_entity_id=int(first.id),
+                    changes={"requisites": {"signing_mode": "statutory_body"}},
+                )
 
             with pytest.raises(DocumentLegalEntityError, match="тип продавца"):
                 await DocumentLegalEntityService.update(

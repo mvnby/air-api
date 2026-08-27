@@ -10,6 +10,14 @@ from sqlmodel import select
 
 from models import DocumentLegalEntity
 from models.tenancy import TenantScope
+from modules.documents.domain.party import (
+    INDIVIDUAL_ENTREPRENEUR,
+    ORGANIZATION,
+    POWER_OF_ATTORNEY,
+    SELF,
+    STATUTORY_BODY,
+    default_signing_mode,
+)
 
 
 class DocumentLegalEntityError(ValueError):
@@ -64,8 +72,11 @@ class DocumentLegalEntityService:
         normalized_slug = cls._slug(slug or normalized_name)
         normalized_legal_name = cls._optional_text(legal_name, 500)
         normalized_unp = cls._optional_text(unp, 32)
-        normalized_requisites = cls._requisites(requisites)
         normalized_entity_type = cls._entity_type(entity_type)
+        normalized_requisites = cls._requisites(
+            requisites,
+            entity_type=normalized_entity_type,
+        )
 
         await cls._lock_tenant(session, tenant_scope.tenant_id)
         existing = await cls.list(session, tenant_scope=tenant_scope)
@@ -125,8 +136,14 @@ class DocumentLegalEntityService:
             entity.entity_type = cls._entity_type(changes["entity_type"])
         if "is_vat_payer" in changes:
             entity.is_vat_payer = bool(changes["is_vat_payer"])
-        if "requisites" in changes:
-            entity.requisites = cls._requisites(changes["requisites"] or {})
+        if "requisites" in changes or "entity_type" in changes:
+            requisites = dict(changes.get("requisites", entity.requisites) or {})
+            if "entity_type" in changes and "requisites" not in changes:
+                requisites["signing_mode"] = default_signing_mode(entity.entity_type)
+            entity.requisites = cls._requisites(
+                requisites,
+                entity_type=entity.entity_type,
+            )
 
         requested_status = str(changes.get("status", entity.status)).strip().lower()
         if requested_status not in {"active", "disabled"}:
@@ -248,12 +265,16 @@ class DocumentLegalEntityService:
     @staticmethod
     def _entity_type(value: Any) -> str:
         normalized = str(value or "").strip().lower()
-        if normalized not in {"organization", "individual_entrepreneur"}:
+        if normalized not in {ORGANIZATION, INDIVIDUAL_ENTREPRENEUR}:
             raise DocumentLegalEntityError("Недопустимый тип продавца")
         return normalized
 
     @staticmethod
-    def _requisites(value: Mapping[str, Any]) -> dict[str, str]:
+    def _requisites(
+        value: Mapping[str, Any],
+        *,
+        entity_type: str,
+    ) -> dict[str, str]:
         if not isinstance(value, Mapping):
             raise DocumentLegalEntityError("Реквизиты должны быть объектом")
         result: dict[str, str] = {}
@@ -264,4 +285,29 @@ class DocumentLegalEntityService:
             normalized_value = str(raw or "").strip()
             if normalized_value:
                 result[normalized_key] = normalized_value
+
+        signer_position = result.get("signer_position") or result.get("director_title")
+        signer_name = result.get("signer_name") or result.get("director_name")
+        acting_basis = result.get("acting_basis") or result.get("acts_on_basis")
+        signing_mode = result.get("signing_mode") or default_signing_mode(entity_type)
+        allowed_modes = (
+            {STATUTORY_BODY, POWER_OF_ATTORNEY}
+            if entity_type == ORGANIZATION
+            else {SELF, POWER_OF_ATTORNEY}
+        )
+        if signing_mode not in allowed_modes:
+            raise DocumentLegalEntityError(
+                "Режим подписания не соответствует типу продавца"
+            )
+
+        result["signing_mode"] = signing_mode
+        if signer_position:
+            result["signer_position"] = signer_position
+            result["director_title"] = signer_position
+        if signer_name:
+            result["signer_name"] = signer_name
+            result["director_name"] = signer_name
+        if acting_basis:
+            result["acting_basis"] = acting_basis
+            result["acts_on_basis"] = acting_basis
         return result

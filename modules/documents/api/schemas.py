@@ -10,9 +10,18 @@ class DocumentLegalEntityRequisites(BaseModel):
 
     legal_address: str | None = Field(default=None, max_length=500)
     postal_address: str | None = Field(default=None, max_length=500)
+    city: str | None = Field(default=None, max_length=160)
     bank_name: str | None = Field(default=None, max_length=300)
     iban: str | None = Field(default=None, max_length=64)
     bic: str | None = Field(default=None, max_length=32)
+    signing_mode: str | None = Field(
+        default=None,
+        pattern="^(self|statutory_body|power_of_attorney)$",
+    )
+    signer_position: str | None = Field(default=None, max_length=160)
+    signer_name: str | None = Field(default=None, max_length=200)
+    acting_basis: str | None = Field(default=None, max_length=300)
+    # Transitional aliases accepted from the first native-document release.
     director_title: str | None = Field(default=None, max_length=160)
     director_name: str | None = Field(default=None, max_length=200)
     acts_on_basis: str | None = Field(default=None, max_length=300)
@@ -137,6 +146,7 @@ class NativeTemplatePlaceholderSchemaPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     fields: list[str] = Field(default_factory=list, max_length=500)
+    conditions: list[str] = Field(default_factory=list, max_length=100)
     tables: list[NativeTemplateTableBlockPayload] = Field(
         default_factory=list, max_length=20
     )
@@ -175,9 +185,18 @@ class NativePlaceholderTableItem(BaseModel):
     row_fields: list[NativePlaceholderDescriptorItem]
 
 
+class NativePlaceholderConditionItem(BaseModel):
+    name: str
+    label: str
+    group: str
+    start_syntax: str
+    end_syntax: str
+
+
 class NativePlaceholderCatalogResponse(BaseModel):
     document_type: str
     fields: list[NativePlaceholderDescriptorItem]
+    conditions: list[NativePlaceholderConditionItem]
     tables: list[NativePlaceholderTableItem]
 
 
@@ -187,6 +206,7 @@ class ManagedDocumentDraftPayload(BaseModel):
     legal_entity_id: int = Field(gt=0)
     document_type: str = Field(pattern="^(offer|invoice|contract|act|tn2|ttn1)$")
     issue_date: date
+    issue_city: str | None = Field(default=None, max_length=160)
     template_id: int | None = Field(default=None, gt=0)
     proposal_id: int | None = Field(default=None, gt=0)
     base_document_id: int | None = Field(default=None, gt=0)
@@ -244,6 +264,7 @@ class ManagedDocumentItem(BaseModel):
     official_number: str | None = None
     official_full_number: str | None = None
     official_date: date | None = None
+    issue_city: str | None = None
     display_number: str
     date: datetime
     document_template_id: int | None = None

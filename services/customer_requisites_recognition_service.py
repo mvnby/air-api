@@ -614,6 +614,7 @@ class CustomerRequisitesRecognitionService:
             "phone": extracted.get("phone") or "",
             "email": extracted.get("email"),
             "type": CustomerType.company,
+            "signing_mode": "statutory_body",
             "inn": extracted.get("inn"),
             "full_legal_name": extracted.get("full_legal_name") or extracted.get("name"),
             "legal_address": extracted.get("legal_address"),

@@ -965,12 +965,14 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
     full_legal_name: Optional[str]
     legal_address: Optional[str]
     actual_address: Optional[str] = None
+    city: Optional[str] = None
     iban: Optional[str]
     bic: Optional[str]
     bank_name: Optional[str]
     signer_position: Optional[str] = None
     signer_name: Optional[str] = None
     acting_basis: Optional[str] = None
+    signing_mode: Optional[str] = None
     last_delivery_address: Optional[str] = None
     created_at: Optional[datetime]
     order_count: int
@@ -1605,12 +1607,14 @@ class ManagerCustomerUpdatePayload(BaseModel):
     full_legal_name: Optional[str] = None
     legal_address: Optional[str] = None
     actual_address: Optional[str] = None
+    city: Optional[str] = None
     bank_name: Optional[str] = None
     bic: Optional[str] = None
     iban: Optional[str] = None
     signer_position: Optional[str] = None
     signer_name: Optional[str] = None
     acting_basis: Optional[str] = None
+    signing_mode: Optional[str] = None
     is_favorite: Optional[bool] = None
 
     @field_validator("name")
@@ -1629,8 +1633,22 @@ class ManagerCustomerUpdatePayload(BaseModel):
         if value is None:
             return None
         normalized = value.strip().lower()
-        if normalized not in {"individual", "company"}:
-            raise ValueError("Тип клиента должен быть individual или company")
+        if normalized not in {"individual", "individual_entrepreneur", "company"}:
+            raise ValueError(
+                "Тип клиента должен быть individual, individual_entrepreneur или company"
+            )
+        return normalized
+
+    @field_validator("signing_mode")
+    @classmethod
+    def _validate_signing_mode(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized not in {"self", "statutory_body", "power_of_attorney"}:
+            raise ValueError(
+                "Режим подписания должен быть self, statutory_body или power_of_attorney"
+            )
         return normalized
 
     @field_validator("phone")

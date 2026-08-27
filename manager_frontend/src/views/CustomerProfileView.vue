@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Building2, Mail, Phone, Plus, ReceiptText, Save, UserRound, X } from 'lucide-vue-next';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
+import CustomerLegalDetails from '../components/customers/CustomerLegalDetails.vue';
 import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 import EquipmentAttachmentsPanel from '../components/equipment/EquipmentAttachmentsPanel.vue';
 import EquipmentWarrantyPanel from '../components/equipment/EquipmentWarrantyPanel.vue';
@@ -10,7 +11,13 @@ import { listAllCustomerEquipment } from '../components/equipment/loadAllCustome
 import { sanitizeEquipmentComponentPayload } from '../components/equipment/equipment-component-permissions';
 import {
   buildCustomerPatchPayload,
+  customerPartyLabel,
+  defaultSigningMode,
+  isBusinessCustomer,
+  normalizeCustomerPartyType,
+  normalizeCustomerSigningMode,
   type CustomerForm,
+  type CustomerPartyType,
 } from '../components/customers/customer-profile-form';
 import { api } from '../api';
 import { confirmDialog } from '../services/ui-feedback';
@@ -108,7 +115,12 @@ type EquipmentComponentForm = {
   notes: string;
 };
 
-const customer = ref<ManagerCatalogCustomerItemResponse | null>(null);
+type CustomerProfileResponse = ManagerCatalogCustomerItemResponse & {
+  city?: string | null;
+  signing_mode?: string | null;
+};
+
+const customer = ref<CustomerProfileResponse | null>(null);
 const loading = ref(false);
 const saving = ref(false);
 const error = ref('');
@@ -194,6 +206,7 @@ const form = ref<CustomerForm>({
   phone: '',
   email: '',
   type: 'individual',
+  city: '',
   inn: '',
   kpp: '',
   full_legal_name: '',
@@ -205,6 +218,7 @@ const form = ref<CustomerForm>({
   signer_position: '',
   signer_name: '',
   acting_basis: '',
+  signing_mode: 'self',
 });
 
 const phoneModel = computed({
@@ -525,11 +539,14 @@ const componentLine = (item: ManagerEquipmentComponentItemResponse) => {
   return parts.join(' · ') || 'Паспортные данные не заполнены';
 };
 
-const toForm = (item: ManagerCatalogCustomerItemResponse): CustomerForm => ({
+const toForm = (item: CustomerProfileResponse): CustomerForm => {
+  const type = normalizeCustomerPartyType(item.type);
+  return {
   name: item.name || '',
   phone: item.phone || '',
   email: item.email || '',
-  type: item.type === 'company' ? 'company' : 'individual',
+  type,
+  city: item.city || '',
   inn: item.inn || '',
   kpp: item.kpp || '',
   full_legal_name: item.full_legal_name || '',
@@ -541,7 +558,9 @@ const toForm = (item: ManagerCatalogCustomerItemResponse): CustomerForm => ({
   signer_position: item.signer_position || '',
   signer_name: item.signer_name || '',
   acting_basis: item.acting_basis || '',
-});
+  signing_mode: normalizeCustomerSigningMode(type, item.signing_mode),
+  };
+};
 
 const currentForm = computed(() => form.value);
 
@@ -559,6 +578,13 @@ const formDiff = computed<Record<keyof CustomerForm, boolean>>(() => {
 
 const hasChanges = computed(() => Object.values(formDiff.value).some(Boolean));
 const isCompany = computed(() => currentForm.value.type === 'company');
+const isBusiness = computed(() => isBusinessCustomer(currentForm.value.type));
+const customerTypeLabel = computed(() => customerPartyLabel(normalizeCustomerPartyType(customer.value?.type)));
+
+const setCustomerType = (type: CustomerPartyType) => {
+  form.value.type = type;
+  form.value.signing_mode = defaultSigningMode(type);
+};
 
 const fieldClass = (key: keyof CustomerForm) => ({
   'field-input': true,
@@ -598,7 +624,7 @@ const loadCustomer = async () => {
   try {
     customer.value = await api.getManagerCustomerDetail(customerId.value);
     resetFormFromCustomer();
-    if (shouldOpenContractForm.value && customer.value?.type === 'company') {
+    if (shouldOpenContractForm.value && customer.value && isBusinessCustomer(normalizeCustomerPartyType(customer.value.type))) {
       openContractForm();
     }
   } catch (e) {
@@ -1191,8 +1217,8 @@ const validateForm = (): boolean => {
   if (!form.value.phone.trim()) {
     phoneError.value = 'Телефон обязателен';
   }
-  if (isCompany.value && !form.value.full_legal_name.trim()) {
-    serverErrors.value.full_legal_name = 'Для юрлица укажите полное наименование';
+  if (isBusiness.value && !form.value.full_legal_name.trim()) {
+    serverErrors.value.full_legal_name = 'Для ИП или юрлица укажите полное наименование';
   }
 
   return !phoneError.value && !emailError.value && !innError.value && !ibanError.value && !Object.keys(serverErrors.value).length;
@@ -1220,6 +1246,7 @@ const saveCustomer = async () => {
       'phone',
       'email',
       'type',
+      'city',
       'inn',
       'kpp',
       'full_legal_name',
@@ -1231,6 +1258,7 @@ const saveCustomer = async () => {
       'signer_position',
       'signer_name',
       'acting_basis',
+      'signing_mode',
     ]);
     serverErrors.value = parsed.fieldErrors;
     if (!phoneError.value && parsed.fieldErrors.phone) phoneError.value = parsed.fieldErrors.phone;
@@ -1361,10 +1389,10 @@ onMounted(() => {
         <header class="rounded-[2rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-6 shadow-sm">
           <p class="text-xs uppercase tracking-[0.2em] text-[var(--mv-text-muted)]">Customer profile</p>
           <h1 class="mt-2 text-2xl font-bold">{{ customer.full_legal_name || customer.name || `Клиент #${customer.id}` }}</h1>
-          <p class="mt-1 text-sm text-[var(--mv-text-muted)]">ID: #{{ customer.id }} · {{ customer.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</p>
+          <p class="mt-1 text-sm text-[var(--mv-text-muted)]">ID: #{{ customer.id }} · {{ customerTypeLabel }}</p>
         </header>
 
-        <section v-if="!editMode && isCompany" class="rounded-[1.5rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-5 shadow-sm">
+        <section v-if="!editMode && isBusiness" class="rounded-[1.5rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-5 shadow-sm">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 class="flex items-center gap-2 text-lg font-bold">
@@ -1488,9 +1516,9 @@ onMounted(() => {
                 <p class="detail"><UserRound class="h-4 w-4" /> <span>{{ customer.name || '—' }}</span></p>
                 <p class="detail"><Phone class="h-4 w-4" /> <span>{{ customer.phone || '—' }}</span></p>
                 <p class="detail"><Mail class="h-4 w-4" /> <span>{{ customer.email || '—' }}</span></p>
-                <p v-if="customer.type !== 'company'" class="detail"><Building2 class="h-4 w-4" /> <span>Адрес: {{ customer.actual_address || customer.last_delivery_address || '—' }}</span></p>
-                <p class="detail"><Building2 class="h-4 w-4" /> <span>УНП: {{ customer.inn || '—' }}</span></p>
-                <p class="detail"><Building2 class="h-4 w-4" /> <span>КПП: {{ customer.kpp || '—' }}</span></p>
+                <p v-if="!isBusiness" class="detail"><Building2 class="h-4 w-4" /> <span>Адрес: {{ customer.actual_address || customer.last_delivery_address || '—' }}</span></p>
+                <p v-if="isBusiness" class="detail"><Building2 class="h-4 w-4" /> <span>УНП: {{ customer.inn || '—' }}</span></p>
+                <p v-if="isBusiness && customer.kpp" class="detail"><Building2 class="h-4 w-4" /> <span>КПП: {{ customer.kpp }}</span></p>
                 <p class="detail"><ReceiptText class="h-4 w-4" /> <span>Заказов: {{ customer.order_count }}</span></p>
                 <p class="detail"><ReceiptText class="h-4 w-4" /> <span>Создан: {{ formatDate(customer.created_at) }}</span></p>
               </div>
@@ -1498,13 +1526,14 @@ onMounted(() => {
 
             <template v-else>
               <div class="space-y-3 text-sm">
-                <select v-model="form.type" :class="fieldClass('type')">
-                  <option value="individual">Физ. лицо</option>
-                  <option value="company">Юр. лицо</option>
-                </select>
+                <div class="flex rounded-lg bg-[var(--mv-panel)] p-1">
+                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'individual' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('individual')">Физлицо</button>
+                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'individual_entrepreneur' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('individual_entrepreneur')">ИП</button>
+                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'company' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('company')">Юрлицо</button>
+                </div>
                 <input v-model="form.name" type="text" :placeholder="isCompany ? 'Компания' : 'Имя клиента'" :class="fieldClass('name')" />
                 <AddressSuggestInput
-                  v-if="!isCompany"
+                  v-if="!isBusiness"
                   v-model="form.actual_address"
                   placeholder="Адрес объекта / доставки"
                   :input-class="fieldClass('actual_address')"
@@ -1514,72 +1543,32 @@ onMounted(() => {
                 <span v-if="phoneError" class="field-error">{{ phoneError }}</span>
                 <input v-model="form.email" type="email" placeholder="Email" :class="fieldClass('email')" />
                 <span v-if="emailError" class="field-error">{{ emailError }}</span>
-                <div class="relative">
+                <div v-if="isBusiness" class="relative">
                     <input v-model="form.inn" type="text" placeholder="УНП" :class="fieldClass('inn')" @blur="onInnBlur" />
                     <div v-if="isEgrLoading" class="absolute right-3 top-2">
                         <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
                     </div>
                 </div>
-                <span v-if="innError" class="field-error">{{ innError }}</span>
-                <input v-model="form.kpp" type="text" placeholder="КПП" :class="fieldClass('kpp')" />
+                <span v-if="isBusiness && innError" class="field-error">{{ innError }}</span>
+                <input v-if="isBusiness" v-model="form.kpp" type="text" placeholder="КПП (если используется)" :class="fieldClass('kpp')" />
               </div>
             </template>
           </article>
 
-          <article class="rounded-[1.5rem] border border-[var(--mv-border)] bg-[var(--mv-surface)] p-5 shadow-sm">
-            <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-[var(--mv-text-muted)]">Юр. реквизиты</h2>
-
-            <template v-if="!editMode">
-              <div class="space-y-2 text-sm">
-                <p class="detail-value"><span>Полное наименование</span><strong>{{ customer.full_legal_name || '—' }}</strong></p>
-                <p class="detail-value"><span>Юр. адрес</span><strong>{{ customer.legal_address || '—' }}</strong></p>
-                <p class="detail-value"><span>Факт. адрес</span><strong>{{ customer.actual_address || '—' }}</strong></p>
-                <p class="detail-value"><span>Банк</span><strong>{{ customer.bank_name || '—' }}</strong></p>
-                <p class="detail-value"><span>BIC</span><strong>{{ customer.bic || '—' }}</strong></p>
-                <p class="detail-value"><span>IBAN</span><strong>{{ customer.iban || '—' }}</strong></p>
-                <p class="detail-value"><span>Подписант</span><strong>{{ customer.signer_name || '—' }}</strong></p>
-                <p class="detail-value"><span>Должность</span><strong>{{ customer.signer_position || '—' }}</strong></p>
-                <p class="detail-value"><span>Основание</span><strong>{{ customer.acting_basis || '—' }}</strong></p>
-                <p class="detail-value"><span>Последний адрес доставки</span><strong>{{ customer.last_delivery_address || '—' }}</strong></p>
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="space-y-3 text-sm">
-                <div v-if="isCompany" class="space-y-3">
-                  <input v-model="form.full_legal_name" type="text" placeholder="Полное наименование" :class="fieldClass('full_legal_name')" />
-                  <AddressSuggestInput
-                    v-model="form.legal_address"
-                    placeholder="Юр. адрес"
-                    :input-class="fieldClass('legal_address')"
-                    :error="serverErrors.legal_address"
-                  />
-                  <AddressSuggestInput
-                    v-model="form.actual_address"
-                    placeholder="Факт. адрес"
-                    :input-class="fieldClass('actual_address')"
-                    :error="serverErrors.actual_address"
-                  />
-                  <input v-model="form.bank_name" type="text" placeholder="Название банка" :class="fieldClass('bank_name')" />
-                  <input v-model="form.bic" type="text" placeholder="BIC" :class="fieldClass('bic')" />
-                  <div class="relative">
-                    <input v-model="form.iban" type="text" placeholder="IBAN" :class="fieldClass('iban')" @blur="onIbanBlur" />
-                    <div v-if="isBankLoading" class="absolute right-3 top-2">
-                        <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
-                    </div>
-                  </div>
-                  <span v-if="ibanError" class="field-error">{{ ibanError }}</span>
-                  <input v-model="form.signer_name" type="text" placeholder="Подписант" :class="fieldClass('signer_name')" />
-                  <input v-model="form.signer_position" type="text" placeholder="Должность подписанта" :class="fieldClass('signer_position')" />
-                  <input v-model="form.acting_basis" type="text" placeholder="Основание действий" :class="fieldClass('acting_basis')" />
-                </div>
-                <p v-else class="text-xs text-[var(--mv-text-muted)]">Для физлица реквизиты юрлица не обязательны.</p>
-              </div>
-            </template>
-          </article>
+          <CustomerLegalDetails
+            :customer="form"
+            :editing="editMode"
+            :field-class="fieldClass"
+            :iban-error="ibanError"
+            :is-bank-loading="isBankLoading"
+            :server-errors="serverErrors"
+            :last-delivery-address="customer.last_delivery_address || ''"
+            @update:customer="form = $event"
+            @iban-blur="onIbanBlur"
+          />
         </section>
 
-        <section v-if="!editMode && isCompany" class="mt-8 mb-6">
+        <section v-if="!editMode && isBusiness" class="mt-8 mb-6">
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 class="flex items-center gap-2 text-lg font-bold">
               <span class="material-icons-round text-teal-500">contract</span>

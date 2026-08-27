@@ -21,6 +21,7 @@ from .contracts import (
     TemplateValidationResult,
     make_rendered_docx,
 )
+from .docx_conditions import DocxConditionProcessor, iter_section_story_areas
 
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\s*}}")
@@ -57,6 +58,14 @@ class NativeDocxRenderer:
             discovered.update(parsed)
         return frozenset(discovered)
 
+    def discover_conditions(self, source: bytes) -> frozenset[str]:
+        """Return safe condition identifiers found in conditional markers."""
+        try:
+            document = Document(BytesIO(source))
+        except Exception as exc:
+            raise ValueError(f"Template is not a readable DOCX: {exc}") from exc
+        return DocxConditionProcessor().discover(document)
+
     def validate(
         self,
         template: DocumentTemplateVersion,
@@ -87,6 +96,11 @@ class NativeDocxRenderer:
         row_fields_by_row: dict[object, set[str]] = {}
         anchored_rows: dict[object, set[str]] = {}
         scalar_placeholders: set[str] = set()
+
+        condition_issues, used_conditions = DocxConditionProcessor().validate(
+            document, template.condition_catalog
+        )
+        issues.extend(condition_issues)
 
         for paragraph, location, row_id in self._iter_paragraphs(document):
             parsed, malformed = self._parse_placeholders(
@@ -189,7 +203,11 @@ class NativeDocxRenderer:
         if context is not None:
             issues.extend(
                 self._validate_context(
-                    template, context, scalar_placeholders, row_fields_by_row
+                    template,
+                    context,
+                    scalar_placeholders,
+                    row_fields_by_row,
+                    used_conditions,
                 )
             )
         return TemplateValidationResult(tuple(issues))
@@ -197,13 +215,14 @@ class NativeDocxRenderer:
     def render(self, template: DocumentTemplateVersion, context: RenderContext):
         validation = self.validate(template, context)
         if not validation.is_valid:
-            if any(issue.code.startswith("context_") for issue in validation.issues):
+            if all(issue.code.startswith("context_") for issue in validation.issues):
                 raise ContextFieldError(
                     "; ".join(issue.message for issue in validation.issues)
                 )
             raise TemplateValidationError(validation)
 
         document = Document(BytesIO(template.source))
+        DocxConditionProcessor().render(document, context.conditions)
         for table, _ in self._iter_tables(document):
             self._render_table_blocks(table, template.table_blocks, context)
         for paragraph, _, _ in self._iter_paragraphs(document):
@@ -219,6 +238,7 @@ class NativeDocxRenderer:
         context: RenderContext,
         scalar_placeholders: set[str],
         row_fields_by_row: Mapping[object, set[str]],
+        used_conditions: set[str],
     ) -> list[TemplateValidationIssue]:
         issues: list[TemplateValidationIssue] = []
         for field_name in sorted(set(context.values) - set(template.field_catalog)):
@@ -237,6 +257,27 @@ class NativeDocxRenderer:
                     f"Context does not provide required field '{field_name}'",
                     "context.values",
                     field_name,
+                )
+            )
+
+        for condition_name in sorted(
+            set(context.conditions) - set(template.condition_catalog)
+        ):
+            issues.append(
+                TemplateValidationIssue(
+                    "context_unknown_condition",
+                    f"Context condition '{condition_name}' is not approved by this template version",
+                    "context.conditions",
+                    condition_name,
+                )
+            )
+        for condition_name in sorted(used_conditions - set(context.conditions)):
+            issues.append(
+                TemplateValidationIssue(
+                    "context_missing_condition",
+                    f"Context does not provide required condition '{condition_name}'",
+                    "context.conditions",
+                    condition_name,
                 )
             )
 
@@ -330,6 +371,7 @@ class NativeDocxRenderer:
             match.group(0)
             for match in _RAW_PLACEHOLDER_PATTERN.finditer(text)
             if (match.start(), match.end()) not in valid_spans
+            and not match.group(1).strip().startswith(("#if", "/if"))
         ]
         if "{{" in text and not _RAW_PLACEHOLDER_PATTERN.search(text):
             malformed.append("{{")
@@ -410,7 +452,7 @@ class NativeDocxRenderer:
                         seen,
                     )
         for section_index, section in enumerate(document.sections):
-            for name, area in (("header", section.header), ("footer", section.footer)):
+            for name, area in iter_section_story_areas(section):
                 for paragraph in area.paragraphs:
                     if paragraph._p not in seen:
                         seen.add(paragraph._p)
@@ -446,12 +488,12 @@ class NativeDocxRenderer:
         seen: set[object] = set()
         yield from self._iter_table_collection(document.tables, "body", seen)
         for section_index, section in enumerate(document.sections):
-            yield from self._iter_table_collection(
-                section.header.tables, f"section[{section_index}].header", seen
-            )
-            yield from self._iter_table_collection(
-                section.footer.tables, f"section[{section_index}].footer", seen
-            )
+            for name, area in iter_section_story_areas(section):
+                yield from self._iter_table_collection(
+                    area.tables,
+                    f"section[{section_index}].{name}",
+                    seen,
+                )
 
     def _iter_table_collection(
         self, tables: Iterable[Table], location: str, seen: set[object]
