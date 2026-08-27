@@ -168,6 +168,8 @@ async def test_context_snapshot_uses_selected_proposal_and_does_not_mutate_order
     assert snapshot["meta"]["proposal_id"] == selected.id
     assert snapshot["meta"]["business_role"] == "payment_request"
     assert snapshot["values"]["seller.unp"] == "390000000"
+    assert snapshot["values"]["seller.entity_type"] == "organization"
+    assert snapshot["values"]["seller.entity_type_label"] == "Организация"
     assert snapshot["values"]["customer.unp"] == "123456789"
     assert snapshot["values"]["totals.amount"] == "1400.00"
     assert [row["line.title"] for row in snapshot["table_rows"]["lines"]] == [

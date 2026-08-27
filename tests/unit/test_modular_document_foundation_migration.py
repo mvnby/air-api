@@ -15,6 +15,7 @@ from tests.unit.alembic_chain_test_support import assert_revision_in_single_head
 
 
 REVISION = "e6f7a8b9c0d1"
+HEAD_REVISION = "e7a8b9c0d1e2"
 
 
 def _migration():
@@ -30,7 +31,7 @@ def _migration():
 
 def test_modular_document_foundation_is_single_alembic_head() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert assert_revision_in_single_head_chain(scripts, REVISION) == HEAD_REVISION
 
 
 def test_expand_migration_preserves_legacy_rows_and_removes_foundation_on_sqlite() -> (

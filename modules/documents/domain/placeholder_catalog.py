@@ -43,6 +43,10 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
         "seller.legal_name", "Полное наименование продавца", "Продавец"
     ),
     PlaceholderDescriptor("seller.unp", "УНП продавца", "Продавец"),
+    PlaceholderDescriptor("seller.entity_type", "Тип продавца (код)", "Продавец"),
+    PlaceholderDescriptor(
+        "seller.entity_type_label", "Тип продавца", "Продавец"
+    ),
     PlaceholderDescriptor("seller.is_vat_payer", "Признак плательщика НДС", "Продавец"),
     PlaceholderDescriptor(
         "seller.legal_address", "Юридический адрес продавца", "Продавец"

@@ -27,6 +27,10 @@ class DocumentLegalEntityCreatePayload(BaseModel):
     slug: str | None = Field(default=None, max_length=80)
     legal_name: str | None = Field(default=None, max_length=500)
     unp: str | None = Field(default=None, max_length=32)
+    entity_type: str = Field(
+        default="organization",
+        pattern="^(organization|individual_entrepreneur)$",
+    )
     is_vat_payer: bool = False
     is_default: bool = False
     requisites: DocumentLegalEntityRequisites = Field(
@@ -41,6 +45,10 @@ class DocumentLegalEntityUpdatePayload(BaseModel):
     slug: str | None = Field(default=None, min_length=1, max_length=80)
     legal_name: str | None = Field(default=None, max_length=500)
     unp: str | None = Field(default=None, max_length=32)
+    entity_type: str | None = Field(
+        default=None,
+        pattern="^(organization|individual_entrepreneur)$",
+    )
     is_vat_payer: bool | None = None
     is_default: bool | None = None
     requisites: DocumentLegalEntityRequisites | None = None
@@ -56,6 +64,7 @@ class DocumentLegalEntityItem(BaseModel):
     display_name: str
     legal_name: str | None = None
     unp: str | None = None
+    entity_type: str
     is_vat_payer: bool
     is_default: bool
     requisites: dict[str, str]

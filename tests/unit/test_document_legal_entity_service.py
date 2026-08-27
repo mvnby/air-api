@@ -96,6 +96,7 @@ async def test_switching_default_is_atomic_and_default_cannot_be_disabled(
                 is_vat_payer=False,
                 is_default=True,
                 requisites={},
+                entity_type="individual_entrepreneur",
             )
             second = await DocumentLegalEntityService.create(
                 session,
@@ -119,6 +120,15 @@ async def test_switching_default_is_atomic_and_default_cannot_be_disabled(
             assert second.is_default is True
             assert sum(row.is_default for row in rows) == 1
             assert next(row for row in rows if row.id == first.id).is_default is False
+            assert first.entity_type == "individual_entrepreneur"
+
+            with pytest.raises(DocumentLegalEntityError, match="тип продавца"):
+                await DocumentLegalEntityService.update(
+                    session,
+                    tenant_scope=scope,
+                    legal_entity_id=int(first.id),
+                    changes={"entity_type": "person"},
+                )
 
             with pytest.raises(DocumentLegalEntityError, match="Нельзя отключить"):
                 await DocumentLegalEntityService.update(

@@ -31184,6 +31184,12 @@
             ],
             "title": "Unp"
           },
+          "entity_type": {
+            "type": "string",
+            "pattern": "^(organization|individual_entrepreneur)$",
+            "title": "Entity Type",
+            "default": "organization"
+          },
           "is_vat_payer": {
             "type": "boolean",
             "title": "Is Vat Payer",
@@ -31245,6 +31251,10 @@
             ],
             "title": "Unp"
           },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type"
+          },
           "is_vat_payer": {
             "type": "boolean",
             "title": "Is Vat Payer"
@@ -31281,6 +31291,7 @@
           "tenant_id",
           "slug",
           "display_name",
+          "entity_type",
           "is_vat_payer",
           "is_default",
           "requisites",
@@ -31484,6 +31495,18 @@
               }
             ],
             "title": "Unp"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(organization|individual_entrepreneur)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
           },
           "is_vat_payer": {
             "anyOf": [

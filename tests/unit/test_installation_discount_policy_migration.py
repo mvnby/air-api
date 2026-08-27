@@ -13,7 +13,7 @@ from tests.unit.alembic_chain_test_support import assert_revision_in_single_head
 
 
 REVISION = "e5f6a7b8c9d0"
-HEAD_REVISION = "e6f7a8b9c0d1"
+HEAD_REVISION = "e7a8b9c0d1e2"
 
 
 def _migration():
