@@ -71,6 +71,10 @@ import {
 } from '../src/components/orders/order-transition';
 import {
   buildCustomerPatchPayload,
+  customerPartyLabel,
+  defaultSigningMode,
+  isBusinessCustomer,
+  normalizeCustomerSigningMode,
   type CustomerForm,
 } from '../src/components/customers/customer-profile-form';
 import { getOrderDocumentAccess } from '../src/components/orders/order-document-access';
@@ -84,6 +88,7 @@ const customerForm: CustomerForm = {
   phone: '+375 (29) 591-26-81',
   email: 'CLIENT@EXAMPLE.COM ',
   type: 'company',
+  city: 'Минск',
   inn: '123 456 789',
   kpp: '',
   full_legal_name: 'ООО Клиент',
@@ -95,6 +100,7 @@ const customerForm: CustomerForm = {
   signer_position: '',
   signer_name: '',
   acting_basis: '',
+  signing_mode: 'statutory_body',
 };
 const phoneOnlyPatch = buildCustomerPatchPayload(customerForm, { phone: true });
 assert(
@@ -135,10 +141,28 @@ assert(
   blankSignerPatch.signer_position === '' && blankSignerPatch.acting_basis === '',
   'explicitly cleared signer requisites must reach the API for safe defaulting',
 );
+const entrepreneurPatch = buildCustomerPatchPayload(customerForm, {
+  type: true,
+  city: true,
+  signing_mode: true,
+});
+assert(
+  entrepreneurPatch.type === 'company' && entrepreneurPatch.city === 'Минск' && entrepreneurPatch.signing_mode === 'statutory_body',
+  'party type, city, and signing mode must be included in a scoped customer PATCH',
+);
+assert(isBusinessCustomer('individual_entrepreneur'), 'individual entrepreneur must use business customer flows');
+assert(!isBusinessCustomer('individual'), 'individual must not use business customer flows');
+assert(customerPartyLabel('individual_entrepreneur') === 'ИП', 'individual entrepreneur must have a clear manager label');
+assert(defaultSigningMode('company') === 'statutory_body', 'company must default to signing by statutory body');
+assert(defaultSigningMode('individual_entrepreneur') === 'self', 'individual entrepreneur must default to self-signing');
+assert(
+  normalizeCustomerSigningMode('individual_entrepreneur', 'statutory_body') === 'self',
+  'individual entrepreneur cannot retain a company signing mode',
+);
 
 assert(
   navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')
-    === 'Подбор оборудования|Кондиционеры|Подборки|Бренды|Фичи|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
+    === 'Подбор оборудования|Кондиционеры|Скидки на монтаж|Подборки|Бренды|Фичи|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
   'catalog navigation must follow the product data workflow',
 );
 

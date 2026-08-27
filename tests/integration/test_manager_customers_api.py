@@ -32,12 +32,14 @@ async def test_manager_customer_detail_contains_extended_requisites(async_client
         full_legal_name="ООО Тест Клиент",
         legal_address="Минск, ул. Ленина, 1",
         actual_address="Минск, ул. Ленина, 2",
+        city="Минск",
         bank_name="Тест Банк",
         bic="TESTBY2X",
         iban="BY00TEST30120000000000000000",
         signer_position="Директор",
         signer_name="Иван Иванов",
         acting_basis="Устава",
+        signing_mode="statutory_body",
     )
     db.add(customer)
     await db.commit()
@@ -64,12 +66,14 @@ async def test_manager_customer_detail_contains_extended_requisites(async_client
     assert payload["full_legal_name"] == "ООО Тест Клиент"
     assert payload["legal_address"] == "Минск, ул. Ленина, 1"
     assert payload["actual_address"] == "Минск, ул. Ленина, 2"
+    assert payload["city"] == "Минск"
     assert payload["bank_name"] == "Тест Банк"
     assert payload["bic"] == "TESTBY2X"
     assert payload["iban"] == "BY00TEST30120000000000000000"
     assert payload["signer_position"] == "Директор"
     assert payload["signer_name"] == "Иван Иванов"
     assert payload["acting_basis"] == "Устава"
+    assert payload["signing_mode"] == "statutory_body"
     assert payload["last_delivery_address"] == "Минск, ул. Орловская, 15"
     assert payload["order_count"] == 1
 
@@ -158,6 +162,100 @@ async def test_manager_customer_patch_defaults_blank_required_requisites(async_c
     assert patched["phone"] == "+375 (29) 591-26-81"
     assert patched["signer_position"] == "директора"
     assert patched["acting_basis"] == "Устава"
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_patch_supports_ip_city_and_self_signing(async_client, db):
+    headers = await _auth_headers(async_client)
+    customer = Customer(
+        tenant_id=1,
+        name="ИП Тест",
+        phone="+375291112233",
+        type=CustomerType.individual,
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    response = await async_client.patch(
+        f"/api/manager/customers/{customer.id}",
+        headers=headers,
+        json={
+            "type": "individual_entrepreneur",
+            "city": "Витебск",
+            "signing_mode": "self",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["type"] == "individual_entrepreneur"
+    assert payload["city"] == "Витебск"
+    assert payload["signing_mode"] == "self"
+
+    customer.type = CustomerType.company
+    customer.signing_mode = "statutory_body"
+    db.add(customer)
+    await db.commit()
+
+    switched = await async_client.patch(
+        f"/api/manager/customers/{customer.id}",
+        headers=headers,
+        json={"type": "individual_entrepreneur"},
+    )
+
+    assert switched.status_code == 200
+    assert switched.json()["type"] == "individual_entrepreneur"
+    assert switched.json()["signing_mode"] == "self"
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_patch_rejects_incompatible_signing_mode(async_client, db):
+    headers = await _auth_headers(async_client)
+    customer = Customer(
+        tenant_id=1,
+        name="ООО Тест",
+        phone="+375291112233",
+        type=CustomerType.company,
+        signing_mode="statutory_body",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    response = await async_client.patch(
+        f"/api/manager/customers/{customer.id}",
+        headers=headers,
+        json={"signing_mode": "self"},
+    )
+
+    assert response.status_code == 400
+    assert "не соответствует типу" in response.json()["detail"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_patch_normalizes_legacy_company_self_mode(async_client, db):
+    headers = await _auth_headers(async_client)
+    customer = Customer(
+        tenant_id=1,
+        name="ООО Старый клиент",
+        phone="+375291112233",
+        type=CustomerType.company,
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    response = await async_client.patch(
+        f"/api/manager/customers/{customer.id}",
+        headers=headers,
+        json={"city": "Гродно"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["city"] == "Гродно"
+    assert payload["signing_mode"] == "statutory_body"
 
 
 @pytest.mark.asyncio
@@ -510,6 +608,33 @@ async def test_manager_customer_contract_create_and_dashboard_notice(async_clien
     assert captured["replacements"]["{{contract_valid_until}}"] == "15.01.2027"
     assert captured["replacements"]["{{contract_number}}"] == created["number"]
     assert created["document_role_type"] == "executor_customer"
+
+    entrepreneur = Customer(
+        tenant_id=1,
+        name="ИП Договор",
+        phone="+375291223345",
+        type=CustomerType.individual_entrepreneur,
+        inn="391823267",
+        full_legal_name="Индивидуальный предприниматель Договор Дмитрий",
+        legal_address="Витебск, Победителей 2",
+        signing_mode="self",
+    )
+    db.add(entrepreneur)
+    await db.commit()
+    await db.refresh(entrepreneur)
+    entrepreneur_response = await async_client.post(
+        f"/api/manager/customers/{entrepreneur.id}/contracts",
+        headers=headers,
+        json={
+            "contract_date": "2026-01-16T00:00:00",
+            "valid_until": "2027-01-16T00:00:00",
+            "template_id": "service-template",
+        },
+    )
+    assert entrepreneur_response.status_code == 200, entrepreneur_response.text
+    assert captured["replacements"]["{{client_name}}"] == "Индивидуальный предприниматель Договор Дмитрий"
+    assert captured["replacements"]["{{signer_position}}"] == ""
+    assert captured["replacements"]["{{acting_basis}}"] == ""
 
     list_resp = await async_client.get(f"/api/manager/customers/{customer.id}/contracts", headers=headers)
     assert list_resp.status_code == 200

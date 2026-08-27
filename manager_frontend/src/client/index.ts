@@ -465,6 +465,7 @@ export type { NativeDocumentTemplateCreatePayload } from './models/NativeDocumen
 export type { NativeDocumentTemplateItem } from './models/NativeDocumentTemplateItem';
 export type { NativeDocumentTemplateListResponse } from './models/NativeDocumentTemplateListResponse';
 export type { NativePlaceholderCatalogResponse } from './models/NativePlaceholderCatalogResponse';
+export type { NativePlaceholderConditionItem } from './models/NativePlaceholderConditionItem';
 export type { NativePlaceholderDescriptorItem } from './models/NativePlaceholderDescriptorItem';
 export type { NativePlaceholderTableItem } from './models/NativePlaceholderTableItem';
 export type { NativeTemplateVersionItem } from './models/NativeTemplateVersionItem';

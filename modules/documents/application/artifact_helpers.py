@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -26,6 +26,7 @@ def build_render_inputs(
 ) -> tuple[RenderTemplateVersion, RenderContext]:
     schema = version.placeholder_schema or {}
     field_catalog = frozenset(str(value) for value in schema.get("fields", []))
+    condition_catalog = frozenset(str(value) for value in schema.get("conditions", []))
     table_blocks = tuple(
         TableBlockSpec(
             name=str(item.get("name", "")),
@@ -38,13 +39,16 @@ def build_render_inputs(
         version=version.version,
         source=source,
         field_catalog=field_catalog,
+        condition_catalog=condition_catalog,
         table_blocks=table_blocks,
         filename=str(version.source_filename or "template.docx"),
     )
     snapshot_values = snapshot.get("values", {})
+    snapshot_conditions = snapshot.get("conditions")
     snapshot_tables = snapshot.get("table_rows", {})
     context = RenderContext(
         values={field: snapshot_values.get(field, "") for field in field_catalog},
+        conditions=_condition_values(condition_catalog, snapshot_conditions),
         table_rows={
             block.name: tuple(
                 {field: row.get(field, "") for field in block.row_fields}
@@ -54,6 +58,33 @@ def build_render_inputs(
         },
     )
     return render_template, context
+
+
+def _condition_values(
+    condition_catalog: frozenset[str],
+    snapshot_conditions: Any,
+) -> dict[str, bool]:
+    if not condition_catalog:
+        return {}
+    if not isinstance(snapshot_conditions, Mapping):
+        raise ValueError("Снимок документа не содержит каталог условных флагов")
+
+    missing = condition_catalog - set(snapshot_conditions)
+    if missing:
+        raise ValueError(
+            "В снимке документа отсутствуют условные флаги: "
+            + ", ".join(sorted(missing))
+        )
+
+    values: dict[str, bool] = {}
+    for condition in condition_catalog:
+        value = snapshot_conditions[condition]
+        if not isinstance(value, bool):
+            raise TypeError(
+                f"Условный флаг {condition!r} в снимке документа должен быть boolean"
+            )
+        values[condition] = value
+    return values
 
 
 def artifact_basename(document_type: str, official_full_number: str) -> str:

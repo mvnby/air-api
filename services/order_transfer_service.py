@@ -45,6 +45,7 @@ from schemas import (
 )
 from services.order_product_transfer_service import OrderProductTransferService
 from services.order_service import OrderService
+from services.customer_party import signing_mode_for_customer_type
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
     TenantScope,
@@ -446,12 +447,18 @@ class OrderTransferService:
                 customer.tenant_id = tenant_scope.tenant_id
             return customer
 
+        customer_type = OrderTransferService._parse_enum(
+            CustomerType,
+            customer_data.type,
+            CustomerType.individual,
+        )
         customer = Customer(
             tenant_id=tenant_scope.tenant_id,
             name=customer_data.name or "Без имени",
             phone=customer_data.phone or "",
             email=customer_data.email,
-            type=OrderTransferService._parse_enum(CustomerType, customer_data.type, CustomerType.individual),
+            type=customer_type,
+            signing_mode=signing_mode_for_customer_type(customer_type),
             full_legal_name=customer_data.full_legal_name,
             inn=customer_data.inn,
             legal_address=customer_data.legal_address,

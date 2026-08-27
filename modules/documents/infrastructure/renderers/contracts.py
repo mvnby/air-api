@@ -10,8 +10,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import re
 from types import MappingProxyType
 from typing import Any, Mapping
+
+
+_IDENTIFIER_PATTERN = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\Z")
 
 
 def _freeze_text_mapping(values: Mapping[str, Any], *, label: str) -> Mapping[str, str]:
@@ -25,6 +29,19 @@ def _freeze_text_mapping(values: Mapping[str, Any], *, label: str) -> Mapping[st
             frozen[key] = str(value)
         else:
             raise TypeError(f"{label}[{key!r}] must be a scalar value")
+    return MappingProxyType(frozen)
+
+
+def _freeze_bool_mapping(values: Mapping[str, bool]) -> Mapping[str, bool]:
+    frozen: dict[str, bool] = {}
+    for key, value in values.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError("conditions keys must be non-empty strings")
+        if not _IDENTIFIER_PATTERN.fullmatch(key):
+            raise ValueError(f"condition name {key!r} must be a safe identifier")
+        if not isinstance(value, bool):
+            raise TypeError(f"conditions[{key!r}] must be a bool")
+        frozen[key] = value
     return MappingProxyType(frozen)
 
 
@@ -53,10 +70,12 @@ class DocumentTemplateVersion:
     field_catalog: frozenset[str]
     table_blocks: tuple[TableBlockSpec, ...] = ()
     filename: str = "template.docx"
+    condition_catalog: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "field_catalog", frozenset(self.field_catalog))
         object.__setattr__(self, "table_blocks", tuple(self.table_blocks))
+        object.__setattr__(self, "condition_catalog", frozenset(self.condition_catalog))
         if not self.template_key:
             raise ValueError("template_key is required")
         if self.version < 1:
@@ -65,6 +84,16 @@ class DocumentTemplateVersion:
             raise ValueError("template source must be a non-empty DOCX byte string")
         if not self.filename.lower().endswith(".docx"):
             raise ValueError("template filename must use the .docx extension")
+        invalid_conditions = [
+            name
+            for name in self.condition_catalog
+            if not isinstance(name, str) or not _IDENTIFIER_PATTERN.fullmatch(name)
+        ]
+        if invalid_conditions:
+            raise ValueError(
+                "condition catalog contains unsafe identifiers: "
+                f"{sorted(map(repr, invalid_conditions))}"
+            )
 
         names = [block.name for block in self.table_blocks]
         if len(names) != len(set(names)):
@@ -94,6 +123,7 @@ class RenderContext:
     table_rows: Mapping[str, tuple[Mapping[str, str], ...]] = field(
         default_factory=dict
     )
+    conditions: Mapping[str, bool] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         values = _freeze_text_mapping(self.values, label="values")
@@ -107,6 +137,7 @@ class RenderContext:
             )
         object.__setattr__(self, "values", values)
         object.__setattr__(self, "table_rows", MappingProxyType(rows))
+        object.__setattr__(self, "conditions", _freeze_bool_mapping(self.conditions))
 
 
 @dataclass(frozen=True, slots=True)

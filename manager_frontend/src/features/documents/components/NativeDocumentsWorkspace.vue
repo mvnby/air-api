@@ -157,7 +157,7 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           <button class="font-bold" type="button" @click="workspace.replacesDocumentId.value = null">Отменить</button>
         </div>
 
-        <div class="grid gap-3 lg:grid-cols-[180px_minmax(180px,1fr)_minmax(220px,1.2fr)_150px_auto] lg:items-end">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[150px_minmax(160px,.8fr)_minmax(220px,1.2fr)_140px_160px_auto] xl:items-end">
           <label class="native-field">
             <span>Тип</span>
             <select v-model="workspace.documentType.value" class="native-input" data-testid="native-document-type">
@@ -179,6 +179,10 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           <label class="native-field">
             <span>Дата документа</span>
             <input v-model="workspace.issueDate.value" class="native-input" type="date" />
+          </label>
+          <label class="native-field">
+            <span>Город документа</span>
+            <input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" />
           </label>
           <button class="inline-flex h-10 items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" :disabled="workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="workspace.createDraft">
             Создать черновик

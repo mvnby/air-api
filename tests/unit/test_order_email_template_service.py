@@ -4,6 +4,27 @@ from models import Customer, Order, OrderDocument, OrderProductLink, OrderServic
 from services.order_email_template_service import OrderEmailTemplateService
 
 
+def test_ip_signing_personally_does_not_require_position_or_basis() -> None:
+    customer = Customer(
+        tenant_id=1,
+        name="ИП Тест",
+        phone="+375291111111",
+        email="ip@example.com",
+        type="individual_entrepreneur",
+        signing_mode="self",
+    )
+    order = Order(customer=customer)
+
+    missing_keys = {
+        item["key"] for item in OrderEmailTemplateService._missing_requisites(order)
+    }
+
+    assert "inn" in missing_keys
+    assert "signer_name" in missing_keys
+    assert "signer_position" not in missing_keys
+    assert "acting_basis" not in missing_keys
+
+
 @pytest.mark.asyncio
 async def test_invoice_template_uses_order_scenario_and_reports_missing_requisites(db):
     customer = Customer(

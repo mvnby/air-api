@@ -103,6 +103,9 @@ const getRelativeTime = (dt: string | null | undefined) => {
 };
 
 const hasLongComment = computed(() => (props.item.comment || '').length > 140);
+const isBusinessCustomer = computed(() => (
+  props.item.customer_type === 'individual_entrepreneur' || props.item.customer_type === 'company'
+));
 </script>
 
 <template>
@@ -127,7 +130,7 @@ const hasLongComment = computed(() => (props.item.comment || '').length > 140);
           <span class="font-semibold text-slate-800 dark:text-white truncate text-sm">
             {{ item.customer_name || item.customer_full_legal_name || '(Имя не указано)' }}
           </span>
-          <span v-if="item.customer_type === 'company' && item.customer_inn" class="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-tighter">
+          <span v-if="isBusinessCustomer && item.customer_inn" class="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-tighter">
             УНП {{ item.customer_inn }}
           </span>
         </div>
@@ -139,6 +142,10 @@ const hasLongComment = computed(() => (props.item.comment || '').length > 140);
           v-if="item.customer_type === 'company'"
           class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600"
         >🏢 ЮР</span>
+        <span
+          v-else-if="item.customer_type === 'individual_entrepreneur'"
+          class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+        >💼 ИП</span>
         <span
           v-if="item.is_new"
           class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold bg-teal-500 text-white"

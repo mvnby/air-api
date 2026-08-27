@@ -27,6 +27,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const documentType = ref('contract');
   const businessRole = ref<'payment_request' | 'offer'>('payment_request');
   const issueDate = ref(new Date().toISOString().slice(0, 10));
+  const issueCity = ref('');
   const replacesDocumentId = ref<number | null>(null);
   const baseDocumentId = ref<number | null>(null);
   const baseCustomerContractId = ref<number | null>(null);
@@ -156,6 +157,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   };
 
   watch([selectedLegalEntityId, documentType], () => void loadTemplates(), { flush: 'sync' });
+  watch(selectedLegalEntityId, (legalEntityId) => {
+    const entity = legalEntities.value.find((item) => item.id === legalEntityId);
+    issueCity.value = String(entity?.requisites.city || '').trim();
+  }, { flush: 'sync' });
   watch(selectedTemplateId, () => void loadTemplateVersions(), { flush: 'sync' });
 
   const createDraft = async () => {
@@ -166,6 +171,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         legal_entity_id: selectedLegalEntityId.value,
         document_type: documentType.value,
         issue_date: issueDate.value,
+        issue_city: issueCity.value.trim() || null,
         template_id: selectedTemplateId.value,
         proposal_id: input.proposalId() || null,
         business_role: documentType.value === 'invoice' ? businessRole.value : null,
@@ -228,6 +234,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     selectedLegalEntityId.value = document.legal_entity_id || selectedLegalEntityId.value;
     businessRole.value = document.business_role === 'offer' ? 'offer' : 'payment_request';
     issueDate.value = (document.official_date || document.date).slice(0, 10);
+    issueCity.value = document.issue_city
+      || String(legalEntities.value.find((item) => item.id === selectedLegalEntityId.value)?.requisites.city || '').trim();
     replacesDocumentId.value = document.id;
   };
 
@@ -264,6 +272,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     draftBlockedReason,
     issue,
     issueBlockedReason,
+    issueCity,
     issueDate,
     legalEntities,
     loading,

@@ -31343,6 +31343,18 @@
             ],
             "title": "Postal Address"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "bank_name": {
             "anyOf": [
               {
@@ -31378,6 +31390,54 @@
               }
             ],
             "title": "Bic"
+          },
+          "signing_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(self|statutory_body|power_of_attorney)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signing Mode"
+          },
+          "signer_position": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Position"
+          },
+          "signer_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Name"
+          },
+          "acting_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acting Basis"
           },
           "director_title": {
             "anyOf": [
@@ -34690,6 +34750,18 @@
             "format": "date",
             "title": "Issue Date"
           },
+          "issue_city": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue City"
+          },
           "template_id": {
             "anyOf": [
               {
@@ -34952,6 +35024,17 @@
               }
             ],
             "title": "Official Date"
+          },
+          "issue_city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue City"
           },
           "display_number": {
             "type": "string",
@@ -36925,6 +37008,17 @@
             ],
             "title": "Actual Address"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "iban": {
             "anyOf": [
               {
@@ -36990,6 +37084,17 @@
               }
             ],
             "title": "Acting Basis"
+          },
+          "signing_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signing Mode"
           },
           "last_delivery_address": {
             "anyOf": [
@@ -39249,6 +39354,17 @@
             ],
             "title": "Actual Address"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "bank_name": {
             "anyOf": [
               {
@@ -39314,6 +39430,17 @@
               }
             ],
             "title": "Acting Basis"
+          },
+          "signing_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signing Mode"
           },
           "is_favorite": {
             "anyOf": [
@@ -53657,6 +53784,13 @@
             "type": "array",
             "title": "Fields"
           },
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/NativePlaceholderConditionItem"
+            },
+            "type": "array",
+            "title": "Conditions"
+          },
           "tables": {
             "items": {
               "$ref": "#/components/schemas/NativePlaceholderTableItem"
@@ -53669,9 +53803,43 @@
         "required": [
           "document_type",
           "fields",
+          "conditions",
           "tables"
         ],
         "title": "NativePlaceholderCatalogResponse"
+      },
+      "NativePlaceholderConditionItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "start_syntax": {
+            "type": "string",
+            "title": "Start Syntax"
+          },
+          "end_syntax": {
+            "type": "string",
+            "title": "End Syntax"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "group",
+          "start_syntax",
+          "end_syntax"
+        ],
+        "title": "NativePlaceholderConditionItem"
       },
       "NativePlaceholderDescriptorItem": {
         "properties": {

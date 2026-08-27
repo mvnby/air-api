@@ -27,6 +27,7 @@ from modules.documents.infrastructure.template_source_storage import (
     PrivateTemplateSourceStorage,
 )
 from modules.documents.domain import (
+    CONDITIONAL_FLAGS,
     LINE_ROW_PLACEHOLDERS,
     SCALAR_PLACEHOLDERS,
 )
@@ -49,6 +50,7 @@ from .schemas import (
     NativeDocumentTemplateListResponse,
     NativeTemplatePlaceholderSchemaPayload,
     NativePlaceholderCatalogResponse,
+    NativePlaceholderConditionItem,
     NativePlaceholderDescriptorItem,
     NativePlaceholderTableItem,
     NativeTemplateVersionItem,
@@ -82,6 +84,16 @@ async def get_native_placeholder_catalog(
                 syntax=f"{{{{ {item.name} }}}}",
             )
             for item in SCALAR_PLACEHOLDERS
+        ],
+        conditions=[
+            NativePlaceholderConditionItem(
+                name=item.name,
+                label=item.label,
+                group=item.group,
+                start_syntax=f"{{{{#if {item.name}}}}}",
+                end_syntax=f"{{{{/if {item.name}}}}}",
+            )
+            for item in CONDITIONAL_FLAGS
         ],
         tables=[
             NativePlaceholderTableItem(
@@ -236,7 +248,9 @@ async def upload_native_template_version(
             )
     else:
         try:
-            discovered = NativeDocxRenderer().discover_placeholders(content)
+            renderer = NativeDocxRenderer()
+            discovered = renderer.discover_placeholders(content)
+            discovered_conditions = renderer.discover_conditions(content)
         except ValueError as exc:
             raise _template_error(
                 400,
@@ -251,6 +265,11 @@ async def upload_native_template_version(
             fields=[
                 item.name for item in SCALAR_PLACEHOLDERS if item.name in discovered
             ],
+            conditions=[
+                item.name
+                for item in CONDITIONAL_FLAGS
+                if item.name in discovered_conditions
+            ],
             tables=(
                 [
                     {
@@ -263,10 +282,15 @@ async def upload_native_template_version(
             ),
         )
     allowed_fields = {item.name for item in SCALAR_PLACEHOLDERS}
+    allowed_conditions = {item.name for item in CONDITIONAL_FLAGS}
     allowed_row_fields = {item.name for item in LINE_ROW_PLACEHOLDERS}
-    if set(schema.fields) - allowed_fields or any(
-        item.name != "lines" or set(item.row_fields) - allowed_row_fields
-        for item in schema.tables
+    if (
+        set(schema.fields) - allowed_fields
+        or set(schema.conditions) - allowed_conditions
+        or any(
+            item.name != "lines" or set(item.row_fields) - allowed_row_fields
+            for item in schema.tables
+        )
     ):
         raise _template_error(
             400,
@@ -277,6 +301,7 @@ async def upload_native_template_version(
     try:
         contract = NativeTemplatePlaceholderContract.create(
             field_catalog=schema.fields,
+            condition_catalog=schema.conditions,
             table_blocks=(
                 TableBlockSpec(name=item.name, row_fields=frozenset(item.row_fields))
                 for item in schema.tables

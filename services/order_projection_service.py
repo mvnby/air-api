@@ -223,11 +223,16 @@ class OrderProjectionService:
         if segment not in {"all", "b2c", "b2b"}:
             raise ValueError(f"Invalid segment: {customer_segment}")
 
-        # B2B = explicit company OR customer has non-empty INN.
+        # B2B = explicit business party OR customer has non-empty INN.
         # B2C = everything else (including legacy orders without linked customer).
         has_inn = and_(Customer.inn.is_not(None), func.length(func.trim(Customer.inn)) > 0)
         is_b2b = or_(
-            cast(Customer.type, String) == CustomerType.company.value,
+            cast(Customer.type, String).in_(
+                (
+                    CustomerType.company.value,
+                    CustomerType.individual_entrepreneur.value,
+                )
+            ),
             has_inn,
         )
         base_filters = [

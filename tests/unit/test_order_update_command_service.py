@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Customer, Order, OrderProductLink, OrderProposal, OrderStatus, Product
+from models import Customer, CustomerType, Order, OrderProductLink, OrderProposal, OrderStatus, Product
 from models.tenancy import TenantScope
 from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
@@ -184,3 +184,22 @@ async def test_lost_order_does_not_archive_shared_customer_with_active_other_sto
     assert result is not None
     assert stored_customer is not None
     assert stored_customer.is_archived is False
+
+
+@pytest.mark.asyncio
+async def test_manager_order_update_sets_individual_entrepreneur_and_self_signing(
+    update_session: AsyncSession,
+):
+    order_id, customer_id = await _create_order(update_session)
+
+    await OrderUpdateCommandService.update_order_for_manager(
+        update_session,
+        order_id,
+        ManagerOrderUpdatePayload(customer_type="individual_entrepreneur"),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    customer = await update_session.get(Customer, customer_id)
+    assert customer is not None
+    assert customer.type == CustomerType.individual_entrepreneur
+    assert customer.signing_mode == "self"

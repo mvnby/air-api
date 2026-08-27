@@ -18,6 +18,7 @@ from services.order_proposal_lifecycle import (
     PROPOSAL_STATUS_SENT,
 )
 from services.order_product_link_command import OrderProductLinkCommand
+from services.customer_party import customer_type_from_value, signing_mode_for_customer_type
 from services.tenant_scope_service import (
     TenantScope,
     tenant_scope_clause,
@@ -1014,13 +1015,21 @@ class OrderService:
                 )
                 customer = None
         
+        customer_type_explicit = str(customer_type or "").strip() in {
+            "individual",
+            "individual_entrepreneur",
+            "company",
+        }
+        requested_customer_type = customer_type_from_value(customer_type)
+
         if not customer:
             customer = Customer(
                 tenant_id=tenant_scope.tenant_id,
                 name=customer_name,
                 phone=phone_clean,
                 email=customer_email,
-                type=CustomerType.company if customer_type == "company" else CustomerType.individual,
+                type=requested_customer_type,
+                signing_mode=signing_mode_for_customer_type(requested_customer_type),
                 actual_address=customer_address,
                 inn=customer_inn,
                 full_legal_name=customer_full_legal_name,
@@ -1043,9 +1052,18 @@ class OrderService:
             if customer_address:
                 customer.actual_address = customer_address
             
-            # Update B2B info if provided (individual -> company conversion or updating company data)
-            if customer_type == "company":
-                customer.type = CustomerType.company
+            # Preserve the stored party type unless this workflow explicitly selected one.
+            if customer_type_explicit:
+                customer.type = requested_customer_type
+                customer.signing_mode = signing_mode_for_customer_type(requested_customer_type)
+            else:
+                requested_customer_type = customer_type_from_value(customer.type)
+
+            # Update business requisites for a company or individual entrepreneur.
+            if requested_customer_type in {
+                CustomerType.company,
+                CustomerType.individual_entrepreneur,
+            }:
                 if customer_inn:
                     customer.inn = customer_inn
                 if customer_full_legal_name:
@@ -2263,15 +2281,16 @@ class OrderService:
             return None
 
         customer_type = customer.type.value if hasattr(customer.type, "value") else str(customer.type or "")
-        if customer_type == "company" or customer.inn or customer.full_legal_name:
-            return "company"
+        if customer_type in {"individual", "individual_entrepreneur", "company"}:
+            return customer_type
 
         meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
         raw_meta_type = str(meta.get("lead_customer_type") or "").strip()
-        if raw_meta_type == "company":
-            return "company"
-        if raw_meta_type == "individual" and meta.get("lead_customer_type_known") is True:
-            return "individual"
+        if (
+            raw_meta_type in {"individual", "individual_entrepreneur", "company"}
+            and meta.get("lead_customer_type_known") is True
+        ):
+            return raw_meta_type
         if meta.get("lead_customer_type_known") is True and customer_type == "individual":
             return "individual"
 

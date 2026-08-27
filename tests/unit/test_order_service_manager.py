@@ -440,14 +440,23 @@ def test_service_repair_transition_helpers_reject_non_repair_orders():
 async def test_service_get_orders_for_manager_segment_and_search(db):
     c1 = Customer(tenant_id=1, name="Alice", phone="+375291111111", type=CustomerType.individual)
     c2 = Customer(tenant_id=1, name="Acme LLC", phone="+375292222222", type=CustomerType.individual, inn="999000111")
+    c3 = Customer(
+        tenant_id=1,
+        name="ИП Без УНП",
+        phone="+375293333333",
+        type=CustomerType.individual_entrepreneur,
+    )
     db.add(c1)
     db.add(c2)
+    db.add(c3)
     await db.commit()
     await db.refresh(c1)
     await db.refresh(c2)
+    await db.refresh(c3)
 
     db.add(Order(tenant_id=1, storefront_id=1, customer_id=c1.id, status=OrderStatus.NEGOTIATION, comment="note 1"))
     db.add(Order(tenant_id=1, storefront_id=1, customer_id=c2.id, status=OrderStatus.NEGOTIATION, comment="note 2"))
+    db.add(Order(tenant_id=1, storefront_id=1, customer_id=c3.id, status=OrderStatus.NEGOTIATION, comment="note 3"))
     await db.commit()
 
     b2c = await OrderService.get_orders_for_manager(db, "b2c", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
@@ -458,8 +467,11 @@ async def test_service_get_orders_for_manager_segment_and_search(db):
     assert len(b2b["items"]) == 1
     assert b2b["items"][0]["customer"]["name"] == "Acme LLC"
 
+    all_b2b = await OrderService.get_orders_for_manager(db, "b2b", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
+    assert {item["customer"]["name"] for item in all_b2b["items"]} == {"Acme LLC", "ИП Без УНП"}
+
     all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
-    assert {item["customer"]["name"] for item in all_orders["items"]} == {"Alice", "Acme LLC"}
+    assert {item["customer"]["name"] for item in all_orders["items"]} == {"Alice", "Acme LLC", "ИП Без УНП"}
 
 
 @pytest.mark.asyncio

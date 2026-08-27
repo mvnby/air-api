@@ -6,6 +6,10 @@ from sqlmodel import select
 
 from models import Customer, CustomerBranch, CustomerType, Order
 from models.tenancy import TenantScope
+from services.customer_party import (
+    signing_mode_for_customer_type,
+    valid_signing_modes_for_customer_type,
+)
 from services.tenant_scope_service import (
     storefront_scope_clause,
     tenant_scope_clause,
@@ -42,23 +46,35 @@ class CustomerService:
         last_delivery_address: Optional[str] = None,
         branches: Optional[list[dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        customer_type = (
+            customer.type.value
+            if hasattr(customer.type, "value")
+            else str(customer.type)
+        )
+        signing_mode = str(customer.signing_mode or "").strip().lower()
+        if signing_mode not in {"self", "statutory_body", "power_of_attorney"}:
+            signing_mode = ""
+        if not signing_mode or (customer_type == "company" and signing_mode == "self"):
+            signing_mode = signing_mode_for_customer_type(CustomerType(customer_type))
         return {
             "id": int(customer.id or 0),
             "name": customer.name,
             "phone": customer.phone,
             "email": customer.email,
-            "type": customer.type.value if hasattr(customer.type, "value") else str(customer.type),
+            "type": customer_type,
             "inn": customer.inn,
             "kpp": customer.kpp,
             "full_legal_name": customer.full_legal_name,
             "legal_address": customer.legal_address,
             "actual_address": customer.actual_address,
+            "city": customer.city,
             "iban": customer.iban,
             "bic": customer.bic,
             "bank_name": customer.bank_name,
             "signer_position": customer.signer_position,
             "signer_name": customer.signer_name,
             "acting_basis": customer.acting_basis,
+            "signing_mode": signing_mode,
             "last_delivery_address": last_delivery_address,
             "created_at": customer.created_at.isoformat() if customer.created_at else None,
             "order_count": order_count,
@@ -329,6 +345,7 @@ class CustomerService:
             "full_legal_name",
             "legal_address",
             "actual_address",
+            "city",
             "bank_name",
             "bic",
             "iban",
@@ -341,8 +358,33 @@ class CustomerService:
         if "phone" in payload and payload["phone"] is not None:
             customer.phone = str(payload["phone"]).strip()
 
-        if "type" in payload and payload["type"]:
-            customer.type = CustomerType(str(payload["type"]).strip().lower())
+        current_type = CustomerType(customer.type)
+        requested_type = (
+            CustomerType(str(payload["type"]).strip().lower())
+            if "type" in payload and payload["type"]
+            else current_type
+        )
+        customer.type = requested_type
+
+        requested_signing_mode = (
+            str(payload["signing_mode"]).strip().lower()
+            if "signing_mode" in payload and payload["signing_mode"] is not None
+            else str(customer.signing_mode or "").strip().lower()
+        )
+        signing_mode_is_explicit = (
+            "signing_mode" in payload and payload["signing_mode"] is not None
+        )
+        if not signing_mode_is_explicit and (
+            requested_type != current_type
+            or requested_signing_mode
+            not in valid_signing_modes_for_customer_type(requested_type)
+        ):
+            requested_signing_mode = signing_mode_for_customer_type(requested_type)
+        CustomerService._validate_signing_mode(
+            customer_type=requested_type,
+            signing_mode=requested_signing_mode,
+        )
+        customer.signing_mode = requested_signing_mode
 
         if "is_favorite" in payload and payload["is_favorite"] is not None:
             customer.is_favorite = bool(payload["is_favorite"])
@@ -372,6 +414,13 @@ class CustomerService:
             customer_id=customer_id,
             tenant_scope=tenant_scope,
         )
+
+    @staticmethod
+    def _validate_signing_mode(*, customer_type: CustomerType, signing_mode: str) -> None:
+        if signing_mode not in {"self", "statutory_body", "power_of_attorney"}:
+            raise ValueError("Недопустимый режим подписания")
+        if signing_mode not in valid_signing_modes_for_customer_type(customer_type):
+            raise ValueError("Режим подписания не соответствует типу клиента")
 
     @staticmethod
     async def list_for_manager(

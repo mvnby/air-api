@@ -6,6 +6,7 @@ from sqlmodel import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from models import Customer, CustomerBranch, CustomerContract
+from services.customer_party import customer_type_from_value, signing_mode_for_customer_type
 from services.customer_contract_service import CustomerContractService
 from services.order_service import OrderService
 from services.order_update.context import OrderUpdateContext
@@ -83,7 +84,7 @@ async def _apply_customer_link(context: OrderUpdateContext) -> bool:
         if hasattr(new_customer.type, "value")
         else str(new_customer.type or "")
     )
-    if linked_customer_type in {"individual", "company"}:
+    if linked_customer_type in {"individual", "individual_entrepreneur", "company"}:
         order.technical_meta = dict(order.technical_meta or {})
         order.technical_meta["lead_customer_type_known"] = True
         order.technical_meta["lead_customer_type"] = linked_customer_type
@@ -209,6 +210,13 @@ async def _update_linked_customer(context: OrderUpdateContext) -> None:
         )
 
     for field_name in requested_fields:
+        if field_name == "customer_type":
+            customer_type = customer_type_from_value(
+                getattr(context.payload, field_name, None)
+            )
+            customer.type = customer_type
+            customer.signing_mode = signing_mode_for_customer_type(customer_type)
+            continue
         setattr(
             customer,
             CUSTOMER_FIELD_MAP[field_name],
@@ -223,7 +231,7 @@ def _apply_customer_type_hint(context: OrderUpdateContext) -> None:
     ).strip()
     if (
         "customer_type" in context.fields_set
-        and incoming_customer_type in {"individual", "company"}
+        and incoming_customer_type in {"individual", "individual_entrepreneur", "company"}
     ):
         context.order.technical_meta = dict(context.order.technical_meta or {})
         context.order.technical_meta["lead_customer_type_known"] = True

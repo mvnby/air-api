@@ -293,10 +293,18 @@ class BaseDocumentStrategy(ABC):
     def _append_customer_variables(self, replacements: Dict[str, str], c: Any) -> Dict[str, str]:
         # Customer Real Data
         if c:
-            if c.type == CustomerType.company and c.full_legal_name:
+            if c.type in {
+                CustomerType.company,
+                CustomerType.individual_entrepreneur,
+            } and c.full_legal_name:
                 client_main_name = c.full_legal_name
             else:
                 client_main_name = c.name
+
+            signs_personally = (
+                c.type == CustomerType.individual_entrepreneur
+                and getattr(c, "signing_mode", "self") == "self"
+            )
 
             replacements.update({
                 "{{client_name}}": client_main_name,
@@ -304,9 +312,9 @@ class BaseDocumentStrategy(ABC):
                 "{{email}}": f"email: {c.email or '-'}",
                 "{{inn}}": c.inn or "-",
                 "{{address}}": c.legal_address or c.actual_address or "-",
-                "{{signer_position}}": c.signer_position or "директора",
+                "{{signer_position}}": "" if signs_personally else c.signer_position or "директора",
                 "{{signer_name}}": c.signer_name or "_______________________________________",
-                "{{acting_basis}}": c.acting_basis or "Устава",
+                "{{acting_basis}}": "" if signs_personally else c.acting_basis or "Устава",
                 "{{bank_name}}": c.bank_name or "-",
                 "{{iban}}": c.iban or "-",
                 "{{bic}}": c.bic or "-"

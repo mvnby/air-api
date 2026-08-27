@@ -25,6 +25,10 @@ from services.tenant_scope_service import (
     storefront_scope_clause,
     tenant_scope_clause,
 )
+from services.customer_party import (
+    is_business_customer_type,
+    signing_mode_for_customer_type,
+)
 from services.tenant_entity_access_service import TenantEntityAccessService
 
 
@@ -428,7 +432,8 @@ class LeadService:
         else:
             customer_type = CustomerType.individual
 
-        customer_name = name or (full_legal_name if customer_type == CustomerType.company else None) or f"Лид #{lead.id}"
+        is_business_customer = is_business_customer_type(customer_type)
+        customer_name = name or (full_legal_name if is_business_customer else None) or f"Лид #{lead.id}"
         customer_phone = phone or ""
 
         if customer is None:
@@ -438,6 +443,7 @@ class LeadService:
                 phone=customer_phone,
                 email=email,
                 type=customer_type,
+                signing_mode=signing_mode_for_customer_type(customer_type),
                 inn=inn,
                 full_legal_name=full_legal_name,
                 legal_address=legal_address,
@@ -467,8 +473,13 @@ class LeadService:
                 customer.bic = bic
             if bank_name:
                 customer.bank_name = bank_name
-            if customer_type == CustomerType.company:
+            if payload.customer_type:
+                customer.type = customer_type
+                customer.signing_mode = signing_mode_for_customer_type(customer_type)
+            elif customer_type == CustomerType.company:
                 customer.type = CustomerType.company
+                if customer.signing_mode == "self":
+                    customer.signing_mode = "statutory_body"
             session.add(customer)
             await session.flush()
 
@@ -505,7 +516,11 @@ class LeadService:
         lead.converted_order_id = order.id
         lead.segment_hint = LeadService._normalize_segment_hint(
             inn=inn,
-            explicit_hint=LeadSegmentHint.b2b.value if customer.type == CustomerType.company else LeadSegmentHint.b2c.value,
+            explicit_hint=(
+                LeadSegmentHint.b2b.value
+                if is_business_customer_type(customer.type)
+                else LeadSegmentHint.b2c.value
+            ),
         )
         lead.loss_reason = None
         session.add(lead)

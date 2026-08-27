@@ -33,10 +33,12 @@ async def _seed_order(db):
         email="buyer@example.test",
         inn="123456789",
         legal_address="г. Витебск, ул. Клиентская, 1",
+        city="Витебск",
         bank_name="Банк покупателя",
         iban="BY00TEST00000000000000000000",
         bic="TESTBY2X",
         signer_name="Иванов И.И.",
+        signing_mode="statutory_body",
         type=CustomerType.company,
     )
     selected_product = Product(
@@ -82,8 +84,13 @@ async def _seed_order(db):
         is_default=True,
         is_vat_payer=False,
         requisites={
+            "city": "Витебск",
             "legal_address": "г. Витебск, ул. Продавца, 1",
             "iban": "BY00SELLER0000000000000000",
+            "signing_mode": "statutory_body",
+            "signer_position": "Директор",
+            "signer_name": "Петров П.П.",
+            "acting_basis": "Устава",
         },
     )
     db.add_all([customer, selected_product, alternative_product, installation, issuer])
@@ -164,13 +171,20 @@ async def test_context_snapshot_uses_selected_proposal_and_does_not_mutate_order
         ),
     )
 
-    assert snapshot["schema_version"] == 1
+    assert snapshot["schema_version"] == 2
     assert snapshot["meta"]["proposal_id"] == selected.id
     assert snapshot["meta"]["business_role"] == "payment_request"
     assert snapshot["values"]["seller.unp"] == "390000000"
     assert snapshot["values"]["seller.entity_type"] == "organization"
     assert snapshot["values"]["seller.entity_type_label"] == "Организация"
+    assert snapshot["values"]["seller.city"] == "Витебск"
+    assert snapshot["values"]["document.issue_city"] == "Витебск"
+    assert snapshot["values"]["seller.signing_mode"] == "statutory_body"
     assert snapshot["values"]["customer.unp"] == "123456789"
+    assert snapshot["values"]["customer.entity_type"] == "organization"
+    assert snapshot["values"]["customer.signing_mode"] == "statutory_body"
+    assert snapshot["conditions"]["seller.organization_statutory_body"] is True
+    assert snapshot["conditions"]["customer.is_individual_entrepreneur"] is False
     assert snapshot["values"]["totals.amount"] == "1400.00"
     assert [row["line.title"] for row in snapshot["table_rows"]["lines"]] == [
         "Кондиционер выбранный",
@@ -180,6 +194,51 @@ async def test_context_snapshot_uses_selected_proposal_and_does_not_mutate_order
 
     await db.refresh(order)
     assert order.total_amount == 1_400
+
+
+@pytest.mark.asyncio
+async def test_context_snapshot_supports_ip_parties_and_explicit_issue_city(db):
+    order, issuer, _selected, _alternative = await _seed_order(db)
+    issuer.entity_type = "individual_entrepreneur"
+    issuer.requisites = {
+        **issuer.requisites,
+        "city": "Полоцк",
+        "signing_mode": "self",
+    }
+    customer = await db.get(Customer, order.customer_id)
+    assert customer is not None
+    customer.type = CustomerType.individual_entrepreneur
+    customer.city = "Новополоцк"
+    customer.signing_mode = "power_of_attorney"
+    customer.acting_basis = "доверенности № 4 от 01.08.2026"
+    db.add_all([issuer, customer])
+    await db.commit()
+
+    snapshot = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(
+            order_id=order.id,
+            legal_entity_id=issuer.id,
+            document_type="contract",
+            issue_date=date(2026, 8, 27),
+            issue_city="Минск",
+        ),
+    )
+
+    assert snapshot["meta"]["issue_city"] == "Минск"
+    assert snapshot["values"]["document.issue_city"] == "Минск"
+    assert snapshot["values"]["seller.city"] == "Полоцк"
+    assert snapshot["values"]["customer.city"] == "Новополоцк"
+    assert snapshot["values"]["seller.entity_type"] == "individual_entrepreneur"
+    assert snapshot["values"]["customer.entity_type"] == "individual_entrepreneur"
+    assert snapshot["values"]["seller.signer_position"] == ""
+    assert snapshot["values"]["seller.acting_basis"] == ""
+    assert snapshot["conditions"]["seller.individual_entrepreneur_self"] is True
+    assert (
+        snapshot["conditions"]["customer.individual_entrepreneur_power_of_attorney"]
+        is True
+    )
 
 
 @pytest.mark.asyncio

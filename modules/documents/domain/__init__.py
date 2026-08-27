@@ -12,9 +12,11 @@ from .numbering import (
     numbering_policy_key,
 )
 from .placeholder_catalog import (
+    CONDITIONAL_FLAGS,
     LINE_ROW_PLACEHOLDERS,
     SCALAR_PLACEHOLDERS,
     SUPPORTED_NATIVE_DOCUMENT_TYPES,
+    ConditionDescriptor,
     PlaceholderDescriptor,
 )
 
@@ -27,9 +29,11 @@ __all__ = [
     "DocumentStatus",
     "new_internal_reference",
     "numbering_policy_key",
+    "CONDITIONAL_FLAGS",
     "LINE_ROW_PLACEHOLDERS",
     "SCALAR_PLACEHOLDERS",
     "SUPPORTED_NATIVE_DOCUMENT_TYPES",
+    "ConditionDescriptor",
     "PlaceholderDescriptor",
     "transition_document",
 ]

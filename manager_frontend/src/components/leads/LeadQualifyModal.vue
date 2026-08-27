@@ -7,6 +7,8 @@ import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../../composables/useB2BLookup';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
+import LeadBusinessRequisites from './LeadBusinessRequisites.vue';
+import LeadCustomerTypeChooser, { type LeadCustomerType } from './LeadCustomerTypeChooser.vue';
 import { notify } from '../../services/ui-feedback';
 
 const props = defineProps<{
@@ -18,12 +20,16 @@ const emit = defineEmits<{
   (e: 'success', orderId: number): void;
 }>();
 
-type CustomerTypeChoice = '' | 'individual' | 'company';
+type CustomerTypeChoice = '' | LeadCustomerType;
 type ServiceTypeChoice = '' | 'turnkey' | 'install_only' | 'pre_install' | 'maintenance' | 'repair' | 'dismantling';
 type OptionalSectionKey = 'contacts' | 'company' | 'branch' | 'extra';
 
 const isCustomerType = (value: unknown): value is Exclude<CustomerTypeChoice, ''> =>
-  value === 'individual' || value === 'company';
+  value === 'individual' || value === 'individual_entrepreneur' || value === 'company';
+
+const isBusinessCustomerType = (value: CustomerTypeChoice) => (
+  value === 'individual_entrepreneur' || value === 'company'
+);
 
 const normalizeServiceType = (value: unknown): ServiceTypeChoice => {
   const raw = String(value || '').trim();
@@ -110,11 +116,6 @@ const serviceOptions: Array<{ value: ServiceTypeChoice; label: string; hint: str
   { value: 'dismantling', label: 'Демонтаж', hint: 'снять или перенести', icon: 'move_down' },
 ];
 
-const customerTypeOptions: Array<{ value: Exclude<CustomerTypeChoice, ''>; label: string; hint: string; icon: string }> = [
-  { value: 'individual', label: 'Физлицо', hint: 'частный клиент', icon: 'person' },
-  { value: 'company', label: 'Юрлицо', hint: 'компания или ИП', icon: 'business' },
-];
-
 const selectCustomerType = (value: Exclude<CustomerTypeChoice, ''>) => {
   customerType.value = value;
   customerTypeChosenByManager.value = true;
@@ -153,7 +154,7 @@ const loadBranches = async (customerId: number) => {
 
 const searchCustomer = async () => {
   const requestId = ++customerSearchRequestId;
-  const query = customerType.value === 'company'
+  const query = isBusinessCustomerType(customerType.value)
     ? companyInn.value
     : (unmaskedPhone.value || customerPhone.value);
   if (!query || query.length < 5) {
@@ -174,15 +175,7 @@ const searchCustomer = async () => {
       foundCustomerName.value = match.name || match.full_legal_name || 'Неизвестно';
       searchStatus.value = 'found';
       const matchType = isCustomerType(match.type) ? match.type : '';
-      const matchLooksCompany = matchType === 'company' || Boolean(match.inn || match.full_legal_name);
-      if (matchLooksCompany) {
-        customerType.value = 'company';
-      } else if (
-        matchType === 'individual'
-        && (initialCustomerType === 'individual' || (customerTypeChosenByManager.value && customerType.value === 'individual'))
-      ) {
-        customerType.value = 'individual';
-      }
+      if (matchType && !customerTypeChosenByManager.value) customerType.value = matchType;
       if (!customerName.value) customerName.value = match.name || match.full_legal_name || '';
       if (!customerEmail.value) customerEmail.value = match.email || '';
       if (!companyInn.value) companyInn.value = match.inn || '';
@@ -302,7 +295,7 @@ const buildPayload = (): ManagerOrderUpdatePayload => {
   const deliveryAddress = cleanText(customerDeliveryAddress.value || selectedBranch.value?.delivery_address);
   if (deliveryAddress) payload.customer_delivery_address = deliveryAddress;
 
-  const name = cleanText(customerType.value === 'company'
+  const name = cleanText(isBusinessCustomerType(customerType.value)
     ? (companyName.value || companyFullLegalName.value || customerName.value)
     : customerName.value);
   if (name) payload.customer_name = name;
@@ -313,7 +306,7 @@ const buildPayload = (): ManagerOrderUpdatePayload => {
   const email = cleanText(customerEmail.value);
   if (email) payload.customer_email = email;
 
-  if (customerType.value === 'company') {
+  if (isBusinessCustomerType(customerType.value)) {
     const inn = cleanText(companyInn.value);
     const fullLegalName = cleanText(companyFullLegalName.value || companyName.value);
     const legalAddress = cleanText(companyLegalAddress.value);
@@ -432,26 +425,11 @@ const submitQualify = async () => {
               </h3>
               <span v-if="attemptedSubmit && missingCustomerType" class="text-xs font-semibold text-red-500">Выберите тип клиента</span>
             </div>
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button
-                v-for="option in customerTypeOptions"
-                :key="option.value"
-                type="button"
-                class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all"
-                :class="customerType === option.value
-                  ? 'border-teal-500 bg-teal-50 text-teal-800 shadow-sm dark:border-teal-400 dark:bg-teal-500/10 dark:text-teal-200'
-                  : attemptedSubmit && missingCustomerType
-                    ? 'border-red-300 bg-red-50 text-slate-700 dark:border-red-500/50 dark:bg-red-500/10 dark:text-slate-200'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'"
-                @click="selectCustomerType(option.value)"
-              >
-                <span class="material-icons-round text-[20px]">{{ option.icon }}</span>
-                <span class="min-w-0">
-                  <span class="block text-sm font-bold">{{ option.label }}</span>
-                  <span class="block text-xs opacity-70">{{ option.hint }}</span>
-                </span>
-              </button>
-            </div>
+            <LeadCustomerTypeChooser
+              :model-value="customerType"
+              :show-error="attemptedSubmit && missingCustomerType"
+              @update:model-value="selectCustomerType($event)"
+            />
           </div>
 
           <div>
@@ -536,59 +514,39 @@ const submitQualify = async () => {
           </div>
 
           <button
-            v-if="customerType === 'company'"
+            v-if="isBusinessCustomerType(customerType)"
             type="button"
             class="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/70"
             @click="optionalSections.company = !optionalSections.company"
           >
             <span>
-              <span class="block text-sm font-bold">Реквизиты компании</span>
+              <span class="block text-sm font-bold">Реквизиты бизнеса</span>
               <span class="block text-xs text-slate-500">{{ sectionSummary('company') }}</span>
             </span>
             <span class="material-icons-round text-slate-400">{{ optionalSections.company ? 'expand_less' : 'expand_more' }}</span>
           </button>
-          <div v-if="customerType === 'company' && optionalSections.company" class="grid grid-cols-1 gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60 md:grid-cols-2">
-            <label class="block text-xs font-semibold text-slate-500">
-              УНП
-              <span class="relative mt-1 block">
-                <input v-model="companyInn" type="text" class="w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900" placeholder="9 цифр" @input="onSearchInput" @blur="onInnBlur">
-                <span v-if="isEgrLoading" class="absolute right-3 top-2.5">
-                  <span class="material-icons-round animate-spin text-sm text-teal-500">refresh</span>
-                </span>
-              </span>
-            </label>
-            <label class="block text-xs font-semibold text-slate-500">
-              Короткое название
-              <input v-model="companyName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
-            </label>
-            <label class="block text-xs font-semibold text-slate-500 md:col-span-2">
-              Полное юридическое название
-              <input v-model="companyFullLegalName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
-            </label>
-            <AddressSuggestInput
-              v-model="companyLegalAddress"
-              class="md:col-span-2"
-              label="Юридический адрес"
-              input-class="bg-white text-sm dark:bg-slate-900"
-            />
-            <label class="block text-xs font-semibold text-slate-500 md:col-span-2">
-              IBAN
-              <span class="relative mt-1 block">
-                <input v-model="companyIban" type="text" class="w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900" @blur="onIbanBlur">
-                <span v-if="isBankLoading" class="absolute right-3 top-2.5">
-                  <span class="material-icons-round animate-spin text-sm text-teal-500">refresh</span>
-                </span>
-              </span>
-            </label>
-            <label class="block text-xs font-semibold text-slate-500">
-              BIC
-              <input v-model="companyBic" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
-            </label>
-            <label class="block text-xs font-semibold text-slate-500">
-              Банк
-              <input v-model="companyBankName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
-            </label>
-          </div>
+          <LeadBusinessRequisites
+            v-if="isBusinessCustomerType(customerType) && optionalSections.company"
+            :inn="companyInn"
+            :name="companyName"
+            :full-legal-name="companyFullLegalName"
+            :legal-address="companyLegalAddress"
+            :iban="companyIban"
+            :bic="companyBic"
+            :bank-name="companyBankName"
+            :is-egr-loading="isEgrLoading"
+            :is-bank-loading="isBankLoading"
+            @update:inn="companyInn = $event"
+            @update:name="companyName = $event"
+            @update:full-legal-name="companyFullLegalName = $event"
+            @update:legal-address="companyLegalAddress = $event"
+            @update:iban="companyIban = $event"
+            @update:bic="companyBic = $event"
+            @update:bank-name="companyBankName = $event"
+            @search-input="onSearchInput"
+            @inn-blur="onInnBlur"
+            @iban-blur="onIbanBlur"
+          />
 
           <button
             type="button"

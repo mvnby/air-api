@@ -125,6 +125,37 @@ async def test_qualify_lead_creates_order_and_updates_status(db, tenant_scope):
 
 
 @pytest.mark.asyncio
+async def test_qualify_lead_creates_individual_entrepreneur(db, tenant_scope):
+    lead_data = await LeadService.create_lead(
+        db,
+        LeadCreatePayload(
+            source="manager",
+            name="ИП Новый",
+            phone="+375293333334",
+            inn="391823267",
+            request_text="Монтаж для ИП",
+        ),
+        tenant_scope=tenant_scope,
+    )
+
+    result = await LeadService.qualify_lead(
+        db,
+        lead_id=lead_data["id"],
+        payload=LeadQualifyPayload(
+            customer_type="individual_entrepreneur",
+            full_legal_name="Индивидуальный предприниматель Новый Николай",
+        ),
+        tenant_scope=tenant_scope,
+    )
+
+    assert result is not None
+    customer = await db.get(Customer, result["customer_id"])
+    assert customer is not None
+    assert customer.type == CustomerType.individual_entrepreneur
+    assert customer.signing_mode == "self"
+
+
+@pytest.mark.asyncio
 async def test_qualify_lead_rejects_mismatched_tenant_scope(db, tenant_scope):
     lead_data = await LeadService.create_lead(
         db,
