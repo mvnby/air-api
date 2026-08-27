@@ -260,10 +260,10 @@ const save = () => {
           </div>
           <span v-if="isIndividualEntrepreneur && !isPowerOfAttorney" class="font-normal text-slate-500">ИП действует от собственного имени — отдельное основание не требуется.</span>
         </div>
+        <label class="settings-field sm:col-span-2"><span>{{ isIndividualEntrepreneur && !isPowerOfAttorney ? 'ФИО предпринимателя' : 'ФИО подписанта' }}</span><input v-model="signerName" data-testid="seller-signer-name" class="settings-input" /></label>
         <template v-if="showsSignerFields">
           <label class="settings-field"><span>Должность подписанта</span><input v-model="signerPosition" data-testid="seller-signer-position" class="settings-input" :placeholder="isPowerOfAttorney ? 'Представитель' : 'Директор'" /></label>
-          <label class="settings-field"><span>ФИО подписанта</span><input v-model="signerName" data-testid="seller-signer-name" class="settings-input" /></label>
-          <label class="settings-field sm:col-span-2"><span>Основание полномочий</span><input v-model="actingBasis" data-testid="seller-acting-basis" class="settings-input" :placeholder="isPowerOfAttorney ? 'доверенности № 4 от 01.08.2026' : 'Устава'" /></label>
+          <label class="settings-field"><span>Основание полномочий</span><input v-model="actingBasis" data-testid="seller-acting-basis" class="settings-input" :placeholder="isPowerOfAttorney ? 'доверенности № 4 от 01.08.2026' : 'Устава'" /></label>
         </template>
         <div class="flex flex-wrap gap-2 sm:col-span-2">
           <button class="settings-button-primary" type="submit" :disabled="saving">{{ saving ? 'Сохраняем…' : 'Сохранить реквизиты' }}</button>
