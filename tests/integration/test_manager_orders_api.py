@@ -2059,6 +2059,92 @@ async def test_manager_order_generate_document(async_client, db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_legacy_google_contract_does_not_reuse_void_native_document(async_client, db, monkeypatch):
+    customer = Customer(
+        tenant_id=1,
+        name="Legacy Google Customer",
+        phone="+375297777778",
+        type=CustomerType.company,
+        inn="123456789",
+    )
+    issuer = DocumentLegalEntity(
+        tenant_id=1,
+        slug="legacy-google-regression",
+        display_name="Legacy Google Issuer",
+        is_default=False,
+        requisites={},
+    )
+    db.add_all([customer, issuer])
+    await db.flush()
+    order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=customer.id,
+        status=OrderStatus.NEGOTIATION,
+    )
+    db.add(order)
+    await db.flush()
+    void_native = OrderDocument(
+        tenant_id=1,
+        legal_entity_id=issuer.id,
+        order_id=order.id,
+        doc_type="contract",
+        status="void",
+        internal_reference="doc_void_native_contract",
+        number="doc_void_native_contract",
+        google_file_id=None,
+        google_edit_url=None,
+    )
+    db.add(void_native)
+    await db.commit()
+    await db.refresh(order)
+    await db.refresh(void_native)
+
+    copies = []
+
+    class _FakeGoogleService:
+        def copy_template(self, template_id, title):
+            copies.append((template_id, title))
+            return {
+                "file_id": "legacy-google-contract-file",
+                "edit_url": "https://docs.google.com/document/d/legacy-google-contract-file/edit",
+            }
+
+        def replace_placeholders(self, file_id, replacements):
+            assert file_id == "legacy-google-contract-file"
+            assert replacements["{{doc_number}}"].startswith("Д-")
+
+    from services import document_service
+
+    monkeypatch.setattr(document_service, "get_google_service", lambda: _FakeGoogleService())
+    headers = await _auth_headers(async_client)
+    params = {
+        "template_id": "legacy-google-installation-template",
+        "contract_date": "2026-08-31T00:00:00",
+    }
+
+    created = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/contract",
+        headers=headers,
+        params=params,
+    )
+    assert created.status_code == 200, created.text
+    payload = created.json()
+    assert payload["doc_id"] != void_native.id
+    assert payload["edit_url"] == "https://docs.google.com/document/d/legacy-google-contract-file/edit"
+    assert len(copies) == 1
+
+    repeated = await async_client.post(
+        f"/api/manager/orders/{order.id}/documents/contract",
+        headers=headers,
+        params=params,
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["doc_id"] == payload["doc_id"]
+    assert len(copies) == 1
+
+
+@pytest.mark.asyncio
 async def test_manager_doc_download_returns_pdf_bytes(async_client, db, monkeypatch):
     customer = Customer(tenant_id=1, name="Download", phone="+375297777777", type=CustomerType.individual)
     db.add(customer)
