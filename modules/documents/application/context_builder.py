@@ -27,9 +27,15 @@ from modules.documents.domain.party import (
     party_conditions,
 )
 from modules.documents.domain import (
+    ActTerms,
     B2C_NATIVE_DOCUMENT_TYPES,
+    BusinessDocumentTerms,
     ConsumerDocumentTerms,
     SUPPORTED_NATIVE_DOCUMENT_TYPES,
+)
+from .business_context import (
+    BusinessDocumentContextError,
+    build_business_document_context,
 )
 
 from .consumer_context import (
@@ -61,12 +67,14 @@ class DocumentContextSelection:
     scope_product_line_ids: tuple[int, ...] = ()
     business_role: str | None = None
     consumer_terms: ConsumerDocumentTerms | None = None
+    business_terms: BusinessDocumentTerms | None = None
+    act_terms: ActTerms | None = None
 
 
 class DocumentContextBuilder:
     """Build a JSON-safe immutable source snapshot without mutating ORM state."""
 
-    SNAPSHOT_VERSION = 3
+    SNAPSHOT_VERSION = 4
     NATIVE_TYPES = SUPPORTED_NATIVE_DOCUMENT_TYPES
     BASE_TYPES = frozenset({"offer", "invoice", "contract"})
     CLOSING_TYPES = frozenset({"act", "tn2", "ttn1"})
@@ -90,6 +98,13 @@ class DocumentContextBuilder:
         ):
             raise DocumentContextError(
                 "Параметры документа физлицу нельзя передать для этого типа документа"
+            )
+        if (
+            selection.business_terms is not None
+            and document_type in B2C_NATIVE_DOCUMENT_TYPES
+        ):
+            raise DocumentContextError(
+                "Параметры B2B нельзя передать для B2C заказ-акта"
             )
         business_role = cls._business_role(document_type, selection.business_role)
         order = await cls._load_order(
@@ -171,6 +186,16 @@ class DocumentContextBuilder:
                 seller_requisites=seller_requisites,
             )
         except ConsumerDocumentContextError as exc:
+            raise DocumentContextError(str(exc)) from exc
+        try:
+            business_context = build_business_document_context(
+                document_type=document_type,
+                terms=selection.business_terms,
+                act_terms=selection.act_terms,
+                order_additional_conditions=order.additional_conditions,
+                total_amount=total,
+            )
+        except BusinessDocumentContextError as exc:
             raise DocumentContextError(str(exc)) from exc
         seller_entity_type = legal_entity.entity_type
         seller_signing_mode = normalize_signing_mode(
@@ -265,6 +290,7 @@ class DocumentContextBuilder:
             "order.object_address": scope_address,
             "proposal.name": str(getattr(proposal, "name", "") or ""),
             **consumer_context.values,
+            **business_context.values,
             "totals.amount": cls._money(total),
             "totals.amount_in_words": cls._amount_in_words(total),
             "totals.currency": "BYN",
@@ -307,12 +333,22 @@ class DocumentContextBuilder:
             values["customer.acting_basis"] = ""
 
         conditions = {
+            "document.invoice_is_payment_request": (
+                document_type == "invoice" and business_role == "payment_request"
+            ),
+            "document.invoice_is_offer": (
+                document_type == "invoice" and business_role == "offer"
+            ),
+            "seller.is_vat_payer": bool(legal_entity.is_vat_payer),
+            "seller.is_not_vat_payer": not bool(legal_entity.is_vat_payer),
+            "order.has_object_address": bool(scope_address),
             **party_conditions(
                 "seller",
                 entity_type=seller_entity_type,
                 signing_mode=seller_signing_mode,
             ),
             **consumer_context.conditions,
+            **business_context.conditions,
             **party_conditions(
                 "customer",
                 entity_type=customer_entity_type,
@@ -341,7 +377,7 @@ class DocumentContextBuilder:
             },
             "values": values,
             "conditions": conditions,
-            "table_rows": {"lines": public_rows},
+            "table_rows": {"lines": public_rows, **business_context.table_rows},
         }
 
     @staticmethod

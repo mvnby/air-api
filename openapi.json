@@ -24668,6 +24668,55 @@
   },
   "components": {
     "schemas": {
+      "ActTermsPayload": {
+        "properties": {
+          "result_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Text"
+          },
+          "claims_status": {
+            "type": "string",
+            "pattern": "^(none|present)$",
+            "title": "Claims Status",
+            "default": "none"
+          },
+          "claims_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claims Text"
+          },
+          "acceptance_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Deadline"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ActTermsPayload"
+      },
       "AddressSuggestResponse": {
         "properties": {
           "items": {
@@ -28835,6 +28884,148 @@
           "specs"
         ],
         "title": "BulkSpecUpdate"
+      },
+      "BusinessDocumentTermsPayload": {
+        "properties": {
+          "contract_scenario": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(framework|installation|maintenance|repair|services|supply|supply_installation)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Scenario"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "delivery_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Deadline"
+          },
+          "performance_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performance Deadline"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
+          },
+          "additional_conditions_overridden": {
+            "type": "boolean",
+            "title": "Additional Conditions Overridden",
+            "default": false
+          },
+          "payment_schedule": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentScheduleItemPayload"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Payment Schedule"
+          },
+          "goods_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goods Warranty Months"
+          },
+          "goods_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goods Warranty Terms"
+          },
+          "work_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Months"
+          },
+          "work_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Terms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BusinessDocumentTermsPayload"
       },
       "CalendarEventResponse": {
         "properties": {
@@ -35135,6 +35326,26 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ConsumerDocumentTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "business_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDocumentTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "act_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActTermsPayload"
               },
               {
                 "type": "null"
@@ -56157,6 +56368,67 @@
           "created_at"
         ],
         "title": "PaymentResponse"
+      },
+      "PaymentScheduleItemPayload": {
+        "properties": {
+          "share_percent": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Share Percent"
+          },
+          "due_event": {
+            "type": "string",
+            "pattern": "^(after_acceptance|after_supply|after_work|before_supply|before_work)$",
+            "title": "Due Event"
+          },
+          "due_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Days"
+          },
+          "due_day_kind": {
+            "type": "string",
+            "pattern": "^(banking|calendar)$",
+            "title": "Due Day Kind",
+            "default": "calendar"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "share_percent",
+          "due_event"
+        ],
+        "title": "PaymentScheduleItemPayload"
       },
       "ProductAvailabilityLeadPayload": {
         "properties": {

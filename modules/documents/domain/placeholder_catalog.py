@@ -120,6 +120,22 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("order.object_title", "Название объекта", "Заказ"),
     PlaceholderDescriptor("order.object_address", "Адрес объекта", "Заказ"),
     PlaceholderDescriptor("proposal.name", "Название предложения", "Предложение"),
+    PlaceholderDescriptor("contract.scenario", "Сценарий договора (код)", "Договор"),
+    PlaceholderDescriptor("contract.scenario_label", "Сценарий договора", "Договор"),
+    PlaceholderDescriptor("contract.subject", "Предмет договора", "Договор"),
+    PlaceholderDescriptor("contract.valid_until", "Срок действия договора", "Договор"),
+    PlaceholderDescriptor("contract.delivery_deadline", "Срок поставки", "Договор"),
+    PlaceholderDescriptor(
+        "contract.performance_deadline", "Срок выполнения работ", "Договор"
+    ),
+    PlaceholderDescriptor(
+        "contract.additional_conditions", "Дополнительные условия", "Договор"
+    ),
+    PlaceholderDescriptor("payment.summary", "Краткое условие оплаты", "Оплата"),
+    PlaceholderDescriptor("payment.total", "Сумма по графику", "Оплата"),
+    PlaceholderDescriptor("payment.prepayment_amount", "Сумма предоплаты", "Оплата"),
+    PlaceholderDescriptor("payment.balance_amount", "Остаток оплаты", "Оплата"),
+    PlaceholderDescriptor("payment.currency", "Валюта оплаты", "Оплата"),
     PlaceholderDescriptor("offer.url", "Ссылка на публичную оферту", "Оферта"),
     PlaceholderDescriptor("offer.version", "Версия оферты", "Оферта"),
     PlaceholderDescriptor("offer.published_on", "Дата публикации оферты", "Оферта"),
@@ -160,6 +176,9 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor(
         "route.ends_capped_status", "Статус заглушки трассы", "Трасса"
     ),
+    PlaceholderDescriptor("act.result_text", "Результат работ", "Акт"),
+    PlaceholderDescriptor("act.claims_text", "Замечания заказчика", "Акт"),
+    PlaceholderDescriptor("act.acceptance_deadline", "Срок приемки", "Акт"),
     PlaceholderDescriptor("totals.amount", "Сумма", "Итоги"),
     PlaceholderDescriptor("totals.amount_in_words", "Сумма прописью", "Итоги"),
     PlaceholderDescriptor("totals.currency", "Валюта", "Итоги"),
@@ -224,10 +243,78 @@ CONDITIONAL_FLAGS: tuple[ConditionDescriptor, ...] = tuple(
 
 CONDITIONAL_FLAGS += (
     ConditionDescriptor(
+        "document.invoice_is_payment_request",
+        "Счёт только для оплаты",
+        "Документ",
+    ),
+    ConditionDescriptor(
+        "document.invoice_is_offer",
+        "Счёт является офертой",
+        "Документ",
+    ),
+    ConditionDescriptor("seller.is_vat_payer", "Продавец платит НДС", "Продавец"),
+    ConditionDescriptor(
+        "seller.is_not_vat_payer", "Продавец не платит НДС", "Продавец"
+    ),
+    ConditionDescriptor("order.has_object_address", "Указан адрес объекта", "Заказ"),
+    *(
+        ConditionDescriptor(f"contract.is_{scenario}", f"Договор: {label}", "Договор")
+        for scenario, label in (
+            ("services", "услуги"),
+            ("repair", "диагностика и ремонт"),
+            ("maintenance", "техническое обслуживание"),
+            ("supply_installation", "поставка с монтажом"),
+            ("installation", "монтаж"),
+            ("framework", "рамочный"),
+            ("supply", "поставка оборудования"),
+        )
+    ),
+    ConditionDescriptor("contract.framework", "Рамочный договор", "Договор"),
+    ConditionDescriptor("contract.has_subject", "Указан предмет договора", "Договор"),
+    ConditionDescriptor(
+        "contract.has_additional_conditions", "Есть дополнительные условия", "Договор"
+    ),
+    ConditionDescriptor(
+        "contract.has_delivery_deadline", "Указан срок поставки", "Договор"
+    ),
+    ConditionDescriptor(
+        "contract.has_no_delivery_deadline", "Срок поставки не указан", "Договор"
+    ),
+    ConditionDescriptor(
+        "contract.has_performance_deadline", "Указан срок выполнения работ", "Договор"
+    ),
+    ConditionDescriptor(
+        "contract.has_no_performance_deadline",
+        "Срок выполнения работ не указан",
+        "Договор",
+    ),
+    ConditionDescriptor(
+        "contract.has_any_deadline", "Указан хотя бы один срок", "Договор"
+    ),
+    ConditionDescriptor(
+        "contract.has_no_deadlines", "Сроки поставки и работ не указаны", "Договор"
+    ),
+    ConditionDescriptor("payment.has_schedule", "Есть график оплаты", "Оплата"),
+    ConditionDescriptor("payment.is_full_prepayment", "100% предоплата", "Оплата"),
+    ConditionDescriptor(
+        "payment.is_equipment_prepayment_balance",
+        "Предоплата за оборудование и остаток после работ",
+        "Оплата",
+    ),
+    ConditionDescriptor(
+        "payment.is_postpayment", "Оплата после работ или приемки", "Оплата"
+    ),
+    ConditionDescriptor(
+        "payment.is_custom_schedule", "Индивидуальный график оплаты", "Оплата"
+    ),
+    ConditionDescriptor(
         "warranty.goods.present", "Указана гарантия на оборудование", "Гарантия"
     ),
     ConditionDescriptor(
         "warranty.work.present", "Указана гарантия на работы", "Гарантия"
+    ),
+    ConditionDescriptor(
+        "warranty.any_present", "Указана хотя бы одна гарантия", "Гарантия"
     ),
     ConditionDescriptor(
         "route.photo_fixation_performed", "Выполнена фотофиксация", "Трасса"
@@ -236,6 +323,10 @@ CONDITIONAL_FLAGS += (
         "route.pressure_test_performed", "Выполнена опрессовка", "Трасса"
     ),
     ConditionDescriptor("route.ends_capped", "Концы трассы заглушены", "Трасса"),
+    ConditionDescriptor("act.claims_present", "Есть замечания", "Акт"),
+    ConditionDescriptor("act.no_claims", "Замечаний нет", "Акт"),
+    ConditionDescriptor("act.has_result", "Указан результат работ", "Акт"),
+    ConditionDescriptor("act.has_acceptance_deadline", "Указан срок приемки", "Акт"),
 )
 
 LINE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
@@ -251,6 +342,16 @@ LINE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("line.seats", "Количество грузовых мест", "Строки"),
     PlaceholderDescriptor("line.mass", "Масса", "Строки"),
     PlaceholderDescriptor("line.note", "Примечание", "Строки"),
+)
+
+PAYMENT_SCHEDULE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
+    PlaceholderDescriptor("payment.number", "Номер платежа", "График оплаты"),
+    PlaceholderDescriptor("payment.share_percent", "Доля, %", "График оплаты"),
+    PlaceholderDescriptor("payment.amount", "Сумма", "График оплаты"),
+    PlaceholderDescriptor("payment.due_event", "Срок оплаты", "График оплаты"),
+    PlaceholderDescriptor("payment.due_days", "Количество дней", "График оплаты"),
+    PlaceholderDescriptor("payment.due_day_kind", "Вид дней", "График оплаты"),
+    PlaceholderDescriptor("payment.note", "Примечание", "График оплаты"),
 )
 
 SUPPORTED_NATIVE_DOCUMENT_TYPES = (

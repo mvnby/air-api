@@ -6,8 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from modules.documents.domain import (
     B2C_NATIVE_DOCUMENT_TYPES,
+    BUSINESS_TERMS_DOCUMENT_TYPES,
     SUPPORTED_NATIVE_DOCUMENT_TYPES,
 )
+from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
 
 
 NATIVE_DOCUMENT_TYPE_PATTERN = (
@@ -239,15 +241,47 @@ class ManagedDocumentDraftPayload(BaseModel):
     business_role: str | None = Field(default=None, pattern="^(payment_request|offer)$")
     replaces_document_id: int | None = Field(default=None, gt=0)
     consumer_terms: "ConsumerDocumentTermsPayload | None" = None
+    business_terms: BusinessDocumentTermsPayload | None = None
+    act_terms: ActTermsPayload | None = None
 
     @model_validator(mode="after")
-    def validate_consumer_terms_scope(self) -> "ManagedDocumentDraftPayload":
+    def validate_terms_scope(self) -> "ManagedDocumentDraftPayload":
         if (
             self.consumer_terms is not None
             and self.document_type not in B2C_NATIVE_DOCUMENT_TYPES
         ):
             raise ValueError(
                 "Параметры документа физлицу доступны только для B2C заказ-актов"
+            )
+        if (
+            self.business_terms is not None
+            and self.document_type in B2C_NATIVE_DOCUMENT_TYPES
+        ):
+            raise ValueError("Параметры B2B нельзя передать для B2C заказ-акта")
+        if (
+            self.business_terms is not None
+            and self.document_type not in BUSINESS_TERMS_DOCUMENT_TYPES
+        ):
+            raise ValueError(
+                "Параметры B2B доступны только для договора, счета, предложения или акта"
+            )
+        if self.document_type == "contract" and self.business_terms is None:
+            raise ValueError("Для договора выберите сценарий и условия")
+        if self.business_terms is not None and self.document_type == "contract":
+            if self.business_terms.contract_scenario is None:
+                raise ValueError("Для договора выберите сценарий")
+            if not self.business_terms.payment_schedule:
+                raise ValueError("Для договора укажите график оплаты")
+        elif (
+            self.business_terms is not None
+            and self.business_terms.contract_scenario is not None
+        ):
+            raise ValueError("Сценарий договора можно указать только для договора")
+        if self.act_terms is not None and self.document_type != "act":
+            raise ValueError("Параметры акта доступны только для акта")
+        if self.document_type == "act" and self.act_terms is None:
+            raise ValueError(
+                "Для акта явно укажите наличие или отсутствие замечаний"
             )
         return self
 

@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
@@ -22,7 +23,12 @@ from modules.documents.application.context_builder import (
     DocumentContextError,
     DocumentContextSelection,
 )
-from modules.documents.domain import ConsumerDocumentTerms
+from modules.documents.domain import (
+    ActTerms,
+    BusinessDocumentTerms,
+    ConsumerDocumentTerms,
+    PaymentScheduleItem,
+)
 
 
 async def _seed_order(db):
@@ -172,10 +178,15 @@ async def test_context_snapshot_uses_selected_proposal_and_does_not_mutate_order
         ),
     )
 
-    assert snapshot["schema_version"] == 3
+    assert snapshot["schema_version"] == 4
     assert snapshot["meta"]["proposal_id"] == selected.id
     assert snapshot["meta"]["business_role"] == "payment_request"
+    assert snapshot["conditions"]["document.invoice_is_payment_request"] is True
+    assert snapshot["conditions"]["document.invoice_is_offer"] is False
     assert snapshot["values"]["seller.unp"] == "390000000"
+    assert snapshot["conditions"]["seller.is_vat_payer"] is False
+    assert snapshot["conditions"]["seller.is_not_vat_payer"] is True
+    assert snapshot["conditions"]["order.has_object_address"] is True
     assert snapshot["values"]["seller.entity_type"] == "organization"
     assert snapshot["values"]["seller.entity_type_label"] == "Организация"
     assert snapshot["values"]["seller.city"] == "Витебск"
@@ -224,6 +235,12 @@ async def test_context_snapshot_supports_ip_parties_and_explicit_issue_city(db):
             document_type="contract",
             issue_date=date(2026, 8, 27),
             issue_city="Минск",
+            business_terms=BusinessDocumentTerms(
+                contract_scenario="services",
+                payment_schedule=(
+                    PaymentScheduleItem(Decimal("100"), "before_work"),
+                ),
+            ),
         ),
     )
 
@@ -240,6 +257,46 @@ async def test_context_snapshot_supports_ip_parties_and_explicit_issue_city(db):
         snapshot["conditions"]["customer.individual_entrepreneur_power_of_attorney"]
         is True
     )
+
+
+@pytest.mark.asyncio
+async def test_contract_snapshot_keeps_b2b_terms_and_selected_proposal_scope(db):
+    order, issuer, selected, _alternative = await _seed_order(db)
+    issuer.is_vat_payer = True
+    db.add(issuer)
+    await db.commit()
+
+    snapshot = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(
+            order_id=order.id,
+            legal_entity_id=issuer.id,
+            document_type="contract",
+            issue_date=date(2026, 8, 31),
+            business_terms=BusinessDocumentTerms(
+                contract_scenario="supply_installation",
+                goods_warranty_months=24,
+                payment_schedule=(
+                    PaymentScheduleItem(Decimal("70"), "before_supply"),
+                    PaymentScheduleItem(Decimal("30"), "after_work"),
+                ),
+            ),
+        ),
+    )
+
+    assert snapshot["meta"]["proposal_id"] == selected.id
+    assert snapshot["values"]["contract.scenario"] == "supply_installation"
+    assert snapshot["values"]["warranty.goods.months"] == "24"
+    assert snapshot["conditions"]["contract.is_supply_installation"] is True
+    assert snapshot["conditions"]["seller.is_vat_payer"] is True
+    assert snapshot["conditions"]["seller.is_not_vat_payer"] is False
+    assert snapshot["conditions"]["payment.is_equipment_prepayment_balance"] is True
+    assert snapshot["table_rows"]["payment_schedule"][0]["payment.amount"] == "980.00"
+    assert [row["line.title"] for row in snapshot["table_rows"]["lines"]] == [
+        "Кондиционер выбранный",
+        "Монтаж кондиционера",
+    ]
 
 
 @pytest.mark.asyncio
@@ -289,7 +346,7 @@ async def test_b2c_context_is_self_contained_and_snapshots_consumer_terms(
         ),
     )
 
-    assert snapshot["schema_version"] == 3
+    assert snapshot["schema_version"] == 4
     assert snapshot["meta"]["base_document_id"] is None
     assert snapshot["meta"]["base_customer_contract_id"] is None
     assert snapshot["values"]["offer.url"] == "https://mvn.by/offer"
@@ -396,6 +453,7 @@ async def test_act_prefers_contract_and_never_uses_payment_request_invoice(db):
             legal_entity_id=issuer.id,
             document_type="act",
             issue_date=date(2026, 8, 26),
+            act_terms=ActTerms(claims_status="none"),
         ),
     )
 
@@ -414,6 +472,7 @@ async def test_act_prefers_contract_and_never_uses_payment_request_invoice(db):
                 document_type="act",
                 issue_date=date(2026, 8, 26),
                 base_document_id=payment_request.id,
+                act_terms=ActTerms(claims_status="none"),
             ),
         )
 
@@ -443,6 +502,7 @@ async def test_legacy_invoice_without_explicit_offer_role_is_never_a_basis(db):
                 legal_entity_id=issuer.id,
                 document_type="act",
                 issue_date=date(2026, 8, 26),
+                act_terms=ActTerms(claims_status="none"),
             ),
         )
 
@@ -456,6 +516,7 @@ async def test_legacy_invoice_without_explicit_offer_role_is_never_a_basis(db):
                 document_type="act",
                 issue_date=date(2026, 8, 26),
                 base_document_id=legacy_invoice.id,
+                act_terms=ActTerms(claims_status="none"),
             ),
         )
 

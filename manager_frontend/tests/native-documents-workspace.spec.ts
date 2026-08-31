@@ -145,6 +145,31 @@ describe('NativeDocumentsWorkspace', () => {
         proposal_id: 7,
         base_document_id: null,
         base_customer_contract_id: 91,
+        act_terms: expect.objectContaining({ claims_status: 'none' }),
+      }),
+    );
+  });
+
+  it('requires remarks text when an act is created with customer remarks', async () => {
+    const wrapper = await mountWorkspace();
+
+    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await flushPromises();
+    await wrapper.get('[data-testid="act-claims-present"]').trigger('click');
+
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('title'))
+      .toContain('Опишите замечания заказчика');
+    await wrapper.get('[data-testid="act-claims-text"]').setValue('Устранить шум наружного блока.');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        act_terms: expect.objectContaining({
+          claims_status: 'present',
+          claims_text: 'Устранить шум наружного блока.',
+        }),
       }),
     );
   });
@@ -162,6 +187,33 @@ describe('NativeDocumentsWorkspace', () => {
     ]);
     await toggle.findAll('button')[1]!.trigger('click');
     expect(toggle.text()).toContain('Счёт-оферта');
+  });
+
+  it('requires one of seven direct contract scenarios before creating a B2B contract', async () => {
+    const wrapper = await mountWorkspace();
+    const create = wrapper.get('[data-testid="create-native-draft"]');
+
+    expect(create.attributes('disabled')).toBeDefined();
+    expect(create.attributes('title')).toContain('Выберите сценарий договора');
+    expect(wrapper.findAll('button[data-testid^="contract-scenario-"]')).toHaveLength(7);
+
+    await wrapper.get('[data-testid="contract-scenario-supply_installation"]').trigger('click');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        document_type: 'contract',
+        business_terms: expect.objectContaining({
+          contract_scenario: 'supply_installation',
+          goods_warranty_months: 48,
+          payment_schedule: expect.arrayContaining([
+            expect.objectContaining({ share_percent: 100, due_event: 'before_supply' }),
+          ]),
+        }),
+      }),
+    );
   });
 
   it('sends B2C terms only for a consumer order document', async () => {

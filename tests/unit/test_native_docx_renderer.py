@@ -2,6 +2,7 @@ from io import BytesIO
 
 import pytest
 from docx import Document
+from docx.oxml.ns import qn
 
 from modules.documents.infrastructure.renderers import (
     ContextFieldError,
@@ -113,6 +114,67 @@ def test_native_renderer_replaces_split_placeholders_and_repeats_table_rows():
     ]
     assert rendered.template_key == "invoice"
     assert rendered.template_version == 3
+
+
+def test_renderer_removes_only_empty_trailing_paragraph_after_final_table():
+    document = Document()
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "Подпись"
+    document.add_paragraph()
+    template = DocumentTemplateVersion(
+        template_key="contract",
+        version=1,
+        source=_save(document),
+        field_catalog=frozenset(),
+    )
+
+    rendered = NativeDocxRenderer().render(template, RenderContext(values={}))
+
+    result = Document(BytesIO(rendered.content))
+    body_content_tags = [
+        child.tag
+        for child in result._element.body.iterchildren()
+        if child.tag != result._element.body.sectPr.tag
+    ]
+    assert body_content_tags == [result.tables[0]._element.tag]
+
+
+def test_renderer_keeps_trailing_paragraph_with_a_page_break_after_final_table():
+    document = Document()
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "Подпись"
+    document.add_paragraph().add_run().add_break()
+    template = DocumentTemplateVersion(
+        template_key="contract",
+        version=1,
+        source=_save(document),
+        field_catalog=frozenset(),
+    )
+
+    rendered = NativeDocxRenderer().render(template, RenderContext(values={}))
+
+    result = Document(BytesIO(rendered.content))
+    assert len(result.paragraphs) == 1
+
+
+def test_renderer_preserves_multiline_clause_as_word_line_breaks():
+    document = Document()
+    document.add_paragraph("Условия: {{ contract.additional_conditions }}")
+    template = DocumentTemplateVersion(
+        template_key="contract",
+        version=1,
+        source=_save(document),
+        field_catalog=frozenset({"contract.additional_conditions"}),
+    )
+
+    rendered = NativeDocxRenderer().render(
+        template,
+        RenderContext(
+            values={"contract.additional_conditions": "Первое условие\nВторое условие"}
+        ),
+    )
+
+    result = Document(BytesIO(rendered.content))
+    assert result.paragraphs[0].text == "Условия: Первое условие\nВторое условие"
+    assert len(list(result.paragraphs[0]._p.iter(qn("w:br")))) == 1
 
 
 def test_renderer_discovers_template_placeholders_without_expanding_catalogue():

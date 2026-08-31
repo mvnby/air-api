@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ActTermsPayload } from './ActTermsPayload';
+import type { BusinessDocumentTermsPayload } from './BusinessDocumentTermsPayload';
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
 export type ManagedDocumentDraftPayload = {
     legal_entity_id: number;
@@ -21,5 +23,7 @@ export type ManagedDocumentDraftPayload = {
     business_role?: (string | null);
     replaces_document_id?: (number | null);
     consumer_terms?: (ConsumerDocumentTermsPayload | null);
+    business_terms?: (BusinessDocumentTermsPayload | null);
+    act_terms?: (ActTermsPayload | null);
 };
 
