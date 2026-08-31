@@ -75,6 +75,7 @@ import {
   defaultSigningMode,
   isBusinessCustomer,
   normalizeCustomerSigningMode,
+  validateCustomerProfileForm,
   type CustomerForm,
 } from '../src/components/customers/customer-profile-form';
 import { getOrderDocumentAccess } from '../src/components/orders/order-document-access';
@@ -158,6 +159,22 @@ assert(defaultSigningMode('individual_entrepreneur') === 'self', 'individual ent
 assert(
   normalizeCustomerSigningMode('individual_entrepreneur', 'statutory_body') === 'self',
   'individual entrepreneur cannot retain a company signing mode',
+);
+const legacyCompanyWithoutPhone = validateCustomerProfileForm(
+  { ...customerForm, phone: '' },
+  false,
+);
+assert(
+  legacyCompanyWithoutPhone.valid && !legacyCompanyWithoutPhone.phoneError,
+  'an existing company without a phone must remain editable because the API allows an optional phone',
+);
+const invalidEnteredPhone = validateCustomerProfileForm(
+  { ...customerForm, phone: '+375 29' },
+  false,
+);
+assert(
+  !invalidEnteredPhone.valid && Boolean(invalidEnteredPhone.phoneError),
+  'a non-empty incomplete phone must still block customer profile saving',
 );
 
 assert(

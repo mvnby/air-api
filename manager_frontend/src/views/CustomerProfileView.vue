@@ -16,6 +16,7 @@ import {
   isBusinessCustomer,
   normalizeCustomerPartyType,
   normalizeCustomerSigningMode,
+  validateCustomerProfileForm,
   type CustomerForm,
   type CustomerPartyType,
 } from '../components/customers/customer-profile-form';
@@ -52,13 +53,7 @@ import { useB2BLookup } from '../composables/useB2BLookup';
 import { dispatchCustomerUpdated } from '../utils/customer-events';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import { normalizeIban, normalizeUnp } from '../utils/legal-requisites';
-import {
-  normalizeEmail,
-  validateOptionalBelarusPhone,
-  validateOptionalByIban,
-  validateOptionalByUnp,
-  validateOptionalEmail,
-} from '../utils/validation';
+import { normalizeEmail } from '../utils/validation';
 
 type EquipmentForm = {
   customer_branch_id: number | null;
@@ -1206,26 +1201,21 @@ const validateForm = (): boolean => {
   normalizeForm();
   clearFieldErrors();
 
-  phoneError.value = validateOptionalBelarusPhone(form.value.phone || '', phoneMask.isComplete.value);
-  emailError.value = validateOptionalEmail(form.value.email || '');
-  innError.value = validateOptionalByUnp(form.value.inn || '');
-  ibanError.value = validateOptionalByIban(form.value.iban || '');
-
-  if (!form.value.name.trim()) {
-    serverErrors.value.name = 'Имя клиента не может быть пустым';
-  }
-  if (!form.value.phone.trim()) {
-    phoneError.value = 'Телефон обязателен';
-  }
-  if (isBusiness.value && !form.value.full_legal_name.trim()) {
-    serverErrors.value.full_legal_name = 'Для ИП или юрлица укажите полное наименование';
-  }
-
-  return !phoneError.value && !emailError.value && !innError.value && !ibanError.value && !Object.keys(serverErrors.value).length;
+  const validation = validateCustomerProfileForm(form.value, phoneMask.isComplete.value);
+  serverErrors.value = { ...validation.fieldErrors };
+  phoneError.value = validation.phoneError;
+  emailError.value = validation.emailError;
+  innError.value = validation.innError;
+  ibanError.value = validation.ibanError;
+  return validation.valid;
 };
 
 const saveCustomer = async () => {
-  if (!customer.value || !hasChanges.value || !validateForm()) return;
+  if (!customer.value || !hasChanges.value) return;
+  if (!validateForm()) {
+    saveError.value = 'Не удалось сохранить карточку: проверьте выделенные поля';
+    return;
+  }
 
   const payload = buildCustomerPatchPayload(currentForm.value, formDiff.value);
 
