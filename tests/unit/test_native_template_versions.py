@@ -131,6 +131,82 @@ async def test_native_templates_are_tenant_and_legal_entity_scoped(
 
 
 @pytest.mark.asyncio
+async def test_native_template_use_case_is_persisted_and_scope_validated(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = await _database(tmp_path)
+    try:
+        async with sessions() as session:
+            scope, _, issuer, _ = await _scopes_and_issuers(session)
+            template = await NativeTemplateVersionService.create_template(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(issuer.id),
+                name="Поставка с монтажом",
+                doc_type="contract",
+                contract_scenario="supply_installation",
+            )
+            assert template.contract_scenario == "supply_installation"
+            assert template.business_role is None
+
+            with pytest.raises(TemplateVersionError, match="сценарий"):
+                await NativeTemplateVersionService.create_template(
+                    session,
+                    tenant_scope=scope,
+                    legal_entity_id=int(issuer.id),
+                    name="Некорректный акт",
+                    doc_type="act",
+                    contract_scenario="services",
+                )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_native_template_metadata_can_be_corrected_without_reupload(
+    tmp_path: Path,
+) -> None:
+    engine, sessions = await _database(tmp_path)
+    try:
+        async with sessions() as session:
+            scope, _, issuer, _ = await _scopes_and_issuers(session)
+            template = await NativeTemplateVersionService.create_template(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(issuer.id),
+                name="Черновое название",
+                doc_type="contract",
+                contract_scenario="repair",
+            )
+            updated = await NativeTemplateVersionService.update_template_metadata(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(issuer.id),
+                template_id=int(template.id),
+                name="Договор услуг",
+                description="Исправленная карточка",
+                contract_scenario="services",
+            )
+
+            assert updated.name == "Договор услуг"
+            assert updated.description == "Исправленная карточка"
+            assert updated.contract_scenario == "services"
+            assert updated.business_role is None
+
+            with pytest.raises(TemplateVersionError, match="роль"):
+                await NativeTemplateVersionService.update_template_metadata(
+                    session,
+                    tenant_scope=scope,
+                    legal_entity_id=int(issuer.id),
+                    template_id=int(template.id),
+                    name="Договор услуг",
+                    business_role="offer",
+                )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_uploads_increment_versions_and_private_source_readback_is_verified(
     tmp_path: Path,
 ) -> None:

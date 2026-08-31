@@ -41,6 +41,7 @@ from routers.manager_operation_ids import (
     GET_MANAGER_NATIVE_PLACEHOLDER_CATALOG,
     LIST_MANAGER_NATIVE_DOCUMENT_TEMPLATES,
     LIST_MANAGER_NATIVE_TEMPLATE_VERSIONS,
+    UPDATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE,
     UPLOAD_MANAGER_NATIVE_TEMPLATE_VERSION,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
@@ -50,6 +51,7 @@ from .schemas import (
     NativeDocumentTemplateCreatePayload,
     NativeDocumentTemplateItem,
     NativeDocumentTemplateListResponse,
+    NativeDocumentTemplateUpdatePayload,
     NativeTemplatePlaceholderSchemaPayload,
     NativePlaceholderCatalogResponse,
     NativePlaceholderConditionItem,
@@ -180,6 +182,8 @@ async def create_native_document_template(
             name=payload.name,
             doc_type=payload.doc_type,
             description=payload.description,
+            contract_scenario=payload.contract_scenario,
+            business_role=payload.business_role,
         )
     except TemplateVersionNotFoundError as exc:
         raise _template_error(
@@ -198,6 +202,52 @@ async def create_native_document_template(
     except TemplateVersionError as exc:
         raise _template_error(
             400, CREATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE, "native_template_invalid", exc
+        )
+    return NativeDocumentTemplateItem.model_validate(row)
+
+
+@router.patch(
+    "/templates/{template_id}",
+    response_model=NativeDocumentTemplateItem,
+    operation_id=UPDATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE,
+)
+async def update_native_document_template(
+    template_id: int,
+    payload: NativeDocumentTemplateUpdatePayload,
+    session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+) -> NativeDocumentTemplateItem:
+    try:
+        row = await NativeTemplateVersionService.update_template_metadata(
+            session,
+            tenant_scope=auth.tenant_scope(),
+            legal_entity_id=payload.legal_entity_id,
+            template_id=template_id,
+            name=payload.name,
+            description=payload.description,
+            contract_scenario=payload.contract_scenario,
+            business_role=payload.business_role,
+        )
+    except TemplateVersionNotFoundError as exc:
+        raise _template_error(
+            404,
+            UPDATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE,
+            "native_template_not_found",
+            exc,
+        )
+    except TemplateVersionConflictError as exc:
+        raise _template_error(
+            409,
+            UPDATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE,
+            "native_template_conflict",
+            exc,
+        )
+    except TemplateVersionError as exc:
+        raise _template_error(
+            400,
+            UPDATE_MANAGER_NATIVE_DOCUMENT_TEMPLATE,
+            "native_template_invalid",
+            exc,
         )
     return NativeDocumentTemplateItem.model_validate(row)
 

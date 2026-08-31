@@ -11,6 +11,7 @@ import {
 } from '../../../client';
 import { getApiErrorMessage } from '../../../utils/api-errors';
 import { NATIVE_DOCUMENT_TYPES, documentTypeName } from '../model/native-document-options';
+import { CONTRACT_SCENARIOS } from '../model/business-document-terms';
 
 const props = defineProps<{ legalEntityId: number | null }>();
 const emit = defineEmits<{ toast: [payload: { message: string; type: 'success' | 'error' }] }>();
@@ -22,6 +23,12 @@ const versions = ref<NativeTemplateVersionItem[]>([]);
 const catalog = ref<NativePlaceholderCatalogResponse | null>(null);
 const templateName = ref('');
 const templateDescription = ref('');
+const templateContractScenario = ref<string>('');
+const templateBusinessRole = ref<string>('');
+const metadataName = ref('');
+const metadataDescription = ref('');
+const metadataContractScenario = ref<string>('');
+const metadataBusinessRole = ref<string>('');
 const changeNote = ref('');
 const uploadFile = ref<File | null>(null);
 const uploadInput = ref<HTMLInputElement | null>(null);
@@ -101,9 +108,17 @@ const loadTemplates = async () => {
 };
 
 watch(() => [props.legalEntityId, documentType.value], () => {
+  templateContractScenario.value = '';
+  templateBusinessRole.value = '';
   void Promise.all([loadTemplates(), loadCatalog()]);
 }, { immediate: true });
 watch(selectedTemplateId, () => void loadVersions());
+watch(selectedTemplate, (template) => {
+  metadataName.value = template?.name || '';
+  metadataDescription.value = template?.description || '';
+  metadataContractScenario.value = template?.contract_scenario || '';
+  metadataBusinessRole.value = template?.business_role || '';
+}, { immediate: true });
 
 const createTemplate = async () => {
   if (!props.legalEntityId || !templateName.value.trim()) return;
@@ -114,9 +129,17 @@ const createTemplate = async () => {
       name: templateName.value.trim(),
       doc_type: documentType.value,
       description: templateDescription.value.trim() || null,
+      contract_scenario: documentType.value === 'contract'
+        ? templateContractScenario.value || null
+        : null,
+      business_role: documentType.value === 'invoice'
+        ? templateBusinessRole.value || null
+        : null,
     });
     templateName.value = '';
     templateDescription.value = '';
+    templateContractScenario.value = '';
+    templateBusinessRole.value = '';
     await loadTemplates();
     selectedTemplateId.value = created.id;
     notify('Карточка шаблона создана. Теперь загрузите DOCX.');
@@ -143,6 +166,32 @@ const uploadVersion = async () => {
     notify('Версия проверена и сохранена черновиком. Активируйте её после проверки полей.');
   } catch (error) {
     notify(`Шаблон не принят: ${getApiErrorMessage(error)}`, 'error');
+  } finally {
+    saving.value = false;
+  }
+};
+
+const saveTemplateMetadata = async () => {
+  if (!props.legalEntityId || !selectedTemplate.value || !metadataName.value.trim()) return;
+  saving.value = true;
+  try {
+    const templateId = selectedTemplate.value.id;
+    await ManagerDocumentSystemService.updateManagerNativeDocumentTemplate(templateId, {
+      legal_entity_id: props.legalEntityId,
+      name: metadataName.value.trim(),
+      description: metadataDescription.value.trim() || null,
+      contract_scenario: documentType.value === 'contract'
+        ? metadataContractScenario.value || null
+        : null,
+      business_role: documentType.value === 'invoice'
+        ? metadataBusinessRole.value || null
+        : null,
+    });
+    await loadTemplates();
+    selectedTemplateId.value = templateId;
+    notify('Карточка шаблона обновлена');
+  } catch (error) {
+    notify(`Не удалось обновить карточку: ${getApiErrorMessage(error)}`, 'error');
   } finally {
     saving.value = false;
   }
@@ -215,6 +264,8 @@ const versionConditions = (version: NativeTemplateVersionItem) => (
         <form class="grid gap-3 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700 sm:grid-cols-2" @submit.prevent="createTemplate">
           <label class="settings-field"><span>Название</span><input v-model="templateName" class="settings-input" :placeholder="`Основной: ${documentTypeName(documentType)}`" /></label>
           <label class="settings-field"><span>Заметка</span><input v-model="templateDescription" class="settings-input" placeholder="Для B2B-клиентов" /></label>
+          <label v-if="documentType === 'contract'" class="settings-field sm:col-span-2"><span>Сценарий договора</span><select v-model="templateContractScenario" class="settings-input"><option value="">Универсальный шаблон</option><option v-for="scenario in CONTRACT_SCENARIOS" :key="scenario.value" :value="scenario.value">{{ scenario.label }}</option></select></label>
+          <label v-if="documentType === 'invoice'" class="settings-field sm:col-span-2"><span>Роль счёта</span><select v-model="templateBusinessRole" class="settings-input"><option value="">Для обеих ролей</option><option value="payment_request">Документ для оплаты</option><option value="offer">Счёт-оферта</option></select></label>
           <button class="settings-button-secondary sm:col-span-2 sm:justify-self-start" type="submit" :disabled="saving || !templateName.trim()">Создать шаблон</button>
         </form>
 
@@ -226,8 +277,21 @@ const versionConditions = (version: NativeTemplateVersionItem) => (
             class="rounded-xl border px-3 py-2 text-sm font-semibold"
             :class="template.id === selectedTemplateId ? 'border-teal-500 bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"
             @click="selectedTemplateId = template.id"
-          >{{ template.name }}</button>
+          >
+            {{ template.name }}
+            <span v-if="template.contract_scenario" class="ml-1 text-[10px] opacity-70">{{ CONTRACT_SCENARIOS.find((item) => item.value === template.contract_scenario)?.label }}</span>
+            <span v-if="template.business_role" class="ml-1 text-[10px] opacity-70">{{ template.business_role === 'offer' ? 'счёт-оферта' : 'для оплаты' }}</span>
+          </button>
         </div>
+
+        <form v-if="selectedTemplate" class="grid gap-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700 sm:grid-cols-2" data-testid="native-template-metadata" @submit.prevent="saveTemplateMetadata">
+          <h3 class="font-semibold text-slate-900 dark:text-white sm:col-span-2">Карточка шаблона</h3>
+          <label class="settings-field"><span>Название</span><input v-model="metadataName" class="settings-input" data-testid="native-template-metadata-name" /></label>
+          <label class="settings-field"><span>Заметка</span><input v-model="metadataDescription" class="settings-input" data-testid="native-template-metadata-description" /></label>
+          <label v-if="documentType === 'contract'" class="settings-field sm:col-span-2"><span>Сценарий договора</span><select v-model="metadataContractScenario" class="settings-input" data-testid="native-template-metadata-contract-scenario"><option value="">Универсальный шаблон</option><option v-for="scenario in CONTRACT_SCENARIOS" :key="scenario.value" :value="scenario.value">{{ scenario.label }}</option></select></label>
+          <label v-if="documentType === 'invoice'" class="settings-field sm:col-span-2"><span>Роль счёта</span><select v-model="metadataBusinessRole" class="settings-input"><option value="">Для обеих ролей</option><option value="payment_request">Документ для оплаты</option><option value="offer">Счёт-оферта</option></select></label>
+          <button class="settings-button-secondary sm:col-span-2 sm:justify-self-start" data-testid="native-template-metadata-save" type="submit" :disabled="saving || !metadataName.trim()">Сохранить карточку</button>
+        </form>
 
         <form v-if="selectedTemplate" class="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/70" @submit.prevent="uploadVersion">
           <h3 class="font-semibold text-slate-900 dark:text-white">Новая версия · {{ selectedTemplate.name }}</h3>

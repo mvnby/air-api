@@ -8,8 +8,10 @@ import { useManagedDocumentWorkspace } from '../composables/use-managed-document
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
+import TransportTermsPanel from './TransportTermsPanel.vue';
 import { isConsumerDocumentType } from '../model/consumer-document-terms';
 import { isBusinessTermsDocumentType } from '../model/business-document-terms';
+import { getCustomerDocumentWarnings } from '../model/customer-document-readiness';
 import {
   BUSINESS_NATIVE_DOCUMENT_TYPES,
   CONSUMER_NATIVE_DOCUMENT_TYPES,
@@ -29,6 +31,8 @@ const emit = defineEmits<{
 }>();
 
 const formRef = ref<HTMLElement | null>(null);
+type DocumentAudience = 'business' | 'consumer';
+const documentAudience = ref<DocumentAudience>('business');
 const proposalId = computed(() => {
   if (props.activeProposalId) return props.activeProposalId;
   return props.order.proposals?.find((item) => item.is_selected && !item.is_archived)?.id
@@ -59,6 +63,20 @@ const selectedBasisValue = ref('');
 const basisRequired = computed(() => ['act', 'tn2', 'ttn1'].includes(workspace.documentType.value));
 const isConsumerDocument = computed(() => isConsumerDocumentType(workspace.documentType.value));
 const isBusinessTermsDocument = computed(() => isBusinessTermsDocumentType(workspace.documentType.value));
+const customerIsConsumer = computed(() => props.order.customer?.type === 'individual');
+const customerTypeLabel = computed(() => {
+  if (props.order.customer?.type === 'company') return 'юрлицо';
+  if (props.order.customer?.type === 'individual_entrepreneur') return 'ИП';
+  return 'физлицо';
+});
+const customerWarnings = computed(() => (
+  getCustomerDocumentWarnings(props.order.customer, workspace.documentType.value)
+));
+const audienceMismatchWarning = computed(() => (
+  isConsumerDocument.value && !customerIsConsumer.value
+    ? `Карточка клиента отмечена как ${customerTypeLabel.value}. Заказ-акт для физлица лучше не выпускать до проверки типа клиента.`
+    : ''
+));
 const basisOptions = computed<BasisOption[]>(() => {
   const result: BasisOption[] = [];
   const contract = props.order.customer_contract;
@@ -112,8 +130,32 @@ const syncBasis = () => {
 };
 
 watch([basisRequired, basisOptions, selectedBasisValue], syncBasis, { immediate: true });
+watch(workspace.documentType, (type) => {
+  documentAudience.value = isConsumerDocumentType(type) ? 'consumer' : 'business';
+});
 
-watch(() => props.order.id, () => void workspace.loadWorkspace(), { immediate: true });
+const setAudience = (audience: DocumentAudience) => {
+  documentAudience.value = audience;
+  workspace.documentType.value = audience === 'consumer'
+    ? CONSUMER_NATIVE_DOCUMENT_TYPES[0].value
+    : BUSINESS_NATIVE_DOCUMENT_TYPES[0].value;
+};
+
+watch(() => props.order.id, () => {
+  const audience: DocumentAudience = customerIsConsumer.value ? 'consumer' : 'business';
+  documentAudience.value = audience;
+  workspace.documentType.value = audience === 'consumer'
+    ? CONSUMER_NATIVE_DOCUMENT_TYPES[0].value
+    : 'contract';
+  void workspace.loadWorkspace();
+}, { immediate: true });
+
+const openCustomerProfile = () => {
+  if (!props.order.customer?.id) return;
+  const returnTo = `${window.location.pathname}${window.location.search}`;
+  window.history.pushState({}, '', `/manager/customers/profile?customerId=${props.order.customer.id}&returnTo=${encodeURIComponent(returnTo)}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
 
 const openSettings = () => {
   if (!canManageDocumentSettings.value) return;
@@ -165,16 +207,19 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           <button class="font-bold" type="button" @click="workspace.replacesDocumentId.value = null">Отменить</button>
         </div>
 
+        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="inline-flex w-fit rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-audience-toggle">
+            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="documentAudience === 'business' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'" data-testid="native-audience-business" @click="setAudience('business')">Для организаций и ИП</button>
+            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="documentAudience === 'consumer' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'" data-testid="native-audience-consumer" @click="setAudience('consumer')">Для физлиц</button>
+          </div>
+          <span class="text-xs font-semibold text-slate-500">В карточке клиента: {{ customerTypeLabel }}</span>
+        </div>
+
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[150px_minmax(160px,.8fr)_minmax(220px,1.2fr)_140px_160px_auto] xl:items-end">
           <label class="native-field">
             <span>Тип</span>
             <select v-model="workspace.documentType.value" class="native-input" data-testid="native-document-type">
-              <optgroup label="Для организаций">
-                <option v-for="type in BUSINESS_NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
-              </optgroup>
-              <optgroup label="Для физлиц">
-                <option v-for="type in CONSUMER_NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
-              </optgroup>
+              <option v-for="type in documentAudience === 'business' ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
             </select>
           </label>
           <label class="native-field">
@@ -200,6 +245,12 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           <button class="inline-flex h-10 items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" :disabled="workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="workspace.createDraft">
             Создать черновик
           </button>
+        </div>
+
+        <div v-if="customerWarnings.length || audienceMismatchWarning" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="native-customer-readiness-warning">
+          <p v-if="audienceMismatchWarning">{{ audienceMismatchWarning }}</p>
+          <p v-if="customerWarnings.length">Для полного документа в карточке клиента не хватает: {{ customerWarnings.join(', ') }}.</p>
+          <button class="mt-1 font-semibold underline underline-offset-2" type="button" @click="openCustomerProfile">Открыть карточку клиента</button>
         </div>
 
         <label v-if="basisRequired" class="native-field mt-4">
@@ -236,6 +287,12 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           v-if="workspace.documentType.value === 'act'"
           :terms="workspace.actTerms.value"
           @update-terms="workspace.actTerms.value = $event"
+        />
+        <TransportTermsPanel
+          v-if="['tn2', 'ttn1'].includes(workspace.documentType.value)"
+          :document-type="workspace.documentType.value"
+          :terms="workspace.transportTerms.value"
+          @update-terms="workspace.transportTerms.value = $event"
         />
         <p v-if="workspace.draftBlockedReason.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
       </div>

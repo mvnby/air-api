@@ -371,6 +371,24 @@ class DocumentTemplate(SQLModel, table=True):
             "legal_entity_id IS NULL OR tenant_id IS NOT NULL",
             name="ck_document_template_legal_entity_requires_tenant",
         ),
+        CheckConstraint(
+            "contract_scenario IS NULL OR contract_scenario IN "
+            "('services', 'repair', 'maintenance', 'supply_installation', "
+            "'installation', 'framework', 'supply')",
+            name="ck_document_template_contract_scenario_valid",
+        ),
+        CheckConstraint(
+            "business_role IS NULL OR business_role IN ('payment_request', 'offer')",
+            name="ck_document_template_business_role_valid",
+        ),
+        CheckConstraint(
+            "contract_scenario IS NULL OR doc_type = 'contract'",
+            name="ck_document_template_contract_scenario_scope",
+        ),
+        CheckConstraint(
+            "business_role IS NULL OR doc_type = 'invoice'",
+            name="ck_document_template_business_role_scope",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -388,6 +406,12 @@ class DocumentTemplate(SQLModel, table=True):
     description: Optional[str] = None
     base_document_type_label: Optional[str] = Field(
         default=None, sa_column=Column(String, nullable=True)
+    )
+    contract_scenario: Optional[str] = Field(
+        default=None, sa_column=Column(String(32), nullable=True, index=True)
+    )
+    business_role: Optional[str] = Field(
+        default=None, sa_column=Column(String(32), nullable=True, index=True)
     )
 
     is_default: bool = Field(default=False, index=True)

@@ -34,6 +34,7 @@ from .business_terms import (
     BusinessDocumentTerms,
     PaymentScheduleItem,
 )
+from .transport_terms import TransportTerms, WAYBILL_DOCUMENT_TYPES
 
 __all__ = [
     "DocumentLifecycleError",
@@ -60,6 +61,8 @@ __all__ = [
     "ActTerms",
     "BusinessDocumentTerms",
     "PaymentScheduleItem",
+    "TransportTerms",
+    "WAYBILL_DOCUMENT_TYPES",
     "PlaceholderDescriptor",
     "transition_document",
 ]

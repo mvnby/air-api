@@ -142,6 +142,8 @@ class NativeTemplateVersionService:
         name: str,
         doc_type: str,
         description: str | None = None,
+        contract_scenario: str | None = None,
+        business_role: str | None = None,
     ) -> DocumentTemplate:
         legal_entity_id = _positive_id(legal_entity_id, "legal_entity_id")
         issuer = await cls._get_legal_entity(
@@ -156,12 +158,21 @@ class NativeTemplateVersionService:
                 "Нельзя создавать шаблон для отключенного юридического лица"
             )
 
+        normalized_doc_type = _doc_type(doc_type)
         template = DocumentTemplate(
             tenant_id=tenant_scope.tenant_id,
             legal_entity_id=legal_entity_id,
             name=_required_text(name, "Название", 200),
-            doc_type=_doc_type(doc_type),
+            doc_type=normalized_doc_type,
             description=_optional_text(description, 1000),
+            contract_scenario=_template_contract_scenario(
+                contract_scenario,
+                doc_type=normalized_doc_type,
+            ),
+            business_role=_template_business_role(
+                business_role,
+                doc_type=normalized_doc_type,
+            ),
             google_template_id=None,
             is_active=True,
         )
@@ -205,6 +216,40 @@ class NativeTemplateVersionService:
             )
         )
         return list(result.scalars().all())
+
+    @classmethod
+    async def update_template_metadata(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        legal_entity_id: int,
+        template_id: int,
+        name: str,
+        description: str | None = None,
+        contract_scenario: str | None = None,
+        business_role: str | None = None,
+    ) -> DocumentTemplate:
+        template = await cls._get_scoped_template(
+            session,
+            tenant_id=tenant_scope.tenant_id,
+            legal_entity_id=legal_entity_id,
+            template_id=template_id,
+        )
+        template.name = _required_text(name, "Название", 200)
+        template.description = _optional_text(description, 1000)
+        template.contract_scenario = _template_contract_scenario(
+            contract_scenario,
+            doc_type=template.doc_type,
+        )
+        template.business_role = _template_business_role(
+            business_role,
+            doc_type=template.doc_type,
+        )
+        session.add(template)
+        await cls._commit(session, conflict_message="Не удалось обновить шаблон")
+        await session.refresh(template)
+        return template
 
     @classmethod
     async def upload_native_docx_version(
@@ -591,4 +636,24 @@ def _doc_type(value: object) -> str:
     normalized = str(value or "").strip().lower()
     if not _DOC_TYPE.fullmatch(normalized):
         raise TemplateVersionError("Тип документа имеет недопустимый формат")
+    return normalized
+
+
+def _template_contract_scenario(value: object, *, doc_type: str) -> str | None:
+    normalized = str(value or "").strip().lower() or None
+    if normalized is None:
+        return None
+    from modules.documents.domain import CONTRACT_SCENARIOS
+
+    if doc_type != "contract" or normalized not in CONTRACT_SCENARIOS:
+        raise TemplateVersionError("Некорректный сценарий шаблона договора")
+    return normalized
+
+
+def _template_business_role(value: object, *, doc_type: str) -> str | None:
+    normalized = str(value or "").strip().lower() or None
+    if normalized is None:
+        return None
+    if doc_type != "invoice" or normalized not in {"payment_request", "offer"}:
+        raise TemplateVersionError("Некорректная роль шаблона счета")
     return normalized

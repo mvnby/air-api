@@ -8,6 +8,7 @@ from modules.documents.domain import (
     B2C_NATIVE_DOCUMENT_TYPES,
     BUSINESS_TERMS_DOCUMENT_TYPES,
     SUPPORTED_NATIVE_DOCUMENT_TYPES,
+    WAYBILL_DOCUMENT_TYPES,
 )
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
 
@@ -135,6 +136,22 @@ class NativeDocumentTemplateCreatePayload(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     doc_type: str = Field(pattern=NATIVE_DOCUMENT_TYPE_PATTERN)
     description: str | None = Field(default=None, max_length=1000)
+    contract_scenario: str | None = Field(
+        default=None,
+        pattern="^(services|repair|maintenance|supply_installation|installation|framework|supply)$",
+    )
+    business_role: str | None = Field(
+        default=None,
+        pattern="^(payment_request|offer)$",
+    )
+
+    @model_validator(mode="after")
+    def validate_template_use_case(self) -> "NativeDocumentTemplateCreatePayload":
+        if self.contract_scenario is not None and self.doc_type != "contract":
+            raise ValueError("Сценарий можно закрепить только за шаблоном договора")
+        if self.business_role is not None and self.doc_type != "invoice":
+            raise ValueError("Роль счета можно закрепить только за шаблоном счета")
+        return self
 
 
 class NativeDocumentTemplateItem(BaseModel):
@@ -146,10 +163,28 @@ class NativeDocumentTemplateItem(BaseModel):
     name: str
     doc_type: str
     description: str | None = None
+    contract_scenario: str | None = None
+    business_role: str | None = None
     is_default: bool
     is_active: bool
     sort_order: int
     created_at: datetime
+
+
+class NativeDocumentTemplateUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    legal_entity_id: int = Field(gt=0)
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    contract_scenario: str | None = Field(
+        default=None,
+        pattern="^(services|repair|maintenance|supply_installation|installation|framework|supply)$",
+    )
+    business_role: str | None = Field(
+        default=None,
+        pattern="^(payment_request|offer)$",
+    )
 
 
 class NativeDocumentTemplateListResponse(BaseModel):
@@ -243,6 +278,7 @@ class ManagedDocumentDraftPayload(BaseModel):
     consumer_terms: "ConsumerDocumentTermsPayload | None" = None
     business_terms: BusinessDocumentTermsPayload | None = None
     act_terms: ActTermsPayload | None = None
+    transport_terms: "TransportTermsPayload | None" = None
 
     @model_validator(mode="after")
     def validate_terms_scope(self) -> "ManagedDocumentDraftPayload":
@@ -283,7 +319,25 @@ class ManagedDocumentDraftPayload(BaseModel):
             raise ValueError(
                 "Для акта явно укажите наличие или отсутствие замечаний"
             )
+        if (
+            self.transport_terms is not None
+            and self.document_type not in WAYBILL_DOCUMENT_TYPES
+        ):
+            raise ValueError(
+                "Транспортные реквизиты доступны только для ТН-2 и ТТН-1"
+            )
         return self
+
+
+class TransportTermsPayload(BaseModel):
+    """Optional transport facts for printable TN-2/TTN-1 forms."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    car_model: str | None = Field(default=None, max_length=200)
+    car_number: str | None = Field(default=None, max_length=64)
+    driver_name: str | None = Field(default=None, max_length=300)
+    carrier: str | None = Field(default=None, max_length=500)
 
 
 class ConsumerDocumentTermsPayload(BaseModel):

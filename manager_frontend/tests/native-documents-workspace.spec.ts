@@ -70,6 +70,7 @@ beforeEach(() => {
       is_default: true,
       requisites: {
         default_goods_warranty_months: '48',
+        default_work_warranty_months: '12',
         offer_url: 'https://mvn.by/offer',
         offer_version: '1.0',
         offer_published_on: '04.06.2026',
@@ -255,8 +256,12 @@ describe('NativeDocumentsWorkspace', () => {
   it('sends B2C terms only for a consumer order document', async () => {
     const wrapper = await mountWorkspace();
 
-    expect(wrapper.get('[data-testid="native-document-type"]').findAll('optgroup')
-      .map((group) => group.attributes('label'))).toEqual(['Для организаций', 'Для физлиц']);
+    expect(wrapper.get('[data-testid="native-document-type"]').findAll('option')
+      .map((option) => option.attributes('value'))).not.toContain('b2c_route_laying_act');
+    await wrapper.get('[data-testid="native-audience-consumer"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="native-document-type"]').findAll('option')
+      .map((option) => option.attributes('value'))).toContain('b2c_route_laying_act');
 
     await wrapper.get('[data-testid="native-document-type"]').setValue('b2c_route_laying_act');
     await flushPromises();
@@ -265,6 +270,8 @@ describe('NativeDocumentsWorkspace', () => {
       .toContain('Параметры закладки трассы');
     expect(wrapper.get('[data-testid="consumer-document-terms"]').text())
       .not.toContain('Гарантия на оборудование');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-work-warranty"]').element.value)
+      .toBe('12');
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
 
@@ -272,7 +279,10 @@ describe('NativeDocumentsWorkspace', () => {
       42,
       expect.objectContaining({
         document_type: 'b2c_route_laying_act',
-        consumer_terms: expect.objectContaining({ goods_warranty_months: 48 }),
+        consumer_terms: expect.objectContaining({
+          goods_warranty_months: 48,
+          work_warranty_months: 12,
+        }),
       }),
     );
   });
@@ -297,6 +307,8 @@ describe('NativeDocumentsWorkspace', () => {
     });
     const wrapper = await mountWorkspace();
 
+    await wrapper.get('[data-testid="native-audience-consumer"]').trigger('click');
+    await flushPromises();
     await wrapper.get('[data-testid="native-document-type"]').setValue('b2c_supply_installation_act');
     await flushPromises();
     await wrapper.get('[data-testid="consumer-equipment-brand"]').setValue('Midea');

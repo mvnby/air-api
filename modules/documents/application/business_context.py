@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -18,6 +18,31 @@ from modules.documents.domain import (
 
 class BusinessDocumentContextError(ValueError):
     pass
+
+
+def with_default_goods_warranty(
+    terms: BusinessDocumentTerms | None,
+    *,
+    configured_months: object,
+) -> BusinessDocumentTerms | None:
+    """Resolve the server-side equipment warranty for supply scenarios."""
+
+    if (
+        terms is None
+        or terms.contract_scenario not in {"supply", "supply_installation"}
+        or terms.goods_warranty_months is not None
+    ):
+        return terms
+    raw_configured = str(configured_months or "").strip()
+    try:
+        configured = int(raw_configured) if raw_configured else 36
+    except ValueError:
+        configured = 36
+    if configured == 0:
+        return replace(terms, goods_warranty_months=0)
+    if not 1 <= configured <= 240:
+        configured = 36
+    return replace(terms, goods_warranty_months=configured)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +110,7 @@ def build_business_document_context(
             "Для акта явно укажите наличие или отсутствие замечаний"
         )
 
-    resolved_terms = terms or BusinessDocumentTerms()
+    resolved_terms = _without_disabled_warranties(terms or BusinessDocumentTerms())
     is_act = document_type == "act"
     resolved_act = act_terms or ActTerms()
     _validate_warranty(resolved_terms)
@@ -185,6 +210,15 @@ def build_business_document_context(
         },
         table_rows={"payment_schedule": schedule_rows},
     )
+
+
+def _without_disabled_warranties(terms: BusinessDocumentTerms) -> BusinessDocumentTerms:
+    changes: dict[str, object] = {}
+    if terms.goods_warranty_months == 0:
+        changes.update(goods_warranty_months=None, goods_warranty_terms=None)
+    if terms.work_warranty_months == 0:
+        changes.update(work_warranty_months=None, work_warranty_terms=None)
+    return replace(terms, **changes) if changes else terms
 
 
 def _validate_warranty(terms: BusinessDocumentTerms) -> None:

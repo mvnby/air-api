@@ -26,6 +26,11 @@ import {
   createDefaultActTerms,
   type ActTerms,
 } from '../model/act-terms';
+import {
+  createDefaultTransportTerms,
+  serializeTransportTerms,
+  type TransportTerms,
+} from '../model/transport-terms';
 
 type ManagedWorkspaceInput = {
   orderId: () => number;
@@ -52,6 +57,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const consumerTerms = ref<ConsumerDocumentTerms>(createDefaultConsumerDocumentTerms());
   const businessTerms = ref<BusinessDocumentTerms>(createDefaultBusinessDocumentTerms());
   const actTerms = ref<ActTerms>(createDefaultActTerms());
+  const transportTerms = ref<TransportTerms>(createDefaultTransportTerms());
   const busy = ref(false);
   const loading = ref(false);
   const templatesLoading = ref(false);
@@ -62,22 +68,40 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   let templateRequestId = 0;
   let versionRequestId = 0;
   let preferredTemplateId: number | null = null;
+  const templateUseCaseKey = computed(() => {
+    if (documentType.value === 'contract') return businessTerms.value.contract_scenario || '';
+    if (documentType.value === 'invoice') return businessRole.value;
+    return '';
+  });
 
   const defaultGoodsWarrantyMonths = (legalEntityId = selectedLegalEntityId.value) => {
     const entity = legalEntities.value.find((item) => item.id === legalEntityId);
-    const configured = Number(entity?.requisites.default_goods_warranty_months);
+    const raw = entity?.requisites.default_goods_warranty_months;
+    const configured = raw == null || raw === '' ? Number.NaN : Number(raw);
     return Number.isFinite(configured) && configured >= 0 && configured <= 240 ? configured : 36;
+  };
+  const defaultWorkWarrantyMonths = (legalEntityId = selectedLegalEntityId.value) => {
+    const entity = legalEntities.value.find((item) => item.id === legalEntityId);
+    const raw = entity?.requisites.default_work_warranty_months;
+    const configured = raw == null || raw === '' ? Number.NaN : Number(raw);
+    return Number.isFinite(configured) && configured >= 0 && configured <= 240 ? configured : null;
   };
   const selectedGoodsWarrantyDefault = computed(() => defaultGoodsWarrantyMonths());
 
   const resetConsumerTerms = () => {
-    consumerTerms.value = createDefaultConsumerDocumentTerms(defaultGoodsWarrantyMonths());
+    consumerTerms.value = createDefaultConsumerDocumentTerms(
+      defaultGoodsWarrantyMonths(),
+      defaultWorkWarrantyMonths(),
+    );
   };
   const resetBusinessTerms = () => {
     businessTerms.value = createDefaultBusinessDocumentTerms();
   };
   const resetActTerms = () => {
     actTerms.value = createDefaultActTerms();
+  };
+  const resetTransportTerms = () => {
+    transportTerms.value = createDefaultTransportTerms();
   };
 
   const selectedTemplateHasActiveVersion = computed(() => (
@@ -175,7 +199,22 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         || selectedLegalEntityId.value !== legalEntityId
         || documentType.value !== type
       ) return;
-      templates.value = response.items.filter((item) => item.is_active);
+      const activeTemplates = response.items.filter((item) => item.is_active);
+      if (documentType.value === 'contract' && templateUseCaseKey.value) {
+        const exact = activeTemplates.filter(
+          (item) => item.contract_scenario === templateUseCaseKey.value,
+        );
+        const universal = activeTemplates.filter((item) => !item.contract_scenario);
+        templates.value = exact.length ? [...exact, ...universal] : universal;
+      } else if (documentType.value === 'invoice') {
+        const exact = activeTemplates.filter(
+          (item) => item.business_role === templateUseCaseKey.value,
+        );
+        const universal = activeTemplates.filter((item) => !item.business_role);
+        templates.value = exact.length ? [...exact, ...universal] : universal;
+      } else {
+        templates.value = activeTemplates;
+      }
       const preferred = templates.value.find((item) => item.id === preferredTemplateId);
       selectedTemplateId.value = preferred?.id
         || templates.value.find((item) => item.is_default)?.id
@@ -201,6 +240,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     resetConsumerTerms();
     resetBusinessTerms();
     resetActTerms();
+    resetTransportTerms();
     try {
       const [entitiesResponse, runtimeResponse] = await Promise.all([
         ManagerDocumentSystemService.listManagerDocumentLegalEntities(),
@@ -218,10 +258,17 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
 
-  watch([selectedLegalEntityId, documentType], () => void loadTemplates(), { flush: 'sync' });
+  watch(
+    [selectedLegalEntityId, documentType, templateUseCaseKey],
+    () => void loadTemplates(),
+    { flush: 'sync' },
+  );
   watch(documentType, (nextType, previousType) => {
     if (isConsumerDocumentType(nextType) && !isConsumerDocumentType(previousType)) {
       resetConsumerTerms();
+    }
+    if (['tn2', 'ttn1'].includes(nextType) && !['tn2', 'ttn1'].includes(previousType)) {
+      resetTransportTerms();
     }
   });
   watch(selectedLegalEntityId, (legalEntityId, previousLegalEntityId) => {
@@ -234,6 +281,15 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       consumerTerms.value = {
         ...consumerTerms.value,
         goods_warranty_months: defaultGoodsWarrantyMonths(legalEntityId),
+      };
+    }
+    if (
+      isConsumerDocumentType(documentType.value)
+      && consumerTerms.value.work_warranty_months === defaultWorkWarrantyMonths(previousLegalEntityId)
+    ) {
+      consumerTerms.value = {
+        ...consumerTerms.value,
+        work_warranty_months: defaultWorkWarrantyMonths(legalEntityId),
       };
     }
     if (
@@ -269,12 +325,16 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
           ? serializeBusinessTerms(documentType.value, businessTerms.value)
           : undefined,
         act_terms: documentType.value === 'act' ? actTerms.value : undefined,
+        transport_terms: ['tn2', 'ttn1'].includes(documentType.value)
+          ? serializeTransportTerms(transportTerms.value)
+          : undefined,
       };
       await ManagerDocumentSystemService.createManagerManagedDocumentDraft(input.orderId(), payload);
       replacesDocumentId.value = null;
       resetConsumerTerms();
       resetBusinessTerms();
       resetActTerms();
+      resetTransportTerms();
       await loadDocuments();
       input.refresh();
       input.notify('Черновик создан. Данные заказа зафиксированы, но официальный номер ещё не занят.');
@@ -348,6 +408,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     resetConsumerTerms();
     resetBusinessTerms();
     resetActTerms();
+    resetTransportTerms();
     preferredTemplateId = document.document_template_id || null;
     documentType.value = document.doc_type;
     selectedLegalEntityId.value = document.legal_entity_id || selectedLegalEntityId.value;
@@ -407,11 +468,13 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     resetConsumerTerms,
     resetBusinessTerms,
     resetActTerms,
+    resetTransportTerms,
     selectedLegalEntityId,
     selectedGoodsWarrantyDefault,
     selectedTemplateId,
     templates,
     templatesLoading,
+    transportTerms,
     voidDocument,
     voidReason,
     voidTarget,

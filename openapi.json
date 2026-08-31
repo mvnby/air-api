@@ -12506,6 +12506,63 @@
         }
       }
     },
+    "/api/manager/document-system/templates/{template_id}": {
+      "patch": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Update Native Document Template",
+        "operationId": "update_manager_native_document_template",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeDocumentTemplateUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeDocumentTemplateItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/templates/{template_id}/versions": {
       "get": {
         "tags": [
@@ -29017,7 +29074,7 @@
               {
                 "type": "integer",
                 "maximum": 240.0,
-                "minimum": 1.0
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -29042,7 +29099,7 @@
               {
                 "type": "integer",
                 "maximum": 240.0,
-                "minimum": 1.0
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -35386,6 +35443,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ActTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transport_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransportTermsPayload"
               },
               {
                 "type": "null"
@@ -54178,6 +54245,30 @@
               }
             ],
             "title": "Description"
+          },
+          "contract_scenario": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(services|repair|maintenance|supply_installation|installation|framework|supply)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Scenario"
+          },
+          "business_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(payment_request|offer)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Role"
           }
         },
         "additionalProperties": false,
@@ -54221,6 +54312,28 @@
               }
             ],
             "title": "Description"
+          },
+          "contract_scenario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Scenario"
+          },
+          "business_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Role"
           },
           "is_default": {
             "type": "boolean",
@@ -54269,6 +54382,64 @@
           "items"
         ],
         "title": "NativeDocumentTemplateListResponse"
+      },
+      "NativeDocumentTemplateUpdatePayload": {
+        "properties": {
+          "legal_entity_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Legal Entity Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "contract_scenario": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(services|repair|maintenance|supply_installation|installation|framework|supply)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Scenario"
+          },
+          "business_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(payment_request|offer)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "legal_entity_id",
+          "name"
+        ],
+        "title": "NativeDocumentTemplateUpdatePayload"
       },
       "NativePlaceholderCatalogResponse": {
         "properties": {
@@ -64561,6 +64732,62 @@
           "hash"
         ],
         "title": "TelegramLoginPayload"
+      },
+      "TransportTermsPayload": {
+        "properties": {
+          "car_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Car Model"
+          },
+          "car_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Car Number"
+          },
+          "driver_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver Name"
+          },
+          "carrier": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carrier"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TransportTermsPayload",
+        "description": "Optional transport facts for printable TN-2/TTN-1 forms."
       },
       "ValidationError": {
         "properties": {

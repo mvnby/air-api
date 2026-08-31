@@ -20,6 +20,7 @@ import type { ManagedDocumentVoidPayload } from '../models/ManagedDocumentVoidPa
 import type { NativeDocumentTemplateCreatePayload } from '../models/NativeDocumentTemplateCreatePayload';
 import type { NativeDocumentTemplateItem } from '../models/NativeDocumentTemplateItem';
 import type { NativeDocumentTemplateListResponse } from '../models/NativeDocumentTemplateListResponse';
+import type { NativeDocumentTemplateUpdatePayload } from '../models/NativeDocumentTemplateUpdatePayload';
 import type { NativePlaceholderCatalogResponse } from '../models/NativePlaceholderCatalogResponse';
 import type { NativeTemplateVersionItem } from '../models/NativeTemplateVersionItem';
 import type { NativeTemplateVersionListResponse } from '../models/NativeTemplateVersionListResponse';
@@ -183,6 +184,30 @@ export class ManagerDocumentSystemService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/document-system/templates',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Native Document Template
+     * @param templateId
+     * @param requestBody
+     * @returns NativeDocumentTemplateItem Successful Response
+     * @throws ApiError
+     */
+    public static updateManagerNativeDocumentTemplate(
+        templateId: number,
+        requestBody: NativeDocumentTemplateUpdatePayload,
+    ): CancelablePromise<NativeDocumentTemplateItem> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/document-system/templates/{template_id}',
+            path: {
+                'template_id': templateId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

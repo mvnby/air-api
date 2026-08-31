@@ -158,6 +158,7 @@ async def _create_native_contract_template(
             "legal_entity_id": legal_entity_id,
             "name": "Договор поставки",
             "doc_type": "contract",
+            "contract_scenario": "services",
         },
     )
     assert created.status_code == 200, created.text
@@ -257,6 +258,30 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
         headers,
         legal_entity_id=issuer_id,
     )
+    updated_template = await async_client.patch(
+        f"{BASE}/templates/{template_id}",
+        headers=headers,
+        json={
+            "legal_entity_id": issuer_id,
+            "name": "Договор услуг API",
+            "description": "Исправленная карточка без повторной загрузки",
+            "contract_scenario": "services",
+            "business_role": None,
+        },
+    )
+    assert updated_template.status_code == 200, updated_template.text
+    assert updated_template.json()["name"] == "Договор услуг API"
+    assert updated_template.json()["contract_scenario"] == "services"
+    wrong_role = await async_client.patch(
+        f"{BASE}/templates/{template_id}",
+        headers=headers,
+        json={
+            "legal_entity_id": issuer_id,
+            "name": "Договор услуг API",
+            "business_role": "offer",
+        },
+    )
+    assert wrong_role.status_code == 400
     versions = await async_client.get(
         f"{BASE}/templates/{template_id}/versions",
         headers=headers,

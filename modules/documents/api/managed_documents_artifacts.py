@@ -15,6 +15,7 @@ from modules.documents.domain import (
     BusinessDocumentTerms,
     ConsumerDocumentTerms,
     PaymentScheduleItem,
+    TransportTerms,
 )
 from modules.documents.application.errors import (
     ManagedDocumentConflictError,
@@ -141,6 +142,11 @@ async def create_managed_document_draft(
                 act_terms=(
                     ActTerms(**payload.act_terms.model_dump())
                     if payload.act_terms is not None
+                    else None
+                ),
+                transport_terms=(
+                    TransportTerms(**payload.transport_terms.model_dump())
+                    if payload.transport_terms is not None
                     else None
                 ),
             ),

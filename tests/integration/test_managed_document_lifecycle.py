@@ -27,6 +27,7 @@ from modules.documents.application import (
     DocumentContextSelection,
     ManagedDocumentConflictError,
     ManagedDocumentGenerationError,
+    ManagedDocumentNotFoundError,
     ManagedDocumentService,
     NativeTemplatePlaceholderContract,
     NativeTemplateVersionService,
@@ -209,6 +210,96 @@ async def _draft(
         ),
         replaces_document_id=replaces,
     )
+
+
+async def _active_contract_template(
+    db,
+    *,
+    scope,
+    issuer,
+    template_storage,
+    name: str,
+    scenario: str,
+):
+    template = await NativeTemplateVersionService.create_template(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=issuer.id,
+        name=name,
+        doc_type="contract",
+        contract_scenario=scenario,
+    )
+    version = await NativeTemplateVersionService.upload_native_docx_version(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=issuer.id,
+        template_id=template.id,
+        filename=f"{name}.docx",
+        content=_template_docx(),
+        placeholder_contract=NativeTemplatePlaceholderContract.create(
+            field_catalog={"document.official_full_number", "customer.full_name"},
+            table_blocks=(
+                TableBlockSpec(
+                    name="lines",
+                    row_fields=frozenset(
+                        {"line.number", "line.title", "line.quantity", "line.amount"}
+                    ),
+                ),
+            ),
+        ),
+        storage=template_storage,
+    )
+    await NativeTemplateVersionService.activate_version(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=issuer.id,
+        template_id=template.id,
+        version_id=version.id,
+    )
+    return template
+
+
+@pytest.mark.asyncio
+async def test_draft_prefers_exact_template_use_case_and_rejects_mismatch(db, tmp_path):
+    scope, order, issuer, template_storage, _ = await _seed(db, tmp_path)
+    services = await _active_contract_template(
+        db,
+        scope=scope,
+        issuer=issuer,
+        template_storage=template_storage,
+        name="Договор услуг",
+        scenario="services",
+    )
+    repair = await _active_contract_template(
+        db,
+        scope=scope,
+        issuer=issuer,
+        template_storage=template_storage,
+        name="Договор ремонта",
+        scenario="repair",
+    )
+
+    draft = await _draft(db, scope=scope, order=order, issuer=issuer)
+    assert draft.document_template_id == services.id
+
+    with pytest.raises(ManagedDocumentNotFoundError, match="нет активной DOCX-версии"):
+        await ManagedDocumentService.create_draft(
+            db,
+            tenant_scope=scope,
+            selection=DocumentContextSelection(
+                order_id=order.id,
+                legal_entity_id=issuer.id,
+                document_type="contract",
+                issue_date=date(2026, 8, 26),
+                business_terms=BusinessDocumentTerms(
+                    contract_scenario="services",
+                    payment_schedule=(
+                        PaymentScheduleItem(Decimal("100"), "before_work"),
+                    ),
+                ),
+            ),
+            template_id=repair.id,
+        )
 
 
 @pytest.mark.asyncio
