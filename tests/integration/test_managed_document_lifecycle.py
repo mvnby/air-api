@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 
@@ -12,12 +12,15 @@ from models import (
     DocumentArtifact,
     DocumentLegalEntity,
     DocumentNumberReservation,
+    DocumentNumberSequence,
     Order,
     OrderDocument,
     OrderProductLink,
     OrderProposal,
     OrderStatus,
     Product,
+    Storefront,
+    Tenant,
 )
 from models.tenancy import TenantScope
 from modules.documents.application import (
@@ -28,9 +31,16 @@ from modules.documents.application import (
     NativeTemplatePlaceholderContract,
     NativeTemplateVersionService,
 )
-from modules.documents.domain import BusinessDocumentTerms, PaymentScheduleItem
+from modules.documents.domain import (
+    BusinessDocumentTerms,
+    DocumentNumberScope,
+    PaymentScheduleItem,
+)
 from modules.documents.infrastructure.artifact_storage import (
     PrivateDocumentArtifactStorage,
+)
+from modules.documents.infrastructure.numbering_repository import (
+    DocumentNumberingRepository,
 )
 from modules.documents.infrastructure.renderers import TableBlockSpec
 from modules.documents.infrastructure.template_source_storage import (
@@ -225,7 +235,7 @@ async def test_issue_is_idempotent_and_persists_frozen_docx_pdf_and_number(
     assert result.document.official_number == "001"
     assert (
         result.document.render_snapshot["values"]["document.official_full_number"]
-        == "Д-001"
+        == "Д-2026-001"
     )
     assert {artifact.kind for artifact in result.artifacts} == {"rendered_docx", "pdf"}
     assert all(artifact.is_authoritative for artifact in result.artifacts)
@@ -243,6 +253,193 @@ async def test_issue_is_idempotent_and_persists_frozen_docx_pdf_and_number(
     assert (
         len((await db.execute(select(DocumentNumberReservation))).scalars().all()) == 1
     )
+
+
+@pytest.mark.asyncio
+async def test_default_issuer_bootstraps_legacy_contract_sequence_without_crossing_tenants(
+    db, tmp_path
+):
+    scope, order, issuer, template_storage, artifact_storage = await _seed(db, tmp_path)
+    db.add_all(
+        [
+            OrderDocument(
+                order_id=order.id,
+                doc_type="contract",
+                number="Д-2026-055",
+                date=datetime(2026, 1, 1),
+            ),
+            OrderDocument(
+                order_id=order.id,
+                doc_type="contract",
+                number="Д-2026-not-a-number",
+                date=datetime(2026, 1, 2),
+            ),
+        ]
+    )
+    foreign_tenant = Tenant(slug="foreign-numbering", display_name="Foreign")
+    db.add(foreign_tenant)
+    await db.flush()
+    foreign_storefront = Storefront(
+        tenant_id=foreign_tenant.id,
+        slug="foreign-numbering",
+        display_name="Foreign",
+        status="active",
+        is_default=True,
+    )
+    foreign_customer = Customer(
+        tenant_id=foreign_tenant.id,
+        name="Foreign customer",
+        phone="+375290000055",
+        type=CustomerType.company,
+    )
+    db.add_all([foreign_storefront, foreign_customer])
+    await db.flush()
+    foreign_order = Order(
+        tenant_id=foreign_tenant.id,
+        storefront_id=foreign_storefront.id,
+        customer_id=foreign_customer.id,
+        status=OrderStatus.NEGOTIATION,
+    )
+    db.add(foreign_order)
+    await db.flush()
+    db.add(
+        OrderDocument(
+            order_id=foreign_order.id,
+            doc_type="contract",
+            number="Д-2026-999",
+            date=datetime(2026, 1, 3),
+        )
+    )
+    await db.commit()
+
+    native_scope = DocumentNumberScope(
+        tenant_id=scope.tenant_id,
+        legal_entity_id=issuer.id,
+        document_type="contract",
+        series="Д-",
+        period_key="2026",
+    )
+    for suffix in ("one", "two"):
+        await DocumentNumberingRepository.reserve(
+            db,
+            scope=native_scope,
+            idempotency_key=f"already-native-{suffix}",
+        )
+    await db.commit()
+
+    draft = await _draft(db, scope=scope, order=order, issuer=issuer)
+    result = await ManagedDocumentService.issue(
+        db,
+        tenant_scope=scope,
+        document_id=draft.id,
+        template_storage=template_storage,
+        artifact_storage=artifact_storage,
+        pdf_converter=FakePdfConverter(),
+    )
+    assert result.document.official_number == "056"
+    assert result.document.render_snapshot["values"]["document.official_full_number"] == "Д-2026-056"
+
+    repeated = await ManagedDocumentService.issue(
+        db,
+        tenant_scope=scope,
+        document_id=draft.id,
+        template_storage=template_storage,
+        artifact_storage=artifact_storage,
+        pdf_converter=FailingPdfConverter(),
+    )
+    assert repeated.document.official_number == "056"
+
+    sequence = (
+        await db.execute(
+            select(DocumentNumberSequence).where(
+                DocumentNumberSequence.tenant_id == scope.tenant_id,
+                DocumentNumberSequence.legal_entity_id == issuer.id,
+                DocumentNumberSequence.document_type == "contract",
+                DocumentNumberSequence.series == "Д-",
+                DocumentNumberSequence.period_key == "2026",
+            )
+        )
+    ).scalar_one()
+    sequence.last_value = 80
+    db.add(sequence)
+    await db.commit()
+    later_draft = await _draft(db, scope=scope, order=order, issuer=issuer)
+    later = await ManagedDocumentService.issue(
+        db,
+        tenant_scope=scope,
+        document_id=later_draft.id,
+        template_storage=template_storage,
+        artifact_storage=artifact_storage,
+        pdf_converter=FakePdfConverter(),
+    )
+    assert later.document.official_number == "081"
+
+
+@pytest.mark.asyncio
+async def test_non_default_issuer_does_not_claim_unattributed_legacy_sequence(db, tmp_path):
+    scope, order, issuer, template_storage, artifact_storage = await _seed(db, tmp_path)
+    db.add(
+        OrderDocument(
+            order_id=order.id,
+            doc_type="contract",
+            number="Д-2026-055",
+            date=datetime(2026, 1, 1),
+        )
+    )
+    secondary = DocumentLegalEntity(
+        tenant_id=scope.tenant_id,
+        slug="secondary-numbering",
+        display_name="Secondary issuer",
+        is_default=False,
+        requisites={},
+    )
+    db.add(secondary)
+    await db.commit()
+    template = await NativeTemplateVersionService.create_template(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=secondary.id,
+        name="Secondary contract",
+        doc_type="contract",
+    )
+    version = await NativeTemplateVersionService.upload_native_docx_version(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=secondary.id,
+        template_id=template.id,
+        filename="Secondary.docx",
+        content=_template_docx(),
+        placeholder_contract=NativeTemplatePlaceholderContract.create(
+            field_catalog={"document.official_full_number", "customer.full_name"},
+            table_blocks=(
+                TableBlockSpec(
+                    name="lines",
+                    row_fields=frozenset(
+                        {"line.number", "line.title", "line.quantity", "line.amount"}
+                    ),
+                ),
+            ),
+        ),
+        storage=template_storage,
+    )
+    await NativeTemplateVersionService.activate_version(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=secondary.id,
+        template_id=template.id,
+        version_id=version.id,
+    )
+    draft = await _draft(db, scope=scope, order=order, issuer=secondary)
+    result = await ManagedDocumentService.issue(
+        db,
+        tenant_scope=scope,
+        document_id=draft.id,
+        template_storage=template_storage,
+        artifact_storage=artifact_storage,
+        pdf_converter=FakePdfConverter(),
+    )
+    assert result.document.official_number == "001"
+    assert result.document.render_snapshot["values"]["document.official_full_number"] == "Д-2026-001"
 
 
 @pytest.mark.asyncio
@@ -360,6 +557,12 @@ async def test_calendar_year_scope_and_replacement_chain(db, tmp_path):
     )
     assert next_year_result.document.official_period_key == "2027"
     assert next_year_result.document.official_number == "001"
+    assert (
+        next_year_result.document.render_snapshot["values"][
+            "document.official_full_number"
+        ]
+        == "Д-2027-001"
+    )
     assert len((await db.execute(select(OrderDocument))).scalars().all()) == 3
 
 

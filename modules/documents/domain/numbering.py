@@ -69,6 +69,17 @@ class EffectiveDocumentNumberPolicy:
             raise ValueError("Basis is required for per-basis numbering")
         return normalized_basis
 
+    def format_number_text(self, period_key: str, number_value: int) -> str:
+        """Build the human-facing number without changing the sequence scope."""
+
+        policy = self.normalized()
+        if number_value <= 0:
+            raise ValueError("Document number must be positive")
+        sequence = f"{number_value:0{policy.minimum_width}d}"
+        if policy.period_mode == "calendar_year":
+            return f"{policy.series}{period_key}-{sequence}"
+        return f"{policy.series}{sequence}"
+
 
 DEFAULT_NUMBER_POLICIES: dict[str, EffectiveDocumentNumberPolicy] = {
     "contract": EffectiveDocumentNumberPolicy("contract", "Д-"),

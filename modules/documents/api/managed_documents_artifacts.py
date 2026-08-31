@@ -33,6 +33,7 @@ from modules.documents.infrastructure.template_source_storage import (
 )
 from routers.manager_operation_ids import (
     CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT,
+    DELETE_MANAGER_MANAGED_DOCUMENT_DRAFT,
     DOWNLOAD_MANAGER_DOCUMENT_ARTIFACT,
     GET_MANAGER_DOCUMENT_ARTIFACT_ACCESS,
     ISSUE_MANAGER_MANAGED_DOCUMENT,
@@ -162,6 +163,39 @@ async def create_managed_document_draft(
             400, CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT, "managed_document_invalid", exc
         )
     return await _document_item(session, auth, row)
+
+
+@router.delete(
+    "/documents/{document_id}/draft",
+    status_code=204,
+    operation_id=DELETE_MANAGER_MANAGED_DOCUMENT_DRAFT,
+)
+async def delete_managed_document_draft(
+    document_id: int,
+    session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+) -> Response:
+    try:
+        await ManagedDocumentService.delete_draft(
+            session,
+            tenant_scope=auth.tenant_scope(),
+            document_id=document_id,
+        )
+    except ManagedDocumentNotFoundError as exc:
+        raise _document_error(
+            404,
+            DELETE_MANAGER_MANAGED_DOCUMENT_DRAFT,
+            "managed_document_not_found",
+            exc,
+        )
+    except ManagedDocumentConflictError as exc:
+        raise _document_error(
+            409,
+            DELETE_MANAGER_MANAGED_DOCUMENT_DRAFT,
+            "managed_document_immutable",
+            exc,
+        )
+    return Response(status_code=204)
 
 
 @router.post(
@@ -371,8 +405,11 @@ async def _document_item(
 def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
     official_full_number = None
     if document.official_number:
-        official_full_number = (
-            f"{document.official_series or ''}{document.official_number}"
+        official_full_number = str(
+            ((document.render_snapshot or {}).get("values") or {}).get(
+                "document.official_full_number", ""
+            )
+            or f"{document.official_series or ''}{document.official_number}"
         )
     provider = (
         "native"

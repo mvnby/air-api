@@ -12,6 +12,7 @@ from core.manager_error_codes import (
     BAD_REQUEST,
     CUSTOMER_NOT_FOUND,
     DOCUMENT_HAS_DEPENDENTS,
+    DOCUMENT_MANAGED_BY_NATIVE,
     DOCUMENT_NOT_FOUND,
     ORDER_DOCUMENTS_LOCKED,
     ORDER_NOT_FOUND,
@@ -47,7 +48,12 @@ from schemas import (
     DocumentTemplatePayload,
     DocumentTemplateUpdatePayload,
 )
-from services.document_service import DocumentHasDependentsError, DocumentService, OrderDocumentsLockedError
+from services.document_service import (
+    DocumentHasDependentsError,
+    DocumentService,
+    NativeManagedDocumentError,
+    OrderDocumentsLockedError,
+)
 from services.document_template_service import DocumentTemplateService
 from services.google_oauth_credentials import GoogleCredentialsError, GoogleDriveListError
 from services.google_service import get_google_service
@@ -336,6 +342,13 @@ async def delete_manager_doc(
             status_code=409,
             endpoint=DELETE_MANAGER_DOC,
             error_code=DOCUMENT_HAS_DEPENDENTS,
+            message=str(exc),
+        ) from exc
+    except NativeManagedDocumentError as exc:
+        raise manager_http_error(
+            status_code=409,
+            endpoint=DELETE_MANAGER_DOC,
+            error_code=DOCUMENT_MANAGED_BY_NATIVE,
             message=str(exc),
         ) from exc
     

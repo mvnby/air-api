@@ -260,6 +260,49 @@ async def test_context_snapshot_supports_ip_parties_and_explicit_issue_city(db):
 
 
 @pytest.mark.asyncio
+async def test_context_snapshot_repairs_legacy_odo_customer_party_for_b2b_preamble(db):
+    order, issuer, _selected, _alternative = await _seed_order(db)
+    customer = await db.get(Customer, order.customer_id)
+    assert customer is not None
+    customer.type = CustomerType.individual
+    customer.signing_mode = "self"
+    customer.name = "ОДО «Термотехника»"
+    customer.full_legal_name = "ОДО «Термотехника»"
+    customer.inn = "300566486"
+    customer.legal_address = "г. Витебск, ул. Тестовая, 1"
+    customer.bank_name = "ОАО «Белагропромбанк»"
+    customer.iban = "BY93BAPB3013W29470010000"
+    customer.bic = "BAPBBY2X"
+    customer.signer_position = "директор"
+    customer.signer_name = "Иванов И.И."
+    customer.acting_basis = "Устава"
+    db.add(customer)
+    await db.commit()
+
+    snapshot = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(
+            order_id=order.id,
+            legal_entity_id=issuer.id,
+            document_type="contract",
+            issue_date=date(2026, 8, 31),
+            business_terms=BusinessDocumentTerms(
+                contract_scenario="installation",
+                payment_schedule=(
+                    PaymentScheduleItem(Decimal("100"), "before_work"),
+                ),
+            ),
+        ),
+    )
+
+    assert snapshot["values"]["customer.entity_type"] == "organization"
+    assert snapshot["values"]["customer.signing_mode"] == "statutory_body"
+    assert snapshot["conditions"]["customer.organization_statutory_body"] is True
+    assert snapshot["conditions"]["customer.individual_self"] is False
+
+
+@pytest.mark.asyncio
 async def test_contract_snapshot_keeps_b2b_terms_and_selected_proposal_scope(db):
     order, issuer, selected, _alternative = await _seed_order(db)
     issuer.is_vat_payer = True

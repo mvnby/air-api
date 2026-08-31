@@ -204,7 +204,14 @@ class DocumentContextBuilder:
         )
         customer = order.customer
         customer_entity_type = customer_document_entity_type(
-            getattr(customer, "type", None)
+            getattr(customer, "type", None),
+            name=getattr(customer, "name", None),
+            full_legal_name=getattr(customer, "full_legal_name", None),
+            inn=getattr(customer, "inn", None),
+            legal_address=getattr(customer, "legal_address", None),
+            bank_name=getattr(customer, "bank_name", None),
+            iban=getattr(customer, "iban", None),
+            bic=getattr(customer, "bic", None),
         )
         customer_signing_mode = normalize_signing_mode(
             customer_entity_type,

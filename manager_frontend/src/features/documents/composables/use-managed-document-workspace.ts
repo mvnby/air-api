@@ -8,6 +8,7 @@ import {
   type NativeTemplateVersionItem,
 } from '../../../client';
 import { getApiErrorMessage } from '../../../utils/api-errors';
+import { confirmDialog } from '../../../services/ui-feedback';
 import {
   createDefaultConsumerDocumentTerms,
   isConsumerDocumentType,
@@ -300,6 +301,27 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
 
+  const deleteDraft = async (document: ManagedDocumentItem) => {
+    if (document.status !== 'draft') return;
+    if (!await confirmDialog({
+      title: 'Удалить черновик?',
+      description: 'Официальный номер ещё не присвоен, поэтому черновик можно удалить без следа в нумерации.',
+      confirmText: 'Удалить черновик',
+      variant: 'danger',
+    })) return;
+    busy.value = true;
+    try {
+      await ManagerDocumentSystemService.deleteManagerManagedDocumentDraft(document.id);
+      await loadDocuments();
+      input.refresh();
+      input.notify('Черновик удалён. Официальная нумерация не изменилась.');
+    } catch (error) {
+      input.notify(`Не удалось удалить черновик: ${getApiErrorMessage(error)}`, 'error');
+    } finally {
+      busy.value = false;
+    }
+  };
+
   const requestVoid = (document: ManagedDocumentItem) => {
     voidTarget.value = document;
     voidReason.value = '';
@@ -366,6 +388,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     busy,
     consumerTerms,
     createDraft,
+    deleteDraft,
     documentType,
     documents,
     downloadArtifact,

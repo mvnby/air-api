@@ -11,6 +11,7 @@ from models import (
     CustomerBranch,
     CustomerContract,
     CustomerType,
+    DocumentLegalEntity,
     DocumentTemplate,
     GlobalConfig,
     Installer,
@@ -3359,6 +3360,69 @@ async def test_manager_doc_delete_success(async_client, db, monkeypatch):
     
     # Verify Google Call
     assert "fid_del" in deleted_ids
+
+
+@pytest.mark.asyncio
+async def test_legacy_document_api_hides_and_rejects_native_managed_rows(async_client, db):
+    customer = Customer(
+        tenant_id=1,
+        name="Document boundary",
+        phone="+375290000077",
+        type=CustomerType.individual,
+    )
+    db.add(customer)
+    await db.flush()
+    order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+    )
+    issuer = DocumentLegalEntity(
+        tenant_id=1,
+        slug="legacy-api-boundary",
+        display_name="ООО Документы",
+        legal_name="ООО Документы",
+        unp="390000077",
+        is_default=False,
+        requisites={},
+    )
+    db.add_all([order, issuer])
+    await db.flush()
+    legacy = OrderDocument(
+        order_id=order.id,
+        doc_type="contract",
+        number="LEGACY-77",
+        google_file_id="legacy-google-file",
+    )
+    native = OrderDocument(
+        tenant_id=1,
+        legal_entity_id=issuer.id,
+        order_id=order.id,
+        doc_type="contract",
+        status="draft",
+        internal_reference="crm-legacy-boundary-77",
+        number="CRM-77",
+    )
+    db.add_all([legacy, native])
+    await db.commit()
+    await db.refresh(native)
+
+    headers = await _auth_headers(async_client)
+    listed = await async_client.get(
+        f"/api/manager/orders/{order.id}/documents",
+        headers=headers,
+    )
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["items"]] == [legacy.id]
+
+    deleted = await async_client.delete(
+        f"/api/manager/docs/{native.id}",
+        headers=headers,
+    )
+    assert deleted.status_code == 409
+    assert deleted.json()["detail"]["error_code"] == "document_managed_by_native"
+    assert await db.get(OrderDocument, native.id) is not None
 
 
 @pytest.mark.asyncio

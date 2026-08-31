@@ -6,6 +6,9 @@ import {
 } from '../src/client';
 import NativeDocumentsWorkspace from '../src/features/documents/components/NativeDocumentsWorkspace.vue';
 
+const confirmDialog = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+vi.mock('../src/services/ui-feedback', () => ({ confirmDialog }));
+
 const NOW = '2026-08-27T00:00:00Z';
 const baseOrder = {
   id: 42,
@@ -110,6 +113,7 @@ beforeEach(() => {
     }],
   });
   vi.spyOn(ManagerDocumentSystemService, 'createManagerManagedDocumentDraft').mockResolvedValue({} as never);
+  vi.spyOn(ManagerDocumentSystemService, 'deleteManagerManagedDocumentDraft').mockResolvedValue(undefined as never);
 });
 
 afterEach(() => {
@@ -125,6 +129,38 @@ const mountWorkspace = async () => {
 };
 
 describe('NativeDocumentsWorkspace', () => {
+  it('deletes an unissued draft after an explicit confirmation', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockResolvedValueOnce({
+        items: [{
+          id: 77,
+          order_id: 42,
+          legal_entity_id: 5,
+          doc_type: 'contract',
+          status: 'draft',
+          provider: 'native',
+          internal_reference: 'doc_draft_77',
+          display_number: 'doc_draft_77',
+          date: NOW,
+          created_at: NOW,
+          artifacts: [],
+        }],
+      })
+      .mockResolvedValue({ items: [] });
+    const wrapper = await mountWorkspace();
+
+    const remove = wrapper.findAll('button').find((button) => button.text() === 'Удалить черновик');
+    expect(remove).toBeDefined();
+    await remove!.trigger('click');
+    await flushPromises();
+
+    expect(confirmDialog).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Удалить черновик?',
+      variant: 'danger',
+    }));
+    expect(ManagerDocumentSystemService.deleteManagerManagedDocumentDraft).toHaveBeenCalledWith(77);
+  });
+
   it('uses the active customer contract as the default basis for an act', async () => {
     const wrapper = await mountWorkspace();
 

@@ -435,7 +435,7 @@ async def test_document_system_draft_issue_is_idempotent_and_artifacts_are_tenan
     assert (
         issued.json()["official_full_number"]
         == repeated.json()["official_full_number"]
-        == "Д-001"
+        == "Д-2026-001"
     )
     assert {artifact["kind"] for artifact in issued.json()["artifacts"]} == {
         "pdf",
@@ -473,6 +473,72 @@ async def test_document_system_draft_issue_is_idempotent_and_artifacts_are_tenan
         headers=_staff_headers(owner_b),
     )
     assert denied.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_document_system_deletes_only_unissued_native_draft(
+    async_client: AsyncClient,
+    db,
+    monkeypatch,
+):
+    import importlib
+
+    document_router = importlib.import_module("modules.documents.api.router")
+    monkeypatch.setattr(document_router, "_pdf_converter", lambda: _FakePdfConverter())
+
+    headers = await _legacy_owner_headers(async_client)
+    issuer_id = await _create_issuer(async_client, headers, name="ООО Черновики API")
+    template_id, _version_id = await _create_native_contract_template(
+        async_client,
+        headers,
+        legal_entity_id=issuer_id,
+    )
+    order = await _seed_order(db)
+
+    async def create_draft():
+        response = await async_client.post(
+            f"{BASE}/orders/{order.id}/documents/drafts",
+            headers=headers,
+            json={
+                "legal_entity_id": issuer_id,
+                "document_type": "contract",
+                "issue_date": "2026-08-31",
+                "template_id": template_id,
+                "business_terms": {
+                    "contract_scenario": "services",
+                    "payment_schedule": [
+                        {"share_percent": 100, "due_event": "before_work"}
+                    ],
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        return int(response.json()["id"])
+
+    removable_id = await create_draft()
+    removed = await async_client.delete(
+        f"{BASE}/documents/{removable_id}/draft",
+        headers=headers,
+    )
+    assert removed.status_code == 204, removed.text
+    listed = await async_client.get(
+        f"{BASE}/orders/{order.id}/documents",
+        headers=headers,
+    )
+    assert removable_id not in {item["id"] for item in listed.json()["items"]}
+
+    issued_id = await create_draft()
+    issued = await async_client.post(
+        f"{BASE}/documents/{issued_id}/issue",
+        headers=headers,
+    )
+    assert issued.status_code == 200, issued.text
+    protected = await async_client.delete(
+        f"{BASE}/documents/{issued_id}/draft",
+        headers=headers,
+    )
+    assert protected.status_code == 409
+    assert protected.json()["detail"]["error_code"] == "managed_document_immutable"
 
 
 @pytest.mark.asyncio

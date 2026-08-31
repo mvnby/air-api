@@ -12876,6 +12876,46 @@
         }
       }
     },
+    "/api/manager/document-system/documents/{document_id}/draft": {
+      "delete": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Delete Managed Document Draft",
+        "operationId": "delete_manager_managed_document_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/documents/{document_id}/issue": {
       "post": {
         "tags": [
