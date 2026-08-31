@@ -7,5 +7,7 @@ export type NativeDocumentTemplateCreatePayload = {
     name: string;
     doc_type: string;
     description?: (string | null);
+    contract_scenario?: (string | null);
+    business_role?: (string | null);
 };
 

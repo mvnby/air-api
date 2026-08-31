@@ -38,13 +38,14 @@ export const isSupplyInstallationDocumentType = (documentType: string) => (
 
 export const createDefaultConsumerDocumentTerms = (
   goodsWarrantyMonths: number | null = 36,
+  workWarrantyMonths: number | null = null,
 ): ConsumerDocumentTerms => ({
   equipment_brand: null,
   equipment_model: null,
   equipment_serial: null,
   goods_warranty_months: goodsWarrantyMonths,
   goods_warranty_terms: null,
-  work_warranty_months: null,
+  work_warranty_months: workWarrantyMonths,
   work_warranty_terms: null,
   route_length_meters: null,
   route_liquid_pipe_diameter_mm: null,

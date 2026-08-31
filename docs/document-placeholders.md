@@ -1,5 +1,46 @@
 # Document Placeholders
 
+## Native DOCX templates
+
+The Manager document system is the primary path for new templates. A DOCX can
+contain scalar placeholders such as `{{ document.official_full_number }}`, safe
+conditional blocks such as `{{#if customer.organization_statutory_body}}`, and
+repeatable table anchors such as `{{ lines }}`. The authoritative, current
+catalog is available in **Settings → Documents → DOCX templates** and through
+`GET /api/manager/document-system/placeholder-catalog`; do not maintain a
+second hand-written field list in this file.
+
+Templates are owned by one tenant and one seller legal entity. Uploading a
+changed Word file creates an immutable draft version. Activating it retires the
+previous active version without modifying documents that were already issued.
+
+Contract template cards can be bound to one of the seven contract scenarios.
+Invoice cards can be bound to either a payment request or an invoice-offer.
+The order workspace then offers the matching template automatically, while an
+unbound template remains a universal fallback.
+
+Warranty months are frozen in the draft snapshot. Seller defaults prefill the
+form; equipment defaults to 36 months when no value is configured. A value of
+`0` explicitly means “do not include a contractual warranty block” (it does
+not alter any mandatory statutory rights).
+
+The native snapshot stores seller and customer party types independently.
+Use the party conditions instead of writing one fixed preamble:
+
+- `seller.individual_entrepreneur_self` / `customer.individual_entrepreneur_self`
+- `seller.organization_statutory_body` / `customer.organization_statutory_body`
+- `seller.signs_by_power_of_attorney` / `customer.signs_by_power_of_attorney`
+
+For printable TN-2/TTN-1 templates, transport values are available as
+`transport.car_model`, `transport.car_number`, `transport.driver_name`, and
+`transport.carrier`. This does not submit an electronic waybill to EDI.
+
+## Legacy Google templates
+
+The sections below document the compatibility placeholders used by the legacy
+Google Docs/Sheets generator. Legacy mode remains optional and separate from
+the native versioned DOCX workflow.
+
 ## Object Address
 
 Use `{{object_address}}` in document templates when the act or another document needs the work site address.

@@ -41,9 +41,9 @@ class BusinessDocumentTermsPayload(BaseModel):
     payment_schedule: list[PaymentScheduleItemPayload] = Field(
         default_factory=list, max_length=20
     )
-    goods_warranty_months: int | None = Field(default=None, ge=1, le=240)
+    goods_warranty_months: int | None = Field(default=None, ge=0, le=240)
     goods_warranty_terms: str | None = Field(default=None, max_length=4000)
-    work_warranty_months: int | None = Field(default=None, ge=1, le=240)
+    work_warranty_months: int | None = Field(default=None, ge=0, le=240)
     work_warranty_terms: str | None = Field(default=None, max_length=4000)
 
     @model_validator(mode="after")

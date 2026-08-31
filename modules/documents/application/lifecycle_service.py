@@ -13,8 +13,6 @@ from sqlmodel import select
 from models import (
     DocumentArtifact,
     DocumentLegalEntity,
-    DocumentTemplate,
-    DocumentTemplateVersion,
     Order,
     OrderDocument,
     OrderStatus,
@@ -59,6 +57,11 @@ from .errors import (
 )
 from .number_policies import DocumentNumberPolicyService
 from .replacement_guard import lock_replacement_target
+from .template_selection import (
+    load_document_template_version,
+    resolve_template_use_case,
+    select_active_native_template,
+)
 
 
 DOCX_CONTENT_TYPE = (
@@ -196,12 +199,15 @@ class ManagedDocumentService:
         )
         if order is None:
             raise ManagedDocumentNotFoundError("Заказ не найден")
-        template, version = await cls._active_native_template(
+        contract_scenario, business_role = resolve_template_use_case(selection)
+        template, version = await select_active_native_template(
             session,
             tenant_scope=tenant_scope,
             legal_entity_id=selection.legal_entity_id,
             document_type=selection.document_type,
             template_id=template_id,
+            contract_scenario=contract_scenario,
+            business_role=business_role,
         )
         if replaces_document_id is not None:
             await lock_replacement_target(
@@ -339,7 +345,7 @@ class ManagedDocumentService:
                 replacement_document_id=document.id,
             )
 
-        template, version = await cls._load_document_template_version(
+        template, version = await load_document_template_version(
             session,
             tenant_scope=tenant_scope,
             document=document,
@@ -583,44 +589,6 @@ class ManagedDocumentService:
         return order
 
     @staticmethod
-    async def _active_native_template(
-        session: AsyncSession,
-        *,
-        tenant_scope: TenantScope,
-        legal_entity_id: int,
-        document_type: str,
-        template_id: int | None,
-    ) -> tuple[DocumentTemplate, DocumentTemplateVersion]:
-        statement = (
-            select(DocumentTemplate, DocumentTemplateVersion)
-            .join(
-                DocumentTemplateVersion,
-                DocumentTemplateVersion.template_id == DocumentTemplate.id,
-            )
-            .where(
-                DocumentTemplate.tenant_id == tenant_scope.tenant_id,
-                DocumentTemplate.legal_entity_id == legal_entity_id,
-                DocumentTemplate.doc_type == str(document_type).strip().lower(),
-                DocumentTemplate.is_active.is_(True),
-                DocumentTemplateVersion.renderer == "docx",
-                DocumentTemplateVersion.status == "active",
-            )
-            .order_by(
-                DocumentTemplate.is_default.desc(),
-                DocumentTemplate.sort_order,
-                DocumentTemplate.id,
-            )
-        )
-        if template_id is not None:
-            statement = statement.where(DocumentTemplate.id == template_id)
-        row = (await session.execute(statement)).first()
-        if row is None:
-            raise ManagedDocumentNotFoundError(
-                "Для документа нет активной DOCX-версии шаблона"
-            )
-        return row[0], row[1]
-
-    @staticmethod
     async def _get_scoped_document(
         session: AsyncSession,
         *,
@@ -642,35 +610,6 @@ class ManagedDocumentService:
         if for_update:
             statement = statement.with_for_update()
         return (await session.execute(statement)).scalar_one_or_none()
-
-    @staticmethod
-    async def _load_document_template_version(
-        session: AsyncSession,
-        *,
-        tenant_scope: TenantScope,
-        document: OrderDocument,
-    ) -> tuple[DocumentTemplate, DocumentTemplateVersion]:
-        row = (
-            await session.execute(
-                select(DocumentTemplate, DocumentTemplateVersion)
-                .join(
-                    DocumentTemplateVersion,
-                    DocumentTemplateVersion.template_id == DocumentTemplate.id,
-                )
-                .where(
-                    DocumentTemplate.id == document.document_template_id,
-                    DocumentTemplate.tenant_id == tenant_scope.tenant_id,
-                    DocumentTemplate.legal_entity_id == document.legal_entity_id,
-                    DocumentTemplateVersion.id == document.template_version_id,
-                    DocumentTemplateVersion.renderer == "docx",
-                )
-            )
-        ).first()
-        if row is None:
-            raise ManagedDocumentNotFoundError(
-                "Зафиксированная версия шаблона не найдена"
-            )
-        return row[0], row[1]
 
     @staticmethod
     def _basis_numbering_key(document: OrderDocument) -> str | None:

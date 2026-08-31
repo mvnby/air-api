@@ -136,9 +136,11 @@ def _warranty_months(
             months = int(candidate)
         except (TypeError, ValueError):
             continue
-        if 0 <= months <= 240:
+        if months == 0:
+            return None
+        if 1 <= months <= 240:
             return months
-    return fallback
+    return None if fallback == 0 else fallback
 
 
 def _performed_status(value: bool) -> str:

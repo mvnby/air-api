@@ -90,6 +90,28 @@ def test_supply_warranty_prefers_explicit_then_issuer_then_36_months():
     assert fallback.values["warranty.goods.months"] == "36"
 
 
+def test_zero_warranty_explicitly_suppresses_issuer_default():
+    context = build_consumer_document_context(
+        document_type="b2c_supply_installation_act",
+        terms=ConsumerDocumentTerms(
+            goods_warranty_months=0,
+            work_warranty_months=0,
+        ),
+        seller_requisites={
+            "offer_url": "https://mvn.by/offer",
+            "offer_version": "1.0",
+            "offer_published_on": "04.06.2026",
+            "default_goods_warranty_months": "24",
+            "default_work_warranty_months": "12",
+        },
+    )
+
+    assert context.conditions["warranty.goods.present"] is False
+    assert context.conditions["warranty.work.present"] is False
+    assert context.values["warranty.goods.months"] == ""
+    assert context.values["warranty.work.months"] == ""
+
+
 def test_non_supply_b2c_documents_do_not_claim_equipment_warranty():
     context = build_consumer_document_context(
         document_type="b2c_maintenance_repair_act",

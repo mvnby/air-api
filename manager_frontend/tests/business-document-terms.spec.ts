@@ -65,14 +65,13 @@ describe('business document terms', () => {
       .toBe('График оплаты должен составлять ровно 100%');
   });
 
-  it('uses null for no warranty and rejects a zero-month legal warranty', () => {
+  it('uses zero as an explicit no-contractual-warranty choice', () => {
     const terms = {
       ...createDefaultBusinessDocumentTerms(),
       contract_scenario: 'supply' as const,
       goods_warranty_months: 0,
     };
 
-    expect(businessTermsValidationError('contract', terms))
-      .toBe('Срок гарантии на оборудование должен быть от 1 до 240 месяцев');
+    expect(businessTermsValidationError('contract', terms)).toBe('');
   });
 });

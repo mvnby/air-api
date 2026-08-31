@@ -153,14 +153,15 @@ def test_business_context_rejects_framework_without_valid_until_and_warranty_tex
             order_additional_conditions=None,
             total_amount=Decimal("1"),
         )
-    with pytest.raises(BusinessDocumentContextError, match="от 1 до 240"):
-        build_business_document_context(
-            document_type="contract",
-            terms=_terms(goods_warranty_months=0),
-            act_terms=None,
-            order_additional_conditions=None,
-            total_amount=Decimal("1"),
-        )
+    disabled = build_business_document_context(
+        document_type="contract",
+        terms=_terms(goods_warranty_months=0),
+        act_terms=None,
+        order_additional_conditions=None,
+        total_amount=Decimal("1"),
+    )
+    assert disabled.conditions["warranty.goods.present"] is False
+    assert disabled.values["warranty.goods.months"] == ""
 
 
 def test_act_terms_are_only_available_for_b2b_act():

@@ -5,6 +5,7 @@
 import type { ActTermsPayload } from './ActTermsPayload';
 import type { BusinessDocumentTermsPayload } from './BusinessDocumentTermsPayload';
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
+import type { TransportTermsPayload } from './TransportTermsPayload';
 export type ManagedDocumentDraftPayload = {
     legal_entity_id: number;
     document_type: string;
@@ -25,5 +26,6 @@ export type ManagedDocumentDraftPayload = {
     consumer_terms?: (ConsumerDocumentTermsPayload | null);
     business_terms?: (BusinessDocumentTermsPayload | null);
     act_terms?: (ActTermsPayload | null);
+    transport_terms?: (TransportTermsPayload | null);
 };
 

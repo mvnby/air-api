@@ -117,14 +117,14 @@ export const businessTermsValidationError = (
   if (terms.goods_warranty_terms && terms.goods_warranty_months === null) {
     return 'Для гарантии на оборудование укажите срок';
   }
-  if (terms.goods_warranty_months !== null && (terms.goods_warranty_months < 1 || terms.goods_warranty_months > 240)) {
-    return 'Срок гарантии на оборудование должен быть от 1 до 240 месяцев';
+  if (terms.goods_warranty_months !== null && (terms.goods_warranty_months < 0 || terms.goods_warranty_months > 240)) {
+    return 'Срок гарантии на оборудование должен быть от 0 до 240 месяцев';
   }
   if (terms.work_warranty_terms && terms.work_warranty_months === null) {
     return 'Для гарантии на работы укажите срок';
   }
-  if (terms.work_warranty_months !== null && (terms.work_warranty_months < 1 || terms.work_warranty_months > 240)) {
-    return 'Срок гарантии на работы должен быть от 1 до 240 месяцев';
+  if (terms.work_warranty_months !== null && (terms.work_warranty_months < 0 || terms.work_warranty_months > 240)) {
+    return 'Срок гарантии на работы должен быть от 0 до 240 месяцев';
   }
   return '';
 };

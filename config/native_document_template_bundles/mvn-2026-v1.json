@@ -1,0 +1,154 @@
+{
+  "bundle_id": "mvn-2026-v1",
+  "description": "B2B and B2C native DOCX templates adapted for the CRM placeholder contract",
+  "templates": [
+    {
+      "key": "b2b-act",
+      "name": "Акт сдачи-приёмки B2B",
+      "aliases": ["Акт выполненых работ"],
+      "doc_type": "act",
+      "source_filename": "B2B — Акт сдачи-приёмки — CRM v2.docx",
+      "sha256": "15e475a8eab0e207373a96491c20b73178c00f558c7cf1b327ac377f38a67fb4",
+      "description": "Акт сдачи-приёмки для организаций и ИП",
+      "sort_order": 10
+    },
+    {
+      "key": "b2b-contract-repair",
+      "name": "Договор: диагностика и ремонт",
+      "aliases": [],
+      "doc_type": "contract",
+      "contract_scenario": "repair",
+      "source_filename": "B2B — Договор диагностики и ремонта — CRM v2.docx",
+      "sha256": "16c82a2afa485818b19a89b3b9b42113352ee0951723182fb06f2e31082ea066",
+      "description": "B2B: диагностика, ремонт и необходимые запчасти",
+      "sort_order": 60
+    },
+    {
+      "key": "b2b-contract-installation",
+      "name": "Договор: монтажные работы",
+      "aliases": ["Монтажные работы B2B"],
+      "doc_type": "contract",
+      "contract_scenario": "installation",
+      "source_filename": "B2B — Договор монтажных работ — CRM v2.docx",
+      "sha256": "8b479bc76ed738a67a0088b22e0ec2e00aac9e87bc4e94c08f9b641b6ce42c8e",
+      "description": "B2B: монтаж, включая оборудование заказчика",
+      "sort_order": 30
+    },
+    {
+      "key": "b2b-contract-supply-installation",
+      "name": "Договор: поставка с монтажом",
+      "aliases": ["Продажа+Монтаж"],
+      "doc_type": "contract",
+      "contract_scenario": "supply_installation",
+      "source_filename": "B2B — Договор поставки и монтажа — CRM v2.docx",
+      "sha256": "543ec802359b1b8160d72f993d49f29d4ef65649eaef2d4c74025add246d3720",
+      "description": "B2B: поставка оборудования и монтаж под ключ",
+      "sort_order": 10
+    },
+    {
+      "key": "b2b-contract-supply",
+      "name": "Договор: поставка оборудования",
+      "aliases": [],
+      "doc_type": "contract",
+      "contract_scenario": "supply",
+      "source_filename": "B2B — Договор поставки оборудования — CRM v3.docx",
+      "sha256": "63b6e818169b39df442263d5fc723ece67626e0e3771d82fbaa0f1d616984855",
+      "description": "B2B: поставка оборудования без монтажа",
+      "sort_order": 20
+    },
+    {
+      "key": "b2b-contract-maintenance",
+      "name": "Договор: техническое обслуживание",
+      "aliases": [],
+      "doc_type": "contract",
+      "contract_scenario": "maintenance",
+      "source_filename": "B2B — Договор технического обслуживания — CRM v2.docx",
+      "sha256": "6a8017cc69ae45822eb17f076f07cf39cca1d32a5d23febca563662b70faf383",
+      "description": "B2B: регламентное техническое обслуживание",
+      "sort_order": 50
+    },
+    {
+      "key": "b2b-contract-services",
+      "name": "Договор: оказание услуг",
+      "aliases": [],
+      "doc_type": "contract",
+      "contract_scenario": "services",
+      "source_filename": "B2B — Договор услуг — CRM v2.docx",
+      "sha256": "4ca881869b3362a8dbfcc5de73457e2622294081ec631687c7c4a0638e5ebb25",
+      "description": "B2B: отдельные согласованные услуги",
+      "sort_order": 40
+    },
+    {
+      "key": "b2b-offer",
+      "name": "Коммерческое предложение B2B",
+      "aliases": [],
+      "doc_type": "offer",
+      "source_filename": "B2B — Коммерческое предложение — CRM v3.docx",
+      "sha256": "1d989add0b71a8249c2944cf733b7e6f306ab2738bcfba42e19456ad34b09f4b",
+      "description": "Коммерческое предложение с вариантами и условиями",
+      "sort_order": 10
+    },
+    {
+      "key": "b2b-contract-framework",
+      "name": "Рамочный договор",
+      "aliases": [],
+      "doc_type": "contract",
+      "contract_scenario": "framework",
+      "source_filename": "B2B — Рамочный договор — CRM v2.docx",
+      "sha256": "6c79425e61b0178c80745442a4ad6c73f31d112413b00cd62b488582570be0d4",
+      "description": "B2B: повторяющиеся поставки и работы",
+      "sort_order": 70
+    },
+    {
+      "key": "b2b-invoice-offer",
+      "name": "Счёт на оплату / счёт-оферта B2B",
+      "aliases": ["Счёт-оферта B2B"],
+      "doc_type": "invoice",
+      "business_role": null,
+      "source_filename": "B2B — Счёт-оферта — CRM v2.docx",
+      "sha256": "6fc551c9c6f09d78bef5364db42081d6152d326420ca3c0d654dbdbf9605e609",
+      "description": "Универсальный счёт: документ для оплаты либо оферта с акцептом оплатой",
+      "sort_order": 10
+    },
+    {
+      "key": "b2c-route-laying",
+      "name": "Заказ-акт: закладка трассы",
+      "aliases": [],
+      "doc_type": "b2c_route_laying_act",
+      "source_filename": "Заказ-акт — закладка трассы — CRM v2.docx",
+      "sha256": "d2b2e9b6488fdc937ef13bc5731578d6acab9dfadb2169ad883e6cfce0bcfc64",
+      "description": "B2C: закладка и фиксация параметров трассы",
+      "sort_order": 40
+    },
+    {
+      "key": "b2c-customer-equipment-installation",
+      "name": "Заказ-акт: монтаж оборудования заказчика",
+      "aliases": [],
+      "doc_type": "b2c_customer_equipment_installation_act",
+      "source_filename": "Заказ-акт — монтаж оборудования заказчика — CRM v2.docx",
+      "sha256": "7bfec33abcd3058da20f55c302a21c96cbf37f8c92e766c6cec938ced82b60f8",
+      "description": "B2C: монтаж оборудования, приобретённого заказчиком",
+      "sort_order": 20
+    },
+    {
+      "key": "b2c-supply-installation",
+      "name": "Заказ-акт: поставка и монтаж",
+      "aliases": [],
+      "doc_type": "b2c_supply_installation_act",
+      "source_filename": "Заказ-акт — поставка и монтаж оборудования — CRM v2.docx",
+      "sha256": "1dad791727dc844de6acc2566be315bd9f25e1c8b794af53aaec27f381e815d3",
+      "description": "B2C: поставка оборудования и монтаж под ключ",
+      "sort_order": 10
+    },
+    {
+      "key": "b2c-maintenance-repair",
+      "name": "Заказ-акт: обслуживание и ремонт",
+      "aliases": [],
+      "doc_type": "b2c_maintenance_repair_act",
+      "source_filename": "Заказ-акт — техническое обслуживание и ремонт — CRM v2.docx",
+      "sha256": "94f076f8291832de645124ed9fcb5bcc11317772a5b9bcfed6f87f764b5170f5",
+      "description": "B2C: техническое обслуживание и ремонт",
+      "sort_order": 30
+    }
+  ]
+}

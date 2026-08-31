@@ -467,6 +467,7 @@ export type { Meta } from './models/Meta';
 export type { NativeDocumentTemplateCreatePayload } from './models/NativeDocumentTemplateCreatePayload';
 export type { NativeDocumentTemplateItem } from './models/NativeDocumentTemplateItem';
 export type { NativeDocumentTemplateListResponse } from './models/NativeDocumentTemplateListResponse';
+export type { NativeDocumentTemplateUpdatePayload } from './models/NativeDocumentTemplateUpdatePayload';
 export type { NativePlaceholderCatalogResponse } from './models/NativePlaceholderCatalogResponse';
 export type { NativePlaceholderConditionItem } from './models/NativePlaceholderConditionItem';
 export type { NativePlaceholderDescriptorItem } from './models/NativePlaceholderDescriptorItem';
@@ -627,6 +628,7 @@ export type { SupplyRequestUpdatePayload } from './models/SupplyRequestUpdatePay
 export type { TagGroupResponse } from './models/TagGroupResponse';
 export type { TagResponse } from './models/TagResponse';
 export type { TelegramLoginPayload } from './models/TelegramLoginPayload';
+export type { TransportTermsPayload } from './models/TransportTermsPayload';
 export type { ValidationError } from './models/ValidationError';
 export type { WebRebuildCompletePayload } from './models/WebRebuildCompletePayload';
 export type { WebRebuildStatusResponse } from './models/WebRebuildStatusResponse';

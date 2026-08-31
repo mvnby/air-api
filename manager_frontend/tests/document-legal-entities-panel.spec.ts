@@ -1,8 +1,9 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DocumentLegalEntityItem } from '../src/client';
+import { ManagerDocumentSystemService, type DocumentLegalEntityItem } from '../src/client';
 import { api } from '../src/api';
 import DocumentLegalEntitiesPanel from '../src/features/documents/settings/DocumentLegalEntitiesPanel.vue';
+import NativeTemplateLibrary from '../src/features/documents/settings/NativeTemplateLibrary.vue';
 
 
 const NOW = '2026-08-27T00:00:00Z';
@@ -142,5 +143,53 @@ describe('DocumentLegalEntitiesPanel', () => {
       }),
     }));
     expect(wrapper.emitted('update')?.[0]?.[1].requisites).not.toHaveProperty('phone');
+  });
+});
+
+describe('NativeTemplateLibrary', () => {
+  it('corrects an existing template use case without creating a duplicate', async () => {
+    vi.spyOn(ManagerDocumentSystemService, 'listManagerNativeDocumentTemplates').mockResolvedValue({
+      items: [{
+        id: 10,
+        tenant_id: 1,
+        legal_entity_id: 5,
+        name: 'Договор ремонта',
+        doc_type: 'contract',
+        description: 'Старая карточка',
+        contract_scenario: 'repair',
+        business_role: null,
+        is_default: false,
+        is_active: true,
+        sort_order: 0,
+        created_at: NOW,
+      }],
+    });
+    vi.spyOn(ManagerDocumentSystemService, 'listManagerNativeTemplateVersions').mockResolvedValue({ items: [] });
+    vi.spyOn(ManagerDocumentSystemService, 'getManagerNativePlaceholderCatalog').mockResolvedValue({
+      document_type: 'contract',
+      fields: [],
+      conditions: [],
+      tables: [],
+    });
+    vi.spyOn(ManagerDocumentSystemService, 'createManagerNativeDocumentTemplate').mockResolvedValue({} as never);
+    vi.spyOn(ManagerDocumentSystemService, 'updateManagerNativeDocumentTemplate').mockResolvedValue({} as never);
+    const wrapper = mount(NativeTemplateLibrary, { props: { legalEntityId: 5 } });
+    wrappers.push(wrapper);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="native-template-metadata-name"]').setValue('Договор услуг');
+    await wrapper.get('[data-testid="native-template-metadata-description"]').setValue('Исправленная карточка');
+    await wrapper.get('[data-testid="native-template-metadata-contract-scenario"]').setValue('services');
+    await wrapper.get('[data-testid="native-template-metadata"]').trigger('submit');
+    await flushPromises();
+
+    expect(ManagerDocumentSystemService.updateManagerNativeDocumentTemplate).toHaveBeenCalledWith(10, {
+      legal_entity_id: 5,
+      name: 'Договор услуг',
+      description: 'Исправленная карточка',
+      contract_scenario: 'services',
+      business_role: null,
+    });
+    expect(ManagerDocumentSystemService.createManagerNativeDocumentTemplate).not.toHaveBeenCalled();
   });
 });

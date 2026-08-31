@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from typing import Any, Iterable, Mapping, Sequence
 
-from num2words import num2words
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -32,10 +31,13 @@ from modules.documents.domain import (
     BusinessDocumentTerms,
     ConsumerDocumentTerms,
     SUPPORTED_NATIVE_DOCUMENT_TYPES,
+    TransportTerms,
+    WAYBILL_DOCUMENT_TYPES,
 )
 from .business_context import (
     BusinessDocumentContextError,
     build_business_document_context,
+    with_default_goods_warranty,
 )
 
 from .consumer_context import (
@@ -43,6 +45,8 @@ from .consumer_context import (
     build_consumer_document_context,
 )
 from .logistics_rows import build_logistics_rows
+from .transport_context import build_transport_document_context
+from .value_formatters import amount_in_words, money, number_in_words, quantity
 
 
 class DocumentContextError(ValueError):
@@ -69,6 +73,7 @@ class DocumentContextSelection:
     consumer_terms: ConsumerDocumentTerms | None = None
     business_terms: BusinessDocumentTerms | None = None
     act_terms: ActTerms | None = None
+    transport_terms: TransportTerms | None = None
 
 
 class DocumentContextBuilder:
@@ -105,6 +110,13 @@ class DocumentContextBuilder:
         ):
             raise DocumentContextError(
                 "Параметры B2B нельзя передать для B2C заказ-акта"
+            )
+        if (
+            selection.transport_terms is not None
+            and document_type not in WAYBILL_DOCUMENT_TYPES
+        ):
+            raise DocumentContextError(
+                "Транспортные реквизиты доступны только для ТН-2 и ТТН-1"
             )
         business_role = cls._business_role(document_type, selection.business_role)
         order = await cls._load_order(
@@ -175,7 +187,7 @@ class DocumentContextBuilder:
         )
         issue_date = selection.issue_date
         seller_requisites = {
-            str(key or "").strip().lower(): str(value or "").strip()
+            str(key or "").strip().lower(): _requisite_text(value)
             for key, value in (legal_entity.requisites or {}).items()
             if str(key or "").strip()
         }
@@ -187,16 +199,25 @@ class DocumentContextBuilder:
             )
         except ConsumerDocumentContextError as exc:
             raise DocumentContextError(str(exc)) from exc
+        resolved_business_terms = with_default_goods_warranty(
+            selection.business_terms,
+            configured_months=seller_requisites.get(
+                "default_goods_warranty_months"
+            ),
+        )
         try:
             business_context = build_business_document_context(
                 document_type=document_type,
-                terms=selection.business_terms,
+                terms=resolved_business_terms,
                 act_terms=selection.act_terms,
                 order_additional_conditions=order.additional_conditions,
                 total_amount=total,
             )
         except BusinessDocumentContextError as exc:
             raise DocumentContextError(str(exc)) from exc
+        transport_context = build_transport_document_context(
+            selection.transport_terms
+        )
         seller_entity_type = legal_entity.entity_type
         seller_signing_mode = normalize_signing_mode(
             seller_entity_type,
@@ -250,10 +271,7 @@ class DocumentContextBuilder:
             "document.type": document_type,
             "document.business_role": business_role or "",
             "document.act_sequence_number": "",
-            "transport.car_model": "—",
-            "transport.car_number": "—",
-            "transport.driver_name": "—",
-            "transport.carrier": "—",
+            **transport_context.values,
             "basis.type": basis_type,
             "basis.number": basis_number,
             "basis.date": basis_date,
@@ -298,14 +316,14 @@ class DocumentContextBuilder:
             "proposal.name": str(getattr(proposal, "name", "") or ""),
             **consumer_context.values,
             **business_context.values,
-            "totals.amount": cls._money(total),
-            "totals.amount_in_words": cls._amount_in_words(total),
+            "totals.amount": money(total),
+            "totals.amount_in_words": amount_in_words(total),
             "totals.currency": "BYN",
             "totals.vat_label": vat_label,
-            "totals.quantity": cls._quantity(total_quantity),
-            "totals.quantity_in_words": num2words(total_quantity, lang="ru"),
-            "totals.weight": cls._quantity(total_weight),
-            "totals.weight_in_words": num2words(total_weight, lang="ru"),
+            "totals.quantity": quantity(total_quantity),
+            "totals.quantity_in_words": number_in_words(total_quantity),
+            "totals.weight": quantity(total_weight),
+            "totals.weight_in_words": number_in_words(total_weight),
         }
         for normalized_key, value in seller_requisites.items():
             if normalized_key and normalized_key.replace("_", "").isalnum():
@@ -637,8 +655,8 @@ class DocumentContextBuilder:
             "line.kind": kind,
             "line.unit": "шт.",
             "line.quantity": str(quantity),
-            "line.unit_price": cls._money(unit_price),
-            "line.amount": cls._money(amount),
+            "line.unit_price": money(unit_price),
+            "line.amount": money(amount),
             "line.country": "",
             "line.vat_label": "",
             "line.seats": "",
@@ -660,33 +678,8 @@ class DocumentContextBuilder:
             )
         return normalized
 
-    @staticmethod
-    def _money(value: Decimal) -> str:
-        return f"{value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):.2f}"
 
-    @staticmethod
-    def _quantity(value: Decimal) -> str:
-        return format(value.normalize(), "f")
-
-    @classmethod
-    def _amount_in_words(cls, amount: Decimal) -> str:
-        rounded = amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        rubles = int(rounded)
-        kopecks = int((rounded - rubles) * 100)
-        ruble_word = cls._plural(
-            rubles, "белорусский рубль", "белорусских рубля", "белорусских рублей"
-        )
-        kopeck_word = cls._plural(kopecks, "копейка", "копейки", "копеек")
-        return (
-            f"{num2words(rubles, lang='ru')} {ruble_word} {kopecks:02d} {kopeck_word}"
-        ).capitalize()
-
-    @staticmethod
-    def _plural(value: int, one: str, few: str, many: str) -> str:
-        if value % 100 in {11, 12, 13, 14}:
-            return many
-        if value % 10 == 1:
-            return one
-        if value % 10 in {2, 3, 4}:
-            return few
-        return many
+def _requisite_text(value: object | None) -> str:
+    if value is None or value is False:
+        return ""
+    return str(value).strip()

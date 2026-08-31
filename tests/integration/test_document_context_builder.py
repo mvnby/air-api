@@ -28,6 +28,7 @@ from modules.documents.domain import (
     BusinessDocumentTerms,
     ConsumerDocumentTerms,
     PaymentScheduleItem,
+    TransportTerms,
 )
 
 
@@ -343,6 +344,64 @@ async def test_contract_snapshot_keeps_b2b_terms_and_selected_proposal_scope(db)
 
 
 @pytest.mark.asyncio
+async def test_supply_contract_defaults_goods_warranty_from_issuer_then_36(db):
+    order, issuer, _selected, _alternative = await _seed_order(db)
+    issuer.requisites = {
+        **issuer.requisites,
+        "default_goods_warranty_months": 18,
+    }
+    db.add(issuer)
+    await db.commit()
+
+    selection = dict(
+        order_id=order.id,
+        legal_entity_id=issuer.id,
+        document_type="contract",
+        issue_date=date(2026, 8, 31),
+        business_terms=BusinessDocumentTerms(
+            contract_scenario="supply",
+            payment_schedule=(
+                PaymentScheduleItem(Decimal("100"), "before_supply"),
+            ),
+        ),
+    )
+    configured = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(**selection),
+    )
+    assert configured["values"]["warranty.goods.months"] == "18"
+
+    issuer.requisites = {
+        **issuer.requisites,
+        "default_goods_warranty_months": 0,
+    }
+    db.add(issuer)
+    await db.commit()
+    disabled = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(**selection),
+    )
+    assert disabled["values"]["warranty.goods.months"] == ""
+    assert disabled["conditions"]["warranty.goods.present"] is False
+
+    issuer.requisites = {
+        key: value
+        for key, value in issuer.requisites.items()
+        if key != "default_goods_warranty_months"
+    }
+    db.add(issuer)
+    await db.commit()
+    fallback = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(**selection),
+    )
+    assert fallback["values"]["warranty.goods.months"] == "36"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "document_type",
     (
@@ -433,6 +492,20 @@ async def test_b2c_goods_warranty_defaults_to_legal_entity_then_36_months(db):
         selection=DocumentContextSelection(**selection),
     )
     assert configured["values"]["warranty.goods.months"] == "18"
+
+    issuer.requisites = {
+        **issuer.requisites,
+        "default_goods_warranty_months": 0,
+    }
+    db.add(issuer)
+    await db.commit()
+    disabled = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(**selection),
+    )
+    assert disabled["values"]["warranty.goods.months"] == ""
+    assert disabled["conditions"]["warranty.goods.present"] is False
 
     issuer.requisites = {
         key: value
@@ -594,6 +667,12 @@ async def test_paper_waybill_uses_contract_and_only_expanded_product_rows(db):
             legal_entity_id=issuer.id,
             document_type="tn2",
             issue_date=date(2026, 8, 26),
+            transport_terms=TransportTerms(
+                car_model="ГАЗель Next",
+                car_number="1234 АВ-2",
+                driver_name="Иванов И.И.",
+                carrier="ООО Перевозчик",
+            ),
         ),
     )
 
@@ -601,7 +680,10 @@ async def test_paper_waybill_uses_contract_and_only_expanded_product_rows(db):
     assert snapshot["values"]["basis.number"] == "Д-009"
     assert snapshot["values"]["totals.amount"] == "1000.00"
     assert snapshot["values"]["totals.quantity"] == "2"
-    assert snapshot["values"]["transport.car_number"] == "—"
+    assert snapshot["values"]["transport.car_model"] == "ГАЗель Next"
+    assert snapshot["values"]["transport.car_number"] == "1234 АВ-2"
+    assert snapshot["values"]["transport.driver_name"] == "Иванов И.И."
+    assert snapshot["values"]["transport.carrier"] == "ООО Перевозчик"
     assert snapshot["table_rows"]["lines"] == [
         {
             "line.number": "1",
