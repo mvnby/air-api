@@ -36,6 +36,7 @@ type CustomerFormDiff = Partial<Record<keyof CustomerForm, boolean>>;
 
 export type CustomerProfileValidation = {
   valid: boolean;
+  issues: string[];
   fieldErrors: Partial<Record<keyof CustomerForm, string>>;
   phoneError: string;
   emailError: string;
@@ -78,12 +79,18 @@ export const validateCustomerProfileForm = (
   if (!form.name.trim()) {
     fieldErrors.name = 'Имя клиента не может быть пустым';
   }
-  if (isBusinessCustomer(form.type) && !form.full_legal_name.trim()) {
-    fieldErrors.full_legal_name = 'Для ИП или юрлица укажите полное наименование';
-  }
+
+  const issues = [
+    fieldErrors.name && `Название — ${fieldErrors.name}`,
+    phoneError && `Телефон — ${phoneError}`,
+    emailError && `Email — ${emailError}`,
+    innError && `УНП — ${innError}`,
+    ibanError && `IBAN — ${ibanError}`,
+  ].filter((issue): issue is string => Boolean(issue));
 
   return {
-    valid: !phoneError && !emailError && !innError && !ibanError && !Object.keys(fieldErrors).length,
+    valid: issues.length === 0,
+    issues,
     fieldErrors,
     phoneError,
     emailError,

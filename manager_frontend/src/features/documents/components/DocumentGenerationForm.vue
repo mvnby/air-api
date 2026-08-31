@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { inject } from 'vue';
+import { computed, inject } from 'vue';
+import type { OrderCustomerBrief } from '../../../client';
 import AdditionalConditionsLibrary from '../../../components/orders/AdditionalConditionsLibrary.vue';
 import AddressSuggestInput from '../../../components/ui/AddressSuggestInput.vue';
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_ROLE_OPTIONS, DOCUMENT_TYPES } from '../model/document-constants';
 import { formatMoney, getRoleLabel } from '../model/document-formatters';
 import WaybillComposition from './WaybillComposition.vue';
 import { DocumentGenerationContextKey, type DocumentGenerationContext } from '../model/document-generation-context';
+import { getCustomerDocumentWarnings } from '../model/customer-document-readiness';
+
+const props = defineProps<{
+  customer?: OrderCustomerBrief | null;
+}>();
 
 const context = inject<DocumentGenerationContext>(DocumentGenerationContextKey);
 if (!context) throw new Error('DocumentGenerationForm requires a generation context');
@@ -24,6 +30,18 @@ const {
     registerExternalContract, selectDocumentType, setActServiceLineQuantity, syncActServiceSelection },
   customerBranches, documentAccess, isCreatePanelOpen,
 } = context;
+
+const customerDocumentWarnings = computed(() => (
+  getCustomerDocumentWarnings(props.customer, selectedDocumentType.value)
+));
+
+const openCustomerProfile = () => {
+  if (!props.customer?.id) return;
+  const returnTo = `${window.location.pathname}${window.location.search}`;
+  const target = `/manager/customers/profile?customerId=${props.customer.id}&returnTo=${encodeURIComponent(returnTo)}`;
+  window.history.pushState({}, '', target);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
 </script>
 
 <template>
@@ -63,6 +81,21 @@ const {
             <p v-if="isDocumentTypeLocked(selectedDocumentType)" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
               {{ lockedDocumentTitle(selectedDocumentType) }}.
             </p>
+          </div>
+
+          <div
+            v-if="customerDocumentWarnings.length"
+            class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/20 dark:text-amber-200"
+          >
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                Можно продолжить, но в документе могут остаться пустые реквизиты:
+                <strong>{{ customerDocumentWarnings.join(', ') }}</strong>.
+              </p>
+              <button type="button" class="shrink-0 font-semibold underline" @click="openCustomerProfile">
+                Дополнить карточку
+              </button>
+            </div>
           </div>
 
           <div class="grid gap-3 md:grid-cols-2">

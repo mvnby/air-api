@@ -110,7 +110,7 @@ async def test_manager_customer_patch_updates_requisites(async_client, db):
             "legal_address": "Минск, ул. Новая, 10",
             "bank_name": "Новый банк",
             "bic": "AKBBBY2X",
-            "iban": "BY12AKBB30120000000000000000",
+            "iban": "BY12АKBB30120000000000000000",
             "signer_position": "Директор",
             "signer_name": "Петр Петров",
             "acting_basis": "Устава",

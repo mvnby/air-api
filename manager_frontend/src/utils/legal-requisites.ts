@@ -15,7 +15,16 @@ type BankResponse = {
 
 export const normalizeUnp = (value: string): string => value.replace(/\D/g, '').slice(0, 9);
 
-export const normalizeIban = (value: string): string => value.replace(/\s/g, '').toUpperCase();
+const IBAN_CONFUSABLES: Record<string, string> = {
+  А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P',
+  С: 'C', Т: 'T', У: 'Y', Х: 'X', І: 'I',
+};
+
+export const normalizeIban = (value: string): string => (value || '')
+  .normalize('NFKC')
+  .toUpperCase()
+  .replace(/[АВЕКМНОРСТУХІ]/g, (letter) => IBAN_CONFUSABLES[letter] || letter)
+  .replace(/[\s\u200B-\u200D\uFEFF]/g, '');
 
 export const getCompanyFromEgr = (payload: unknown): { fullLegalName?: string; legalAddress?: string } => {
   const data = (payload || {}) as EgrResponse;
