@@ -178,6 +178,16 @@ reconcile_standby_proxy() {
   fi
 }
 
+refresh_standby_proxy_upstream() {
+  if [[ "${PROXY_MODE}" != "container_nginx" ]]; then
+    return 0
+  fi
+
+  log standby "refreshing container proxy after API recreation"
+  "${COMPOSE[@]}" up -d --no-deps --force-recreate "${PROXY_SERVICE}"
+  "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t
+}
+
 rollback_standby() {
   local exit_code=$?
   trap - ERR
@@ -189,6 +199,7 @@ rollback_standby() {
       log rollback "restoring previous release on ${active_service}"
       write_backend_image "${previous_image}"
       "${COMPOSE[@]}" up -d --no-deps --force-recreate "${active_service}"
+      refresh_standby_proxy_upstream
     fi
     if [[ "${worker_supported}" == "true" ]]; then
       if require_expected_role; then
@@ -341,6 +352,7 @@ write_backend_image "${BACKEND_IMAGE}"
 env_updated=true
 "${COMPOSE[@]}" stop bot >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up -d --no-deps --force-recreate "${active_service}"
+refresh_standby_proxy_upstream
 require_expected_role
 wait_fenced_standby
 communications_worker_start_controlled "${EXPECTED_ROLE}" "${worker_gate_profile}"
