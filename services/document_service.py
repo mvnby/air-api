@@ -233,12 +233,26 @@ class DocumentService:
                 scope_product_line_ids=scope_product_line_ids,
             )
 
-        # 1. Проверяем, есть ли уже такой документ
-        # Если есть дубликаты, берем самый новый
+        # Reuse only a complete legacy Google document generated from the same
+        # explicitly selected template. Native CRM documents have their own
+        # lifecycle and may be voided or have no Google URL at all.
         query = select(OrderDocument).where(
             OrderDocument.order_id == order_id,
-            OrderDocument.doc_type == doc_type
-        ).order_by(OrderDocument.created_at.desc())
+            OrderDocument.doc_type == doc_type,
+            OrderDocument.status.is_(None),
+            OrderDocument.internal_reference.is_(None),
+            OrderDocument.template_version_id.is_(None),
+            OrderDocument.google_file_id.is_not(None),
+            OrderDocument.google_edit_url.is_not(None),
+        )
+        if document_template_id is not None:
+            query = query.where(OrderDocument.document_template_id == document_template_id)
+        elif template_id is not None:
+            query = query.where(
+                OrderDocument.document_template_id.is_(None),
+                OrderDocument.template_id == template_id,
+            )
+        query = query.order_by(OrderDocument.created_at.desc())
         result = await session.execute(query)
         existing_doc = result.scalars().first()
 
