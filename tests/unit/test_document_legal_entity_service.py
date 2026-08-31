@@ -59,6 +59,14 @@ async def test_legal_entities_are_tenant_scoped_and_first_one_becomes_default(
 
             assert first.is_default is True
             assert first.requisites["signing_mode"] == "statutory_body"
+            updated = await DocumentLegalEntityService.update(
+                session,
+                tenant_scope=first_scope,
+                legal_entity_id=int(first.id),
+                changes={"requisites": {"city": "Витебск"}},
+            )
+            assert updated.requisites["city"] == "Витебск"
+            assert updated.requisites["iban"] == "BY00TEST"
             assert [
                 row.display_name
                 for row in await DocumentLegalEntityService.list(

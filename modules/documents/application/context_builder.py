@@ -26,7 +26,16 @@ from modules.documents.domain.party import (
     normalize_signing_mode,
     party_conditions,
 )
+from modules.documents.domain import (
+    B2C_NATIVE_DOCUMENT_TYPES,
+    ConsumerDocumentTerms,
+    SUPPORTED_NATIVE_DOCUMENT_TYPES,
+)
 
+from .consumer_context import (
+    ConsumerDocumentContextError,
+    build_consumer_document_context,
+)
 from .logistics_rows import build_logistics_rows
 
 
@@ -51,13 +60,14 @@ class DocumentContextSelection:
     scope_service_line_quantities: Mapping[int, int] | None = None
     scope_product_line_ids: tuple[int, ...] = ()
     business_role: str | None = None
+    consumer_terms: ConsumerDocumentTerms | None = None
 
 
 class DocumentContextBuilder:
     """Build a JSON-safe immutable source snapshot without mutating ORM state."""
 
-    SNAPSHOT_VERSION = 2
-    NATIVE_TYPES = frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1"})
+    SNAPSHOT_VERSION = 3
+    NATIVE_TYPES = SUPPORTED_NATIVE_DOCUMENT_TYPES
     BASE_TYPES = frozenset({"offer", "invoice", "contract"})
     CLOSING_TYPES = frozenset({"act", "tn2", "ttn1"})
 
@@ -73,6 +83,13 @@ class DocumentContextBuilder:
         if document_type not in cls.NATIVE_TYPES:
             raise DocumentContextError(
                 "Тип документа пока не поддерживается нативным генератором"
+            )
+        if (
+            selection.consumer_terms is not None
+            and document_type not in B2C_NATIVE_DOCUMENT_TYPES
+        ):
+            raise DocumentContextError(
+                "Параметры документа физлицу нельзя передать для этого типа документа"
             )
         business_role = cls._business_role(document_type, selection.business_role)
         order = await cls._load_order(
@@ -147,6 +164,14 @@ class DocumentContextBuilder:
             for key, value in (legal_entity.requisites or {}).items()
             if str(key or "").strip()
         }
+        try:
+            consumer_context = build_consumer_document_context(
+                document_type=document_type,
+                terms=selection.consumer_terms,
+                seller_requisites=seller_requisites,
+            )
+        except ConsumerDocumentContextError as exc:
+            raise DocumentContextError(str(exc)) from exc
         seller_entity_type = legal_entity.entity_type
         seller_signing_mode = normalize_signing_mode(
             seller_entity_type,
@@ -239,6 +264,7 @@ class DocumentContextBuilder:
             "order.object_title": scope_title,
             "order.object_address": scope_address,
             "proposal.name": str(getattr(proposal, "name", "") or ""),
+            **consumer_context.values,
             "totals.amount": cls._money(total),
             "totals.amount_in_words": cls._amount_in_words(total),
             "totals.currency": "BYN",
@@ -286,6 +312,7 @@ class DocumentContextBuilder:
                 entity_type=seller_entity_type,
                 signing_mode=seller_signing_mode,
             ),
+            **consumer_context.conditions,
             **party_conditions(
                 "customer",
                 entity_type=customer_entity_type,

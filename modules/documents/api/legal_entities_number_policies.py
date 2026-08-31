@@ -117,7 +117,7 @@ async def patch_document_legal_entity(
 ) -> DocumentLegalEntityItem:
     changes = payload.model_dump(exclude_unset=True)
     if payload.requisites is not None:
-        changes["requisites"] = payload.requisites.model_dump(exclude_none=True)
+        changes["requisites"] = payload.requisites.model_dump(exclude_unset=True)
     try:
         row = await DocumentLegalEntityService.update(
             session,

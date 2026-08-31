@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
 export type ManagedDocumentDraftPayload = {
     legal_entity_id: number;
     document_type: string;
@@ -19,5 +20,6 @@ export type ManagedDocumentDraftPayload = {
     scope_product_line_ids?: Array<number>;
     business_role?: (string | null);
     replaces_document_id?: (number | null);
+    consumer_terms?: (ConsumerDocumentTermsPayload | null);
 };
 

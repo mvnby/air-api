@@ -122,4 +122,25 @@ describe('DocumentLegalEntitiesPanel', () => {
     expect(wrapper.get<HTMLInputElement>('[data-testid="seller-bic"]').element.value)
       .toBe('MANUALBIC');
   });
+
+  it('saves consumer offer policy without resubmitting unrelated requisites', async () => {
+    const wrapper = mountPanel(entity({
+      requisites: {
+        phone: '+375291234567',
+        offer_url: 'https://old.example/offer',
+      },
+    }));
+
+    await wrapper.get('[data-testid="consumer-offer-url"]').setValue('https://mvn.by/offer');
+    await wrapper.get('[data-testid="default-goods-warranty-months"]').setValue('48');
+    await wrapper.get('form.grid').trigger('submit');
+
+    expect(wrapper.emitted('update')?.[0]?.[1]).toEqual(expect.objectContaining({
+      requisites: expect.objectContaining({
+        offer_url: 'https://mvn.by/offer',
+        default_goods_warranty_months: 48,
+      }),
+    }));
+    expect(wrapper.emitted('update')?.[0]?.[1].requisites).not.toHaveProperty('phone');
+  });
 });

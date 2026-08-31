@@ -5,8 +5,11 @@ import { getOrderDocumentAccess } from '../../../components/orders/order-documen
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capabilities';
 import { managerSession } from '../../../services/manager-session';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
+import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
+import { isConsumerDocumentType } from '../model/consumer-document-terms';
 import {
-  NATIVE_DOCUMENT_TYPES,
+  BUSINESS_NATIVE_DOCUMENT_TYPES,
+  CONSUMER_NATIVE_DOCUMENT_TYPES,
   documentTypeName,
   managedDocumentStatus,
   managedDocumentStatusClass,
@@ -51,6 +54,7 @@ const formatDate = (value: string | null | undefined) => value
   : '—';
 const selectedBasisValue = ref('');
 const basisRequired = computed(() => ['act', 'tn2', 'ttn1'].includes(workspace.documentType.value));
+const isConsumerDocument = computed(() => isConsumerDocumentType(workspace.documentType.value));
 const basisOptions = computed<BasisOption[]>(() => {
   const result: BasisOption[] = [];
   const contract = props.order.customer_contract;
@@ -161,12 +165,17 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           <label class="native-field">
             <span>Тип</span>
             <select v-model="workspace.documentType.value" class="native-input" data-testid="native-document-type">
-              <option v-for="type in NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
+              <optgroup label="Для организаций">
+                <option v-for="type in BUSINESS_NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
+              </optgroup>
+              <optgroup label="Для физлиц">
+                <option v-for="type in CONSUMER_NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
+              </optgroup>
             </select>
           </label>
           <label class="native-field">
             <span>Юрлицо</span>
-            <select v-model="workspace.selectedLegalEntityId.value" class="native-input">
+            <select v-model="workspace.selectedLegalEntityId.value" class="native-input" data-testid="native-legal-entity">
               <option v-for="entity in workspace.legalEntities.value" :key="entity.id" :value="entity.id">{{ entity.display_name }}</option>
             </select>
           </label>
@@ -206,6 +215,12 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           </div>
           <p class="mt-1.5 text-xs text-slate-500">{{ workspace.businessRole.value === 'payment_request' ? 'После появления договора закрывающие документы будут ссылаться на договор.' : 'Оферта может сама стать основанием сделки.' }}</p>
         </div>
+        <ConsumerDocumentTermsPanel
+          v-if="isConsumerDocument"
+          :document-type="workspace.documentType.value"
+          :terms="workspace.consumerTerms.value"
+          @update-terms="workspace.consumerTerms.value = $event"
+        />
         <p v-if="workspace.draftBlockedReason.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
       </div>
 

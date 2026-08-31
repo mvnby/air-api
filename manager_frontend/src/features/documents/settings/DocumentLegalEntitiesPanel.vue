@@ -34,6 +34,11 @@ const signingMode = ref<SigningMode>('statutory_body');
 const signerPosition = ref('');
 const signerName = ref('');
 const actingBasis = ref('');
+const offerUrl = ref('');
+const offerVersion = ref('');
+const offerPublishedOn = ref('');
+const defaultGoodsWarrantyMonths = ref<number | null>(36);
+const defaultWorkWarrantyMonths = ref<number | null>(null);
 const egrLookupSucceeded = ref(false);
 const bankLookupSucceeded = ref(false);
 const {
@@ -83,6 +88,15 @@ const syncForm = () => {
   signerPosition.value = entity?.requisites.signer_position || entity?.requisites.director_title || '';
   signerName.value = entity?.requisites.signer_name || entity?.requisites.director_name || '';
   actingBasis.value = entity?.requisites.acting_basis || entity?.requisites.acts_on_basis || '';
+  offerUrl.value = entity?.requisites.offer_url || '';
+  offerVersion.value = entity?.requisites.offer_version || '';
+  offerPublishedOn.value = entity?.requisites.offer_published_on || '';
+  const rawGoodsMonths = entity?.requisites.default_goods_warranty_months;
+  const goodsMonths = rawGoodsMonths == null || rawGoodsMonths === '' ? Number.NaN : Number(rawGoodsMonths);
+  defaultGoodsWarrantyMonths.value = Number.isFinite(goodsMonths) ? goodsMonths : 36;
+  const rawWorkMonths = entity?.requisites.default_work_warranty_months;
+  const workMonths = rawWorkMonths == null || rawWorkMonths === '' ? Number.NaN : Number(rawWorkMonths);
+  defaultWorkWarrantyMonths.value = Number.isFinite(workMonths) ? workMonths : null;
   egrError.value = '';
   bankError.value = '';
   egrLookupSucceeded.value = false;
@@ -132,24 +146,38 @@ const onIbanBlur = async () => {
   bankLookupSucceeded.value = true;
 };
 
+const updateWarrantyMonths = (kind: 'goods' | 'work', event: Event) => {
+  const rawValue = (event.target as HTMLInputElement).value;
+  const parsed = rawValue === '' ? null : Number(rawValue);
+  const value = Number.isFinite(parsed) ? parsed : null;
+  if (kind === 'goods') defaultGoodsWarrantyMonths.value = value ?? 36;
+  else defaultWorkWarrantyMonths.value = value;
+};
+
 const save = () => {
   if (!props.selectedId) return;
+  const requisites = {
+    offer_url: offerUrl.value.trim() || null,
+    offer_version: offerVersion.value.trim() || null,
+    offer_published_on: offerPublishedOn.value.trim() || null,
+    default_goods_warranty_months: defaultGoodsWarrantyMonths.value ?? 36,
+    default_work_warranty_months: defaultWorkWarrantyMonths.value,
+    legal_address: legalAddress.value.trim() || null,
+    city: city.value.trim() || null,
+    bank_name: bankName.value.trim() || null,
+    iban: iban.value.trim() || null,
+    bic: bic.value.trim() || null,
+    signing_mode: signingMode.value,
+    signer_position: signerPosition.value.trim() || null,
+    signer_name: signerName.value.trim() || null,
+    acting_basis: actingBasis.value.trim() || null,
+  };
   emit('update', props.selectedId, {
     legal_name: legalName.value.trim() || null,
     unp: unp.value.trim() || null,
     entity_type: entityType.value,
     is_vat_payer: isVatPayer.value,
-    requisites: {
-      legal_address: legalAddress.value.trim() || null,
-      city: city.value.trim() || null,
-      bank_name: bankName.value.trim() || null,
-      iban: iban.value.trim() || null,
-      bic: bic.value.trim() || null,
-      signing_mode: signingMode.value,
-      signer_position: signerPosition.value.trim() || null,
-      signer_name: signerName.value.trim() || null,
-      acting_basis: actingBasis.value.trim() || null,
-    },
+    requisites,
   });
 };
 </script>
@@ -227,6 +255,17 @@ const save = () => {
           <span>Плательщик НДС</span>
           <span class="material-icons-round text-[20px]">{{ isVatPayer ? 'toggle_on' : 'toggle_off' }}</span>
         </button>
+        <div class="settings-field rounded-xl border border-teal-100 bg-teal-50/60 p-4 sm:col-span-2 dark:border-teal-900/60 dark:bg-teal-950/20">
+          <span class="text-sm font-bold text-teal-950 dark:text-teal-100">Документы для физлиц</span>
+          <span class="font-normal text-slate-500">Оферта и гарантия подставляются в заказ-акты. В документе всегда сохраняется значение на дату создания черновика.</span>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <label class="settings-field sm:col-span-2"><span>Ссылка на публичную оферту</span><input v-model="offerUrl" data-testid="consumer-offer-url" class="settings-input" type="url" placeholder="https://example.by/offer" /></label>
+            <label class="settings-field"><span>Версия оферты</span><input v-model="offerVersion" data-testid="consumer-offer-version" class="settings-input" placeholder="Редакция 1.0" /></label>
+            <label class="settings-field"><span>Опубликована</span><input v-model="offerPublishedOn" data-testid="consumer-offer-published-on" class="settings-input" placeholder="04.06.2026" inputmode="numeric" /></label>
+            <label class="settings-field"><span>Гарантия на оборудование по умолчанию, мес.</span><input :value="defaultGoodsWarrantyMonths ?? 36" data-testid="default-goods-warranty-months" class="settings-input" type="number" min="0" max="240" @input="updateWarrantyMonths('goods', $event)" /></label>
+            <label class="settings-field"><span>Гарантия на работы по умолчанию, мес.</span><input :value="defaultWorkWarrantyMonths ?? ''" data-testid="default-work-warranty-months" class="settings-input" type="number" min="0" max="240" placeholder="Не задана" @input="updateWarrantyMonths('work', $event)" /></label>
+          </div>
+        </div>
         <label class="settings-field"><span>Город</span><input v-model="city" data-testid="seller-city" class="settings-input" placeholder="Например, Витебск" /></label>
         <label class="settings-field sm:col-span-2"><span>{{ isIndividualEntrepreneur ? 'Адрес регистрации' : 'Юридический адрес' }}</span><input v-model="legalAddress" data-testid="seller-legal-address" class="settings-input" /></label>
         <label class="settings-field sm:col-span-2"><span>Банк</span><input v-model="bankName" data-testid="seller-bank-name" class="settings-input" /></label>

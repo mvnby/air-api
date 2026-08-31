@@ -128,6 +128,7 @@ export type { CatalogImportResultResponse } from './models/CatalogImportResultRe
 export type { CatalogResponse } from './models/CatalogResponse';
 export type { CatalogRevisionResponse } from './models/CatalogRevisionResponse';
 export type { CommonGalleryImageResponse } from './models/CommonGalleryImageResponse';
+export type { ConsumerDocumentTermsPayload } from './models/ConsumerDocumentTermsPayload';
 export type { CustomerPayload } from './models/CustomerPayload';
 export type { CustomerRequisitesConfirmPayload } from './models/CustomerRequisitesConfirmPayload';
 export type { CustomerRequisitesConfirmResponse } from './models/CustomerRequisitesConfirmResponse';

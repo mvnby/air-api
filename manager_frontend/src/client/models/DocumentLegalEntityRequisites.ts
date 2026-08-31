@@ -18,5 +18,10 @@ export type DocumentLegalEntityRequisites = {
     acts_on_basis?: (string | null);
     phone?: (string | null);
     email?: (string | null);
+    offer_url?: (string | null);
+    offer_version?: (string | null);
+    offer_published_on?: (string | null);
+    default_goods_warranty_months?: number;
+    default_work_warranty_months?: (number | null);
 };
 

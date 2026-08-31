@@ -8,6 +8,11 @@ import {
   type NativeTemplateVersionItem,
 } from '../../../client';
 import { getApiErrorMessage } from '../../../utils/api-errors';
+import {
+  createDefaultConsumerDocumentTerms,
+  isConsumerDocumentType,
+  type ConsumerDocumentTerms,
+} from '../model/consumer-document-terms';
 
 type ManagedWorkspaceInput = {
   orderId: () => number;
@@ -31,6 +36,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const replacesDocumentId = ref<number | null>(null);
   const baseDocumentId = ref<number | null>(null);
   const baseCustomerContractId = ref<number | null>(null);
+  const consumerTerms = ref<ConsumerDocumentTerms>(createDefaultConsumerDocumentTerms());
   const busy = ref(false);
   const loading = ref(false);
   const templatesLoading = ref(false);
@@ -41,6 +47,16 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   let templateRequestId = 0;
   let versionRequestId = 0;
   let preferredTemplateId: number | null = null;
+
+  const defaultGoodsWarrantyMonths = (legalEntityId = selectedLegalEntityId.value) => {
+    const entity = legalEntities.value.find((item) => item.id === legalEntityId);
+    const configured = Number(entity?.requisites.default_goods_warranty_months);
+    return Number.isFinite(configured) && configured >= 0 && configured <= 240 ? configured : 36;
+  };
+
+  const resetConsumerTerms = () => {
+    consumerTerms.value = createDefaultConsumerDocumentTerms(defaultGoodsWarrantyMonths());
+  };
 
   const selectedTemplateHasActiveVersion = computed(() => (
     templateVersions.value.some((item) => item.status === 'active')
@@ -53,6 +69,14 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const draftBlockedReason = computed(() => {
     if (templatesLoading.value || templateVersionsLoading.value) return 'Загружаем подходящий шаблон…';
     if (!selectedLegalEntityId.value) return 'Нет юридического лица';
+    if (isConsumerDocumentType(documentType.value)) {
+      const requisites = legalEntities.value.find(
+        (item) => item.id === selectedLegalEntityId.value,
+      )?.requisites;
+      if (!requisites?.offer_url || !requisites.offer_version || !requisites.offer_published_on) {
+        return 'Для документа физлицу заполните ссылку, версию и дату публичной оферты';
+      }
+    }
     if (!selectedTemplateId.value) return 'Нет шаблона для этого типа';
     if (!selectedTemplateHasActiveVersion.value) return 'У шаблона нет активной DOCX-версии';
     if (['act', 'tn2', 'ttn1'].includes(documentType.value) && !baseDocumentId.value && !baseCustomerContractId.value) {
@@ -139,6 +163,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const loadWorkspace = async () => {
     loading.value = true;
+    replacesDocumentId.value = null;
+    baseDocumentId.value = null;
+    baseCustomerContractId.value = null;
+    resetConsumerTerms();
     try {
       const [entitiesResponse, runtimeResponse] = await Promise.all([
         ManagerDocumentSystemService.listManagerDocumentLegalEntities(),
@@ -157,9 +185,23 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   };
 
   watch([selectedLegalEntityId, documentType], () => void loadTemplates(), { flush: 'sync' });
-  watch(selectedLegalEntityId, (legalEntityId) => {
+  watch(documentType, (nextType, previousType) => {
+    if (isConsumerDocumentType(nextType) && !isConsumerDocumentType(previousType)) {
+      resetConsumerTerms();
+    }
+  });
+  watch(selectedLegalEntityId, (legalEntityId, previousLegalEntityId) => {
     const entity = legalEntities.value.find((item) => item.id === legalEntityId);
     issueCity.value = String(entity?.requisites.city || '').trim();
+    if (
+      isConsumerDocumentType(documentType.value)
+      && consumerTerms.value.goods_warranty_months === defaultGoodsWarrantyMonths(previousLegalEntityId)
+    ) {
+      consumerTerms.value = {
+        ...consumerTerms.value,
+        goods_warranty_months: defaultGoodsWarrantyMonths(legalEntityId),
+      };
+    }
   }, { flush: 'sync' });
   watch(selectedTemplateId, () => void loadTemplateVersions(), { flush: 'sync' });
 
@@ -167,7 +209,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     if (draftBlockedReason.value || !selectedLegalEntityId.value) return;
     busy.value = true;
     try {
-      await ManagerDocumentSystemService.createManagerManagedDocumentDraft(input.orderId(), {
+      const payload = {
         legal_entity_id: selectedLegalEntityId.value,
         document_type: documentType.value,
         issue_date: issueDate.value,
@@ -178,8 +220,11 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         base_document_id: baseDocumentId.value,
         base_customer_contract_id: baseCustomerContractId.value,
         replaces_document_id: replacesDocumentId.value,
-      });
+        consumer_terms: isConsumerDocumentType(documentType.value) ? consumerTerms.value : undefined,
+      };
+      await ManagerDocumentSystemService.createManagerManagedDocumentDraft(input.orderId(), payload);
       replacesDocumentId.value = null;
+      resetConsumerTerms();
       await loadDocuments();
       input.refresh();
       input.notify('Черновик создан. Данные заказа зафиксированы, но официальный номер ещё не занят.');
@@ -229,6 +274,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   };
 
   const prepareReplacement = (document: ManagedDocumentItem) => {
+    resetConsumerTerms();
     preferredTemplateId = document.document_template_id || null;
     documentType.value = document.doc_type;
     selectedLegalEntityId.value = document.legal_entity_id || selectedLegalEntityId.value;
@@ -265,6 +311,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     baseDocumentId,
     businessRole,
     busy,
+    consumerTerms,
     createDraft,
     documentType,
     documents,
@@ -281,6 +328,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     prepareReplacement,
     replacesDocumentId,
     requestVoid,
+    resetConsumerTerms,
     selectedLegalEntityId,
     selectedTemplateId,
     templates,
