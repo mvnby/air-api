@@ -42,6 +42,19 @@ log() {
   printf '[patroni-node-deploy][%s] %s\n' "$1" "$2"
 }
 
+prepare_registry_auth() {
+  [[ -n "${GHCR_PAT:-}" ]] || return 0
+  [[ -n "${TMP_DIR}" && -d "${TMP_DIR}" ]] || {
+    log error "temporary release directory is unavailable for registry auth"
+    return 1
+  }
+  export DOCKER_CONFIG="${TMP_DIR}/docker-config"
+  install -d -m 700 "${DOCKER_CONFIG}"
+  printf '%s' "${GHCR_PAT}" \
+    | docker login ghcr.io -u "${GITHUB_ACTOR:-github-actions}" --password-stdin
+  unset GHCR_PAT
+}
+
 ensure_document_pdf_runtime() {
   log document-pdf "pulling and waiting for private ${DOCUMENT_PDF_SERVICE} runtime"
   "${COMPOSE[@]}" pull "${DOCUMENT_PDF_SERVICE}"
@@ -303,6 +316,9 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
     log error "blue-green script is not executable: ${BLUE_GREEN_SCRIPT}"
     exit 1
   }
+  TMP_DIR="$(mktemp -d)"
+  trap 'rm -rf "${TMP_DIR}"' EXIT
+  prepare_registry_auth
   log primary "deploying through the inactive API slot"
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
     API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
@@ -312,8 +328,6 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
     API_RUN_DEFAULTS=false \
     bash "${BLUE_GREEN_SCRIPT}"
   require_expected_role
-  TMP_DIR="$(mktemp -d)"
-  trap 'rm -rf "${TMP_DIR}"' EXIT
   COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
   worker_supported=true
   deploy_communications_worker
@@ -334,9 +348,7 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
 export BACKEND_IMAGE
 worker_supported=true
-if [[ -n "${GHCR_PAT:-}" ]]; then
-  printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GITHUB_ACTOR:-github-actions}" --password-stdin
-fi
+prepare_registry_auth
 
 trap rollback_standby ERR
 reconcile_standby_proxy
