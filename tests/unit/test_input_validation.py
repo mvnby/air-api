@@ -43,6 +43,7 @@ def test_validate_optional_unp_accepts_9_digits_only():
 
 def test_validate_optional_iban_accepts_valid_by_iban():
     assert validate_optional_iban("BY13ALFA30122644440010270000") == "BY13ALFA30122644440010270000"
+    assert validate_optional_iban("BY57ОLMP30125000210500000933") == "BY57OLMP30125000210500000933"
     with pytest.raises(ValueError):
         validate_optional_iban("DE89370400440532013000")
     with pytest.raises(ValueError):

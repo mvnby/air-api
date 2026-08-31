@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from typing import Optional
 from urllib.parse import unquote, urlsplit, urlunsplit
 
@@ -12,6 +13,7 @@ _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _PHONE_PATTERN = re.compile(r"^\+?[\d\s().-]+$")
 _BIC_PATTERN = re.compile(r"^[A-Z0-9]{8,11}$")
 _IBAN_BY_PATTERN = re.compile(r"^BY\d{2}[A-Z0-9]{24}$")
+_IBAN_CONFUSABLES = str.maketrans("АВЕКМНОРСТУХІ", "ABEKMHOPCTYXI")
 _CONTROL_OR_SPACE_PATTERN = re.compile(r"[\x00-\x20\x7f]")
 _PUBLIC_MANUAL_RELATIVE_PREFIXES = ("/media/",)
 
@@ -87,7 +89,9 @@ def validate_optional_unp(value: Optional[str]) -> Optional[str]:
 
 
 def normalize_iban(value: str) -> str:
-    return re.sub(r"\s+", "", value or "").upper()
+    normalized = unicodedata.normalize("NFKC", value or "").upper()
+    normalized = normalized.translate(_IBAN_CONFUSABLES)
+    return re.sub(r"[\s\u200b-\u200d\ufeff]+", "", normalized)
 
 
 def validate_optional_iban(value: Optional[str]) -> Optional[str]:

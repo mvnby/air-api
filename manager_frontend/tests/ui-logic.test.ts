@@ -79,6 +79,8 @@ import {
   type CustomerForm,
 } from '../src/components/customers/customer-profile-form';
 import { getOrderDocumentAccess } from '../src/components/orders/order-document-access';
+import { normalizeIban } from '../src/utils/legal-requisites';
+import { getCustomerDocumentWarnings } from '../src/features/documents/model/customer-document-readiness';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -168,6 +170,27 @@ assert(
   legacyCompanyWithoutPhone.valid && !legacyCompanyWithoutPhone.phoneError,
   'an existing company without a phone must remain editable because the API allows an optional phone',
 );
+const sparseCompanyProfile = validateCustomerProfileForm(
+  {
+    ...customerForm,
+    phone: '',
+    email: '',
+    inn: '',
+    full_legal_name: '',
+    legal_address: '',
+    bank_name: '',
+    bic: '',
+    iban: '',
+    signer_position: '',
+    signer_name: '',
+    acting_basis: '',
+  },
+  false,
+);
+assert(
+  sparseCompanyProfile.valid,
+  'missing optional contacts and document requisites must not block saving a usable customer draft',
+);
 const invalidEnteredPhone = validateCustomerProfileForm(
   { ...customerForm, phone: '+375 29' },
   false,
@@ -175,6 +198,41 @@ const invalidEnteredPhone = validateCustomerProfileForm(
 assert(
   !invalidEnteredPhone.valid && Boolean(invalidEnteredPhone.phoneError),
   'a non-empty incomplete phone must still block customer profile saving',
+);
+assert(
+  invalidEnteredPhone.issues.some((issue) => issue.startsWith('Телефон —')),
+  'customer validation must name the exact field that blocks saving',
+);
+assert(
+  normalizeIban('BY57ОLMP30125000210500000933') === 'BY57OLMP30125000210500000933',
+  'IBAN normalization must repair a pasted Cyrillic lookalike in an otherwise valid account',
+);
+const contractWarnings = getCustomerDocumentWarnings({
+  id: 4,
+  type: 'company',
+  name: 'ОДО «Термотехника»',
+  phone: '',
+  email: null,
+  full_legal_name: null,
+  inn: '300566486',
+  legal_address: null,
+  signer_position: null,
+  signer_name: null,
+  acting_basis: null,
+}, 'contract');
+assert(
+  contractWarnings.join('|') === 'полное наименование|юридический адрес|ФИО подписанта|должность подписанта|основание полномочий',
+  'contract generation must warn about missing legal requisites without requiring phone or email',
+);
+assert(
+  getCustomerDocumentWarnings({
+    id: 4,
+    type: 'company',
+    name: 'ОДО «Термотехника»',
+    phone: '',
+    inn: '300566486',
+  }, 'offer').length === 0,
+  'a commercial offer must stay flexible when the customer has enough identity data',
 );
 
 assert(

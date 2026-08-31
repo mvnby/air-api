@@ -51,7 +51,7 @@ const forwardAttach = (document: ManagerOrderDocumentItem, event: Event) => emit
     <OrderEmailHistory class="mb-4" :order-id="order.id" :refresh-key="emailHistoryRefreshKey" @toast="emit('toast', $event.message, $event.type || 'success')" />
     <div class="flex flex-col gap-3">
       <DocumentList :documents="documents" :proposals="order.proposals || []" :can-create="access.canCreate" :can-replace="access.canReplace" :can-delete="access.canDelete" :access-summary="access.summary" :processing-document-id="processingId" @create="emit('create')" @download="emit('download', $event)" @attach="forwardAttach" @delete="emit('delete', $event)" />
-      <DocumentGenerationForm />
+      <DocumentGenerationForm :customer="order.customer" />
     </div>
   </section>
 </template>

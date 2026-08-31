@@ -1197,7 +1197,7 @@ const onIbanBlur = async () => {
     }
 };
 
-const validateForm = (): boolean => {
+const validateForm = () => {
   normalizeForm();
   clearFieldErrors();
 
@@ -1207,13 +1207,14 @@ const validateForm = (): boolean => {
   emailError.value = validation.emailError;
   innError.value = validation.innError;
   ibanError.value = validation.ibanError;
-  return validation.valid;
+  return validation;
 };
 
 const saveCustomer = async () => {
   if (!customer.value || !hasChanges.value) return;
-  if (!validateForm()) {
-    saveError.value = 'Не удалось сохранить карточку: проверьте выделенные поля';
+  const validation = validateForm();
+  if (!validation.valid) {
+    saveError.value = `Не удалось сохранить. Исправьте: ${validation.issues.join('; ')}`;
     return;
   }
 
