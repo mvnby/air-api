@@ -8,6 +8,7 @@ import re
 from typing import Iterable, Mapping
 
 from docx import Document
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.table import _Cell, _Row, Table
 from docx.text.paragraph import Paragraph
@@ -228,9 +229,48 @@ class NativeDocxRenderer:
         for paragraph, _, _ in self._iter_paragraphs(document):
             self._replace_placeholders(paragraph, context.values)
 
+        self._remove_empty_trailing_paragraph_after_table(document)
+
         output = BytesIO()
         document.save(output)
         return make_rendered_docx(output.getvalue(), template)
+
+    @staticmethod
+    def _remove_empty_trailing_paragraph_after_table(document) -> None:
+        """Drop a non-content paragraph that would create a blank final page.
+
+        Word requires a paragraph after a table while editing, and Google Docs
+        exports one at the end of the document.  When the signature table fills
+        the previous page, that otherwise invisible paragraph can spill onto a
+        blank page.  Keep paragraphs containing any renderable OOXML content;
+        only the final, truly empty paragraph immediately after a table is safe
+        to remove from the generated artifact.
+        """
+        body = document._element.body
+        content = [child for child in body.iterchildren() if child.tag != qn("w:sectPr")]
+        if len(content) < 2:
+            return
+
+        previous, trailing = content[-2:]
+        if previous.tag != qn("w:tbl") or trailing.tag != qn("w:p"):
+            return
+
+        rendered_tags = {
+            qn("w:t"),
+            qn("w:tab"),
+            qn("w:br"),
+            qn("w:drawing"),
+            qn("w:object"),
+            qn("w:pict"),
+            qn("w:sym"),
+            qn("w:fldChar"),
+            qn("w:instrText"),
+            qn("w:noBreakHyphen"),
+        }
+        if any(node.tag in rendered_tags for node in trailing.iter()):
+            return
+
+        body.remove(trailing)
 
     def _validate_context(
         self,
@@ -416,6 +456,23 @@ class NativeDocxRenderer:
 
     @staticmethod
     def _set_text(node, value: str) -> None:
+        parts = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        NativeDocxRenderer._set_text_node(node, parts[0])
+        if len(parts) == 1:
+            return
+
+        parent = node.getparent()
+        position = parent.index(node) + 1
+        for part in parts[1:]:
+            parent.insert(position, OxmlElement("w:br"))
+            position += 1
+            text_node = OxmlElement("w:t")
+            NativeDocxRenderer._set_text_node(text_node, part)
+            parent.insert(position, text_node)
+            position += 1
+
+    @staticmethod
+    def _set_text_node(node, value: str) -> None:
         node.text = value
         space_attr = qn("xml:space")
         if value.startswith(" ") or value.endswith(" "):

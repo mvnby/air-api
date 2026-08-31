@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from io import BytesIO
 
 import pytest
@@ -27,6 +28,7 @@ from modules.documents.application import (
     NativeTemplatePlaceholderContract,
     NativeTemplateVersionService,
 )
+from modules.documents.domain import BusinessDocumentTerms, PaymentScheduleItem
 from modules.documents.infrastructure.artifact_storage import (
     PrivateDocumentArtifactStorage,
 )
@@ -188,6 +190,12 @@ async def _draft(
             legal_entity_id=issuer.id,
             document_type="contract",
             issue_date=issue_date,
+            business_terms=BusinessDocumentTerms(
+                contract_scenario="services",
+                payment_schedule=(
+                    PaymentScheduleItem(Decimal("100"), "before_work"),
+                ),
+            ),
         ),
         replaces_document_id=replaces,
     )

@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from io import BytesIO
 
@@ -116,6 +117,17 @@ def _template_docx() -> bytes:
     document.add_paragraph("{{#if seller.is_individual_entrepreneur}}")
     document.add_paragraph("Продавец действует как ИП")
     document.add_paragraph("{{/if seller.is_individual_entrepreneur}}")
+    table = document.add_table(rows=2, cols=3)
+    for index, value in enumerate(("Этап", "%", "Сумма")):
+        table.rows[0].cells[index].text = value
+    for index, value in enumerate(
+        (
+            "{{ payment_schedule }}{{ payment.number }}",
+            "{{ payment.share_percent }}",
+            "{{ payment.amount }}",
+        )
+    ):
+        table.rows[1].cells[index].text = value
     output = BytesIO()
     document.save(output)
     return output.getvalue()
@@ -222,7 +234,10 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     assert seller_ip_condition["end_syntax"] == (
         "{{/if seller.is_individual_entrepreneur}}"
     )
-    assert catalog.json()["tables"][0]["anchor_syntax"] == "{{ lines }}"
+    assert [item["anchor_syntax"] for item in catalog.json()["tables"]] == [
+        "{{ lines }}",
+        "{{ payment_schedule }}",
+    ]
     waybill_catalog = await async_client.get(
         f"{BASE}/placeholder-catalog",
         headers=headers,
@@ -257,7 +272,20 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     assert version["placeholder_schema"] == {
         "fields": ["customer.full_name", "document.official_full_number"],
         "conditions": ["seller.is_individual_entrepreneur"],
-        "tables": [],
+        "tables": [
+            {
+                "name": "payment_schedule",
+                "row_fields": [
+                    "payment.amount",
+                    "payment.due_day_kind",
+                    "payment.due_days",
+                    "payment.due_event",
+                    "payment.note",
+                    "payment.number",
+                    "payment.share_percent",
+                ],
+            }
+        ],
     }
     source = await async_client.get(
         f"{BASE}/templates/{template_id}/versions/{version_id}/source",
@@ -268,6 +296,32 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     assert source.content.startswith(b"PK")
     assert source.headers["cache-control"] == "private, no-store"
     assert "filename*=UTF-8''" in source.headers["content-disposition"]
+
+    manual_schema = {
+        "fields": ["customer.full_name", "document.official_full_number"],
+        "conditions": ["seller.is_individual_entrepreneur"],
+        "tables": [
+            {
+                "name": "payment_schedule",
+                "row_fields": [
+                    "payment.amount",
+                    "payment.number",
+                    "payment.share_percent",
+                ],
+            }
+        ],
+    }
+    manually_uploaded = await async_client.post(
+        f"{BASE}/templates/{template_id}/versions",
+        headers=headers,
+        data={
+            "legal_entity_id": str(issuer_id),
+            "placeholder_schema": json.dumps(manual_schema),
+        },
+        files={"file": ("Договор-2.docx", _template_docx(), DOCX_MIME)},
+    )
+    assert manually_uploaded.status_code == 200, manually_uploaded.text
+    assert manually_uploaded.json()["placeholder_schema"] == manual_schema
 
 
 @pytest.mark.asyncio
@@ -357,6 +411,12 @@ async def test_document_system_draft_issue_is_idempotent_and_artifacts_are_tenan
             "issue_date": "2026-08-26",
             "issue_city": "Минск",
             "template_id": template_id,
+            "business_terms": {
+                "contract_scenario": "services",
+                "payment_schedule": [
+                    {"share_percent": 100, "due_event": "before_work"}
+                ],
+            },
         },
     )
     assert draft.status_code == 200, draft.text

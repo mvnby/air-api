@@ -29,6 +29,7 @@ from modules.documents.infrastructure.template_source_storage import (
 from modules.documents.domain import (
     CONDITIONAL_FLAGS,
     LINE_ROW_PLACEHOLDERS,
+    PAYMENT_SCHEDULE_ROW_PLACEHOLDERS,
     SCALAR_PLACEHOLDERS,
     SUPPORTED_NATIVE_DOCUMENT_TYPES,
 )
@@ -113,7 +114,20 @@ async def get_native_placeholder_catalog(
                     )
                     for item in LINE_ROW_PLACEHOLDERS
                 ],
-            )
+            ),
+            NativePlaceholderTableItem(
+                name="payment_schedule",
+                anchor_syntax="{{ payment_schedule }}",
+                row_fields=[
+                    NativePlaceholderDescriptorItem(
+                        name=item.name,
+                        label=item.label,
+                        group=item.group,
+                        syntax=f"{{{{ {item.name} }}}}",
+                    )
+                    for item in PAYMENT_SCHEDULE_ROW_PLACEHOLDERS
+                ],
+            ),
         ],
     )
 
@@ -263,8 +277,9 @@ async def upload_native_template_version(
                 "native_template_invalid",
                 exc,
             ) from exc
-        discovered_row_fields = {
-            item.name for item in LINE_ROW_PLACEHOLDERS if item.name in discovered
+        table_placeholders = {
+            "lines": LINE_ROW_PLACEHOLDERS,
+            "payment_schedule": PAYMENT_SCHEDULE_ROW_PLACEHOLDERS,
         }
         schema = NativeTemplatePlaceholderSchemaPayload(
             fields=[
@@ -275,25 +290,30 @@ async def upload_native_template_version(
                 for item in CONDITIONAL_FLAGS
                 if item.name in discovered_conditions
             ],
-            tables=(
-                [
-                    {
-                        "name": "lines",
-                        "row_fields": [item.name for item in LINE_ROW_PLACEHOLDERS],
-                    }
-                ]
-                if "lines" in discovered or discovered_row_fields
-                else []
-            ),
+            tables=[
+                {
+                    "name": table_name,
+                    "row_fields": [item.name for item in row_placeholders],
+                }
+                for table_name, row_placeholders in table_placeholders.items()
+                if table_name in discovered
+                or any(item.name in discovered for item in row_placeholders)
+            ],
         )
     allowed_fields = {item.name for item in SCALAR_PLACEHOLDERS}
     allowed_conditions = {item.name for item in CONDITIONAL_FLAGS}
-    allowed_row_fields = {item.name for item in LINE_ROW_PLACEHOLDERS}
+    allowed_tables = {
+        "lines": {item.name for item in LINE_ROW_PLACEHOLDERS},
+        "payment_schedule": {
+            item.name for item in PAYMENT_SCHEDULE_ROW_PLACEHOLDERS
+        },
+    }
     if (
         set(schema.fields) - allowed_fields
         or set(schema.conditions) - allowed_conditions
         or any(
-            item.name != "lines" or set(item.row_fields) - allowed_row_fields
+            item.name not in allowed_tables
+            or set(item.row_fields) - allowed_tables.get(item.name, set())
             for item in schema.tables
         )
     ):

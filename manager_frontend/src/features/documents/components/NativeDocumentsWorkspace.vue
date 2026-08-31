@@ -6,7 +6,10 @@ import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capab
 import { managerSession } from '../../../services/manager-session';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
+import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
+import ActTermsPanel from './ActTermsPanel.vue';
 import { isConsumerDocumentType } from '../model/consumer-document-terms';
+import { isBusinessTermsDocumentType } from '../model/business-document-terms';
 import {
   BUSINESS_NATIVE_DOCUMENT_TYPES,
   CONSUMER_NATIVE_DOCUMENT_TYPES,
@@ -55,6 +58,7 @@ const formatDate = (value: string | null | undefined) => value
 const selectedBasisValue = ref('');
 const basisRequired = computed(() => ['act', 'tn2', 'ttn1'].includes(workspace.documentType.value));
 const isConsumerDocument = computed(() => isConsumerDocumentType(workspace.documentType.value));
+const isBusinessTermsDocument = computed(() => isBusinessTermsDocumentType(workspace.documentType.value));
 const basisOptions = computed<BasisOption[]>(() => {
   const result: BasisOption[] = [];
   const contract = props.order.customer_contract;
@@ -220,6 +224,18 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           :document-type="workspace.documentType.value"
           :terms="workspace.consumerTerms.value"
           @update-terms="workspace.consumerTerms.value = $event"
+        />
+        <B2BContractTermsPanel
+          v-if="isBusinessTermsDocument"
+          :document-type="workspace.documentType.value"
+          :default-goods-warranty-months="workspace.selectedGoodsWarrantyDefault.value"
+          :terms="workspace.businessTerms.value"
+          @update-terms="workspace.businessTerms.value = $event"
+        />
+        <ActTermsPanel
+          v-if="workspace.documentType.value === 'act'"
+          :terms="workspace.actTerms.value"
+          @update-terms="workspace.actTerms.value = $event"
         />
         <p v-if="workspace.draftBlockedReason.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
       </div>

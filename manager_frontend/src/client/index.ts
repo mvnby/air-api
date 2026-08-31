@@ -7,6 +7,7 @@ export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
+export type { ActTermsPayload } from './models/ActTermsPayload';
 export type { AddressSuggestionItem } from './models/AddressSuggestionItem';
 export type { AddressSuggestResponse } from './models/AddressSuggestResponse';
 export type { AnalyticsAuthorizationUrlResponse } from './models/AnalyticsAuthorizationUrlResponse';
@@ -111,6 +112,7 @@ export type { BulkGalleryDeleteRequest } from './models/BulkGalleryDeleteRequest
 export type { BulkProductIdsRequest } from './models/BulkProductIdsRequest';
 export type { BulkRoundRequest } from './models/BulkRoundRequest';
 export type { BulkSpecUpdate } from './models/BulkSpecUpdate';
+export type { BusinessDocumentTermsPayload } from './models/BusinessDocumentTermsPayload';
 export type { CalendarEventResponse } from './models/CalendarEventResponse';
 export type { CalendarEventType } from './models/CalendarEventType';
 export type { CartItemPayload } from './models/CartItemPayload';
@@ -499,6 +501,7 @@ export type { PaymentBankReceiptResponse } from './models/PaymentBankReceiptResp
 export type { PaymentCreatePayload } from './models/PaymentCreatePayload';
 export type { PaymentCurrency } from './models/PaymentCurrency';
 export type { PaymentResponse } from './models/PaymentResponse';
+export type { PaymentScheduleItemPayload } from './models/PaymentScheduleItemPayload';
 export type { ProductAvailabilityLeadPayload } from './models/ProductAvailabilityLeadPayload';
 export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabilityLeadResponse';
 export type { ProductBrandResponse } from './models/ProductBrandResponse';

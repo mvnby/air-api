@@ -10,7 +10,12 @@ from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.security import AuthenticatedUser, require_manager_access
 from modules.documents.application.context_builder import DocumentContextSelection
-from modules.documents.domain import ConsumerDocumentTerms
+from modules.documents.domain import (
+    ActTerms,
+    BusinessDocumentTerms,
+    ConsumerDocumentTerms,
+    PaymentScheduleItem,
+)
 from modules.documents.application.errors import (
     ManagedDocumentConflictError,
     ManagedDocumentError,
@@ -115,6 +120,26 @@ async def create_managed_document_draft(
                 consumer_terms=(
                     ConsumerDocumentTerms(**payload.consumer_terms.model_dump())
                     if payload.consumer_terms is not None
+                    else None
+                ),
+                business_terms=(
+                    BusinessDocumentTerms(
+                        **{
+                            **payload.business_terms.model_dump(
+                                exclude={"payment_schedule"}
+                            ),
+                            "payment_schedule": tuple(
+                                PaymentScheduleItem(**item.model_dump())
+                                for item in payload.business_terms.payment_schedule
+                            ),
+                        }
+                    )
+                    if payload.business_terms is not None
+                    else None
+                ),
+                act_terms=(
+                    ActTerms(**payload.act_terms.model_dump())
+                    if payload.act_terms is not None
                     else None
                 ),
             ),
