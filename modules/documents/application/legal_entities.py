@@ -137,8 +137,16 @@ class DocumentLegalEntityService:
         if "is_vat_payer" in changes:
             entity.is_vat_payer = bool(changes["is_vat_payer"])
         if "requisites" in changes or "entity_type" in changes:
-            requisites = dict(changes.get("requisites", entity.requisites) or {})
-            if "entity_type" in changes and "requisites" not in changes:
+            requisites = dict(entity.requisites or {})
+            if "requisites" in changes:
+                cls._merge_requisite_changes(
+                    requisites,
+                    changes.get("requisites") or {},
+                )
+            if "entity_type" in changes and (
+                "requisites" not in changes
+                or "signing_mode" not in (changes.get("requisites") or {})
+            ):
                 requisites["signing_mode"] = default_signing_mode(entity.entity_type)
             entity.requisites = cls._requisites(
                 requisites,
@@ -311,3 +319,26 @@ class DocumentLegalEntityService:
             result["acting_basis"] = acting_basis
             result["acts_on_basis"] = acting_basis
         return result
+
+    @staticmethod
+    def _merge_requisite_changes(
+        current: dict[str, Any],
+        changes: Mapping[str, Any],
+    ) -> None:
+        alias_groups = {
+            "signer_position": {"signer_position", "director_title"},
+            "director_title": {"signer_position", "director_title"},
+            "signer_name": {"signer_name", "director_name"},
+            "director_name": {"signer_name", "director_name"},
+            "acting_basis": {"acting_basis", "acts_on_basis"},
+            "acts_on_basis": {"acting_basis", "acts_on_basis"},
+        }
+        for raw_key, raw_value in changes.items():
+            key = str(raw_key or "").strip()
+            if not key:
+                continue
+            if raw_value is None or not str(raw_value).strip():
+                for removable in alias_groups.get(key, {key}):
+                    current.pop(removable, None)
+                continue
+            current[key] = raw_value

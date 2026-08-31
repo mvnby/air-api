@@ -30,6 +30,7 @@ from modules.documents.domain import (
     CONDITIONAL_FLAGS,
     LINE_ROW_PLACEHOLDERS,
     SCALAR_PLACEHOLDERS,
+    SUPPORTED_NATIVE_DOCUMENT_TYPES,
 )
 from routers.manager_operation_ids import (
     ACTIVATE_MANAGER_NATIVE_TEMPLATE_VERSION,
@@ -65,6 +66,10 @@ router = APIRouter(
     route_class=ManagerPermissionRoute,
 )
 
+_NATIVE_DOCUMENT_TYPE_PATTERN = (
+    "^(" + "|".join(sorted(SUPPORTED_NATIVE_DOCUMENT_TYPES)) + ")$"
+)
+
 
 @router.get(
     "/placeholder-catalog",
@@ -72,7 +77,7 @@ router = APIRouter(
     operation_id=GET_MANAGER_NATIVE_PLACEHOLDER_CATALOG,
 )
 async def get_native_placeholder_catalog(
-    doc_type: str = Query(..., pattern="^(offer|invoice|contract|act|tn2|ttn1)$"),
+    doc_type: str = Query(..., pattern=_NATIVE_DOCUMENT_TYPE_PATTERN),
 ) -> NativePlaceholderCatalogResponse:
     return NativePlaceholderCatalogResponse(
         document_type=doc_type,

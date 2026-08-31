@@ -19,6 +19,11 @@ from .placeholder_catalog import (
     ConditionDescriptor,
     PlaceholderDescriptor,
 )
+from .consumer_terms import (
+    B2C_NATIVE_DOCUMENT_TYPES,
+    ConsumerDocumentTerms,
+    DEFAULT_GOODS_WARRANTY_MONTHS,
+)
 
 __all__ = [
     "DocumentLifecycleError",
@@ -34,6 +39,9 @@ __all__ = [
     "SCALAR_PLACEHOLDERS",
     "SUPPORTED_NATIVE_DOCUMENT_TYPES",
     "ConditionDescriptor",
+    "B2C_NATIVE_DOCUMENT_TYPES",
+    "ConsumerDocumentTerms",
+    "DEFAULT_GOODS_WARRANTY_MONTHS",
     "PlaceholderDescriptor",
     "transition_document",
 ]

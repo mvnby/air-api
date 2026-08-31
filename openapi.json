@@ -12368,7 +12368,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^(offer|invoice|contract|act|tn2|ttn1)$",
+              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|offer|tn2|ttn1)$",
               "title": "Doc Type"
             }
           }
@@ -29636,6 +29636,187 @@
         ],
         "title": "CommonGalleryImageResponse"
       },
+      "ConsumerDocumentTermsPayload": {
+        "properties": {
+          "equipment_brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Brand"
+          },
+          "equipment_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Model"
+          },
+          "equipment_serial": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Serial"
+          },
+          "goods_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goods Warranty Months"
+          },
+          "goods_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goods Warranty Terms"
+          },
+          "work_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Months"
+          },
+          "work_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Terms"
+          },
+          "route_length_meters": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Length Meters"
+          },
+          "route_liquid_pipe_diameter_mm": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Liquid Pipe Diameter Mm"
+          },
+          "route_gas_pipe_diameter_mm": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Gas Pipe Diameter Mm"
+          },
+          "route_drainage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Drainage"
+          },
+          "route_power_supply": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Power Supply"
+          },
+          "route_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Notes"
+          },
+          "route_photo_fixation_performed": {
+            "type": "boolean",
+            "title": "Route Photo Fixation Performed",
+            "default": false
+          },
+          "route_pressure_test_performed": {
+            "type": "boolean",
+            "title": "Route Pressure Test Performed",
+            "default": false
+          },
+          "route_ends_capped": {
+            "type": "boolean",
+            "title": "Route Ends Capped",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConsumerDocumentTermsPayload",
+        "description": "B2C-only facts frozen on draft creation, never read from mutable CRM state."
+      },
       "CustomerPayload": {
         "properties": {
           "name": {
@@ -31498,6 +31679,63 @@
               }
             ],
             "title": "Email"
+          },
+          "offer_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Url"
+          },
+          "offer_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Version"
+          },
+          "offer_published_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "pattern": "^\\d{2}\\.\\d{2}\\.\\d{4}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Published On"
+          },
+          "default_goods_warranty_months": {
+            "type": "integer",
+            "maximum": 240.0,
+            "minimum": 0.0,
+            "title": "Default Goods Warranty Months",
+            "default": 36
+          },
+          "default_work_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Work Warranty Months"
           }
         },
         "additionalProperties": false,
@@ -34742,7 +34980,7 @@
           },
           "document_type": {
             "type": "string",
-            "pattern": "^(offer|invoice|contract|act|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|offer|tn2|ttn1)$",
             "title": "Document Type"
           },
           "issue_date": {
@@ -34892,6 +35130,16 @@
               }
             ],
             "title": "Replaces Document Id"
+          },
+          "consumer_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsumerDocumentTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -53665,7 +53913,7 @@
           },
           "doc_type": {
             "type": "string",
-            "pattern": "^(offer|invoice|contract|act|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|offer|tn2|ttn1)$",
             "title": "Doc Type"
           },
           "description": {

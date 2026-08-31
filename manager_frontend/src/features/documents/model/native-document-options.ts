@@ -1,12 +1,24 @@
 import type { ManagedDocumentItem } from '../../../client';
 
-export const NATIVE_DOCUMENT_TYPES = [
+export const BUSINESS_NATIVE_DOCUMENT_TYPES = [
   { value: 'offer', label: 'Коммерческое предложение' },
   { value: 'invoice', label: 'Счёт' },
   { value: 'contract', label: 'Договор' },
   { value: 'act', label: 'Акт' },
   { value: 'tn2', label: 'Товарная накладная ТН-2' },
   { value: 'ttn1', label: 'Товарно-транспортная ТТН-1' },
+] as const;
+
+export const CONSUMER_NATIVE_DOCUMENT_TYPES = [
+  { value: 'b2c_supply_installation_act', label: 'Заказ-акт: продажа с монтажом' },
+  { value: 'b2c_customer_equipment_installation_act', label: 'Заказ-акт: монтаж оборудования клиента' },
+  { value: 'b2c_maintenance_repair_act', label: 'Заказ-акт: обслуживание и ремонт' },
+  { value: 'b2c_route_laying_act', label: 'Заказ-акт: закладка трассы' },
+] as const;
+
+export const NATIVE_DOCUMENT_TYPES = [
+  ...BUSINESS_NATIVE_DOCUMENT_TYPES,
+  ...CONSUMER_NATIVE_DOCUMENT_TYPES,
 ] as const;
 
 export const NUMBER_POLICY_TYPES = [

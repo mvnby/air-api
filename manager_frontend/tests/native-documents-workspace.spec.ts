@@ -65,7 +65,12 @@ beforeEach(() => {
       display_name: 'ООО МВН',
       is_vat_payer: false,
       is_default: true,
-      requisites: {},
+      requisites: {
+        default_goods_warranty_months: '48',
+        offer_url: 'https://mvn.by/offer',
+        offer_version: '1.0',
+        offer_published_on: '04.06.2026',
+      },
       status: 'active',
       created_at: NOW,
       updated_at: NOW,
@@ -157,6 +162,64 @@ describe('NativeDocumentsWorkspace', () => {
     ]);
     await toggle.findAll('button')[1]!.trigger('click');
     expect(toggle.text()).toContain('Счёт-оферта');
+  });
+
+  it('sends B2C terms only for a consumer order document', async () => {
+    const wrapper = await mountWorkspace();
+
+    expect(wrapper.get('[data-testid="native-document-type"]').findAll('optgroup')
+      .map((group) => group.attributes('label'))).toEqual(['Для организаций', 'Для физлиц']);
+
+    await wrapper.get('[data-testid="native-document-type"]').setValue('b2c_route_laying_act');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="consumer-document-terms"]').text())
+      .toContain('Параметры закладки трассы');
+    expect(wrapper.get('[data-testid="consumer-document-terms"]').text())
+      .not.toContain('Гарантия на оборудование');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        document_type: 'b2c_route_laying_act',
+        consumer_terms: expect.objectContaining({ goods_warranty_months: 48 }),
+      }),
+    );
+  });
+
+  it('keeps entered order facts when the seller changes', async () => {
+    const firstEntity = (await ManagerDocumentSystemService.listManagerDocumentLegalEntities()).items[0]!;
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({
+      items: [
+        firstEntity,
+        {
+          ...firstEntity,
+          id: 6,
+          slug: 'partner',
+          display_name: 'ИП Партнёр',
+          is_default: false,
+          requisites: {
+            ...firstEntity.requisites,
+            default_goods_warranty_months: '24',
+          },
+        },
+      ],
+    });
+    const wrapper = await mountWorkspace();
+
+    await wrapper.get('[data-testid="native-document-type"]').setValue('b2c_supply_installation_act');
+    await flushPromises();
+    await wrapper.get('[data-testid="consumer-equipment-brand"]').setValue('Midea');
+    await wrapper.get('[data-testid="consumer-goods-warranty"]').setValue('60');
+    await wrapper.get('[data-testid="native-legal-entity"]').setValue('6');
+    await flushPromises();
+
+    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-brand"]').element.value)
+      .toBe('Midea');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-goods-warranty"]').element.value)
+      .toBe('60');
   });
 
   it('blocks draft creation while a newly selected document type is loading', async () => {

@@ -22,6 +22,7 @@ from modules.documents.application.context_builder import (
     DocumentContextError,
     DocumentContextSelection,
 )
+from modules.documents.domain import ConsumerDocumentTerms
 
 
 async def _seed_order(db):
@@ -239,6 +240,107 @@ async def test_context_snapshot_supports_ip_parties_and_explicit_issue_city(db):
         snapshot["conditions"]["customer.individual_entrepreneur_power_of_attorney"]
         is True
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "document_type",
+    (
+        "b2c_supply_installation_act",
+        "b2c_customer_equipment_installation_act",
+        "b2c_maintenance_repair_act",
+        "b2c_route_laying_act",
+    ),
+)
+async def test_b2c_context_is_self_contained_and_snapshots_consumer_terms(
+    db, document_type
+):
+    order, issuer, _selected, _alternative = await _seed_order(db)
+    issuer.requisites = {
+        **issuer.requisites,
+        "offer_url": "https://mvn.by/offer",
+        "offer_version": "2026-06-04",
+        "offer_published_on": "04.06.2026",
+        "default_goods_warranty_months": 24,
+        "default_work_warranty_months": 12,
+    }
+    db.add(issuer)
+    await db.commit()
+
+    snapshot = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(
+            order_id=order.id,
+            legal_entity_id=issuer.id,
+            document_type=document_type,
+            issue_date=date(2026, 8, 31),
+            consumer_terms=ConsumerDocumentTerms(
+                equipment_brand="Midea",
+                equipment_model="Breeze X",
+                equipment_serial="AB-42",
+                goods_warranty_months=48,
+                goods_warranty_terms="При соблюдении инструкции",
+                route_length_meters="12",
+                route_photo_fixation_performed=True,
+                route_pressure_test_performed=False,
+                route_ends_capped=True,
+            ),
+        ),
+    )
+
+    assert snapshot["schema_version"] == 3
+    assert snapshot["meta"]["base_document_id"] is None
+    assert snapshot["meta"]["base_customer_contract_id"] is None
+    assert snapshot["values"]["offer.url"] == "https://mvn.by/offer"
+    assert snapshot["values"]["equipment.display_name"] == "Midea Breeze X"
+    assert snapshot["values"]["warranty.goods.months"] == (
+        "48" if document_type == "b2c_supply_installation_act" else ""
+    )
+    assert snapshot["values"]["warranty.work.months"] == "12"
+    assert snapshot["conditions"]["warranty.goods.present"] is (
+        document_type == "b2c_supply_installation_act"
+    )
+    assert snapshot["conditions"]["route.photo_fixation_performed"] is True
+    assert snapshot["conditions"]["route.pressure_test_performed"] is False
+    assert snapshot["values"]["route.photo_fixation_status"] == "выполнена"
+    assert snapshot["values"]["route.pressure_test_status"] == "не выполнена"
+    assert snapshot["values"]["route.ends_capped_status"] == "заглушены"
+
+
+@pytest.mark.asyncio
+async def test_b2c_goods_warranty_defaults_to_legal_entity_then_36_months(db):
+    order, issuer, _selected, _alternative = await _seed_order(db)
+    issuer.requisites = {**issuer.requisites, "default_goods_warranty_months": 18}
+    db.add(issuer)
+    await db.commit()
+
+    selection = dict(
+        order_id=order.id,
+        legal_entity_id=issuer.id,
+        document_type="b2c_supply_installation_act",
+        issue_date=date(2026, 8, 31),
+    )
+    configured = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(**selection),
+    )
+    assert configured["values"]["warranty.goods.months"] == "18"
+
+    issuer.requisites = {
+        key: value
+        for key, value in issuer.requisites.items()
+        if key != "default_goods_warranty_months"
+    }
+    db.add(issuer)
+    await db.commit()
+    fallback = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(**selection),
+    )
+    assert fallback["values"]["warranty.goods.months"] == "36"
 
 
 @pytest.mark.asyncio

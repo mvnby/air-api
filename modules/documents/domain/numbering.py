@@ -78,6 +78,18 @@ DEFAULT_NUMBER_POLICIES: dict[str, EffectiveDocumentNumberPolicy] = {
     "act": EffectiveDocumentNumberPolicy("act", "А-"),
     "tn2": EffectiveDocumentNumberPolicy("tn2", "ТН-"),
     "ttn1": EffectiveDocumentNumberPolicy("ttn1", "ТТН-"),
+    "b2c_supply_installation_act": EffectiveDocumentNumberPolicy(
+        "b2c_supply_installation_act", "ЗА-"
+    ),
+    "b2c_customer_equipment_installation_act": EffectiveDocumentNumberPolicy(
+        "b2c_customer_equipment_installation_act", "АУ-"
+    ),
+    "b2c_maintenance_repair_act": EffectiveDocumentNumberPolicy(
+        "b2c_maintenance_repair_act", "АР-"
+    ),
+    "b2c_route_laying_act": EffectiveDocumentNumberPolicy(
+        "b2c_route_laying_act", "ЗТ-"
+    ),
 }
 
 

@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from modules.documents.domain import (
+    B2C_NATIVE_DOCUMENT_TYPES,
+    SUPPORTED_NATIVE_DOCUMENT_TYPES,
+)
+
+
+NATIVE_DOCUMENT_TYPE_PATTERN = (
+    "^(" + "|".join(sorted(SUPPORTED_NATIVE_DOCUMENT_TYPES)) + ")$"
+)
 
 
 class DocumentLegalEntityRequisites(BaseModel):
@@ -27,6 +37,15 @@ class DocumentLegalEntityRequisites(BaseModel):
     acts_on_basis: str | None = Field(default=None, max_length=300)
     phone: str | None = Field(default=None, max_length=64)
     email: str | None = Field(default=None, max_length=254)
+    offer_url: str | None = Field(default=None, max_length=1000)
+    offer_version: str | None = Field(default=None, max_length=100)
+    offer_published_on: str | None = Field(
+        default=None,
+        max_length=10,
+        pattern=r"^\d{2}\.\d{2}\.\d{4}$",
+    )
+    default_goods_warranty_months: int = Field(default=36, ge=0, le=240)
+    default_work_warranty_months: int | None = Field(default=None, ge=0, le=240)
 
 
 class DocumentLegalEntityCreatePayload(BaseModel):
@@ -112,7 +131,7 @@ class NativeDocumentTemplateCreatePayload(BaseModel):
 
     legal_entity_id: int = Field(gt=0)
     name: str = Field(min_length=1, max_length=200)
-    doc_type: str = Field(pattern="^(offer|invoice|contract|act|tn2|ttn1)$")
+    doc_type: str = Field(pattern=NATIVE_DOCUMENT_TYPE_PATTERN)
     description: str | None = Field(default=None, max_length=1000)
 
 
@@ -204,7 +223,7 @@ class ManagedDocumentDraftPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     legal_entity_id: int = Field(gt=0)
-    document_type: str = Field(pattern="^(offer|invoice|contract|act|tn2|ttn1)$")
+    document_type: str = Field(pattern=NATIVE_DOCUMENT_TYPE_PATTERN)
     issue_date: date
     issue_city: str | None = Field(default=None, max_length=160)
     template_id: int | None = Field(default=None, gt=0)
@@ -219,6 +238,41 @@ class ManagedDocumentDraftPayload(BaseModel):
     scope_product_line_ids: list[int] = Field(default_factory=list, max_length=500)
     business_role: str | None = Field(default=None, pattern="^(payment_request|offer)$")
     replaces_document_id: int | None = Field(default=None, gt=0)
+    consumer_terms: "ConsumerDocumentTermsPayload | None" = None
+
+    @model_validator(mode="after")
+    def validate_consumer_terms_scope(self) -> "ManagedDocumentDraftPayload":
+        if (
+            self.consumer_terms is not None
+            and self.document_type not in B2C_NATIVE_DOCUMENT_TYPES
+        ):
+            raise ValueError(
+                "Параметры документа физлицу доступны только для B2C заказ-актов"
+            )
+        return self
+
+
+class ConsumerDocumentTermsPayload(BaseModel):
+    """B2C-only facts frozen on draft creation, never read from mutable CRM state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    equipment_brand: str | None = Field(default=None, max_length=200)
+    equipment_model: str | None = Field(default=None, max_length=300)
+    equipment_serial: str | None = Field(default=None, max_length=300)
+    goods_warranty_months: int | None = Field(default=None, ge=0, le=240)
+    goods_warranty_terms: str | None = Field(default=None, max_length=4_000)
+    work_warranty_months: int | None = Field(default=None, ge=0, le=240)
+    work_warranty_terms: str | None = Field(default=None, max_length=4_000)
+    route_length_meters: str | None = Field(default=None, max_length=64)
+    route_liquid_pipe_diameter_mm: str | None = Field(default=None, max_length=64)
+    route_gas_pipe_diameter_mm: str | None = Field(default=None, max_length=64)
+    route_drainage: str | None = Field(default=None, max_length=500)
+    route_power_supply: str | None = Field(default=None, max_length=500)
+    route_notes: str | None = Field(default=None, max_length=4_000)
+    route_photo_fixation_performed: bool = False
+    route_pressure_test_performed: bool = False
+    route_ends_capped: bool = False
 
 
 class ManagedDocumentVoidPayload(BaseModel):

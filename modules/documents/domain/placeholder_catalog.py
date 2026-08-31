@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .consumer_terms import B2C_NATIVE_DOCUMENT_TYPES
+
 
 @dataclass(frozen=True, slots=True)
 class PlaceholderDescriptor:
@@ -118,6 +120,46 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("order.object_title", "Название объекта", "Заказ"),
     PlaceholderDescriptor("order.object_address", "Адрес объекта", "Заказ"),
     PlaceholderDescriptor("proposal.name", "Название предложения", "Предложение"),
+    PlaceholderDescriptor("offer.url", "Ссылка на публичную оферту", "Оферта"),
+    PlaceholderDescriptor("offer.version", "Версия оферты", "Оферта"),
+    PlaceholderDescriptor("offer.published_on", "Дата публикации оферты", "Оферта"),
+    PlaceholderDescriptor("equipment.brand", "Бренд оборудования", "Оборудование"),
+    PlaceholderDescriptor("equipment.model", "Модель оборудования", "Оборудование"),
+    PlaceholderDescriptor(
+        "equipment.serial", "Серийный номер оборудования", "Оборудование"
+    ),
+    PlaceholderDescriptor(
+        "equipment.display_name", "Наименование оборудования", "Оборудование"
+    ),
+    PlaceholderDescriptor(
+        "warranty.goods.months", "Гарантия на оборудование, мес.", "Гарантия"
+    ),
+    PlaceholderDescriptor(
+        "warranty.goods.terms", "Условия гарантии на оборудование", "Гарантия"
+    ),
+    PlaceholderDescriptor(
+        "warranty.work.months", "Гарантия на работы, мес.", "Гарантия"
+    ),
+    PlaceholderDescriptor(
+        "warranty.work.terms", "Условия гарантии на работы", "Гарантия"
+    ),
+    PlaceholderDescriptor("route.length_meters", "Длина трассы, м", "Трасса"),
+    PlaceholderDescriptor(
+        "route.liquid_pipe_diameter_mm", "Диаметр жидкостной трубы, мм", "Трасса"
+    ),
+    PlaceholderDescriptor(
+        "route.gas_pipe_diameter_mm", "Диаметр газовой трубы, мм", "Трасса"
+    ),
+    PlaceholderDescriptor("route.drainage", "Дренаж", "Трасса"),
+    PlaceholderDescriptor("route.power_supply", "Электропитание", "Трасса"),
+    PlaceholderDescriptor("route.notes", "Примечания по трассе", "Трасса"),
+    PlaceholderDescriptor(
+        "route.photo_fixation_status", "Статус фотофиксации", "Трасса"
+    ),
+    PlaceholderDescriptor("route.pressure_test_status", "Статус опрессовки", "Трасса"),
+    PlaceholderDescriptor(
+        "route.ends_capped_status", "Статус заглушки трассы", "Трасса"
+    ),
     PlaceholderDescriptor("totals.amount", "Сумма", "Итоги"),
     PlaceholderDescriptor("totals.amount_in_words", "Сумма прописью", "Итоги"),
     PlaceholderDescriptor("totals.currency", "Валюта", "Итоги"),
@@ -180,6 +222,22 @@ CONDITIONAL_FLAGS: tuple[ConditionDescriptor, ...] = tuple(
     )
 )
 
+CONDITIONAL_FLAGS += (
+    ConditionDescriptor(
+        "warranty.goods.present", "Указана гарантия на оборудование", "Гарантия"
+    ),
+    ConditionDescriptor(
+        "warranty.work.present", "Указана гарантия на работы", "Гарантия"
+    ),
+    ConditionDescriptor(
+        "route.photo_fixation_performed", "Выполнена фотофиксация", "Трасса"
+    ),
+    ConditionDescriptor(
+        "route.pressure_test_performed", "Выполнена опрессовка", "Трасса"
+    ),
+    ConditionDescriptor("route.ends_capped", "Концы трассы заглушены", "Трасса"),
+)
+
 LINE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("line.number", "Номер строки", "Строки"),
     PlaceholderDescriptor("line.title", "Наименование", "Строки"),
@@ -195,6 +253,7 @@ LINE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("line.note", "Примечание", "Строки"),
 )
 
-SUPPORTED_NATIVE_DOCUMENT_TYPES = frozenset(
-    {"offer", "invoice", "contract", "act", "tn2", "ttn1"}
+SUPPORTED_NATIVE_DOCUMENT_TYPES = (
+    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1"})
+    | B2C_NATIVE_DOCUMENT_TYPES
 )

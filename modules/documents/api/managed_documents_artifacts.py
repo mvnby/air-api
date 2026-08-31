@@ -10,6 +10,7 @@ from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.security import AuthenticatedUser, require_manager_access
 from modules.documents.application.context_builder import DocumentContextSelection
+from modules.documents.domain import ConsumerDocumentTerms
 from modules.documents.application.errors import (
     ManagedDocumentConflictError,
     ManagedDocumentError,
@@ -111,6 +112,11 @@ async def create_managed_document_draft(
                 scope_service_line_quantities=payload.scope_service_line_quantities,
                 scope_product_line_ids=tuple(payload.scope_product_line_ids),
                 business_role=payload.business_role,
+                consumer_terms=(
+                    ConsumerDocumentTerms(**payload.consumer_terms.model_dump())
+                    if payload.consumer_terms is not None
+                    else None
+                ),
             ),
             template_id=payload.template_id,
             replaces_document_id=payload.replaces_document_id,
