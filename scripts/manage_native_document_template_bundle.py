@@ -6,6 +6,8 @@ the repository and are written directly to private template storage on apply.
 No template or historical version is deleted by this command.
 """
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -16,7 +18,12 @@ from hashlib import sha256
 import json
 from pathlib import Path, PurePath
 import re
+import sys
 from typing import Any, AsyncIterator
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession

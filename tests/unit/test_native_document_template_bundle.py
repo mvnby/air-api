@@ -1,9 +1,29 @@
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
 from scripts.manage_native_document_template_bundle import BundleError, load_bundle
+
+
+def test_bundle_cli_is_directly_executable() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/manage_native_document_template_bundle.py",
+            "--help",
+        ],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Plan or idempotently apply" in result.stdout
 
 
 def _manifest(**overrides):
