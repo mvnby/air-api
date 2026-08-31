@@ -111,7 +111,12 @@ class DocumentTemplateService:
         return items
 
     @staticmethod
-    async def list_templates(session: AsyncSession, doc_type: Optional[str] = None) -> list[DocumentTemplate]:
+    async def list_templates(
+        session: AsyncSession,
+        doc_type: Optional[str] = None,
+        *,
+        google_only: bool = False,
+    ) -> list[DocumentTemplate]:
         stmt = select(DocumentTemplate).options(
             selectinload(DocumentTemplate.customers),
             selectinload(DocumentTemplate.linked_contract_templates),
@@ -119,6 +124,8 @@ class DocumentTemplateService:
         )
         if doc_type:
             stmt = stmt.where(DocumentTemplate.doc_type == DocumentTemplateService._normalize_doc_type(doc_type))
+        if google_only:
+            stmt = stmt.where(DocumentTemplate.google_template_id.is_not(None))
         stmt = stmt.order_by(DocumentTemplate.doc_type, DocumentTemplate.sort_order, DocumentTemplate.name)
         result = await session.execute(stmt)
         return list(result.scalars().all())
@@ -132,7 +139,11 @@ class DocumentTemplateService:
     ) -> list[dict[str, Any]]:
         items = [
             DocumentTemplateService._serialize_template(template)
-            for template in await DocumentTemplateService.list_templates(session, doc_type)
+            for template in await DocumentTemplateService.list_templates(
+                session,
+                doc_type,
+                google_only=True,
+            )
         ]
         if include_legacy and (doc_type in {None, "contract"}) and not any(item["doc_type"] == "contract" for item in items):
             items.extend(await DocumentTemplateService.legacy_contract_templates(session))
@@ -320,7 +331,11 @@ class DocumentTemplateService:
         contract_template_id: Optional[int] = None,
     ) -> list[dict[str, Any]]:
         normalized_doc_type = DocumentTemplateService._normalize_doc_type(doc_type)
-        templates = await DocumentTemplateService.list_templates(session, normalized_doc_type)
+        templates = await DocumentTemplateService.list_templates(
+            session,
+            normalized_doc_type,
+            google_only=True,
+        )
         result: list[DocumentTemplate] = []
         for template in templates:
             if not template.is_active:
@@ -342,8 +357,13 @@ class DocumentTemplateService:
             result.append(template)
 
         items = [DocumentTemplateService._serialize_template(template) for template in result]
-        if not items and normalized_doc_type == "contract":
-            items.extend(await DocumentTemplateService.legacy_contract_templates(session))
+        if normalized_doc_type == "contract":
+            known_google_ids = {str(item["id"]) for item in items if item.get("id")}
+            items.extend(
+                item
+                for item in await DocumentTemplateService.legacy_contract_templates(session)
+                if item["id"] not in known_google_ids
+            )
         if not items:
             default_id = TEMPLATES.get(normalized_doc_type)
             if default_id:

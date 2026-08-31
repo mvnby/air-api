@@ -351,6 +351,26 @@ export class ManagerDocumentSystemService {
         });
     }
     /**
+     * Delete Managed Document Draft
+     * @param documentId
+     * @returns void
+     * @throws ApiError
+     */
+    public static deleteManagerManagedDocumentDraft(
+        documentId: number,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/document-system/documents/{document_id}/draft',
+            path: {
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Issue Managed Document
      * @param documentId
      * @returns ManagedDocumentItem Successful Response

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -12,13 +13,62 @@ STATUTORY_BODY = "statutory_body"
 POWER_OF_ATTORNEY = "power_of_attorney"
 
 
-def customer_document_entity_type(value: Any) -> str:
+_INDIVIDUAL_ENTREPRENEUR_NAME_PATTERN = re.compile(
+    r"(?:^|\s)(?:ип|индивидуальн\w*\s+предпринимател\w*)(?:\s|$)",
+    re.IGNORECASE,
+)
+_ORGANIZATION_NAME_PATTERN = re.compile(
+    r"(?:^|\s)(?:ооо|одо|оао|зао|чуп|руп|куп|гуп|уп|гу|"
+    r"общество\s+с\s+(?:ограниченной|дополнительной)\s+ответственностью|"
+    r"открытое\s+акционерное\s+общество|закрытое\s+акционерное\s+общество)"
+    r"(?:\s|$)",
+    re.IGNORECASE,
+)
+
+
+def customer_document_entity_type(
+    value: Any,
+    *,
+    name: Any = None,
+    full_legal_name: Any = None,
+    inn: Any = None,
+    legal_address: Any = None,
+    bank_name: Any = None,
+    iban: Any = None,
+    bic: Any = None,
+) -> str:
+    """Resolve a document party type without mutating a legacy customer row.
+
+    ``company`` and ``individual_entrepreneur`` are explicit, authoritative
+    selections. Older CRM records may still contain the default ``individual``
+    value despite a legal form in their name; that strong identity evidence wins
+    over the stale default. Requisites only resolve an absent/invalid type, as
+    an UNP or bank account alone may also belong to an entrepreneur.
+    """
+
     normalized = getattr(value, "value", value)
     normalized = str(normalized or "").strip().lower()
     if normalized == "company":
         return ORGANIZATION
     if normalized == INDIVIDUAL_ENTREPRENEUR:
         return INDIVIDUAL_ENTREPRENEUR
+
+    party_names = " ".join(
+        str(candidate or "").strip()
+        for candidate in (full_legal_name, name)
+        if str(candidate or "").strip()
+    )
+    if _INDIVIDUAL_ENTREPRENEUR_NAME_PATTERN.search(party_names):
+        return INDIVIDUAL_ENTREPRENEUR
+    if _ORGANIZATION_NAME_PATTERN.search(party_names):
+        return ORGANIZATION
+
+    if normalized == INDIVIDUAL:
+        return INDIVIDUAL
+
+    business_requisites = (inn, legal_address, bank_name, iban, bic)
+    if sum(bool(str(item or "").strip()) for item in business_requisites) >= 2:
+        return ORGANIZATION
     return INDIVIDUAL
 
 

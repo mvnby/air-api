@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
+from typing import Callable
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import DocumentNumberReservation, DocumentNumberSequence, OrderDocument
+from models import (
+    DocumentNumberReservation,
+    DocumentNumberSequence,
+    Order,
+    OrderDocument,
+)
 from modules.documents.domain.numbering import DocumentNumberScope
 
 
@@ -44,6 +51,8 @@ class DocumentNumberingRepository:
         scope: DocumentNumberScope,
         idempotency_key: str,
         minimum_width: int = 3,
+        number_text_formatter: Callable[[int], str] | None = None,
+        legacy_document_type: str | None = None,
     ) -> DocumentNumberReservationResult:
         normalized_scope = scope.normalized()
         normalized_key = idempotency_key.strip()
@@ -53,6 +62,7 @@ class DocumentNumberingRepository:
             raise ValueError("Minimum width must be positive")
 
         dialect_name = cls._dialect_name(session)
+        await cls._lock_allocation_scope(session, normalized_scope, dialect_name)
         if dialect_name == "postgresql":
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
@@ -78,10 +88,21 @@ class DocumentNumberingRepository:
                 reused=True,
             )
 
+        if legacy_document_type is not None:
+            await cls._bootstrap_legacy_sequence(
+                session,
+                scope=normalized_scope,
+                legacy_document_type=legacy_document_type,
+            )
+
         next_value = await cls._increment_sequence(
             session, normalized_scope, dialect_name
         )
-        number_text = f"{normalized_scope.series}{next_value:0{minimum_width}d}"
+        reservation_number_text = (
+            number_text_formatter(next_value)
+            if number_text_formatter is not None
+            else f"{normalized_scope.series}{next_value:0{minimum_width}d}"
+        )
         reservation = DocumentNumberReservation(
             tenant_id=normalized_scope.tenant_id,
             legal_entity_id=normalized_scope.legal_entity_id,
@@ -89,7 +110,7 @@ class DocumentNumberingRepository:
             series=normalized_scope.series,
             period_key=normalized_scope.period_key,
             number_value=next_value,
-            number_text=number_text,
+            number_text=reservation_number_text,
             idempotency_key=normalized_key,
         )
         session.add(reservation)
@@ -97,7 +118,7 @@ class DocumentNumberingRepository:
         return DocumentNumberReservationResult(
             reservation_id=reservation.id,
             number_value=next_value,
-            number_text=number_text,
+            number_text=reservation_number_text,
             reused=False,
         )
 
@@ -195,6 +216,117 @@ class DocumentNumberingRepository:
     def _dialect_name(session: AsyncSession) -> str:
         bind = session.get_bind()
         return str(getattr(getattr(bind, "dialect", None), "name", ""))
+
+    @staticmethod
+    async def _lock_allocation_scope(
+        session: AsyncSession,
+        scope: DocumentNumberScope,
+        dialect_name: str,
+    ) -> None:
+        """Serialize bootstrap and allocation for one durable sequence scope."""
+
+        if dialect_name != "postgresql":
+            return
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
+            {
+                "lock_key": (
+                    "document_number_allocation:"
+                    f"{scope.tenant_id}:{scope.legal_entity_id}:"
+                    f"{scope.document_type}:{scope.series}:{scope.period_key}"
+                )
+            },
+        )
+
+    @classmethod
+    async def _bootstrap_legacy_sequence(
+        cls,
+        session: AsyncSession,
+        *,
+        scope: DocumentNumberScope,
+        legacy_document_type: str,
+    ) -> None:
+        """Lift, never reset, a default issuer's native sequence from legacy rows.
+
+        Legacy OrderDocument rows do not carry a legal entity. The caller opts
+        in only for its tenant's default issuer; joining Order keeps another
+        tenant's old rows out of the floor calculation.
+        """
+
+        normalized_type = str(legacy_document_type or "").strip().lower()
+        if not normalized_type or not re.fullmatch(r"\d{4}", scope.period_key):
+            return
+        pattern = re.compile(
+            rf"^{re.escape(scope.series)}{scope.period_key}-(\d+)$"
+        )
+        legacy_numbers = (
+            await session.execute(
+                select(OrderDocument.number)
+                .join_from(OrderDocument, Order)
+                .where(
+                    Order.tenant_id == scope.tenant_id,
+                    OrderDocument.doc_type == normalized_type,
+                    OrderDocument.internal_reference.is_(None),
+                )
+            )
+        ).scalars()
+        legacy_floor = max(
+            (
+                int(match.group(1))
+                for number in legacy_numbers
+                if (match := pattern.fullmatch(str(number or "").strip()))
+            ),
+            default=0,
+        )
+        native_floor = (
+            await session.execute(
+                select(func.max(DocumentNumberReservation.number_value)).where(
+                    DocumentNumberReservation.tenant_id == scope.tenant_id,
+                    DocumentNumberReservation.legal_entity_id == scope.legal_entity_id,
+                    DocumentNumberReservation.document_type == scope.document_type,
+                    DocumentNumberReservation.series == scope.series,
+                    DocumentNumberReservation.period_key == scope.period_key,
+                )
+            )
+        ).scalar_one_or_none() or 0
+        sequence = (
+            await session.execute(
+                select(DocumentNumberSequence)
+                .where(
+                    DocumentNumberSequence.tenant_id == scope.tenant_id,
+                    DocumentNumberSequence.legal_entity_id == scope.legal_entity_id,
+                    DocumentNumberSequence.document_type == scope.document_type,
+                    DocumentNumberSequence.series == scope.series,
+                    DocumentNumberSequence.period_key == scope.period_key,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        floor = max(
+            legacy_floor,
+            int(native_floor),
+            int(sequence.last_value or 0) if sequence else 0,
+        )
+        if sequence is None:
+            if floor:
+                session.add(
+                    DocumentNumberSequence(
+                        tenant_id=scope.tenant_id,
+                        legal_entity_id=scope.legal_entity_id,
+                        document_type=scope.document_type,
+                        series=scope.series,
+                        period_key=scope.period_key,
+                        last_value=floor,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                )
+                await session.flush()
+            return
+        if sequence.last_value < floor:
+            sequence.last_value = floor
+            sequence.updated_at = datetime.now(timezone.utc)
+            session.add(sequence)
+            await session.flush()
 
     @staticmethod
     async def _find_existing(

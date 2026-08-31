@@ -10,6 +10,7 @@ PRODUCT_NOT_FOUND = "product_not_found"
 DOCUMENT_GENERATION_FAILED = "document_generation_failed"
 DOCUMENT_NOT_FOUND = "document_not_found"
 DOCUMENT_HAS_DEPENDENTS = "document_has_dependents"
+DOCUMENT_MANAGED_BY_NATIVE = "document_managed_by_native"
 ORDER_DOCUMENTS_LOCKED = "order_documents_locked"
 
 
@@ -27,6 +28,7 @@ DEFAULT_MANAGER_ERROR_MESSAGES = {
     DOCUMENT_GENERATION_FAILED: "Не удалось сформировать документ",
     DOCUMENT_NOT_FOUND: "Документ не найден",
     DOCUMENT_HAS_DEPENDENTS: "Нельзя удалить документ-основание: сначала удалите связанные акты или накладные",
+    DOCUMENT_MANAGED_BY_NATIVE: "Документ CRM управляется нативным контуром",
     ORDER_DOCUMENTS_LOCKED: "Заказ завершён: документы доступны только для просмотра и повторной отправки",
 
 }

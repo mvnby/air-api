@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from models import Customer, DocumentTemplate, GlobalConfig, Order, OrderDocument
+from services.document_service import DocumentService
 from services.document_template_service import DocumentTemplateService
 
 
@@ -126,6 +127,49 @@ async def test_legacy_contract_templates_are_returned_when_no_managed_rows(sqlit
     assert items[0]["id"] == "legacy-id"
     assert items[0]["document_template_id"] is None
     assert items[0]["document_role_type"] == "executor_customer"
+
+
+@pytest.mark.asyncio
+async def test_contract_template_list_keeps_global_google_templates_alongside_google_rows(
+    sqlite_session,
+):
+    sqlite_session.add_all(
+        [
+            GlobalConfig(
+                key="contract_templates",
+                value=(
+                    '[{"id":"legacy-install","name":"Монтаж"},'
+                    '{"id":"legacy-sale","name":"Продажа"}]'
+                ),
+                description="legacy",
+            ),
+            DocumentTemplate(
+                name="Google договор банка",
+                doc_type="contract",
+                google_template_id="google-bank-contract",
+                is_active=True,
+            ),
+            DocumentTemplate(
+                name="Native DOCX contract",
+                doc_type="contract",
+                google_template_id=None,
+                is_active=True,
+            ),
+        ]
+    )
+    await sqlite_session.commit()
+
+    items = await DocumentService.get_available_templates(
+        sqlite_session,
+        "contract",
+    )
+
+    assert {item["id"] for item in items} == {
+        "google-bank-contract",
+        "legacy-install",
+        "legacy-sale",
+    }
+    assert all(item["id"] is not None for item in items)
 
 
 @pytest.mark.asyncio

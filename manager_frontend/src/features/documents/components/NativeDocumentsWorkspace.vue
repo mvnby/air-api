@@ -265,6 +265,7 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
                 <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
               </button>
               <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || Boolean(workspace.issueBlockedReason.value)" :title="workspace.issueBlockedReason.value" @click="workspace.issue(document)">Выпустить</button>
+              <button v-if="document.status === 'draft' && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value" @click="workspace.deleteDraft(document)">Удалить черновик</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Заменить</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action-danger" type="button" @click="workspace.requestVoid(document)">Аннулировать</button>
             </div>
@@ -275,6 +276,9 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
             <button class="native-action-danger h-10" type="submit" :disabled="workspace.busy.value || !workspace.voidReason.value.trim()">Подтвердить</button>
             <button class="native-action h-10" type="button" @click="workspace.voidTarget.value = null">Отмена</button>
           </form>
+          <p v-if="document.status === 'void'" class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            Аннулированный номер и сформированные файлы сохранены в истории. Повторно этот номер не используется.
+          </p>
         </article>
 
         <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">

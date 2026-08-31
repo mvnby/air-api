@@ -26,6 +26,10 @@ class OrderDocumentsLockedError(ValueError):
     """Raised when a completed order would have its document history mutated."""
 
 
+class NativeManagedDocumentError(ValueError):
+    """Raised when a legacy Google Docs command targets a native CRM document."""
+
+
 class DocumentService:
     """Сервис для работы с документами заказов через Google Drive"""
 
@@ -67,6 +71,18 @@ class DocumentService:
         ".doc": "application/msword",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
+
+    @staticmethod
+    def _is_native_managed_document(document: OrderDocument) -> bool:
+        """Keep legacy Google operations away from the native lifecycle boundary."""
+        return any(
+            value is not None
+            for value in (
+                document.status,
+                document.internal_reference,
+                document.template_version_id,
+            )
+        )
 
     @staticmethod
     async def ensure_order_documents_mutable(session: AsyncSession, order_id: int) -> Order:
@@ -374,6 +390,11 @@ class DocumentService:
         if not document:
             return None
 
+        if DocumentService._is_native_managed_document(document):
+            raise NativeManagedDocumentError(
+                "Документ CRM управляется нативным контуром и не удаляется через Google Docs"
+            )
+
         order_id = document.order_id
         await DocumentService.ensure_order_documents_mutable(session, order_id)
         google_file_id = document.google_file_id
@@ -625,7 +646,12 @@ class DocumentService:
             return None
         query = (
             select(OrderDocument)
-            .where(OrderDocument.order_id == order_id)
+            .where(
+                OrderDocument.order_id == order_id,
+                OrderDocument.status.is_(None),
+                OrderDocument.internal_reference.is_(None),
+                OrderDocument.template_version_id.is_(None),
+            )
             .order_by(OrderDocument.created_at.desc())
         )
 

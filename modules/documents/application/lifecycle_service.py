@@ -12,6 +12,7 @@ from sqlmodel import select
 
 from models import (
     DocumentArtifact,
+    DocumentLegalEntity,
     DocumentTemplate,
     DocumentTemplateVersion,
     Order,
@@ -255,6 +256,38 @@ class ManagedDocumentService:
         return document
 
     @classmethod
+    async def delete_draft(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        document_id: int,
+    ) -> None:
+        """Delete only an unissued native draft without an official artifact."""
+        document = await cls._get_scoped_document(
+            session,
+            tenant_scope=tenant_scope,
+            document_id=document_id,
+            for_update=True,
+        )
+        if document is None:
+            raise ManagedDocumentNotFoundError("Документ не найден")
+        if (
+            document.status != DocumentStatus.DRAFT.value
+            or document.official_number
+            or document.issued_at
+        ):
+            raise ManagedDocumentConflictError(
+                "Удалить можно только черновик до присвоения официального номера"
+            )
+        if await cls._artifacts(session, tenant_scope.tenant_id, document_id):
+            raise ManagedDocumentConflictError(
+                "Черновик уже содержит сформированные файлы и должен остаться в истории"
+            )
+        await session.delete(document)
+        await cls._commit(session, "Не удалось удалить черновик документа")
+
+    @classmethod
     async def issue(
         cls,
         session: AsyncSession,
@@ -334,6 +367,19 @@ class ManagedDocumentService:
             ),
             idempotency_key=f"issue:{document.internal_reference}",
             minimum_width=policy.minimum_width,
+            number_text_formatter=lambda value: policy.format_number_text(
+                period_key, value
+            ),
+            legacy_document_type=(
+                document.doc_type
+                if policy.period_mode == "calendar_year"
+                and await cls._is_default_issuer(
+                    session,
+                    tenant_id=tenant_scope.tenant_id,
+                    legal_entity_id=document.legal_entity_id,
+                )
+                else None
+            ),
         )
         await DocumentNumberingRepository.attach_to_document(
             session,
@@ -633,6 +679,26 @@ class ManagedDocumentService:
         if document.base_customer_contract_id:
             return f"contract-{document.base_customer_contract_id}"
         return None
+
+    @staticmethod
+    async def _is_default_issuer(
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        legal_entity_id: int,
+    ) -> bool:
+        return (
+            (
+                await session.execute(
+                    select(DocumentLegalEntity.id).where(
+                        DocumentLegalEntity.id == legal_entity_id,
+                        DocumentLegalEntity.tenant_id == tenant_id,
+                        DocumentLegalEntity.is_default.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            is not None
+        )
 
     @staticmethod
     async def _artifacts(
