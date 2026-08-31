@@ -48,6 +48,23 @@ def test_node_deploy_keeps_api_cutover_separate_and_worker_profile_gated():
     assert '("true", "true"): "active"' in contract
 
 
+def test_node_deploy_registry_auth_covers_primary_worker_pull_and_is_ephemeral():
+    text = NODE_DEPLOY.read_text(encoding="utf-8")
+    primary = text[text.index('if [[ "${EXPECTED_ROLE}" == "primary" ]]') :]
+    primary = primary[: primary.index("resolve_active_service")]
+
+    assert 'export DOCKER_CONFIG="${TMP_DIR}/docker-config"' in text
+    assert 'install -d -m 700 "${DOCKER_CONFIG}"' in text
+    assert "unset GHCR_PAT" in text
+    assert primary.index("prepare_registry_auth") < primary.index(
+        'bash "${BLUE_GREEN_SCRIPT}"'
+    )
+    assert primary.index("prepare_registry_auth") < primary.index(
+        "deploy_communications_worker"
+    )
+    assert "trap 'rm -rf \"${TMP_DIR}\"' EXIT" in primary
+
+
 def test_candidate_rollback_fences_worker_before_old_compose_and_image_restore():
     text = CANDIDATE.read_text(encoding="utf-8")
     lifecycle = CANDIDATE_LIFECYCLE.read_text(encoding="utf-8")
