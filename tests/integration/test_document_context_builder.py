@@ -172,7 +172,7 @@ async def test_context_snapshot_uses_selected_proposal_and_does_not_mutate_order
         ),
     )
 
-    assert snapshot["schema_version"] == 2
+    assert snapshot["schema_version"] == 3
     assert snapshot["meta"]["proposal_id"] == selected.id
     assert snapshot["meta"]["business_role"] == "payment_request"
     assert snapshot["values"]["seller.unp"] == "390000000"
@@ -311,7 +311,13 @@ async def test_b2c_context_is_self_contained_and_snapshots_consumer_terms(
 @pytest.mark.asyncio
 async def test_b2c_goods_warranty_defaults_to_legal_entity_then_36_months(db):
     order, issuer, _selected, _alternative = await _seed_order(db)
-    issuer.requisites = {**issuer.requisites, "default_goods_warranty_months": 18}
+    issuer.requisites = {
+        **issuer.requisites,
+        "offer_url": "https://mvn.by/offer",
+        "offer_version": "2026-06-04",
+        "offer_published_on": "04.06.2026",
+        "default_goods_warranty_months": 18,
+    }
     db.add(issuer)
     await db.commit()
 
