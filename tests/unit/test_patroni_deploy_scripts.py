@@ -290,6 +290,7 @@ def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fenc
     assert 'up -d --no-deps "${PROXY_SERVICE}"' in text
     assert 'up -d --no-deps --force-recreate "${PROXY_SERVICE}"' in text
     assert "running proxy has stale mounts" in text
+    assert "refreshing container proxy after API recreation" in text
     assert "up -d db" not in text
     standby_runtime = text.index(
         'log standby "updating fenced service ${active_service}"'
@@ -298,7 +299,18 @@ def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fenc
     app_recreate = text.index(
         'up -d --no-deps --force-recreate "${active_service}"', converter_ready
     )
-    assert standby_runtime < converter_ready < app_recreate
+    proxy_refresh = text.index("refresh_standby_proxy_upstream", app_recreate)
+    fenced_health = text.index("wait_fenced_standby", proxy_refresh)
+    assert standby_runtime < converter_ready < app_recreate < proxy_refresh < fenced_health
+
+    rollback_runtime = text.index('log rollback "restoring previous release')
+    rollback_recreate = text.index(
+        'up -d --no-deps --force-recreate "${active_service}"', rollback_runtime
+    )
+    rollback_proxy_refresh = text.index(
+        "refresh_standby_proxy_upstream", rollback_recreate
+    )
+    assert rollback_runtime < rollback_recreate < rollback_proxy_refresh
 
 
 def test_patroni_compose_keeps_document_pdf_converter_private_and_gated():
