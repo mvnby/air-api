@@ -1,7 +1,13 @@
 import type { ManagerCustomerUpdatePayload } from '../../client';
 import { normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
 import { normalizePhoneForApi } from '../../utils/phone';
-import { normalizeEmail } from '../../utils/validation';
+import {
+  normalizeEmail,
+  validateOptionalBelarusPhone,
+  validateOptionalByIban,
+  validateOptionalByUnp,
+  validateOptionalEmail,
+} from '../../utils/validation';
 
 export type CustomerPartyType = 'individual' | 'individual_entrepreneur' | 'company';
 export type CustomerSigningMode = 'self' | 'statutory_body' | 'power_of_attorney';
@@ -28,6 +34,15 @@ export type CustomerForm = {
 
 type CustomerFormDiff = Partial<Record<keyof CustomerForm, boolean>>;
 
+export type CustomerProfileValidation = {
+  valid: boolean;
+  fieldErrors: Partial<Record<keyof CustomerForm, string>>;
+  phoneError: string;
+  emailError: string;
+  innError: string;
+  ibanError: string;
+};
+
 const normalizers: Partial<Record<keyof CustomerForm, (value: string) => string>> = {
   phone: normalizePhoneForApi,
   email: normalizeEmail,
@@ -48,6 +63,33 @@ export const buildCustomerPatchPayload = (
   });
 
   return payload;
+};
+
+export const validateCustomerProfileForm = (
+  form: CustomerForm,
+  phoneMaskComplete: boolean,
+): CustomerProfileValidation => {
+  const fieldErrors: Partial<Record<keyof CustomerForm, string>> = {};
+  const phoneError = validateOptionalBelarusPhone(form.phone || '', phoneMaskComplete);
+  const emailError = validateOptionalEmail(form.email || '');
+  const innError = validateOptionalByUnp(form.inn || '');
+  const ibanError = validateOptionalByIban(form.iban || '');
+
+  if (!form.name.trim()) {
+    fieldErrors.name = 'Имя клиента не может быть пустым';
+  }
+  if (isBusinessCustomer(form.type) && !form.full_legal_name.trim()) {
+    fieldErrors.full_legal_name = 'Для ИП или юрлица укажите полное наименование';
+  }
+
+  return {
+    valid: !phoneError && !emailError && !innError && !ibanError && !Object.keys(fieldErrors).length,
+    fieldErrors,
+    phoneError,
+    emailError,
+    innError,
+    ibanError,
+  };
 };
 
 export const normalizeCustomerPartyType = (value: unknown): CustomerPartyType => {
