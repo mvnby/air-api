@@ -24,6 +24,7 @@ import {
     type ProductUpdate,
     type ManagerCustomerBranchCreatePayload,
     type ManagerCustomerBranchUpdatePayload,
+    type ManagerCustomerCreatePayload,
     type ManagerCustomerUpdatePayload,
     type ManagerCatalogProductItemResponse as Product,
     type ManagerOrderUpdatePayload,
@@ -825,6 +826,10 @@ export const api = {
 
     async getManagerCustomerDetail(customerId: number) {
         return await ManagerService.getManagerCustomerDetail(customerId);
+    },
+
+    async createManagerCustomer(payload: ManagerCustomerCreatePayload) {
+        return await ManagerService.createManagerCustomer(payload);
     },
 
     async patchManagerCustomer(customerId: number, payload: ManagerCustomerUpdatePayload) {

@@ -5,11 +5,13 @@ from schemas import (
     BulkRoundRequest,
     ManagerCustomerBranchCreatePayload,
     ManagerCustomerBranchUpdatePayload,
+    ManagerCustomerCreatePayload,
     ManagerCustomerUpdatePayload,
     ProductCreate,
     ProductDuplicatePayload,
     ProductUpdate,
 )
+from services.customer_creation_service import CustomerCreationService
 from services.customer_service import CustomerService
 from services.product_service import ProductService
 from services.product_manager_service import ProductManagerService
@@ -96,6 +98,19 @@ class ManagerCatalogService:
         return await CustomerService.get_for_manager(
             session=session,
             customer_id=customer_id,
+            tenant_scope=tenant_scope,
+        )
+
+    @staticmethod
+    async def create_customer(
+        session: AsyncSession,
+        *,
+        payload: ManagerCustomerCreatePayload,
+        tenant_scope: TenantScope,
+    ) -> Dict[str, Any]:
+        return await CustomerCreationService.create_for_manager(
+            session=session,
+            payload=payload.model_dump(exclude_none=True),
             tenant_scope=tenant_scope,
         )
 

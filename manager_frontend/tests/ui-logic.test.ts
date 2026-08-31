@@ -70,6 +70,7 @@ import {
   runOptimisticOrderTransition,
 } from '../src/components/orders/order-transition';
 import {
+  buildCustomerCreatePayload,
   buildCustomerPatchPayload,
   customerPartyLabel,
   defaultSigningMode,
@@ -106,6 +107,23 @@ const customerForm: CustomerForm = {
   signing_mode: 'statutory_body',
 };
 const phoneOnlyPatch = buildCustomerPatchPayload(customerForm, { phone: true });
+const createCustomerPayload = buildCustomerCreatePayload({
+  ...customerForm,
+  name: '  ООО Клиент  ',
+  email: ' CLIENT@EXAMPLE.COM ',
+  inn: '123 456 789',
+  iban: 'by12 akbb 3012 0000 0000 0000 0000',
+});
+assert(
+  createCustomerPayload.name === 'ООО Клиент'
+    && createCustomerPayload.type === 'company'
+    && createCustomerPayload.phone === '+375 (29) 591-26-81'
+    && createCustomerPayload.email === 'client@example.com'
+    && createCustomerPayload.inn === '123456789'
+    && createCustomerPayload.iban === 'BY12AKBB30120000000000000000'
+    && createCustomerPayload.signing_mode === 'statutory_body',
+  'customer create payload must normalize identity and requisites before POST',
+);
 assert(
   Object.keys(phoneOnlyPatch).join(',') === 'phone',
   'customer PATCH must contain only fields changed by the user',

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, Plus, Star } from 'lucide-vue-next';
+import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, Plus, Star, UserPlus } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
 import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../utils/customer-events';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
+import CreateCustomerModal from '../components/customers/CreateCustomerModal.vue';
 
 // --- State ---
 const customers = ref<ManagerCatalogCustomerItemResponse[]>([]);
@@ -19,6 +20,7 @@ const favoriteSaving = ref<Record<number, boolean>>({});
 const cleanupTimers = new Map<number, number>();
 const toast = ref('');
 const showCreateOrder = ref(false);
+const showCreateCustomer = ref(false);
 const createOrderCustomer = ref<{ id: number; name: string } | null>(null);
 
 function sortCustomerItems(items: ManagerCatalogCustomerItemResponse[]) {
@@ -128,6 +130,11 @@ function openCustomerProfile(customerId: number) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+function onCustomerCreated(customer: ManagerCatalogCustomerItemResponse) {
+  showCreateCustomer.value = false;
+  openCustomerProfile(customer.id);
+}
+
 onMounted(() => {
   const customerIdRaw = new URLSearchParams(window.location.search).get('customerId');
   if (customerIdRaw) {
@@ -197,6 +204,15 @@ onUnmounted(() => {
         Клиенты
       </h1>
       <div class="header-controls">
+        <button
+          type="button"
+          data-testid="create-customer"
+          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-500"
+          @click="showCreateCustomer = true"
+        >
+          <UserPlus :size="17" />
+          Новый клиент
+        </button>
         <div class="search-box">
           <Search :size="16" />
           <input
@@ -257,7 +273,10 @@ onUnmounted(() => {
       <p v-else-if="onlyWithOrders" class="text-gray-500 dark:text-slate-400">Нет клиентов с заказами по текущим фильтрам.</p>
       <div v-else class="text-gray-500 dark:text-slate-400">
         <p>Клиентская база пуста.</p>
-        <p class="text-xs mt-1">Клиенты появятся здесь при создании заказов или лидов.</p>
+        <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-500" @click="showCreateCustomer = true">
+          <UserPlus :size="17" />
+          Создать первого клиента
+        </button>
       </div>
     </div>
 
@@ -338,6 +357,13 @@ onUnmounted(() => {
       :customer-name="createOrderCustomer.name"
       @close="showCreateOrder = false; createOrderCustomer = null"
       @created="onOrderCreated"
+    />
+
+    <CreateCustomerModal
+      v-if="showCreateCustomer"
+      @close="showCreateCustomer = false"
+      @created="onCustomerCreated"
+      @open-existing="openCustomerProfile"
     />
 
   </div>
