@@ -1,4 +1,4 @@
-import type { ManagerCustomerUpdatePayload } from '../../client';
+import type { ManagerCustomerCreatePayload, ManagerCustomerUpdatePayload } from '../../client';
 import { normalizeIban, normalizeUnp } from '../../utils/legal-requisites';
 import { normalizePhoneForApi } from '../../utils/phone';
 import {
@@ -65,6 +65,28 @@ export const buildCustomerPatchPayload = (
 
   return payload;
 };
+
+export const buildCustomerCreatePayload = (
+  form: CustomerForm,
+): ManagerCustomerCreatePayload => ({
+  name: form.name.trim(),
+  type: form.type,
+  phone: normalizePhoneForApi(form.phone),
+  email: normalizeEmail(form.email),
+  city: form.city.trim(),
+  inn: normalizeUnp(form.inn),
+  kpp: form.kpp.trim(),
+  full_legal_name: form.full_legal_name.trim(),
+  legal_address: form.legal_address.trim(),
+  actual_address: form.actual_address.trim(),
+  bank_name: form.bank_name.trim(),
+  bic: form.bic.trim(),
+  iban: normalizeIban(form.iban),
+  signer_position: form.signer_position.trim(),
+  signer_name: form.signer_name.trim(),
+  acting_basis: form.acting_basis.trim(),
+  signing_mode: normalizeCustomerSigningMode(form.type, form.signing_mode),
+});
 
 export const validateCustomerProfileForm = (
   form: CustomerForm,

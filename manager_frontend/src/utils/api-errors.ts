@@ -33,6 +33,7 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   lead_not_found: 'Лид не найден',
   order_not_found: 'Сделка не найдена',
   customer_not_found: 'Клиент не найден',
+  customer_already_exists: 'Клиент с такими данными уже существует',
   product_not_found: 'Товар не найден',
   document_generation_failed: 'Не удалось сформировать документ',
 };
@@ -70,6 +71,9 @@ export const getApiErrorMessage = (error: unknown): string => {
 
   if (detail && typeof detail === 'object') {
     const payload = detail as StructuredDetail;
+    if (payload.error_code === 'customer_already_exists' && payload.message) {
+      return payload.message;
+    }
     if (payload.field_errors && typeof payload.field_errors === 'object') {
       const firstFieldError = Object.entries(payload.field_errors).find(([, msg]) => Boolean(msg));
       if (firstFieldError) {
@@ -84,6 +88,14 @@ export const getApiErrorMessage = (error: unknown): string => {
   if (maybe?.message) return maybe.message;
   if (maybe?.status) return `HTTP ${maybe.status}${maybe.statusText ? ` ${maybe.statusText}` : ''}`;
   return 'Неизвестная ошибка';
+};
+
+export const getApiFieldError = (error: unknown, field: string): string | null => {
+  const maybe = error as ApiErrorLike;
+  const detail = maybe?.body?.detail;
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
+  const value = (detail as StructuredDetail).field_errors?.[field];
+  return typeof value === 'string' && value ? value : null;
 };
 
 export const parseApiFieldErrors = (
@@ -120,7 +132,7 @@ export const parseApiFieldErrors = (
         if (!fieldErrors[field]) fieldErrors[field] = msg;
       }
     }
-    if (payload.message && Object.keys(fieldErrors).length) {
+    if (payload.message) {
       message = payload.message;
     } else {
       const mappedMessage = payload.error_code ? ERROR_CODE_MESSAGES[payload.error_code] : undefined;

@@ -407,6 +407,39 @@ async def test_customer_api_isolates_tenants(
     assert me_b.json()["tenant_id"] == tenant_b.id
     assert me_b.json()["storefront_id"] == storefront_b.id
 
+    created_a_resp = await async_client.post(
+        "/api/manager/customers",
+        headers=headers_a,
+        json={
+            "name": "Одинаковый клиент A",
+            "phone": "+375 (29) 000-00-99",
+            "email": "shared-create@example.com",
+            "type": "company",
+            "inn": "123456790",
+        },
+    )
+    created_b_resp = await async_client.post(
+        "/api/manager/customers",
+        headers=headers_b,
+        json={
+            "name": "Одинаковый клиент B",
+            "phone": "+375 (29) 000-00-99",
+            "email": "shared-create@example.com",
+            "type": "company",
+            "inn": "123456790",
+        },
+    )
+    assert created_a_resp.status_code == 201
+    assert created_b_resp.status_code == 201
+    created_a = created_a_resp.json()
+    created_b = created_b_resp.json()
+    assert created_a["id"] != created_b["id"]
+
+    created_a_entity = await db.get(Customer, created_a["id"])
+    created_b_entity = await db.get(Customer, created_b["id"])
+    assert created_a_entity is not None and created_a_entity.tenant_id == 1
+    assert created_b_entity is not None and created_b_entity.tenant_id == tenant_b.id
+
     list_a = await async_client.get(
         "/api/manager/customers?only_with_orders=false",
         headers=headers_a,
@@ -420,9 +453,11 @@ async def test_customer_api_isolates_tenants(
     assert {item["id"] for item in list_a.json()["items"]} == {
         legacy.id,
         customer_a.id,
+        created_a["id"],
     }
     assert {item["id"] for item in list_b.json()["items"]} == {
         customer_b.id,
+        created_b["id"],
     }
 
     assert (

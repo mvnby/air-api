@@ -79,6 +79,126 @@ async def test_manager_customer_detail_contains_extended_requisites(async_client
 
 
 @pytest.mark.asyncio
+async def test_manager_can_create_sparse_customer_from_customers_page(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    response = await async_client.post(
+        "/api/manager/customers",
+        headers=headers,
+        json={"name": "Новый клиент", "type": "individual"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["name"] == "Новый клиент"
+    assert payload["type"] == "individual"
+    assert payload["phone"] == ""
+    assert payload["email"] is None
+    assert payload["order_count"] == 0
+    assert payload["signing_mode"] == "self"
+
+    created = await db.get(Customer, payload["id"])
+    assert created is not None
+    assert created.tenant_id == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_create_normalizes_company_requisites(async_client, db):
+    headers = await _auth_headers(async_client)
+
+    response = await async_client.post(
+        "/api/manager/customers",
+        headers=headers,
+        json={
+            "name": "ООО Новый партнёр",
+            "type": "company",
+            "phone": "+375 (29) 333-44-55",
+            "email": "OFFICE@EXAMPLE.COM ",
+            "inn": "123 456 780",
+            "full_legal_name": "ООО Новый партнёр",
+            "legal_address": "г. Минск, ул. Новая, 1",
+            "bic": "akbbby2x",
+            "iban": "BY12 АKBB 3012 0000 0000 0000 0000",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["email"] == "office@example.com"
+    assert payload["inn"] == "123456780"
+    assert payload["bic"] == "AKBBBY2X"
+    assert payload["iban"] == "BY12AKBB30120000000000000000"
+    assert payload["signing_mode"] == "statutory_body"
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_create_rejects_duplicate_and_points_to_existing(
+    async_client, db
+):
+    headers = await _auth_headers(async_client)
+    existing = Customer(
+        tenant_id=1,
+        name="Существующий клиент",
+        phone="+375 (29) 444-55-66",
+        email="known@example.com",
+        type=CustomerType.company,
+        inn="123456781",
+    )
+    db.add(existing)
+    await db.commit()
+    await db.refresh(existing)
+
+    response = await async_client.post(
+        "/api/manager/customers",
+        headers=headers,
+        json={
+            "name": "Дубль",
+            "type": "company",
+            "phone": "+375294445566",
+            "email": "KNOWN@example.com",
+            "inn": "123456781",
+        },
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["error_code"] == "customer_already_exists"
+    assert detail["field_errors"]["duplicate_customer_id"] == str(existing.id)
+    assert set(detail["field_errors"]["duplicate_fields"].split(",")) == {
+        "inn",
+        "phone",
+        "email",
+    }
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_create_rejects_invalid_or_incompatible_payload(
+    async_client,
+):
+    headers = await _auth_headers(async_client)
+
+    blank_name = await async_client.post(
+        "/api/manager/customers",
+        headers=headers,
+        json={"name": "   "},
+    )
+    assert blank_name.status_code == 422
+    assert "name" in blank_name.json()["detail"]["field_errors"]
+
+    incompatible_signer = await async_client.post(
+        "/api/manager/customers",
+        headers=headers,
+        json={
+            "name": "ООО Неверный подписант",
+            "type": "company",
+            "signing_mode": "self",
+        },
+    )
+    assert incompatible_signer.status_code == 400
+    assert "не соответствует типу" in incompatible_signer.json()["detail"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_manager_customer_patch_updates_requisites(async_client, db):
     headers = await _auth_headers(async_client)
 

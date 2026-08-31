@@ -1677,6 +1677,11 @@ class ManagerCustomerUpdatePayload(BaseModel):
         return validate_optional_bic(value)
 
 
+class ManagerCustomerCreatePayload(ManagerCustomerUpdatePayload):
+    name: str
+    type: str = "individual"
+
+
 class ManagerTagGroupCreatePayload(BaseModel):
     title: str
     slug: Optional[str] = None

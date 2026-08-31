@@ -6,11 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
-from core.manager_error_codes import BAD_REQUEST, CUSTOMER_NOT_FOUND
+from core.manager_error_codes import (
+    BAD_REQUEST,
+    CUSTOMER_ALREADY_EXISTS,
+    CUSTOMER_NOT_FOUND,
+)
 from core.security import get_current_manager_tenant_scope
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     CONFIRM_MANAGER_CUSTOMER_REQUISITES,
+    CREATE_MANAGER_CUSTOMER,
     CREATE_MANAGER_CUSTOMER_BRANCH,
     CREATE_MANAGER_CUSTOMER_RECONCILIATION_DOCUMENT,
     DELETE_MANAGER_CUSTOMER,
@@ -35,6 +40,7 @@ from schemas import (
     ManagerCustomerBranchItemResponse,
     ManagerCustomerBranchListResponse,
     ManagerCustomerBranchUpdatePayload,
+    ManagerCustomerCreatePayload,
     ManagerCustomerDocumentListResponse,
     ManagerCustomerReconciliationDocumentResponse,
     ManagerCustomerReconciliationResponse,
@@ -42,6 +48,7 @@ from schemas import (
 )
 from services.customer_reconciliation_service import CustomerReconciliationService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from services.customer_creation_service import CustomerAlreadyExistsError
 from services.customer_service import CustomerService
 from services.document_service import DocumentService
 from services.manager_catalog_service import ManagerCatalogService
@@ -77,6 +84,43 @@ async def list_customers_for_manager(
         only_with_orders=only_with_orders,
         tenant_scope=tenant_scope,
     )
+
+
+@router.post(
+    "/customers",
+    response_model=ManagerCatalogCustomerItemResponse,
+    status_code=201,
+    operation_id=CREATE_MANAGER_CUSTOMER,
+)
+async def create_customer_for_manager(
+    payload: ManagerCustomerCreatePayload,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    try:
+        return await ManagerCatalogService.create_customer(
+            session=session,
+            payload=payload,
+            tenant_scope=tenant_scope,
+        )
+    except CustomerAlreadyExistsError as exc:
+        raise manager_http_error(
+            status_code=409,
+            endpoint=CREATE_MANAGER_CUSTOMER,
+            error_code=CUSTOMER_ALREADY_EXISTS,
+            message=str(exc),
+            field_errors={
+                "duplicate_customer_id": str(exc.customer_id),
+                "duplicate_fields": ",".join(exc.matched_fields),
+            },
+        ) from exc
+    except ValueError as exc:
+        raise manager_http_error(
+            status_code=400,
+            endpoint=CREATE_MANAGER_CUSTOMER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
 
 
 @router.post(

@@ -259,6 +259,7 @@ export type { ManagerCustomerContractCreatePayload } from './models/ManagerCusto
 export type { ManagerCustomerContractItemResponse } from './models/ManagerCustomerContractItemResponse';
 export type { ManagerCustomerContractListResponse } from './models/ManagerCustomerContractListResponse';
 export type { ManagerCustomerContractUpdatePayload } from './models/ManagerCustomerContractUpdatePayload';
+export type { ManagerCustomerCreatePayload } from './models/ManagerCustomerCreatePayload';
 export type { ManagerCustomerDocumentItem } from './models/ManagerCustomerDocumentItem';
 export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustomerDocumentListResponse';
 export type { ManagerCustomerReconciliationBasisDocument } from './models/ManagerCustomerReconciliationBasisDocument';

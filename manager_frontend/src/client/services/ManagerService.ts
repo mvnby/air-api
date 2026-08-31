@@ -32,6 +32,7 @@ import type { ManagerCustomerBranchCreatePayload } from '../models/ManagerCustom
 import type { ManagerCustomerBranchItemResponse } from '../models/ManagerCustomerBranchItemResponse';
 import type { ManagerCustomerBranchListResponse } from '../models/ManagerCustomerBranchListResponse';
 import type { ManagerCustomerBranchUpdatePayload } from '../models/ManagerCustomerBranchUpdatePayload';
+import type { ManagerCustomerCreatePayload } from '../models/ManagerCustomerCreatePayload';
 import type { ManagerCustomerDocumentListResponse } from '../models/ManagerCustomerDocumentListResponse';
 import type { ManagerCustomerReconciliationDocumentResponse } from '../models/ManagerCustomerReconciliationDocumentResponse';
 import type { ManagerCustomerReconciliationResponse } from '../models/ManagerCustomerReconciliationResponse';
@@ -212,6 +213,25 @@ export class ManagerService {
                 'type': type,
                 'only_with_orders': onlyWithOrders,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Customer For Manager
+     * @param requestBody
+     * @returns ManagerCatalogCustomerItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerCustomer(
+        requestBody: ManagerCustomerCreatePayload,
+    ): CancelablePromise<ManagerCatalogCustomerItemResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
