@@ -79,6 +79,29 @@ describe('manager account menu', () => {
 
     await wrapper.get('[aria-haspopup="menu"]').trigger('click');
     expect(wrapper.text()).not.toContain('Интеграции');
+    expect(wrapper.text()).not.toContain('Документы CRM');
     expect(wrapper.text()).not.toContain('Настройки сайта');
+  });
+
+  it('routes a document owner to CRM document settings without infrastructure access', async () => {
+    const wrapper = mount(ManagerAccountMenu, {
+      props: {
+        auth: {
+          username: 'documents-owner-vitebsk',
+          display_name: 'Владелец документов',
+          status: 'active',
+          tenant_id: 21,
+          storefront_id: 71,
+          capabilities: [MANAGER_CAPABILITY.documentsManage],
+        },
+      },
+    });
+
+    await wrapper.get('[aria-haspopup="menu"]').trigger('click');
+
+    expect(wrapper.text()).toContain('Документы CRM');
+    expect(wrapper.text()).not.toContain('Настройки сайта');
+    await wrapper.get('[data-testid="manager-document-settings"]').trigger('click');
+    expect(wrapper.emitted('navigate')).toEqual([['/manager/settings/documents']]);
   });
 });
