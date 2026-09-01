@@ -60,6 +60,7 @@ const deferred = <T>() => {
 };
 
 beforeEach(() => {
+  confirmDialog.mockReset().mockResolvedValue(true);
   vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({
     items: [{
       id: 5,
@@ -69,6 +70,7 @@ beforeEach(() => {
       is_vat_payer: false,
       is_default: true,
       requisites: {
+        city: 'Витебск',
         default_goods_warranty_months: '48',
         default_work_warranty_months: '12',
         offer_url: 'https://mvn.by/offer',
@@ -130,6 +132,13 @@ const mountWorkspace = async () => {
 };
 
 describe('NativeDocumentsWorkspace', () => {
+  it('prefills the document city from the default seller legal entity', async () => {
+    const wrapper = await mountWorkspace();
+
+    expect(wrapper.get<HTMLInputElement>('[data-testid="native-document-issue-city"]').element.value)
+      .toBe('Витебск');
+  });
+
   it('deletes an unissued draft after an explicit confirmation', async () => {
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
       .mockResolvedValueOnce({
@@ -242,6 +251,7 @@ describe('NativeDocumentsWorkspace', () => {
       42,
       expect.objectContaining({
         document_type: 'contract',
+        issue_city: 'Витебск',
         business_terms: expect.objectContaining({
           contract_scenario: 'supply_installation',
           goods_warranty_months: 48,

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   ChevronDown,
+  FileText,
   KeyRound,
   Link2,
   Loader2,
@@ -44,6 +45,9 @@ const canManageAnalytics = computed(() => (
 ));
 const canManageInfrastructure = computed(() => (
   hasManagerCapability(props.auth, MANAGER_CAPABILITY.infrastructureManage)
+));
+const canManageDocuments = computed(() => (
+  hasManagerCapability(props.auth, MANAGER_CAPABILITY.documentsManage)
 ));
 
 const navigate = (path: string) => {
@@ -123,6 +127,17 @@ onBeforeUnmount(() => {
       >
         <Link2 class="h-4 w-4" />
         Интеграции
+      </button>
+      <button
+        v-if="canManageDocuments"
+        data-testid="manager-document-settings"
+        class="account-menu-item text-gray-700 hover:bg-gray-50 hover:text-gray-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
+        type="button"
+        role="menuitem"
+        @click="navigate('/manager/settings/documents')"
+      >
+        <FileText class="h-4 w-4" />
+        Документы CRM
       </button>
       <button
         v-if="canManageInfrastructure"
