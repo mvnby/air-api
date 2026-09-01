@@ -109,6 +109,7 @@ class BankReceiptAllocationService:
         allocations: list[dict[str, Any]],
         payment_type: str = "postpayment",
         metadata_updates: Optional[dict[str, Any]] = None,
+        allow_payer_unp_mismatch: bool = False,
     ) -> BankReceipt:
         receipt_result = await session.execute(
             select(BankReceipt).where(BankReceipt.id == receipt_id).with_for_update()
@@ -166,13 +167,13 @@ class BankReceiptAllocationService:
             orders = []
 
         expected_unp = BankReceiptService._normalize_unp(receipt.payer_unp)
-        if not expected_unp:
+        if not expected_unp and normalized_allocations and not allow_payer_unp_mismatch:
             raise ValueError("Bank receipt payer UNP is required for payment allocation")
         orders_by_id = {int(order.id or 0): order for order in orders}
         for item in normalized_allocations:
             order = orders_by_id[item["order_id"]]
             order_unp = BankReceiptService._normalize_unp(order.customer.inn if order.customer else "")
-            if order_unp != expected_unp:
+            if not allow_payer_unp_mismatch and order_unp != expected_unp:
                 raise ValueError("Selected orders do not belong to the bank receipt payer UNP")
             current_allocation = existing_by_order.get(item["order_id"], 0.0)
             other_payments = BankReceiptService._money(float(order.total_payments or 0) - current_allocation)

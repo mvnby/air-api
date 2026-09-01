@@ -110,6 +110,13 @@ export const canAttachBankReceiptGroup = (receipt: BankReceiptResponse) => {
   );
 };
 
+export const canAttachBankReceiptToOrder = (receipt: BankReceiptResponse) => (
+  Number(receipt.amount || 0) > 0
+  && Number(receipt.allocation_count || 0) === 0
+  && !receipt.matched_payment_id
+  && !['matched', 'partially_allocated', 'void', 'closed_orders', 'non_order_income', 'parse_failed'].includes(receipt.status)
+);
+
 export const canManageBankReceiptAllocations = (receipt: BankReceiptResponse) => (
   Boolean(receipt.payer_unp)
   && Number(receipt.amount || 0) > 0

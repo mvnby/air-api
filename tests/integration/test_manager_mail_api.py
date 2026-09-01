@@ -202,6 +202,70 @@ async def test_manager_mail_manually_attaches_review_group_bank_receipt(async_cl
 
 
 @pytest.mark.asyncio
+async def test_manager_mail_attaches_budget_payer_receipt_to_explicit_order(async_client, db):
+    customer = Customer(
+        tenant_id=1,
+        name="Заказчик бюджетного платежа",
+        phone="+375291234570",
+        type=CustomerType.company,
+        inn="390999002",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=customer.id,
+        status=OrderStatus.EXECUTION,
+        title="Бюджетный заказ",
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+    db.add(OrderServiceLink(order_id=order.id, title="Работы", quantity=1, price=1460, cost=0))
+
+    receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Бюджетное поступление",
+        fingerprint="manual-budget-payer-api-test",
+        received_at=datetime(2026, 9, 1, 10, 0),
+        amount=1460,
+        currency=PaymentCurrency.BYN,
+        payer_name="Главное управление МФ Республики Беларусь по Витебской области",
+        payer_unp="300594330",
+        payment_purpose="Оплата через бюджет",
+        raw_body="raw",
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+
+    headers = await _auth_headers(async_client)
+    response = await async_client.post(
+        f"/api/manager/mail/bank-receipts/{receipt.id}/attach",
+        headers=headers,
+        json={"order_id": order.id, "payment_type": "postpayment"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "matched"
+    assert payload["matched_order_id"] == order.id
+    assert payload["allocated_amount"] == 1460
+    assert payload["unallocated_amount"] == 0
+    assert payload["match_meta"]["manual_selected_order_id"] == order.id
+    assert payload["match_meta"]["manual_payer_unp_override"] is True
+    payment = (
+        await db.execute(select(Payment).where(Payment.bank_receipt_id == receipt.id))
+    ).scalar_one()
+    assert payment.order_id == order.id
+
+
+@pytest.mark.asyncio
 async def test_manager_mail_replaces_partial_bank_receipt_allocations(async_client, db):
     customer = Customer(
         tenant_id=1,

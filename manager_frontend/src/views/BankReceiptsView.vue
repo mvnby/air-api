@@ -8,6 +8,7 @@ import type {
   BankReceiptResponse,
 } from '../client';
 import BankReceiptAllocationDialog from '../components/payments/BankReceiptAllocationDialog.vue';
+import BankReceiptManualAttach from '../components/payments/BankReceiptManualAttach.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 import {
   BANK_RECEIPT_STATUS_OPTIONS as statusOptions,
@@ -19,6 +20,7 @@ import {
   bankReceiptStatusClass as statusClass,
   bankReceiptStatusLabel as statusLabel,
   canAttachBankReceiptGroup as canAttachGroup,
+  canAttachBankReceiptToOrder as canAttachToOrder,
   canManageBankReceiptAllocations as canManageAllocations,
 } from '../utils/bank-receipts';
 import { confirmDialog, promptDialog } from '../services/ui-feedback';
@@ -43,6 +45,8 @@ const allocationDetail = ref<BankReceiptAllocationDetailResponse | null>(null);
 const allocationLoading = ref(false);
 const allocationSaving = ref(false);
 const allocationError = ref('');
+const manualAttachReceiptId = ref<number | null>(null);
+const manualAttachError = ref('');
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)));
 
@@ -211,6 +215,37 @@ const saveAllocations = async (allocations: BankReceiptAllocationPayload[]) => {
     allocationError.value = getApiErrorMessage(err);
   } finally {
     allocationSaving.value = false;
+  }
+};
+
+const startManualAttach = (receipt: BankReceiptResponse) => {
+  manualAttachReceiptId.value = receipt.id;
+  manualAttachError.value = '';
+};
+
+const cancelManualAttach = () => {
+  if (actionId.value === manualAttachReceiptId.value) return;
+  manualAttachReceiptId.value = null;
+  manualAttachError.value = '';
+};
+
+const attachToExplicitOrder = async (receipt: BankReceiptResponse, targetOrderId: number) => {
+  actionId.value = receipt.id;
+  manualAttachError.value = '';
+  notice.value = '';
+  try {
+    await ManagerMailService.attachManagerBankReceipt(receipt.id, {
+      order_id: targetOrderId,
+      payment_type: 'postpayment',
+    });
+    notice.value = `Поступление #${receipt.id} прикреплено к заказу #${targetOrderId}.`;
+    actionId.value = null;
+    cancelManualAttach();
+    await loadReceipts();
+  } catch (err) {
+    manualAttachError.value = getApiErrorMessage(err);
+  } finally {
+    actionId.value = null;
   }
 };
 
@@ -457,17 +492,30 @@ onMounted(loadReceipts);
                       #{{ receipt.matched_order_id }}
                       <ExternalLink class="h-3.5 w-3.5" />
                     </button>
-                    <div v-else-if="candidateOrders(receipt).length" class="flex flex-wrap gap-1">
-                      <button
-                        v-for="candidateId in candidateOrders(receipt)"
-                        :key="candidateId"
-                        class="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200"
-                        @click="goToOrder(Number(candidateId))"
-                      >
-                        #{{ candidateId }}
-                      </button>
-                    </div>
-                    <span v-else class="text-gray-400">—</span>
+                    <template v-else>
+                      <div v-if="candidateOrders(receipt).length" class="flex flex-wrap gap-1">
+                        <button
+                          v-for="candidateId in candidateOrders(receipt)"
+                          :key="candidateId"
+                          class="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200"
+                          @click="goToOrder(Number(candidateId))"
+                        >
+                          #{{ candidateId }}
+                        </button>
+                      </div>
+                      <span v-else-if="manualAttachReceiptId !== receipt.id" class="text-gray-400">—</span>
+
+                      <BankReceiptManualAttach
+                        v-if="canAttachToOrder(receipt)"
+                        :receipt-id="receipt.id"
+                        :open="manualAttachReceiptId === receipt.id"
+                        :busy="actionId === receipt.id"
+                        :error="manualAttachReceiptId === receipt.id ? manualAttachError : ''"
+                        @open="startManualAttach(receipt)"
+                        @cancel="cancelManualAttach"
+                        @attach="attachToExplicitOrder(receipt, $event)"
+                      />
+                    </template>
                     <div
                       v-if="groupMatch(receipt)?.available"
                       class="mt-2 rounded-lg border px-2 py-1.5 text-xs"
