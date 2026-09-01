@@ -745,6 +745,80 @@ async def test_bank_receipt_can_be_manually_attached_to_order(sqlite_session):
 
 
 @pytest.mark.asyncio
+async def test_bank_receipt_manual_attach_can_override_budget_payer_unp(sqlite_session):
+    customer = Customer(
+        tenant_id=1,
+        name="Заказчик бюджетного платежа",
+        phone="+375291111119",
+        type="company",
+        inn="390999001",
+    )
+    sqlite_session.add(customer)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(customer)
+
+    order = Order(
+        tenant_id=1,
+        storefront_id=1,
+        customer_id=customer.id,
+        status="execution",
+        title="Бюджетный заказ",
+    )
+    sqlite_session.add(order)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(order)
+    sqlite_session.add(
+        OrderServiceLink(order_id=order.id, title="Работы", quantity=1, price=1460, cost=0)
+    )
+
+    receipt = BankReceipt(
+        status="requires_review",
+        operation_type="incoming_funds",
+        sender_email="bank-statement@local",
+        subject="Бюджетное поступление",
+        fingerprint="manual-budget-payer-override",
+        received_at=datetime(2026, 9, 1, 10, 0),
+        amount=1460,
+        currency=PaymentCurrency.BYN,
+        payer_name="Главное управление МФ Республики Беларусь по Витебской области",
+        payer_unp="300594330",
+        payment_purpose="Оплата через бюджет",
+        raw_body="statement row",
+    )
+    sqlite_session.add(receipt)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(receipt)
+
+    with pytest.raises(ValueError, match="do not belong"):
+        await BankReceiptAllocationService.replace(
+            sqlite_session,
+            receipt_id=receipt.id,
+            allocations=[{"order_id": order.id, "amount": 1460}],
+        )
+
+    attached = await BankReceiptService.attach_receipt_to_order(
+        sqlite_session,
+        receipt_id=receipt.id,
+        order_id=order.id,
+    )
+
+    assert attached.status == "matched"
+    assert attached.matched_order_id == order.id
+    assert attached.match_meta["manual_attached"] is True
+    assert attached.match_meta["manual_selected_order_id"] == order.id
+    assert attached.match_meta["manual_payer_unp_override"] is True
+    payment = (
+        await sqlite_session.execute(
+            select(Payment).where(Payment.bank_receipt_id == receipt.id)
+        )
+    ).scalar_one()
+    assert payment.order_id == order.id
+    assert payment.amount == 1460
+    await sqlite_session.refresh(order)
+    assert order.balance_due == 0
+
+
+@pytest.mark.asyncio
 async def test_bank_receipt_allocations_keep_overpayment_as_unallocated_remainder(sqlite_session):
     customer = Customer(tenant_id=1, name="Тестовый плательщик", phone="+375291111120", type="company", inn="300999001")
     sqlite_session.add(customer)

@@ -558,19 +558,33 @@ class BankReceiptService:
         if receipt.amount <= 0:
             raise ValueError("Bank receipt amount is not valid")
 
-        detail = await BankReceiptAllocationService.get_detail(session, receipt_id=receipt_id)
-        candidate = next((item for item in detail["orders"] if item["order_id"] == order_id), None)
-        if not candidate:
-            raise ValueError("Order is not an unpaid order of the bank receipt payer")
+        orders = await BankReceiptService._load_receipt_candidate_orders(
+            session,
+            receipt,
+            order_ids=[order_id],
+        )
+        order = orders[0]
+        balance_due = BankReceiptService._money(order.balance_due)
+        if balance_due <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
+            raise ValueError("Order has no outstanding balance")
+
+        receipt_unp = BankReceiptService._normalize_unp(receipt.payer_unp)
+        order_unp = BankReceiptService._normalize_unp(order.customer.inn if order.customer else "")
+        payer_unp_override = receipt_unp != order_unp
         amount = BankReceiptService._money(
-            min(float(receipt.amount), float(candidate["balance_due_before_receipt"]))
+            min(float(receipt.amount), balance_due)
         )
         return await BankReceiptAllocationService.replace(
             session,
             receipt_id=receipt_id,
             allocations=[{"order_id": order_id, "amount": amount}],
             payment_type=payment_type,
-            metadata_updates={"manual_attached": True},
+            metadata_updates={
+                "manual_attached": True,
+                "manual_selected_order_id": order_id,
+                "manual_payer_unp_override": payer_unp_override,
+            },
+            allow_payer_unp_mismatch=True,
         )
 
     @staticmethod
