@@ -51,12 +51,75 @@ def test_normalize_unknown_landline_returns_none():
     assert CustomerRequisitesRecognitionService.normalize_phone("69-73-29", context="") is None
 
 
-def test_recognized_company_defaults_to_statutory_body_signing() -> None:
+@pytest.mark.parametrize(
+    ("extracted", "raw_text", "expected_type", "expected_signing_mode"),
+    [
+        (
+            {"name": "ООО Тест"},
+            "",
+            "company",
+            "statutory_body",
+        ),
+        (
+            {
+                "name": "ИП Иванов Иван Иванович",
+                "inn": "391823267",
+            },
+            "",
+            "individual_entrepreneur",
+            "self",
+        ),
+        (
+            {"name": "Иванов Иван Иванович", "inn": "391823267"},
+            "",
+            "individual_entrepreneur",
+            "self",
+        ),
+        (
+            {"name": "Иванов Иван Иванович"},
+            "",
+            "individual",
+            "self",
+        ),
+        (
+            {"name": "Иванов Иван", "inn": "391823267"},
+            "Индивидуальный предприниматель Иванов Иван",
+            "individual_entrepreneur",
+            "self",
+        ),
+        (
+            {"name": "Иванов Иван Иванович", "inn": "123456789"},
+            "ООО «Ромашка» УНП 123456789 директор Иванов Иван Иванович",
+            "company",
+            "statutory_body",
+        ),
+        (
+            {"name": "Иванов Иван Иванович", "inn": "391823267"},
+            "Иванов Иван Иванович УНП 391823267 банк ОАО «Белинвестбанк»",
+            "individual_entrepreneur",
+            "self",
+        ),
+        (
+            {"name": "МегаЕвроКлимат", "inn": "392053942"},
+            "",
+            "company",
+            "statutory_body",
+        ),
+    ],
+)
+def test_customer_payload_infers_party_type_and_signing_mode(
+    extracted,
+    raw_text,
+    expected_type,
+    expected_signing_mode,
+) -> None:
     payload = CustomerRequisitesRecognitionService._customer_payload(
-        {"name": "ООО Тест"}
+        extracted,
+        raw_text=raw_text,
     )
 
-    assert payload["signing_mode"] == "statutory_body"
+    assert payload["type"].value == expected_type
+    assert payload["signing_mode"] == expected_signing_mode
 
 
 @pytest.mark.parametrize(
@@ -229,6 +292,7 @@ def test_normalize_extracted_cleans_signer_basis_and_phone():
     assert extracted["signer_position"] == "директора"
     assert extracted["signer_name"] == "Дмитриенко Сергея Александровича"
     assert extracted["acting_basis"] == "Устава"
+    assert extracted["customer_type"] == "company"
     assert extracted["phone"] == "+375212697329"
     assert extracted["bic"] == "BLBBBY2X"
     assert flags["is_valid"] is True

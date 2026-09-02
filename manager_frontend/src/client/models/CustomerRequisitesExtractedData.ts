@@ -5,6 +5,7 @@
 export type CustomerRequisitesExtractedData = {
     name?: (string | null);
     full_legal_name?: (string | null);
+    customer_type?: ('individual' | 'individual_entrepreneur' | 'company' | null);
     inn?: (string | null);
     legal_address?: (string | null);
     bank_name?: (string | null);

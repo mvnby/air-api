@@ -30,8 +30,10 @@ from core.input_validation import (
     validate_optional_unp,
     validate_optional_phone,
 )
-from models import Customer, CustomerRequisitesRecognition, CustomerType
+from models import Customer, CustomerRequisitesRecognition
 from models.tenancy import TenantScope
+from services.customer_party import signing_mode_for_customer_type
+from services.customer_party_classifier import infer_customer_type_from_requisites
 from services.customer_service import CustomerService
 from services.google_vision_error_policy import (
     OcrProviderError,
@@ -455,6 +457,11 @@ class CustomerRequisitesRecognitionService:
             except ValueError as exc:
                 field_errors[field] = str(exc)
 
+        data["customer_type"] = infer_customer_type_from_requisites(
+            data,
+            raw_text=raw_text,
+        ).value
+
         if data.get("phone_raw") and not data.get("phone"):
             warnings["phone"] = "Телефон сохранен только в OCR JSON: не удалось уверенно нормализовать"
 
@@ -608,13 +615,22 @@ class CustomerRequisitesRecognitionService:
         return cls._recognition_response(recognition, duplicate)
 
     @classmethod
-    def _customer_payload(cls, extracted: dict[str, Any]) -> dict[str, Any]:
+    def _customer_payload(
+        cls,
+        extracted: dict[str, Any],
+        *,
+        raw_text: str = "",
+    ) -> dict[str, Any]:
+        customer_type = infer_customer_type_from_requisites(
+            extracted,
+            raw_text=raw_text,
+        )
         return {
             "name": extracted.get("name") or extracted.get("full_legal_name") or "Новый клиент",
             "phone": extracted.get("phone") or "",
             "email": extracted.get("email"),
-            "type": CustomerType.company,
-            "signing_mode": "statutory_body",
+            "type": customer_type,
+            "signing_mode": signing_mode_for_customer_type(customer_type),
             "inn": extracted.get("inn"),
             "full_legal_name": extracted.get("full_legal_name") or extracted.get("name"),
             "legal_address": extracted.get("legal_address"),
@@ -662,7 +678,7 @@ class CustomerRequisitesRecognitionService:
             raise ValueError("Нельзя создать клиента: исправьте ошибки распознавания")
 
         extracted = recognition.extracted_json or {}
-        payload = cls._customer_payload(extracted)
+        payload = cls._customer_payload(extracted, raw_text=recognition.raw_text)
         normalized_action = str(action or "").strip().lower()
 
         if normalized_action == "update":
@@ -685,9 +701,6 @@ class CustomerRequisitesRecognitionService:
             if customer.tenant_id is None:
                 customer.tenant_id = tenant_scope.tenant_id
             for key, value in payload.items():
-                if key == "type":
-                    setattr(customer, key, CustomerType.company)
-                    continue
                 if value is not None and value != "":
                     setattr(customer, key, value)
             session.add(customer)

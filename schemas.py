@@ -1543,6 +1543,9 @@ class ManagerCatalogCustomerListResponse(BaseModel):
 class CustomerRequisitesExtractedData(BaseModel):
     name: Optional[str] = None
     full_legal_name: Optional[str] = None
+    customer_type: Optional[
+        Literal["individual", "individual_entrepreneur", "company"]
+    ] = None
     inn: Optional[str] = None
     legal_address: Optional[str] = None
     bank_name: Optional[str] = None
