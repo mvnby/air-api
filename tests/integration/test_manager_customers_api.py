@@ -502,6 +502,7 @@ async def test_manager_customer_requisites_recognize_and_confirm_create(async_cl
     assert recognize_resp.status_code == 200
     recognized = recognize_resp.json()
     assert recognized["extracted"]["inn"] == "300063995"
+    assert recognized["extracted"]["customer_type"] == "company"
     assert recognized["extracted"]["phone"] == "+375212697329"
     assert recognized["extracted"]["signer_name"] == "Дмитриенко Сергея Александровича"
     assert recognized["extracted"]["acting_basis"] == "Устава"
@@ -517,6 +518,8 @@ async def test_manager_customer_requisites_recognize_and_confirm_create(async_cl
     assert confirm_resp.status_code == 200
     customer = confirm_resp.json()["customer"]
     assert customer["name"] == "УП «Витебскгазстрой» ОАО «Белгазстрой»"
+    assert customer["type"] == "company"
+    assert customer["signing_mode"] == "statutory_body"
     assert customer["inn"] == "300063995"
     assert customer["phone"] == "+375212697329"
     assert customer["signer_position"] == "директора"
@@ -531,7 +534,8 @@ async def test_manager_customer_requisites_duplicate_can_update(async_client, db
         tenant_id=1,
         name="Старое имя",
         phone="",
-        type=CustomerType.company,
+        type=CustomerType.individual,
+        signing_mode="self",
         inn="300063995",
         bank_name="Старый банк",
     )
@@ -574,8 +578,52 @@ async def test_manager_customer_requisites_duplicate_can_update(async_client, db
     assert confirm_resp.status_code == 200
     assert confirm_resp.json()["customer"]["id"] == existing.id
     await db.refresh(existing)
+    assert existing.type == CustomerType.company
+    assert existing.signing_mode == "statutory_body"
     assert existing.bank_name == "ОАО «Белинвестбанк»"
     assert existing.signer_name == "Дмитриенко Сергея Александровича"
+
+
+@pytest.mark.asyncio
+async def test_manager_customer_requisites_creates_individual_entrepreneur(
+    async_client,
+    monkeypatch,
+):
+    headers = await _auth_headers(async_client)
+
+    async def fake_ocr(content, *, mime_type, filename=None):
+        return "ИП Иванов Иван Иванович УНП 391823267 р/с BY00TEST"
+
+    async def fake_extract(raw_text):
+        return {
+            "name": "Иванов Иван Иванович",
+            "full_legal_name": "Индивидуальный предприниматель Иванов Иван Иванович",
+            "inn": "391823267",
+            "iban": "BY86AKBB30150000026010000000",
+            "bic": "AKBBBY2X",
+        }
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_ocr_text", fake_ocr)
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+
+    recognize_response = await async_client.post(
+        "/api/manager/customers/requisites/recognize",
+        headers=headers,
+        files={"file": ("requisites.png", b"fake-image", "image/png")},
+    )
+    assert recognize_response.status_code == 200
+    recognized = recognize_response.json()
+    assert recognized["extracted"]["customer_type"] == "individual_entrepreneur"
+
+    confirm_response = await async_client.post(
+        f"/api/manager/customers/requisites/{recognized['id']}/confirm",
+        headers=headers,
+        json={"action": "create"},
+    )
+    assert confirm_response.status_code == 200
+    customer = confirm_response.json()["customer"]
+    assert customer["type"] == "individual_entrepreneur"
+    assert customer["signing_mode"] == "self"
 
 
 @pytest.mark.asyncio

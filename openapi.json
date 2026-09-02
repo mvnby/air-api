@@ -30962,6 +30962,22 @@
             ],
             "title": "Full Legal Name"
           },
+          "customer_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "individual",
+                  "individual_entrepreneur",
+                  "company"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Type"
+          },
           "inn": {
             "anyOf": [
               {

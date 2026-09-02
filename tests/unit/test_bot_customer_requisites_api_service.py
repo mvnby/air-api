@@ -115,6 +115,8 @@ async def test_requisites_confirmation_is_idempotent_and_bound_to_owner(db):
     assert first.changed is True
     assert repeated.changed is False
     assert repeated.customer["id"] == first.customer["id"]
+    assert first.customer["type"] == "company"
+    assert first.customer["signing_mode"] == "statutory_body"
     customers = (await db.execute(select(Customer))).scalars().all()
     assert len(customers) == 1
 
@@ -126,3 +128,37 @@ async def test_requisites_confirmation_is_idempotent_and_bound_to_owner(db):
             action="create",
             tenant_scope=TEST_TENANT_SCOPE,
         )
+
+
+@pytest.mark.asyncio
+async def test_requisites_confirmation_creates_individual_entrepreneur(db):
+    await _add_manager(db, 2004)
+    recognition = CustomerRequisitesRecognition(
+        tenant_id=1,
+        source="telegram_text",
+        status="recognized",
+        telegram_user_id=2004,
+        telegram_chat_id=-100,
+        telegram_message_id=78,
+        raw_text="ИП Иванов Иван Иванович УНП 391823267",
+        extracted_json={
+            "name": "Иванов Иван Иванович",
+            "inn": "391823267",
+            "customer_type": "individual_entrepreneur",
+        },
+        validation_flags={"field_errors": {}, "warnings": {}, "is_valid": True},
+    )
+    db.add(recognition)
+    await db.commit()
+    await db.refresh(recognition)
+
+    result = await BotCustomerRequisitesApiService.apply_action_for_manager(
+        db,
+        telegram_id=2004,
+        recognition_id=int(recognition.id),
+        action="create",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert result.customer["type"] == "individual_entrepreneur"
+    assert result.customer["signing_mode"] == "self"
