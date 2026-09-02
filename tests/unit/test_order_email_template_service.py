@@ -26,7 +26,7 @@ def test_ip_signing_personally_does_not_require_position_or_basis() -> None:
 
 
 @pytest.mark.asyncio
-async def test_invoice_template_uses_order_scenario_and_reports_missing_requisites(db):
+async def test_invoice_template_uses_order_scenario_and_reports_missing_requisites(db, tenant_scope):
     customer = Customer(
         tenant_id=1,
         name="ООО Тест",
@@ -64,6 +64,7 @@ async def test_invoice_template_uses_order_scenario_and_reports_missing_requisit
 
     result = await OrderEmailTemplateService.compose(
         db,
+        tenant_scope=tenant_scope,
         order_id=order.id,
         document_ids=[invoice.id],
         template_key="auto",
@@ -79,7 +80,7 @@ async def test_invoice_template_uses_order_scenario_and_reports_missing_requisit
 
 
 @pytest.mark.asyncio
-async def test_requisites_template_lists_only_missing_customer_fields(db):
+async def test_requisites_template_lists_only_missing_customer_fields(db, tenant_scope):
     customer = Customer(
         tenant_id=1,
         name="ООО Клиент",
@@ -106,6 +107,7 @@ async def test_requisites_template_lists_only_missing_customer_fields(db):
 
     result = await OrderEmailTemplateService.compose(
         db,
+        tenant_scope=tenant_scope,
         order_id=order.id,
         document_ids=[],
         template_key="request_requisites",
@@ -118,7 +120,7 @@ async def test_requisites_template_lists_only_missing_customer_fields(db):
 
 
 @pytest.mark.asyncio
-async def test_documents_template_describes_multiple_attachments(db):
+async def test_documents_template_describes_multiple_attachments(db, tenant_scope):
     customer = Customer(tenant_id=1, name="Клиент", phone="+375293333333", type="individual")
     db.add(customer)
     await db.commit()
@@ -156,6 +158,7 @@ async def test_documents_template_describes_multiple_attachments(db):
 
     result = await OrderEmailTemplateService.compose(
         db,
+        tenant_scope=tenant_scope,
         order_id=order.id,
         document_ids=[invoice.id, contract.id],
         template_key="auto",
@@ -167,7 +170,7 @@ async def test_documents_template_describes_multiple_attachments(db):
 
 
 @pytest.mark.asyncio
-async def test_signer_template_and_diagnostic_scenario_are_adaptive(db):
+async def test_signer_template_and_diagnostic_scenario_are_adaptive(db, tenant_scope):
     customer = Customer(
         tenant_id=1,
         name="ООО Диагностика",
@@ -207,12 +210,14 @@ async def test_signer_template_and_diagnostic_scenario_are_adaptive(db):
 
     signer_request = await OrderEmailTemplateService.compose(
         db,
+        tenant_scope=tenant_scope,
         order_id=order.id,
         document_ids=[],
         template_key="request_signer",
     )
     diagnostic_email = await OrderEmailTemplateService.compose(
         db,
+        tenant_scope=tenant_scope,
         order_id=order.id,
         document_ids=[defect_act.id],
         template_key="auto",

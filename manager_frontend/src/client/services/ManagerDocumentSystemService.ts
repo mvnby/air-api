@@ -11,6 +11,7 @@ import type { DocumentNumberPolicyItem } from '../models/DocumentNumberPolicyIte
 import type { DocumentNumberPolicyListResponse } from '../models/DocumentNumberPolicyListResponse';
 import type { DocumentNumberPolicyPayload } from '../models/DocumentNumberPolicyPayload';
 import type { DocumentPdfRuntimeStatus } from '../models/DocumentPdfRuntimeStatus';
+import type { ExternalEditSessionItem } from '../models/ExternalEditSessionItem';
 import type { ManagedDocumentArtifactAccessResponse } from '../models/ManagedDocumentArtifactAccessResponse';
 import type { ManagedDocumentArtifactListResponse } from '../models/ManagedDocumentArtifactListResponse';
 import type { ManagedDocumentDraftPayload } from '../models/ManagedDocumentDraftPayload';
@@ -24,6 +25,12 @@ import type { NativeDocumentTemplateUpdatePayload } from '../models/NativeDocume
 import type { NativePlaceholderCatalogResponse } from '../models/NativePlaceholderCatalogResponse';
 import type { NativeTemplateVersionItem } from '../models/NativeTemplateVersionItem';
 import type { NativeTemplateVersionListResponse } from '../models/NativeTemplateVersionListResponse';
+import type { OrderEmailComposePayload } from '../models/OrderEmailComposePayload';
+import type { OrderEmailComposeResponse } from '../models/OrderEmailComposeResponse';
+import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
+import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
+import type { TemplateExternalEditSyncPayload } from '../models/TemplateExternalEditSyncPayload';
+import type { TemplateExternalEditSyncResponse } from '../models/TemplateExternalEditSyncResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -329,6 +336,226 @@ export class ManagerDocumentSystemService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/document-system/runtime/pdf',
+        });
+    }
+    /**
+     * Compose Native Order Email
+     * @param orderId
+     * @param requestBody
+     * @returns OrderEmailComposeResponse Successful Response
+     * @throws ApiError
+     */
+    public static composeManagerNativeOrderEmail(
+        orderId: number,
+        requestBody: OrderEmailComposePayload,
+    ): CancelablePromise<OrderEmailComposeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/orders/{order_id}/email/compose',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Send Native Order Email
+     * @param orderId
+     * @param requestBody
+     * @returns OutgoingEmailResponse Successful Response
+     * @throws ApiError
+     */
+    public static sendManagerNativeOrderEmail(
+        orderId: number,
+        requestBody: OrderEmailSendPayload,
+    ): CancelablePromise<OutgoingEmailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/orders/{order_id}/email',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Native Template Google Edit Session
+     * @param templateId
+     * @param versionId
+     * @param legalEntityId
+     * @returns ExternalEditSessionItem Successful Response
+     * @throws ApiError
+     */
+    public static getManagerNativeTemplateGoogleEditSession(
+        templateId: number,
+        versionId: number,
+        legalEntityId: number,
+    ): CancelablePromise<ExternalEditSessionItem> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session',
+            path: {
+                'template_id': templateId,
+                'version_id': versionId,
+            },
+            query: {
+                'legal_entity_id': legalEntityId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Native Template Google Edit Session
+     * @param templateId
+     * @param versionId
+     * @param legalEntityId
+     * @returns ExternalEditSessionItem Successful Response
+     * @throws ApiError
+     */
+    public static createManagerNativeTemplateGoogleEditSession(
+        templateId: number,
+        versionId: number,
+        legalEntityId: number,
+    ): CancelablePromise<ExternalEditSessionItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session',
+            path: {
+                'template_id': templateId,
+                'version_id': versionId,
+            },
+            query: {
+                'legal_entity_id': legalEntityId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Sync Native Template Google Edit Session
+     * @param templateId
+     * @param versionId
+     * @param legalEntityId
+     * @param requestBody
+     * @returns TemplateExternalEditSyncResponse Successful Response
+     * @throws ApiError
+     */
+    public static syncManagerNativeTemplateGoogleEditSession(
+        templateId: number,
+        versionId: number,
+        legalEntityId: number,
+        requestBody: TemplateExternalEditSyncPayload,
+    ): CancelablePromise<TemplateExternalEditSyncResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session/sync',
+            path: {
+                'template_id': templateId,
+                'version_id': versionId,
+            },
+            query: {
+                'legal_entity_id': legalEntityId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Managed Document Google Edit Session
+     * @param documentId
+     * @returns ExternalEditSessionItem Successful Response
+     * @throws ApiError
+     */
+    public static getManagerManagedDocumentGoogleEditSession(
+        documentId: number,
+    ): CancelablePromise<ExternalEditSessionItem> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/documents/{document_id}/google-edit-session',
+            path: {
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Managed Document Google Edit Session
+     * @param documentId
+     * @returns ExternalEditSessionItem Successful Response
+     * @throws ApiError
+     */
+    public static createManagerManagedDocumentGoogleEditSession(
+        documentId: number,
+    ): CancelablePromise<ExternalEditSessionItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/documents/{document_id}/google-edit-session',
+            path: {
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Sync Managed Document Google Edit Session
+     * @param documentId
+     * @param requestBody
+     * @returns ExternalEditSessionItem Successful Response
+     * @throws ApiError
+     */
+    public static syncManagerManagedDocumentGoogleEditSession(
+        documentId: number,
+        requestBody: TemplateExternalEditSyncPayload,
+    ): CancelablePromise<ExternalEditSessionItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/documents/{document_id}/google-edit-session/sync',
+            path: {
+                'document_id': documentId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Managed Document Draft
+     * @param documentId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static previewManagerManagedDocumentDraft(
+        documentId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/documents/{document_id}/preview',
+            path: {
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

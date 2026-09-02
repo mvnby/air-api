@@ -7,8 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from models import Order, OrderDocument
+from models import DocumentLegalEntity, Order, OrderDocument, Tenant
+from models.tenancy import TenantScope
 from services.customer_party import is_business_customer_type
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 @dataclass(frozen=True)
@@ -156,7 +158,12 @@ class OrderEmailTemplateService:
         ]
 
     @staticmethod
-    def _request_body(labels: List[str], *, signer_only: bool = False) -> str:
+    def _request_body(
+        labels: List[str],
+        *,
+        sender_name: str,
+        signer_only: bool = False,
+    ) -> str:
         if signer_only:
             intro = "Для подготовки договора просим сообщить данные лица, которое будет подписывать договор:"
         else:
@@ -177,9 +184,48 @@ class OrderEmailTemplateService:
                 *details,
                 "",
                 "С уважением,",
-                "Мастер Воздуха",
+                sender_name,
             ]
         )
+
+    @classmethod
+    async def _sender_name(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        documents: List[OrderDocument],
+    ) -> str:
+        if tenant_scope.is_system:
+            return "Мастер Воздуха"
+
+        legal_entity_ids = {
+            int(item.legal_entity_id)
+            for item in documents
+            if item.legal_entity_id is not None
+        }
+        statement = select(DocumentLegalEntity).where(
+            DocumentLegalEntity.tenant_id == tenant_scope.tenant_id,
+            DocumentLegalEntity.status == "active",
+        )
+        if len(legal_entity_ids) == 1:
+            statement = statement.where(
+                DocumentLegalEntity.id == next(iter(legal_entity_ids))
+            )
+        else:
+            statement = statement.where(DocumentLegalEntity.is_default.is_(True))
+        legal_entity = (await session.execute(statement.limit(1))).scalars().first()
+        if legal_entity is not None:
+            return cls._clean(legal_entity.display_name) or cls._clean(
+                legal_entity.legal_name
+            )
+
+        tenant_name = (
+            await session.execute(
+                select(Tenant.display_name).where(Tenant.id == tenant_scope.tenant_id)
+            )
+        ).scalar_one_or_none()
+        return cls._clean(tenant_name) or "Ваша организация"
 
     @classmethod
     def _select_template(cls, requested: str, document_types: List[str]) -> str:
@@ -207,6 +253,7 @@ class OrderEmailTemplateService:
         cls,
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         order_id: int,
         document_ids: List[int],
         template_key: str = "auto",
@@ -214,23 +261,27 @@ class OrderEmailTemplateService:
         if template_key not in cls.TEMPLATE_KEYS:
             raise ValueError("Unknown email template")
 
-        order = (
-            await session.execute(
-                select(Order)
-                .where(Order.id == order_id)
-                .options(
-                    selectinload(Order.customer),
-                    selectinload(Order.documents),
-                    selectinload(Order.product_links),
-                    selectinload(Order.service_links),
-                )
-                .execution_options(populate_existing=True)
-            )
-        ).scalar_one_or_none()
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+            options=(
+                selectinload(Order.customer),
+                selectinload(Order.documents),
+                selectinload(Order.product_links),
+                selectinload(Order.service_links),
+            ),
+            populate_existing=True,
+        )
         if order is None:
             raise ValueError("Order not found")
 
-        documents_by_id = {int(item.id): item for item in order.documents}
+        documents_by_id = {
+            int(item.id): item
+            for item in order.documents
+            if item.tenant_id == tenant_scope.tenant_id
+            or (tenant_scope.is_system and item.tenant_id is None)
+        }
         documents: List[OrderDocument] = []
         for document_id in document_ids:
             document = documents_by_id.get(int(document_id))
@@ -247,18 +298,29 @@ class OrderEmailTemplateService:
         signer_keys = {"signer_name", "signer_position", "acting_basis"}
         signer_missing = [item for item in missing if item["key"] in signer_keys]
         scenario = cls._scenario_label(order)
+        sender_name = await cls._sender_name(
+            session,
+            tenant_scope=tenant_scope,
+            documents=documents,
+        )
 
         if selected_template == "request_requisites":
             labels = [item["label"] for item in missing]
             subject = "Запрос реквизитов для подготовки документов"
-            body_text = cls._request_body(labels)
+            body_text = cls._request_body(labels, sender_name=sender_name)
         elif selected_template == "request_signer":
             labels = [item["label"] for item in signer_missing]
             subject = "Запрос данных подписанта для договора"
-            body_text = cls._request_body(labels, signer_only=True)
+            body_text = cls._request_body(
+                labels,
+                sender_name=sender_name,
+                signer_only=True,
+            )
         elif selected_template == "custom":
             subject = f"По заказу #{order.id}"
-            body_text = "\n".join(["Добрый день!", "", "", "С уважением,", "Мастер Воздуха"])
+            body_text = "\n".join(
+                ["Добрый день!", "", "", "С уважением,", sender_name]
+            )
         else:
             body_labels = [
                 cls.DOCUMENT_LABELS.get(item.doc_type, "документ")
@@ -283,7 +345,7 @@ class OrderEmailTemplateService:
                     "Документ приложен к письму." if len(documents) == 1 else "Документы приложены к письму.",
                     "",
                     "С уважением,",
-                    "Мастер Воздуха",
+                    sender_name,
                 ]
             )
 

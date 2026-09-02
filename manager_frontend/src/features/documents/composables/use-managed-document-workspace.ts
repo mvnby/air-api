@@ -31,6 +31,7 @@ import {
   serializeTransportTerms,
   type TransportTerms,
 } from '../model/transport-terms';
+import { openNativeDocumentPreview } from '../integrations/native-document-preview';
 
 type ManagedWorkspaceInput = {
   orderId: () => number;
@@ -440,6 +441,14 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
 
+  const previewDraft = async (document: ManagedDocumentItem) => {
+    try {
+      await openNativeDocumentPreview(document.id);
+    } catch (error) {
+      input.notify(`Не удалось открыть предпросмотр: ${getApiErrorMessage(error)}`, 'error');
+    }
+  };
+
   return {
     actTerms,
     baseCustomerContractId,
@@ -458,8 +467,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     issueBlockedReason,
     issueCity,
     issueDate,
+    previewDraft,
     legalEntities,
     loading,
+    loadDocuments,
     loadWorkspace,
     pdfRuntime,
     prepareReplacement,

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, time
 
@@ -34,21 +32,14 @@ from modules.documents.infrastructure.artifact_storage import (
 from modules.documents.infrastructure.numbering_repository import (
     DocumentNumberingRepository,
 )
-from modules.documents.infrastructure.renderers import (
-    NativeDocxRenderer,
-    PdfConverter,
-)
+from modules.documents.infrastructure.renderers import PdfConverter
 from modules.documents.infrastructure.template_source_storage import (
     TemplateSourceStorage,
 )
 
-from .artifact_helpers import (
-    artifact_basename,
-    artifact_row,
-    build_render_inputs,
-    list_artifacts,
-    stored_artifact,
-)
+from .artifact_helpers import artifact_row, list_artifacts, stored_artifact
+from .editable_draft import EditableDraftError
+from .editable_draft_issue import load_editable_draft_for_issue
 from .context_builder import DocumentContextBuilder, DocumentContextSelection
 from .errors import (
     ManagedDocumentConflictError,
@@ -56,18 +47,16 @@ from .errors import (
     ManagedDocumentNotFoundError,
 )
 from .number_policies import DocumentNumberPolicyService
+from .issuance_artifacts import (
+    assign_official_identity,
+    render_and_store_issued_artifacts,
+)
 from .replacement_guard import lock_replacement_target
 from .template_selection import (
     load_document_template_version,
     resolve_template_use_case,
     select_active_native_template,
 )
-
-
-DOCX_CONTENT_TYPE = (
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
-PDF_CONTENT_TYPE = "application/pdf"
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +292,7 @@ class ManagedDocumentService:
         template_storage: TemplateSourceStorage,
         artifact_storage: DocumentArtifactStorage,
         pdf_converter: PdfConverter,
+        verified_remote_revision: str | None = None,
     ) -> IssuedDocumentResult:
         document = await cls._get_scoped_document(
             session,
@@ -350,6 +340,37 @@ class ManagedDocumentService:
             tenant_scope=tenant_scope,
             document=document,
         )
+        editable_source: bytes | None = None
+        required_placeholder_counts: dict[str, int] | None = None
+        source_artifact = next(
+            (
+                item
+                for item in await cls._artifacts(
+                    session, tenant_scope.tenant_id, document_id
+                )
+                if item.kind == "source_docx"
+            ),
+            None,
+        )
+        if source_artifact is not None:
+            try:
+                issue_source = await load_editable_draft_for_issue(
+                    session,
+                    tenant_id=tenant_scope.tenant_id,
+                    document_id=document_id,
+                    source_artifact=source_artifact,
+                    placeholder_schema=version.placeholder_schema or {},
+                    artifact_storage=artifact_storage,
+                    verified_remote_revision=verified_remote_revision,
+                )
+                editable_source = issue_source.content
+                required_placeholder_counts = (
+                    issue_source.required_placeholder_counts
+                )
+            except (EditableDraftError, FileNotFoundError, TypeError, ValueError) as exc:
+                raise ManagedDocumentConflictError(
+                    "Отредактированный черновик повреждён или потерял служебные поля выпуска"
+                ) from exc
         policy_key = numbering_policy_key(document.doc_type, document.business_role)
         policy = await DocumentNumberPolicyService.get_effective(
             session,
@@ -393,64 +414,31 @@ class ManagedDocumentService:
             reservation_id=reservation.reservation_id,
             document_id=document_id,
         )
-        official_number = f"{reservation.number_value:0{policy.minimum_width}d}"
-        snapshot = deepcopy(document.render_snapshot)
-        values = snapshot.setdefault("values", {})
-        values.update(
-            {
-                "document.internal_reference": document.internal_reference,
-                "document.official_series": policy.series,
-                "document.official_number": official_number,
-                "document.official_full_number": reservation.number_text,
-                "document.issued_on": issued_on.strftime("%d.%m.%Y"),
-                "document.act_sequence_number": str(reservation.number_value),
-            }
+        snapshot, values = assign_official_identity(
+            document=document,
+            policy=policy,
+            reservation=reservation,
+            period_key=period_key,
+            issued_on=issued_on,
         )
-        document.official_series = policy.series
-        document.official_period_key = period_key
-        document.official_number = official_number
-        document.official_date = issued_on
-        document.render_snapshot = snapshot
         session.add(document)
         await cls._commit(session, "Не удалось зарезервировать номер документа")
 
         try:
-            source = await template_storage.read_persisted(
+            stored_docx, stored_pdf = await render_and_store_issued_artifacts(
                 tenant_id=tenant_scope.tenant_id,
-                template_id=int(template.id),
-                version=version.version,
-                storage_key=version.source_storage_key,
-                filename=str(version.source_filename or "template.docx"),
-                checksum_sha256=version.checksum_sha256,
-            )
-            render_template, render_context = build_render_inputs(
+                document_id=document_id,
+                document_type=document.doc_type,
+                official_full_number=reservation.number_text,
                 template=template,
                 version=version,
-                source=source,
                 snapshot=snapshot,
-            )
-            rendered = NativeDocxRenderer().render(render_template, render_context)
-            basename = artifact_basename(document.doc_type, reservation.number_text)
-            pdf_content = await asyncio.to_thread(
-                pdf_converter.convert_docx,
-                rendered.content,
-                filename=f"{basename}.docx",
-            )
-            stored_docx = await artifact_storage.save(
-                tenant_id=tenant_scope.tenant_id,
-                document_id=document_id,
-                kind="rendered_docx",
-                filename=f"{basename}.docx",
-                content_type=DOCX_CONTENT_TYPE,
-                content=rendered.content,
-            )
-            stored_pdf = await artifact_storage.save(
-                tenant_id=tenant_scope.tenant_id,
-                document_id=document_id,
-                kind="pdf",
-                filename=f"{basename}.pdf",
-                content_type=PDF_CONTENT_TYPE,
-                content=pdf_content,
+                official_values=values,
+                editable_source=editable_source,
+                required_placeholder_counts=required_placeholder_counts,
+                template_storage=template_storage,
+                artifact_storage=artifact_storage,
+                pdf_converter=pdf_converter,
             )
         except Exception as exc:
             raise ManagedDocumentGenerationError(

@@ -1,10 +1,11 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
 from docx import Document
 from httpx import AsyncClient
+from sqlmodel import select
 
 from core.config import settings
 from core.security import create_access_token
@@ -16,9 +17,15 @@ from models import (
     StaffUser,
     Storefront,
     Tenant,
+    TenantAuditEvent,
     TenantMembership,
 )
 from services.private_attachment_storage_service import LocalPrivateAttachmentStorage
+from modules.documents.infrastructure.external_edit_provider import (
+    DOCX_CONTENT_TYPE,
+    DownloadedExternalEditFile,
+    ExternalEditFileMetadata,
+)
 
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -33,6 +40,37 @@ class _FakePdfConverter:
         assert content.startswith(b"PK")
         assert filename.endswith(".docx")
         return b"%PDF-1.4\napi-document-system-test\n%%EOF"
+
+
+class _FakeGoogleTemplateEditor:
+    provider_name = "google_drive"
+    connection_id = "api-connection-1"
+
+    def __init__(self) -> None:
+        self.content = _template_docx()
+        self.revision = "revision-1"
+        self.edit_session_id = ""
+
+    def metadata(self) -> ExternalEditFileMetadata:
+        return ExternalEditFileMetadata(
+            file_id="api-google-file",
+            edit_session_id=self.edit_session_id,
+            edit_url="https://docs.google.com/document/d/api-google-file/edit",
+            filename="Договор.docx",
+            mime_type=DOCX_CONTENT_TYPE,
+            revision=self.revision,
+            modified_at=datetime(2026, 9, 2, tzinfo=timezone.utc),
+        )
+
+    async def ensure_docx(self, **kwargs) -> ExternalEditFileMetadata:
+        self.edit_session_id = kwargs["edit_session_id"]
+        return self.metadata()
+
+    async def get_metadata(self, _file_id: str) -> ExternalEditFileMetadata:
+        return self.metadata()
+
+    async def download_docx(self, _file_id: str) -> DownloadedExternalEditFile:
+        return DownloadedExternalEditFile(self.metadata(), self.content)
 
 
 @pytest.fixture(autouse=True)
@@ -347,6 +385,112 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     )
     assert manually_uploaded.status_code == 200, manually_uploaded.text
     assert manually_uploaded.json()["placeholder_schema"] == manual_schema
+
+
+@pytest.mark.asyncio
+async def test_native_template_google_round_trip_creates_unactivated_revision(
+    async_client: AsyncClient,
+    db,
+    monkeypatch,
+):
+    import importlib
+
+    headers = await _legacy_owner_headers(async_client)
+    issuer_id = await _create_issuer(async_client, headers, name="ООО Google Редактор")
+    template_id, version_id = await _create_native_contract_template(
+        async_client,
+        headers,
+        legal_entity_id=issuer_id,
+    )
+    provider = _FakeGoogleTemplateEditor()
+    document_router = importlib.import_module("modules.documents.api.router")
+
+    async def _provider(**_kwargs):
+        return provider
+
+    monkeypatch.setattr(
+        document_router,
+        "get_google_document_edit_provider",
+        _provider,
+    )
+    edit_path = (
+        f"{BASE}/templates/{template_id}/versions/{version_id}/google-edit-session"
+    )
+    opened = await async_client.post(
+        edit_path,
+        headers=headers,
+        params={"legal_entity_id": issuer_id},
+    )
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["status"] == "ready"
+    assert opened.json()["can_edit"] is True
+
+    edited = Document(BytesIO(_template_docx()))
+    edited.add_paragraph("Email: {{ customer.email }}")
+    output = BytesIO()
+    edited.save(output)
+    provider.content = output.getvalue()
+    provider.revision = "revision-2"
+
+    status = await async_client.get(
+        edit_path,
+        headers=headers,
+        params={"legal_entity_id": issuer_id},
+    )
+    assert status.status_code == 200, status.text
+    assert status.json()["status"] == "changed"
+
+    sync_payload = {
+        "expected_base_checksum_sha256": status.json()["base_checksum_sha256"],
+        "expected_remote_revision": status.json()["remote_revision"],
+        "idempotency_key": "api-sync-1",
+    }
+    synced = await async_client.post(
+        f"{edit_path}/sync",
+        headers=headers,
+        params={"legal_entity_id": issuer_id},
+        json=sync_payload,
+    )
+    assert synced.status_code == 200, synced.text
+    assert synced.json()["session"]["status"] == "ready"
+    assert synced.json()["new_template_version"]["version"] == 2
+    assert synced.json()["new_template_version"]["status"] == "draft"
+
+    repeated = await async_client.post(
+        f"{edit_path}/sync",
+        headers=headers,
+        params={"legal_entity_id": issuer_id},
+        json=sync_payload,
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert (
+        repeated.json()["new_template_version"]["id"]
+        == synced.json()["new_template_version"]["id"]
+    )
+    audit_events = (
+        await db.execute(
+            select(TenantAuditEvent).where(
+                TenantAuditEvent.action == "document_template.google_sync"
+            )
+        )
+    ).scalars().all()
+    assert len(audit_events) == 1
+    assert audit_events[0].entity_id == template_id
+    assert (
+        audit_events[0].change_set["new_template_version_id"]
+        == synced.json()["new_template_version"]["id"]
+    )
+
+    versions = await async_client.get(
+        f"{BASE}/templates/{template_id}/versions",
+        headers=headers,
+        params={"legal_entity_id": issuer_id},
+    )
+    assert versions.status_code == 200, versions.text
+    assert [(item["version"], item["status"]) for item in versions.json()["items"]] == [
+        (2, "draft"),
+        (1, "active"),
+    ]
 
 
 @pytest.mark.asyncio

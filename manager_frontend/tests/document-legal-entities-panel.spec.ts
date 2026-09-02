@@ -4,6 +4,7 @@ import { ManagerDocumentSystemService, type DocumentLegalEntityItem } from '../s
 import { api } from '../src/api';
 import DocumentLegalEntitiesPanel from '../src/features/documents/settings/DocumentLegalEntitiesPanel.vue';
 import NativeTemplateLibrary from '../src/features/documents/settings/NativeTemplateLibrary.vue';
+import { googleDocumentEditorApi } from '../src/features/documents/integrations/google-document-editor-api';
 
 
 const NOW = '2026-08-27T00:00:00Z';
@@ -40,6 +41,41 @@ const mountPanel = (item: DocumentLegalEntityItem = entity()) => {
 };
 
 beforeEach(() => {
+  vi.spyOn(googleDocumentEditorApi, 'getConnectionStatus').mockResolvedValue({
+    connected: false,
+    provider: 'google_drive',
+    account_label: null,
+    managed_folder_url: null,
+    connected_at: null,
+    last_verified_at: null,
+    last_error_code: null,
+  });
+  vi.spyOn(googleDocumentEditorApi, 'getSession').mockResolvedValue(null);
+  vi.spyOn(googleDocumentEditorApi, 'createSession').mockResolvedValue({
+    id: 'template-session-10',
+    status: 'ready',
+    edit_url: 'https://docs.google.com/document/d/template-10/edit',
+    can_edit: true,
+    base_checksum_sha256: 'a'.repeat(64),
+    remote_revision: 'revision-1',
+    modified_at: NOW,
+    last_synced_at: NOW,
+    detail: null,
+  });
+  vi.spyOn(googleDocumentEditorApi, 'syncSession').mockResolvedValue({
+    session: {
+      id: 'template-session-10',
+      status: 'ready',
+      edit_url: 'https://docs.google.com/document/d/template-10/edit',
+      can_edit: true,
+      base_checksum_sha256: 'b'.repeat(64),
+      remote_revision: 'revision-2',
+      modified_at: NOW,
+      last_synced_at: NOW,
+      detail: null,
+    },
+    newTemplateVersionCreated: true,
+  });
   vi.spyOn(api, 'getCompanyByUnp').mockResolvedValue({
     row: {
       vnaimp: 'Индивидуальный предприниматель Иванов Иван Иванович',
@@ -191,5 +227,117 @@ describe('NativeTemplateLibrary', () => {
       business_role: null,
     });
     expect(ManagerDocumentSystemService.createManagerNativeDocumentTemplate).not.toHaveBeenCalled();
+  });
+
+  it('opens and imports an online template edit only when Google Drive is connected', async () => {
+    vi.mocked(googleDocumentEditorApi.getConnectionStatus).mockResolvedValue({
+      connected: true,
+      provider: 'google_drive',
+      account_label: 'docs@example.com',
+      managed_folder_url: 'https://drive.google.com/drive/folders/crm',
+      connected_at: NOW,
+      last_verified_at: NOW,
+      last_error_code: null,
+    });
+    vi.spyOn(ManagerDocumentSystemService, 'listManagerNativeDocumentTemplates').mockResolvedValue({
+      items: [{
+        id: 10,
+        tenant_id: 1,
+        legal_entity_id: 5,
+        name: 'Договор ремонта',
+        doc_type: 'contract',
+        is_default: true,
+        is_active: true,
+        sort_order: 0,
+        created_at: NOW,
+      }],
+    });
+    vi.spyOn(ManagerDocumentSystemService, 'listManagerNativeTemplateVersions').mockResolvedValue({
+      items: [{
+        id: 20,
+        template_id: 10,
+        version: 1,
+        status: 'active',
+        renderer: 'docx',
+        source_filename: 'contract.docx',
+        checksum_sha256: 'a'.repeat(64),
+        placeholder_schema: {},
+        created_at: NOW,
+      }],
+    });
+    vi.spyOn(ManagerDocumentSystemService, 'getManagerNativePlaceholderCatalog').mockResolvedValue({
+      document_type: 'contract',
+      fields: [],
+      conditions: [],
+      tables: [],
+    });
+    const replace = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ opener: null, location: { replace }, close: vi.fn() } as never);
+    const wrapper = mount(NativeTemplateLibrary, { props: { legalEntityId: 5 } });
+    wrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="template-google-connected"]').text()).toContain('docs@example.com');
+    const edit = wrapper.findAll('button').find((button) => button.text().includes('Редактировать в Google Docs'));
+    expect(edit).toBeDefined();
+    await edit!.trigger('click');
+    await flushPromises();
+
+    expect(googleDocumentEditorApi.createSession).toHaveBeenCalledWith({
+      kind: 'template-version',
+      templateId: 10,
+      versionId: 20,
+      legalEntityId: 5,
+    });
+    expect(replace).toHaveBeenCalledWith('https://docs.google.com/document/d/template-10/edit');
+
+    vi.mocked(googleDocumentEditorApi.getSession).mockResolvedValue({
+      id: 'template-session-10',
+      status: 'ready',
+      edit_url: 'https://docs.google.com/document/d/template-10/edit',
+      can_edit: true,
+      base_checksum_sha256: 'a'.repeat(64),
+      remote_revision: 'revision-1',
+      modified_at: NOW,
+      last_synced_at: NOW,
+      detail: null,
+    });
+
+    const sync = wrapper.findAll('button').find((button) => button.text().includes('Забрать изменения'));
+    await sync!.trigger('click');
+    await flushPromises();
+    expect(googleDocumentEditorApi.syncSession).toHaveBeenCalled();
+    expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('новая версия шаблона'))).toBe(true);
+
+    vi.mocked(googleDocumentEditorApi.syncSession).mockResolvedValueOnce({
+      session: {
+        id: 'template-session-10',
+        status: 'ready',
+        edit_url: 'https://docs.google.com/document/d/template-10/edit',
+        can_edit: true,
+        base_checksum_sha256: 'b'.repeat(64),
+        remote_revision: 'revision-2',
+        modified_at: NOW,
+        last_synced_at: NOW,
+        detail: null,
+      },
+      newTemplateVersionCreated: false,
+    });
+    await wrapper.findAll('button').find((button) => button.text().includes('Забрать изменения'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('новых изменений нет'))).toBe(true);
+
+    const statusCallsBeforeFocus = vi.mocked(googleDocumentEditorApi.getConnectionStatus).mock.calls.length;
+    const sessionCallsBeforeFocus = vi.mocked(googleDocumentEditorApi.getSession).mock.calls.length;
+    window.dispatchEvent(new Event('focus'));
+    await flushPromises();
+    expect(googleDocumentEditorApi.getConnectionStatus).toHaveBeenCalledTimes(statusCallsBeforeFocus + 1);
+    expect(vi.mocked(googleDocumentEditorApi.getSession).mock.calls.length).toBeGreaterThan(sessionCallsBeforeFocus);
+
+    wrapper.unmount();
+    const statusCallsAfterUnmount = vi.mocked(googleDocumentEditorApi.getConnectionStatus).mock.calls.length;
+    window.dispatchEvent(new Event('focus'));
+    await flushPromises();
+    expect(googleDocumentEditorApi.getConnectionStatus).toHaveBeenCalledTimes(statusCallsAfterUnmount);
   });
 });

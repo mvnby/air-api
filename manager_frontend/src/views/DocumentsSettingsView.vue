@@ -130,7 +130,7 @@ const savePolicy = async (documentType: string, payload: DocumentNumberPolicyPay
         <div>
           <p class="text-xs font-bold uppercase tracking-[0.18em] text-teal-600">Документный контур</p>
           <h1 class="mt-1 font-['Space_Grotesk'] text-3xl font-bold text-slate-950 dark:text-white">Документы внутри CRM</h1>
-          <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Нативная генерация DOCX/PDF и версии шаблонов. Google Docs остаётся доступным в заказе как отдельный провайдер.</p>
+          <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Нативная генерация DOCX/PDF и история версий. Google Диск можно подключить как онлайн-редактор шаблонов и черновиков.</p>
         </div>
         <div class="rounded-xl border px-4 py-3 text-sm" :class="runtime?.available ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'">
           <div class="font-bold">PDF: {{ runtime?.available ? 'готов' : 'недоступен' }}</div>

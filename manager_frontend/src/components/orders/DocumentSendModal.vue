@@ -1,13 +1,22 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { ManagerMailService } from '../../client';
-import type { ManagerOrderDetailResponse, ManagerOrderDocumentItem } from '../../client';
+import { computed, nextTick, ref, watch } from 'vue';
+import { ManagerDocumentSystemService, ManagerMailService } from '../../client';
+import type { ManagerOrderDetailResponse } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
+
+type SendableOrderDocument = {
+  id: number;
+  doc_type: string;
+  date: string;
+  number?: string | null;
+  display_number?: string | null;
+};
 
 const props = defineProps<{
   modelValue: boolean;
   order: ManagerOrderDetailResponse;
-  documents: ManagerOrderDocumentItem[];
+  documents: SendableOrderDocument[];
+  transport?: 'legacy' | 'native';
 }>();
 
 const emit = defineEmits<{
@@ -53,6 +62,7 @@ const composing = ref(false);
 const subjectTouched = ref(false);
 const bodyTouched = ref(false);
 let composeRequestId = 0;
+let resettingSelection = false;
 
 const selectedDocuments = computed(() => {
   const selected = new Set(selectedDocumentIds.value);
@@ -65,9 +75,9 @@ const activeTemplate = computed(() => (
 ));
 const documentsRequired = computed(() => activeTemplate.value?.requires_documents !== false);
 
-const documentLabel = (doc: ManagerOrderDocumentItem) => {
+const documentLabel = (doc: SendableOrderDocument) => {
   const typeLabel = DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type || 'Документ';
-  return `${typeLabel} ${doc.number || `#${doc.id}`}`;
+  return `${typeLabel} ${doc.number || doc.display_number || `#${doc.id}`}`;
 };
 
 const templateAvailable = (key: string) => {
@@ -112,6 +122,7 @@ const buildBody = () => {
 };
 
 const refreshDefaults = () => {
+  resettingSelection = true;
   selectedDocumentIds.value = latestDefaultDocumentIds();
   toEmail.value = props.order.customer?.email || '';
   templateKey.value = props.documents.length ? 'auto' : 'request_requisites';
@@ -121,7 +132,10 @@ const refreshDefaults = () => {
   error.value = '';
   subjectTouched.value = false;
   bodyTouched.value = false;
-  void applyTemplate(true);
+  void nextTick(() => {
+    resettingSelection = false;
+    return applyTemplate(true);
+  });
 };
 
 const applyTemplate = async (force = false) => {
@@ -129,10 +143,13 @@ const applyTemplate = async (force = false) => {
   const requestId = ++composeRequestId;
   composing.value = true;
   try {
-    const result = await ManagerMailService.composeManagerOrderEmail(props.order.id, {
+    const payload = {
       document_ids: selectedDocumentIds.value,
       template_key: templateKey.value,
-    });
+    };
+    const result = props.transport === 'native'
+      ? await ManagerDocumentSystemService.composeManagerNativeOrderEmail(props.order.id, payload)
+      : await ManagerMailService.composeManagerOrderEmail(props.order.id, payload);
     if (requestId !== composeRequestId) return;
     templateOptions.value = result.template_options || templateOptions.value;
     missingRequisites.value = result.missing_requisites || [];
@@ -148,6 +165,7 @@ const applyTemplate = async (force = false) => {
 };
 
 const changeTemplate = () => {
+  resettingSelection = true;
   if (templateKey.value === 'request_requisites' || templateKey.value === 'request_signer') {
     selectedDocumentIds.value = [];
   } else if (['offer', 'invoice', 'contract'].includes(templateKey.value)) {
@@ -160,7 +178,10 @@ const changeTemplate = () => {
   }
   subjectTouched.value = false;
   bodyTouched.value = false;
-  void applyTemplate(true);
+  void nextTick(() => {
+    resettingSelection = false;
+    return applyTemplate(true);
+  });
 };
 
 watch(
@@ -171,7 +192,7 @@ watch(
 );
 
 watch(selectedDocumentIds, () => {
-  if (!props.modelValue) return;
+  if (!props.modelValue || resettingSelection) return;
   if (templateKey.value === 'custom') return;
   void applyTemplate(false);
 });
@@ -202,12 +223,17 @@ const sendEmail = async () => {
 
   sending.value = true;
   try {
-    await ManagerMailService.sendManagerOrderEmail(props.order.id, {
+    const payload = {
       to_email: toEmail.value.trim(),
       subject: subject.value.trim(),
       body_text: bodyText.value.trim(),
       document_ids: selectedDocumentIds.value,
-    });
+    };
+    if (props.transport === 'native') {
+      await ManagerDocumentSystemService.sendManagerNativeOrderEmail(props.order.id, payload);
+    } else {
+      await ManagerMailService.sendManagerOrderEmail(props.order.id, payload);
+    }
     emit('settled');
     emit('sent');
     emit('update:modelValue', false);

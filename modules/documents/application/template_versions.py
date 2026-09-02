@@ -264,6 +264,7 @@ class NativeTemplateVersionService:
         placeholder_contract: NativeTemplatePlaceholderContract,
         storage: TemplateSourceStorage,
         change_note: str | None = None,
+        commit: bool = True,
     ) -> DocumentTemplateVersion:
         if not isinstance(placeholder_contract, NativeTemplatePlaceholderContract):
             raise TypeError(
@@ -318,9 +319,12 @@ class NativeTemplateVersionService:
             change_note=_optional_text(change_note, 1000),
         )
         session.add(version)
-        await cls._commit(
-            session, conflict_message="Не удалось сохранить новую версию шаблона"
-        )
+        if commit:
+            await cls._commit(
+                session, conflict_message="Не удалось сохранить новую версию шаблона"
+            )
+        else:
+            await session.flush()
         await session.refresh(version)
         return version
 

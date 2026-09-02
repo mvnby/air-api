@@ -33,7 +33,7 @@ def _migration():
 
 def test_native_template_use_case_is_single_alembic_head() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert_revision_in_single_head_chain(scripts, REVISION)
 
 
 def test_migration_adds_scoped_template_metadata_and_is_reversible() -> None:

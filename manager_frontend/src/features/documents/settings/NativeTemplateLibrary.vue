@@ -12,6 +12,9 @@ import {
 import { getApiErrorMessage } from '../../../utils/api-errors';
 import { NATIVE_DOCUMENT_TYPES, documentTypeName } from '../model/native-document-options';
 import { CONTRACT_SCENARIOS } from '../model/business-document-terms';
+import GoogleDocumentEditorActions from '../components/GoogleDocumentEditorActions.vue';
+import { useGoogleDocumentEditor } from '../composables/use-google-document-editor';
+import type { GoogleDocumentEditTarget } from '../integrations/google-document-editor-api';
 
 const props = defineProps<{ legalEntityId: number | null }>();
 const emit = defineEmits<{ toast: [payload: { message: string; type: 'success' | 'error' }] }>();
@@ -37,6 +40,7 @@ const saving = ref(false);
 const activatingId = ref<number | null>(null);
 const downloadingId = ref<number | null>(null);
 let loadId = 0;
+let versionLoadId = 0;
 
 const selectedTemplate = computed(() => templates.value.find((item) => item.id === selectedTemplateId.value) || null);
 const groupedFields = computed(() => {
@@ -57,6 +61,29 @@ const groupedConditions = computed(() => {
 });
 
 const notify = (message: string, type: 'success' | 'error' = 'success') => emit('toast', { message, type });
+let reloadTemplateVersions: (() => Promise<void>) | null = null;
+const googleEditor = useGoogleDocumentEditor({
+  notify,
+  onSynced: async (target) => {
+    if (target.kind === 'template-version') await reloadTemplateVersions?.();
+  },
+});
+const googleTarget = (version: NativeTemplateVersionItem): GoogleDocumentEditTarget | null => {
+  if (!props.legalEntityId || !selectedTemplateId.value) return null;
+  return {
+    kind: 'template-version',
+    templateId: selectedTemplateId.value,
+    versionId: version.id,
+    legalEntityId: props.legalEntityId,
+  };
+};
+const loadGoogleSessions = () => {
+  if (!googleEditor.connected.value) return;
+  for (const version of versions.value) {
+    const target = googleTarget(version);
+    if (target) void googleEditor.loadSession(target);
+  }
+};
 const selectUploadFile = (event: Event) => {
   uploadFile.value = (event.target as HTMLInputElement).files?.[0] || null;
 };
@@ -72,16 +99,25 @@ const loadCatalog = async () => {
 const loadVersions = async () => {
   const legalEntityId = props.legalEntityId;
   const templateId = selectedTemplateId.value;
+  const requestId = ++versionLoadId;
   if (!legalEntityId || !templateId) {
     versions.value = [];
     return;
   }
   try {
-    versions.value = (await ManagerDocumentSystemService.listManagerNativeTemplateVersions(templateId, legalEntityId)).items;
+    const response = await ManagerDocumentSystemService.listManagerNativeTemplateVersions(templateId, legalEntityId);
+    if (
+      requestId !== versionLoadId
+      || props.legalEntityId !== legalEntityId
+      || selectedTemplateId.value !== templateId
+    ) return;
+    versions.value = response.items;
+    loadGoogleSessions();
   } catch (error) {
     notify(`Не удалось загрузить версии: ${getApiErrorMessage(error)}`, 'error');
   }
 };
+reloadTemplateVersions = loadVersions;
 
 const loadTemplates = async () => {
   const legalEntityId = props.legalEntityId;
@@ -113,6 +149,9 @@ watch(() => [props.legalEntityId, documentType.value], () => {
   void Promise.all([loadTemplates(), loadCatalog()]);
 }, { immediate: true });
 watch(selectedTemplateId, () => void loadVersions());
+watch(googleEditor.connected, (connected) => {
+  if (connected) loadGoogleSessions();
+});
 watch(selectedTemplate, (template) => {
   metadataName.value = template?.name || '';
   metadataDescription.value = template?.description || '';
@@ -213,11 +252,13 @@ const activate = async (versionId: number) => {
 
 const downloadVersion = async (version: NativeTemplateVersionItem) => {
   if (!props.legalEntityId || !selectedTemplateId.value) return;
+  const legalEntityId = props.legalEntityId;
+  const templateId = selectedTemplateId.value;
   downloadingId.value = version.id;
   try {
-    const query = new URLSearchParams({ legal_entity_id: String(props.legalEntityId) });
+    const query = new URLSearchParams({ legal_entity_id: String(legalEntityId) });
     const response = await fetch(
-      `${OpenAPI.BASE}/api/manager/document-system/templates/${selectedTemplateId.value}/versions/${version.id}/source?${query}`,
+      `${OpenAPI.BASE}/api/manager/document-system/templates/${templateId}/versions/${version.id}/source?${query}`,
       {
         credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin',
         headers: { Accept: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
@@ -245,6 +286,22 @@ const versionFields = (version: NativeTemplateVersionItem) => (
 const versionConditions = (version: NativeTemplateVersionItem) => (
   Array.isArray(version.placeholder_schema?.conditions) ? version.placeholder_schema.conditions : []
 );
+const syncGoogleTemplate = async (version: NativeTemplateVersionItem) => {
+  const target = googleTarget(version);
+  if (target) await googleEditor.sync(target);
+};
+const openGoogleTemplate = (version: NativeTemplateVersionItem) => {
+  const target = googleTarget(version);
+  if (target) void googleEditor.open(target);
+};
+const googleSession = (version: NativeTemplateVersionItem) => {
+  const target = googleTarget(version);
+  return target ? googleEditor.getSession(target) : null;
+};
+const googleBusy = (version: NativeTemplateVersionItem) => {
+  const target = googleTarget(version);
+  return target ? googleEditor.isBusy(target) : false;
+};
 </script>
 
 <template>
@@ -253,6 +310,14 @@ const versionConditions = (version: NativeTemplateVersionItem) => (
       <div>
         <h2 class="settings-title">DOCX-шаблоны</h2>
         <p class="settings-help">Меняйте Word-файл как обычно. CRM найдёт поля и безопасные условные секции, проверит их и создаст новую неизменяемую версию.</p>
+        <p v-if="googleEditor.connectionState.value === 'connected'" class="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="template-google-connected">
+          Google подключён<span v-if="googleEditor.accountLabel.value">: {{ googleEditor.accountLabel.value }}</span>. После возвращения изменения сохраняются в CRM новой версией шаблона.
+        </p>
+        <p v-else-if="googleEditor.connectionState.value === 'disconnected'" class="mt-1 text-xs text-slate-500" data-testid="template-google-disconnected">
+          <template v-if="googleEditor.canConnect.value">Для онлайн-редактирования <button class="font-semibold text-teal-700 underline underline-offset-2" type="button" @click="googleEditor.connect">подключите Google</button>.</template>
+          <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
+          Загрузка DOCX вручную останется доступна.
+        </p>
       </div>
       <select v-model="documentType" class="settings-input w-full lg:w-72">
         <option v-for="type in NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
@@ -312,6 +377,14 @@ const versionConditions = (version: NativeTemplateVersionItem) => (
               </div>
               <div class="flex flex-wrap gap-2">
                 <button class="settings-button-secondary" type="button" :disabled="downloadingId === version.id" @click="downloadVersion(version)">Скачать DOCX</button>
+                <GoogleDocumentEditorActions
+                  v-if="googleEditor.connected.value"
+                  :session="googleSession(version)"
+                  :busy="googleBusy(version)"
+                  :editable="googleSession(version)?.can_edit !== false"
+                  @open="openGoogleTemplate(version)"
+                  @sync="syncGoogleTemplate(version)"
+                />
                 <button v-if="version.status !== 'active'" class="settings-button-secondary" type="button" :disabled="activatingId === version.id" @click="activate(version.id)">Сделать активной</button>
               </div>
             </div>

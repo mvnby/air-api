@@ -12153,6 +12153,58 @@
         }
       }
     },
+    "/api/manager/document-drive/status": {
+      "get": {
+        "tags": [
+          "manager-document-drive"
+        ],
+        "summary": "Get Manager Document Drive Status",
+        "operationId": "get_manager_document_drive_status",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDriveStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/document-drive/authorization-url": {
+      "get": {
+        "tags": [
+          "manager-document-drive"
+        ],
+        "summary": "Get Manager Document Drive Authorization Url",
+        "operationId": "get_manager_document_drive_authorization_url",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDriveAuthorizationUrlResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/document-system/legal-entities": {
       "get": {
         "tags": [
@@ -12871,6 +12923,518 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/manager/document-system/orders/{order_id}/email/compose": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Compose Native Order Email",
+        "operationId": "compose_manager_native_order_email",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderEmailComposePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderEmailComposeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/orders/{order_id}/email": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Send Native Order Email",
+        "operationId": "send_manager_native_order_email",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderEmailSendPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutgoingEmailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Native Template Google Edit Session",
+        "operationId": "get_manager_native_template_google_edit_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "legal_entity_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Legal Entity Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEditSessionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Create Native Template Google Edit Session",
+        "operationId": "create_manager_native_template_google_edit_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "legal_entity_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Legal Entity Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEditSessionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session/sync": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Sync Native Template Google Edit Session",
+        "operationId": "sync_manager_native_template_google_edit_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "legal_entity_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Legal Entity Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateExternalEditSyncPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateExternalEditSyncResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/google-edit-session": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Managed Document Google Edit Session",
+        "operationId": "get_manager_managed_document_google_edit_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEditSessionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Create Managed Document Google Edit Session",
+        "operationId": "create_manager_managed_document_google_edit_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEditSessionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/google-edit-session/sync": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Sync Managed Document Google Edit Session",
+        "operationId": "sync_manager_managed_document_google_edit_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateExternalEditSyncPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEditSessionItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/preview": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Preview Managed Document Draft",
+        "operationId": "preview_manager_managed_document_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/manager/document-system/orders/{order_id}/documents": {
@@ -31653,6 +32217,95 @@
         ],
         "title": "DashboardTouchpoint"
       },
+      "DocumentDriveAuthorizationUrlResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "DocumentDriveAuthorizationUrlResponse"
+      },
+      "DocumentDriveStatusResponse": {
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "provider": {
+            "type": "string",
+            "const": "google_drive",
+            "title": "Provider",
+            "default": "google_drive"
+          },
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "managed_folder_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Managed Folder Url"
+          },
+          "connected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connected"
+        ],
+        "title": "DocumentDriveStatusResponse"
+      },
       "DocumentLegalEntityCreatePayload": {
         "properties": {
           "display_name": {
@@ -33036,6 +33689,91 @@
           "other"
         ],
         "title": "EquipmentServiceEventType"
+      },
+      "ExternalEditSessionItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "edit_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Url"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "title": "Can Edit"
+          },
+          "base_checksum_sha256": {
+            "type": "string",
+            "title": "Base Checksum Sha256"
+          },
+          "remote_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Revision"
+          },
+          "modified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "can_edit",
+          "base_checksum_sha256"
+        ],
+        "title": "ExternalEditSessionItem"
       },
       "FeatureCategoryResponse": {
         "properties": {
@@ -64970,6 +65708,58 @@
           "hash"
         ],
         "title": "TelegramLoginPayload"
+      },
+      "TemplateExternalEditSyncPayload": {
+        "properties": {
+          "expected_base_checksum_sha256": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Expected Base Checksum Sha256"
+          },
+          "expected_remote_revision": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Expected Remote Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_base_checksum_sha256",
+          "expected_remote_revision",
+          "idempotency_key"
+        ],
+        "title": "TemplateExternalEditSyncPayload"
+      },
+      "TemplateExternalEditSyncResponse": {
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/ExternalEditSessionItem"
+          },
+          "new_template_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NativeTemplateVersionItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "session"
+        ],
+        "title": "TemplateExternalEditSyncResponse"
       },
       "TransportTermsPayload": {
         "properties": {

@@ -35,6 +35,7 @@ from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
 from .auth_security import AuthLoginThrottle
 from .analytics_connection import AnalyticsConnection
+from .document_drive_connection import DocumentDriveConnection
 from .legacy_owner_auth import LegacyOwnerAuthState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob
@@ -48,6 +49,7 @@ from .document import (
     DocumentNumberSequence,
     DocumentTemplateVersion,
 )
+from .document_external_edit import DocumentExternalEditSession
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
 from .communication_runtime import (
     CommunicationRuntimeState,
@@ -132,6 +134,7 @@ from .supplier import (
 __all__ = [
     "Article",
     "AnalyticsConnection",
+    "DocumentDriveConnection",
     "AuthLoginThrottle",
     "BankReceipt",
     "Cart",
@@ -168,6 +171,7 @@ __all__ = [
     "DocumentNumberSequence",
     "DocumentTemplate",
     "DocumentTemplateVersion",
+    "DocumentExternalEditSession",
     "DocumentTemplateActLink",
     "DocumentTemplateCustomerLink",
     "CustomerEquipment",
