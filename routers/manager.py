@@ -13,6 +13,7 @@ from routers import manager_crm
 from routers import manager_contracts
 from routers import manager_dashboard
 from routers import manager_docs
+from routers import manager_document_drive
 from routers import manager_equipment
 from routers import manager_equipment_links
 from routers import manager_google_auth
@@ -57,6 +58,7 @@ router.include_router(manager_mdv_catalog.router)
 router.include_router(manager_specs.router)
 router.include_router(manager_auth.router)
 router.include_router(manager_docs.router)
+router.include_router(manager_document_drive.router)
 router.include_router(manager_document_system_router)
 router.include_router(manager_orders.router)
 router.include_router(manager_equipment.router)

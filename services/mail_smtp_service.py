@@ -9,9 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
-from models import Order, OrderDocument, OrderProposal, OutgoingEmail
+from models import OrderProposal, OutgoingEmail
+from models.tenancy import TenantScope
+from modules.documents.application.delivery_service import (
+    ManagedDocumentDeliveryService,
+)
 from services.document_service import DocumentService
 from services.order_proposal_lifecycle import PROPOSAL_STATUS_SENT, sync_selected_proposal_status
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 @dataclass(frozen=True)
@@ -20,6 +25,15 @@ class MailAttachment:
     content: bytes
     mime_type: str = "application/octet-stream"
     metadata: Optional[Dict[str, Any]] = None
+
+
+class PartnerTenantSmtpUnavailableError(RuntimeError):
+    """Global MVN SMTP must never impersonate a partner tenant."""
+
+
+MAX_ORDER_EMAIL_DOCUMENTS = 10
+MAX_ORDER_EMAIL_ATTACHMENT_BYTES = 10 * 1024 * 1024
+MAX_ORDER_EMAIL_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
 class MailSmtpService:
@@ -153,6 +167,7 @@ class MailSmtpService:
     async def send_order_email(
         session: AsyncSession,
         *,
+        tenant_scope: TenantScope,
         order_id: int,
         to_email: str,
         subject: str,
@@ -161,7 +176,22 @@ class MailSmtpService:
         reply_to: Optional[str] = None,
         document_ids: Optional[List[int]] = None,
     ) -> OutgoingEmail:
-        order = await session.get(Order, order_id)
+        if not tenant_scope.is_system:
+            raise PartnerTenantSmtpUnavailableError(
+                "Отправка через почту «Мастер Воздуха» недоступна партнерскому аккаунту"
+            )
+        normalized_document_ids = list(
+            dict.fromkeys(int(value) for value in (document_ids or []))
+        )
+        if len(normalized_document_ids) > MAX_ORDER_EMAIL_DOCUMENTS:
+            raise ValueError(
+                f"За одно письмо можно отправить не более {MAX_ORDER_EMAIL_DOCUMENTS} документов"
+            )
+        order = await TenantEntityAccessService.get_order(
+            session,
+            order_id,
+            tenant_scope=tenant_scope,
+        )
         if not order:
             raise ValueError("Order not found")
 
@@ -169,19 +199,40 @@ class MailSmtpService:
         has_offer_document = False
         offer_proposal_ids: set[int] = set()
         sent_document_types: set[str] = set()
-        for doc_id in document_ids or []:
-            doc = await session.get(OrderDocument, doc_id)
+        native_document_ids: list[int] = []
+        total_attachment_bytes = 0
+        for doc_id in normalized_document_ids:
+            doc = await TenantEntityAccessService.get_order_document(
+                session,
+                doc_id,
+                tenant_scope=tenant_scope,
+            )
             if not doc or doc.order_id != order_id:
                 raise ValueError(f"Document {doc_id} not found on order")
+            if DocumentService._is_native_managed_document(doc):
+                if doc.status not in {"issued", "sent", "signed"}:
+                    raise ValueError(
+                        f"Document {doc_id} must be issued before sending"
+                    )
+                native_document_ids.append(int(doc.id))
             sent_document_types.add(doc.doc_type)
             if doc.doc_type == "offer":
                 has_offer_document = True
                 if doc.proposal_id is not None:
                     offer_proposal_ids.add(doc.proposal_id)
-            stream, filename = await DocumentService.get_download_stream(session, doc_id)
+            stream, filename = await DocumentService.get_download_stream(
+                session,
+                doc_id,
+                tenant_scope=tenant_scope,
+            )
             if not stream:
                 raise ValueError(f"Document {doc_id} cannot be downloaded")
             encoded = getattr(stream, "getvalue", lambda: bytes(stream))()
+            if len(encoded) > MAX_ORDER_EMAIL_ATTACHMENT_BYTES:
+                raise ValueError("Один из PDF слишком велик для отправки по почте")
+            total_attachment_bytes += len(encoded)
+            if total_attachment_bytes > MAX_ORDER_EMAIL_TOTAL_ATTACHMENT_BYTES:
+                raise ValueError("Общий размер PDF слишком велик для одного письма")
             attachments.append(
                 MailAttachment(
                     filename=filename or f"document-{doc_id}.pdf",
@@ -225,8 +276,8 @@ class MailSmtpService:
                         await session.execute(
                             select(OrderProposal).where(
                                 OrderProposal.order_id == order_id,
-                                OrderProposal.is_selected == True,
-                                OrderProposal.is_archived == False,
+                                OrderProposal.is_selected.is_(True),
+                                OrderProposal.is_archived.is_(False),
                             )
                         )
                     ).scalars().all()
@@ -252,6 +303,15 @@ class MailSmtpService:
 
         if sent_document_types:
             session.add(order)
+        if native_document_ids:
+            await ManagedDocumentDeliveryService.mark_sent(
+                session,
+                tenant_scope=tenant_scope,
+                document_ids=native_document_ids,
+                sent_at=sent_at,
+            )
+            await session.refresh(email_row)
+        elif sent_document_types:
             await session.commit()
             await session.refresh(email_row)
         return email_row

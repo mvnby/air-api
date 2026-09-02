@@ -1439,7 +1439,8 @@ async def test_send_order_email_attaches_documents_and_marks_offer_sent(sqlite_s
     await sqlite_session.refresh(offer)
     await sqlite_session.refresh(invoice)
 
-    async def fake_download(_session, doc_id: int):
+    async def fake_download(_session, doc_id: int, **kwargs):
+        assert kwargs["tenant_scope"] == TEST_TENANT_SCOPE
         return b"%PDF-1.4", f"document-{doc_id}.pdf"
 
     sent_messages = []
@@ -1452,6 +1453,7 @@ async def test_send_order_email_attaches_documents_and_marks_offer_sent(sqlite_s
 
     email_row = await MailSmtpService.send_order_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         order_id=order.id,
         to_email="client@example.com",
         subject="Коммерческое предложение",
@@ -1506,7 +1508,8 @@ async def test_send_order_email_without_offer_keeps_proposal_status(sqlite_sessi
     await sqlite_session.commit()
     await sqlite_session.refresh(invoice)
 
-    async def fake_download(_session, doc_id: int):
+    async def fake_download(_session, doc_id: int, **kwargs):
+        assert kwargs["tenant_scope"] == TEST_TENANT_SCOPE
         return b"%PDF-1.4", f"document-{doc_id}.pdf"
 
     monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
@@ -1514,6 +1517,7 @@ async def test_send_order_email_without_offer_keeps_proposal_status(sqlite_sessi
 
     await MailSmtpService.send_order_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         order_id=order.id,
         to_email="client@example.com",
         subject="Счет",
@@ -1554,7 +1558,8 @@ async def test_send_contract_email_moves_negotiation_to_awaiting_signature(sqlit
     await sqlite_session.commit()
     await sqlite_session.refresh(contract)
 
-    async def fake_download(_session, doc_id: int):
+    async def fake_download(_session, doc_id: int, **kwargs):
+        assert kwargs["tenant_scope"] == TEST_TENANT_SCOPE
         return b"%PDF-1.4", f"document-{doc_id}.pdf"
 
     monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
@@ -1562,6 +1567,7 @@ async def test_send_contract_email_moves_negotiation_to_awaiting_signature(sqlit
 
     await MailSmtpService.send_order_email(
         sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
         order_id=order.id,
         to_email="client@example.com",
         subject="Договор",
@@ -1605,7 +1611,8 @@ async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, m
     await sqlite_session.commit()
     await sqlite_session.refresh(offer)
 
-    async def fake_download(_session, doc_id: int):
+    async def fake_download(_session, doc_id: int, **kwargs):
+        assert kwargs["tenant_scope"] == TEST_TENANT_SCOPE
         return b"%PDF-1.4", f"document-{doc_id}.pdf"
 
     monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
@@ -1614,6 +1621,7 @@ async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, m
     with pytest.raises(RuntimeError, match="SMTP unavailable"):
         await MailSmtpService.send_order_email(
             sqlite_session,
+            tenant_scope=TEST_TENANT_SCOPE,
             order_id=order.id,
             to_email="client@example.com",
             subject="Коммерческое предложение",

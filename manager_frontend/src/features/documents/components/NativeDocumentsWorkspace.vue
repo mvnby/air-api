@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { ManagerOrderDetailResponse } from '../../../client';
+import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue';
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capabilities';
 import { managerSession } from '../../../services/manager-session';
@@ -9,6 +10,9 @@ import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
+import GoogleDocumentEditorActions from './GoogleDocumentEditorActions.vue';
+import { useGoogleDocumentEditor } from '../composables/use-google-document-editor';
+import type { GoogleDocumentEditTarget } from '../integrations/google-document-editor-api';
 import { isConsumerDocumentType } from '../model/consumer-document-terms';
 import { isBusinessTermsDocumentType } from '../model/business-document-terms';
 import { getCustomerDocumentWarnings } from '../model/customer-document-readiness';
@@ -31,6 +35,7 @@ const emit = defineEmits<{
 }>();
 
 const formRef = ref<HTMLElement | null>(null);
+const sendOpen = ref(false);
 type DocumentAudience = 'business' | 'consumer';
 const documentAudience = ref<DocumentAudience>('business');
 const proposalId = computed(() => {
@@ -43,11 +48,23 @@ const access = computed(() => getOrderDocumentAccess(props.order.status));
 const canManageDocumentSettings = computed(() => (
   hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.documentsManage)
 ));
+const canSendNativeEmail = computed(() => managerSession.auth.value?.is_system_tenant === true);
 const workspace = useManagedDocumentWorkspace({
   orderId: () => props.order.id,
   proposalId: () => proposalId.value,
   notify: (message, type = 'success') => emit('toast', { message, type }),
   refresh: () => emit('refresh'),
+});
+const sendableDocuments = computed(() => workspace.documents.value.filter((document) => (
+  ['issued', 'sent', 'signed'].includes(document.status)
+)));
+const googleEditor = useGoogleDocumentEditor({
+  notify: (message, type = 'success') => emit('toast', { message, type }),
+  onSynced: async (target) => {
+    if (target.kind !== 'managed-document') return;
+    await workspace.loadDocuments();
+    emit('refresh');
+  },
 });
 
 type BasisOption = {
@@ -173,10 +190,61 @@ const prepareReplacement = (document: Parameters<typeof workspace.prepareReplace
   requestAnimationFrame(() => formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 };
 const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'rendered_docx' ? 'DOCX' : kind;
+const googleTarget = (documentId: number): GoogleDocumentEditTarget => ({
+  kind: 'managed-document',
+  documentId,
+});
+const loadGoogleDocumentSessions = () => {
+  if (!googleEditor.connected.value) return;
+  for (const document of workspace.documents.value) {
+    if (document.status === 'draft') void googleEditor.loadSession(googleTarget(document.id));
+  }
+};
+watch([googleEditor.connected, workspace.documents], ([connected]) => {
+  if (connected) loadGoogleDocumentSessions();
+});
+const syncGoogleDocument = async (documentId: number) => {
+  await googleEditor.sync(googleTarget(documentId));
+};
+const googleDraftBusy = (documentId: number) => {
+  const target = googleTarget(documentId);
+  const session = googleEditor.getSession(target);
+  return googleEditor.isBusy(target) || session?.status === 'syncing';
+};
+const issueDocument = async (document: Parameters<typeof workspace.issue>[0]) => {
+  const target = googleTarget(document.id);
+  if (googleEditor.connected.value) {
+    await googleEditor.loadSession(target);
+    const session = googleEditor.getSession(target);
+    if (session?.status === 'changed' && session.can_edit) {
+      const synced = await googleEditor.sync(target);
+      if (!synced) return;
+    } else if (session && session.status !== 'ready') {
+      emit('toast', {
+        message: 'Черновик ещё не синхронизирован с Google Docs',
+        type: 'error',
+      });
+      return;
+    }
+  }
+  await workspace.issue(document);
+};
+const handleEmailSent = async () => {
+  await workspace.loadDocuments();
+  emit('refresh');
+  emit('toast', { message: 'Письмо с документами отправлено', type: 'success' });
+};
 </script>
 
 <template>
   <section class="rounded-2xl border border-teal-200 bg-white p-4 shadow-sm dark:border-teal-900/70 dark:bg-slate-900/60 sm:p-5" data-testid="native-documents-workspace">
+    <DocumentSendModal
+      v-model="sendOpen"
+      transport="native"
+      :order="order"
+      :documents="sendableDocuments"
+      @sent="handleEmailSent"
+    />
     <div class="flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <div class="flex flex-wrap items-center gap-2">
@@ -184,10 +252,22 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
           <span class="rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-teal-800 dark:bg-teal-950/60 dark:text-teal-300">DOCX + PDF</span>
         </div>
         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Черновик фиксирует данные. Официальный номер выдаётся только при явном выпуске.</p>
+        <p v-if="googleEditor.connectionState.value === 'connected'" class="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="document-google-connected">
+          Google подключён<span v-if="googleEditor.accountLabel.value">: {{ googleEditor.accountLabel.value }}</span>. Черновики можно править онлайн; изменения сохраняются в CRM после возвращения во вкладку.
+        </p>
+        <p v-else-if="googleEditor.connectionState.value === 'disconnected'" class="mt-1 text-xs text-slate-500" data-testid="document-google-disconnected">
+          <template v-if="googleEditor.canConnect.value">Для онлайн-редактирования <button class="font-semibold text-teal-700 underline underline-offset-2" type="button" @click="googleEditor.connect">подключите Google</button>.</template>
+          <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
+        </p>
       </div>
-      <button v-if="canManageDocumentSettings" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-teal-400 hover:text-teal-700 dark:border-slate-700 dark:text-slate-300" type="button" @click="openSettings">
-        <span class="material-icons-round text-[17px]">settings</span>Юрлица и шаблоны
-      </button>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <button v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-teal-700" type="button" data-testid="native-document-email" @click="sendOpen = true">
+          <span class="material-icons-round text-[17px]">send</span>Письмо
+        </button>
+        <button v-if="canManageDocumentSettings" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-teal-400 hover:text-teal-700 dark:border-slate-700 dark:text-slate-300" type="button" @click="openSettings">
+          <span class="material-icons-round text-[17px]">settings</span>Юрлица и шаблоны
+        </button>
+      </div>
     </div>
 
     <div v-if="workspace.loading.value" class="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
@@ -302,6 +382,9 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
       <div v-if="workspace.issueBlockedReason.value" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="pdf-runtime-warning">
         <strong>Выпуск временно недоступен:</strong> {{ workspace.issueBlockedReason.value }}. Черновики создавать можно; официальный номер не будет занят до успешного выпуска.
       </div>
+      <p v-if="sendableDocuments.length && !canSendNativeEmail" class="mt-4 text-xs text-slate-500" data-testid="native-email-unavailable">
+        Отправка из CRM появится после подключения почты вашей организации. PDF уже можно скачать и отправить вручную.
+      </p>
 
       <div class="mt-4 space-y-3">
         <article v-for="document in workspace.documents.value" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
@@ -318,12 +401,22 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
             </div>
 
             <div class="flex flex-wrap gap-2 sm:justify-end">
+              <button v-if="document.status === 'draft'" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" @click="workspace.previewDraft(document)">
+                <span class="material-icons-round text-[17px]">visibility</span>Предпросмотр
+              </button>
               <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id)">
                 <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
               </button>
-              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || Boolean(workspace.issueBlockedReason.value)" :title="workspace.issueBlockedReason.value" @click="workspace.issue(document)">Выпустить</button>
-              <button v-if="document.status === 'draft' && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value" @click="workspace.deleteDraft(document)">Удалить черновик</button>
-              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Заменить</button>
+              <GoogleDocumentEditorActions
+                v-if="document.status === 'draft' && access.canCreate && googleEditor.connected.value"
+                :session="googleEditor.getSession(googleTarget(document.id))"
+                :busy="googleEditor.isBusy(googleTarget(document.id))"
+                @open="googleEditor.open(googleTarget(document.id))"
+                @sync="syncGoogleDocument(document.id)"
+              />
+              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" :title="workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
+              <button v-if="document.status === 'draft' && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
+              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action-danger" type="button" @click="workspace.requestVoid(document)">Аннулировать</button>
             </div>
           </div>
@@ -341,7 +434,7 @@ const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'render
         <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <span class="material-icons-round text-4xl text-slate-300">description</span>
           <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
-          <p class="mt-1 text-xs text-slate-500">Google-документы находятся на соседней вкладке.</p>
+          <p class="mt-1 text-xs text-slate-500">Создайте черновик, чтобы проверить, отредактировать и затем выпустить документ.</p>
         </div>
       </div>
     </template>

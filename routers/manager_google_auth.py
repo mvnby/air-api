@@ -135,6 +135,8 @@ def _consume_google_oauth_state(request: Request, received_state: str) -> dict[s
         "auth_version": pending.get("auth_version"),
         "staff_user_id": pending.get("staff_user_id"),
         "username": str(pending.get("username") or ""),
+        "tenant_membership_id": pending.get("tenant_membership_id"),
+        "tenant_id": pending.get("tenant_id"),
     }
 
 
@@ -263,6 +265,20 @@ async def manager_google_auth_callback(
     state: str = "",
     error: str = "",
 ):
+    from routers.manager_document_drive import complete_manager_document_drive_oauth
+    from services.document_drive_oauth_state import (
+        consume_document_drive_oauth_state,
+    )
+
+    document_drive_pending = consume_document_drive_oauth_state(request, state)
+    if document_drive_pending is not None:
+        return await complete_manager_document_drive_oauth(
+            request=request,
+            session=session,
+            pending=document_drive_pending,
+            code=code,
+            error=error,
+        )
     analytics_pending = consume_analytics_google_oauth_state(request, state)
     if analytics_pending is not None:
         return await _complete_analytics_google_oauth(

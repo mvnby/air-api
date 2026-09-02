@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Optional, List
+from typing import TYPE_CHECKING, Any, Optional, List
 from sqlalchemy import and_, func, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -10,12 +10,15 @@ from sqlalchemy.orm.attributes import set_committed_value
 from models import Customer, CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink, OrderStatus
 from models.tenancy import TenantScope
 from services.google_service import get_google_service
-from services.documents.base import TEMPLATES, DOC_NAMES, BaseDocumentStrategy
+from services.documents.base import TEMPLATES, DOC_NAMES
 from services.documents.factory import DocumentFactory
 from services.document_role_service import DocumentRoleService
 from services.document_template_service import DocumentTemplateService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import tenant_scope_clause
+
+if TYPE_CHECKING:
+    import fastapi
 
 
 class DocumentHasDependentsError(ValueError):
@@ -368,6 +371,21 @@ class DocumentService:
 
         if not document:
             return None, None
+
+        if DocumentService._is_native_managed_document(document):
+            if tenant_scope is None:
+                raise NativeManagedDocumentError(
+                    "Для скачивания нативного документа требуется контекст организации"
+                )
+            from modules.documents.application.native_download import (
+                native_document_pdf_download,
+            )
+
+            return await native_document_pdf_download(
+                session,
+                tenant_scope=tenant_scope,
+                document=document,
+            )
 
         if not document.google_file_id:
             raise ValueError("Для этого документа нет загруженного файла")

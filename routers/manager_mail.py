@@ -534,10 +534,12 @@ async def compose_manager_order_email(
     order_id: int,
     payload: OrderEmailComposePayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await OrderEmailTemplateService.compose(
             session,
+            tenant_scope=tenant_scope,
             order_id=order_id,
             document_ids=payload.document_ids,
             template_key=payload.template_key,
@@ -560,10 +562,12 @@ async def send_manager_order_email(
     order_id: int,
     payload: OrderEmailSendPayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     try:
         return await MailSmtpService.send_order_email(
             session,
+            tenant_scope=tenant_scope,
             order_id=order_id,
             to_email=payload.to_email,
             subject=payload.subject,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import Counter
 from io import BytesIO
 import re
 from typing import Iterable, Mapping
@@ -47,17 +48,21 @@ class NativeDocxRenderer:
         Discovery never expands the security catalogue; callers intersect the
         result with their server-owned allowlist before constructing a version.
         """
+        return frozenset(self.discover_placeholder_counts(source))
+
+    def discover_placeholder_counts(self, source: bytes) -> dict[str, int]:
+        """Count every syntactically valid placeholder occurrence in a DOCX."""
         try:
             document = Document(BytesIO(source))
         except Exception as exc:
             raise ValueError(f"Template is not a readable DOCX: {exc}") from exc
-        discovered: set[str] = set()
+        discovered: Counter[str] = Counter()
         for paragraph, _location, _row_id in self._iter_paragraphs(document):
             parsed, _malformed = self._parse_placeholders(
                 self._paragraph_text(paragraph)
             )
             discovered.update(parsed)
-        return frozenset(discovered)
+        return dict(discovered)
 
     def discover_conditions(self, source: bytes) -> frozenset[str]:
         """Return safe condition identifiers found in conditional markers."""

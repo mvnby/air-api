@@ -738,6 +738,8 @@ async def test_manager_mail_send_order_email_passes_document_ids(async_client, m
 @pytest.mark.asyncio
 async def test_manager_mail_composes_adaptive_order_email(async_client, monkeypatch):
     async def fake_compose(_session, **kwargs):
+        tenant_scope = kwargs.pop("tenant_scope")
+        assert tenant_scope.is_system is True
         assert kwargs == {
             "order_id": 123,
             "document_ids": [10, 11],

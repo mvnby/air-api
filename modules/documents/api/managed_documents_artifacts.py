@@ -26,6 +26,13 @@ from modules.documents.application.errors import (
 from modules.documents.application.lifecycle_service import (
     ManagedDocumentService,
 )
+from modules.documents.application.draft_preview import (
+    ManagedDocumentDraftPreviewService,
+)
+from modules.documents.application.editable_draft import EditableDraftError
+from modules.documents.application.editable_draft_issue import (
+    verify_document_external_edit_before_issue,
+)
 from modules.documents.infrastructure.artifact_storage import (
     PrivateDocumentArtifactStorage,
 )
@@ -40,6 +47,7 @@ from routers.manager_operation_ids import (
     ISSUE_MANAGER_MANAGED_DOCUMENT,
     LIST_MANAGER_DOCUMENT_ARTIFACTS,
     LIST_MANAGER_MANAGED_ORDER_DOCUMENTS,
+    PREVIEW_MANAGER_MANAGED_DOCUMENT_DRAFT,
     VOID_MANAGER_MANAGED_DOCUMENT,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
@@ -61,6 +69,59 @@ router = APIRouter(
     dependencies=[Depends(require_manager_access)],
     route_class=ManagerPermissionRoute,
 )
+
+
+@router.get(
+    "/documents/{document_id}/preview",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+    operation_id=PREVIEW_MANAGER_MANAGED_DOCUMENT_DRAFT,
+)
+async def preview_managed_document_draft(
+    document_id: int,
+    session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+) -> Response:
+    private = _legacy_private_storage()
+    try:
+        content, filename = await ManagedDocumentDraftPreviewService.render_pdf(
+            session,
+            tenant_scope=auth.tenant_scope(),
+            document_id=document_id,
+            template_storage=PrivateTemplateSourceStorage(private),
+            artifact_storage=PrivateDocumentArtifactStorage(private),
+            pdf_converter=_legacy_pdf_converter(),
+        )
+    except ManagedDocumentNotFoundError as exc:
+        raise _document_error(
+            404,
+            PREVIEW_MANAGER_MANAGED_DOCUMENT_DRAFT,
+            "managed_document_not_found",
+            exc,
+        )
+    except ManagedDocumentConflictError as exc:
+        raise _document_error(
+            409,
+            PREVIEW_MANAGER_MANAGED_DOCUMENT_DRAFT,
+            "managed_document_preview_conflict",
+            exc,
+        )
+    except (FileNotFoundError, TypeError, ValueError) as exc:
+        raise _document_error(
+            503,
+            PREVIEW_MANAGER_MANAGED_DOCUMENT_DRAFT,
+            "managed_document_preview_failed",
+            exc,
+        )
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}",
+        },
+    )
 
 
 @router.get(
@@ -216,6 +277,24 @@ async def issue_managed_document(
 ) -> ManagedDocumentItem:
     private = _legacy_private_storage()
     try:
+        from .router import get_google_document_edit_provider
+
+        provider = None
+        try:
+            provider = await get_google_document_edit_provider(
+                session=session,
+                tenant_scope=auth.tenant_scope(),
+            )
+        except Exception:
+            # The verifier permits no-provider issuance only when this draft has
+            # never been sent to an external editor.
+            provider = None
+        verified_remote_revision = await verify_document_external_edit_before_issue(
+            session,
+            tenant_scope=auth.tenant_scope(),
+            document_id=document_id,
+            provider=provider,
+        )
         result = await ManagedDocumentService.issue(
             session,
             tenant_scope=auth.tenant_scope(),
@@ -223,12 +302,13 @@ async def issue_managed_document(
             template_storage=PrivateTemplateSourceStorage(private),
             artifact_storage=PrivateDocumentArtifactStorage(private),
             pdf_converter=_legacy_pdf_converter(),
+            verified_remote_revision=verified_remote_revision,
         )
     except ManagedDocumentNotFoundError as exc:
         raise _document_error(
             404, ISSUE_MANAGER_MANAGED_DOCUMENT, "managed_document_not_found", exc
         )
-    except ManagedDocumentConflictError as exc:
+    except (ManagedDocumentConflictError, EditableDraftError) as exc:
         raise _document_error(
             409, ISSUE_MANAGER_MANAGED_DOCUMENT, "managed_document_conflict", exc
         )

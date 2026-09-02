@@ -54,18 +54,37 @@ class GoogleOAuthProvider:
     """Build/exchange/refresh credentials without coupling them to any database model."""
 
     @staticmethod
-    def build_authorization_url(*, client_secret_path: str | Path, redirect_uri: str, state: str, scopes: tuple[str, ...] = GOOGLE_MARKETING_SCOPES) -> str:
+    def build_authorization_url(
+        *,
+        client_secret_path: str | Path,
+        redirect_uri: str,
+        state: str,
+        scopes: tuple[str, ...] = GOOGLE_MARKETING_SCOPES,
+        include_granted_scopes: bool = True,
+    ) -> str:
         flow = Flow.from_client_secrets_file(str(client_secret_path), scopes=scopes, redirect_uri=redirect_uri)
+        authorization_options = {
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+        }
+        if include_granted_scopes:
+            authorization_options["include_granted_scopes"] = "true"
         url, _ = flow.authorization_url(
-            access_type="offline",
-            include_granted_scopes="true",
-            prompt="consent",
-            state=state,
+            **authorization_options,
         )
         return url
 
     @staticmethod
-    def exchange_authorization_code(*, client_secret_path: str | Path, redirect_uri: str, code: str, scopes: tuple[str, ...] = GOOGLE_MARKETING_SCOPES, flow_factory: Callable[..., Flow] = Flow.from_client_secrets_file) -> GoogleOAuthCredentialPayload:
+    def exchange_authorization_code(
+        *,
+        client_secret_path: str | Path,
+        redirect_uri: str,
+        code: str,
+        scopes: tuple[str, ...] = GOOGLE_MARKETING_SCOPES,
+        flow_factory: Callable[..., Flow] = Flow.from_client_secrets_file,
+        allow_scope_superset: bool = True,
+    ) -> GoogleOAuthCredentialPayload:
         try:
             flow = flow_factory(str(client_secret_path), scopes=scopes, redirect_uri=redirect_uri)
             granted_scope_override: tuple[str, ...] | None = None
@@ -77,7 +96,11 @@ class GoogleOAuthProvider:
                 # which still contains every permission required here.
                 granted_scopes = set(getattr(scope_warning, "new_scope", ()) or ())
                 token = getattr(scope_warning, "token", None)
-                if not token or not set(scopes).issubset(granted_scopes):
+                required_scopes = set(scopes)
+                scope_matches = required_scopes.issubset(granted_scopes)
+                if not allow_scope_superset:
+                    scope_matches = granted_scopes == required_scopes
+                if not token or not scope_matches:
                     raise AnalyticsProviderError(
                         "google_oauth_scope_mismatch",
                         "Google did not grant the required permissions",
@@ -90,6 +113,14 @@ class GoogleOAuthProvider:
                     "google_oauth_refresh_token_missing",
                     "Google did not return an offline refresh token",
                 )
+            granted_scopes = tuple(
+                granted_scope_override or tuple(credentials.scopes or scopes)
+            )
+            if not allow_scope_superset and set(granted_scopes) != set(scopes):
+                raise AnalyticsProviderError(
+                    "google_oauth_scope_mismatch",
+                    "Google did not grant the required permissions",
+                )
             return GoogleOAuthCredentialPayload(
                 access_token=credentials.token or "",
                 refresh_token=credentials.refresh_token,
@@ -97,7 +128,7 @@ class GoogleOAuthProvider:
                 client_secret=credentials.client_secret or "",
                 token_uri=credentials.token_uri or "https://oauth2.googleapis.com/token",
                 expiry=credentials.expiry,
-                scopes=granted_scope_override or tuple(credentials.scopes or scopes),
+                scopes=granted_scopes,
             )
         except AnalyticsProviderError:
             raise
@@ -224,10 +255,15 @@ class GoogleAnalyticsProvider:
         body = {"dateRanges": [{"startDate": period_start.isoformat(), "endDate": period_end.isoformat()}], "dimensions": [{"name": "sessionSourceMedium"}], "metrics": [{"name": "sessions"}]}
         async with self._client_factory() as client:
             response = await client.post(f"{self.BASE_URL}/properties/{property_id}:runReport", headers=_headers(access_token), json=body)
-        if response.status_code != 200: raise _error(response, "google_analytics")
+        if response.status_code != 200:
+            raise _error(response, "google_analytics")
         try:
             return {str(row["dimensionValues"][0].get("value") or "(not set)"): int(row["metricValues"][0].get("value") or 0) for row in response.json().get("rows", [])}
-        except (IndexError, KeyError, TypeError, ValueError) as exc: raise AnalyticsProviderError("google_analytics_invalid_response", "Provider returned an invalid response") from exc
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise AnalyticsProviderError(
+                "google_analytics_invalid_response",
+                "Provider returned an invalid response",
+            ) from exc
 
     async def fetch_summary(self, *, access_token: str, property_id: str, period_start: date, period_end: date) -> GoogleAnalyticsSnapshot:
         body = {
@@ -352,7 +388,8 @@ class GoogleSearchConsoleProvider:
         encoded = quote(site_property, safe="")
         async with self._client_factory() as client:
             response = await client.get(f"{self.BASE_URL}/sites/{encoded}", headers=_headers(access_token))
-        if response.status_code != 200: raise _error(response, "google_search_console")
+        if response.status_code != 200:
+            raise _error(response, "google_search_console")
 
     async def verify(self, access_token: str, public_config: Mapping[str, Any], developer_token: str | None = None) -> dict[str, str]:
         site_property = str(public_config.get("site_property") or "")
@@ -371,10 +408,15 @@ class GoogleSearchConsoleProvider:
         body = {"startDate": period_start.isoformat(), "endDate": period_end.isoformat(), "dimensions": ["query"], "rowLimit": min(max(limit, 1), 25000)}
         async with self._client_factory() as client:
             response = await client.post(f"{self.BASE_URL}/sites/{encoded}/searchAnalytics/query", headers=_headers(access_token), json=body)
-        if response.status_code != 200: raise _error(response, "google_search_console")
+        if response.status_code != 200:
+            raise _error(response, "google_search_console")
         try:
             return tuple(SearchQueryRow(query=str(row["keys"][0]), clicks=int(row.get("clicks", 0)), impressions=int(row.get("impressions", 0)), ctr=round(float(row.get("ctr", 0)) * 100, 2), position=round(float(row["position"]), 2) if row.get("position") is not None else None) for row in response.json().get("rows", []))
-        except (IndexError, KeyError, TypeError, ValueError) as exc: raise AnalyticsProviderError("google_search_console_invalid_response", "Provider returned an invalid response") from exc
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            raise AnalyticsProviderError(
+                "google_search_console_invalid_response",
+                "Provider returned an invalid response",
+            ) from exc
 
     async def fetch(self, access_token: str, public_config: Mapping[str, Any], period_start: date, period_end: date, *, limit: int = 100) -> SearchDemandProviderSnapshot:
         rows = await self.fetch_query_rows(access_token=access_token, site_property=str(public_config["site_property"]), period_start=period_start, period_end=period_end, limit=limit)
@@ -389,11 +431,13 @@ class GoogleAdsProvider:
 
     async def fetch_advertising_snapshot(self, *, access_token: str, customer_id: str, period_start: date, period_end: date, login_customer_id: str | None = None) -> AdvertisingSnapshot:
         headers = {**_headers(access_token), "developer-token": self._developer_token}
-        if login_customer_id: headers["login-customer-id"] = login_customer_id.replace("-", "")
+        if login_customer_id:
+            headers["login-customer-id"] = login_customer_id.replace("-", "")
         query = "SELECT customer.currency_code, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM customer WHERE segments.date BETWEEN '" + period_start.isoformat() + "' AND '" + period_end.isoformat() + "'"
         async with self._client_factory() as client:
             response = await client.post(f"{self.BASE_URL}/customers/{customer_id.replace('-', '')}/googleAds:searchStream", headers=headers, json={"query": query})
-        if response.status_code != 200: raise _error(response, "google_ads")
+        if response.status_code != 200:
+            raise _error(response, "google_ads")
         try:
             rows = [row for batch in response.json() for row in batch.get("results", [])]
             currencies = {
@@ -411,7 +455,11 @@ class GoogleAdsProvider:
                 round(sum(float(row.get("metrics", {}).get("conversions", 0)) for row in rows), 2),
                 next(iter(currencies)) if len(currencies) == 1 else None,
             )
-        except (TypeError, ValueError) as exc: raise AnalyticsProviderError("google_ads_invalid_response", "Provider returned an invalid response") from exc
+        except (TypeError, ValueError) as exc:
+            raise AnalyticsProviderError(
+                "google_ads_invalid_response",
+                "Provider returned an invalid response",
+            ) from exc
 
     async def verify(self, access_token: str, public_config: Mapping[str, Any], developer_token: str | None = None) -> dict[str, str]:
         customer_id = str(public_config.get("customer_id") or "")

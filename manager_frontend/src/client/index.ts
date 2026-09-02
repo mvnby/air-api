@@ -154,6 +154,8 @@ export type { DashboardSearchDemandProvider } from './models/DashboardSearchDema
 export type { DashboardSearchQuery } from './models/DashboardSearchQuery';
 export type { DashboardStatsResponse } from './models/DashboardStatsResponse';
 export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
+export type { DocumentDriveAuthorizationUrlResponse } from './models/DocumentDriveAuthorizationUrlResponse';
+export type { DocumentDriveStatusResponse } from './models/DocumentDriveStatusResponse';
 export type { DocumentLegalEntityCreatePayload } from './models/DocumentLegalEntityCreatePayload';
 export type { DocumentLegalEntityItem } from './models/DocumentLegalEntityItem';
 export type { DocumentLegalEntityListResponse } from './models/DocumentLegalEntityListResponse';
@@ -173,6 +175,7 @@ export type { EmailLeadDecisionResponse } from './models/EmailLeadDecisionRespon
 export type { EmailLeadImportJobResponse } from './models/EmailLeadImportJobResponse';
 export type { EmailLeadImportResponse } from './models/EmailLeadImportResponse';
 export type { EquipmentServiceEventType } from './models/EquipmentServiceEventType';
+export type { ExternalEditSessionItem } from './models/ExternalEditSessionItem';
 export type { FeatureCategoryResponse } from './models/FeatureCategoryResponse';
 export type { FeatureContentDraft } from './models/FeatureContentDraft';
 export type { FeatureContentDraftRequest } from './models/FeatureContentDraftRequest';
@@ -629,6 +632,8 @@ export type { SupplyRequestUpdatePayload } from './models/SupplyRequestUpdatePay
 export type { TagGroupResponse } from './models/TagGroupResponse';
 export type { TagResponse } from './models/TagResponse';
 export type { TelegramLoginPayload } from './models/TelegramLoginPayload';
+export type { TemplateExternalEditSyncPayload } from './models/TemplateExternalEditSyncPayload';
+export type { TemplateExternalEditSyncResponse } from './models/TemplateExternalEditSyncResponse';
 export type { TransportTermsPayload } from './models/TransportTermsPayload';
 export type { ValidationError } from './models/ValidationError';
 export type { WebRebuildCompletePayload } from './models/WebRebuildCompletePayload';
@@ -662,6 +667,7 @@ export { ManagerContractsService } from './services/ManagerContractsService';
 export { ManagerCrmService } from './services/ManagerCrmService';
 export { ManagerDashboardService } from './services/ManagerDashboardService';
 export { ManagerDocsService } from './services/ManagerDocsService';
+export { ManagerDocumentDriveService } from './services/ManagerDocumentDriveService';
 export { ManagerDocumentSystemService } from './services/ManagerDocumentSystemService';
 export { ManagerEquipmentService } from './services/ManagerEquipmentService';
 export { ManagerEquipmentLinksService } from './services/ManagerEquipmentLinksService';
