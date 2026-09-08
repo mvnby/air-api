@@ -371,7 +371,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
     if (
       previousType === 'b2c_supply_installation_act'
-      && nextType === 'b2c_customer_equipment_installation_act'
+      && nextType !== 'b2c_supply_installation_act'
     ) {
       resetSoldEquipmentTerms();
     }

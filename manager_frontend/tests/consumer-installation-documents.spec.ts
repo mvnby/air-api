@@ -40,6 +40,17 @@ const mountConsumerWorkspace = async () => {
 };
 
 describe('consumer installation documents', () => {
+  it.each(['b2c_customer_equipment_installation_act', 'b2c_maintenance_repair_act', 'b2c_route_laying_act'])('clears sale stages when switching to %s', async (documentType) => {
+    const wrapper = await mountConsumerWorkspace();
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000');
+    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType);
+    await flushPromises();
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ document_type: documentType, consumer_terms: expect.objectContaining({ installation_two_stages: false, installation_first_stage_amount: null }) }));
+  });
+
   it('serializes exact two-stage amounts and clears them with the direct toggle', async () => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
