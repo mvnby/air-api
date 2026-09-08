@@ -33,6 +33,16 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("document.issued_on", "Дата документа", "Документ"),
     PlaceholderDescriptor("document.issue_city", "Город документа", "Документ"),
     PlaceholderDescriptor("document.type", "Тип документа", "Документ"),
+    *(
+        PlaceholderDescriptor(f"installation.{name}", label, "Этапы монтажа")
+        for name, label in (
+            ("first_stage_amount", "К оплате за первый этап, BYN"),
+            ("remaining_amount", "Остаток после второго этапа, BYN"),
+            ("first_stage_works", "Работы первого этапа"),
+            ("second_stage_works", "Работы второго этапа"),
+            ("second_stage_due", "Срок второго этапа и оплаты остатка"),
+        )
+    ),
     PlaceholderDescriptor("document.business_role", "Роль счета", "Документ"),
     PlaceholderDescriptor(
         "document.act_sequence_number", "Порядковый номер акта", "Документ"
@@ -242,6 +252,9 @@ CONDITIONAL_FLAGS: tuple[ConditionDescriptor, ...] = tuple(
 )
 
 CONDITIONAL_FLAGS += (
+    ConditionDescriptor("equipment.has_serial", "Указан серийный номер", "Оборудование"),
+    ConditionDescriptor("installation.two_stages", "Монтаж в два этапа", "Этапы монтажа"),
+    ConditionDescriptor("installation.single_stage", "Монтаж в один этап", "Этапы монтажа"),
     ConditionDescriptor(
         "document.invoice_is_payment_request",
         "Счёт только для оплаты",

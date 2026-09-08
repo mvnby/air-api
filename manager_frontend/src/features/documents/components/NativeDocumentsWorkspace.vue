@@ -14,6 +14,7 @@ import GoogleDocumentEditorActions from './GoogleDocumentEditorActions.vue';
 import { useGoogleDocumentEditor } from '../composables/use-google-document-editor';
 import type { GoogleDocumentEditTarget } from '../integrations/google-document-editor-api';
 import { isConsumerDocumentType } from '../model/consumer-document-terms';
+import { proposalLineTotalCents } from '../model/installation-two-stages';
 import { isBusinessTermsDocumentType } from '../model/business-document-terms';
 import { getCustomerDocumentWarnings } from '../model/customer-document-readiness';
 import {
@@ -44,6 +45,8 @@ const proposalId = computed(() => {
     || props.order.proposals?.find((item) => !item.is_archived)?.id
     || null;
 });
+const activeProposal = computed(() => props.order.proposals?.find((item) => item.id === proposalId.value) || null);
+const activeProposalTotalCents = computed(() => proposalLineTotalCents(activeProposal.value));
 const access = computed(() => getOrderDocumentAccess(props.order.status));
 const canManageDocumentSettings = computed(() => (
   hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.documentsManage)
@@ -52,6 +55,7 @@ const canSendNativeEmail = computed(() => managerSession.auth.value?.is_system_t
 const workspace = useManagedDocumentWorkspace({
   orderId: () => props.order.id,
   proposalId: () => proposalId.value,
+  proposalTotalCents: () => activeProposalTotalCents.value,
   notify: (message, type = 'success') => emit('toast', { message, type }),
   refresh: () => emit('refresh'),
 });
@@ -316,7 +320,7 @@ const handleEmailSent = async () => {
           </label>
           <label class="native-field">
             <span>Дата документа</span>
-            <input v-model="workspace.issueDate.value" class="native-input" type="date" />
+            <input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" />
           </label>
           <label class="native-field">
             <span>Город документа</span>
@@ -354,7 +358,8 @@ const handleEmailSent = async () => {
           v-if="isConsumerDocument"
           :document-type="workspace.documentType.value"
           :terms="workspace.consumerTerms.value"
-          @update-terms="workspace.consumerTerms.value = $event"
+          :proposal-total-cents="activeProposalTotalCents"
+          @update-terms="workspace.updateConsumerTerms"
         />
         <B2BContractTermsPanel
           v-if="isBusinessTermsDocument"

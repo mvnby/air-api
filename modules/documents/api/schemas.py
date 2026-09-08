@@ -290,6 +290,12 @@ class ManagedDocumentDraftPayload(BaseModel):
                 "Параметры документа физлицу доступны только для B2C заказ-актов"
             )
         if (
+            self.consumer_terms is not None
+            and self.consumer_terms.installation_two_stages
+            and self.document_type != "b2c_supply_installation_act"
+        ):
+            raise ValueError("Монтаж в два этапа доступен для продажи с монтажом")
+        if (
             self.business_terms is not None
             and self.document_type in B2C_NATIVE_DOCUMENT_TYPES
         ):
@@ -352,6 +358,10 @@ class ConsumerDocumentTermsPayload(BaseModel):
     goods_warranty_terms: str | None = Field(default=None, max_length=4_000)
     work_warranty_months: int | None = Field(default=None, ge=0, le=240)
     work_warranty_terms: str | None = Field(default=None, max_length=4_000)
+    installation_two_stages: bool = False
+    installation_first_stage_amount: str | None = Field(
+        default=None, max_length=20, pattern=r"^\d{1,12}(?:\.\d{1,2})?$"
+    )
     route_length_meters: str | None = Field(default=None, max_length=64)
     route_liquid_pipe_diameter_mm: str | None = Field(default=None, max_length=64)
     route_gas_pipe_diameter_mm: str | None = Field(default=None, max_length=64)

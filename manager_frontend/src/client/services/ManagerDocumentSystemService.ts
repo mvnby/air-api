@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Body_upload_manager_native_template_version } from '../models/Body_upload_manager_native_template_version';
+import type { ConsumerEquipmentDefaultsResponse } from '../models/ConsumerEquipmentDefaultsResponse';
 import type { DocumentLegalEntityCreatePayload } from '../models/DocumentLegalEntityCreatePayload';
 import type { DocumentLegalEntityItem } from '../models/DocumentLegalEntityItem';
 import type { DocumentLegalEntityListResponse } from '../models/DocumentLegalEntityListResponse';
@@ -35,6 +36,34 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerDocumentSystemService {
+    /**
+     * Get Manager Consumer Equipment Defaults
+     * @param orderId
+     * @param proposalId
+     * @param issueDate
+     * @returns ConsumerEquipmentDefaultsResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerConsumerEquipmentDefaults(
+        orderId: number,
+        proposalId?: (number | null),
+        issueDate?: (string | null),
+    ): CancelablePromise<ConsumerEquipmentDefaultsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/orders/{order_id}/consumer-defaults',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'proposal_id': proposalId,
+                'issue_date': issueDate,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * List Document Legal Entities
      * @returns DocumentLegalEntityListResponse Successful Response

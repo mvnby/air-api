@@ -468,7 +468,7 @@ async def test_b2c_context_is_self_contained_and_snapshots_consumer_terms(
 
 
 @pytest.mark.asyncio
-async def test_b2c_goods_warranty_defaults_to_legal_entity_then_36_months(db):
+async def test_b2c_goods_warranty_defaults_to_36_regardless_of_legal_entity(db):
     order, issuer, _selected, _alternative = await _seed_order(db)
     issuer.requisites = {
         **issuer.requisites,
@@ -491,7 +491,7 @@ async def test_b2c_goods_warranty_defaults_to_legal_entity_then_36_months(db):
         tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
         selection=DocumentContextSelection(**selection),
     )
-    assert configured["values"]["warranty.goods.months"] == "18"
+    assert configured["values"]["warranty.goods.months"] == "36"
 
     issuer.requisites = {
         **issuer.requisites,
@@ -504,8 +504,8 @@ async def test_b2c_goods_warranty_defaults_to_legal_entity_then_36_months(db):
         tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
         selection=DocumentContextSelection(**selection),
     )
-    assert disabled["values"]["warranty.goods.months"] == ""
-    assert disabled["conditions"]["warranty.goods.present"] is False
+    assert disabled["values"]["warranty.goods.months"] == "36"
+    assert disabled["conditions"]["warranty.goods.present"] is True
 
     issuer.requisites = {
         key: value

@@ -25,6 +25,8 @@ class ConsumerDocumentTerms:
     goods_warranty_terms: str | None = None
     work_warranty_months: int | None = None
     work_warranty_terms: str | None = None
+    installation_two_stages: bool = False
+    installation_first_stage_amount: str | None = None
     route_length_meters: str | None = None
     route_liquid_pipe_diameter_mm: str | None = None
     route_gas_pipe_diameter_mm: str | None = None

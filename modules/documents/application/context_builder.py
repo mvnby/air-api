@@ -44,6 +44,8 @@ from .consumer_context import (
     ConsumerDocumentContextError,
     build_consumer_document_context,
 )
+from .commercial_rows import line_rows
+from .consumer_equipment import resolve_consumer_equipment_defaults
 from .logistics_rows import build_logistics_rows
 from .transport_context import build_transport_document_context
 from .value_formatters import amount_in_words, money, number_in_words, quantity
@@ -165,7 +167,7 @@ class DocumentContextBuilder:
         rows = (
             build_logistics_rows(product_links)
             if document_type in {"tn2", "ttn1"}
-            else cls._line_rows(product_links, service_lines)
+            else line_rows(product_links, service_lines)
         )
         vat_label = "с НДС" if legal_entity.is_vat_payer else "без НДС"
         for row in rows:
@@ -191,11 +193,18 @@ class DocumentContextBuilder:
             for key, value in (legal_entity.requisites or {}).items()
             if str(key or "").strip()
         }
+        consumer_terms = selection.consumer_terms
+        if document_type == "b2c_supply_installation_act":
+            consumer_terms = await resolve_consumer_equipment_defaults(
+                session, product_links=product_links, terms=consumer_terms,
+                issue_date=selection.issue_date,
+            )
         try:
             consumer_context = build_consumer_document_context(
                 document_type=document_type,
-                terms=selection.consumer_terms,
+                terms=consumer_terms,
                 seller_requisites=seller_requisites,
+                total_amount=total,
             )
         except ConsumerDocumentContextError as exc:
             raise DocumentContextError(str(exc)) from exc
@@ -599,73 +608,6 @@ class DocumentContextBuilder:
             number,
             raw_date.strftime("%d.%m.%Y"),
         )
-
-    @classmethod
-    def _line_rows(
-        cls,
-        product_links: Sequence[OrderProductLink],
-        service_lines: Sequence[tuple[OrderServiceLink, int]],
-    ) -> list[dict[str, str]]:
-        rows: list[dict[str, str]] = []
-        for item in product_links:
-            quantity = int(item.quantity or 0)
-            unit_price = Decimal(str(item.price or 0))
-            rows.append(
-                cls._line_row(
-                    len(rows) + 1,
-                    title=str(
-                        item.title_snapshot
-                        or getattr(item.product, "title", "")
-                        or "Товар"
-                    ),
-                    kind="product",
-                    quantity=quantity,
-                    unit_price=unit_price,
-                )
-            )
-        for item, quantity in service_lines:
-            unit_price = Decimal(str(item.price or 0))
-            rows.append(
-                cls._line_row(
-                    len(rows) + 1,
-                    title=str(
-                        item.title or getattr(item.service, "title", "") or "Услуга"
-                    ),
-                    kind="service",
-                    quantity=quantity,
-                    unit_price=unit_price,
-                )
-            )
-        return rows
-
-    @classmethod
-    def _line_row(
-        cls,
-        index: int,
-        *,
-        title: str,
-        kind: str,
-        quantity: int,
-        unit_price: Decimal,
-    ) -> dict[str, str]:
-        amount = unit_price * quantity
-        return {
-            "line.number": str(index),
-            "line.title": title,
-            "line.kind": kind,
-            "line.unit": "шт.",
-            "line.quantity": str(quantity),
-            "line.unit_price": money(unit_price),
-            "line.amount": money(amount),
-            "line.country": "",
-            "line.vat_label": "",
-            "line.seats": "",
-            "line.mass": "",
-            "line.note": "",
-            "line.amount_raw": str(amount),
-            "line.quantity_raw": str(quantity),
-            "line.mass_raw": "0",
-        }
 
     @staticmethod
     def _business_role(document_type: str, raw: str | None) -> str | None:

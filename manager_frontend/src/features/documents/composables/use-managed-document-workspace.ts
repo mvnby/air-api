@@ -12,8 +12,13 @@ import { confirmDialog } from '../../../services/ui-feedback';
 import {
   createDefaultConsumerDocumentTerms,
   isConsumerDocumentType,
+  isSupplyInstallationDocumentType,
   type ConsumerDocumentTerms,
 } from '../model/consumer-document-terms';
+import {
+  calculateInstallationTwoStages,
+  normalizeByNAmount,
+} from '../model/installation-two-stages';
 import {
   createDefaultBusinessDocumentTerms,
   businessTermsValidationError,
@@ -36,9 +41,19 @@ import { openNativeDocumentPreview } from '../integrations/native-document-previ
 type ManagedWorkspaceInput = {
   orderId: () => number;
   proposalId: () => number | null;
+  proposalTotalCents: () => number | null;
   notify: (message: string, type?: 'success' | 'error') => void;
   refresh: () => void;
 };
+
+type ConsumerDefaultField = 'equipment_brand' | 'equipment_model' | 'goods_warranty_months' | 'goods_warranty_terms';
+
+const consumerDefaultFields: ConsumerDefaultField[] = [
+  'equipment_brand',
+  'equipment_model',
+  'goods_warranty_months',
+  'goods_warranty_terms',
+];
 
 export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const documents = ref<ManagedDocumentItem[]>([]);
@@ -59,6 +74,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const businessTerms = ref<BusinessDocumentTerms>(createDefaultBusinessDocumentTerms());
   const actTerms = ref<ActTerms>(createDefaultActTerms());
   const transportTerms = ref<TransportTerms>(createDefaultTransportTerms());
+  const consumerDefaultsLoading = ref(false);
+  const consumerDefaultsLoaded = ref(false);
   const busy = ref(false);
   const loading = ref(false);
   const templatesLoading = ref(false);
@@ -68,6 +85,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   let requestId = 0;
   let templateRequestId = 0;
   let versionRequestId = 0;
+  let consumerDefaultsRequestId = 0;
+  let consumerDefaultsContext = '';
+  let consumerDefaultsScope = '';
+  const manuallyEditedConsumerDefaultFields = new Set<ConsumerDefaultField>();
   let preferredTemplateId: number | null = null;
   const templateUseCaseKey = computed(() => {
     if (documentType.value === 'contract') return businessTerms.value.contract_scenario || '';
@@ -76,6 +97,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   });
 
   const defaultGoodsWarrantyMonths = (legalEntityId = selectedLegalEntityId.value) => {
+    if (isConsumerDocumentType(documentType.value)) return 36;
     const entity = legalEntities.value.find((item) => item.id === legalEntityId);
     const raw = entity?.requisites.default_goods_warranty_months;
     const configured = raw == null || raw === '' ? Number.NaN : Number(raw);
@@ -94,6 +116,72 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       defaultGoodsWarrantyMonths(),
       defaultWorkWarrantyMonths(),
     );
+    manuallyEditedConsumerDefaultFields.clear();
+  };
+  const resetSoldEquipmentTerms = () => {
+    consumerTerms.value = {
+      ...consumerTerms.value,
+      equipment_brand: null,
+      equipment_model: null,
+      equipment_serial: null,
+      goods_warranty_months: 36,
+      goods_warranty_terms: null,
+      installation_two_stages: false,
+      installation_first_stage_amount: null,
+    };
+    manuallyEditedConsumerDefaultFields.clear();
+  };
+  const updateConsumerTerms = (nextTerms: ConsumerDocumentTerms) => {
+    for (const field of consumerDefaultFields) {
+      if (nextTerms[field] !== consumerTerms.value[field]) {
+        manuallyEditedConsumerDefaultFields.add(field);
+      }
+    }
+    consumerTerms.value = nextTerms;
+  };
+  const loadConsumerDefaults = async () => {
+    const orderId = input.orderId();
+    const proposalId = input.proposalId();
+    const issueDateAtRequest = issueDate.value;
+    const requestContext = consumerDefaultsContext;
+    const currentRequest = ++consumerDefaultsRequestId;
+    consumerDefaultsLoading.value = true;
+    consumerDefaultsLoaded.value = false;
+    try {
+      const defaults = await ManagerDocumentSystemService.getManagerConsumerEquipmentDefaults(
+        orderId,
+        proposalId,
+        issueDateAtRequest || null,
+      );
+      if (
+        currentRequest !== consumerDefaultsRequestId
+        || requestContext !== consumerDefaultsContext
+        || documentType.value !== 'b2c_supply_installation_act'
+        || input.orderId() !== orderId
+        || input.proposalId() !== proposalId
+      ) return;
+      const current = consumerTerms.value;
+      consumerTerms.value = {
+        ...current,
+        equipment_brand: !manuallyEditedConsumerDefaultFields.has('equipment_brand')
+          ? defaults.equipment_brand ?? null : current.equipment_brand,
+        equipment_model: !manuallyEditedConsumerDefaultFields.has('equipment_model')
+          ? defaults.equipment_model ?? null : current.equipment_model,
+        goods_warranty_months: !manuallyEditedConsumerDefaultFields.has('goods_warranty_months')
+          ? defaults.goods_warranty_months : current.goods_warranty_months,
+        goods_warranty_terms: !manuallyEditedConsumerDefaultFields.has('goods_warranty_terms')
+          ? defaults.goods_warranty_terms ?? null : current.goods_warranty_terms,
+      };
+      consumerDefaultsLoaded.value = true;
+    } catch (error) {
+      if (currentRequest === consumerDefaultsRequestId && requestContext === consumerDefaultsContext) {
+        input.notify(`Не удалось подставить оборудование: ${getApiErrorMessage(error)}`, 'error');
+      }
+    } finally {
+      if (currentRequest === consumerDefaultsRequestId && requestContext === consumerDefaultsContext) {
+        consumerDefaultsLoading.value = false;
+      }
+    }
   };
   const resetBusinessTerms = () => {
     businessTerms.value = createDefaultBusinessDocumentTerms();
@@ -115,6 +203,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   });
   const draftBlockedReason = computed(() => {
     if (templatesLoading.value || templateVersionsLoading.value) return 'Загружаем подходящий шаблон…';
+    if (isSupplyInstallationDocumentType(documentType.value) && consumerDefaultsLoading.value) {
+      return 'Подставляем данные оборудования…';
+    }
     if (!selectedLegalEntityId.value) return 'Нет юридического лица';
     const businessTermsError = isBusinessTermsDocumentType(documentType.value)
       ? businessTermsValidationError(documentType.value, businessTerms.value)
@@ -133,6 +224,13 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       if (!requisites?.offer_url || !requisites.offer_version || !requisites.offer_published_on) {
         return 'Для документа физлицу заполните ссылку, версию и дату публичной оферты';
       }
+    }
+    if (isSupplyInstallationDocumentType(documentType.value) && consumerTerms.value.installation_two_stages) {
+      const validation = calculateInstallationTwoStages(
+        consumerTerms.value.installation_first_stage_amount,
+        input.proposalTotalCents(),
+      );
+      if (validation.error) return validation.error;
     }
     if (!selectedTemplateId.value) return 'Нет шаблона для этого типа';
     if (!selectedTemplateHasActiveVersion.value) return 'У шаблона нет активной DOCX-версии';
@@ -271,19 +369,16 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     if (['tn2', 'ttn1'].includes(nextType) && !['tn2', 'ttn1'].includes(previousType)) {
       resetTransportTerms();
     }
+    if (
+      previousType === 'b2c_supply_installation_act'
+      && nextType === 'b2c_customer_equipment_installation_act'
+    ) {
+      resetSoldEquipmentTerms();
+    }
   });
   watch(selectedLegalEntityId, (legalEntityId, previousLegalEntityId) => {
     const entity = legalEntities.value.find((item) => item.id === legalEntityId);
     issueCity.value = String(entity?.requisites.city || '').trim();
-    if (
-      isConsumerDocumentType(documentType.value)
-      && consumerTerms.value.goods_warranty_months === defaultGoodsWarrantyMonths(previousLegalEntityId)
-    ) {
-      consumerTerms.value = {
-        ...consumerTerms.value,
-        goods_warranty_months: defaultGoodsWarrantyMonths(legalEntityId),
-      };
-    }
     if (
       isConsumerDocumentType(documentType.value)
       && consumerTerms.value.work_warranty_months === defaultWorkWarrantyMonths(previousLegalEntityId)
@@ -304,6 +399,26 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       };
     }
   }, { flush: 'sync' });
+  watch(
+    [documentType, () => input.orderId(), () => input.proposalId(), issueDate],
+    ([type, orderId, proposalId, nextIssueDate]) => {
+      const scope = type === 'b2c_supply_installation_act' ? `${orderId}:${proposalId || ''}` : '';
+      const context = scope ? `${scope}:${nextIssueDate}` : '';
+      if (context === consumerDefaultsContext) return;
+      const scopeChanged = scope !== consumerDefaultsScope;
+      consumerDefaultsScope = scope;
+      consumerDefaultsContext = context;
+      ++consumerDefaultsRequestId;
+      if (!context) {
+        consumerDefaultsLoading.value = false;
+        consumerDefaultsLoaded.value = false;
+        return;
+      }
+      if (scopeChanged) resetSoldEquipmentTerms();
+      void loadConsumerDefaults();
+    },
+    { flush: 'sync' },
+  );
   watch(selectedTemplateId, () => void loadTemplateVersions(), { flush: 'sync' });
 
   const createDraft = async () => {
@@ -321,7 +436,24 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         base_document_id: baseDocumentId.value,
         base_customer_contract_id: baseCustomerContractId.value,
         replaces_document_id: replacesDocumentId.value,
-        consumer_terms: isConsumerDocumentType(documentType.value) ? consumerTerms.value : undefined,
+        consumer_terms: isConsumerDocumentType(documentType.value)
+          ? {
+            ...consumerTerms.value,
+            goods_warranty_months: isSupplyInstallationDocumentType(documentType.value)
+              && !consumerDefaultsLoaded.value
+              && !manuallyEditedConsumerDefaultFields.has('goods_warranty_months')
+              ? null
+              : consumerTerms.value.goods_warranty_months,
+            goods_warranty_terms: isSupplyInstallationDocumentType(documentType.value)
+              && !consumerDefaultsLoaded.value
+              && !manuallyEditedConsumerDefaultFields.has('goods_warranty_terms')
+              ? null
+              : consumerTerms.value.goods_warranty_terms,
+            installation_first_stage_amount: consumerTerms.value.installation_two_stages
+              ? normalizeByNAmount(consumerTerms.value.installation_first_stage_amount)
+              : null,
+          }
+          : undefined,
         business_terms: isBusinessTermsDocumentType(documentType.value)
           ? serializeBusinessTerms(documentType.value, businessTerms.value)
           : undefined,
@@ -333,6 +465,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       await ManagerDocumentSystemService.createManagerManagedDocumentDraft(input.orderId(), payload);
       replacesDocumentId.value = null;
       resetConsumerTerms();
+      if (isSupplyInstallationDocumentType(documentType.value)) {
+        consumerDefaultsContext = '';
+        void loadConsumerDefaults();
+      }
       resetBusinessTerms();
       resetActTerms();
       resetTransportTerms();
@@ -457,6 +593,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     businessTerms,
     busy,
     consumerTerms,
+    updateConsumerTerms,
     createDraft,
     deleteDraft,
     documentType,

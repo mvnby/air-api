@@ -63,7 +63,7 @@ def test_b2c_placeholder_catalog_has_printable_toggle_states_and_default_warrant
     assert DocumentLegalEntityRequisites().default_goods_warranty_months == 36
 
 
-def test_supply_warranty_prefers_explicit_then_issuer_then_36_months():
+def test_supply_warranty_prefers_explicit_then_36_regardless_of_issuer():
     offer = {
         "offer_url": "https://mvn.by/offer",
         "offer_version": "1.0",
@@ -85,7 +85,7 @@ def test_supply_warranty_prefers_explicit_then_issuer_then_36_months():
         seller_requisites=offer,
     )
 
-    assert configured.values["warranty.goods.months"] == "24"
+    assert configured.values["warranty.goods.months"] == "36"
     assert explicit.values["warranty.goods.months"] == "48"
     assert fallback.values["warranty.goods.months"] == "36"
 
@@ -146,3 +146,23 @@ def test_b2b_payload_rejects_consumer_terms():
             issue_date=date(2026, 8, 31),
             consumer_terms={"goods_warranty_months": 36},
         )
+
+
+def test_equipment_display_does_not_repeat_brand_already_in_catalog_model():
+    context = build_consumer_document_context(
+        document_type="b2c_supply_installation_act",
+        terms=ConsumerDocumentTerms(equipment_brand="TCL", equipment_model="TCL BreezeIN 2.0 TAC-09CHSD/UG11V3AH"),
+        seller_requisites={"offer_url": "https://example.test/offer", "offer_version": "1", "offer_published_on": "09.09.2026"},
+    )
+    assert context.values["equipment.display_name"] == "TCL BreezeIN 2.0 TAC-09CHSD/UG11V3AH"
+    assert context.conditions["equipment.has_serial"] is False
+
+
+def test_manual_serial_number_is_available_for_conditional_template_output():
+    context = build_consumer_document_context(
+        document_type="b2c_supply_installation_act",
+        terms=ConsumerDocumentTerms(equipment_serial="TCL-12345"),
+        seller_requisites={"offer_url": "https://example.test/offer", "offer_version": "1", "offer_published_on": "09.09.2026"},
+    )
+    assert context.values["equipment.serial"] == "TCL-12345"
+    assert context.conditions["equipment.has_serial"] is True

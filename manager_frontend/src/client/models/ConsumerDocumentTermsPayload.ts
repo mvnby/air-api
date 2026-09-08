@@ -13,6 +13,8 @@ export type ConsumerDocumentTermsPayload = {
     goods_warranty_terms?: (string | null);
     work_warranty_months?: (number | null);
     work_warranty_terms?: (string | null);
+    installation_two_stages?: boolean;
+    installation_first_stage_amount?: (string | null);
     route_length_meters?: (string | null);
     route_liquid_pipe_diameter_mm?: (string | null);
     route_gas_pipe_diameter_mm?: (string | null);
