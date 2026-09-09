@@ -34,8 +34,14 @@ const deferred = <T>() => {
   let resolve!: (value: T) => void;
   return { promise: new Promise<T>((done) => { resolve = done; }), resolve };
 };
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    callback(0);
+    return 0;
+  });
   vi.spyOn(googleDocumentEditorApi, 'getConnectionStatus').mockResolvedValue({ connected: false, provider: 'google_drive', account_label: null, managed_folder_url: null, connected_at: null, last_verified_at: null, last_error_code: null });
   vi.spyOn(googleDocumentEditorApi, 'getSession').mockResolvedValue(null);
   vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({ items: [{ id: 5, tenant_id: 1, slug: 'mvn', display_name: 'ООО МВН', is_default: true, status: 'active', requisites: { city: 'Витебск', default_goods_warranty_months: '48', default_work_warranty_months: '12', offer_url: 'https://mvn.by/offer', offer_version: '1.0', offer_published_on: '04.06.2026' }, created_at: NOW, updated_at: NOW }] });
@@ -46,7 +52,13 @@ beforeEach(() => {
   vi.spyOn(ManagerDocumentSystemService, 'getManagerConsumerEquipmentDefaults').mockResolvedValue(defaults);
   vi.spyOn(ManagerDocumentSystemService, 'createManagerManagedDocumentDraft').mockResolvedValue({} as never);
 });
-afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.restoreAllMocks(); managerSession.auth.value = null; });
+afterEach(() => {
+  for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+  vi.restoreAllMocks();
+  if (originalScrollIntoView) Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
+  else Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  managerSession.auth.value = null;
+});
 const mountConsumerWorkspace = async () => {
   const wrapper = mount(NativeDocumentsWorkspace, { props: { order: baseOrder } });
   wrappers.push(wrapper);
@@ -63,6 +75,7 @@ const prepareReplacementFromDocumentList = async (wrapper: VueWrapper) => {
   if (!action) throw new Error('Не найдена кнопка создания исправленной редакции');
   await action.trigger('click');
   await flushPromises();
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
 };
 
 describe('consumer installation documents', () => {
