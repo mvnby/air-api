@@ -359,6 +359,7 @@ class ConsumerDocumentTermsPayload(BaseModel):
     work_warranty_months: int | None = Field(default=None, ge=0, le=240)
     work_warranty_terms: str | None = Field(default=None, max_length=4_000)
     installation_two_stages: bool = False
+    installation_outdoor_unit_in_first_stage: bool = True
     installation_first_stage_amount: str | None = Field(
         default=None, max_length=20, pattern=r"^\d{1,12}(?:\.\d{1,2})?$"
     )

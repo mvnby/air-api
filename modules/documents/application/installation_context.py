@@ -43,9 +43,13 @@ def build_installation_context(
         "installation.remaining_amount": money(total - first),
         "installation.first_stage_works": (
             "Установка наружного блока, штробление и прокладка коммуникаций."
+            if terms.installation_outdoor_unit_in_first_stage
+            else "Штробление и прокладка коммуникаций."
         ),
         "installation.second_stage_works": (
             "Установка внутреннего блока, подключение и пусконаладочные работы."
+            if terms.installation_outdoor_unit_in_first_stage
+            else "Установка наружного и внутреннего блоков, подключение и пусконаладочные работы."
         ),
         "installation.second_stage_due": (
             "После завершения ремонта и готовности помещения; дата выезда "

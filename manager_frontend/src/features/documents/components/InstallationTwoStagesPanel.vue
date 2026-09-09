@@ -36,6 +36,18 @@ const updateFirstStageAmount = (event: Event) => {
   const value = (event.target as HTMLInputElement).value.trim();
   update({ installation_first_stage_amount: value || null });
 };
+
+const firstStageDescription = computed(() => (
+  props.terms.installation_outdoor_unit_in_first_stage
+    ? 'наружный блок, коммуникации и штробление'
+    : 'коммуникации и штробление'
+));
+
+const secondStageDescription = computed(() => (
+  props.terms.installation_outdoor_unit_in_first_stage
+    ? 'внутренний блок, подключение и пусконаладка'
+    : 'внутренний и наружный блоки, подключение и пусконаладка'
+));
 </script>
 
 <template>
@@ -57,9 +69,34 @@ const updateFirstStageAmount = (event: Event) => {
     </div>
 
     <div v-if="terms.installation_two_stages" class="mt-4 grid gap-3 sm:grid-cols-2">
-      <p class="sm:col-span-2 text-xs leading-5 text-teal-900/75 dark:text-teal-200/75">
-        Сумма выбранного предложения: {{ formatByn(proposalTotalCents) }}. Первый этап: наружный блок, коммуникации и штробление. Второй: внутренний блок, подключение и пусконаладка после ремонта по договорённости.
+      <p class="sm:col-span-2 text-xs leading-5 text-teal-900/75 dark:text-teal-200/75" data-testid="installation-two-stages-description">
+        Сумма выбранного предложения: {{ formatByn(proposalTotalCents) }}. Первый этап: {{ firstStageDescription }}. Второй: {{ secondStageDescription }} после ремонта по договорённости.
       </p>
+      <div class="sm:col-span-2">
+        <span class="text-xs font-semibold text-teal-950/80 dark:text-teal-100/80">Первый этап</span>
+        <div class="mt-1.5 inline-flex rounded-xl border border-teal-200 bg-white p-1 dark:border-teal-900 dark:bg-slate-900" aria-label="Состав первого этапа">
+          <button
+            type="button"
+            class="installation-stage-choice"
+            :class="terms.installation_outdoor_unit_in_first_stage ? 'installation-stage-choice-active' : 'installation-stage-choice-idle'"
+            :aria-pressed="terms.installation_outdoor_unit_in_first_stage"
+            data-testid="installation-outdoor-first-stage"
+            @click="update({ installation_outdoor_unit_in_first_stage: true })"
+          >
+            Коммуникации + наружный блок
+          </button>
+          <button
+            type="button"
+            class="installation-stage-choice"
+            :class="!terms.installation_outdoor_unit_in_first_stage ? 'installation-stage-choice-active' : 'installation-stage-choice-idle'"
+            :aria-pressed="!terms.installation_outdoor_unit_in_first_stage"
+            data-testid="installation-outdoor-second-stage"
+            @click="update({ installation_outdoor_unit_in_first_stage: false })"
+          >
+            Только коммуникации
+          </button>
+        </div>
+      </div>
       <label class="consumer-field">
         <span>К оплате за первый этап, BYN</span>
         <input
@@ -72,7 +109,7 @@ const updateFirstStageAmount = (event: Event) => {
         />
       </label>
       <label class="consumer-field">
-        <span>Остаток после установки внутреннего блока</span>
+        <span>К оплате за второй этап, BYN</span>
         <input
           :value="formatByn(calculation.remainingCents)"
           class="consumer-input bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
@@ -93,4 +130,7 @@ const updateFirstStageAmount = (event: Event) => {
 .consumer-toggle { @apply h-9 rounded-lg border px-3 text-sm font-semibold transition; }
 .consumer-toggle-active { @apply border-teal-600 bg-teal-600 text-white; }
 .consumer-toggle-idle { @apply border-teal-200 bg-white text-teal-900 hover:border-teal-400 dark:border-teal-900 dark:bg-slate-900 dark:text-teal-100; }
+.installation-stage-choice { @apply rounded-lg px-3 py-1.5 text-sm font-semibold transition; }
+.installation-stage-choice-active { @apply bg-teal-600 text-white; }
+.installation-stage-choice-idle { @apply text-teal-900 hover:bg-teal-50 dark:text-teal-100 dark:hover:bg-teal-900/30; }
 </style>

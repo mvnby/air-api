@@ -30706,6 +30706,11 @@
             "title": "Installation Two Stages",
             "default": false
           },
+          "installation_outdoor_unit_in_first_stage": {
+            "type": "boolean",
+            "title": "Installation Outdoor Unit In First Stage",
+            "default": true
+          },
           "installation_first_stage_amount": {
             "anyOf": [
               {

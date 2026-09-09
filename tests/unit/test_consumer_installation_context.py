@@ -33,6 +33,36 @@ def test_two_stage_payment_is_calculated_from_total_with_exact_kopecks():
     assert build("3000.11", "3140.31")[0]["installation.remaining_amount"] == "140.20"
 
 
+@pytest.mark.parametrize("outdoor_in_first", [True, False])
+def test_outdoor_unit_moves_between_stages_without_changing_payment(outdoor_in_first):
+    payload = ManagedDocumentDraftPayload(
+        legal_entity_id=1, document_type="b2c_supply_installation_act", issue_date="2026-09-09",
+        consumer_terms={
+            "installation_two_stages": True,
+            "installation_first_stage_amount": "3000",
+            "installation_outdoor_unit_in_first_stage": outdoor_in_first,
+        },
+    )
+    values, _ = build_installation_context(
+        document_type=payload.document_type,
+        terms=ConsumerDocumentTerms(**payload.consumer_terms.model_dump()),
+        total=Decimal("3140"),
+    )
+    assert ("наружного" in values["installation.first_stage_works"]) is outdoor_in_first
+    assert ("наружного" in values["installation.second_stage_works"]) is not outdoor_in_first
+    assert "внутреннего" in values["installation.second_stage_works"]
+    assert "пусконаладочные" in values["installation.second_stage_works"]
+    assert values["installation.remaining_amount"] == "140.00"
+
+
+def test_existing_staged_requests_keep_outdoor_unit_in_first_stage_by_default():
+    payload = ManagedDocumentDraftPayload(
+        legal_entity_id=1, document_type="b2c_supply_installation_act", issue_date="2026-09-09",
+        consumer_terms={"installation_two_stages": True, "installation_first_stage_amount": "3000"},
+    )
+    assert payload.consumer_terms.installation_outdoor_unit_in_first_stage is True
+
+
 @pytest.mark.parametrize("amount", [None, "", "NaN", "Infinity", "0", "-1", "3140", "3141", "1.001"])
 def test_invalid_stage_payment_is_rejected(amount):
     with pytest.raises(ValueError):
