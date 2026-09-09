@@ -1,0 +1,16 @@
+{
+  "bundle_id": "mvn-b2c-installation-v3",
+  "description": "B2C supply and installation: staged payments and first-stage acceptance",
+  "templates": [
+    {
+      "key": "b2c-supply-installation",
+      "name": "Заказ-акт: поставка и монтаж",
+      "aliases": [],
+      "doc_type": "b2c_supply_installation_act",
+      "source_filename": "Заказ-акт — поставка и монтаж оборудования — CRM v3.docx",
+      "sha256": "962fb81159bdfed60b8b17472161e5e0055865542eeadde31944c93b645341e2",
+      "description": "B2C: поставка оборудования и монтаж в один или два этапа",
+      "sort_order": 10
+    }
+  ]
+}

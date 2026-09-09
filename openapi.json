@@ -12205,6 +12205,87 @@
         ]
       }
     },
+    "/api/manager/document-system/orders/{order_id}/consumer-defaults": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Manager Consumer Equipment Defaults",
+        "operationId": "get_manager_consumer_equipment_defaults",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "issue_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issue Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumerEquipmentDefaultsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/legal-entities": {
       "get": {
         "tags": [
@@ -30620,6 +30701,24 @@
             ],
             "title": "Work Warranty Terms"
           },
+          "installation_two_stages": {
+            "type": "boolean",
+            "title": "Installation Two Stages",
+            "default": false
+          },
+          "installation_first_stage_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20,
+                "pattern": "^\\d{1,12}(?:\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation First Stage Amount"
+          },
           "route_length_meters": {
             "anyOf": [
               {
@@ -30712,6 +30811,63 @@
         "type": "object",
         "title": "ConsumerDocumentTermsPayload",
         "description": "B2C-only facts frozen on draft creation, never read from mutable CRM state."
+      },
+      "ConsumerEquipmentDefaultsResponse": {
+        "properties": {
+          "equipment_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Brand"
+          },
+          "equipment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Model"
+          },
+          "equipment_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Serial"
+          },
+          "goods_warranty_months": {
+            "type": "integer",
+            "title": "Goods Warranty Months"
+          },
+          "goods_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goods Warranty Terms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goods_warranty_months"
+        ],
+        "title": "ConsumerEquipmentDefaultsResponse"
       },
       "CustomerPayload": {
         "properties": {

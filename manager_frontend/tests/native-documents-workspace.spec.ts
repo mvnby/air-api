@@ -158,6 +158,13 @@ beforeEach(() => {
   vi.spyOn(ManagerDocumentSystemService, 'createManagerManagedDocumentDraft').mockResolvedValue({} as never);
   vi.spyOn(ManagerDocumentSystemService, 'issueManagerManagedDocument').mockResolvedValue({} as never);
   vi.spyOn(ManagerDocumentSystemService, 'deleteManagerManagedDocumentDraft').mockResolvedValue(undefined as never);
+  vi.spyOn(ManagerDocumentSystemService, 'getManagerConsumerEquipmentDefaults').mockResolvedValue({
+    equipment_brand: 'Midea',
+    equipment_model: 'MSAG-09HRN1',
+    equipment_serial: null,
+    goods_warranty_months: 36,
+    goods_warranty_terms: 'По условиям изготовителя',
+  });
 });
 
 afterEach(() => {
@@ -466,7 +473,7 @@ describe('NativeDocumentsWorkspace', () => {
       expect.objectContaining({
         document_type: 'b2c_route_laying_act',
         consumer_terms: expect.objectContaining({
-          goods_warranty_months: 48,
+          goods_warranty_months: 36,
           work_warranty_months: 12,
         }),
       }),

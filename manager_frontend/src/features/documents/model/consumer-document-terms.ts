@@ -15,6 +15,8 @@ export type ConsumerDocumentTerms = {
   route_photo_fixation_performed: boolean;
   route_pressure_test_performed: boolean;
   route_ends_capped: boolean;
+  installation_two_stages: boolean;
+  installation_first_stage_amount: string | null;
 };
 
 export const B2C_NATIVE_DOCUMENT_TYPES = [
@@ -56,4 +58,6 @@ export const createDefaultConsumerDocumentTerms = (
   route_photo_fixation_performed: false,
   route_pressure_test_performed: false,
   route_ends_capped: false,
+  installation_two_stages: false,
+  installation_first_stage_amount: null,
 });

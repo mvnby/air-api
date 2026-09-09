@@ -135,9 +135,9 @@
       "name": "Заказ-акт: поставка и монтаж",
       "aliases": [],
       "doc_type": "b2c_supply_installation_act",
-      "source_filename": "Заказ-акт — поставка и монтаж оборудования — CRM v2.docx",
-      "sha256": "1dad791727dc844de6acc2566be315bd9f25e1c8b794af53aaec27f381e815d3",
-      "description": "B2C: поставка оборудования и монтаж под ключ",
+      "source_filename": "Заказ-акт — поставка и монтаж оборудования — CRM v3.docx",
+      "sha256": "962fb81159bdfed60b8b17472161e5e0055865542eeadde31944c93b645341e2",
+      "description": "B2C: поставка оборудования и монтаж в один или два этапа",
       "sort_order": 10
     },
     {

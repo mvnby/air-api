@@ -5,10 +5,12 @@ import {
   isRouteLayingDocumentType,
   isSupplyInstallationDocumentType,
 } from '../model/consumer-document-terms';
+import InstallationTwoStagesPanel from './InstallationTwoStagesPanel.vue';
 
 const props = defineProps<{
   documentType: string;
   terms: ConsumerDocumentTerms;
+  proposalTotalCents: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -43,13 +45,20 @@ const updateMonths = (field: 'goods_warranty_months' | 'work_warranty_months', e
 
     <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <label class="consumer-field"><span>Бренд оборудования</span><input :value="terms.equipment_brand || ''" class="consumer-input" data-testid="consumer-equipment-brand" placeholder="Например, Midea" @input="updateText('equipment_brand', $event)" /></label>
-      <label class="consumer-field"><span>Модель</span><input :value="terms.equipment_model || ''" class="consumer-input" placeholder="MSAG-09HRN1" @input="updateText('equipment_model', $event)" /></label>
-      <label class="consumer-field"><span>Серийный номер</span><input :value="terms.equipment_serial || ''" class="consumer-input" @input="updateText('equipment_serial', $event)" /></label>
+      <label class="consumer-field"><span>Модель</span><input :value="terms.equipment_model || ''" class="consumer-input" data-testid="consumer-equipment-model" placeholder="MSAG-09HRN1" @input="updateText('equipment_model', $event)" /></label>
+      <label class="consumer-field"><span>Серийный номер</span><input :value="terms.equipment_serial || ''" class="consumer-input" data-testid="consumer-equipment-serial" @input="updateText('equipment_serial', $event)" /></label>
       <label v-if="isSupplyInstallation" class="consumer-field"><span>Гарантия на оборудование, мес.</span><input :value="terms.goods_warranty_months ?? ''" class="consumer-input" data-testid="consumer-goods-warranty" type="number" min="0" max="240" title="0 — не указывать договорную гарантию" @input="updateMonths('goods_warranty_months', $event)" /></label>
       <label v-if="isSupplyInstallation" class="consumer-field sm:col-span-2"><span>Условия гарантии на оборудование</span><input :value="terms.goods_warranty_terms || ''" class="consumer-input" placeholder="Например, при соблюдении правил эксплуатации" @input="updateText('goods_warranty_terms', $event)" /></label>
       <label class="consumer-field"><span>Гарантия на работы, мес.</span><input :value="terms.work_warranty_months ?? ''" class="consumer-input" data-testid="consumer-work-warranty" type="number" min="0" max="240" placeholder="Если предусмотрена" title="0 — не указывать договорную гарантию" @input="updateMonths('work_warranty_months', $event)" /></label>
       <label class="consumer-field sm:col-span-2"><span>Условия гарантии на работы</span><input :value="terms.work_warranty_terms || ''" class="consumer-input" placeholder="Дополнительные условия, если есть" @input="updateText('work_warranty_terms', $event)" /></label>
     </div>
+
+    <InstallationTwoStagesPanel
+      v-if="isSupplyInstallation"
+      :terms="terms"
+      :proposal-total-cents="proposalTotalCents"
+      @update-terms="update"
+    />
 
     <template v-if="isRouteLaying">
       <div class="mt-5 border-t border-teal-200 pt-4 dark:border-teal-900/70">

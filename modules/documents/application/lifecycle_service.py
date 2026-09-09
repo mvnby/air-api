@@ -39,6 +39,7 @@ from modules.documents.infrastructure.template_source_storage import (
 
 from .artifact_helpers import artifact_row, list_artifacts, stored_artifact
 from .editable_draft import EditableDraftError
+from .installation_context import staged_template_is_supported
 from .editable_draft_issue import load_editable_draft_for_issue
 from .context_builder import DocumentContextBuilder, DocumentContextSelection
 from .errors import (
@@ -198,6 +199,14 @@ class ManagedDocumentService:
             contract_scenario=contract_scenario,
             business_role=business_role,
         )
+        if (
+            selection.consumer_terms is not None
+            and selection.consumer_terms.installation_two_stages
+            and not staged_template_is_supported(version.placeholder_schema or {})
+        ):
+            raise ManagedDocumentConflictError(
+                "Обновите шаблон заказ-акта: выбранная версия не поддерживает монтаж в два этапа"
+            )
         if replaces_document_id is not None:
             await lock_replacement_target(
                 session,
