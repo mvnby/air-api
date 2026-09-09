@@ -379,7 +379,7 @@ const handleEmailSent = async () => {
           :terms="workspace.transportTerms.value"
           @update-terms="workspace.transportTerms.value = $event"
         />
-        <p v-if="workspace.draftBlockedReason.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
+        <p v-if="workspace.draftBlockedReason.value && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
       </div>
 
       <p v-else-if="!access.canCreate" class="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800">{{ access.summary }}</p>

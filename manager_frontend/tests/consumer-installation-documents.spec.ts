@@ -1,6 +1,8 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ManagerDocumentSystemService, type ManagerOrderDetailResponse } from '../src/client';
+import { MANAGER_CAPABILITY } from '../src/manager-capabilities';
+import { managerSession } from '../src/services/manager-session';
 import NativeDocumentsWorkspace from '../src/features/documents/components/NativeDocumentsWorkspace.vue';
 import { googleDocumentEditorApi } from '../src/features/documents/integrations/google-document-editor-api';
 
@@ -13,12 +15,33 @@ const baseOrder = {
   proposals: [{ id: 7, order_id: 42, name: 'Основное', is_selected: true, is_archived: false, product_lines: [{ line_total: 3140 }] }],
   needs_attention: false, awaiting_measurement: false, client_thinking: false, ready_for_execution: false,
 } as ManagerOrderDetailResponse;
+const issuedSupplyInstallationDocument = {
+  id: 614,
+  order_id: 42,
+  legal_entity_id: 5,
+  proposal_id: 7,
+  doc_type: 'b2c_supply_installation_act',
+  status: 'issued',
+  provider: 'native',
+  display_number: 'Д-614',
+  date: NOW,
+  official_date: NOW,
+  document_template_id: 100,
+  created_at: NOW,
+  artifacts: [],
+};
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   return { promise: new Promise<T>((done) => { resolve = done; }), resolve };
 };
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    callback(0);
+    return 0;
+  });
   vi.spyOn(googleDocumentEditorApi, 'getConnectionStatus').mockResolvedValue({ connected: false, provider: 'google_drive', account_label: null, managed_folder_url: null, connected_at: null, last_verified_at: null, last_error_code: null });
   vi.spyOn(googleDocumentEditorApi, 'getSession').mockResolvedValue(null);
   vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({ items: [{ id: 5, tenant_id: 1, slug: 'mvn', display_name: 'ООО МВН', is_default: true, status: 'active', requisites: { city: 'Витебск', default_goods_warranty_months: '48', default_work_warranty_months: '12', offer_url: 'https://mvn.by/offer', offer_version: '1.0', offer_published_on: '04.06.2026' }, created_at: NOW, updated_at: NOW }] });
@@ -29,7 +52,13 @@ beforeEach(() => {
   vi.spyOn(ManagerDocumentSystemService, 'getManagerConsumerEquipmentDefaults').mockResolvedValue(defaults);
   vi.spyOn(ManagerDocumentSystemService, 'createManagerManagedDocumentDraft').mockResolvedValue({} as never);
 });
-afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.restoreAllMocks(); });
+afterEach(() => {
+  for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+  vi.restoreAllMocks();
+  if (originalScrollIntoView) Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
+  else Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  managerSession.auth.value = null;
+});
 const mountConsumerWorkspace = async () => {
   const wrapper = mount(NativeDocumentsWorkspace, { props: { order: baseOrder } });
   wrappers.push(wrapper);
@@ -37,6 +66,16 @@ const mountConsumerWorkspace = async () => {
   await wrapper.get('[data-testid="native-audience-consumer"]').trigger('click');
   await flushPromises();
   return wrapper;
+};
+
+const prepareReplacementFromDocumentList = async (wrapper: VueWrapper) => {
+  const action = wrapper.findAll('button').find((button) => (
+    button.text() === 'Создать исправленную редакцию'
+  ));
+  if (!action) throw new Error('Не найдена кнопка создания исправленной редакции');
+  await action.trigger('click');
+  await flushPromises();
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
 };
 
 describe('consumer installation documents', () => {
@@ -51,21 +90,97 @@ describe('consumer installation documents', () => {
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ document_type: documentType, consumer_terms: expect.objectContaining({ installation_two_stages: false, installation_first_stage_amount: null }) }));
   });
 
-  it('serializes exact two-stage amounts and clears them with the direct toggle', async () => {
+  it('serializes exact two-stage amounts, the default first-stage outdoor unit, and clears them with the direct toggle', async () => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
     await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000,00');
     expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00 BYN');
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
-    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ consumer_terms: expect.objectContaining({ installation_two_stages: true, installation_first_stage_amount: '3000.00' }) }));
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ consumer_terms: expect.objectContaining({ installation_two_stages: true, installation_outdoor_unit_in_first_stage: true, installation_first_stage_amount: '3000.00' }) }));
     const clearWrapper = await mountConsumerWorkspace();
     await clearWrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
     await clearWrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000');
     await clearWrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
     await clearWrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
-    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(42, expect.objectContaining({ consumer_terms: expect.objectContaining({ installation_two_stages: false, installation_first_stage_amount: null }) }));
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(42, expect.objectContaining({ consumer_terms: expect.objectContaining({ installation_two_stages: false, installation_outdoor_unit_in_first_stage: true, installation_first_stage_amount: null }) }));
+  });
+
+  it('places the outdoor unit in the second stage when selected and keeps the split calculation', async () => {
+    const wrapper = await mountConsumerWorkspace();
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000');
+    await wrapper.get('[data-testid="installation-outdoor-second-stage"]').trigger('click');
+
+    expect(wrapper.get('[data-testid="installation-outdoor-second-stage"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('[data-testid="installation-two-stages-description"]').text()).toContain('Второй: внутренний и наружный блоки, подключение и пусконаладка');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00 BYN');
+
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({
+      consumer_terms: expect.objectContaining({
+        installation_two_stages: true,
+        installation_outdoor_unit_in_first_stage: false,
+        installation_first_stage_amount: '3000.00',
+      }),
+    }));
+  });
+
+  it('keeps an invalid first-stage amount beside the field instead of linking to document settings', async () => {
+    managerSession.auth.value = { capabilities: [MANAGER_CAPABILITY.documentsManage] } as never;
+    const wrapper = await mountConsumerWorkspace();
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3140');
+
+    expect(wrapper.get('[data-testid="installation-two-stages-error"]').text()).toContain('Первый этап должен быть больше 0');
+    expect(wrapper.find('[data-testid="native-draft-blocked-reason"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Исправить в настройках');
+  });
+
+  it('keeps entered installation stages when replacing an issued document of the same type', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({
+      items: [issuedSupplyInstallationDocument],
+    });
+    const wrapper = await mountConsumerWorkspace();
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000');
+    await wrapper.get('[data-testid="installation-outdoor-second-stage"]').trigger('click');
+
+    await prepareReplacementFromDocumentList(wrapper);
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-first-stage-amount"]').element.value).toBe('3000');
+    expect(wrapper.get('[data-testid="installation-outdoor-second-stage"]').attributes('aria-pressed')).toBe('true');
+
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({
+      replaces_document_id: 614,
+      consumer_terms: expect.objectContaining({
+        installation_two_stages: true,
+        installation_outdoor_unit_in_first_stage: false,
+        installation_first_stage_amount: '3000.00',
+      }),
+    }));
+  });
+
+  it('prepares an untouched same-type replacement with default consumer terms', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({
+      items: [issuedSupplyInstallationDocument],
+    });
+    const wrapper = await mountConsumerWorkspace();
+
+    await prepareReplacementFromDocumentList(wrapper);
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({
+      replaces_document_id: 614,
+      consumer_terms: expect.objectContaining({
+        installation_two_stages: false,
+        installation_outdoor_unit_in_first_stage: true,
+        installation_first_stage_amount: null,
+      }),
+    }));
   });
 
   it('preserves manual equipment through a date-based defaults refresh', async () => {

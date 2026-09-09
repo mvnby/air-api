@@ -16,6 +16,7 @@ export type ConsumerDocumentTerms = {
   route_pressure_test_performed: boolean;
   route_ends_capped: boolean;
   installation_two_stages: boolean;
+  installation_outdoor_unit_in_first_stage: boolean;
   installation_first_stage_amount: string | null;
 };
 
@@ -59,5 +60,6 @@ export const createDefaultConsumerDocumentTerms = (
   route_pressure_test_performed: false,
   route_ends_capped: false,
   installation_two_stages: false,
+  installation_outdoor_unit_in_first_stage: true,
   installation_first_stage_amount: null,
 });

@@ -127,6 +127,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       goods_warranty_months: 36,
       goods_warranty_terms: null,
       installation_two_stages: false,
+      installation_outdoor_unit_in_first_stage: true,
       installation_first_stage_amount: null,
     };
     manuallyEditedConsumerDefaultFields.clear();
@@ -201,6 +202,16 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     if (!pdfRuntime.value.available) return pdfRuntime.value.detail || 'Сервис PDF не настроен';
     return '';
   });
+  const installationTwoStagesError = computed(() => {
+    if (!isSupplyInstallationDocumentType(documentType.value) || !consumerTerms.value.installation_two_stages) {
+      return '';
+    }
+    return calculateInstallationTwoStages(
+      consumerTerms.value.installation_first_stage_amount,
+      input.proposalTotalCents(),
+    ).error;
+  });
+
   const draftBlockedReason = computed(() => {
     if (templatesLoading.value || templateVersionsLoading.value) return 'Загружаем подходящий шаблон…';
     if (isSupplyInstallationDocumentType(documentType.value) && consumerDefaultsLoading.value) {
@@ -225,13 +236,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         return 'Для документа физлицу заполните ссылку, версию и дату публичной оферты';
       }
     }
-    if (isSupplyInstallationDocumentType(documentType.value) && consumerTerms.value.installation_two_stages) {
-      const validation = calculateInstallationTwoStages(
-        consumerTerms.value.installation_first_stage_amount,
-        input.proposalTotalCents(),
-      );
-      if (validation.error) return validation.error;
-    }
+    if (installationTwoStagesError.value) return installationTwoStagesError.value;
     if (!selectedTemplateId.value) return 'Нет шаблона для этого типа';
     if (!selectedTemplateHasActiveVersion.value) return 'У шаблона нет активной DOCX-версии';
     if (['act', 'tn2', 'ttn1'].includes(documentType.value) && !baseDocumentId.value && !baseCustomerContractId.value) {
@@ -542,7 +547,11 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   };
 
   const prepareReplacement = (document: ManagedDocumentItem) => {
-    resetConsumerTerms();
+    const preservesConsumerTerms = (
+      isConsumerDocumentType(documentType.value)
+      && documentType.value === document.doc_type
+    );
+    if (!preservesConsumerTerms) resetConsumerTerms();
     resetBusinessTerms();
     resetActTerms();
     resetTransportTerms();
@@ -606,6 +615,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     issueDate,
     previewDraft,
     legalEntities,
+    hasInstallationTwoStagesError: computed(() => Boolean(installationTwoStagesError.value)),
     loading,
     loadDocuments,
     loadWorkspace,
