@@ -57,6 +57,14 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('order drawer autosave integration', () => {
+  it('flushes edits before navigating to the customer profile', async () => {
+    await mountDrawer();
+    customer().vm.$emit('update:comment', 'Сохранить перед переходом');
+    await nextTick();
+    expect(await customer().props('beforeNavigate')!()).toBe(true);
+    expect(stored.comment).toBe('Сохранить перед переходом');
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
+  });
   it('persists a suggested address and added service before generating a contract', async () => {
     await mountDrawer();
     expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();

@@ -77,6 +77,18 @@ const mountContext = () => {
   return wrapper;
 };
 
+it('keeps the current page when the order cannot finish saving before navigation', async () => {
+  const wrapper = mountContext();
+  const beforeNavigate = vi.fn().mockResolvedValue(false);
+  await wrapper.setProps({ beforeNavigate });
+  const navigate = vi.spyOn(window.history, 'pushState');
+  wrapper.findComponent({ name: 'OrderCustomerObjectSummary' }).vm.$emit('open-customer');
+  await flushPromises();
+  expect(beforeNavigate).toHaveBeenCalledOnce();
+  expect(navigate).not.toHaveBeenCalled();
+  navigate.mockRestore();
+});
+
 const companyOrder = {
   ...order,
   customer: {

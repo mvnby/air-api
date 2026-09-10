@@ -464,6 +464,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         :order="order"
         :address-error="getFieldError('customer_delivery_address')"
         :comment-error="getFieldError('comment')"
+        :before-navigate="closeDrawer"
         @toast="setToast($event.message, $event.type)"
         @updated="handleCustomerUpdated"
         @reload="emit('reload', $event)"

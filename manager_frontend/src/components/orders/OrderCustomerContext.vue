@@ -17,6 +17,7 @@ const props = defineProps<{
   order: ManagerOrderDetailResponse;
   addressError?: string;
   commentError?: string;
+  beforeNavigate?: () => Promise<boolean>;
 }>();
 
 const emit = defineEmits<{
@@ -171,13 +172,14 @@ const copyText = async (value: string | null | undefined, label: string) => {
   }
 };
 
-const openCustomerProfile = () => {
+const openCustomerProfile = async () => {
   if (!customer.value?.id) return;
   const returnTo = `${window.location.pathname}${window.location.search}`;
   const query = new URLSearchParams({
     customerId: String(customer.value.id),
     returnTo,
   });
+  if (props.beforeNavigate && !await props.beforeNavigate()) return;
   window.history.pushState({}, '', `/manager/customers/profile?${query.toString()}`);
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
@@ -272,6 +274,33 @@ watch(
     @toggle-branch="showBranchFields = !showBranchFields"
   />
 
+  <div v-if="canSuggestCompanyAddress" class="mt-2 px-3 text-sm text-slate-600 dark:text-slate-300">
+    <p>Адрес объекта не указан. Можно найти его по названию компании.</p>
+    <button
+      type="button"
+      data-testid="suggest-company-address"
+      class="btn-mini-outline mt-2 text-xs"
+      :disabled="companyAddressLoading"
+      @click="suggestCompanyAddress"
+    >{{ companyAddressLoading ? 'Ищем адрес...' : 'Подобрать адрес' }}</button>
+    <p v-if="companyAddressError" class="mt-2 text-xs text-red-700">Не удалось получить подсказки. Адрес можно ввести вручную.</p>
+    <p v-else-if="companyAddressSearched && !companyAddressLoading && companyAddressCandidates.length === 0" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Подходящих подсказок не найдено. Адрес можно ввести вручную.</p>
+    <div v-else-if="companyAddressCandidates.length" class="mt-2 space-y-1">
+      <p class="text-xs text-slate-500 dark:text-slate-400">Выберите подходящий адрес объекта:</p>
+      <button
+        v-for="candidate in companyAddressCandidates"
+        :key="candidate.value"
+        type="button"
+        :data-testid="`company-address-candidate-${candidate.value}`"
+        class="block w-full rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 px-2 py-1.5 text-left text-sm hover:border-teal-500"
+        @click="chooseCompanyAddress(candidate.value)"
+      >
+        <span class="font-medium">{{ candidate.value }}</span>
+        <span v-if="candidate.subtitle" class="block text-xs text-slate-500">{{ candidate.subtitle }}</span>
+      </button>
+    </div>
+  </div>
+
   <div v-if="showBranchFields && customer?.id" class="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900 sm:grid-cols-2">
     <label class="field-label sm:col-span-2">
       Филиал клиента
@@ -298,32 +327,6 @@ watch(
     :has-error="Boolean(addressError || commentError)"
   >
     <div class="grid gap-3 md:grid-cols-2">
-      <div v-if="canSuggestCompanyAddress" class="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-        <p>Адрес объекта не указан. Можно проверить адрес по названию компании «{{ companyName }}».</p>
-        <button
-          type="button"
-          data-testid="suggest-company-address"
-          class="btn-mini-outline mt-2 text-xs"
-          :disabled="companyAddressLoading"
-          @click="suggestCompanyAddress"
-        >{{ companyAddressLoading ? 'Ищем адрес...' : 'Подобрать адрес' }}</button>
-        <p v-if="companyAddressError" class="mt-2 text-xs text-red-700">Не удалось получить подсказки. Адрес можно ввести вручную.</p>
-        <p v-else-if="companyAddressSearched && !companyAddressLoading && companyAddressCandidates.length === 0" class="mt-2 text-xs text-amber-800">Подходящих подсказок не найдено. Адрес можно ввести вручную.</p>
-        <div v-else-if="companyAddressCandidates.length" class="mt-2 space-y-1">
-          <p class="text-xs text-amber-800">Выберите адрес объекта. Юридический адрес компании не подставляется автоматически.</p>
-          <button
-            v-for="candidate in companyAddressCandidates"
-            :key="candidate.value"
-            type="button"
-            :data-testid="`company-address-candidate-${candidate.value}`"
-            class="block w-full rounded-md border border-amber-200 bg-white px-2 py-1.5 text-left text-sm hover:border-amber-400"
-            @click="chooseCompanyAddress(candidate.value)"
-          >
-            <span class="font-medium">{{ candidate.value }}</span>
-            <span v-if="candidate.subtitle" class="block text-xs text-slate-500">{{ candidate.subtitle }}</span>
-          </button>
-        </div>
-      </div>
       <AddressSuggestInput v-model="deliveryAddress" class="md:col-span-2" label="Адрес объекта / доставки" placeholder="Введите адрес..." :error="addressError" />
       <label class="field-label md:col-span-2">
         Комментарий
