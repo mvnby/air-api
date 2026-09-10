@@ -62,6 +62,10 @@ export const useOrderDrawerPersistence = ({
   const persistDraft = () => {
     if (!draftKey.value) return;
     try {
+      if (!hasUnsavedChanges.value) {
+        window.sessionStorage.removeItem(draftKey.value);
+        return;
+      }
       const payload: OrderDrawerDraft = {
         productLines: productLines.value.map((line) => ({ ...line })),
         serviceLines: serviceLines.value.map((line) => ({ ...line })),

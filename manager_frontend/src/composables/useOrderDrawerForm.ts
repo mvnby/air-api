@@ -209,7 +209,7 @@ export const useOrderDrawerForm = ({
     }
   };
 
-  const currentFormSnapshot = (proposalStatus: string) => JSON.stringify({
+  const currentFormSnapshot = (_proposalStatus?: string) => JSON.stringify({
     status: status.value,
     title: orderTitle.value.trim(),
     workflowType: workflowType.value,
@@ -226,7 +226,6 @@ export const useOrderDrawerForm = ({
     measurerId: measurerId.value,
     measurementResult: measurementResult.value,
     additionalConditions: additionalConditions.value,
-    proposalStatus,
     negotiationStatus: negotiationStatus.value,
     executionStatus: executionStatus.value,
     executionWithoutPayment: executionWithoutPayment.value,
@@ -301,50 +300,51 @@ export const useOrderDrawerForm = ({
     }
   };
 
-  const buildSavePayload = (activeProposalLocked: boolean): ManagerOrderUpdatePayload | null => {
-    localServerErrors.value = {};
-    localFormError.value = '';
-    const errors: Record<string, string> = {};
-    if (!status.value) errors.status = 'Укажите статус';
-    if (assessmentDate.value && installationDate.value && installationDate.value < assessmentDate.value) {
-      errors.installation_date = 'Дата монтажа не может быть раньше даты замера';
-    }
-    const lineError = validateLines();
-    if (lineError) {
-      if (lineError.includes('товар')) errors.products = lineError;
-      else errors.services = lineError;
-    }
-    if (Object.keys(errors).length) {
-      localServerErrors.value = errors;
-      localFormError.value = 'Исправьте ошибки в форме';
-      return null;
-    }
-    if (status.value === 'execution' && total.value <= 0) {
-      localFormError.value = 'Нельзя перевести в монтаж с пустой сметой';
-      return null;
-    }
-    if (status.value === 'execution' && measurementRequired.value && !measurementResult.value.trim()) {
-      localFormError.value = 'Требуется замер: заполните результат замера';
-      return null;
-    }
-    if (enableCurrency.value) {
-      if (!targetCurrency.value) {
-        localFormError.value = 'Выберите валюту сделки';
+  const buildSavePayload = (activeProposalLocked: boolean, validate = true): ManagerOrderUpdatePayload | null => {
+    if (validate) {
+      localServerErrors.value = {};
+      localFormError.value = '';
+      const errors: Record<string, string> = {};
+      if (!status.value) errors.status = 'Укажите статус';
+      if (assessmentDate.value && installationDate.value && installationDate.value < assessmentDate.value) {
+        errors.installation_date = 'Дата монтажа не может быть раньше даты замера';
+      }
+      const lineError = validateLines();
+      if (lineError) {
+        if (lineError.includes('товар')) errors.products = lineError;
+        else errors.services = lineError;
+      }
+      if (Object.keys(errors).length) {
+        localServerErrors.value = errors;
+        localFormError.value = 'Исправьте ошибки в форме';
         return null;
       }
-      if (!getActiveFxRate(targetCurrency.value)) {
-        localFormError.value = 'Для выбранной валюты сейчас нет доступного курса';
+      if (status.value === 'execution' && total.value <= 0) {
+        localFormError.value = 'Нельзя перевести в монтаж с пустой сметой';
         return null;
       }
-      if (!targetCurrencyAmount.value || targetCurrencyAmount.value <= 0) {
-        localFormError.value = 'Укажите зафиксированную сумму в валюте';
+      if (status.value === 'execution' && measurementRequired.value && !measurementResult.value.trim()) {
+        localFormError.value = 'Требуется замер: заполните результат замера';
         return null;
       }
-    } else if (payments.value.some((payment) => payment.currency !== 'BYN')) {
-      localFormError.value = 'Нельзя отключить валютный режим, пока в заказе есть валютные платежи';
-      return null;
+      if (enableCurrency.value) {
+        if (!targetCurrency.value) {
+          localFormError.value = 'Выберите валюту сделки';
+          return null;
+        }
+        if (!getActiveFxRate(targetCurrency.value)) {
+          localFormError.value = 'Для выбранной валюты сейчас нет доступного курса';
+          return null;
+        }
+        if (!targetCurrencyAmount.value || targetCurrencyAmount.value <= 0) {
+          localFormError.value = 'Укажите зафиксированную сумму в валюте';
+          return null;
+        }
+      } else if (payments.value.some((payment) => payment.currency !== 'BYN')) {
+        localFormError.value = 'Нельзя отключить валютный режим, пока в заказе есть валютные платежи';
+        return null;
+      }
     }
-    repairMeta.value = buildRepairMetaPayload();
     const lines = buildLinesPayload();
     return {
       status: status.value,

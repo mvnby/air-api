@@ -20,7 +20,6 @@ const drawerOpen = ref(false);
 const selectedOrder = ref<ManagerOrderDetailResponse | null>(null);
 const orderServerErrors = ref<Record<string, string>>({});
 const orderFormError = ref('');
-const saving = ref(false);
 const toast = ref('');
 const calendarRef = ref<any>(null);
 const staleStages = ref<ManagerStaleWorkStageItem[]>([]);
@@ -135,47 +134,6 @@ const deleteStaleStage = async (stage: ManagerStaleWorkStageItem) => {
     refreshCalendar();
   } catch (err) {
     setToast(`Ошибка удаления: ${getApiErrorMessage(err)}`);
-  }
-};
-
-const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePayload }) => {
-  if (saving.value) return;
-  saving.value = true;
-  orderServerErrors.value = {};
-  orderFormError.value = '';
-  try {
-    selectedOrder.value = await api.patchManagerOrder(payload.orderId, payload.data);
-    setToast('Сделка сохранена');
-    
-    // Refresh events to show updated dates immediately
-    refreshCalendar();
-  } catch (error: any) {
-    console.error(error);
-    const parsed = parseApiFieldErrors(error, [
-      'status',
-      'next_followup_date',
-      'measurement_date',
-      'installation_date',
-      'comment',
-      'is_paid',
-      'customer_name',
-      'customer_phone',
-      'customer_email',
-      'customer_inn',
-      'customer_full_legal_name',
-      'customer_legal_address',
-      'customer_bank_name',
-      'customer_bic',
-      'customer_iban',
-      'customer_delivery_address',
-      'products',
-      'services',
-    ]);
-    orderServerErrors.value = parsed.fieldErrors;
-    orderFormError.value = parsed.message;
-    setToast(`Ошибка сохранения: ${parsed.message}`);
-  } finally {
-    saving.value = false;
   }
 };
 
@@ -382,8 +340,6 @@ const calendarOptions = ref<CalendarOptions>({
       :order="selectedOrder"
       :server-errors="orderServerErrors"
       :form-error="orderFormError"
-      :saving="saving"
-      @save="saveOrder"
       @updated="applyOrderUpdate"
       @deleted="handleOrderDeleted"
       @reload="openOrder($event)"

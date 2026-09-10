@@ -19,7 +19,7 @@ import {
   STATUS_ORDER,
   formatMoney,
 } from './order-utils';
-import { getApiErrorMessage, parseApiFieldErrors } from '../../utils/api-errors';
+import { getApiErrorMessage } from '../../utils/api-errors';
 import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import { managerSession, requireManagerSessionRecovery } from '../../services/manager-session';
 import OrdersImportPreviewModal from './OrdersImportPreviewModal.vue';
@@ -40,7 +40,7 @@ const setToast = (message: string) => {
   }, 2500);
 };
 const {
-  segment, view, statusFilter, overdueOnly, sort, search, loading, saving, orders,
+  segment, view, statusFilter, overdueOnly, sort, search, loading, orders,
   movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
   openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
   groupByCustomer, filtersOpen, selectedOrderIds, transferLoading, importFileInput,
@@ -424,49 +424,6 @@ const reloadOrder = async (orderId: number) => {
   await loadOrders();
 };
 
-const saveOrder = async (payload: { orderId: number; data: ManagerOrderUpdatePayload }) => {
-  if (saving.value) return;
-  saving.value = true;
-  orderServerErrors.value = {};
-  orderFormError.value = '';
-  try {
-    selectedOrder.value = await api.patchManagerOrder(payload.orderId, payload.data);
-    setToast('Сделка сохранена');
-    await loadOrders();
-  } catch (error) {
-    console.error(error);
-    const parsed = parseApiFieldErrors(error, [
-      'status',
-      'title',
-      'manager_labels',
-      'next_followup_date',
-      'measurement_date',
-      'installation_date',
-      'comment',
-      'is_paid',
-      'customer_name',
-      'customer_phone',
-      'customer_email',
-      'customer_inn',
-      'customer_full_legal_name',
-      'customer_legal_address',
-      'customer_bank_name',
-      'customer_bic',
-      'customer_iban',
-      'customer_delivery_address',
-      'target_currency',
-      'target_currency_amount',
-      'products',
-      'services',
-    ]);
-    orderServerErrors.value = parsed.fieldErrors;
-    orderFormError.value = parsed.message;
-    setToast(`Ошибка сохранения: ${parsed.message}`);
-  } finally {
-    saving.value = false;
-  }
-};
-
 const handleOrderDeleted = async (orderId: number) => {
   orders.value = orders.value.filter((order) => order.id !== orderId);
   drawerOpen.value = false;
@@ -647,8 +604,6 @@ watch(drawerOpen, (isOpen) => {
       :order="selectedOrder"
       :server-errors="orderServerErrors"
       :form-error="orderFormError"
-      :saving="saving"
-      @save="saveOrder"
       @updated="applyOrderUpdate"
       @deleted="handleOrderDeleted"
       @reload="reloadOrder"

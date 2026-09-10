@@ -6,7 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Customer, CustomerType, Order, OrderProductLink, OrderProposal, OrderStatus, Product
+from models import (
+    Customer,
+    CustomerType,
+    Order,
+    OrderProductLink,
+    OrderProposal,
+    OrderServiceLink,
+    OrderStatus,
+    Product,
+)
 from models.tenancy import TenantScope
 from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
@@ -203,3 +212,205 @@ async def test_manager_order_update_sets_individual_entrepreneur_and_self_signin
     assert customer is not None
     assert customer.type == CustomerType.individual_entrepreneur
     assert customer.signing_mode == "self"
+
+
+@pytest.mark.asyncio
+async def test_explicit_line_proposal_scope_clears_empty_alternative_without_touching_selected(
+    update_session: AsyncSession,
+):
+    order_id, _ = await _create_order(update_session)
+    selected_product = Product(
+        title="Выбранный товар",
+        slug="selected-product-line-scope",
+        price=500,
+    )
+    alternative_product = Product(
+        title="Товар альтернативы",
+        slug="alternative-product-line-scope",
+        price=700,
+    )
+    update_session.add_all([selected_product, alternative_product])
+    await update_session.flush()
+
+    selected_proposal = OrderProposal(
+        order_id=order_id,
+        name="Выбранный вариант",
+        is_selected=True,
+    )
+    alternative_proposal = OrderProposal(
+        order_id=order_id,
+        name="Альтернативный вариант",
+    )
+    update_session.add_all([selected_proposal, alternative_proposal])
+    await update_session.flush()
+    update_session.add_all(
+        [
+            OrderProductLink(
+                order_id=order_id,
+                proposal_id=selected_proposal.id,
+                product_id=selected_product.id,
+                quantity=1,
+                price=500,
+            ),
+            OrderProductLink(
+                order_id=order_id,
+                proposal_id=alternative_proposal.id,
+                product_id=alternative_product.id,
+                quantity=1,
+                price=700,
+            ),
+            OrderServiceLink(
+                order_id=order_id,
+                proposal_id=selected_proposal.id,
+                title="Выбранная услуга",
+                quantity=1,
+                price=100,
+            ),
+            OrderServiceLink(
+                order_id=order_id,
+                proposal_id=alternative_proposal.id,
+                title="Услуга альтернативы",
+                quantity=1,
+                price=200,
+            ),
+        ]
+    )
+    await update_session.commit()
+
+    await OrderUpdateCommandService.update_order_for_manager(
+        update_session,
+        order_id,
+        ManagerOrderUpdatePayload(
+            line_proposal_id=alternative_proposal.id,
+            products=[],
+            services=[],
+        ),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    selected_product_links = list(
+        (
+            await update_session.execute(
+                select(OrderProductLink).where(
+                    OrderProductLink.proposal_id == selected_proposal.id
+                )
+            )
+        ).scalars()
+    )
+    selected_service_links = list(
+        (
+            await update_session.execute(
+                select(OrderServiceLink).where(
+                    OrderServiceLink.proposal_id == selected_proposal.id
+                )
+            )
+        ).scalars()
+    )
+    alternative_product_links = list(
+        (
+            await update_session.execute(
+                select(OrderProductLink).where(
+                    OrderProductLink.proposal_id == alternative_proposal.id
+                )
+            )
+        ).scalars()
+    )
+    alternative_service_links = list(
+        (
+            await update_session.execute(
+                select(OrderServiceLink).where(
+                    OrderServiceLink.proposal_id == alternative_proposal.id
+                )
+            )
+        ).scalars()
+    )
+    assert [line.product_id for line in selected_product_links] == [selected_product.id]
+    assert [line.title for line in selected_service_links] == ["Выбранная услуга"]
+    assert alternative_product_links == []
+    assert alternative_service_links == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_line_proposal_scope_rejects_conflicting_line_ids(
+    update_session: AsyncSession,
+):
+    order_id, _ = await _create_order(update_session)
+    product = Product(
+        title="Товар для проверки области",
+        slug="line-scope-conflicting-id-product",
+        price=500,
+    )
+    selected_proposal = OrderProposal(order_id=order_id, is_selected=True)
+    alternative_proposal = OrderProposal(order_id=order_id, name="Альтернатива")
+    update_session.add_all([product, selected_proposal, alternative_proposal])
+    await update_session.commit()
+
+    with pytest.raises(
+        ValueError,
+        match="Line proposal scope must match every line proposal_id",
+    ):
+        await OrderUpdateCommandService.update_order_for_manager(
+            update_session,
+            order_id,
+            ManagerOrderUpdatePayload(
+                line_proposal_id=alternative_proposal.id,
+                products=[
+                    {
+                        "product_id": product.id,
+                        "proposal_id": selected_proposal.id,
+                        "quantity": 1,
+                        "price": 500,
+                    }
+                ],
+            ),
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+
+
+@pytest.mark.asyncio
+async def test_explicit_line_proposal_scope_rejects_foreign_and_locked_proposals(
+    update_session: AsyncSession,
+):
+    order_id, customer_id = await _create_order(update_session)
+    selected_proposal = OrderProposal(order_id=order_id, is_selected=True)
+    locked_proposal = OrderProposal(
+        order_id=order_id,
+        name="Отправленный вариант",
+        status="sent",
+    )
+    foreign_order = Order(
+        tenant_id=TEST_TENANT_SCOPE.tenant_id,
+        storefront_id=TEST_TENANT_SCOPE.storefront_id,
+        customer_id=customer_id,
+        status=OrderStatus.NEGOTIATION,
+    )
+    update_session.add_all([selected_proposal, locked_proposal, foreign_order])
+    await update_session.flush()
+    foreign_proposal = OrderProposal(order_id=foreign_order.id, is_selected=True)
+    update_session.add(foreign_proposal)
+    await update_session.flush()
+    locked_proposal_id = int(locked_proposal.id)
+    foreign_proposal_id = int(foreign_proposal.id)
+    await update_session.commit()
+
+    with pytest.raises(ValueError, match="Proposal not found"):
+        await OrderUpdateCommandService.update_order_for_manager(
+            update_session,
+            order_id,
+            ManagerOrderUpdatePayload(
+                line_proposal_id=foreign_proposal_id,
+                products=[],
+            ),
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+
+    with pytest.raises(ValueError, match="cannot be edited"):
+        await OrderUpdateCommandService.update_order_for_manager(
+            update_session,
+            order_id,
+            ManagerOrderUpdatePayload(
+                line_proposal_id=locked_proposal_id,
+                products=[],
+            ),
+            tenant_scope=TEST_TENANT_SCOPE,
+        )

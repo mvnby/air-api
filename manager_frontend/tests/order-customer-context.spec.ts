@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import OrderCustomerContext from '../src/components/orders/OrderCustomerContext.vue';
 
+const suggestAddress = vi.hoisted(() => vi.fn());
+
 const apiMock = vi.hoisted(() => ({
   createManagerCustomerBranch: vi.fn(),
   getManagerCustomerBranches: vi.fn(),
@@ -12,6 +14,10 @@ const apiMock = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/api', () => ({ api: apiMock }));
+vi.mock('../src/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/client')>()),
+  ManagerSettingsService: { suggestAddress },
+}));
 
 const order = {
   id: 42,
@@ -71,6 +77,33 @@ const mountContext = () => {
   return wrapper;
 };
 
+const companyOrder = {
+  ...order,
+  customer: {
+    id: 12,
+    type: 'company',
+    name: 'ООО Альфа',
+    full_legal_name: 'ООО «Альфа»',
+    phone: '+375291112233',
+    email: 'office@example.test',
+  },
+} as ManagerOrderDetailResponse;
+
+const mountCompanyContext = () => {
+  const wrapper = mount(OrderCustomerContext, {
+    props: {
+      order: companyOrder,
+      deliveryAddress: '',
+      customerBranchId: null,
+      comment: '',
+      expanded: true,
+      newBranchAddress: '',
+    },
+  });
+  mountedWrappers.push(wrapper);
+  return wrapper;
+};
+
 beforeEach(() => {
   apiMock.getManagerCustomerBranches.mockResolvedValue({ items: branches });
   apiMock.getManagerCustomers.mockResolvedValue({
@@ -80,6 +113,7 @@ beforeEach(() => {
     ...order,
     customer: { id: 22, name: 'Новый клиент', phone: '+375291234567' },
   });
+  suggestAddress.mockResolvedValue({ items: [] });
 });
 
 afterEach(() => {
@@ -92,7 +126,6 @@ describe('OrderCustomerContext', () => {
   it('loads branches and keeps branch selection coupled to the object address', async () => {
     const wrapper = mountContext();
     await flushPromises();
-
     expect(apiMock.getManagerCustomerBranches).toHaveBeenCalledWith(11);
     await wrapper.get('button[aria-label="Редактировать объект"]').trigger('click');
     await wrapper.findAll('button').find((button) => button.text().includes('Выбрать филиал'))?.trigger('click');
@@ -121,5 +154,52 @@ describe('OrderCustomerContext', () => {
       customer: expect.objectContaining({ id: 22 }),
     }));
     expect(wrapper.emitted('reload')).toEqual([[42]]);
+  });
+
+  it('offers company-name address suggestions only after an explicit request and selection', async () => {
+    suggestAddress.mockResolvedValue({
+      items: [{ value: 'Минск, проспект Победителей, 1', title: 'Минск, проспект Победителей, 1' }],
+    });
+    const wrapper = mountCompanyContext();
+    await flushPromises();
+
+    expect(suggestAddress).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="suggest-company-address"]').text()).toContain('Подобрать адрес');
+
+    await wrapper.get('[data-testid="suggest-company-address"]').trigger('click');
+    await flushPromises();
+
+    expect(suggestAddress).toHaveBeenCalledWith('ООО «Альфа»');
+    expect(wrapper.emitted('update:deliveryAddress')).toBeUndefined();
+    await wrapper.get('[data-testid="company-address-candidate-Минск, проспект Победителей, 1"]').trigger('click');
+    expect(wrapper.emitted('update:deliveryAddress')).toContainEqual(['Минск, проспект Победителей, 1']);
+  });
+
+  it('does not offer company-name suggestions to an individual customer', async () => {
+    const wrapper = mountContext();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="suggest-company-address"]').exists()).toBe(false);
+  });
+
+  it('does not overwrite a branch selected while a refreshed branch list is loading', async () => {
+    const wrapper = mountContext();
+    await flushPromises();
+    await wrapper.setProps({ customerBranchId: 32 });
+    const updatesBeforeRefresh = wrapper.emitted('update:customerBranchId')?.length || 0;
+
+    let resolveBranches: ((value: { items: typeof branches }) => void) | undefined;
+    apiMock.getManagerCustomerBranches.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveBranches = resolve;
+    }));
+    await wrapper.setProps({
+      order: { ...order, customer_branch: branches[0] },
+    });
+
+    resolveBranches?.({ items: branches });
+    await flushPromises();
+
+    expect(wrapper.props('customerBranchId')).toBe(32);
+    expect(wrapper.emitted('update:customerBranchId')?.slice(updatesBeforeRefresh) || []).toEqual([]);
   });
 });

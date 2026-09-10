@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
+import { useCompanyAddressSuggestion } from '../../composables/useCompanyAddressSuggestion';
 import type {
   ManagerCatalogCustomerItemResponse,
   ManagerCustomerBranchItemResponse,
@@ -40,10 +41,25 @@ const showCustomerSearch = ref(false);
 const customerSearchQuery = ref('');
 const customerSearchResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
 const customerSearchLoading = ref(false);
+const {
+  candidates: companyAddressCandidates,
+  loading: companyAddressLoading,
+  error: companyAddressError,
+  searched: companyAddressSearched,
+  suggest: requestCompanyAddressSuggestion,
+  reset: resetCompanyAddressSuggestion,
+} = useCompanyAddressSuggestion();
 let branchesRequestId = 0;
+let branchSelectionRevision = 0;
 let customerSearchRequestId = 0;
 
 const customer = computed(() => props.order.customer ?? null);
+const companyName = computed(() => (
+  customer.value?.full_legal_name?.trim() || customer.value?.name?.trim() || ''
+));
+const canSuggestCompanyAddress = computed(() => (
+  customer.value?.type === 'company' && !deliveryAddress.value.trim() && Boolean(companyName.value)
+));
 const selectedBranch = computed(() => (
   branches.value.find((branch) => branch.id === customerBranchId.value)
   || props.order.customer_branch
@@ -72,11 +88,17 @@ const resetBranches = () => {
 
 const loadBranches = async (customerId: number, preferredBranchId?: number | null) => {
   const requestId = ++branchesRequestId;
+  const selectionRevision = branchSelectionRevision;
+  const selectedBranchId = customerBranchId.value;
   branchesLoading.value = true;
   try {
     const response = await api.getManagerCustomerBranches(customerId);
     if (requestId !== branchesRequestId) return;
     branches.value = response.items || [];
+    if (
+      selectionRevision !== branchSelectionRevision
+      || (selectedBranchId !== null && selectedBranchId !== preferredBranchId)
+    ) return;
     if (!branches.value.length || preferredBranchId === null) {
       customerBranchId.value = null;
       return;
@@ -92,7 +114,7 @@ const loadBranches = async (customerId: number, preferredBranchId?: number | nul
   } catch (error) {
     if (requestId !== branchesRequestId) return;
     console.error('Failed to load customer branches', error);
-    resetBranches();
+    // A lookup failure must not detach the order from its saved object.
   } finally {
     if (requestId === branchesRequestId) branchesLoading.value = false;
   }
@@ -100,6 +122,7 @@ const loadBranches = async (customerId: number, preferredBranchId?: number | nul
 
 const onBranchChange = (event: Event) => {
   const value = (event.target as HTMLSelectElement).value;
+  branchSelectionRevision += 1;
   customerBranchId.value = value ? Number(value) : null;
   const branch = branches.value.find((item) => item.id === customerBranchId.value) || null;
   if (branch) deliveryAddress.value = branch.delivery_address;
@@ -121,6 +144,7 @@ const createBranch = async () => {
       is_default: branches.value.length === 0,
     });
     branches.value = [created, ...branches.value.filter((branch) => branch.id !== created.id)];
+    branchSelectionRevision += 1;
     customerBranchId.value = created.id;
     deliveryAddress.value = created.delivery_address;
     newBranchName.value = '';
@@ -209,12 +233,25 @@ const assignCustomer = async (newCustomer: ManagerCatalogCustomerItemResponse) =
   }
 };
 
+const suggestCompanyAddress = () => {
+  if (!canSuggestCompanyAddress.value) return;
+  void requestCompanyAddressSuggestion(companyName.value);
+};
+
+const chooseCompanyAddress = (address: string) => {
+  const value = address.trim();
+  if (!value) return;
+  deliveryAddress.value = value;
+  resetCompanyAddressSuggestion();
+};
+
 watch(
   () => [props.order.id, props.order.customer?.id, props.order.customer_branch?.id],
   () => {
     const customerId = props.order.customer?.id;
     if (customerId) void loadBranches(customerId, props.order.customer_branch?.id ?? null);
     else resetBranches();
+    resetCompanyAddressSuggestion();
   },
   { immediate: true },
 );
@@ -261,6 +298,32 @@ watch(
     :has-error="Boolean(addressError || commentError)"
   >
     <div class="grid gap-3 md:grid-cols-2">
+      <div v-if="canSuggestCompanyAddress" class="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+        <p>Адрес объекта не указан. Можно проверить адрес по названию компании «{{ companyName }}».</p>
+        <button
+          type="button"
+          data-testid="suggest-company-address"
+          class="btn-mini-outline mt-2 text-xs"
+          :disabled="companyAddressLoading"
+          @click="suggestCompanyAddress"
+        >{{ companyAddressLoading ? 'Ищем адрес...' : 'Подобрать адрес' }}</button>
+        <p v-if="companyAddressError" class="mt-2 text-xs text-red-700">Не удалось получить подсказки. Адрес можно ввести вручную.</p>
+        <p v-else-if="companyAddressSearched && !companyAddressLoading && companyAddressCandidates.length === 0" class="mt-2 text-xs text-amber-800">Подходящих подсказок не найдено. Адрес можно ввести вручную.</p>
+        <div v-else-if="companyAddressCandidates.length" class="mt-2 space-y-1">
+          <p class="text-xs text-amber-800">Выберите адрес объекта. Юридический адрес компании не подставляется автоматически.</p>
+          <button
+            v-for="candidate in companyAddressCandidates"
+            :key="candidate.value"
+            type="button"
+            :data-testid="`company-address-candidate-${candidate.value}`"
+            class="block w-full rounded-md border border-amber-200 bg-white px-2 py-1.5 text-left text-sm hover:border-amber-400"
+            @click="chooseCompanyAddress(candidate.value)"
+          >
+            <span class="font-medium">{{ candidate.value }}</span>
+            <span v-if="candidate.subtitle" class="block text-xs text-slate-500">{{ candidate.subtitle }}</span>
+          </button>
+        </div>
+      </div>
       <AddressSuggestInput v-model="deliveryAddress" class="md:col-span-2" label="Адрес объекта / доставки" placeholder="Введите адрес..." :error="addressError" />
       <label class="field-label md:col-span-2">
         Комментарий

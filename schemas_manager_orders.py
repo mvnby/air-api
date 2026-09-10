@@ -566,6 +566,7 @@ class ManagerOrderUpdatePayload(BaseModel):
     equipment_class: Optional[str] = None
     marketing_source: Optional[str] = None
     installer_id: Optional[int] = None
+    line_proposal_id: Optional[int] = None
     products: Optional[List[ManagerOrderProductLinePayload]] = None
     services: Optional[List[ManagerOrderServiceLinePayload]] = None
 

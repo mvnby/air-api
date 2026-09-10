@@ -62,8 +62,12 @@ const startObjectEdit = () => {
   editingObject.value = true;
 };
 
-const saveObject = () => {
-  emit('update:address', objectAddress.value.trim());
+const updateObjectAddress = (value: string) => {
+  objectAddress.value = value;
+  emit('update:address', value);
+};
+
+const finishObjectEdit = () => {
   editingObject.value = false;
 };
 </script>
@@ -131,13 +135,10 @@ const saveObject = () => {
     </div>
 
     <div v-if="editingObject" class="border-t border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/50">
-      <AddressSuggestInput v-model="objectAddress" label="Адрес объекта" />
+      <AddressSuggestInput :model-value="objectAddress" label="Адрес объекта" @update:model-value="updateObjectAddress" />
       <div class="mt-2 flex justify-between gap-2">
         <button type="button" class="btn-mini-outline text-xs" @click="emit('toggle-branch')">Выбрать филиал</button>
-        <div class="flex gap-2">
-          <button type="button" class="btn-mini-outline text-xs" @click="editingObject = false">Отмена</button>
-          <button type="button" class="btn-mini text-xs" @click="saveObject">Применить</button>
-        </div>
+        <button type="button" class="btn-mini text-xs" @click="finishObjectEdit">Готово</button>
       </div>
     </div>
   </section>

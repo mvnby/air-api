@@ -114,6 +114,7 @@ defineExpose({ openSend, openCreate });
       v-show="activeProvider === 'native'"
       :order="order"
       :active-proposal-id="activeProposalId"
+      :before-generate="beforeGenerate"
       @refresh="emit('refresh')"
       @toast="emit('toast', $event)"
     />
