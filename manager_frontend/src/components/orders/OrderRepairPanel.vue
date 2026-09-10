@@ -37,7 +37,7 @@ const repairMeta = defineModel<RepairMeta>('repairMeta', { required: true });
 const complaintPresets = ref<ManagerRepairComplaintPresetResponse[]>([]);
 const complaintSearch = ref('');
 const complaintsLoading = ref(false);
-const aiDefectType = ref(REPAIR_AI_DEFECT_TYPES[0]?.value || '');
+const aiDefectType = ref('');
 const aiAllowAssumptions = ref(false);
 const aiPolishExisting = ref(true);
 const aiGenerating = ref(false);
@@ -80,7 +80,7 @@ const filteredPresets = computed(() => {
 
 const selectedAiDefect = computed(() => (
   REPAIR_AI_DEFECT_TYPES.find((item) => item.value === aiDefectType.value)
-  || REPAIR_AI_DEFECT_TYPES[0]
+  || null
 ));
 const repairPossibleOptions = computed(() => (
   selectOptionsWithCurrent(REPAIR_CHOICE_OPTIONS, repairMeta.value.repair_possible)
@@ -131,6 +131,14 @@ const applyComplaintPreset = (preset: ManagerRepairComplaintPresetResponse) => {
     || repairMeta.value.likely_diagnosis;
 };
 
+const selectAiDefectType = (event: Event) => {
+  const value = (event.target as HTMLSelectElement).value;
+  aiDefectType.value = value;
+  // A fault type is a business classification. Only an explicit manager choice
+  // may copy the AI selector value into the order form.
+  repairMeta.value.fault_type = value;
+};
+
 const generateAiDraft = async () => {
   const defect = selectedAiDefect.value;
   if (!defect || aiGenerating.value) return;
@@ -179,7 +187,7 @@ watch(
     if (savedFaultType && REPAIR_AI_DEFECT_TYPES.some((item) => item.value === savedFaultType)) {
       aiDefectType.value = savedFaultType;
     } else {
-      repairMeta.value.fault_type = aiDefectType.value;
+      aiDefectType.value = '';
     }
     complaintSearch.value = '';
     void loadComplaintPresets();
@@ -187,9 +195,6 @@ watch(
   { immediate: true },
 );
 
-watch(aiDefectType, (value) => {
-  repairMeta.value.fault_type = value;
-});
 </script>
 
 <template>
@@ -240,7 +245,7 @@ watch(aiDefectType, (value) => {
             <p class="text-sm font-semibold text-violet-950">AI-черновик по выбранной неисправности</p>
             <p class="mt-1 truncate text-xs text-violet-700/80">{{ selectedAiDefect?.label || 'Базовая неисправность не выбрана' }}</p>
           </div>
-          <button type="button" data-testid="generate-repair-ai" class="btn-mini h-[42px] justify-center whitespace-nowrap bg-violet-600 hover:bg-violet-700" :disabled="aiGenerating" @click="generateAiDraft">
+          <button type="button" data-testid="generate-repair-ai" class="btn-mini h-[42px] justify-center whitespace-nowrap bg-violet-600 hover:bg-violet-700" :disabled="aiGenerating || !selectedAiDefect" @click="generateAiDraft">
             <span v-if="aiGenerating" class="material-icons-round animate-spin text-[16px]">loop</span>
             <span v-else class="material-icons-round text-[16px]">auto_awesome</span>
             AI-черновик
@@ -306,7 +311,8 @@ watch(aiDefectType, (value) => {
       </label>
       <label class="field-label">
         Базовая неисправность
-        <select v-model="aiDefectType" data-testid="repair-defect-type" class="field-input">
+        <select :value="aiDefectType" data-testid="repair-defect-type" class="field-input" @change="selectAiDefectType">
+          <option value="">Не выбрана</option>
           <option v-for="item in REPAIR_AI_DEFECT_TYPES" :key="`main-${item.value}`" :value="item.value">{{ item.label }}</option>
         </select>
       </label>
