@@ -51,7 +51,6 @@ const {
   reset: resetCompanyAddressSuggestion,
 } = useCompanyAddressSuggestion();
 let branchesRequestId = 0;
-let branchSelectionRevision = 0;
 let customerSearchRequestId = 0;
 
 const customer = computed(() => props.order.customer ?? null);
@@ -87,31 +86,15 @@ const resetBranches = () => {
   newBranchAddress.value = '';
 };
 
-const loadBranches = async (customerId: number, preferredBranchId?: number | null) => {
+const loadBranches = async (customerId: number) => {
   const requestId = ++branchesRequestId;
-  const selectionRevision = branchSelectionRevision;
-  const selectedBranchId = customerBranchId.value;
   branchesLoading.value = true;
   try {
     const response = await api.getManagerCustomerBranches(customerId);
     if (requestId !== branchesRequestId) return;
     branches.value = response.items || [];
-    if (
-      selectionRevision !== branchSelectionRevision
-      || (selectedBranchId !== null && selectedBranchId !== preferredBranchId)
-    ) return;
-    if (!branches.value.length || preferredBranchId === null) {
-      customerBranchId.value = null;
-      return;
-    }
-    const preferredFromOrder = typeof preferredBranchId === 'number'
-      ? branches.value.find((branch) => branch.id === preferredBranchId)
-      : null;
-    const preferred = preferredFromOrder
-      || branches.value.find((branch) => branch.is_default)
-      || branches.value[0]
-      || null;
-    customerBranchId.value = preferred?.id || null;
+    // Loading choices never changes the order. Hydration owns the saved branch;
+    // only a manager selection or branch creation may change its model.
   } catch (error) {
     if (requestId !== branchesRequestId) return;
     console.error('Failed to load customer branches', error);
@@ -123,7 +106,6 @@ const loadBranches = async (customerId: number, preferredBranchId?: number | nul
 
 const onBranchChange = (event: Event) => {
   const value = (event.target as HTMLSelectElement).value;
-  branchSelectionRevision += 1;
   customerBranchId.value = value ? Number(value) : null;
   const branch = branches.value.find((item) => item.id === customerBranchId.value) || null;
   if (branch) deliveryAddress.value = branch.delivery_address;
@@ -145,7 +127,6 @@ const createBranch = async () => {
       is_default: branches.value.length === 0,
     });
     branches.value = [created, ...branches.value.filter((branch) => branch.id !== created.id)];
-    branchSelectionRevision += 1;
     customerBranchId.value = created.id;
     deliveryAddress.value = created.delivery_address;
     newBranchName.value = '';
@@ -251,7 +232,7 @@ watch(
   () => [props.order.id, props.order.customer?.id, props.order.customer_branch?.id],
   () => {
     const customerId = props.order.customer?.id;
-    if (customerId) void loadBranches(customerId, props.order.customer_branch?.id ?? null);
+    if (customerId) void loadBranches(customerId);
     else resetBranches();
     resetCompanyAddressSuggestion();
   },
@@ -306,6 +287,9 @@ watch(
       Филиал клиента
       <select :value="customerBranchId ?? ''" data-testid="customer-branch" class="field-input mt-1" :disabled="branchesLoading" @change="onBranchChange">
         <option value="">Без филиала</option>
+        <option v-if="customerBranchId && !branches.some((branch) => branch.id === customerBranchId)" :value="customerBranchId">
+          {{ selectedBranch?.name || `Филиал #${customerBranchId}` }} — {{ selectedBranch?.delivery_address || deliveryAddress }}
+        </option>
         <option v-for="branch in branches" :key="branch.id" :value="branch.id">{{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}</option>
       </select>
     </label>

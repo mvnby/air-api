@@ -89,6 +89,24 @@ it('keeps the current page when the order cannot finish saving before navigation
   navigate.mockRestore();
 });
 
+it('does not detach the saved branch when the lookup returns no choices', async () => {
+  apiMock.getManagerCustomerBranches.mockResolvedValue({ items: [] });
+  const wrapper = mount(OrderCustomerContext, {
+    props: {
+      order: { ...order, customer_branch: branches[0] },
+      deliveryAddress: branches[0]!.delivery_address,
+      customerBranchId: 31, comment: '', expanded: false, newBranchAddress: '',
+    },
+  });
+  mountedWrappers.push(wrapper);
+  await flushPromises();
+  expect(wrapper.emitted('update:customerBranchId')).toBeUndefined();
+  expect(wrapper.props('customerBranchId')).toBe(31);
+  wrapper.findComponent({ name: 'OrderCustomerObjectSummary' }).vm.$emit('toggle-branch');
+  await flushPromises();
+  expect((wrapper.get('[data-testid="customer-branch"]').element as HTMLSelectElement).value).toBe('31');
+});
+
 const companyOrder = {
   ...order,
   customer: {
