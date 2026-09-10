@@ -631,6 +631,15 @@ mkdir -p media model-cache/u2net
 ensure_proxy
 ensure_document_pdf_runtime
 
+if [[ "${active_slot}" != "legacy" && "${BACKEND_IMAGE}" == "${previous_image}" \
+  && "${FORCE_ACTIVATION}" != "true" ]]; then
+  keyring_runtime_state="$(integration_keyring_runtime_state)"
+  if [[ "${keyring_runtime_state}" != "matched" ]]; then
+    FORCE_ACTIVATION=true
+    log reconcile "integration keyring configuration changed; activating a new runtime"
+  fi
+fi
+
 if [[ "${active_slot}" != "legacy" \
   && "${BACKEND_IMAGE}" == "${previous_image}" \
   && "${FORCE_ACTIVATION}" != "true" \

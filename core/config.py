@@ -9,6 +9,11 @@ from core.runtime_controls import (
     RuntimeControlDecision,
     resolve_single_active_control,
 )
+from core.integration_credential_keyring import (
+    IntegrationCredentialKeyring,
+    InvalidIntegrationCredentialKeyring,
+    build_integration_credential_keyring,
+)
 from core.storefront_signing_keyring import (
     InvalidStorefrontSigningKeyring,
     StorefrontSigningKeyring,
@@ -573,6 +578,30 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_REDIRECT_URI: str = ""
     GOOGLE_DOCUMENT_DRIVE_OAUTH_REDIRECT_URI: str = ""
     GOOGLE_ADS_DEVELOPER_TOKEN: str = Field(default="", repr=False, exclude=True)
+    # Shared encryption boundary for persisted analytics and document-drive
+    # credentials. During the bounded rollout, write_mode=legacy keeps old
+    # runtimes compatible while every new runtime can read both historical
+    # node keys. The secret-bearing JSON is always excluded from repr/dumps.
+    INTEGRATION_CREDENTIAL_KEYRING_JSON: str = Field(
+        default="",
+        repr=False,
+        exclude=True,
+    )
+
+    @field_validator("INTEGRATION_CREDENTIAL_KEYRING_JSON")
+    @classmethod
+    def _validate_integration_credential_keyring(cls, value: str) -> str:
+        try:
+            build_integration_credential_keyring(str(value or ""))
+        except InvalidIntegrationCredentialKeyring as exc:
+            raise ValueError(f"Integration credential keyring is invalid: {exc}") from None
+        return str(value or "")
+
+    @property
+    def integration_credential_keyring(self) -> IntegrationCredentialKeyring:
+        return build_integration_credential_keyring(
+            self.INTEGRATION_CREDENTIAL_KEYRING_JSON
+        )
 
     # GitHub Actions (for Turbo Rebuilds)
     GITHUB_TOKEN: str = ""

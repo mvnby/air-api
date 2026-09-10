@@ -74,6 +74,10 @@ exec /bin/mv "$@"
 set -u
 printf 'docker %s\n' "$*" >> "$COMMAND_LOG"
 if [[ "${1:-}" == "inspect" ]]; then
+  if [[ "$*" == *"{{json .Config.Env}}"* ]]; then
+    printf '%s\\n' "${FAKE_KEYRING_RUNTIME_ENV:-[]}"
+    exit 0
+  fi
   case "${*: -1}" in
     cid-app) runtime_image="${FAKE_RUNTIME_APP_IMAGE:-}" ;;
     cid-app-blue) runtime_image="${FAKE_RUNTIME_APP_BLUE_IMAGE:-}" ;;
@@ -83,6 +87,15 @@ if [[ "${1:-}" == "inspect" ]]; then
   esac
   [[ -n "$runtime_image" ]] || exit 1
   printf '%s\n' "$runtime_image"
+  exit 0
+fi
+if [[ "$*" == *"config --format json" ]]; then
+  if [[ "${FAIL_KEYRING_CONFIG_INSPECTION:-false}" == "true" ]]; then exit 1; fi
+  if [[ "${FAKE_KEYRING_DRIFT:-false}" == "true" ]]; then
+    printf '%s\\n' '{"services":{"app-blue":{"environment":{"INTEGRATION_CREDENTIAL_KEYRING_JSON":"desired"}},"app-green":{"environment":{"INTEGRATION_CREDENTIAL_KEYRING_JSON":"desired"}}}}'
+  else
+    printf '%s\\n' '{"services":{"app-blue":{"environment":{}},"app-green":{"environment":{}}}}'
+  fi
   exit 0
 fi
 if [[ "$*" == *" ps -q "* ]]; then

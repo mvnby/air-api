@@ -18,5 +18,6 @@ export type DashboardMarketingProvider = {
     platform_conversions?: (number | null);
     currency?: (string | null);
     message?: (string | null);
+    updated_at?: (string | null);
 };
 

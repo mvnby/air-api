@@ -10,6 +10,7 @@ os.environ.update(
         # intentionally require these values, but tests must not depend on a
         # developer's .env or inherit real credentials.
         "SECRET_KEY": "test-only-secret-key-at-least-32-bytes-long",
+        "INTEGRATION_CREDENTIAL_KEYRING_JSON": "",
         "ADMIN_USERNAME": "test-admin",
         "ADMIN_PASSWORD": "test-only-password",
         "SENTRY_DSN": "",

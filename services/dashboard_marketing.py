@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from models.tenancy import TenantScope
-from services.analytics_connection_service import AnalyticsConnectionService
+from services.analytics_connection_service import AnalyticsConnectionError, AnalyticsConnectionService
 from services.analytics_google_providers import (
     GoogleAdsProvider,
     GoogleAnalyticsProvider,
@@ -75,6 +75,7 @@ class MarketingProviderSnapshot:
     platform_conversions: float | None = None
     currency: str | None = None
     message: str | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -108,20 +109,22 @@ class MarketingSnapshotCache:
             try:
                 snapshot = await fetch()
             except Exception:
-                if cached:
+                if cached and cached.snapshot.status in {"fresh", "stale"}:
                     return replace(
                         cached.snapshot,
                         status="stale",
+                        providers=_stale_providers(cached.snapshot.providers),
                         message="Analytics providers are temporarily unavailable; cached data is shown.",
                     )
                 return MarketingSnapshot(
                     status="error",
                     message="Analytics providers are temporarily unavailable.",
                 )
-            if snapshot.status == "error" and cached:
+            if snapshot.status == "error" and cached and cached.snapshot.status in {"fresh", "stale"}:
                 return replace(
                     cached.snapshot,
                     status="stale",
+                    providers=_stale_providers(cached.snapshot.providers),
                     message="Analytics providers are temporarily unavailable; cached data is shown.",
                 )
             self._entries[key] = _CacheEntry(
@@ -129,6 +132,13 @@ class MarketingSnapshotCache:
                 snapshot=snapshot,
             )
             return snapshot
+
+
+def _stale_providers(providers):
+    return tuple(
+        replace(row, status="stale") if row.status == "fresh" else row
+        for row in providers
+    )
 
 
 def _log_google_provider_failure(provider: str, error: Exception) -> None:
@@ -220,10 +230,16 @@ class YandexMetrikaMarketingProvider:
         )
         fingerprint = "environment"
         if session is not None:
-            stored = await AnalyticsConnectionService.get_metrika_runtime_credentials(
-                session,
-                tenant_scope=tenant_scope,
-            )
+            try:
+                stored = await AnalyticsConnectionService.get_metrika_runtime_credentials(
+                    session,
+                    tenant_scope=tenant_scope,
+                )
+            except AnalyticsConnectionError:
+                return MarketingSnapshot(
+                    status="error",
+                    message="Подключение сохранено. Данные недоступны из-за ошибки настроек сервера.",
+                )
             if stored is not None:
                 oauth_token = stored.oauth_token
                 counter_id = stored.counter_id
@@ -334,7 +350,7 @@ class IntegratedMarketingProvider:
             tenant_scope=tenant_scope,
         )
         fingerprints = ":".join(
-            f"{provider}={connection.fingerprint}"
+            f"{provider}={connection.fingerprint}:{connection.error_code or 'ready'}"
             for provider, connection in sorted(connections.items())
         )
         key = (
@@ -375,6 +391,7 @@ class IntegratedMarketingProvider:
                 bounce_rate=metrika.bounce_rate,
                 average_session_duration_seconds=metrika.average_session_duration_seconds,
                 message=metrika.message,
+                updated_at=metrika.updated_at,
             )
         ]
         end = end_exclusive - timedelta(days=1)
@@ -385,6 +402,8 @@ class IntegratedMarketingProvider:
             provider_rows.append(
                 MarketingProviderSnapshot(provider="yandex_direct", status="unconfigured")
             )
+        elif direct_connection.error_code:
+            provider_rows.append(_unreadable_provider("yandex_direct"))
         else:
             try:
                 direct_snapshot = await asyncio.wait_for(
@@ -412,6 +431,8 @@ class IntegratedMarketingProvider:
             provider_rows.append(
                 MarketingProviderSnapshot(provider="google_analytics", status="unconfigured")
             )
+        elif ga_connection.error_code:
+            provider_rows.append(_unreadable_provider("google_analytics"))
         else:
             original = dict(ga_connection.credentials)
             try:
@@ -433,6 +454,7 @@ class IntegratedMarketingProvider:
                         active_users=ga_snapshot.active_users,
                         engagement_rate=ga_snapshot.engagement_rate,
                         average_session_duration_seconds=ga_snapshot.average_session_duration_seconds,
+                        updated_at=datetime.now().astimezone(),
                     )
                 )
                 if ga_connection.credentials != original:
@@ -458,6 +480,8 @@ class IntegratedMarketingProvider:
             provider_rows.append(
                 MarketingProviderSnapshot(provider="google_ads", status="unconfigured")
             )
+        elif ads_connection.error_code:
+            provider_rows.append(_unreadable_provider("google_ads"))
         elif not settings.GOOGLE_ADS_DEVELOPER_TOKEN.strip():
             provider_rows.append(
                 MarketingProviderSnapshot(
@@ -544,7 +568,9 @@ class IntegratedMarketingProvider:
             platform_conversions=conversions,
             currency=currency if currencies_are_compatible else None,
             providers=tuple(provider_rows),
-            updated_at=datetime.now().astimezone(),
+            updated_at=max(
+                (row.updated_at for row in provider_rows if row.updated_at), default=None
+            ),
         )
 
 
@@ -552,12 +578,21 @@ def _advertising_provider_row(snapshot: AdvertisingSnapshot) -> MarketingProvide
     return MarketingProviderSnapshot(
         provider=snapshot.provider,
         status="fresh",
+        updated_at=datetime.now().astimezone(),
         ad_spend=snapshot.spend,
         clicks=snapshot.clicks,
         impressions=snapshot.impressions,
         ctr=snapshot.ctr,
         platform_conversions=snapshot.conversions,
         currency=snapshot.currency,
+    )
+
+
+def _unreadable_provider(provider: str) -> MarketingProviderSnapshot:
+    return MarketingProviderSnapshot(
+        provider=provider,
+        status="error",
+        message="Подключение сохранено. Данные недоступны из-за ошибки настроек сервера.",
     )
 
 

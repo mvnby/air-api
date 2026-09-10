@@ -389,6 +389,8 @@ print(normalized)
           \"\${role}\" \"\${worker_profile}\" >/dev/null; then
         exit 1
       fi
+      \"\${docker_command}\" exec \"\${app_id}\" \
+        python3 scripts/check_integration_credentials.py >/dev/null
       if ! systemctl is-active --quiet mvn-patroni-role-agent.service; then
         exit 1
       fi

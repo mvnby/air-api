@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
 from dataclasses import dataclass
 from typing import Any
 
-from cryptography.fernet import Fernet, InvalidToken
-
 from core.config import settings
+from core.integration_credential_keyring import (
+    DecryptedIntegrationCredential,
+    IntegrationCredentialUnavailable,
+    IntegrationCredentialUnreadable,
+    InvalidIntegrationCredentialKeyring,
+)
 
 
 YANDEX_METRIKA = "yandex_metrika"
@@ -28,57 +29,141 @@ class AnalyticsConnectionError(ValueError):
 
 
 class AnalyticsCredentialCipher:
-    """Authenticated encryption with a domain-separated key derived from SECRET_KEY."""
+    """Storefront-bound analytics credentials with transitional legacy reads."""
 
     _ENCRYPTION_CONTEXT = b"mvn.analytics.credentials.fernet.v1"
     _FINGERPRINT_CONTEXT = b"mvn.analytics.credentials.fingerprint.v1"
 
     @classmethod
-    def _fernet(cls) -> Fernet:
-        secret = str(settings.SECRET_KEY or "").encode("utf-8")
-        if len(secret) < 16:
-            raise AnalyticsConnectionError(
-                "credential_encryption_unavailable",
-                "Хранилище секретов временно недоступно",
-                status_code=503,
-            )
-        key = hmac.new(secret, cls._ENCRYPTION_CONTEXT, hashlib.sha256).digest()
-        return Fernet(base64.urlsafe_b64encode(key))
-
-    @classmethod
-    def encrypt(cls, payload: dict[str, Any]) -> str:
-        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
-        return cls._fernet().encrypt(raw).decode("ascii")
-
-    @classmethod
-    def decrypt(cls, encrypted: str) -> dict[str, Any]:
+    def encrypt(
+        cls,
+        payload: dict[str, Any],
+        *,
+        tenant_id: int,
+        storefront_id: int,
+        provider: str,
+    ) -> str:
+        keyring = settings.integration_credential_keyring
+        if keyring.enabled and keyring.write_mode == "active":
+            value: dict[str, Any] = {
+                "version": 1,
+                "tenant_id": int(tenant_id),
+                "storefront_id": int(storefront_id),
+                "provider": str(provider),
+                "credentials": payload,
+            }
+        else:
+            value = payload
+        raw = json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
         try:
-            raw = cls._fernet().decrypt(encrypted.encode("ascii"))
-            payload = json.loads(raw)
-        except (InvalidToken, ValueError, TypeError, json.JSONDecodeError) as exc:
-            raise AnalyticsConnectionError(
-                "credentials_unreadable",
-                "Сохранённое подключение нужно настроить заново",
-                status_code=503,
-            ) from exc
-        if not isinstance(payload, dict) or not all(
-            isinstance(key, str) for key in payload
-        ):
-            raise AnalyticsConnectionError(
-                "credentials_unreadable",
-                "Сохранённое подключение нужно настроить заново",
-                status_code=503,
+            if keyring.enabled and keyring.write_mode == "active":
+                return keyring.encrypt(raw, context=cls._ENCRYPTION_CONTEXT)
+            return keyring.encrypt_legacy(
+                raw,
+                context=cls._ENCRYPTION_CONTEXT,
+                local_legacy_secret=str(settings.SECRET_KEY or ""),
             )
+        except (IntegrationCredentialUnavailable, InvalidIntegrationCredentialKeyring) as exc:
+            raise cls._unavailable() from exc
+
+    @classmethod
+    def decrypt(
+        cls,
+        encrypted: str,
+        *,
+        tenant_id: int,
+        storefront_id: int,
+        provider: str,
+    ) -> dict[str, Any]:
+        payload, _ = cls.decrypt_with_source(
+            encrypted,
+            tenant_id=tenant_id,
+            storefront_id=storefront_id,
+            provider=provider,
+        )
         return payload
 
     @classmethod
+    def decrypt_with_source(
+        cls,
+        encrypted: str,
+        *,
+        tenant_id: int,
+        storefront_id: int,
+        provider: str,
+    ) -> tuple[dict[str, Any], DecryptedIntegrationCredential]:
+        try:
+            decrypted = settings.integration_credential_keyring.decrypt(
+                encrypted,
+                context=cls._ENCRYPTION_CONTEXT,
+                local_legacy_secret=str(settings.SECRET_KEY or ""),
+            )
+            decoded = json.loads(decrypted.plaintext)
+        except IntegrationCredentialUnavailable as exc:
+            raise cls._unavailable() from exc
+        except (
+            IntegrationCredentialUnreadable,
+            InvalidIntegrationCredentialKeyring,
+            UnicodeError,
+            ValueError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise cls._unreadable() from exc
+        if decrypted.source == "legacy":
+            payload = decoded
+        elif (
+            isinstance(decoded, dict)
+            and decoded.get("version") == 1
+            and decoded.get("tenant_id") == int(tenant_id)
+            and decoded.get("storefront_id") == int(storefront_id)
+            and decoded.get("provider") == str(provider)
+        ):
+            payload = decoded.get("credentials")
+        else:
+            raise cls._unreadable()
+        if not isinstance(payload, dict) or not all(
+            isinstance(key, str) for key in payload
+        ):
+            raise cls._unreadable()
+        return payload, decrypted
+
+    @classmethod
     def fingerprint(cls, secret_value: str) -> str:
-        key = str(settings.SECRET_KEY or "").encode("utf-8")
-        return hmac.new(
-            key,
-            cls._FINGERPRINT_CONTEXT + secret_value.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
+        keyring = settings.integration_credential_keyring
+        try:
+            if keyring.enabled and keyring.write_mode == "active":
+                return keyring.fingerprint(
+                    secret_value.encode("utf-8"),
+                    context=cls._FINGERPRINT_CONTEXT,
+                )
+            return keyring.fingerprint_legacy(
+                secret_value.encode("utf-8"),
+                context=cls._FINGERPRINT_CONTEXT,
+                local_legacy_secret=str(settings.SECRET_KEY or ""),
+            )
+        except (IntegrationCredentialUnavailable, InvalidIntegrationCredentialKeyring) as exc:
+            raise cls._unavailable() from exc
+
+    @staticmethod
+    def _unavailable() -> AnalyticsConnectionError:
+        return AnalyticsConnectionError(
+            "credential_encryption_unavailable",
+            "Хранилище секретов временно недоступно",
+            status_code=503,
+        )
+
+    @staticmethod
+    def _unreadable() -> AnalyticsConnectionError:
+        return AnalyticsConnectionError(
+            "credentials_unreadable",
+            "Подключение сохранено, но сервер не может прочитать его настройки",
+            status_code=503,
+        )
 
 
 @dataclass(frozen=True)
@@ -94,6 +179,7 @@ class AnalyticsRuntimeConnection:
     public_config: dict[str, str]
     credentials: dict[str, Any]
     fingerprint: str
+    error_code: str | None = None
 
 
 PROVIDER_DEFINITIONS = (

@@ -359,6 +359,7 @@ def test_remote_verify_requires_exact_images_runtime_and_closed_gate_profile():
         ("primary", "dormant", "false", False, "wrong_changed_role", "false", 1),
         ("primary", "dormant", "false", False, "always_deferred", "false", 1),
         ("primary", "dormant", "false", False, "verified", "true", 1),
+        ("primary", "credentials_unreadable", "false", False, "verified", "false", 1),
     ],
 )
 def test_remote_verify_path_executes_against_canonical_compose(
@@ -379,6 +380,7 @@ def test_remote_verify_path_executes_against_canonical_compose(
         "invalid": ("false", "true"),
         "uppercase_compose": ("TRUE", "false"),
         "uppercase_runtime": ("false", "false"),
+        "credentials_unreadable": ("false", "false"),
     }[gate_case]
     runtime_gates = (
         ("true", "false")
@@ -448,6 +450,8 @@ def test_remote_verify_path_executes_against_canonical_compose(
         "  printf 'app-container\\n'\n"
         'elif [[ "$1" == "compose" && "$*" == *"ps -q communications-worker"* ]]; then\n'
         "  printf 'worker-container\\n'\n"
+        'elif [[ "$*" == "exec app-container python3 scripts/check_integration_credentials.py" ]]; then\n'
+        '  [[ "$CREDENTIAL_HEALTH" == "passed" ]] || exit 1\n'
             'elif [[ "$1" == "inspect" ]]; then\n'
             f"  printf '%s|true\\n' {repr(NEW_IMAGE)}\n"
         'elif [[ "$1" == "compose" && "$*" == *"exec -T communications-worker"* ]]; then\n'
@@ -556,6 +560,7 @@ def test_remote_verify_path_executes_against_canonical_compose(
             "CANARY_COUNT": str(canary_count),
             "FINAL_ROLE_FLIP": final_role_flip,
             "CURL_COUNT": str(curl_count),
+            "CREDENTIAL_HEALTH": "failed" if gate_case == "credentials_unreadable" else "passed",
         },
         text=True,
         capture_output=True,
@@ -565,6 +570,7 @@ def test_remote_verify_path_executes_against_canonical_compose(
     assert result.returncode == expected_code, result.stderr
     if expected_code == 0:
         assert "API/worker parity confirmed" in result.stdout
+        assert "exec app-container python3 scripts/check_integration_credentials.py" in remote_docker_log.read_text()
         assert sum(
             "config --format json" in line
             for line in remote_docker_log.read_text(encoding="utf-8").splitlines()

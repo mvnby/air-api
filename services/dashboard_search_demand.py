@@ -31,6 +31,7 @@ class SearchDemandProviderState:
     provider: str
     status: SearchDemandStatus
     message: str | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -80,24 +81,33 @@ class SearchDemandCache:
             try:
                 snapshot = await fetch()
             except Exception:
-                if cached:
+                if cached and cached.snapshot.status in {"fresh", "stale"}:
                     return replace(
                         cached.snapshot,
                         status="stale",
+                        providers=_stale_providers(cached.snapshot.providers),
                         message="Показаны последние сохранённые поисковые запросы.",
                     )
                 return SearchDemandSnapshot(
                     status="error",
                     message="Поисковая аналитика временно недоступна.",
                 )
-            if snapshot.status == "error" and cached:
+            if snapshot.status == "error" and cached and cached.snapshot.status in {"fresh", "stale"}:
                 return replace(
                     cached.snapshot,
                     status="stale",
+                    providers=_stale_providers(cached.snapshot.providers),
                     message="Показаны последние сохранённые поисковые запросы.",
                 )
             self._entries[key] = _CacheEntry(monotonic(), snapshot)
             return snapshot
+
+
+def _stale_providers(providers):
+    return tuple(
+        replace(row, status="stale") if row.status == "fresh" else row
+        for row in providers
+    )
 
 
 def _log_google_provider_failure(provider: str, error: Exception) -> None:
@@ -138,7 +148,7 @@ class IntegratedSearchDemandProvider:
             if provider in {"yandex_webmaster", "google_search_console"}
         }
         fingerprints = ":".join(
-            f"{provider}={connection.fingerprint}"
+            f"{provider}={connection.fingerprint}:{connection.error_code or 'ready'}"
             for provider, connection in sorted(relevant.items())
         )
         key = (
@@ -173,6 +183,8 @@ class IntegratedSearchDemandProvider:
             provider_states.append(
                 SearchDemandProviderState("yandex_webmaster", "unconfigured")
             )
+        elif webmaster.error_code:
+            provider_states.append(_unreadable_provider("yandex_webmaster"))
         else:
             try:
                 snapshot = await asyncio.wait_for(
@@ -186,7 +198,9 @@ class IntegratedSearchDemandProvider:
                     timeout=settings.ANALYTICS_PROVIDER_TIMEOUT_SECONDS,
                 )
                 queries.extend(_queries("yandex_webmaster", snapshot.rows))
-                provider_states.append(SearchDemandProviderState("yandex_webmaster", "fresh"))
+                provider_states.append(SearchDemandProviderState(
+                    "yandex_webmaster", "fresh", updated_at=datetime.now().astimezone()
+                ))
             except Exception:
                 provider_states.append(
                     SearchDemandProviderState(
@@ -201,6 +215,8 @@ class IntegratedSearchDemandProvider:
             provider_states.append(
                 SearchDemandProviderState("google_search_console", "unconfigured")
             )
+        elif search_console.error_code:
+            provider_states.append(_unreadable_provider("google_search_console"))
         else:
             original = dict(search_console.credentials)
             try:
@@ -217,7 +233,9 @@ class IntegratedSearchDemandProvider:
                 )
                 queries.extend(_queries("google_search_console", snapshot.rows))
                 provider_states.append(
-                    SearchDemandProviderState("google_search_console", "fresh")
+                    SearchDemandProviderState(
+                        "google_search_console", "fresh", updated_at=datetime.now().astimezone()
+                    )
                 )
                 if search_console.credentials != original:
                     await AnalyticsConnectionService.persist_refreshed_credentials(
@@ -249,13 +267,23 @@ class IntegratedSearchDemandProvider:
             status=status,
             queries=tuple(queries[:1000]),
             providers=tuple(provider_states),
-            updated_at=datetime.now().astimezone() if status == "fresh" else None,
+            updated_at=max(
+                (row.updated_at for row in provider_states if row.updated_at), default=None
+            ),
             message=(
                 "Часть редких запросов поисковые системы могут скрывать; свежие данные появляются с задержкой."
                 if status == "fresh"
                 else None
             ),
         )
+
+
+def _unreadable_provider(provider: str) -> SearchDemandProviderState:
+    return SearchDemandProviderState(
+        provider,
+        "error",
+        "Подключение сохранено. Данные недоступны из-за ошибки настроек сервера.",
+    )
 
 
 def _queries(provider: str, rows: tuple[SearchQueryRow, ...]) -> list[SearchDemandQuery]:

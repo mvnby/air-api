@@ -585,6 +585,7 @@ def _marketing_schema(
                 platform_conversions=item.platform_conversions,
                 currency=item.currency,
                 message=item.message,
+                updated_at=item.updated_at,
             )
             for item in snapshot.providers
         ],
@@ -612,6 +613,7 @@ def _search_demand_schema(snapshot: SearchDemandSnapshot) -> DashboardSearchDema
                 provider=item.provider,
                 status=item.status,
                 message=item.message,
+                updated_at=item.updated_at,
             )
             for item in snapshot.providers
         ],

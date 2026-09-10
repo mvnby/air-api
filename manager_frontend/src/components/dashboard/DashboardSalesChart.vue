@@ -28,6 +28,7 @@ const areaPath = computed(() => {
   return `${linePath.value} L ${last.x} ${height - padding.bottom} L ${first.x} ${height - padding.bottom} Z`;
 });
 const activePoint = computed(() => activeIndex.value == null ? null : props.series[activeIndex.value]);
+const pointAnchor = (index: number) => index === 0 ? 'start' : index === props.series.length - 1 ? 'end' : 'middle';
 const formatDate = (value: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(`${value}T00:00:00`));
 const selectFromPointer = (event: MouseEvent) => {
   if (!props.series.length) return;
@@ -36,6 +37,21 @@ const selectFromPointer = (event: MouseEvent) => {
   const relativeX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
   const ratio = rect.width ? relativeX / rect.width : 0;
   activeIndex.value = Math.round(ratio * (props.series.length - 1));
+};
+const selectFromTouch = (event: TouchEvent) => {
+  const touch = event.touches[0];
+  if (!touch) return;
+  selectFromPointer({ currentTarget: event.currentTarget, clientX: touch.clientX } as MouseEvent);
+};
+const selectFromKey = (event: KeyboardEvent) => {
+  if (!props.series.length) return;
+  const current = activeIndex.value ?? 0;
+  if (event.key === 'Home') activeIndex.value = 0;
+  else if (event.key === 'End') activeIndex.value = props.series.length - 1;
+  else if (event.key === 'ArrowLeft') activeIndex.value = Math.max(0, current - 1);
+  else if (event.key === 'ArrowRight') activeIndex.value = Math.min(props.series.length - 1, current + 1);
+  else return;
+  event.preventDefault();
 };
 </script>
 
@@ -46,13 +62,13 @@ const selectFromPointer = (event: MouseEvent) => {
         <h2 class="font-semibold text-slate-900 dark:text-white">Продажи по дням</h2>
         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Оплаты и закрытые продажи за текущий месяц</p>
       </div>
-      <div v-if="activePoint" class="shrink-0 text-right text-xs text-slate-600 dark:text-slate-300">
+      <div v-if="activePoint" class="max-w-full text-xs text-slate-600 dark:text-slate-300 sm:text-right" aria-live="polite">
         <p class="font-semibold">{{ formatDate(activePoint.date) }}</p>
         <p>{{ formatDashboardCurrency(activePoint.revenue) }} · {{ formatDashboardNumber(activePoint.sales) }} продаж</p>
       </div>
     </div>
     <div v-if="series.length" class="mt-4 overflow-hidden">
-      <svg class="h-auto w-full" :viewBox="`0 0 ${width} ${height}`" role="img" aria-label="График оплат по дням" @mousemove="selectFromPointer" @mouseleave="activeIndex = null">
+      <svg class="h-auto w-full touch-pan-y outline-none focus-visible:ring-2 focus-visible:ring-teal-500" :viewBox="`0 0 ${width} ${height}`" role="img" tabindex="0" aria-label="График оплат по дням. Используйте стрелки для выбора дня." @mousemove="selectFromPointer" @touchstart.passive="selectFromTouch" @touchmove.passive="selectFromTouch" @mouseleave="activeIndex = null" @keydown="selectFromKey">
         <line v-for="fraction in [0, 0.5, 1]" :key="fraction" :x1="padding.left" :x2="width - padding.right" :y1="padding.top + chartHeight * fraction" :y2="padding.top + chartHeight * fraction" stroke="currentColor" class="text-slate-100 dark:text-slate-700" />
         <path :d="areaPath" fill="rgba(13, 148, 136, 0.14)" />
         <path :d="linePath" fill="none" stroke="#0d9488" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
@@ -60,7 +76,7 @@ const selectFromPointer = (event: MouseEvent) => {
           <circle :cx="pointPosition(point, index).x" :cy="pointPosition(point, index).y" :r="activeIndex === index ? 5 : 3" fill="#0d9488">
             <title>{{ `${formatDate(point.date)}: ${formatDashboardCurrency(point.revenue)}, ${point.sales} продаж` }}</title>
           </circle>
-          <text v-if="index === 0 || index === series.length - 1 || index === Math.floor(series.length / 2)" :x="pointPosition(point, index).x" :y="height - 10" text-anchor="middle" class="fill-slate-400 text-[11px]">{{ formatDate(point.date) }}</text>
+          <text v-if="index === 0 || index === series.length - 1 || index === Math.floor(series.length / 2)" :x="pointPosition(point, index).x" :y="height - 10" :text-anchor="pointAnchor(index)" class="fill-slate-400 text-[11px]">{{ formatDate(point.date) }}</text>
         </g>
       </svg>
     </div>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -26,6 +27,9 @@ from services.analytics_connection_contracts import (
     AnalyticsRuntimeConnection,
     AnalyticsRuntimeCredentials,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsConnectionService:
@@ -81,9 +85,15 @@ class AnalyticsConnectionService:
             row = by_provider.get(provider)
             public = row.public_config if row and isinstance(row.public_config, dict) else {}
             state = "coming_soon"
+            error_code = row.last_error_code if row else None
             if available:
                 state = "connected" if row and row.status == "active" else "not_configured"
-                if row and row.last_error_code:
+                if row and row.status == "active":
+                    try:
+                        AnalyticsCredentialCipher.decrypt(row.encrypted_credentials, tenant_id=row.tenant_id, storefront_id=row.storefront_id, provider=row.provider)
+                    except AnalyticsConnectionError as exc:
+                        error_code = exc.code
+                if error_code:
                     state = "error"
             items.append(
                 AnalyticsConnectionItem(
@@ -97,7 +107,7 @@ class AnalyticsConnectionService:
                     counter_name=str(public.get("counter_name") or "") or None,
                     site=str(public.get("site") or "") or None,
                     last_verified_at=row.last_verified_at if row else None,
-                    last_error_code=row.last_error_code if row else None,
+                    last_error_code=error_code,
                     configuration={
                         str(key): str(value)
                         for key, value in public.items()
@@ -158,7 +168,10 @@ class AnalyticsConnectionService:
         )
         connection.status = "active"
         connection.public_config = dict(public_config)
-        connection.encrypted_credentials = AnalyticsCredentialCipher.encrypt(credentials)
+        connection.encrypted_credentials = AnalyticsCredentialCipher.encrypt(
+            credentials, tenant_id=connection.tenant_id,
+            storefront_id=connection.storefront_id, provider=connection.provider,
+        )
         connection.credentials_fingerprint = AnalyticsCredentialCipher.fingerprint(
             fingerprint_source
         )
@@ -216,7 +229,7 @@ class AnalyticsConnectionService:
             )
         if not token and existing:
             token = str(
-                AnalyticsCredentialCipher.decrypt(existing.encrypted_credentials).get(
+                AnalyticsCredentialCipher.decrypt(existing.encrypted_credentials, tenant_id=existing.tenant_id, storefront_id=existing.storefront_id, provider=existing.provider).get(
                     "oauth_token", ""
                 )
             ).strip()
@@ -251,7 +264,8 @@ class AnalyticsConnectionService:
             "site": str(counter.get("site") or ""),
         }
         connection.encrypted_credentials = AnalyticsCredentialCipher.encrypt(
-            {"oauth_token": token}
+            {"oauth_token": token}, tenant_id=connection.tenant_id,
+            storefront_id=connection.storefront_id, provider=connection.provider,
         )
         connection.credentials_fingerprint = AnalyticsCredentialCipher.fingerprint(token)
         connection.last_verified_at = now
@@ -388,7 +402,7 @@ class AnalyticsConnectionService:
             )
         if not secret and existing is not None:
             secret = str(
-                AnalyticsCredentialCipher.decrypt(existing.encrypted_credentials).get(
+                AnalyticsCredentialCipher.decrypt(existing.encrypted_credentials, tenant_id=existing.tenant_id, storefront_id=existing.storefront_id, provider=existing.provider).get(
                     key, ""
                 )
             ).strip()
@@ -471,15 +485,22 @@ class AnalyticsConnectionService:
         connections: dict[str, AnalyticsRuntimeConnection] = {}
         for row in rows:
             public = row.public_config if isinstance(row.public_config, dict) else {}
+            error_code = None
             try:
-                credentials = AnalyticsCredentialCipher.decrypt(row.encrypted_credentials)
-            except AnalyticsConnectionError:
-                continue
+                credentials = AnalyticsCredentialCipher.decrypt(row.encrypted_credentials, tenant_id=row.tenant_id, storefront_id=row.storefront_id, provider=row.provider)
+            except AnalyticsConnectionError as exc:
+                credentials = {}
+                error_code = exc.code
+                logger.warning(
+                    "ANALYTICS_CREDENTIALS_UNAVAILABLE provider=%s tenant_id=%s storefront_id=%s error_code=%s",
+                    row.provider, tenant_scope.tenant_id, tenant_scope.storefront_id, error_code,
+                )
             connections[row.provider] = AnalyticsRuntimeConnection(
                 provider=row.provider,
                 public_config={str(key): str(value) for key, value in public.items()},
                 credentials=credentials,
                 fingerprint=row.credentials_fingerprint,
+                error_code=error_code,
             )
         return connections
 
@@ -506,7 +527,10 @@ class AnalyticsConnectionService:
             separators=(",", ":"),
             default=str,
         )
-        connection.encrypted_credentials = AnalyticsCredentialCipher.encrypt(credentials)
+        connection.encrypted_credentials = AnalyticsCredentialCipher.encrypt(
+            credentials, tenant_id=connection.tenant_id,
+            storefront_id=connection.storefront_id, provider=connection.provider,
+        )
         connection.credentials_fingerprint = AnalyticsCredentialCipher.fingerprint(serialized)
         connection.updated_at = datetime.now(timezone.utc)
         session.add(connection)
@@ -581,13 +605,14 @@ class AnalyticsConnectionService:
             return None
         public = connection.public_config if isinstance(connection.public_config, dict) else {}
         counter_id = str(public.get("counter_id") or "").strip()
-        try:
-            credentials = AnalyticsCredentialCipher.decrypt(connection.encrypted_credentials)
-        except AnalyticsConnectionError:
-            return None
+        credentials = AnalyticsCredentialCipher.decrypt(connection.encrypted_credentials, tenant_id=connection.tenant_id, storefront_id=connection.storefront_id, provider=connection.provider)
         oauth_token = str(credentials.get("oauth_token", "")).strip()
         if not counter_id.isdigit() or not oauth_token:
-            return None
+            raise AnalyticsConnectionError(
+                "credentials_incomplete",
+                "Подключение сохранено, но его настройки недоступны",
+                status_code=503,
+            )
         return AnalyticsRuntimeCredentials(
             counter_id=counter_id,
             oauth_token=oauth_token,

@@ -466,6 +466,9 @@ watch(currentPath, () => {
     <button
       class="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow md:hidden"
       @click="toggleMobileNav"
+      :aria-expanded="isMobileNavOpen"
+      aria-controls="manager-mobile-navigation"
+      :aria-label="isMobileNavOpen ? 'Закрыть меню' : 'Открыть меню'"
     >
       <X v-if="isMobileNavOpen" class="h-5 w-5" />
       <Menu v-else class="h-5 w-5" />
@@ -473,6 +476,7 @@ watch(currentPath, () => {
 
     <div
       v-if="isMobileNavOpen"
+      id="manager-mobile-navigation"
       class="fixed inset-0 z-40 bg-black/40 md:hidden"
       @click="closeMobileNav"
     />
