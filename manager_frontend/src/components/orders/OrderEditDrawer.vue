@@ -17,9 +17,7 @@ import OrderProposalWorkspace from './OrderProposalWorkspace.vue';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
-  ManagerOrderUpdatePayload,
 } from '../../client';
-import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
 } from './order-workspace';
@@ -30,6 +28,7 @@ import { useOrderDrawerForm } from '../../composables/useOrderDrawerForm';
 import { useOrderDrawerPersistence } from '../../composables/useOrderDrawerPersistence';
 import { useOrderDocumentStatus } from '../../composables/useOrderDocumentStatus';
 import { useOrderWorkspaceNavigation } from '../../composables/useOrderWorkspaceNavigation';
+import { useOrderDrawerSaving } from '../../composables/useOrderDrawerSaving';
 import { useOrderDrawerActions } from '../../composables/useOrderDrawerActions';
 
 const props = defineProps<{
@@ -37,12 +36,10 @@ const props = defineProps<{
   order: ManagerOrderDetailResponse | null;
   serverErrors?: Record<string, string>;
   formError?: string;
-  saving?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
-  save: [payload: { orderId: number; data: ManagerOrderUpdatePayload }];
   updated: [order: ManagerOrderDetailResponse];
   deleted: [orderId: number];
   reload: [orderId: number];
@@ -70,6 +67,7 @@ function setToast(message: string, type: 'success' | 'error' = 'success') {
   }, 3000);
 }
 
+const initializing = ref(false);
 const savedLinesSnapshot = ref('');
 const savedFormSnapshot = ref('');
 const commercialEditor = useOrderCommercialEditor({
@@ -100,7 +98,6 @@ const {
   autoCloseOnPayment,
   autoExecutionOnPayment,
   balanceDue: balanceDuePreview,
-  buildRepairMetaPayload,
   buildSavePayload,
   calculatedTargetCurrencyPayments,
   comment,
@@ -169,6 +166,13 @@ const proposalLifecycle = useOrderProposalLifecycle({
   setToast,
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
   onReload: (orderId) => emit('reload', orderId),
+  saveOrder: async () => {
+    if (!await orderSaving.flush()) throw new Error(localFormError.value || 'Заказ не сохранён');
+    return props.order;
+  },
+  onLoaded: () => {
+    savedLinesSnapshot.value = buildCurrentLinesSnapshot(activeProposalId.value);
+  },
 });
 const {
   activeProposal,
@@ -178,8 +182,8 @@ const {
   createProposal,
   duplicateProposal,
   loadProposalLines,
+  proposalActionLoading,
   proposalStatus,
-  saveCurrentProposalLines,
   selectedProposal: selectedOrderProposal,
 } = proposalLifecycle;
 
@@ -188,7 +192,6 @@ const {
   expandedDrawerSections,
   hasUnsavedChanges,
   initializedOrderId,
-  pendingDraftClearOrderId,
   persistDraft,
   restoreDraft,
   restoreDrawerSections,
@@ -202,6 +205,26 @@ const {
   currentLinesSnapshot: () => buildCurrentLinesSnapshot(activeProposalId.value),
   currentFormSnapshot: () => buildCurrentFormSnapshot(proposalStatus.value),
 });
+
+const orderSaving = useOrderDrawerSaving({
+  order: computed(() => props.order),
+  ready: computed(() => props.modelValue && !initializing.value && Boolean(props.order)),
+  activeProposalId,
+  activeProposalLocked,
+  productLines,
+  currentFormSnapshot: () => buildCurrentFormSnapshot(),
+  currentLinesSnapshot: () => buildCurrentLinesSnapshot(activeProposalId.value),
+  savedFormSnapshot,
+  savedLinesSnapshot,
+  hasUnsavedChanges,
+  buildSavePayload,
+  hydrateOrder,
+  localFormError,
+  localServerErrors,
+  clearDraft,
+  onUpdated: (order) => emit('updated', order),
+});
+const { enabled: autosaveEnabled, saving, failed: saveFailed, statusText: saveStatusText } = orderSaving;
 
 const {
   documentEmailStatus,
@@ -230,7 +253,9 @@ const {
   documentsWorkspaceRef,
   setToast,
 });
-const openProposalSend = () => openProposalDocuments(activeProposal.value, orderDocuments.value);
+const openProposalSend = async () => {
+  if (await orderSaving.beforeDocumentGenerate()) openProposalDocuments(activeProposal.value, orderDocuments.value);
+};
 
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => (
@@ -259,9 +284,8 @@ const {
   persistDraft,
   clearDraft,
   setToast,
-  onBeforeClose: () => {
-    pendingDraftClearOrderId.value = null;
-  },
+  beforeClose: async () => !proposalActionLoading.value && await orderSaving.beforeClose(),
+  onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
   onDeleted: (orderId) => emit('deleted', orderId),
@@ -295,24 +319,7 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   paid: totalPaymentsPreview.value,
   balance: balanceDuePreview.value,
 }));
-const beforeDocumentGenerate = async (type: string) => {
-  if (!props.order?.id) return false;
-  let mutated = false;
-  if (['offer', 'invoice', 'retail_receipt', 'service_act', 'maintenance_service_act', 'warranty_certificate', 'act', 'defect_act', 'tn2', 'ttn1'].includes(type)) {
-    await saveCurrentProposalLines();
-    mutated = true;
-  }
-  if (type === 'defect_act') {
-    repairMeta.value = buildRepairMetaPayload();
-    await ManagerOrdersService.patchManagerOrder(props.order.id, {
-      repair_meta: buildRepairMetaPayload() as any,
-      measurement_result: measurementResult.value,
-    });
-    mutated = true;
-    emit('reload', props.order.id);
-  }
-  return { mutated };
-};
+const beforeDocumentGenerate = orderSaving.beforeDocumentGenerate;
 
 const handleDocumentPanelToast = (payload: { message: string; type?: 'success' | 'error' }) => {
   setToast(payload.message, payload.type || 'success');
@@ -328,6 +335,7 @@ const refreshOrderFromDocumentsPanel = () => {
 
 const initForm = async (order: ManagerOrderDetailResponse | null) => {
   if (!order) return;
+  initializing.value = true;
   localServerErrors.value = {};
   localFormError.value = '';
   if (initializedOrderId.value !== order.id) {
@@ -339,59 +347,37 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   }
   hydrateOrder(order);
 
-  const selectedProposal = (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
+  const selectedProposal = (order.proposals || []).find((proposal) => proposal.id === activeProposalId.value && !proposal.is_archived)
+    || (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
     || (order.proposals || []).find((proposal) => !proposal.is_archived)
     || null;
   loadProposalLines(selectedProposal, order);
-  if (pendingDraftClearOrderId.value === order.id) {
-    clearDraft();
-    pendingDraftClearOrderId.value = null;
-  }
-  savedLinesSnapshot.value = buildCurrentLinesSnapshot(activeProposalId.value);
+  orderSaving.resetBaseline();
   showEstimateImport.value = false;
-  await loadEstimateOptions();
-
   resetLookupState();
-  savedFormSnapshot.value = buildCurrentFormSnapshot(proposalStatus.value);
   restoreDraft();
   syncProductLookupFromLines();
+  await nextTick();
+  initializing.value = false;
   await Promise.all([
+    loadEstimateOptions(),
     loadOrderSupplyRequests(order.id),
     loadOrderEmails(order.id),
   ]);
 };
 
 watch(
-  () => props.modelValue,
-  async (value) => {
-    if (value) {
-      await initForm(props.order);
-    }
-  },
-);
-
-watch(
-  () => props.order,
-  async (order, previousOrder) => {
-    if (
-      props.modelValue
-      && order
-      && order !== previousOrder
-      && pendingDraftClearOrderId.value === order.id
-    ) {
+  [() => props.modelValue, () => props.order],
+  async ([open, order], [wasOpen, previousOrder]) => {
+    if (!open || !order) return;
+    if (!wasOpen || order.id !== previousOrder?.id) {
       await initForm(order);
+      nextTick(resetWorkspaceHeader);
+    } else if (!orderSaving.isOwnResponse(order) && !saving.value && !hasUnsavedChanges.value) {
+      await initForm(order);
+    } else {
+      payments.value = [...(order.payments || [])];
     }
-  },
-);
-
-watch(() => props.modelValue, (open) => {
-  if (open) nextTick(resetWorkspaceHeader);
-});
-
-watch(
-  () => props.order,
-  async (value) => {
-    if (props.modelValue) await initForm(value);
   },
 );
 
@@ -411,17 +397,12 @@ const handleWorkspaceNextAction = async () => {
   openWorkspaceTarget(action.target);
 };
 
-const handleSave = () => {
-  if (!props.order) return;
-  const payload = buildSavePayload(activeProposalLocked.value);
-  if (!payload) return;
-  pendingDraftClearOrderId.value = props.order.id;
-  emit('save', { orderId: props.order.id, data: payload });
-};
+const handleSave = () => orderSaving.flush();
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
 const discardUnsavedChanges = async () => {
   if (!props.order) return;
+  orderSaving.cancelScheduled();
   clearDraft();
   await initForm(props.order);
   setToast('Изменения отменены', 'success');
@@ -429,7 +410,6 @@ const discardUnsavedChanges = async () => {
 
 const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) => {
   emit('updated', updatedOrder);
-  await initForm(updatedOrder);
 };
 
 </script>
@@ -456,6 +436,10 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         :is-on-hold="order?.is_on_hold"
         :dirty="hasUnsavedChanges"
         :saving="saving"
+        :autosave-enabled="autosaveEnabled"
+        :save-failed="saveFailed"
+        :save-status-text="saveStatusText"
+        @toggle-autosave="orderSaving.toggle"
         :compact="compactWorkspaceHeader"
         @update:title="orderTitle = $event"
         @change-workflow="setWorkflowType"
@@ -468,7 +452,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         @close="closeDrawer"
       />
 
-      <div class="p-4 sm:p-6">
+      <fieldset :disabled="proposalActionLoading" class="min-w-0 p-4 sm:p-6">
       <OrderManagerLabels v-model="managerLabels" />
       <OrderCustomerContext
         v-if="order"
@@ -480,6 +464,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         :order="order"
         :address-error="getFieldError('customer_delivery_address')"
         :comment-error="getFieldError('comment')"
+        :before-navigate="closeDrawer"
         @toast="setToast($event.message, $event.type)"
         @updated="handleCustomerUpdated"
         @reload="emit('reload', $event)"
@@ -633,7 +618,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         @reload="emit('reload', $event)"
       />
 
-      </div>
+      </fieldset>
     </aside>
 
   </div>

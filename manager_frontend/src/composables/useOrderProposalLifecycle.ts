@@ -34,6 +34,8 @@ type UseOrderProposalLifecycleOptions = {
   setToast: ToastHandler;
   onUpdated: (order: ManagerOrderDetailResponse) => void;
   onReload: (orderId: number) => void;
+  saveOrder?: () => Promise<ManagerOrderDetailResponse | null>;
+  onLoaded?: () => void;
 };
 
 export const useOrderProposalLifecycle = ({
@@ -52,6 +54,8 @@ export const useOrderProposalLifecycle = ({
   setToast,
   onUpdated,
   onReload,
+  saveOrder,
+  onLoaded,
 }: UseOrderProposalLifecycleOptions) => {
   const proposalStatus = ref<ProposalLifecycleStatus>('draft');
   const activeProposalId = ref<number | null>(null);
@@ -100,10 +104,12 @@ export const useOrderProposalLifecycle = ({
       activeProposalId.value = proposal.id;
       proposalStatus.value = normalizeProposalStatus(proposal.status);
       loadLines(proposal.product_lines || [], proposal.service_lines || []);
+      onLoaded?.();
       return;
     }
     activeProposalId.value = null;
     loadLines(fallbackOrder?.product_lines ?? [], fallbackOrder?.service_lines ?? []);
+    onLoaded?.();
   };
 
   const applyOrderResponse = async (
@@ -123,6 +129,7 @@ export const useOrderProposalLifecycle = ({
   };
 
   const saveCurrentProposalLines = async () => {
+    if (saveOrder) return saveOrder();
     if (!order.value?.id) return order.value || null;
     if (activeProposalLocked.value) return order.value;
     const validationError = validateLines();
@@ -244,6 +251,7 @@ export const useOrderProposalLifecycle = ({
     const archivedId = activeProposal.value.id;
     proposalActionLoading.value = true;
     try {
+      await saveCurrentProposalLines();
       const updatedOrder = await ManagerOrdersService.archiveManagerOrderProposal(order.value.id, archivedId);
       const next = (updatedOrder.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
         || (updatedOrder.proposals || []).find((proposal) => proposal.id !== archivedId && !proposal.is_archived)
@@ -298,7 +306,7 @@ export const useOrderProposalLifecycle = ({
     })) return;
     proposalActionLoading.value = true;
     try {
-      if (nextStatus === 'ready_to_send') await saveCurrentProposalLines();
+      await saveCurrentProposalLines();
       const updatedOrder = await ManagerOrdersService.patchManagerOrderProposal(order.value.id, proposal.id, { status: nextStatus });
       proposalStatus.value = nextStatus;
       negotiationStatus.value = updatedOrder.negotiation_status || negotiationStatus.value;

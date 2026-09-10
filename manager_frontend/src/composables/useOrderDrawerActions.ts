@@ -15,6 +15,7 @@ type UseOrderDrawerActionsOptions = {
   persistDraft: () => void;
   clearDraft: () => void;
   setToast: ToastHandler;
+  beforeClose?: () => Promise<boolean>;
   onBeforeClose: () => void;
   onModelValue: (open: boolean) => void;
   onUpdated: (order: ManagerOrderDetailResponse) => void;
@@ -29,6 +30,7 @@ export const useOrderDrawerActions = ({
   persistDraft,
   clearDraft,
   setToast,
+  beforeClose,
   onBeforeClose,
   onModelValue,
   onUpdated,
@@ -77,6 +79,7 @@ export const useOrderDrawerActions = ({
   const closeDrawer = async (options?: { force?: boolean } | Event) => {
     const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
     const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
+    if (!force && beforeClose && !await beforeClose()) return false;
     if (!force && hasUnsavedChanges.value) {
       persistDraft();
       const discard = await confirmDialog({
@@ -85,11 +88,12 @@ export const useOrderDrawerActions = ({
         confirmText: 'Закрыть без сохранения',
         variant: 'warning',
       });
-      if (!discard) return;
+      if (!discard) return false;
     }
     onBeforeClose();
     clearDraft();
     onModelValue(false);
+    return true;
   };
 
   const deleteOrder = async () => {

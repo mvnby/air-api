@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../../api';
+import { useCompanyAddressSuggestion } from '../../composables/useCompanyAddressSuggestion';
 import type {
   ManagerCatalogCustomerItemResponse,
   ManagerCustomerBranchItemResponse,
@@ -16,6 +17,7 @@ const props = defineProps<{
   order: ManagerOrderDetailResponse;
   addressError?: string;
   commentError?: string;
+  beforeNavigate?: () => Promise<boolean>;
 }>();
 
 const emit = defineEmits<{
@@ -40,10 +42,24 @@ const showCustomerSearch = ref(false);
 const customerSearchQuery = ref('');
 const customerSearchResults = ref<ManagerCatalogCustomerItemResponse[]>([]);
 const customerSearchLoading = ref(false);
+const {
+  candidates: companyAddressCandidates,
+  loading: companyAddressLoading,
+  error: companyAddressError,
+  searched: companyAddressSearched,
+  suggest: requestCompanyAddressSuggestion,
+  reset: resetCompanyAddressSuggestion,
+} = useCompanyAddressSuggestion();
 let branchesRequestId = 0;
 let customerSearchRequestId = 0;
 
 const customer = computed(() => props.order.customer ?? null);
+const companyName = computed(() => (
+  customer.value?.full_legal_name?.trim() || customer.value?.name?.trim() || ''
+));
+const canSuggestCompanyAddress = computed(() => (
+  customer.value?.type === 'company' && !deliveryAddress.value.trim() && Boolean(companyName.value)
+));
 const selectedBranch = computed(() => (
   branches.value.find((branch) => branch.id === customerBranchId.value)
   || props.order.customer_branch
@@ -70,29 +86,19 @@ const resetBranches = () => {
   newBranchAddress.value = '';
 };
 
-const loadBranches = async (customerId: number, preferredBranchId?: number | null) => {
+const loadBranches = async (customerId: number) => {
   const requestId = ++branchesRequestId;
   branchesLoading.value = true;
   try {
     const response = await api.getManagerCustomerBranches(customerId);
     if (requestId !== branchesRequestId) return;
     branches.value = response.items || [];
-    if (!branches.value.length || preferredBranchId === null) {
-      customerBranchId.value = null;
-      return;
-    }
-    const preferredFromOrder = typeof preferredBranchId === 'number'
-      ? branches.value.find((branch) => branch.id === preferredBranchId)
-      : null;
-    const preferred = preferredFromOrder
-      || branches.value.find((branch) => branch.is_default)
-      || branches.value[0]
-      || null;
-    customerBranchId.value = preferred?.id || null;
+    // Loading choices never changes the order. Hydration owns the saved branch;
+    // only a manager selection or branch creation may change its model.
   } catch (error) {
     if (requestId !== branchesRequestId) return;
     console.error('Failed to load customer branches', error);
-    resetBranches();
+    // A lookup failure must not detach the order from its saved object.
   } finally {
     if (requestId === branchesRequestId) branchesLoading.value = false;
   }
@@ -147,13 +153,14 @@ const copyText = async (value: string | null | undefined, label: string) => {
   }
 };
 
-const openCustomerProfile = () => {
+const openCustomerProfile = async () => {
   if (!customer.value?.id) return;
   const returnTo = `${window.location.pathname}${window.location.search}`;
   const query = new URLSearchParams({
     customerId: String(customer.value.id),
     returnTo,
   });
+  if (props.beforeNavigate && !await props.beforeNavigate()) return;
   window.history.pushState({}, '', `/manager/customers/profile?${query.toString()}`);
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
@@ -209,12 +216,25 @@ const assignCustomer = async (newCustomer: ManagerCatalogCustomerItemResponse) =
   }
 };
 
+const suggestCompanyAddress = () => {
+  if (!canSuggestCompanyAddress.value) return;
+  void requestCompanyAddressSuggestion(companyName.value);
+};
+
+const chooseCompanyAddress = (address: string) => {
+  const value = address.trim();
+  if (!value) return;
+  deliveryAddress.value = value;
+  resetCompanyAddressSuggestion();
+};
+
 watch(
   () => [props.order.id, props.order.customer?.id, props.order.customer_branch?.id],
   () => {
     const customerId = props.order.customer?.id;
-    if (customerId) void loadBranches(customerId, props.order.customer_branch?.id ?? null);
+    if (customerId) void loadBranches(customerId);
     else resetBranches();
+    resetCompanyAddressSuggestion();
   },
   { immediate: true },
 );
@@ -235,11 +255,41 @@ watch(
     @toggle-branch="showBranchFields = !showBranchFields"
   />
 
+  <div v-if="canSuggestCompanyAddress" class="mt-2 px-3 text-sm text-slate-600 dark:text-slate-300">
+    <p>Адрес объекта не указан. Можно найти его по названию компании.</p>
+    <button
+      type="button"
+      data-testid="suggest-company-address"
+      class="btn-mini-outline mt-2 text-xs"
+      :disabled="companyAddressLoading"
+      @click="suggestCompanyAddress"
+    >{{ companyAddressLoading ? 'Ищем адрес...' : 'Подобрать адрес' }}</button>
+    <p v-if="companyAddressError" class="mt-2 text-xs text-red-700">Не удалось получить подсказки. Адрес можно ввести вручную.</p>
+    <p v-else-if="companyAddressSearched && !companyAddressLoading && companyAddressCandidates.length === 0" class="mt-2 text-xs text-slate-500 dark:text-slate-400">Подходящих подсказок не найдено. Адрес можно ввести вручную.</p>
+    <div v-else-if="companyAddressCandidates.length" class="mt-2 space-y-1">
+      <p class="text-xs text-slate-500 dark:text-slate-400">Выберите подходящий адрес объекта:</p>
+      <button
+        v-for="candidate in companyAddressCandidates"
+        :key="candidate.value"
+        type="button"
+        :data-testid="`company-address-candidate-${candidate.value}`"
+        class="block w-full rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 px-2 py-1.5 text-left text-sm hover:border-teal-500"
+        @click="chooseCompanyAddress(candidate.value)"
+      >
+        <span class="font-medium">{{ candidate.value }}</span>
+        <span v-if="candidate.subtitle" class="block text-xs text-slate-500">{{ candidate.subtitle }}</span>
+      </button>
+    </div>
+  </div>
+
   <div v-if="showBranchFields && customer?.id" class="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900 sm:grid-cols-2">
     <label class="field-label sm:col-span-2">
       Филиал клиента
       <select :value="customerBranchId ?? ''" data-testid="customer-branch" class="field-input mt-1" :disabled="branchesLoading" @change="onBranchChange">
         <option value="">Без филиала</option>
+        <option v-if="customerBranchId && !branches.some((branch) => branch.id === customerBranchId)" :value="customerBranchId">
+          {{ selectedBranch?.name || `Филиал #${customerBranchId}` }} — {{ selectedBranch?.delivery_address || deliveryAddress }}
+        </option>
         <option v-for="branch in branches" :key="branch.id" :value="branch.id">{{ branch.name || `Филиал #${branch.id}` }} — {{ branch.delivery_address }}</option>
       </select>
     </label>

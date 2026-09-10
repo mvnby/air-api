@@ -58,6 +58,7 @@ export type ManagerOrderUpdatePayload = {
     equipment_class?: (string | null);
     marketing_source?: (string | null);
     installer_id?: (number | null);
+    line_proposal_id?: (number | null);
     products?: (Array<ManagerOrderProductLinePayload> | null);
     services?: (Array<ManagerOrderServiceLinePayload> | null);
 };

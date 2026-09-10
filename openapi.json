@@ -49893,6 +49893,17 @@
             ],
             "title": "Installer Id"
           },
+          "line_proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Proposal Id"
+          },
           "products": {
             "anyOf": [
               {

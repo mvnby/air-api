@@ -84,6 +84,14 @@ def _resolve_target_proposal_id(
     }
     if len(payload_proposal_ids) > 1:
         raise ValueError("Only one proposal can be updated at a time")
+
+    explicit_proposal_id = getattr(context.payload, "line_proposal_id", None)
+    if explicit_proposal_id is not None:
+        explicit_proposal_id = int(explicit_proposal_id)
+        if payload_proposal_ids and payload_proposal_ids != {explicit_proposal_id}:
+            raise ValueError("Line proposal scope must match every line proposal_id")
+        return explicit_proposal_id
+
     return next(iter(payload_proposal_ids), None) or int(default_proposal_id)
 
 

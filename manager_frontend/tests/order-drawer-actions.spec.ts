@@ -13,7 +13,7 @@ vi.mock('../src/services/ui-feedback', () => ({ confirmDialog }));
 
 const order = ref({ id: 42, is_on_hold: false } as ManagerOrderDetailResponse);
 
-const createActions = (dirty = false) => {
+const createActions = (dirty = false, beforeClose?: () => Promise<boolean>) => {
   const options = {
     order,
     displayOrderTitle: ref('Монтаж в офисе'),
@@ -22,6 +22,7 @@ const createActions = (dirty = false) => {
     persistDraft: vi.fn(),
     clearDraft: vi.fn(),
     setToast: vi.fn(),
+    beforeClose,
     onBeforeClose: vi.fn(),
     onModelValue: vi.fn(),
     onUpdated: vi.fn(),
@@ -33,6 +34,13 @@ const createActions = (dirty = false) => {
 afterEach(() => vi.clearAllMocks());
 
 describe('useOrderDrawerActions', () => {
+  it('keeps the drawer open when autosave cannot finish', async () => {
+    const { actions, options } = createActions(true, async () => false);
+    await actions.closeDrawer();
+    expect(options.onModelValue).not.toHaveBeenCalled();
+    expect(options.clearDraft).not.toHaveBeenCalled();
+    expect(confirmDialog).not.toHaveBeenCalled();
+  });
   it('keeps the drawer open when the manager rejects discarding a dirty draft', async () => {
     confirmDialog.mockResolvedValue(false);
     const { actions, options } = createActions(true);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import type { ManagerOrderDetailResponse } from '../../../client';
 import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue';
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
@@ -29,6 +29,7 @@ import {
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
   activeProposalId?: number | null;
+  beforeGenerate?: (type: string) => BeforeGenerateResult | Promise<BeforeGenerateResult>;
 }>();
 const emit = defineEmits<{
   refresh: [];
@@ -37,6 +38,8 @@ const emit = defineEmits<{
 
 const formRef = ref<HTMLElement | null>(null);
 const sendOpen = ref(false);
+const preparingDraft = ref(false);
+type BeforeGenerateResult = boolean | void | { proceed?: boolean; mutated?: boolean };
 type DocumentAudience = 'business' | 'consumer';
 const documentAudience = ref<DocumentAudience>('business');
 const proposalId = computed(() => {
@@ -238,6 +241,26 @@ const handleEmailSent = async () => {
   emit('refresh');
   emit('toast', { message: 'Письмо с документами отправлено', type: 'success' });
 };
+
+const createDraft = async () => {
+  if (preparingDraft.value || workspace.busy.value || workspace.draftBlockedReason.value) return;
+  preparingDraft.value = true;
+  try {
+    const result = await props.beforeGenerate?.(workspace.documentType.value);
+    if (result === false || (result && typeof result === 'object' && result.proceed === false)) {
+      emit('toast', { message: 'Сначала сохраните изменения заказа перед созданием черновика.', type: 'error' });
+      return;
+    }
+    // The save callback may replace the order in the parent; let its new props reach this workspace.
+    await nextTick();
+    await workspace.createDraft();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось сохранить изменения заказа.';
+    emit('toast', { message, type: 'error' });
+  } finally {
+    preparingDraft.value = false;
+  }
+};
 </script>
 
 <template>
@@ -326,7 +349,7 @@ const handleEmailSent = async () => {
             <span>Город документа</span>
             <input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" />
           </label>
-          <button class="inline-flex h-10 items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" :disabled="workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="workspace.createDraft">
+          <button class="inline-flex h-10 items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">
             Создать черновик
           </button>
         </div>

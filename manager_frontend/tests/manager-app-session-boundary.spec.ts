@@ -1,4 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { computed, effectScope, ref } from 'vue';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -40,7 +41,7 @@ vi.mock('../src/client', () => ({
     logoutAccessToken: mocks.logout,
   },
   ManagerMailService: {},
-  ManagerOrdersService: {},
+  ManagerOrdersService: { patchManagerOrder: mocks.patchManagerOrder },
   ManagerService: {
     readUserMe: mocks.readMe,
     listManagerStorefronts: mocks.listStorefronts,
@@ -94,6 +95,7 @@ vi.mock('../src/components/orders/OrdersImportPreviewModal.vue', () => ({
 }));
 
 import App from '../src/App.vue';
+import { useOrderDrawerSaving } from '../src/composables/useOrderDrawerSaving';
 import { clearManagerSession, managerSession, recoverManagerSessionFromUnauthorized } from '../src/services/manager-session';
 import {
   installManagerStorefrontFetchScope,
@@ -337,7 +339,26 @@ describe('App Manager session boundary', () => {
     mocks.patchManagerOrder.mockImplementation(
       () => rejectedManagerRequest('/api/manager/orders/77', 'PATCH'),
     );
-    drawer.vm.$emit('save', { orderId: oldOrder.id, data: { title: 'Новое имя' } });
+    // Persistence now belongs to the drawer, rather than a dashboard save event.
+    const saveScope = effectScope();
+    const title = ref('Старое имя');
+    const savedFormSnapshot = ref(title.value);
+    const persistence = saveScope.run(() => useOrderDrawerSaving({
+      order: ref(oldOrder as any),
+      ready: computed(() => managerSession.isAuthenticated.value),
+      activeProposalId: ref(null), activeProposalLocked: ref(false), productLines: ref([]),
+      currentFormSnapshot: () => title.value,
+      currentLinesSnapshot: () => '{}',
+      savedFormSnapshot, savedLinesSnapshot: ref('{}'),
+      hasUnsavedChanges: computed(() => title.value !== savedFormSnapshot.value),
+      buildSavePayload: () => ({ title: title.value }),
+      hydrateOrder: vi.fn(), localFormError: ref(''), localServerErrors: ref({}),
+      clearDraft: vi.fn(), onUpdated: vi.fn(),
+    }))!;
+    persistence.resetBaseline();
+    title.value = 'Новое имя';
+    expect(await persistence.flush()).toBe(false);
+    saveScope.stop();
     await flushPromises();
 
     expect(managerSession.recoveryRequired.value).toBe(true);

@@ -18,6 +18,9 @@ const props = defineProps<{
   isOnHold?: boolean;
   dirty?: boolean;
   saving?: boolean;
+  autosaveEnabled?: boolean;
+  saveFailed?: boolean;
+  saveStatusText?: string;
   compact?: boolean;
 }>();
 
@@ -31,6 +34,7 @@ const emit = defineEmits<{
   discard: [];
   save: [];
   close: [];
+  'toggle-autosave': [];
 }>();
 
 const editingTitle = ref(false);
@@ -176,6 +180,7 @@ const onWorkflowChange = async (event: Event) => {
         <div v-if="editingTitle" class="mt-1.5 flex gap-2">
           <input
             v-model="titleDraft"
+            @input="emit('update:title', ($event.target as HTMLInputElement).value)"
             class="field-input h-9 min-w-0 flex-1 font-semibold"
             maxlength="160"
             aria-label="Название заказа"
@@ -237,6 +242,25 @@ const onWorkflowChange = async (event: Event) => {
       </div>
     </div>
 
+    <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      <button
+        type="button"
+        role="switch"
+        :aria-checked="Boolean(autosaveEnabled)"
+        aria-label="Автосохранение заказа"
+        class="inline-flex min-h-8 items-center gap-2 font-medium text-slate-700 dark:text-slate-200"
+        @click="emit('toggle-autosave')"
+      >
+        <span class="relative h-4 w-7 rounded-full" :class="autosaveEnabled ? 'bg-teal-600' : 'bg-slate-400'" aria-hidden="true">
+          <span class="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform" :class="autosaveEnabled ? 'left-0.5 translate-x-3' : 'left-0.5'" />
+        </span>
+        Автосохранение {{ autosaveEnabled ? 'вкл.' : 'выкл.' }}
+      </button>
+      <span role="status" aria-live="polite" :class="saveFailed ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'">
+        {{ saveStatusText || (saving ? 'Сохраняем…' : dirty ? 'Есть изменения' : 'Сохранено') }}
+      </span>
+    </div>
+
     <div v-if="effectiveCompact" class="mt-2 flex h-8 min-w-0 items-center gap-2">
       <span
         class="inline-flex min-w-0 max-w-[42%] items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
@@ -278,12 +302,7 @@ const onWorkflowChange = async (event: Event) => {
     <div v-if="!effectiveCompact" class="mt-2.5 flex items-center gap-2">
       <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" @click="emit('next')">{{ viewModel.nextAction.label }}</button>
       <button v-if="balance > 0" type="button" class="btn-mini-outline hidden h-9 text-xs sm:inline-flex" @click="emit('payments')">Внести оплату</button>
-      <span v-if="!dirty" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-        <Check :size="15" />
-        <span class="hidden sm:inline">Сохранено</span>
-      </span>
-      <div v-else class="flex shrink-0 items-center gap-1.5">
-        <span class="hidden text-xs font-semibold text-amber-700 dark:text-amber-200 lg:inline">Есть изменения</span>
+      <div v-if="dirty" class="flex shrink-0 items-center gap-1.5">
         <button type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')">
           <Undo2 :size="15" />
         </button>

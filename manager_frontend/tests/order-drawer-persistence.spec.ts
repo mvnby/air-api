@@ -18,15 +18,17 @@ describe('useOrderDrawerPersistence', () => {
     const activeProposalId = ref<number | null>(17);
     const productLines = ref<any[]>([]);
     const serviceLines = ref<any[]>([]);
+    const currentLinesSnapshot = () => JSON.stringify(productLines.value);
+    const savedLinesSnapshot = ref(currentLinesSnapshot());
     scope = effectScope();
     const persistence = scope.run(() => useOrderDrawerPersistence({
       order,
       activeProposalId,
       productLines,
       serviceLines,
-      savedLinesSnapshot: ref('saved-lines'),
+      savedLinesSnapshot,
       savedFormSnapshot: ref('saved-form'),
-      currentLinesSnapshot: () => 'saved-lines',
+      currentLinesSnapshot,
       currentFormSnapshot: () => 'saved-form',
     }))!;
 
@@ -49,6 +51,9 @@ describe('useOrderDrawerPersistence', () => {
       product_logistics_components: [],
       logistics_components: null,
     }));
+    savedLinesSnapshot.value = currentLinesSnapshot();
+    await nextTick();
+    expect(window.sessionStorage.getItem(key)).toBeNull();
   });
 
   it('persists disclosure state without treating it as a form change', async () => {

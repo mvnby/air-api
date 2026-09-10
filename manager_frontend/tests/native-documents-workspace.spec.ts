@@ -173,14 +173,51 @@ afterEach(() => {
   managerSession.auth.value = null;
 });
 
-const mountWorkspace = async () => {
-  const wrapper = mount(NativeDocumentsWorkspace, { props: { order: baseOrder } });
+const mountWorkspace = async (beforeGenerate?: (type: string) => unknown | Promise<unknown>) => {
+  const wrapper = mount(NativeDocumentsWorkspace, { props: { order: baseOrder, beforeGenerate } });
   wrappers.push(wrapper);
   await flushPromises();
   return wrapper;
 };
 
 describe('NativeDocumentsWorkspace', () => {
+  it('waits for the order-save barrier before creating a native draft', async () => {
+    const barrier = deferred<{ mutated: boolean }>();
+    const beforeGenerate = vi.fn(() => barrier.promise);
+    const wrapper = await mountWorkspace(beforeGenerate);
+    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(beforeGenerate).toHaveBeenCalledWith('act');
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+
+    barrier.resolve({ mutated: true });
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ document_type: 'act' }),
+    );
+  });
+
+  it('does not create a native draft when the parent blocks unsaved manual changes', async () => {
+    const beforeGenerate = vi.fn().mockResolvedValue(false);
+    const wrapper = await mountWorkspace(beforeGenerate);
+    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+
+    expect(beforeGenerate).toHaveBeenCalledWith('act');
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+    expect(wrapper.emitted('toast')).toContainEqual([expect.objectContaining({
+      type: 'error',
+      message: expect.stringContaining('Сначала сохраните изменения'),
+    })]);
+  });
+
   it('prefills the document city from the default seller legal entity', async () => {
     const wrapper = await mountWorkspace();
 
