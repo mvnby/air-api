@@ -10,6 +10,7 @@ export type OrderProductLineResponse = {
     product_id?: (number | null);
     product_title: string;
     title_snapshot?: (string | null);
+    client_description?: (string | null);
     currency_snapshot?: (string | null);
     quantity: number;
     price: number;

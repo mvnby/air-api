@@ -177,6 +177,9 @@ class SchedulerService:
         # Enforce the documented public-write replay horizon in bounded batches.
         tasks.append(asyncio.create_task(self._public_write_receipt_retention_loop()))
 
+        # Enforce the aggregate-analytics horizon for inactive storefronts too.
+        tasks.append(asyncio.create_task(self._order_workspace_usage_retention_loop()))
+
         # Reconcile crash-left public private attachments after a long grace.
         tasks.append(asyncio.create_task(self._private_attachment_orphan_loop()))
 
@@ -461,6 +464,25 @@ class SchedulerService:
                 await asyncio.sleep(3600)
             except Exception:
                 logger.exception("Public write receipt retention loop error")
+                await asyncio.sleep(300)
+
+    async def _order_workspace_usage_retention_loop(self):
+        from services.order_workspace_usage_retention import (
+            OrderWorkspaceUsageRetentionService,
+        )
+
+        retention = OrderWorkspaceUsageRetentionService(
+            session_factory=async_session_maker,
+        )
+        while True:
+            try:
+                deleted = await retention.purge_once()
+                if deleted:
+                    logger.info("Expired order workspace usage rows deleted: %s", deleted)
+                # Continue a bounded backlog promptly; otherwise run daily.
+                await asyncio.sleep(1 if deleted >= 1_000 else 24 * 3600)
+            except Exception:
+                logger.exception("Order workspace usage retention loop error")
                 await asyncio.sleep(300)
 
     async def _private_attachment_orphan_loop(self):

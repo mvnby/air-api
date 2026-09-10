@@ -2,6 +2,7 @@ import { nextTick, ref, type Ref } from 'vue';
 import type { ManagerOrderDocumentItem, OrderProposalResponse } from '../client';
 import type { OrderDrawerSectionsState } from './useOrderDrawerPersistence';
 import type { OrderWorkflowType, OrderWorkspaceTarget } from '../components/orders/order-workspace';
+import type { OrderWorkspaceSection } from '../components/orders/OrderWorkspaceNav.vue';
 
 type ToastHandler = (message: string, type?: 'success' | 'error') => void;
 type EquipmentPanelHandle = { collapse: () => void; expand: () => Promise<void> | void };
@@ -26,26 +27,39 @@ export const useOrderWorkspaceNavigation = ({
 }: UseOrderWorkspaceNavigationOptions) => {
   const executionWorkspaceOpen = ref(false);
   const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
+  const activeWorkspaceSection = ref<OrderWorkspaceSection>('proposal');
+
+  const sectionForTarget = (target: OrderWorkspaceTarget): OrderWorkspaceSection => {
+    if (target === 'proposal') return 'proposal';
+    if (target === 'documents') return 'documents';
+    if (target === 'payments') return 'payments';
+    return 'work';
+  };
+
+  const selectWorkspaceSection = (section: OrderWorkspaceSection) => {
+    activeWorkspaceSection.value = section;
+    if (section === 'proposal') expandedSections.value.proposals = true;
+    if (section === 'documents') expandedSections.value.documents = true;
+    if (section === 'payments') {
+      if (status.value === 'execution') executionWorkspaceOpen.value = true;
+      else expandedSections.value.payments = true;
+    }
+  };
 
   const resetWorkspaceNavigation = () => {
     executionWorkspaceOpen.value = false;
     activeWorkspaceTarget.value = null;
+    activeWorkspaceSection.value = 'proposal';
   };
 
   const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = false) => {
     const shouldClose = allowToggle && activeWorkspaceTarget.value === target;
     if (activeWorkspaceTarget.value === 'equipment') equipmentPanelRef.value?.collapse();
-    if (workflowType.value === 'sales_installation' && target !== 'object') {
-      expandedSections.value.proposals = false;
-      expandedSections.value.documents = false;
-      expandedSections.value.payments = false;
-      expandedSections.value.execution = false;
-      executionWorkspaceOpen.value = false;
-    }
     if (shouldClose) {
       activeWorkspaceTarget.value = null;
       return;
     }
+    selectWorkspaceSection(sectionForTarget(target));
     if (target !== 'object') activeWorkspaceTarget.value = target;
     if (target === 'object') expandedSections.value.clientDetails = true;
     if (target === 'planning') {
@@ -76,6 +90,7 @@ export const useOrderWorkspaceNavigation = ({
     documents: ManagerOrderDocumentItem[],
   ) => {
     if (!proposal) return;
+    selectWorkspaceSection('documents');
     expandedSections.value.documents = true;
     activeWorkspaceTarget.value = 'documents';
     await nextTick();
@@ -92,6 +107,7 @@ export const useOrderWorkspaceNavigation = ({
   };
 
   const openDocumentsSend = async () => {
+    selectWorkspaceSection('documents');
     expandedSections.value.documents = true;
     activeWorkspaceTarget.value = 'documents';
     await nextTick();
@@ -101,10 +117,12 @@ export const useOrderWorkspaceNavigation = ({
 
   return {
     activeWorkspaceTarget,
+    activeWorkspaceSection,
     executionWorkspaceOpen,
     openDocumentsSend,
     openProposalSend,
     openWorkspaceTarget,
     resetWorkspaceNavigation,
+    selectWorkspaceSection,
   };
 };

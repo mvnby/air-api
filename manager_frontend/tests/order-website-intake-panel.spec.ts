@@ -89,8 +89,10 @@ describe('OrderWebsiteIntakePanel', () => {
     });
     mountedWrappers.push(wrapper);
 
-    expect(wrapper.text()).not.toContain('Состав заказа');
+    expect(wrapper.get('section > div').attributes('style')).toContain('display: none');
     await wrapper.get('button[aria-expanded="false"]').trigger('click');
     expect(wrapper.emitted('update:expanded')).toEqual([[true]]);
+    await wrapper.setProps({ expanded: true });
+    expect(wrapper.get('section > div').attributes('style') || '').not.toContain('display: none');
   });
 });

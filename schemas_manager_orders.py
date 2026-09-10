@@ -138,6 +138,7 @@ class OrderProductLineResponse(BaseModel):
     product_id: Optional[int] = None
     product_title: str
     title_snapshot: Optional[str] = None
+    client_description: Optional[str] = None
     currency_snapshot: Optional[str] = None
     quantity: int
     price: int
@@ -497,6 +498,7 @@ class ManagerOrderProductLinePayload(BaseModel):
     link_id: Optional[int] = None
     proposal_id: Optional[int] = None
     product_id: int
+    client_description: Optional[str] = Field(default=None, max_length=2000)
     quantity: int
     price: int
     cost: Optional[int] = None

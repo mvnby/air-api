@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from models import OrderProductLink, Product
+from services.order_product_description import normalize_client_description
 
 
 @dataclass(frozen=True)
@@ -140,6 +141,9 @@ class OrderProductLinkCommand:
             quantity=quantity,
             price=unit_price,
             title_snapshot=snapshot.title,
+            client_description=normalize_client_description(
+                item.get("client_description")
+            ),
             currency_snapshot=snapshot.currency,
             cost=product_cost,
             is_installation_included=with_installation,

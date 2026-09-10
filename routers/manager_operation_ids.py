@@ -419,7 +419,12 @@ PATCH_SUPPLY_REQUEST_LINE = "patch_supply_request_line"
 GENERATE_SUPPLY_REQUEST_SUPPLIER_MESSAGE = "generate_supply_request_supplier_message"
 GENERATE_SUPPLY_LOGISTICS_MESSAGE = "generate_supply_logistics_message"
 
+RECORD_MANAGER_ORDER_USAGE = "record_manager_order_usage"
+GET_MANAGER_ORDER_USAGE = "get_manager_order_usage"
+
 ALL_MANAGER_OPERATION_IDS = (
+    RECORD_MANAGER_ORDER_USAGE,
+    GET_MANAGER_ORDER_USAGE,
     READ_USER_ME,
     CHANGE_MANAGER_ACCOUNT_PASSWORD,
     LIST_MANAGER_STOREFRONTS,

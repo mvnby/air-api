@@ -50,6 +50,7 @@ class ManagerOrderTransferProductLine(BaseModel):
     source_id: Optional[int] = None
     product: ManagerOrderTransferProductRef
     title_snapshot: Optional[str] = None
+    client_description: Optional[str] = Field(default=None, max_length=2000)
     currency_snapshot: Optional[str] = None
     quantity: int
     price: int

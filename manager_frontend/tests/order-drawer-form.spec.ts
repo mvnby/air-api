@@ -119,6 +119,16 @@ describe('useOrderDrawerForm', () => {
     expect(buildLinesPayload).not.toHaveBeenCalled();
   });
 
+  it('treats an individual entrepreneur as B2B in the order form', () => {
+    const { form } = createForm();
+    const currentOrder = ref({
+      ...order,
+      customer: { type: 'individual_entrepreneur', inn: '' },
+    });
+
+    expect(form.isB2cCustomer(currentOrder).value).toBe(false);
+  });
+
   it('keeps a saved EUR amount when the late FX lookup has no EUR rate', async () => {
     const { form } = createForm();
     form.hydrateOrder({
@@ -133,6 +143,19 @@ describe('useOrderDrawerForm', () => {
     expect(form.targetCurrency.value).toBe('EUR');
     expect(form.targetCurrencyAmount.value).toBe(1_250.75);
     expect(form.enableCurrency.value).toBe(true);
+  });
+
+  it('still blocks changed currency fields when the selected rate is unavailable', () => {
+    const { form } = createForm();
+    form.hydrateOrder({
+      ...order,
+      target_currency: 'EUR',
+      target_currency_amount: 1_250.75,
+    });
+    form.targetCurrencyAmount.value = 1_300;
+
+    expect(form.buildSavePayload(false, false, true)).toBeNull();
+    expect(form.localFormError.value).toBe('Для выбранной валюты сейчас нет доступного курса');
   });
 
   it('does not recalculate a saved EUR amount from a cached rate during hydration', async () => {

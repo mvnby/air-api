@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from tests.unit.alembic_chain_test_support import assert_revision_in_single_head_chain
 
 
-HEAD_REVISION = "c42e8f9b5d73"
+HEAD_REVISION = "e54a0b1d7f95"
 
 
 def _migration():

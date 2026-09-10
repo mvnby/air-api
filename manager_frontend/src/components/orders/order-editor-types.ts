@@ -5,6 +5,7 @@ export type ProductOption = {
   title: string;
   price: number;
   cost?: number;
+  product_kind?: string;
   is_inverter: boolean;
   power_cooling: number | null;
   availability_status: string;
@@ -37,6 +38,7 @@ export type ProductLine = {
   link_id?: number | null;
   product_id: number;
   product_query: string;
+  client_description?: string | null;
   quantity: number;
   price: number;
   cost: number;

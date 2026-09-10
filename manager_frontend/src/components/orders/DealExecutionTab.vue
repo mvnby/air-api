@@ -294,7 +294,7 @@ watch(() => props.order.id, () => {
               <label class="flex-1 field-label !mb-0 text-xs">Внести сумму ({{ paymentCurrency }})
                   <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
               </label>
-              <button class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">
+              <button type="button" data-order-usage="payment_add" class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">
                 {{ isAddingPayment ? '...' : 'Внести' }}
               </button>
           </div>

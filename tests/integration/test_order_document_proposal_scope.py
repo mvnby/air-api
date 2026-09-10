@@ -77,6 +77,7 @@ async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monk
                 quantity=1,
                 price=1000,
                 cost=700,
+                client_description="Инвертор; площадь: 35 м²",
             ),
             OrderServiceLink(
                 order_id=order.id,
@@ -94,6 +95,7 @@ async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monk
                 quantity=1,
                 price=2000,
                 cost=1300,
+                client_description="Не должно попасть в документ",
             ),
         ]
     )
@@ -134,12 +136,13 @@ async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monk
     assert document.proposal_id == selected_proposal.id
     assert captured_tables == [
         [
-            ["1", cheap_product.title, "шт.", "1", "1000.00", "1000.00"],
+            ["1", f"{cheap_product.title}\nИнвертор; площадь: 35 м²", "шт.", "1", "1000.00", "1000.00"],
             ["2", installation.title, "шт.", "1", "100.00", "100.00"],
             ["Всего:", "", "", "", "", "1100.00"],
         ]
     ]
     assert expensive_product.title not in str(captured_tables)
+    assert "Не должно попасть в документ" not in str(captured_tables)
 
 
 def test_contract_and_invoice_line_scope_does_not_change_document_reuse_policy():

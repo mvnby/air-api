@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import OrderProductLink, SupplyRequestLine
+from services.order_product_description import normalize_client_description
 
 
 class OrderProductLineService:
@@ -86,10 +87,19 @@ class OrderProductLineService:
                         "Нельзя изменить количество товара, уже включенного в поставку."
                     )
 
+            if link.product_id is not None and int(link.product_id) != int(line["product_id"]):
+                # A replacement product must not inherit the previous model's
+                # checkout title or manager description.
+                link.title_snapshot = None
+                link.client_description = None
             link.product_id = int(line["product_id"])
             link.quantity = int(line["quantity"])
             link.price = int(line["price"])
             link.cost = int(line["cost"])
+            if "client_description" in line:
+                link.client_description = normalize_client_description(
+                    line.get("client_description")
+                )
             link.logistics_components = line.get("logistics_components")
             session.add(link)
 

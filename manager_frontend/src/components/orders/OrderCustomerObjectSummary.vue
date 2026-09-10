@@ -96,7 +96,7 @@ const finishObjectEdit = () => {
         <div class="col-start-2 row-start-2 mt-1 flex shrink-0 gap-1 sm:col-start-3 sm:row-start-1 sm:mt-0">
           <button v-if="validPhone" type="button" class="icon-action" aria-label="Скопировать телефон" @click="emit('copy', phone, 'Телефон')"><Copy :size="15" /></button>
           <button type="button" class="icon-action" aria-label="Редактировать клиента" @click="startCustomerEdit"><Pencil :size="15" /></button>
-          <button type="button" class="icon-action hidden sm:flex" aria-label="Открыть полную карточку клиента" @click="emit('open-customer')"><Route :size="15" /></button>
+          <button type="button" data-order-usage="customer_open" class="icon-action hidden sm:flex" aria-label="Открыть полную карточку клиента" @click="emit('open-customer')"><Route :size="15" /></button>
         </div>
       </div>
 

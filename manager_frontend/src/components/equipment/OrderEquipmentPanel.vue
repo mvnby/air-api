@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   Boxes,
   ChevronDown,
@@ -322,7 +322,7 @@ watch(() => props.orderId, () => {
   customerEquipment.value = [];
   customerEquipmentLoading.value = false;
   emit('options-change', []);
-  void loadLinks();
+  if (expanded.value) void loadLinks();
 });
 
 watch(() => [props.customerId, props.customerBranchId], () => {
@@ -335,15 +335,13 @@ watch(() => [props.customerId, props.customerBranchId], () => {
   }
 });
 
-onMounted(() => void loadLinks());
-
-defineExpose({ expand, collapse });
+defineExpose({ expand, collapse, ensureLoaded: loadLinks });
 </script>
 
 <template>
   <section class="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
     <div class="flex items-center gap-1 pr-2">
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60 sm:px-4" :aria-expanded="expanded" @click="toggle">
+      <button type="button" data-order-usage="equipment_open" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60 sm:px-4" :aria-expanded="expanded" @click="toggle">
         <Boxes class="h-5 w-5 shrink-0 text-teal-700 dark:text-teal-300" />
         <span class="min-w-0 flex-1">
           <span class="block text-sm font-semibold text-slate-900 dark:text-slate-100">Оборудование на объекте</span>

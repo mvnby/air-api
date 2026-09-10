@@ -302,6 +302,10 @@ class OrderProductLink(SQLModel, table=True):
         default=None,
         sa_column=Column(Text, nullable=True),
     )
+    client_description: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
     currency_snapshot: Optional[str] = Field(
         default=None,
         sa_column=Column(String(3), nullable=True),

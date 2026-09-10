@@ -132,20 +132,24 @@ async def _replace_product_lines(
             line.product_id,
             logistics_components,
         )
-        values.append(
-            {
-                "link_id": line.link_id,
-                "product_id": line.product_id,
-                "quantity": line.quantity,
-                "price": line.price,
-                "cost": (
-                    line.cost
-                    if line.cost is not None
-                    else cost_defaults.get(int(line.product_id), 0)
-                ),
-                "logistics_components": logistics_components,
-            }
-        )
+        value = {
+            "link_id": line.link_id,
+            "product_id": line.product_id,
+            "quantity": line.quantity,
+            "price": line.price,
+            "cost": (
+                line.cost
+                if line.cost is not None
+                else cost_defaults.get(int(line.product_id), 0)
+            ),
+            "logistics_components": logistics_components,
+        }
+        fields_set = getattr(line, "model_fields_set", None)
+        if fields_set is None:
+            fields_set = getattr(line, "__fields_set__", set())
+        if "client_description" in fields_set:
+            value["client_description"] = line.client_description
+        values.append(value)
     await OrderProductLineService.reconcile(
         context.session,
         order_id=context.order_id,

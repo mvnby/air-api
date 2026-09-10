@@ -354,7 +354,6 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       legalEntities.value = entitiesResponse.items.filter((item) => item.status === 'active');
       pdfRuntime.value = runtimeResponse;
       selectedLegalEntityId.value = legalEntities.value.find((item) => item.is_default)?.id || legalEntities.value[0]?.id || null;
-      await loadTemplates();
     } catch (error) {
       input.notify(`Документный контур не загружен: ${getApiErrorMessage(error)}`, 'error');
     } finally {

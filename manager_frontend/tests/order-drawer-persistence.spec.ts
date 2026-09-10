@@ -35,6 +35,7 @@ describe('useOrderDrawerPersistence', () => {
     productLines.value = [{
       product_id: 9,
       product_query: 'Gree Pular',
+      client_description: 'Тихий; серебристый корпус',
       quantity: 1,
       price: 3_000,
       cost: 2_000,
@@ -47,6 +48,7 @@ describe('useOrderDrawerPersistence', () => {
     persistence.restoreDraft();
     expect(productLines.value[0]).toEqual(expect.objectContaining({
       product_id: 9,
+      client_description: 'Тихий; серебристый корпус',
       quantity: 1,
       product_logistics_components: [],
       logistics_components: null,
