@@ -129,3 +129,22 @@ describe('dashboard efficiency integrations', () => {
     expect(wrapper.text()).not.toContain('Часть данных устарела');
   });
 });
+
+it('does not turn a whole-report failure into disconnected sources', () => {
+  const failed = { status: 'error' as const, providers: [], queries: [] };
+  const advertising = mount(DashboardAdvertising, {
+    props: { marketing: failed, canManageIntegrations: false },
+  });
+  const traffic = mount(DashboardSiteSeo, {
+    props: { marketing: failed, searchDemand: failed, canManageIntegrations: false },
+  });
+  const search = mount(DashboardSearchDemand, {
+    props: { demand: failed, canManageIntegrations: false },
+  });
+  for (const wrapper of [advertising, traffic, search]) {
+    expect(wrapper.text()).not.toContain('Не подключено');
+    expect(wrapper.text()).not.toContain('пока не подключён');
+    expect(wrapper.text()).not.toContain('Подключите Яндекс');
+  }
+  expect(search.text()).toContain('Источники недоступны');
+});

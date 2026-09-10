@@ -42,14 +42,16 @@ const visibleQueries = computed(() => expanded.value ? sortedQueries.value : sor
 const providers = computed(() => props.demand.providers || []);
 const expectedProviders: Array<Exclude<Source, 'all'>> = ['yandex_webmaster', 'google_search_console'];
 const sourceProviders = computed(() => expectedProviders.map(provider => (
-  providers.value.find(item => item.provider === provider) ?? { provider, status: 'unconfigured' as const }
+  providers.value.find(item => item.provider === provider) ?? {
+    provider, status: props.demand.status === 'error' ? 'error' as const : 'unconfigured' as const,
+  }
 )));
 const activeProviders = computed(() => providers.value.filter(provider => provider.status !== 'unconfigured'));
 const hasFreshProvider = computed(() => activeProviders.value.some(provider => provider.status === 'fresh'));
 const hasProblemProvider = computed(() => activeProviders.value.some(provider => provider.status === 'error' || provider.status === 'stale'));
 const hasUnavailableProvider = computed(() => activeProviders.value.some(provider => provider.status === 'error'));
 const demandStatus = computed(() => {
-  if (!activeProviders.value.length) return 'unconfigured' as const;
+  if (!activeProviders.value.length) return props.demand.status === 'error' ? 'error' as const : 'unconfigured' as const;
   if (hasProblemProvider.value && hasFreshProvider.value) return 'stale' as const;
   if (activeProviders.value.every(provider => provider.status === 'error')) return 'error' as const;
   if (activeProviders.value.some(provider => provider.status === 'stale')) return 'stale' as const;

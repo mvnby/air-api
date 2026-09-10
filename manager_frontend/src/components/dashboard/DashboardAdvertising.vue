@@ -14,7 +14,11 @@ type AdvertisingProvider = Extract<DashboardMarketingProvider['provider'], 'yand
 type AdvertisingProviderState = Pick<DashboardMarketingProvider, 'provider' | 'status'> & Partial<DashboardMarketingProvider>;
 const expectedProviders: AdvertisingProvider[] = ['yandex_direct', 'google_ads'];
 const providers = computed(() => expectedProviders.map((name) => (
-  props.marketing.providers?.find(provider => provider.provider === name) ?? { provider: name, status: 'unconfigured' as const }
+  props.marketing.providers?.find(provider => provider.provider === name) ?? {
+    provider: name,
+    status: props.marketing.status === 'error' ? 'error' as const : 'unconfigured' as const,
+    message: props.marketing.status === 'error' ? 'Данные временно недоступны.' : undefined,
+  }
 )));
 const activeProviders = computed(() => providers.value.filter(provider => provider.status !== 'unconfigured'));
 const hasFreshProvider = computed(() => activeProviders.value.some(provider => provider.status === 'fresh'));

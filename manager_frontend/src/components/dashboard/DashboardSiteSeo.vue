@@ -20,7 +20,11 @@ type TrafficProviderState = Pick<DashboardMarketingProvider, 'provider' | 'statu
 const expectedProviders: TrafficProvider[] = ['yandex_metrika', 'google_analytics'];
 const sourcesExpanded = ref(false);
 const providers = computed<TrafficProviderState[]>(() => expectedProviders.map((name) => (
-  props.marketing.providers?.find(provider => provider.provider === name) ?? { provider: name, status: 'unconfigured' }
+  props.marketing.providers?.find(provider => provider.provider === name) ?? {
+    provider: name,
+    status: props.marketing.status === 'error' ? 'error' as const : 'unconfigured' as const,
+    message: props.marketing.status === 'error' ? 'Данные временно недоступны.' : undefined,
+  }
 )));
 const activeProviders = computed(() => providers.value.filter(provider => provider.status !== 'unconfigured'));
 const hasFreshProvider = computed(() => activeProviders.value.some(provider => provider.status === 'fresh'));
