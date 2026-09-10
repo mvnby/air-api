@@ -195,6 +195,12 @@ async def test_mdv_catalog_parses_multi_indoor_and_outdoor_types(monkeypatch):
     assert outdoor["specs"]["type"] == "наружный блок"
 
 
+def test_mdv_catalog_preserves_console_indoor_form_factor():
+    assert MdvCatalogParser._infer_indoor_type("Полупромышленные консольные блоки") == "консольный"
+    assert MdvCatalogParser._inner_block_label("консольный") == "Внутренний консольный блок"
+    assert MdvCatalogParser._semi_descriptor("консольный") == "Консольный"
+
+
 def test_mdv_promoted_keys_cover_supplier_mapping_fields():
     for key in (
         "UNIT_INDOOR",

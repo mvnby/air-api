@@ -111,7 +111,7 @@ async def get_catalog(
     ),
     indoor_types: Optional[List[str]] = Query(
         None,
-        description="Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
+        description="Canonical indoor unit types (duct/cassette/floor_ceiling/column/console)",
     ),
     tag_slugs: Optional[List[str]] = Query(None),
     brand_slugs: Optional[List[str]] = Query(None, description="Canonical brand slugs to include"),

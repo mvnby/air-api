@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy import event
 from sqlmodel import select
 
+from core.config import settings
 from models import Brand, Order, Product, ProductSeries, ProductTagLink, Tag, TagGroup
 from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
@@ -11,6 +12,15 @@ from services.catalog_decision_projection import (
     CatalogDecisionScopeError,
 )
 from services.catalog_decision_quick_order_service import CatalogDecisionQuickOrderService
+
+
+async def _auth_headers(async_client):
+    login = await async_client.post(
+        "/login/access-token",
+        data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},
+    )
+    assert login.status_code == 200
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 async def _category(session, slug: str) -> Tag:
@@ -59,6 +69,169 @@ async def test_catalog_decision_filters_use_normalized_power_and_form_factor(db)
     await db.commit()
     result = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True), filters=CatalogDecisionFilters(search="DECISION", cooling_min_kw=3.2, cooling_max_kw=3.8, indoor_form_factor="wall", area_max=40), page=1, limit=20, sort="title", direction="asc")
     assert [item["id"] for item in result["items"]] == [wall.id]
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_filters_use_nominal_cooling_power_not_modulation_or_title(db):
+    wall = Product(
+        title="DECISION rated household wall",
+        slug="decision-rated-household-wall",
+        price=1000,
+        power_cooling=7.0,
+        specs={"__filter_indoor_type": "wall", "capacity_cooling_min_kw": "5.0", "capacity_cooling_max_kw": "8.0"},
+    )
+    cassette = Product(
+        title="DECISION rated semi cassette",
+        slug="decision-rated-semi-cassette",
+        price=1000,
+        power_cooling=7.0,
+        specs={"__filter_indoor_type": "cassette", "capacity_cooling_min_kw": "5.0", "capacity_cooling_max_kw": "8.0"},
+    )
+    undersized = Product(
+        title="DECISION rated nominal five",
+        slug="decision-rated-nominal-five",
+        price=1000,
+        power_cooling=5.0,
+        specs={"capacity_cooling_min_kw": "4.0", "capacity_cooling_max_kw": "7.0"},
+    )
+    oversized = Product(
+        title="DECISION rated nominal ten",
+        slug="decision-rated-nominal-ten",
+        price=1000,
+        power_cooling=10.0,
+        specs={"capacity_cooling_min_kw": "6.0", "capacity_cooling_max_kw": "11.0"},
+    )
+    title_trap = Product(
+        title="BTU trap 12 but nominal seven",
+        slug="btu-trap-12-nominal-seven",
+        price=1000,
+        power_cooling=7.0,
+        specs={"area_m2": 35},
+    )
+    db.add_all([wall, cassette, undersized, oversized, title_trap])
+    await db.commit()
+
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    kw_result = await CatalogDecisionQueryService.list_system_products(
+        db,
+        tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="DECISION rated", cooling_min_kw=6.5, cooling_max_kw=7.5),
+        page=1,
+        limit=20,
+        sort="title",
+        direction="asc",
+    )
+    btu_result = await CatalogDecisionQueryService.list_system_products(
+        db,
+        tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="BTU trap", cooling_btu_classes=(12,)),
+        page=1,
+        limit=20,
+        sort="title",
+        direction="asc",
+    )
+
+    assert {item["id"] for item in kw_result["items"]} == {wall.id, cassette.id}
+    assert undersized.id not in {item["id"] for item in kw_result["items"]}
+    assert oversized.id not in {item["id"] for item in kw_result["items"]}
+    assert btu_result["meta"]["total"] == 0
+    assert title_trap.id not in {item["id"] for item in btu_result["items"]}
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fallback(db):
+    typed_wins = Product(
+        title="DECISION typed minimum wins",
+        slug="decision-typed-minimum-wins",
+        price=1000,
+        specs={
+            "__typed_specs": {"temp_range_heat": {"min": -20}},
+            "__filter_min_heat": -30,
+        },
+    )
+    exact = Product(
+        title="DECISION exact minus 25",
+        slug="decision-exact-minus-25",
+        price=1000,
+        specs={"__typed_specs": {"temp_range_heat": {"min": -25}}},
+    )
+    colder_legacy = Product(
+        title="DECISION legacy minus 30",
+        slug="decision-legacy-minus-30",
+        price=1000,
+        specs={"__filter_min_heat": -30},
+    )
+    malformed = Product(
+        title="DECISION malformed heating",
+        slug="decision-malformed-heating",
+        price=1000,
+        specs={
+            "__typed_specs": {"temp_range_heat": {"min": "not-a-number"}},
+            "__filter_min_heat": "invalid",
+        },
+    )
+    db.add_all([typed_wins, exact, colder_legacy, malformed])
+    await db.commit()
+
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    first = await CatalogDecisionQueryService.list_system_products(
+        db,
+        tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="DECISION", heating_min=-25),
+        page=1,
+        limit=1,
+        sort="title",
+        direction="asc",
+    )
+    second = await CatalogDecisionQueryService.list_system_products(
+        db,
+        tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="DECISION", heating_min=-25),
+        page=2,
+        limit=1,
+        sort="title",
+        direction="asc",
+    )
+
+    assert first["meta"]["total"] == 2
+    assert [item["slug"] for item in first["items"] + second["items"]] == [
+        "decision-exact-minus-25",
+        "decision-legacy-minus-30",
+    ]
+    assert first["items"][0]["heating_min_c"] == -25
+    assert typed_wins.id not in [item["id"] for item in first["items"] + second["items"]]
+    assert malformed.id not in [item["id"] for item in first["items"] + second["items"]]
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_http_heating_threshold_coerces_and_validates(async_client, db):
+    eligible = Product(
+        title="DECISION HTTP heating minus 25",
+        slug="decision-http-heating-minus-25",
+        price=1000,
+        specs={"__typed_specs": {"temp_range_heat": {"min": -25}}},
+    )
+    db.add(eligible)
+    await db.commit()
+    headers = await _auth_headers(async_client)
+
+    filtered = await async_client.get(
+        "/api/manager/catalog-decision/products?heating_min=-25&availability=out_of_stock",
+        headers=headers,
+    )
+    no_threshold = await async_client.get(
+        "/api/manager/catalog-decision/products?availability=out_of_stock",
+        headers=headers,
+    )
+    invalid = await async_client.get(
+        "/api/manager/catalog-decision/products?heating_min=-21&availability=out_of_stock",
+        headers=headers,
+    )
+
+    assert filtered.status_code == 200, filtered.text
+    assert eligible.id in [item["id"] for item in filtered.json()["items"]]
+    assert no_threshold.status_code == 200, no_threshold.text
+    assert invalid.status_code == 422
 
 
 @pytest.mark.asyncio

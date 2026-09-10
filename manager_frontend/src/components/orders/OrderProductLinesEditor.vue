@@ -14,6 +14,9 @@ const props = defineProps<{
   activeSuggestionIndex: number | null;
   supplyActionLoadingLineId: number | null;
   productsError?: string;
+  catalogAvailable?: boolean;
+  catalogOpening?: boolean;
+  catalogNeedsSave?: boolean;
   supplyBadgeForLine: (line: ProductLine) => SupplyBadge;
 }>();
 
@@ -25,6 +28,7 @@ const emit = defineEmits<{
   open: [index: number];
   remove: [index: number];
   add: [];
+  catalog: [];
   fillDescription: [index: number];
   supply: [payload: { line: ProductLine; intent: 'order' | 'reserve' }];
 }>();
@@ -52,6 +56,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
     <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-wrap items-center gap-3">
         <h4 class="text-md font-semibold text-gray-800">Товары</h4>
+        <button v-if="catalogAvailable" type="button" class="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 disabled:opacity-50" :disabled="catalogOpening" @click="emit('catalog')">{{ catalogOpening ? 'Открываем подбор…' : catalogNeedsSave ? 'Сохранить и подобрать' : 'Подобрать по параметрам' }}</button>
         <label v-if="canManagePlatform" class="flex cursor-pointer items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 shadow-sm transition-colors hover:bg-gray-50">
           <input v-model="searchInStock" type="checkbox" class="h-3 w-3 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
           В наличии

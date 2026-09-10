@@ -29,12 +29,26 @@ describe('CatalogDecisionFilters', () => {
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ coolingBtuClasses: [9, 12] });
   });
 
-  it('uses household mode by default and keeps the quick switches compact', () => {
+  it('starts across categories and keeps the quick switches compact', () => {
     const wrapper = mount(CatalogDecisionFilters, { props: { modelValue: defaultCatalogDecisionFilters(), brands, series } });
 
-    expect(wrapper.findAll('button').find(button => button.text().includes('Бытовой'))!.classes()).toContain('border-teal-600');
+    expect(defaultCatalogDecisionFilters().category).toBeUndefined();
+    expect(wrapper.text()).not.toContain('Бытовой');
+    expect(wrapper.text()).not.toContain('Полупром');
     expect(wrapper.text()).toContain('Включать заказные');
     expect(wrapper.text()).not.toContain('Искать заказные');
     expect(buttonByText(wrapper, 'MDV').element.parentElement?.className).toContain('flex-wrap');
   });
+});
+
+ it('selects a frost threshold and switches it off with another click', async () => {
+  const wrapper = mount(CatalogDecisionFilters, { props: { modelValue: {}, brands, series } });
+  await buttonByText(wrapper, '-25 °C').trigger('click');
+  expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toEqual({ heatingMin: -25 });
+  await wrapper.setProps({ modelValue: { heatingMin: -25 } });
+  await buttonByText(wrapper, '-25 °C').trigger('click');
+  expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toEqual({ heatingMin: undefined });
+  const consoleButton = wrapper.findAll('button').find(button => button.text().includes('Консольный'))!;
+  await consoleButton.trigger('click');
+  expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ indoorFormFactor: 'console' });
 });

@@ -97,7 +97,7 @@ SPEC_DEFINITIONS: Mapping[str, SpecDefinition] = {
         "indoor_type",
         "Тип внутреннего блока",
         SpecValueType.ENUM,
-        enum_values=("настенный", "кассетный", "канальный", "напольно-потолочный", "колонный"),
+        enum_values=("настенный", "кассетный", "канальный", "напольно-потолочный", "колонный", "консольный"),
     ),
     "brand": _spec("brand", "Бренд", SpecValueType.TEXT),
     "series": _spec("series", "Серия", SpecValueType.TEXT),
@@ -1793,7 +1793,9 @@ def _build_scalar_payload(spec: SpecDefinition, value: Any) -> dict[str, Any] | 
             return None
         if spec.key == "indoor_type":
             normalized = text.casefold().replace("ё", "е")
-            if "каналь" in normalized or "duct" in normalized:
+            if "консол" in normalized or "console" in normalized:
+                text = "console"
+            elif "каналь" in normalized or "duct" in normalized:
                 text = "duct"
             elif "кассет" in normalized or "cassette" in normalized:
                 text = "cassette"
@@ -1806,7 +1808,7 @@ def _build_scalar_payload(spec: SpecDefinition, value: Any) -> dict[str, Any] | 
                 or "floor ceiling" in normalized
             ):
                 text = "floor_ceiling"
-            elif "колон" in normalized or "column" in normalized or "console" in normalized:
+            elif "колон" in normalized or "column" in normalized:
                 text = "column"
         payload["value"] = text
         return payload

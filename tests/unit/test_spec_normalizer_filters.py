@@ -382,6 +382,11 @@ def test_indoor_type_filter_key_for_semi_industrial():
     assert universal["type"] == "полупромышленный кондиционер"
     assert universal["indoor_type"] == "напольно-потолочный"
 
+    console = normalize_specs({"Тип внутреннего блока": "напольно-консольный"})
+    assert console["__filter_indoor_type"] == "console"
+    assert console["indoor_type"] == "консольный"
+    assert console["__typed_specs"]["indoor_type"]["value"] == "console"
+
 
 def test_hobot_power_and_controls_keys_are_normalized():
     specs = normalize_specs(

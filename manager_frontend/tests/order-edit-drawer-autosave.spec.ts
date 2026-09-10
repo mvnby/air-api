@@ -213,3 +213,50 @@ describe('order drawer autosave integration', () => {
     expect(header().props('dirty')).toBe(false);
   });
 });
+
+
+describe('equipment picker navigation from the order', () => {
+  const setupCatalog = async () => {
+    managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'catalog-test', capabilities: ['platform.manage'] } as any;
+    history.replaceState({}, '', '/manager/orders/kanban?orderId=395');
+    await mountDrawer();
+  };
+  afterEach(() => {
+    managerSession.auth.value = null;
+    history.replaceState({}, '', '/');
+  });
+  it('saves edits before opening the picker for the exact order and proposal', async () => {
+    await setupCatalog();
+    customer().vm.$emit('update:comment', 'Сохранить перед подбором');
+    await nextTick();
+    const proposal = wrapper.findComponent(OrderProposalWorkspace);
+    expect(proposal.props('catalogAvailable')).toBe(true);
+    proposal.vm.$emit('catalog');
+    await flushPromises();
+    expect(stored.comment).toBe('Сохранить перед подбором');
+    expect(location.pathname).toBe('/manager/catalog-decision');
+    const params = new URLSearchParams(location.search);
+    expect(params.get('orderId')).toBe('395');
+    expect(params.get('proposalId')).toBe('25');
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
+  });
+  it('keeps the order open when saving before the picker fails', async () => {
+    await setupCatalog();
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValueOnce(new Error('save failed'));
+    customer().vm.$emit('update:comment', 'Не терять');
+    await nextTick();
+    wrapper.findComponent(OrderProposalWorkspace).vm.$emit('catalog');
+    await flushPromises();
+    expect(location.pathname).toBe('/manager/orders/kanban');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    expect(wrapper.text()).toContain('Не удалось сохранить заказ');
+  });
+  it('returns to the original unselected proposal', async () => {
+    managerSession.auth.value = { capabilities: ['platform.manage'] } as any;
+    stored.proposals!.push({ ...stored.proposals![0]!, id: 26, name: 'Альтернатива', is_selected: false });
+    history.replaceState({}, '', '/manager/orders/kanban?orderId=395&proposalId=26');
+    await mountDrawer();
+    expect(wrapper.findComponent(OrderProposalWorkspace).props('proposal').activeProposalId.value).toBe(26);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+  });
+});

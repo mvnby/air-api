@@ -36,6 +36,7 @@ class CatalogDecisionProductResponse(BaseModel):
     cooling_power_kw: float | None = None
     cooling_min_kw: float | None = None
     cooling_max_kw: float | None = None
+    heating_min_c: int | None = None
     area_m2: float | None = None
     category: str | None = None
     indoor_form_factor: str | None = None
@@ -71,12 +72,14 @@ CatalogDecisionOrderAttachMode = Literal[
     "auto",
     "replace_selected",
     "new_alternative",
+    "append_to_proposal",
 ]
 
 
 class CatalogDecisionAttachToOrderPayload(BaseModel):
     product_ids: list[int] = Field(min_length=1, max_length=24)
     mode: CatalogDecisionOrderAttachMode = "auto"
+    proposal_id: int | None = Field(default=None, gt=0)
 
 
 class CatalogDecisionCreateOrderPayload(BaseModel):

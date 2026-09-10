@@ -104,6 +104,25 @@ def test_hisense_catalog_extracts_model_specs_media_and_normalized_aliases():
     )
 
 
+def test_hisense_catalog_preserves_console_indoor_form_factor():
+    assert HisenseCatalogParser._normalize_indoor_type("Напольно-консольный") == "консольный"
+    assert HisenseCatalogParser._infer_catalog(
+        "https://hisense-air.ru/product/console",
+        model="AK-12",
+        specs={"Тип внутреннего блока": "Напольно-консольный"},
+    ) == "household"
+    assert HisenseCatalogParser._infer_catalog(
+        "https://hisense-air.ru/product/multi-console",
+        model="AMW2-14U4RGC",
+        specs={"Тип внутреннего блока": "Консольный"},
+    ) == "multi"
+    assert HisenseCatalogParser._infer_catalog(
+        "https://hisense-air.ru/product/console-semi",
+        model="AK-12",
+        specs={"type": "Полупромышленный кондиционер", "Тип внутреннего блока": "Консольный"},
+    ) == "semi"
+
+
 def test_hisense_supplier_matching_understands_multi_and_semi_context():
     profile = build_offer_match_profile("Hisense AMW2-14U4RGC · НАРУЖНЫЕ БЛОКИ MULTI EU DC Inverter")
     assert "AMW2-14U4RGC" in profile.outdoor_model_tokens

@@ -189,6 +189,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
     const url = new URL(window.location.href);
     if (!url.searchParams.has('orderId')) return;
     url.searchParams.delete('orderId');
+    url.searchParams.delete('proposalId');
     window.history.replaceState({}, '', `${url.pathname}${url.search}`);
   };
   const clearIdentityScopedState = () => {

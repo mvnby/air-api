@@ -61,6 +61,46 @@ def test_detect_category_slug_for_multi_inner_block():
     assert slug == "cat-multi"
 
 
+def test_detect_category_slug_treats_console_as_household_form_unless_system_is_explicitly_semi_industrial():
+    household = detect_category_slug(
+        metrics={},
+        specs={"type": "сплит-система", "indoor_type": "консольный"},
+        title="MDV console split",
+    )
+    explicit_semi = detect_category_slug(
+        metrics={},
+        specs={"type": "полупромышленный кондиционер", "indoor_type": "консольный"},
+        title="MDV console",
+    )
+    multi_component = detect_category_slug(
+        metrics={},
+        specs={"type": "внутренний блок", "indoor_type": "консольный"},
+        title="MDV console multi",
+    )
+
+    assert household == "cat-household"
+    assert explicit_semi == "cat-industrial"
+    assert multi_component == "cat-multi"
+
+
+def test_get_auto_tags_keeps_console_split_household_and_multi_component_multi():
+    household_tags = get_auto_tags(
+        {},
+        {"type": "сплит-система", "indoor_type": "консольный"},
+        title="MDV console split",
+    )
+    multi_tags = get_auto_tags(
+        {},
+        {"type": "внутренний блок", "indoor_type": "консольный"},
+        title="MDV console multi",
+    )
+
+    assert "cat-household" in household_tags
+    assert "cat-industrial" not in household_tags
+    assert "cat-multi" in multi_tags
+    assert "cat-household" not in multi_tags
+
+
 def test_detect_category_slug_for_mobile_conditioner():
     slug = detect_category_slug(
         metrics={},
@@ -93,6 +133,11 @@ def test_extract_brand_name_skips_category_like_tokens():
         title="Мульти-сплит-система TCL Free Match",
     )
     assert name == "TCL"
+
+
+def test_extract_brand_name_skips_console_descriptor():
+    assert extract_brand_name(title="Консольный Gree U-Match") == "Gree"
+    assert extract_brand_name(title="Console Hisense unit") == "Hisense"
 
 
 def test_extract_brand_slug_rejects_invalid_service_tokens():

@@ -3414,10 +3414,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
+              "description": "Canonical indoor unit types (duct/cassette/floor_ceiling/column/console)",
               "title": "Indoor Types"
             },
-            "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)"
+            "description": "Canonical indoor unit types (duct/cassette/floor_ceiling/column/console)"
           },
           {
             "name": "tag_slugs",
@@ -3704,10 +3704,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)",
+              "description": "Canonical indoor unit types (duct/cassette/floor_ceiling/column/console)",
               "title": "Indoor Types"
             },
-            "description": "Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)"
+            "description": "Canonical indoor unit types (duct/cassette/floor_ceiling/column/console)"
           },
           {
             "name": "tag_slugs",
@@ -7706,7 +7706,8 @@
                     "cassette",
                     "duct",
                     "floor_ceiling",
-                    "column"
+                    "column",
+                    "console"
                   ],
                   "type": "string"
                 },
@@ -7878,6 +7879,27 @@
               "default": "asc",
               "title": "Direction"
             }
+          },
+          {
+            "name": "heating_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "multipleOf": 5,
+                  "maximum": -20,
+                  "minimum": -30
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Required outdoor heating temperature in Celsius; includes colder-rated models.",
+              "title": "Heating Min"
+            },
+            "description": "Required outdoor heating temperature in Celsius; includes colder-rated models."
           }
         ],
         "responses": {
@@ -30144,10 +30166,23 @@
             "enum": [
               "auto",
               "replace_selected",
-              "new_alternative"
+              "new_alternative",
+              "append_to_proposal"
             ],
             "title": "Mode",
             "default": "auto"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
           }
         },
         "type": "object",
@@ -30434,6 +30469,17 @@
               }
             ],
             "title": "Cooling Max Kw"
+          },
+          "heating_min_c": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heating Min C"
           },
           "area_m2": {
             "anyOf": [

@@ -36,6 +36,7 @@ import { useOrderDrawerActions } from '../../composables/useOrderDrawerActions';
 import { useDrawerFocusTrap } from '../../composables/useDrawerFocusTrap';
 import { useOrderWorkspaceUsage } from '../../composables/useOrderWorkspaceUsage';
 import { useOrderWorkspaceUsageControls } from '../../composables/useOrderWorkspaceUsageControls';
+import { useOrderCatalogNavigation } from '../../composables/useOrderCatalogNavigation';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -230,6 +231,13 @@ const orderSaving = useOrderDrawerSaving({
   onUpdated: (order) => emit('updated', order),
 });
 const { enabled: autosaveEnabled, saving, failed: saveFailed, statusText: saveStatusText } = orderSaving;
+const catalogNavigation = useOrderCatalogNavigation({
+  orderId: computed(() => props.order?.id), proposalId: activeProposalId, status,
+  locked: activeProposalLocked,
+  busy: computed(() => initializing.value || proposalActionLoading.value),
+  flush: orderSaving.flush,
+  close: () => emit('update:modelValue', false),
+});
 
 const {
   documentEmailStatus,
@@ -368,7 +376,9 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   }
   hydrateOrder(order);
 
-  const selectedProposal = (order.proposals || []).find((proposal) => proposal.id === activeProposalId.value && !proposal.is_archived)
+  const params = new URLSearchParams(window.location.search);
+  const returnProposalId = Number(params.get('orderId')) === order.id ? Number(params.get('proposalId')) : null;
+  const selectedProposal = (order.proposals || []).find((proposal) => proposal.id === (activeProposalId.value || returnProposalId) && !proposal.is_archived)
     || (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
     || (order.proposals || []).find((proposal) => !proposal.is_archived)
     || null;
@@ -520,6 +530,10 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 :products-error="getFieldError('products')"
                 :services-error="getFieldError('services')"
                 :format-service-kind="formatServiceKind"
+                :catalog-available="catalogNavigation.available.value"
+                :catalog-opening="catalogNavigation.opening.value"
+                :catalog-needs-save="hasUnsavedChanges"
+                @catalog="catalogNavigation.open"
                 @send="openProposalSend"
               />
             </section>

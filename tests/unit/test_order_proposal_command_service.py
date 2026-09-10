@@ -5,7 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Customer, Order, OrderProductLink, OrderProposal, OrderStatus, Product
+from models import (
+    Customer,
+    Order,
+    OrderProductLink,
+    OrderProposal,
+    OrderServiceLink,
+    OrderStatus,
+    Product,
+)
 from models.tenancy import TenantScope
 from schemas import OrderProposalCreatePayload, OrderProposalUpdatePayload
 from services.order_proposal_command_service import OrderProposalCommandService
@@ -405,3 +413,238 @@ async def test_catalog_selection_replaces_only_selected_proposal_when_confirmed(
     saved_alternative = next(item for item in detail["proposals"] if item["name"] == "Сохранить")
     assert [line["product_id"] for line in selected["product_lines"]] == [int(products[1].id)]
     assert [line["product_id"] for line in saved_alternative["product_lines"]] == [int(products[0].id)]
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_appends_to_exact_draft_proposal_without_replacing_lines(
+    proposal_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    _stub_catalog_snapshots(monkeypatch, products)
+    target = OrderProposal(
+        order_id=order_id,
+        name="Монтаж с сохраненными условиями",
+        is_selected=False,
+        status="draft",
+        sort_order=10,
+    )
+    selected = OrderProposal(order_id=order_id, name="Основное", is_selected=True)
+    proposal_session.add_all([target, selected])
+    await proposal_session.flush()
+    existing = OrderProductLink(
+        order_id=order_id,
+        proposal_id=int(target.id),
+        product_id=int(products[0].id),
+        quantity=3,
+        price=2175,
+        cost=901,
+        title_snapshot="Зафиксированное название",
+        client_description="Индивидуальное описание",
+        currency_snapshot="BYN",
+        logistics_components=[
+            {
+                "title": "Доставка",
+                "country": "Беларусь",
+                "unit": "шт.",
+                "quantity_per_parent": 1,
+                "unit_price": 120,
+                "kind": "other",
+            }
+        ],
+    )
+    service_line = OrderServiceLink(
+        order_id=order_id,
+        proposal_id=int(target.id),
+        title="Монтаж",
+        quantity=2,
+        price=350,
+        cost=100,
+    )
+    proposal_session.add_all([existing, service_line])
+    await proposal_session.commit()
+    existing_id = int(existing.id)
+    service_line_id = int(service_line.id)
+
+    detail = await CatalogDecisionOrderService.attach(
+        proposal_session,
+        order_id=order_id,
+        product_ids=[int(products[1].id)],
+        mode="append_to_proposal",
+        proposal_id=int(target.id),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    appended_target = next(item for item in detail["proposals"] if item["id"] == target.id)
+    old_line = next(
+        item
+        for item in appended_target["product_lines"]
+        if item["id"] == existing_id
+    )
+    assert old_line["product_id"] == int(products[0].id)
+    assert old_line["quantity"] == 3
+    assert old_line["price"] == 2175
+    assert old_line["cost"] == 901
+    assert old_line["title_snapshot"] == "Зафиксированное название"
+    assert old_line["client_description"] == "Индивидуальное описание"
+    assert old_line["currency_snapshot"] == "BYN"
+    assert old_line["logistics_components"] == [
+        {
+            "title": "Доставка",
+            "country": "Беларусь",
+            "unit": "шт.",
+            "quantity_per_parent": 1,
+            "unit_price": 120.0,
+            "kind": "other",
+        }
+    ]
+    assert [line["product_id"] for line in appended_target["product_lines"]] == [
+        int(products[0].id),
+        int(products[1].id),
+    ]
+    assert [(line["id"], line["quantity"], line["price"], line["cost"]) for line in appended_target["service_lines"]] == [
+        (service_line_id, 2, 350, 100)
+    ]
+    stored_order = await proposal_session.get(Order, order_id)
+    assert OrderService._status_value(stored_order.status) == "negotiation"
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_append_is_idempotent_for_existing_product_ids(
+    proposal_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    _stub_catalog_snapshots(monkeypatch, products)
+    proposal = OrderProposal(order_id=order_id, is_selected=True, status="draft")
+    proposal_session.add(proposal)
+    await proposal_session.commit()
+
+    for _ in range(2):
+        await CatalogDecisionOrderService.attach(
+            proposal_session,
+            order_id=order_id,
+            product_ids=[int(products[1].id)],
+            mode="append_to_proposal",
+            proposal_id=int(proposal.id),
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+
+    links = list(
+        (
+            await proposal_session.execute(
+                select(OrderProductLink).where(
+                    OrderProductLink.order_id == order_id,
+                    OrderProductLink.proposal_id == proposal.id,
+                )
+            )
+        ).scalars().all()
+    )
+    assert [int(link.product_id) for link in links] == [int(products[1].id)]
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_append_rejects_foreign_archived_and_locked_targets_atomically(
+    proposal_session: AsyncSession,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    current = OrderProposal(order_id=order_id, is_selected=True, status="draft")
+    archived = OrderProposal(order_id=order_id, name="Архив", is_archived=True)
+    locked = OrderProposal(order_id=order_id, name="Отправлено", status="sent")
+    approved = OrderProposal(order_id=order_id, name="Принято", status="approved")
+    foreign_order = Order(
+        tenant_id=TEST_TENANT_SCOPE.tenant_id,
+        storefront_id=TEST_TENANT_SCOPE.storefront_id,
+        status=OrderStatus.NEGOTIATION,
+    )
+    proposal_session.add_all([current, archived, locked, approved, foreign_order])
+    await proposal_session.flush()
+    foreign = OrderProposal(order_id=int(foreign_order.id), is_selected=True)
+    proposal_session.add(foreign)
+    await proposal_session.commit()
+    product_id = int(products[0].id)
+    foreign_id = int(foreign.id)
+    archived_id = int(archived.id)
+    locked_id = int(locked.id)
+    approved_id = int(approved.id)
+
+    with pytest.raises(ValueError, match="выберите предложение"):
+        await CatalogDecisionOrderService.attach(
+            proposal_session,
+            order_id=order_id,
+            product_ids=[product_id],
+            mode="append_to_proposal",
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+
+    for target_id, error in (
+        (foreign_id, "Proposal not found"),
+        (archived_id, "Proposal not found"),
+        (locked_id, "cannot be edited"),
+        (approved_id, "cannot be edited"),
+    ):
+        with pytest.raises(ValueError, match=error):
+            await CatalogDecisionOrderService.attach(
+                proposal_session,
+                order_id=order_id,
+                product_ids=[product_id],
+                mode="append_to_proposal",
+                proposal_id=target_id,
+                tenant_scope=TEST_TENANT_SCOPE,
+            )
+
+    links = list(
+        (
+            await proposal_session.execute(
+                select(OrderProductLink).where(OrderProductLink.order_id == order_id)
+            )
+        ).scalars().all()
+    )
+    assert links == []
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_append_does_not_cross_tenant_scope(
+    proposal_session: AsyncSession,
+):
+    foreign_customer = Customer(
+        tenant_id=2,
+        name="Foreign tenant customer",
+        phone="+375290000002",
+    )
+    proposal_session.add(foreign_customer)
+    await proposal_session.flush()
+    foreign_order = Order(
+        tenant_id=2,
+        storefront_id=2,
+        customer_id=foreign_customer.id,
+        status=OrderStatus.NEGOTIATION,
+    )
+    proposal_session.add(foreign_order)
+    await proposal_session.flush()
+    foreign_proposal = OrderProposal(order_id=int(foreign_order.id), is_selected=True)
+    proposal_session.add(foreign_proposal)
+    await proposal_session.commit()
+    foreign_order_id = int(foreign_order.id)
+    foreign_proposal_id = int(foreign_proposal.id)
+
+    with pytest.raises(ValueError, match="Order not found"):
+        await CatalogDecisionOrderService.attach(
+            proposal_session,
+            order_id=foreign_order_id,
+            product_ids=[1],
+            mode="append_to_proposal",
+            proposal_id=foreign_proposal_id,
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+
+    assert (
+        await proposal_session.execute(
+            select(OrderProductLink).where(
+                OrderProductLink.order_id == foreign_order_id,
+            )
+        )
+    ).scalars().all() == []

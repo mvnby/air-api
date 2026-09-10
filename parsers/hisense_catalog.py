@@ -243,7 +243,12 @@ class HisenseCatalogParser(BaseParser):
             return "household"
         if "multi" in text or "мульти" in text or model.upper().startswith(("AMW", "AMS", "AKT")):
             return "multi"
-        if any(marker in text for marker in ("кассет", "каналь", "напольно", "потолоч", "колон", "консол")):
+        if "консол" in text:
+            # Console is residential unless the parsed source explicitly
+            # labels the whole system semi-industrial; check this before the
+            # broad floor/ceiling markers in "напольно-консольный".
+            return "semi" if "полупром" in text else "household"
+        if any(marker in text for marker in ("кассет", "каналь", "напольно", "потолоч", "колон")):
             return "semi"
         return "household"
 
@@ -266,12 +271,12 @@ class HisenseCatalogParser(BaseParser):
             return "кассетный"
         if "каналь" in text:
             return "канальный"
+        if "консол" in text:
+            return "консольный"
         if "напольно" in text or "потолоч" in text:
             return "напольно-потолочный"
         if "колон" in text:
             return "колонный"
-        if "консол" in text:
-            return "напольно-потолочный"
         if "настенн" in text:
             return "настенный"
         return None

@@ -45,6 +45,7 @@ export class ManagerCatalogDecisionService {
      * @param isPublished
      * @param sort
      * @param direction
+     * @param heatingMin Required outdoor heating temperature in Celsius; includes colder-rated models.
      * @returns CatalogDecisionListResponse Successful Response
      * @throws ApiError
      */
@@ -58,7 +59,7 @@ export class ManagerCatalogDecisionService {
         areaMin?: (number | null),
         areaMax?: (number | null),
         category?: ('household' | 'multi' | 'semi_industrial' | null),
-        indoorFormFactor?: ('wall' | 'cassette' | 'duct' | 'floor_ceiling' | 'column' | null),
+        indoorFormFactor?: ('wall' | 'cassette' | 'duct' | 'floor_ceiling' | 'column' | 'console' | null),
         brandIds?: (Array<number> | null),
         seriesIds?: (Array<number> | null),
         isInverter?: (boolean | null),
@@ -68,6 +69,7 @@ export class ManagerCatalogDecisionService {
         isPublished?: (boolean | null),
         sort: 'retail_price' | 'purchase_cost' | 'rrc' | 'margin_abs' | 'margin_pct' | 'availability' | 'cooling_power' | 'title' = 'title',
         direction: 'asc' | 'desc' = 'asc',
+        heatingMin?: (number | null),
     ): CancelablePromise<CatalogDecisionListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -92,6 +94,7 @@ export class ManagerCatalogDecisionService {
                 'is_published': isPublished,
                 'sort': sort,
                 'direction': direction,
+                'heating_min': heatingMin,
             },
             errors: {
                 422: `Validation Error`,

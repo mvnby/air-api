@@ -220,6 +220,8 @@ def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | N
     if key == "indoor_type":
         text = val_lower.replace("—", "-")
         text = re.sub(r"\s+", " ", text)
+        if "консол" in text or "console" in text:
+            return "консольный"
         if "каналь" in text:
             return "канальный"
         if "кассет" in text:
@@ -233,7 +235,7 @@ def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | N
             or "floor ceiling" in text
         ):
             return "напольно-потолочный"
-        if "колон" in text or "console" in text or "column" in text:
+        if "колон" in text or "column" in text:
             return "колонный"
         if "настенн" in text or "wall" in text:
             return "настенный"
@@ -386,6 +388,8 @@ def _normalize_indoor_type_kind(*values: Any) -> str | None:
         text = text.replace("—", "-")
         text = re.sub(r"\s+", " ", text)
 
+        if "консол" in text or "console" in text:
+            return "console"
         if "каналь" in text or "duct" in text:
             return "duct"
         if "кассет" in text or "cassette" in text:
@@ -399,7 +403,7 @@ def _normalize_indoor_type_kind(*values: Any) -> str | None:
             or "floor ceiling" in text
         ):
             return "floor_ceiling"
-        if "колонн" in text or "column" in text or "console" in text:
+        if "колонн" in text or "column" in text:
             return "column"
         if "настенн" in text or "wall" in text:
             return "wall"

@@ -14,10 +14,13 @@ const props = defineProps<{
   showProductLines: boolean;
   productsError?: string;
   servicesError?: string;
+  catalogAvailable?: boolean;
+  catalogOpening?: boolean;
+  catalogNeedsSave?: boolean;
   formatServiceKind: (kind?: string | null) => string;
 }>();
 
-const emit = defineEmits<{ send: [] }>();
+const emit = defineEmits<{ send: []; catalog: [] }>();
 const expanded = defineModel<boolean>('expanded', { required: true });
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const commercial = reactive(props.commercial);
@@ -75,6 +78,10 @@ defineExpose({
           :supply-action-loading-line-id="commercial.supplyActionLoadingLineId"
           :products-error="productsError"
           :supply-badge-for-line="commercial.supplyBadgeForLine"
+          :catalog-available="catalogAvailable"
+          :catalog-opening="catalogOpening"
+          :catalog-needs-save="catalogNeedsSave"
+          @catalog="emit('catalog')"
           @focus="commercial.onProductInputFocus"
           @input="commercial.onProductQueryInput"
           @blur="commercial.onProductInputBlur"

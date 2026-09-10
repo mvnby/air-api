@@ -54,6 +54,9 @@ _TITLE_SKIP_TOKENS = {
     "напольно-потолочная",
     "колонный",
     "колонная",
+    "консольный",
+    "консольная",
+    "console",
     "мобильный",
     "мобильная",
     "оконный",
@@ -86,6 +89,9 @@ _INVALID_BRAND_EXACT = {
     "напольная",
     "колонный",
     "колонная",
+    "консольный",
+    "консольная",
+    "console",
     "мобильный",
     "мобильная",
     "моноблок",
@@ -234,6 +240,17 @@ def detect_category_slug(
     if any(marker in combined_type for marker in multi_markers):
         return "cat-multi"
 
+    # Console is an indoor-unit form factor, not evidence of commercial
+    # placement. Treat a standalone console split as household unless its
+    # source explicitly calls the system semi-industrial. Multi components
+    # remain above this branch and therefore keep their cat-multi category.
+    console_markers = ("консол", "console")
+    explicit_industrial_system_markers = ("полупром", "полупромышлен", "промышлен")
+    if any(marker in system_type for marker in explicit_industrial_system_markers):
+        return "cat-industrial"
+    if any(marker in " ".join((indoor_type, system_type)) for marker in console_markers):
+        return "cat-household"
+
     industrial_markers = (
         "кассет",
         "каналь",
@@ -245,7 +262,6 @@ def detect_category_slug(
         "floor-ceiling",
         "floor ceiling",
         "колонн",
-        "console",
     )
     if any(marker in combined_type for marker in industrial_markers):
         return "cat-industrial"
