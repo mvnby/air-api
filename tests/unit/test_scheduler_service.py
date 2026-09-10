@@ -134,6 +134,7 @@ async def test_start_loop_cancels_child_tasks(monkeypatch):
         "_stalled_deal_loop",
         "_lead_archive_loop",
         "_supplier_sync_loop",
+        "_order_workspace_usage_retention_loop",
         "_bank_mail_import_loop",
         "_email_lead_import_loop",
     ):
@@ -147,8 +148,8 @@ async def test_start_loop_cancels_child_tasks(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert started == 6
-    assert cancelled == 6
+    assert started == 7
+    assert cancelled == 7
 
 
 @pytest.mark.asyncio

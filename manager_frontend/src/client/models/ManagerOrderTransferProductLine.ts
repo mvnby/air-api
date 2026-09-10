@@ -8,6 +8,7 @@ export type ManagerOrderTransferProductLine = {
     source_id?: (number | null);
     product: ManagerOrderTransferProductRef;
     title_snapshot?: (string | null);
+    client_description?: (string | null);
     currency_snapshot?: (string | null);
     quantity: number;
     price: number;

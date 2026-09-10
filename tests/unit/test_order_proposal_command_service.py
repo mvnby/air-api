@@ -295,6 +295,50 @@ async def test_catalog_selection_requires_choice_and_preserves_existing_lines(
 
 
 @pytest.mark.asyncio
+async def test_duplicate_proposal_preserves_product_identity_and_client_description(
+    proposal_session: AsyncSession,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    source = OrderProposal(
+        order_id=order_id,
+        name="Исходный вариант",
+        is_selected=True,
+    )
+    proposal_session.add(source)
+    await proposal_session.flush()
+    proposal_session.add(
+        OrderProductLink(
+            order_id=order_id,
+            proposal_id=int(source.id),
+            product_id=int(products[0].id),
+            title_snapshot="Gree 12 при согласовании",
+            client_description="Инвертор; серебристый корпус",
+            currency_snapshot="BYN",
+            quantity=1,
+            price=2200,
+            cost=900,
+        )
+    )
+    await proposal_session.commit()
+
+    detail = await OrderProposalCommandService.create_order_proposal(
+        proposal_session,
+        order_id,
+        OrderProposalCreatePayload(
+            name="Копия",
+            duplicate_from_proposal_id=int(source.id),
+        ),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    copied = next(item for item in detail["proposals"] if item["name"] == "Копия")
+    assert copied["product_lines"][0]["title_snapshot"] == "Gree 12 при согласовании"
+    assert copied["product_lines"][0]["client_description"] == "Инвертор; серебристый корпус"
+    assert copied["product_lines"][0]["currency_snapshot"] == "BYN"
+
+
+@pytest.mark.asyncio
 async def test_catalog_selection_creates_unselected_alternative_without_overwriting_main(
     proposal_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

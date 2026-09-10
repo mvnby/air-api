@@ -12,6 +12,7 @@ import { ManagerSettingsService } from '../client';
 import { confirmDialog } from '../services/ui-feedback';
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../utils/datetime';
 import { getApiErrorMessage } from '../utils/api-errors';
+import { isB2cCustomer as isB2cCustomerParty } from '../utils/customer-party';
 import type { OrderWorkflowType } from '../components/orders/order-workspace';
 import { normalizeOrderWorkflowType } from '../components/orders/order-workspace';
 import { emptyRepairMeta, normalizeRepairMeta, type RepairMeta } from '../components/orders/repair-meta';
@@ -80,7 +81,7 @@ export const useOrderDrawerForm = ({
   const isRepairWorkflow = computed(() => workflowType.value === 'repair');
   const showProductLinesSection = computed(() => workflowType.value === 'sales_installation');
   const isB2cCustomer = (order: Readonly<Ref<ManagerOrderDetailResponse | null>>) => computed(() => (
-    order.value?.customer ? order.value.customer.type !== 'company' : true
+    isB2cCustomerParty(order.value?.customer)
   ));
   const executorOptions = computed(() => {
     const selectedIds = new Set<number>();
@@ -318,7 +319,11 @@ export const useOrderDrawerForm = ({
     }
   };
 
-  const buildSavePayload = (activeProposalLocked: boolean, validate = true): ManagerOrderUpdatePayload | null => {
+  const buildSavePayload = (
+    activeProposalLocked: boolean,
+    validate = true,
+    validateCurrency = validate,
+  ): ManagerOrderUpdatePayload | null => {
     if (validate) {
       localServerErrors.value = {};
       localFormError.value = '';
@@ -345,23 +350,23 @@ export const useOrderDrawerForm = ({
         localFormError.value = 'Требуется замер: заполните результат замера';
         return null;
       }
-      if (enableCurrency.value) {
-        if (!targetCurrency.value) {
-          localFormError.value = 'Выберите валюту сделки';
-          return null;
-        }
-        if (!getActiveFxRate(targetCurrency.value)) {
-          localFormError.value = 'Для выбранной валюты сейчас нет доступного курса';
-          return null;
-        }
-        if (!targetCurrencyAmount.value || targetCurrencyAmount.value <= 0) {
-          localFormError.value = 'Укажите зафиксированную сумму в валюте';
-          return null;
-        }
-      } else if (payments.value.some((payment) => payment.currency !== 'BYN')) {
-        localFormError.value = 'Нельзя отключить валютный режим, пока в заказе есть валютные платежи';
+    }
+    if (validateCurrency && enableCurrency.value) {
+      if (!targetCurrency.value) {
+        localFormError.value = 'Выберите валюту сделки';
         return null;
       }
+      if (!getActiveFxRate(targetCurrency.value)) {
+        localFormError.value = 'Для выбранной валюты сейчас нет доступного курса';
+        return null;
+      }
+      if (!targetCurrencyAmount.value || targetCurrencyAmount.value <= 0) {
+        localFormError.value = 'Укажите зафиксированную сумму в валюте';
+        return null;
+      }
+    } else if (validateCurrency && payments.value.some((payment) => payment.currency !== 'BYN')) {
+      localFormError.value = 'Нельзя отключить валютный режим, пока в заказе есть валютные платежи';
+      return null;
     }
     const lines = buildLinesPayload();
     return {

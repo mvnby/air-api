@@ -177,6 +177,33 @@ def test_renderer_preserves_multiline_clause_as_word_line_breaks():
     assert len(list(result.paragraphs[0]._p.iter(qn("w:br")))) == 1
 
 
+def test_renderer_preserves_client_description_below_product_model_in_table():
+    rendered = NativeDocxRenderer().render(
+        _template(_template_bytes()),
+        RenderContext(
+            values={
+                "document.official_number": "С-2026-001",
+                "customer.full_name": "ООО Тест",
+            },
+            table_rows={
+                "lines": (
+                    {
+                        "line.number": "1",
+                        "line.title": "Gree Pular GWH12\nИнвертор; площадь: 35 м²",
+                        "line.quantity": "1",
+                        "line.amount": "2500.00",
+                    },
+                )
+            },
+        ),
+    )
+
+    result = Document(BytesIO(rendered.content))
+    title_cell = result.tables[0].cell(0, 1)
+    assert title_cell.text == "Gree Pular GWH12\nИнвертор; площадь: 35 м²"
+    assert len(list(title_cell._tc.iter(qn("w:br")))) == 1
+
+
 def test_renderer_discovers_template_placeholders_without_expanding_catalogue():
     discovered = NativeDocxRenderer().discover_placeholders(_template_bytes())
 

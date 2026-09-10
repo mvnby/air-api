@@ -16,7 +16,11 @@ type Options = {
   savedFormSnapshot: Ref<string>;
   savedLinesSnapshot: Ref<string>;
   hasUnsavedChanges: Readonly<Ref<boolean>>;
-  buildSavePayload: (locked: boolean, validate?: boolean) => ManagerOrderUpdatePayload | null;
+  buildSavePayload: (
+    locked: boolean,
+    validate?: boolean,
+    validateCurrency?: boolean,
+  ) => ManagerOrderUpdatePayload | null;
   hydrateOrder: (order: ManagerOrderDetailResponse) => void;
   localFormError: Ref<string>;
   localServerErrors: Ref<Record<string, string>>;
@@ -48,7 +52,11 @@ export const useOrderDrawerSaving = (options: Options) => {
   const save = async () => {
     const order = options.order.value;
     if (!order) return false;
-    const fullPayload = options.buildSavePayload(options.activeProposalLocked.value);
+    const fullPayload = options.buildSavePayload(
+      options.activeProposalLocked.value,
+      true,
+      false,
+    );
     if (!fullPayload) return false;
     const sent = clone(fullPayload);
     const submittedForm = options.currentFormSnapshot();
@@ -60,6 +68,14 @@ export const useOrderDrawerSaving = (options: Options) => {
     const changedForm = Object.fromEntries(Object.entries(formPayload(sent)).filter(([key, value]) => (
       JSON.stringify(value) !== JSON.stringify(baseline[key as keyof ManagerOrderUpdatePayload])
     )));
+    const currencyChanged = (
+      'target_currency' in changedForm
+      || 'target_currency_amount' in changedForm
+    );
+    if (
+      currencyChanged
+      && !options.buildSavePayload(options.activeProposalLocked.value, false, true)
+    ) return false;
     const linesChanged = submittedLines !== options.savedLinesSnapshot.value && !options.activeProposalLocked.value;
     const payload: ManagerOrderUpdatePayload = {
       ...changedForm,

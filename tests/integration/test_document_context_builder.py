@@ -140,6 +140,7 @@ async def _seed_order(db):
                 quantity=1,
                 price=1_000,
                 cost=700,
+                client_description="Инвертор; площадь: 35 м²",
             ),
             OrderServiceLink(
                 order_id=order.id,
@@ -157,6 +158,7 @@ async def _seed_order(db):
                 quantity=1,
                 price=2_000,
                 cost=1_300,
+                client_description="Не должно попасть в документ",
             ),
         ]
     )
@@ -200,7 +202,7 @@ async def test_context_snapshot_uses_selected_proposal_and_does_not_mutate_order
     assert snapshot["conditions"]["customer.is_individual_entrepreneur"] is False
     assert snapshot["values"]["totals.amount"] == "1400.00"
     assert [row["line.title"] for row in snapshot["table_rows"]["lines"]] == [
-        "Кондиционер выбранный",
+        "Кондиционер выбранный\nИнвертор; площадь: 35 м²",
         "Монтаж кондиционера",
     ]
     assert snapshot["table_rows"]["lines"][1]["line.quantity"] == "2"
@@ -338,7 +340,7 @@ async def test_contract_snapshot_keeps_b2b_terms_and_selected_proposal_scope(db)
     assert snapshot["conditions"]["payment.is_equipment_prepayment_balance"] is True
     assert snapshot["table_rows"]["payment_schedule"][0]["payment.amount"] == "980.00"
     assert [row["line.title"] for row in snapshot["table_rows"]["lines"]] == [
-        "Кондиционер выбранный",
+        "Кондиционер выбранный\nИнвертор; площадь: 35 м²",
         "Монтаж кондиционера",
     ]
 

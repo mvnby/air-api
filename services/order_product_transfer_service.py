@@ -14,6 +14,7 @@ from schemas import (
     ManagerOrderTransferProductLine,
     ManagerOrderTransferProductRef,
 )
+from services.order_product_description import normalize_client_description
 from services.order_service import OrderService
 
 
@@ -59,6 +60,7 @@ class OrderProductTransferService:
             source_id=link.id,
             product=OrderProductTransferService.product_ref(link),
             title_snapshot=getattr(link, "title_snapshot", None),
+            client_description=getattr(link, "client_description", None),
             currency_snapshot=getattr(link, "currency_snapshot", None),
             quantity=int(link.quantity or 1),
             price=int(link.price or 0),
@@ -173,6 +175,9 @@ class OrderProductTransferService:
             # Preserve the exported historical fact exactly. The mutable
             # product reference above must never fabricate a legacy snapshot.
             title_snapshot=product_line.title_snapshot,
+            client_description=normalize_client_description(
+                product_line.client_description
+            ),
             currency_snapshot=product_line.currency_snapshot,
             cost=int(product_line.cost or 0),
             is_installation_included=bool(

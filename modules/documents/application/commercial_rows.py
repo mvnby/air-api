@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from models import OrderProductLink, OrderServiceLink
+from services.order_product_description import product_line_document_title
 from .value_formatters import money
 
 
@@ -18,11 +19,7 @@ def line_rows(
         rows.append(
             line_row(
                 len(rows) + 1,
-                title=str(
-                    item.title_snapshot
-                    or getattr(item.product, "title", "")
-                    or "Товар"
-                ),
+                title=product_line_document_title(item),
                 kind="product",
                 quantity=quantity,
                 unit_price=unit_price,

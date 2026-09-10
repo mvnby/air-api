@@ -1178,6 +1178,8 @@ async def test_manager_order_patch_product_price_preserves_supply_request_link(a
         quantity=1,
         price=1990,
         cost=1110,
+        title_snapshot="Название модели на момент заказа",
+        client_description="Сохранить ручное описание",
     )
     db.add(order_line)
     await db.commit()
@@ -1220,11 +1222,37 @@ async def test_manager_order_patch_product_price_preserves_supply_request_link(a
     assert response.status_code == 200
     assert response.json()["product_lines"][0]["id"] == order_line.id
     assert response.json()["product_lines"][0]["price"] == 2090
+    assert response.json()["product_lines"][0]["client_description"] == "Сохранить ручное описание"
 
     await db.refresh(order_line)
     await db.refresh(supply_line)
     assert order_line.price == 2090
+    assert order_line.title_snapshot == "Название модели на момент заказа"
+    assert order_line.client_description == "Сохранить ручное описание"
     assert supply_line.order_product_link_id == order_line.id
+
+    updated_description = await async_client.patch(
+        f"/api/manager/orders/{order.id}",
+        json={
+            "products": [
+                {
+                    "link_id": order_line.id,
+                    "product_id": product.id,
+                    "client_description": "  Инвертор; серебристый корпус  ",
+                    "quantity": 1,
+                    "price": 2090,
+                    "cost": 1110,
+                }
+            ]
+        },
+        headers=headers,
+    )
+    assert updated_description.status_code == 200
+    assert updated_description.json()["product_lines"][0]["client_description"] == "Инвертор; серебристый корпус"
+
+    reopened = await async_client.get(f"/api/manager/orders/{order.id}", headers=headers)
+    assert reopened.status_code == 200
+    assert reopened.json()["product_lines"][0]["client_description"] == "Инвертор; серебристый корпус"
 
 
 @pytest.mark.asyncio

@@ -15404,6 +15404,167 @@
         }
       }
     },
+    "/api/manager/order-workspace-usage/batch": {
+      "post": {
+        "tags": [
+          "manager-order-usage"
+        ],
+        "summary": "Record Manager Order Usage",
+        "operationId": "record_manager_order_usage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderUsageBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderUsageAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/order-workspace-usage/daily": {
+      "get": {
+        "tags": [
+          "manager-order-usage"
+        ],
+        "summary": "Get Manager Order Usage",
+        "operationId": "get_manager_order_usage",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 90,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "sales_installation",
+                    "work",
+                    "maintenance",
+                    "repair"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow"
+            }
+          },
+          {
+            "name": "party_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "individual",
+                    "individual_entrepreneur",
+                    "company",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Party Kind"
+            }
+          },
+          {
+            "name": "viewport",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "mobile",
+                    "tablet",
+                    "desktop"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Viewport"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderUsageReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/equipment": {
       "get": {
         "tags": [
@@ -47769,6 +47930,18 @@
             "type": "integer",
             "title": "Product Id"
           },
+          "client_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Description"
+          },
           "quantity": {
             "type": "integer",
             "title": "Quantity"
@@ -48914,6 +49087,18 @@
               }
             ],
             "title": "Title Snapshot"
+          },
+          "client_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Description"
           },
           "currency_snapshot": {
             "anyOf": [
@@ -56355,6 +56540,17 @@
             ],
             "title": "Title Snapshot"
           },
+          "client_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Description"
+          },
           "currency_snapshot": {
             "anyOf": [
               {
@@ -56728,6 +56924,236 @@
           "line_total"
         ],
         "title": "OrderServiceLineResponse"
+      },
+      "OrderUsageAccepted": {
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accepted"
+        ],
+        "title": "OrderUsageAccepted"
+      },
+      "OrderUsageBatch": {
+        "properties": {
+          "layout_version": {
+            "type": "string",
+            "const": "workspace_v1",
+            "title": "Layout Version",
+            "default": "workspace_v1"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/OrderUsageEvent"
+            },
+            "type": "array",
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "OrderUsageBatch"
+      },
+      "OrderUsageDailyItem": {
+        "properties": {
+          "metric": {
+            "type": "string",
+            "enum": [
+              "order_open",
+              "proposal_open",
+              "documents_open",
+              "work_open",
+              "payments_open",
+              "customer_open",
+              "object_edit",
+              "equipment_open",
+              "attachments_open",
+              "product_add",
+              "product_select",
+              "product_description_edit",
+              "product_remove",
+              "service_add",
+              "service_edit",
+              "service_remove",
+              "scenario_change",
+              "autosave_toggle",
+              "document_create",
+              "payment_add"
+            ],
+            "title": "Metric"
+          },
+          "workflow": {
+            "type": "string",
+            "enum": [
+              "sales_installation",
+              "work",
+              "maintenance",
+              "repair"
+            ],
+            "title": "Workflow"
+          },
+          "party_kind": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "individual_entrepreneur",
+              "company",
+              "unknown"
+            ],
+            "title": "Party Kind"
+          },
+          "viewport": {
+            "type": "string",
+            "enum": [
+              "mobile",
+              "tablet",
+              "desktop"
+            ],
+            "title": "Viewport"
+          },
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "metric",
+          "workflow",
+          "party_kind",
+          "viewport",
+          "day",
+          "count"
+        ],
+        "title": "OrderUsageDailyItem"
+      },
+      "OrderUsageEvent": {
+        "properties": {
+          "metric": {
+            "type": "string",
+            "enum": [
+              "order_open",
+              "proposal_open",
+              "documents_open",
+              "work_open",
+              "payments_open",
+              "customer_open",
+              "object_edit",
+              "equipment_open",
+              "attachments_open",
+              "product_add",
+              "product_select",
+              "product_description_edit",
+              "product_remove",
+              "service_add",
+              "service_edit",
+              "service_remove",
+              "scenario_change",
+              "autosave_toggle",
+              "document_create",
+              "payment_add"
+            ],
+            "title": "Metric"
+          },
+          "workflow": {
+            "type": "string",
+            "enum": [
+              "sales_installation",
+              "work",
+              "maintenance",
+              "repair"
+            ],
+            "title": "Workflow"
+          },
+          "party_kind": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "individual_entrepreneur",
+              "company",
+              "unknown"
+            ],
+            "title": "Party Kind"
+          },
+          "viewport": {
+            "type": "string",
+            "enum": [
+              "mobile",
+              "tablet",
+              "desktop"
+            ],
+            "title": "Viewport"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "metric",
+          "workflow",
+          "party_kind",
+          "viewport"
+        ],
+        "title": "OrderUsageEvent"
+      },
+      "OrderUsageReport": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "since": {
+            "type": "string",
+            "format": "date",
+            "title": "Since"
+          },
+          "through": {
+            "type": "string",
+            "format": "date",
+            "title": "Through"
+          },
+          "timezone": {
+            "type": "string",
+            "const": "Europe/Minsk",
+            "title": "Timezone",
+            "default": "Europe/Minsk"
+          },
+          "layout_version": {
+            "type": "string",
+            "const": "workspace_v1",
+            "title": "Layout Version",
+            "default": "workspace_v1"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderUsageDailyItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "since",
+          "through",
+          "items"
+        ],
+        "title": "OrderUsageReport"
       },
       "OrderWorkStageCreatePayload": {
         "properties": {

@@ -63,7 +63,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
     <p v-if="servicesError" class="mb-2 text-xs text-red-300">{{ servicesError }}</p>
     <div class="space-y-2">
       <div v-for="(line, index) in lines" :key="`service-${index}`" class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-        <button v-if="editingIndex === index" type="button" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" title="Удалить услугу" @click="emit('remove', index)">
+        <button v-if="editingIndex === index" type="button" data-order-usage="order_service_remove" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" title="Удалить услугу" @click="emit('remove', index)">
           ×
         </button>
         <div v-if="editingIndex !== index" class="flex min-w-0 items-start gap-3">
@@ -74,7 +74,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
               <span class="font-semibold text-slate-800 dark:text-slate-200">{{ formatMoney(lineTotal(line)) }}</span>
             </div>
           </div>
-          <button type="button" class="btn-mini-outline h-9 w-9 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать" @click="editingIndex = index">
+          <button type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-9 w-9 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать" @click="editingIndex = index">
             <span class="material-icons-round text-[17px]">edit</span>
           </button>
         </div>
@@ -86,6 +86,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
             </span>
             <textarea
               v-model="line.title"
+              data-order-usage="order_service_edit"
               class="field-input min-h-[64px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
               rows="2"
               placeholder="Название услуги"
@@ -125,7 +126,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
     </div>
 
     <div class="mt-3 grid grid-cols-2 gap-2">
-      <button type="button" data-testid="add-service-line" class="btn-mini justify-center" @click="emit('add')">+ услуга</button>
+      <button type="button" data-testid="add-service-line" data-order-usage="order_service_add" class="btn-mini justify-center" @click="emit('add')">+ услуга</button>
       <button type="button" class="btn-mini-outline justify-center" :class="showEstimateImport ? 'border-teal-200 bg-teal-50 text-teal-700' : ''" @click="emit('toggleEstimate')">Из сметы</button>
     </div>
     <div v-if="showEstimateImport" class="mt-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">

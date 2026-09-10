@@ -58,5 +58,10 @@ export const officialDocumentTitle = (document: ManagedDocumentItem) => {
   const kind = document.doc_type === 'invoice' && document.business_role === 'offer'
     ? 'Счёт-оферта'
     : documentTypeName(document.doc_type);
-  return `${kind} № ${document.display_number}`;
+  const legacyNumber = String(document.display_number || '').trim();
+  const number = String(document.official_full_number || document.official_number || (
+    legacyNumber && legacyNumber !== document.internal_reference && !legacyNumber.startsWith('doc_')
+      ? legacyNumber : ''
+  )).trim();
+  return number ? `${kind} № ${number}` : `${kind} · номер ещё не присвоен`;
 };

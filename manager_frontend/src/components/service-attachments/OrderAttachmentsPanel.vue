@@ -37,6 +37,7 @@ const emit = defineEmits<{
   updated: [item: ServiceAttachmentItem];
   deleted: [attachmentId: number];
   error: [message: string];
+  'need-equipment-options': [];
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -181,7 +182,10 @@ const loadAttachments = async (force = false) => {
 
 const toggleExpanded = () => {
   expanded.value = !expanded.value;
-  if (expanded.value) void loadAttachments();
+  if (expanded.value) {
+    emit('need-equipment-options');
+    void loadAttachments();
+  }
 };
 
 const chooseFiles = () => {
@@ -363,6 +367,7 @@ const deleteAttachment = async (item: ServiceAttachmentItem) => {
 const refresh = () => loadAttachments(true);
 const expand = () => {
   expanded.value = true;
+  emit('need-equipment-options');
   return loadAttachments();
 };
 
@@ -405,6 +410,7 @@ defineExpose({ refresh, expand });
     <button
       v-if="!embedded"
       type="button"
+      data-order-usage="attachments_open"
       class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60 sm:px-4"
       :aria-expanded="expanded"
       @click="toggleExpanded"

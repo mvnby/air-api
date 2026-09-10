@@ -55,4 +55,13 @@ describe('useOrderWorkspaceNavigation', () => {
     await navigation.openProposalSend(proposal, [{ doc_type: 'offer', proposal_id: 17 }] as any);
     expect(documentsWorkspaceRef.value.openSend).toHaveBeenCalledOnce();
   });
+
+  it('opens the execution payment workspace from the focused payments tab', () => {
+    const { navigation } = createNavigation('execution');
+
+    navigation.selectWorkspaceSection('payments');
+
+    expect(navigation.activeWorkspaceSection.value).toBe('payments');
+    expect(navigation.executionWorkspaceOpen.value).toBe(true);
+  });
 });

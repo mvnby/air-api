@@ -38,7 +38,7 @@ const toneClasses = {
       <span class="material-icons-round shrink-0 text-[20px] text-slate-500 dark:text-slate-400" aria-hidden="true">{{ expanded ? 'expand_less' : 'expand_more' }}</span>
     </button>
 
-    <div v-if="expanded" class="border-t border-white/70 px-4 pb-4 pt-3 dark:border-slate-700">
+    <div v-show="expanded" class="border-t border-white/70 px-4 pb-4 pt-3 dark:border-slate-700">
       <slot />
     </div>
   </section>

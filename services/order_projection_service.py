@@ -156,6 +156,7 @@ class OrderProjectionService:
             "product_id": link.product_id,
             "product_title": product_title,
             "title_snapshot": getattr(link, "title_snapshot", None),
+            "client_description": getattr(link, "client_description", None),
             "currency_snapshot": getattr(link, "currency_snapshot", None),
             "quantity": link.quantity,
             "price": link.price,

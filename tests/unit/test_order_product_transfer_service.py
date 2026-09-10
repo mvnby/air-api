@@ -94,6 +94,7 @@ def test_product_reference_title_is_separate_from_historical_snapshot():
         quantity=1,
         price=3200,
         title_snapshot="Historical checkout title",
+        client_description="Инвертор; цвет: серебристый",
         currency_snapshot="BYN",
     )
     link.product = product
@@ -102,6 +103,15 @@ def test_product_reference_title_is_separate_from_historical_snapshot():
 
     assert transferred_line.product.title == "Current catalog title"
     assert transferred_line.title_snapshot == "Historical checkout title"
+    assert transferred_line.client_description == "Инвертор; цвет: серебристый"
+
+    imported_link = OrderProductTransferService.build_import_link(
+        order_id=40,
+        proposal_id=50,
+        product_line=transferred_line,
+        product=product,
+    )
+    assert imported_link.client_description == "Инвертор; цвет: серебристый"
 
 
 def test_order_transfer_modules_stay_below_monolith_gate():

@@ -9,7 +9,11 @@ const documentStubs = {
     props: ['summary', 'hasError'],
     template: '<section><slot /></section>',
   },
-  OrderDocumentsPanel: true,
+  OrderDocumentsPanel: {
+    name: 'OrderDocumentsPanel',
+    data: () => ({ draft: '' }),
+    template: '<input data-testid="google-doc-draft" v-model="draft" />',
+  },
 };
 
 const baseOrder = {
@@ -78,5 +82,22 @@ describe('OrderDocumentsWorkspace', () => {
     const section = wrapper.getComponent({ name: 'OrderDrawerSection' });
     expect(section.props('summary')).toBe('Документов нет');
     expect(section.props('hasError')).toBe(true);
+  });
+
+  it('mounts the Google editor only on first use and keeps it mounted when returning to CRM documents', async () => {
+    const wrapper = shallowMount(OrderDocumentsWorkspace, {
+      props: { order: baseOrder, expanded: true, productLines: [], total: 0 },
+      global: { stubs: documentStubs },
+    });
+    mountedWrappers.push(wrapper);
+
+    expect(wrapper.findComponent({ name: 'OrderDocumentsPanel' }).exists()).toBe(false);
+    await wrapper.get('button:nth-of-type(2)').trigger('click');
+    expect(wrapper.findComponent({ name: 'OrderDocumentsPanel' }).exists()).toBe(true);
+    await wrapper.get('[data-testid="google-doc-draft"]').setValue('Незаписанный черновик');
+    await wrapper.get('button:nth-of-type(1)').trigger('click');
+    expect(wrapper.findComponent({ name: 'OrderDocumentsPanel' }).exists()).toBe(true);
+    expect((wrapper.get('[data-testid="google-doc-draft"]').element as HTMLInputElement).value).toBe('Незаписанный черновик');
+    expect(wrapper.text()).toContain('DOCX · В CRM');
   });
 });

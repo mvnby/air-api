@@ -24,6 +24,7 @@ from routers import manager_mail
 from routers import manager_media
 from routers import manager_mdv_catalog
 from routers import manager_orders
+from routers import manager_order_usage
 from routers import manager_repair_complaints
 from routers import manager_specs
 from routers import manager_installers
@@ -61,6 +62,7 @@ router.include_router(manager_docs.router)
 router.include_router(manager_document_drive.router)
 router.include_router(manager_document_system_router)
 router.include_router(manager_orders.router)
+router.include_router(manager_order_usage.router)
 router.include_router(manager_equipment.router)
 router.include_router(manager_equipment_links.router)
 router.include_router(manager_repair_complaints.router)

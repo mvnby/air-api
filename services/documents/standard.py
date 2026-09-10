@@ -5,6 +5,7 @@ from sqlmodel import select
 from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
 from services.repair_defect_template_service import RepairDefectTemplateService
+from services.order_product_description import product_line_document_title
 from models import CustomerContract, CustomerEquipment, EquipmentComponent, OrderDocument
 
 class GoogleDocStrategy(BaseDocumentStrategy):
@@ -684,7 +685,7 @@ class GeneralDocStrategy(GoogleDocStrategy):
         
         # Products
         for link in self.order.product_links:
-            title = link.product.title if link.product else "Товар"
+            title = product_line_document_title(link)
             row = [
                 str(counter), title, "шт.", 
                 str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"

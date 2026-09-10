@@ -181,12 +181,43 @@ const mountWorkspace = async (beforeGenerate?: (type: string) => unknown | Promi
 };
 
 describe('NativeDocumentsWorkspace', () => {
+  it('loads templates once when the default legal entity is selected', async () => {
+    await mountWorkspace();
+
+    expect(ManagerDocumentSystemService.listManagerNativeDocumentTemplates).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a human label when a native document has no official number', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({
+      items: [{
+        id: 88,
+        order_id: 42,
+        legal_entity_id: 5,
+        doc_type: 'contract',
+        status: 'issued',
+        provider: 'native',
+        internal_reference: 'doc_8c0d3f',
+        display_number: 'doc_8c0d3f',
+        date: NOW,
+        created_at: NOW,
+        artifacts: [],
+      }],
+    });
+    const wrapper = await mountWorkspace();
+
+    const title = wrapper.findAll('h4').find((item) => item.text().includes('Договор'));
+    expect(title?.text()).toBe('Договор · номер ещё не присвоен');
+    expect(title?.text()).not.toContain('doc_8c0d3f');
+  });
+
   it('waits for the order-save barrier before creating a native draft', async () => {
     const barrier = deferred<{ mutated: boolean }>();
     const beforeGenerate = vi.fn(() => barrier.promise);
     const wrapper = await mountWorkspace(beforeGenerate);
     await wrapper.get('[data-testid="native-document-type"]').setValue('act');
     await flushPromises();
+
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('data-order-usage')).toBe('document_create');
 
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();

@@ -13,6 +13,7 @@ const productLine: ProductLine = {
   link_id: 301,
   product_id: 0,
   product_query: 'Gr',
+  client_description: 'Инвертор; площадь: 35 м²',
   quantity: 1,
   price: 1_500,
   cost: 1_000,
@@ -100,6 +101,8 @@ describe('OrderProductLinesEditor', () => {
     expect(wrapper.text()).toContain('Gree Pular');
     expect(wrapper.text()).toContain('Поставка: бронь');
     await wrapper.get(`[data-testid="select-product-${productOption.id}"]`).trigger('click');
+    const fillButtons = wrapper.findAll('button').filter((button) => button.text().includes('Заполнить из каталога'));
+    await fillButtons[0]?.trigger('click');
     const reserveButtons = wrapper.findAll('button').filter((button) => (
       button.text().includes('Забронировать')
     ));
@@ -107,6 +110,7 @@ describe('OrderProductLinesEditor', () => {
     await wrapper.get('[data-testid="add-product-line"]').trigger('click');
 
     expect(wrapper.emitted('select')).toEqual([[{ index: 0, option: productOption }]]);
+    expect(wrapper.emitted('fillDescription')).toEqual([[1]]);
     expect(wrapper.emitted('supply')).toEqual([[{
       line: expect.objectContaining({ link_id: 302 }),
       intent: 'reserve',

@@ -25,6 +25,7 @@ const emit = defineEmits<{
   open: [index: number];
   remove: [index: number];
   add: [];
+  fillDescription: [index: number];
   supply: [payload: { line: ProductLine; intent: 'order' | 'reserve' }];
 }>();
 
@@ -60,14 +61,14 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
     <p v-if="productsError" class="mb-2 text-xs text-red-300">{{ productsError }}</p>
     <div class="space-y-2">
       <div v-for="(line, index) in lines" :key="`product-${index}`" class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-        <button type="button" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить товар #${index + 1}`" title="Удалить товар" @click="emit('remove', index)">
+        <button type="button" data-order-usage="order_product_remove" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить товар #${index + 1}`" title="Удалить товар" @click="emit('remove', index)">
           ×
         </button>
         <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
           <label class="relative col-span-6 space-y-1 md:col-span-5">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
               <span>Название</span>
-              <button v-if="line.product_id && canManagePlatform" class="text-xs font-semibold text-teal-700 hover:text-teal-900" type="button" @click="emit('open', index)">
+              <button v-if="line.product_id && canManagePlatform" type="button" data-order-usage="order_product_open_catalog" class="text-xs font-semibold text-teal-700 hover:text-teal-900" @click="emit('open', index)">
                 Открыть ↗
               </button>
             </span>
@@ -87,6 +88,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
                 :key="`product-suggest-${index}-${item.id}`"
                 type="button"
                 :data-testid="`select-product-${item.id}`"
+                data-order-usage="order_product_select"
                 class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 dark:hover:bg-slate-800 last:mb-0"
                 @mousedown.prevent
                 @click="emit('select', { index, option: item })"
@@ -122,6 +124,28 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
             <div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div>
           </div>
+          <label class="col-span-6 space-y-1 md:col-span-12">
+            <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
+              <span>Описание для клиента</span>
+              <button
+                v-if="line.product_id"
+                type="button"
+                data-order-usage="order_product_fill_description"
+                class="text-xs font-semibold text-teal-700 hover:text-teal-900"
+                @click="emit('fillDescription', index)"
+              >
+                Заполнить из каталога
+              </button>
+            </span>
+            <textarea
+              v-model="line.client_description"
+              data-order-usage="order_product_description"
+              class="field-input min-h-[64px] resize-y text-sm leading-snug"
+              rows="2"
+              maxlength="2000"
+              placeholder="Ключевые характеристики и уточнения для клиента"
+            />
+          </label>
           <p v-if="isPriceDifferent(line)" class="col-span-6 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12">
             Цена строки отличается от каталожной ({{ formatMoney(catalogPrice(line.product_id) || 0) }}).
           </p>
@@ -130,12 +154,12 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               Поставка: {{ supplyBadgeForLine(line)?.label }}
             </span>
             <span v-else-if="line.link_id" class="text-xs text-gray-500">Поставка не создана</span>
-            <button type="button" class="rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'order' })">В поставку</button>
-            <button type="button" class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'reserve' })">Забронировать</button>
+            <button type="button" data-order-usage="order_product_supply" class="rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'order' })">В поставку</button>
+            <button type="button" data-order-usage="order_product_reserve" class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'reserve' })">Забронировать</button>
           </div>
         </div>
       </div>
     </div>
-    <button type="button" data-testid="add-product-line" class="btn-mini mt-3 w-full justify-center" @click="emit('add')">+ товар</button>
+    <button type="button" data-testid="add-product-line" data-order-usage="order_product_add" class="btn-mini mt-3 w-full justify-center" @click="emit('add')">+ товар</button>
   </section>
 </template>

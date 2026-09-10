@@ -7,6 +7,7 @@ export type ManagerOrderProductLinePayload = {
     link_id?: (number | null);
     proposal_id?: (number | null);
     product_id: number;
+    client_description?: (string | null);
     quantity: number;
     price: number;
     cost?: (number | null);

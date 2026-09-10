@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import type { ManagerOrderDetailResponse } from '../../client';
 import type { ProductLine } from './order-editor-types';
 import NativeDocumentsWorkspace from '../../features/documents/components/NativeDocumentsWorkspace.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
+import { isBusinessCustomer } from '../../utils/customer-party';
 
 type BeforeGenerateResult = boolean | void | { proceed?: boolean; mutated?: boolean };
 
@@ -24,9 +25,10 @@ const emit = defineEmits<{
 const expanded = defineModel<boolean>('expanded', { required: true });
 const panelRef = ref<InstanceType<typeof OrderDocumentsPanel> | null>(null);
 const activeProvider = ref<'native' | 'google'>('native');
+const googleProviderMounted = ref(false);
 
 const documents = computed(() => props.order.documents || []);
-const isCompanyOrder = computed(() => props.order.customer?.type === 'company' || Boolean(props.order.customer?.inn));
+const isCompanyOrder = computed(() => isBusinessCustomer(props.order.customer));
 const hasOrderContract = computed(() => documents.value.some((document) => document.doc_type === 'contract'));
 const hasContract = computed(() => (
   (isCompanyOrder.value ? Boolean(props.order.customer_contract_id) : false) || hasOrderContract.value
@@ -59,13 +61,22 @@ const whatsappUrl = computed(() => {
 });
 const viberUrl = computed(() => `viber://chat?number=%2B${customerPhoneDigits.value}`);
 
-const openSend = () => {
+const openSend = async () => {
   activeProvider.value = 'google';
+  googleProviderMounted.value = true;
+  await nextTick();
   panelRef.value?.openSend();
 };
-const openCreate = () => {
+const openCreate = async () => {
   activeProvider.value = 'google';
+  googleProviderMounted.value = true;
+  await nextTick();
   panelRef.value?.openCreate();
+};
+
+const selectProvider = (provider: 'native' | 'google') => {
+  activeProvider.value = provider;
+  if (provider === 'google') googleProviderMounted.value = true;
 };
 
 defineExpose({ openSend, openCreate });
@@ -96,38 +107,40 @@ defineExpose({ openSend, openCreate });
         type="button"
         class="rounded-lg px-3 py-1.5 text-sm font-semibold transition"
         :class="activeProvider === 'native' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-600 hover:text-teal-700 dark:text-slate-300'"
-        @click="activeProvider = 'native'"
+        @click="selectProvider('native')"
       >
-        В CRM
+        DOCX · В CRM
       </button>
       <button
         type="button"
-        class="rounded-lg px-3 py-1.5 text-sm font-semibold transition"
-        :class="activeProvider === 'google' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-600 hover:text-teal-700 dark:text-slate-300'"
-        @click="activeProvider = 'google'"
+        class="rounded-lg px-2.5 py-1.5 text-xs font-semibold transition"
+        :class="activeProvider === 'google' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-500 hover:text-teal-700 dark:text-slate-400'"
+        @click="selectProvider('google')"
       >
         Google Docs
       </button>
     </div>
 
-    <NativeDocumentsWorkspace
-      v-show="activeProvider === 'native'"
-      :order="order"
-      :active-proposal-id="activeProposalId"
-      :before-generate="beforeGenerate"
-      @refresh="emit('refresh')"
-      @toast="emit('toast', $event)"
-    />
+    <div v-show="activeProvider === 'native'">
+      <NativeDocumentsWorkspace
+        :order="order"
+        :active-proposal-id="activeProposalId"
+        :before-generate="beforeGenerate"
+        @refresh="emit('refresh')"
+        @toast="emit('toast', $event)"
+      />
+    </div>
 
-    <OrderDocumentsPanel
-      v-show="activeProvider === 'google'"
-      ref="panelRef"
-      :order="order"
-      :active-proposal-id="activeProposalId"
-      :product-lines="productLines"
-      :before-generate="beforeGenerate"
-      @refresh="emit('refresh')"
-      @toast="emit('toast', $event)"
-    />
+    <div v-if="googleProviderMounted" v-show="activeProvider === 'google'">
+      <OrderDocumentsPanel
+        ref="panelRef"
+        :order="order"
+        :active-proposal-id="activeProposalId"
+        :product-lines="productLines"
+        :before-generate="beforeGenerate"
+        @refresh="emit('refresh')"
+        @toast="emit('toast', $event)"
+      />
+    </div>
   </OrderDrawerSection>
 </template>

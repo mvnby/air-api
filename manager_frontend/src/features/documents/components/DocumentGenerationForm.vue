@@ -382,6 +382,7 @@ const openCustomerProfile = () => {
               </button>
               <button
                 type="button"
+                data-order-usage="document_create"
                 class="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-60"
                 :disabled="isGeneratingDoc || isDocumentTypeLocked(selectedDocumentType)"
                 @click="generateDocument(selectedDocumentType)"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { ArrowRight, Check, ChevronDown, Clock3, MoreVertical, Pause, Pencil, Play, Save, Trash2, Undo2, X } from 'lucide-vue-next';
+import { ArrowRight, Check, Clock3, MoreVertical, Pause, Pencil, Play, Save, Trash2, Undo2, X } from 'lucide-vue-next';
 import { formatMoney } from './order-utils';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
 import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStickyHeader';
@@ -22,6 +22,8 @@ const props = defineProps<{
   saveFailed?: boolean;
   saveStatusText?: string;
   compact?: boolean;
+  usageEnabled?: boolean;
+  canViewUsageReport?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -35,6 +37,8 @@ const emit = defineEmits<{
   save: [];
   close: [];
   'toggle-autosave': [];
+  'usage-toggle': [];
+  'usage-report': [];
 }>();
 
 const editingTitle = ref(false);
@@ -185,7 +189,7 @@ const onWorkflowChange = async (event: Event) => {
             maxlength="160"
             aria-label="Название заказа"
             @keydown.enter.prevent="commitTitle"
-            @keydown.esc.prevent="editingTitle = false"
+            @keydown.esc.stop.prevent="editingTitle = false"
           />
           <button type="button" class="btn-mini-outline h-9 px-2" aria-label="Применить название" @click="commitTitle">
             <Check :size="17" />
@@ -223,7 +227,22 @@ const onWorkflowChange = async (event: Event) => {
           >
             <MoreVertical :size="18" />
           </button>
-          <div v-if="menuOpen" class="absolute right-0 top-11 z-50 w-52 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <div v-if="menuOpen" class="absolute right-0 top-11 z-50 w-56 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <label class="block px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              Сценарий заказа
+              <select :value="workflow" class="field-input mt-1.5 h-8 w-full text-xs" data-order-usage="workflow-change" @change="onWorkflowChange">
+                <option v-for="option in ORDER_WORKFLOW_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <div class="my-1 border-t border-slate-200 dark:border-slate-700" />
+            <button v-if="usageEnabled !== undefined" type="button" class="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" data-order-usage="usage-toggle" @click="emit('usage-toggle')">
+              Сбор статистики
+              <span class="text-xs text-slate-500">{{ usageEnabled ? 'вкл.' : 'выкл.' }}</span>
+            </button>
+            <button v-if="canViewUsageReport" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" data-order-usage="usage-report" @click="emit('usage-report')">
+              Отчёт по использованию
+            </button>
+            <div v-if="usageEnabled !== undefined || canViewUsageReport" class="my-1 border-t border-slate-200 dark:border-slate-700" />
             <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" @click="emit('hold'); menuOpen = false">
               <Play v-if="isOnHold" :size="16" />
               <Pause v-else :size="16" />
@@ -248,6 +267,7 @@ const onWorkflowChange = async (event: Event) => {
         role="switch"
         :aria-checked="Boolean(autosaveEnabled)"
         aria-label="Автосохранение заказа"
+        data-order-usage="autosave-toggle"
         class="inline-flex min-h-8 items-center gap-2 font-medium text-slate-700 dark:text-slate-200"
         @click="emit('toggle-autosave')"
       >
@@ -281,17 +301,6 @@ const onWorkflowChange = async (event: Event) => {
     </div>
 
     <div v-if="!effectiveCompact" class="mt-2.5 flex flex-wrap items-center gap-2">
-      <label class="relative inline-flex min-w-0 items-center">
-        <span class="sr-only">Сценарий заказа</span>
-        <select
-          :value="workflow"
-          class="h-8 max-w-[210px] appearance-none rounded-lg border border-slate-200 bg-slate-50 py-1 pl-2.5 pr-7 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-          @change="onWorkflowChange"
-        >
-          <option v-for="option in ORDER_WORKFLOW_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-        <ChevronDown :size="14" class="pointer-events-none absolute right-2 text-slate-400" />
-      </label>
       <span class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Сумма {{ formatMoney(total) }}</span>
       <span class="text-xs text-slate-500 dark:text-slate-400">оплачено {{ formatMoney(paid) }}</span>
       <span class="text-xs font-semibold" :class="balance > 0 ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'">

@@ -87,6 +87,7 @@ export const useOrderDrawerPersistence = ({
           link_id: Number((line as any).link_id || 0) || null,
           product_id: Number(line.product_id || 0),
           product_query: String(line.product_query || ''),
+          client_description: String(line.client_description || '').trim() || null,
           quantity: Number(line.quantity || 1),
           price: Number(line.price || 0),
           cost: Number(line.cost || 0),

@@ -2,14 +2,18 @@ import { effectScope, ref, type EffectScope } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import { useOrderCommercialEditor } from '../src/composables/useOrderCommercialEditor';
+import { buildKnownProductClientDescription } from '../src/components/orders/product-client-description';
 
 const apiMock = vi.hoisted(() => ({
   smartSearchProducts: vi.fn(),
 }));
+const feedbackMock = vi.hoisted(() => ({
+  confirmDialog: vi.fn().mockResolvedValue(true),
+}));
 
 vi.mock('../src/api', () => ({ api: apiMock }));
 vi.mock('../src/services/ui-feedback', () => ({
-  confirmDialog: vi.fn().mockResolvedValue(true),
+  confirmDialog: feedbackMock.confirmDialog,
 }));
 
 const order = ref({ id: 42 } as ManagerOrderDetailResponse);
@@ -41,6 +45,7 @@ describe('useOrderCommercialEditor', () => {
       link_id: 5,
       product_id: 9,
       product_query: 'Gree Pular',
+      client_description: 'Инвертор; цвет: серебристый',
       quantity: 2,
       price: 1_500.4,
       cost: 1_000.4,
@@ -65,6 +70,7 @@ describe('useOrderCommercialEditor', () => {
     expect(editor.buildLinesPayload(17)).toEqual({
       products: [{
         product_id: 9,
+        client_description: 'Инвертор; цвет: серебристый',
         quantity: 2,
         price: 1_500,
         cost: 1_000,
@@ -89,6 +95,131 @@ describe('useOrderCommercialEditor', () => {
         proposal_id: 17,
       }],
     });
+  });
+
+  it('fills only catalog-backed metrics and preserves manual text without confirmation', async () => {
+    const catalogProduct = {
+      id: 9,
+      title: 'Gree Pular',
+      price: 3_000,
+      cost: 2_000,
+      is_inverter: true,
+      power_cooling: null,
+      availability_status: 'in_stock',
+      vitebsk_qty: 1,
+      minsk_qty: 0,
+      specs: {
+        area_m2: '35',
+        capacity_cooling_kw: '3.2',
+        color: 'Серебристый',
+      },
+    };
+    expect(buildKnownProductClientDescription(catalogProduct)).toBe(
+      'Инвертор; площадь: 35 м²; охлаждение: 3,2 кВт; цвет: Серебристый',
+    );
+    expect(buildKnownProductClientDescription({
+      ...catalogProduct,
+      is_inverter: false,
+      power_cooling: null,
+      specs: { inverter: false },
+    })).toBe('');
+    expect(buildKnownProductClientDescription({
+      ...catalogProduct,
+      is_inverter: true,
+      specs: { compressor_type_norm: 'on_off', inverter: false },
+    })).toBe('Инвертор');
+    expect(buildKnownProductClientDescription({
+      ...catalogProduct,
+      is_inverter: false,
+      specs: { compressor_type_norm: 'on_off', indoor_type: 'настенный' },
+    })).toBe('On/Off; тип внутреннего блока: настенный');
+
+    const editor = createEditor();
+    editor.productLines.value = [{
+      link_id: 5,
+      product_id: 9,
+      product_query: 'Gree Pular',
+      client_description: 'Ручное уточнение',
+      quantity: 1,
+      price: 3_000,
+      cost: 2_000,
+    }];
+    editor.productLookupById.value = { 9: catalogProduct };
+    feedbackMock.confirmDialog.mockResolvedValueOnce(false);
+
+    await editor.fillProductClientDescription(0);
+
+    expect(feedbackMock.confirmDialog).toHaveBeenCalled();
+    expect(editor.productLines.value[0]?.client_description).toBe('Ручное уточнение');
+    expect(editor.productLines.value[0]?.product_id).toBe(9);
+    expect(editor.productLines.value[0]?.product_query).toBe('Gree Pular');
+  });
+
+  it('autofills a newly selected catalog product but keeps hydration exact', () => {
+    const editor = createEditor();
+    editor.loadLines([{
+      id: 5,
+      proposal_id: 17,
+      product_id: 9,
+      product_title: 'Gree Pular',
+      client_description: 'Сохранённый текст',
+      quantity: 1,
+      price: 3_000,
+      cost: 2_000,
+      is_installation_included: false,
+      installation_price: 0,
+      line_total: 3_000,
+      product_logistics_components: [],
+      logistics_components: [],
+    } as any], []);
+    expect(editor.productLines.value[0]?.client_description).toBe('Сохранённый текст');
+
+    editor.selectProductForLine(0, {
+      id: 10,
+      title: 'MDV Aurora',
+      price: 3_200,
+      is_inverter: true,
+      power_cooling: 2.6,
+      availability_status: 'in_stock',
+      vitebsk_qty: 1,
+      minsk_qty: 0,
+      specs: { color: 'Белый' },
+    });
+    expect(editor.productLines.value[0]?.client_description).toBe(
+      'Инвертор; охлаждение: 2,6 кВт; цвет: Белый',
+    );
+  });
+
+  it('ignores a late catalog response after the manager changes the product', async () => {
+    let resolveSearch!: (value: unknown[]) => void;
+    apiMock.smartSearchProducts.mockReturnValueOnce(new Promise((resolve) => {
+      resolveSearch = resolve;
+    }));
+    const editor = createEditor();
+    editor.productLines.value = [{
+      link_id: 5,
+      product_id: 9,
+      product_query: 'Gree Pular',
+      client_description: 'Ручное описание',
+      quantity: 1,
+      price: 3_000,
+      cost: 2_000,
+    }];
+
+    const filling = editor.fillProductClientDescription(0);
+    editor.productLines.value[0]!.product_id = 10;
+    editor.productLines.value[0]!.product_query = 'MDV Aurora';
+    resolveSearch([{
+      id: 9,
+      title: 'Gree Pular',
+      is_inverter: true,
+      specs: { area_m2: 35 },
+    }]);
+    await filling;
+
+    expect(editor.productLines.value[0]?.client_description).toBe('Ручное описание');
+    expect(feedbackMock.confirmDialog).not.toHaveBeenCalled();
+    expect(editor.productLookupById.value[9]).toBeUndefined();
   });
 
   it('keeps stock filtering and product lookup inside the commercial boundary', async () => {

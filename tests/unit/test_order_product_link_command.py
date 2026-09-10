@@ -9,6 +9,7 @@ from services.order_product_link_command import (
     OrderProductCatalogSnapshot,
     OrderProductLinkCommand,
 )
+from services.order_product_description import normalize_client_description
 from services.order_projection_service import OrderProjectionService
 
 
@@ -23,6 +24,15 @@ def _product() -> Product:
     )
 
 
+def test_client_description_normalizer_trims_lines_and_preserves_paragraphs():
+    assert normalize_client_description(
+        "  Инвертор  \r\n\r\n  Серебристый корпус  "
+    ) == "Инвертор\n\nСеребристый корпус"
+    assert normalize_client_description(" \n \r\n") is None
+    with pytest.raises(ValueError, match="must not exceed 2000"):
+        normalize_client_description("x" * 2_001)
+
+
 def test_shared_catalog_command_snapshots_product_price_and_link_fields():
     mutation = OrderProductLinkCommand.shared_catalog().build(
         order_id=10,
@@ -31,6 +41,7 @@ def test_shared_catalog_command_snapshots_product_price_and_link_fields():
         item={
             "product_id": 17,
             "quantity": 2,
+            "client_description": "  Инвертор  \r\n\r\n  Серебристый корпус  ",
             "with_installation": True,
             "installation_price": 750,
             "installation_meta": {"meters": 4},
@@ -41,6 +52,7 @@ def test_shared_catalog_command_snapshots_product_price_and_link_fields():
     assert mutation.link.price == 9000
     assert mutation.link.title_snapshot == "Public product"
     assert mutation.link.currency_snapshot == "BYN"
+    assert mutation.link.client_description == "Инвертор\n\nСеребристый корпус"
     assert mutation.link.cost == 1234
     assert mutation.link.quantity == 2
     assert mutation.link.installation_price == 750
@@ -117,6 +129,7 @@ def test_manager_product_line_dto_prefers_immutable_title_snapshot():
         quantity=2,
         price=3200,
         title_snapshot="Public title at checkout",
+        client_description="Тихий внутренний блок",
         currency_snapshot="BYN",
         cost=1000,
     )
@@ -127,6 +140,7 @@ def test_manager_product_line_dto_prefers_immutable_title_snapshot():
 
     assert response.product_title == "Public title at checkout"
     assert response.title_snapshot == "Public title at checkout"
+    assert response.client_description == "Тихий внутренний блок"
     assert response.currency_snapshot == "BYN"
 
 

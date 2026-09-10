@@ -22,6 +22,8 @@ import type {
   ProductOption,
   ServiceLine,
 } from '../components/orders/order-editor-types';
+import { buildKnownProductClientDescription } from '../components/orders/product-client-description';
+import { createOrderProductDescriptionFiller } from './orderProductDescriptionFiller';
 
 type ToastHandler = (message: string, type?: 'success' | 'error') => void;
 
@@ -115,6 +117,7 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
   link_id: line.id,
   product_id: line.product_id || 0,
   product_query: line.product_title || '',
+  client_description: line.client_description ?? null,
   quantity: line.quantity,
   price: line.price,
   cost: line.cost,
@@ -159,7 +162,6 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   const estimateSearchQuery = ref('');
   const importingEstimate = ref(false);
   const showEstimateImport = ref(false);
-
   const {
     preferredMode: serviceDescriptionMode,
     rememberMode: setDefaultServiceDescriptionMode,
@@ -195,6 +197,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     title: String(item.title ?? ''),
     price: Number(item.price ?? 0),
     cost: Number(item.min_cost_byn ?? 0),
+    product_kind: String(item.product_kind ?? 'unknown'),
     is_inverter: Boolean(item.is_inverter),
     power_cooling: item.power_cooling == null ? null : Number(item.power_cooling),
     availability_status: String(item.availability_status ?? 'out_of_stock'),
@@ -211,6 +214,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
         title: line.product_query,
         price: line.price,
         cost: line.cost,
+        product_kind: 'unknown',
         is_inverter: false,
         power_cooling: null,
         availability_status: 'out_of_stock',
@@ -229,7 +233,6 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       supplyRequests.value = [];
     }
   };
-
   const supplyBadgeForLine = (line: ProductLine) => {
     if (!line.link_id) return null;
     for (const request of supplyRequests.value) {
@@ -288,7 +291,6 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       if (requestId === productSearchRequestId) productLookupLoading.value = false;
     }
   }, 400);
-
   const onProductChanged = (index: number, applyCatalogPrice = false) => {
     const row = productLines.value[index];
     if (!row) return;
@@ -332,6 +334,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     if (!row) return;
     row.product_id = option.id;
     row.product_query = option.title;
+    row.client_description = buildKnownProductClientDescription(option) || null;
     row.price = option.price;
     row.product_country = getProductCountryFromSpecs(option.specs);
     row.product_logistics_components = normalizeProductLogisticsTemplate(option.specs?.logistics_components);
@@ -342,6 +345,10 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     productOptions.value = [];
     onProductChanged(index, false);
   };
+
+  const fillProductClientDescription = createOrderProductDescriptionFiller({
+    order, productLines, productLookupById, mapSmartSearchItemToOption, rememberProductOption, setToast,
+  });
 
   const openSelectedProduct = (index: number) => {
     const row = productLines.value[index];
@@ -362,6 +369,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       link_id: null,
       product_id: 0,
       product_query: '',
+      client_description: null,
       quantity: 1,
       price: 0,
       cost: 0,
@@ -522,6 +530,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   const buildLinesPayload = (proposalId: number | null) => ({
     products: productLines.value.map((line) => ({
       product_id: line.product_id || 0,
+      client_description: line.client_description?.trim() || null,
       quantity: Math.trunc(Number(line.quantity) || 0),
       price: Math.round(Number(line.price) || 0),
       cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
@@ -544,6 +553,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     if (productLines.value.some((line) => line.quantity <= 0)) return 'Количество товара должно быть больше 0';
     if (productLines.value.some((line) => line.price < 0)) return 'Цена товара не может быть отрицательной';
     if (productLines.value.some((line) => !line.product_id)) return 'Выберите товар из выпадающего списка';
+    if (productLines.value.some((line) => (line.client_description?.length || 0) > 2_000)) return 'Описание товара для клиента не может быть длиннее 2000 символов';
     if (serviceLines.value.some((line) => line.quantity <= 0)) return 'Количество услуги должно быть больше 0';
     if (serviceLines.value.some((line) => line.price < 0)) return 'Цена услуги не может быть отрицательной';
     if (serviceLines.value.some((line) => !line.title?.trim())) return 'Для услуги укажите название';
@@ -556,6 +566,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       link_id: line.link_id ?? null,
       product_id: Number(line.product_id || 0),
       product_query: String(line.product_query || '').trim(),
+      client_description: String(line.client_description || '').trim() || null,
       quantity: Number(line.quantity || 0),
       price: Number(line.price || 0),
       cost: Number(line.cost || 0),
@@ -604,6 +615,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     estimateOptions,
     estimateOptionsLoading,
     estimateSearchQuery,
+    fillProductClientDescription,
     importingEstimate,
     loadEstimateOptions,
     loadLines,

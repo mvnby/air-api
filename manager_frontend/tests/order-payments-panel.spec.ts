@@ -71,12 +71,12 @@ const addPaymentMock = vi.mocked(ManagerOrdersService.addManagerOrderPayment);
 const deletePaymentMock = vi.mocked(ManagerOrdersService.deleteManagerOrderPayment);
 const mountedWrappers: VueWrapper[] = [];
 
-const mountPanel = (payments: PaymentResponse[] = []) => {
+const mountPanel = (payments: PaymentResponse[] = [], expanded = true) => {
   const wrapper = mount(OrderPaymentsPanel, {
     attachTo: document.body,
     props: {
       order,
-      expanded: true,
+      expanded,
       payments,
       enableCurrency: false,
       targetCurrency: null,
@@ -109,6 +109,45 @@ afterEach(() => {
 });
 
 describe('OrderPaymentsPanel', () => {
+  it('waits to load bank receipts until the payment section is expanded', async () => {
+    const wrapper = mountPanel([], false);
+    await flushPromises();
+
+    expect(listReceiptsMock).not.toHaveBeenCalled();
+
+    await wrapper.setProps({ expanded: true });
+    await flushPromises();
+
+    expect(listReceiptsMock).toHaveBeenCalledWith(1, 20, 'requires_review', order.customer?.inn);
+  });
+
+  it('does not apply receipts from a previous order after the drawer changes order', async () => {
+    let resolveFirst!: (value: { items: BankReceiptResponse[]; total: number }) => void;
+    const firstRequest = new Promise<{ items: BankReceiptResponse[]; total: number }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const nextReceipt = { ...receipt, id: 902, payer_unp: '190000002' };
+    listReceiptsMock
+      .mockImplementationOnce(() => firstRequest as never)
+      .mockResolvedValueOnce({ items: [nextReceipt], total: 1 });
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    await wrapper.setProps({
+      order: {
+        ...order,
+        id: 43,
+        customer: { ...order.customer, inn: '190000002' },
+      },
+    });
+    await flushPromises();
+    resolveFirst({ items: [receipt], total: 1 });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="attach-receipt-902"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="attach-receipt-901"]').exists()).toBe(false);
+  });
+
   it('loads review candidates by customer UNP and attaches a receipt to the order', async () => {
     const wrapper = mountPanel();
     await flushPromises();
@@ -139,6 +178,7 @@ describe('OrderPaymentsPanel', () => {
     await flushPromises();
 
     await wrapper.get('[data-testid="payment-amount"]').setValue('500');
+    expect(wrapper.get('[data-testid="add-payment"]').attributes('data-order-usage')).toBe('payment_add');
     await wrapper.get('[data-testid="add-payment"]').trigger('click');
     await flushPromises();
 

@@ -23,7 +23,10 @@ const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const commercial = reactive(props.commercial);
 const proposal = reactive(props.proposal);
 
-defineExpose({ openResponse: () => toolbarRef.value?.openResponse() });
+defineExpose({
+  addProduct: () => commercial.addProductLine(),
+  openResponse: () => toolbarRef.value?.openResponse(),
+});
 </script>
 
 <template>
@@ -79,6 +82,7 @@ defineExpose({ openResponse: () => toolbarRef.value?.openResponse() });
           @open="commercial.openSelectedProduct"
           @remove="commercial.removeProductLine"
           @add="commercial.addProductLine"
+          @fill-description="commercial.fillProductClientDescription"
           @supply="commercial.createSupplyFromProductLine($event.line, $event.intent)"
         />
 

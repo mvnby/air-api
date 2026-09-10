@@ -58,6 +58,7 @@ const targetCurrencyAmountModel = computed({
 
 const bankReceipts = ref<BankReceiptResponse[]>([]);
 const bankReceiptsLoading = ref(false);
+let bankReceiptsRequestId = 0;
 const attachingReceiptId = ref<number | null>(null);
 const newPaymentAmount = ref<number | null>(null);
 const newPaymentType = ref('prepayment');
@@ -87,9 +88,12 @@ const notify = (message: string, type: 'success' | 'error') => {
 };
 
 const loadCandidateBankReceipts = async () => {
+  const orderId = props.order.id;
   const inn = props.order.customer?.inn;
+  const currentRequest = ++bankReceiptsRequestId;
   if (!inn) {
     bankReceipts.value = [];
+    bankReceiptsLoading.value = false;
     return;
   }
   bankReceiptsLoading.value = true;
@@ -100,20 +104,35 @@ const loadCandidateBankReceipts = async () => {
       'requires_review',
       inn,
     );
-    bankReceipts.value = response.items || [];
+    if (
+      currentRequest === bankReceiptsRequestId
+      && props.order.id === orderId
+      && props.order.customer?.inn === inn
+    ) bankReceipts.value = response.items || [];
   } catch (error) {
     console.error('Failed to load bank receipts', error);
-    bankReceipts.value = [];
+    if (currentRequest === bankReceiptsRequestId) bankReceipts.value = [];
   } finally {
-    bankReceiptsLoading.value = false;
+    if (currentRequest === bankReceiptsRequestId) bankReceiptsLoading.value = false;
   }
 };
 
 watch(
-  () => props.order,
-  () => void loadCandidateBankReceipts(),
+  [() => props.order.id, () => props.order.customer?.inn, () => props.expanded],
+  ([, inn, expanded]) => {
+    ++bankReceiptsRequestId;
+    if (!expanded || !inn) {
+      bankReceipts.value = [];
+      bankReceiptsLoading.value = false;
+      return;
+    }
+    void loadCandidateBankReceipts();
+  },
   { immediate: true },
 );
+watch(() => props.order.id, () => {
+  attachingReceiptId.value = null;
+}, { flush: 'sync' });
 
 const addPayment = async () => {
   if (!newPaymentAmount.value) return;
@@ -151,19 +170,21 @@ const addPayment = async () => {
 
 const attachBankReceipt = async (receipt: BankReceiptResponse) => {
   if (!receipt.id) return;
+  const orderId = props.order.id;
   attachingReceiptId.value = receipt.id;
   try {
     await ManagerMailService.attachManagerBankReceipt(receipt.id, {
-      order_id: props.order.id,
+      order_id: orderId,
       payment_type: 'postpayment',
     });
+    if (props.order.id !== orderId) return;
     notify('Поступление прикреплено к заказу', 'success');
     await loadCandidateBankReceipts();
-    emit('reload', props.order.id);
+    emit('reload', orderId);
   } catch (error) {
     notify(`Ошибка привязки: ${getApiErrorMessage(error)}`, 'error');
   } finally {
-    attachingReceiptId.value = null;
+    if (props.order.id === orderId) attachingReceiptId.value = null;
   }
 };
 
@@ -295,7 +316,7 @@ const deletePayment = async (paymentId: number) => {
             <option value="postpayment">Доплата</option>
           </select>
         </label>
-        <button type="button" data-testid="add-payment" class="btn-mini h-[38px] w-full sm:w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">Внести</button>
+        <button type="button" data-testid="add-payment" data-order-usage="payment_add" class="btn-mini h-[38px] w-full sm:w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">Внести</button>
       </div>
 
       <div v-if="hasDebtForBankReceipts" class="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
