@@ -6,5 +6,6 @@ export type DashboardSearchDemandProvider = {
     provider: 'yandex_webmaster' | 'google_search_console';
     status: 'unconfigured' | 'fresh' | 'stale' | 'error';
     message?: (string | null);
+    updated_at?: (string | null);
 };
 

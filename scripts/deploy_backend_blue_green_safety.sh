@@ -11,6 +11,40 @@ rollback_buffer_started=false
 rollback_buffer_routed=false
 ROLLBACK_BUFFER_COMPOSE=()
 
+integration_keyring_runtime_state() {
+  # Compare only the integration setting. Secret-bearing Docker output remains
+  # inside this process and is never passed through shell arguments or logs.
+  python3 - "${active_service}" "${COMPOSE[@]}" <<'PY'
+import json
+import subprocess
+import sys
+
+def read(command):
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise ValueError("runtime inspection failed")
+    return result.stdout
+
+try:
+    service, *compose = sys.argv[1:]
+    name = "INTEGRATION_CREDENTIAL_KEYRING_JSON"
+    desired = json.loads(read([*compose, "config", "--format", "json"]))
+    configured = desired["services"][service].get("environment", {}).get(name) or ""
+    containers = read([*compose, "ps", "-q", service]).split()
+    if len(containers) != 1:
+        raise ValueError("one active runtime required")
+    environment = json.loads(read(["docker", "inspect", "--format", "{{json .Config.Env}}", containers[0]]))
+    values = [item.split("=", 1)[1] for item in environment if item.startswith(name + "=")]
+    if len(values) > 1:
+        raise ValueError("ambiguous runtime setting")
+    running = values[0] if values else ""
+    print("matched" if configured == running else "changed")
+except Exception:
+    print("integration keyring runtime comparison failed", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
 require_pitr_maintenance_clear_or_attested_scrub() {
   local transaction_id="${API_PITR_MAINTENANCE_TRANSACTION_ID:-}"
   local pinned_root="/usr/local/libexec/mvn-pitr"

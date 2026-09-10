@@ -134,7 +134,8 @@ async def test_analytics_connections_require_owner_and_isolate_exact_scope(
                     "site": "mvn.by",
                 },
                 encrypted_credentials=AnalyticsCredentialCipher.encrypt(
-                    {"oauth_token": "token-a-secret-value"}
+                    {"oauth_token": "token-a-secret-value"},
+                    tenant_id=1, storefront_id=1, provider="yandex_metrika",
                 ),
                 credentials_fingerprint="fingerprint-a",
             ),
@@ -148,7 +149,9 @@ async def test_analytics_connections_require_owner_and_isolate_exact_scope(
                     "site": "tenant-b.example",
                 },
                 encrypted_credentials=AnalyticsCredentialCipher.encrypt(
-                    {"oauth_token": "token-b-secret-value"}
+                    {"oauth_token": "token-b-secret-value"},
+                    tenant_id=int(tenant_b.id), storefront_id=int(storefront_b.id),
+                    provider="yandex_metrika",
                 ),
                 credentials_fingerprint="fingerprint-b",
             ),

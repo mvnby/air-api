@@ -112,6 +112,7 @@ class DashboardMarketingProvider(BaseModel):
     platform_conversions: float | None = None
     currency: str | None = None
     message: str | None = None
+    updated_at: datetime | None = None
 
 
 class DashboardMarketing(BaseModel):
@@ -146,6 +147,7 @@ class DashboardSearchDemandProvider(BaseModel):
     provider: Literal["yandex_webmaster", "google_search_console"]
     status: Literal["unconfigured", "fresh", "stale", "error"]
     message: str | None = None
+    updated_at: datetime | None = None
 
 
 class DashboardSearchDemand(BaseModel):

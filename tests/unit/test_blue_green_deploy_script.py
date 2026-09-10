@@ -401,6 +401,28 @@ def test_matching_api_runtime_can_use_already_active_shortcut(tmp_path):
     assert "status=already_active" in summary
 
 
+def test_keyring_configuration_change_activates_same_image(tmp_path):
+    env, project, site, command_log = _environment(tmp_path)
+    _configure_active_slot(env, project, site, "blue", "host_nginx")
+    env["BACKEND_IMAGE"] = OLD_IMAGE
+    env["FAKE_KEYRING_DRIFT"] = "true"
+    result = _run(env)
+    assert result.returncode == 0, result.stderr
+    assert "pull app-green" in command_log.read_text()
+    assert "status=already_active" not in Path(env["API_BLUE_GREEN_SUMMARY_FILE"]).read_text()
+
+
+def test_keyring_inspection_failure_blocks_same_image_shortcut(tmp_path):
+    env, project, site, command_log = _environment(tmp_path)
+    _configure_active_slot(env, project, site, "blue", "host_nginx")
+    env["BACKEND_IMAGE"] = OLD_IMAGE
+    env["FAIL_KEYRING_CONFIG_INSPECTION"] = "true"
+    result = _run(env)
+    assert result.returncode != 0
+    assert "integration keyring runtime comparison failed" in result.stderr
+    assert "pull app-green" not in command_log.read_text()
+
+
 def test_bootstrap_only_refuses_env_runtime_drift_without_mutation(tmp_path):
     env, project, _, command_log = _environment(tmp_path)
     (project / ".env").write_text(

@@ -1,14 +1,10 @@
 import type { DashboardKpi, DashboardMarketing, DashboardPeriod } from '../client';
 
-export type DashboardMode = 'manager' | 'owner';
 export type DashboardKpiKey = 'revenue' | 'new_leads' | 'sales' | 'installations' | 'active_tasks' | 'receivables';
 
-export const DASHBOARD_MODE_STORAGE_KEY = 'manager:dashboard:mode:v1';
-
-export const dashboardKpiOrder: Record<DashboardMode, DashboardKpiKey[]> = {
-  manager: ['new_leads', 'active_tasks', 'sales', 'installations', 'revenue', 'receivables'],
-  owner: ['revenue', 'sales', 'receivables', 'new_leads', 'installations', 'active_tasks'],
-};
+export const dashboardKpiOrder: DashboardKpiKey[] = [
+  'revenue', 'sales', 'receivables', 'new_leads', 'installations', 'active_tasks',
+];
 
 export const dashboardKpiLabels: Record<DashboardKpiKey, string> = {
   revenue: 'Оплаты за месяц',
@@ -17,22 +13,6 @@ export const dashboardKpiLabels: Record<DashboardKpiKey, string> = {
   installations: 'Монтажи',
   active_tasks: 'Активные касания',
   receivables: 'Дебиторская задолженность',
-};
-
-export const loadDashboardMode = (): DashboardMode => {
-  try {
-    return window.localStorage.getItem(DASHBOARD_MODE_STORAGE_KEY) === 'owner' ? 'owner' : 'manager';
-  } catch {
-    return 'manager';
-  }
-};
-
-export const saveDashboardMode = (mode: DashboardMode) => {
-  try {
-    window.localStorage.setItem(DASHBOARD_MODE_STORAGE_KEY, mode);
-  } catch {
-    // Dashboard remains usable where local storage is unavailable.
-  }
 };
 
 export const formatDashboardNumber = (value: number | null | undefined) => (
@@ -64,7 +44,7 @@ const formatPeriodRange = (start: string, endExclusive: string) => {
 };
 
 export const formatDashboardComparisonPeriod = (period: DashboardPeriod) => (
-  `${formatPeriodRange(period.current.start, period.current.end)} · сравнение: ${formatPeriodRange(period.previous.start, period.previous.end)}`
+  `${formatPeriodRange(period.current.start, period.current.end)} · сравнение с ${formatPeriodRange(period.previous.start, period.previous.end)}`
 );
 
 export const formatDashboardKpi = (key: DashboardKpiKey, kpi: DashboardKpi) => (
@@ -91,10 +71,10 @@ export const getDashboardTrend = (key: DashboardKpiKey, kpi: DashboardKpi): Dash
 
 export const dashboardMarketingStatus = (marketing: Pick<DashboardMarketing, 'status'>) => {
   const messages = {
-    fresh: 'Данные аналитики обновлены и готовы к работе.',
-    stale: 'Данные аналитики обновлялись давно и могут быть неактуальны.',
-    error: 'Интеграция аналитики временно недоступна. CRM-данные продолжают работать.',
-    unconfigured: 'Подключите Яндекс Метрику, чтобы видеть визиты и источники.',
+    fresh: 'Данные получены.',
+    stale: 'Показан последний доступный снимок; он может быть неактуален.',
+    error: 'Подключение сохранено, но получить данные сейчас не удалось.',
+    unconfigured: 'Источник пока не подключён.',
   } as const;
   const labels = {
     fresh: 'Данные актуальны',

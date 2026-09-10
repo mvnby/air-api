@@ -13,6 +13,7 @@ from services.analytics_connection_service import (
     AnalyticsConnectionService,
     AnalyticsCredentialCipher,
 )
+from services.integration_credential_health import integration_credential_health
 
 
 @pytest.fixture
@@ -104,7 +105,7 @@ async def test_metrika_connection_is_encrypted_and_exactly_storefront_scoped(
         await analytics_session.execute(select(AnalyticsConnection))
     ).scalar_one()
     assert token not in stored.encrypted_credentials
-    assert AnalyticsCredentialCipher.decrypt(stored.encrypted_credentials) == {
+    assert AnalyticsCredentialCipher.decrypt(stored.encrypted_credentials, tenant_id=stored.tenant_id, storefront_id=stored.storefront_id, provider=stored.provider) == {
         "oauth_token": token
     }
 
@@ -125,6 +126,9 @@ async def test_metrika_connection_is_encrypted_and_exactly_storefront_scoped(
     ).scalar_one()
     assert token not in str(audit.change_set)
     assert audit.change_set["counter_id"]["after"] == "123456"
+    assert await integration_credential_health(analytics_session) == {
+        "status": "passed", "checked": 1, "unreadable": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -195,7 +199,7 @@ async def test_yandex_direct_connection_is_verified_encrypted_and_scoped(analyti
         )
     ).scalar_one()
     assert token not in row.encrypted_credentials
-    assert AnalyticsCredentialCipher.decrypt(row.encrypted_credentials)["oauth_token"] == token
+    assert AnalyticsCredentialCipher.decrypt(row.encrypted_credentials, tenant_id=row.tenant_id, storefront_id=row.storefront_id, provider=row.provider)["oauth_token"] == token
 
 
 @pytest.mark.asyncio
@@ -268,7 +272,7 @@ async def test_google_oauth_payload_is_encrypted_without_secret_audit(analytics_
         )
     ).scalar_one()
     assert "google-refresh-secret" not in row.encrypted_credentials
-    assert AnalyticsCredentialCipher.decrypt(row.encrypted_credentials) == credentials
+    assert AnalyticsCredentialCipher.decrypt(row.encrypted_credentials, tenant_id=row.tenant_id, storefront_id=row.storefront_id, provider=row.provider) == credentials
     audits = (
         await analytics_session.execute(
             select(TenantAuditEvent).where(
@@ -279,3 +283,42 @@ async def test_google_oauth_payload_is_encrypted_without_secret_audit(analytics_
     ).scalars().all()
     assert audits
     assert "google-refresh-secret" not in str(audits[-1].change_set)
+
+
+@pytest.mark.asyncio
+async def test_unreadable_connection_remains_configured_with_error(analytics_session, caplog):
+    row = AnalyticsConnection(
+        tenant_id=21, storefront_id=71, provider="yandex_metrika",
+        public_config={"counter_id": "123456"},
+        encrypted_credentials="unreadable-sensitive-ciphertext",
+        credentials_fingerprint="original-fingerprint",
+    )
+    analytics_session.add(row)
+    await analytics_session.commit()
+    scope = TenantScope(tenant_id=21, storefront_id=71)
+
+    items = await AnalyticsConnectionService.list_connections(analytics_session, tenant_scope=scope)
+    item = next(item for item in items if item.provider == "yandex_metrika")
+    assert item.state == "error"
+    assert item.credentials_configured is True
+    assert item.last_error_code == "credentials_unreadable"
+
+    connections = await AnalyticsConnectionService.get_runtime_connections(analytics_session, tenant_scope=scope)
+    assert connections["yandex_metrika"].error_code == "credentials_unreadable"
+    assert connections["yandex_metrika"].credentials == {}
+    assert "ANALYTICS_CREDENTIALS_UNAVAILABLE" in caplog.text
+    assert "unreadable-sensitive-ciphertext" not in caplog.text
+    assert await AnalyticsConnectionService.get_runtime_connections(
+        analytics_session, tenant_scope=TenantScope(tenant_id=21, storefront_id=72)
+    ) == {}
+    with pytest.raises(AnalyticsConnectionError) as error:
+        await AnalyticsConnectionService.get_metrika_runtime_credentials(analytics_session, tenant_scope=scope)
+    assert error.value.code == "credentials_unreadable"
+    # Reading health does not rewrite the saved connection or discard credentials.
+    await analytics_session.refresh(row)
+    assert row.status == "active"
+    assert row.last_error_code is None
+    assert row.encrypted_credentials == "unreadable-sensitive-ciphertext"
+    assert await integration_credential_health(analytics_session) == {
+        "status": "failed", "checked": 1, "unreadable": 1,
+    }

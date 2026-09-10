@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from cryptography.fernet import Fernet, InvalidToken
-
 from core.config import settings
+from core.integration_credential_keyring import (
+    DecryptedIntegrationCredential,
+    IntegrationCredentialUnavailable,
+    IntegrationCredentialUnreadable,
+    InvalidIntegrationCredentialKeyring,
+)
 from modules.documents.infrastructure.external_edit_provider import (
     DownloadedExternalEditFile,
     ExternalEditFileMetadata,
@@ -24,22 +25,10 @@ class DocumentDriveConnectionError(ValueError):
 
 
 class DocumentDriveCredentialCipher:
-    """Authenticated encryption isolated from other integration domains."""
+    """Tenant-bound Drive credentials with transitional legacy reads."""
 
     _ENCRYPTION_CONTEXT = b"mvn.document-drive.credentials.fernet.v1"
     _FINGERPRINT_CONTEXT = b"mvn.document-drive.credentials.fingerprint.v1"
-
-    @classmethod
-    def _fernet(cls) -> Fernet:
-        secret = str(settings.SECRET_KEY or "").encode("utf-8")
-        if len(secret) < 16:
-            raise DocumentDriveConnectionError(
-                "credential_encryption_unavailable",
-                "Хранилище подключений временно недоступно",
-                status_code=503,
-            )
-        key = hmac.new(secret, cls._ENCRYPTION_CONTEXT, hashlib.sha256).digest()
-        return Fernet(base64.urlsafe_b64encode(key))
 
     @classmethod
     def encrypt(
@@ -55,8 +44,22 @@ class DocumentDriveCredentialCipher:
             "provider": str(provider),
             "credentials": payload,
         }
-        raw = json.dumps(envelope, ensure_ascii=False, separators=(",", ":")).encode()
-        return cls._fernet().encrypt(raw).decode("ascii")
+        raw = json.dumps(
+            envelope,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        keyring = settings.integration_credential_keyring
+        try:
+            if keyring.enabled and keyring.write_mode == "active":
+                return keyring.encrypt(raw, context=cls._ENCRYPTION_CONTEXT)
+            return keyring.encrypt_legacy(
+                raw,
+                context=cls._ENCRYPTION_CONTEXT,
+                local_legacy_secret=str(settings.SECRET_KEY or ""),
+            )
+        except (IntegrationCredentialUnavailable, InvalidIntegrationCredentialKeyring) as exc:
+            raise cls._unavailable() from exc
 
     @classmethod
     def decrypt(
@@ -66,36 +69,52 @@ class DocumentDriveCredentialCipher:
         tenant_id: int,
         provider: str,
     ) -> dict[str, Any]:
+        payload, _ = cls.decrypt_with_source(
+            encrypted,
+            tenant_id=tenant_id,
+            provider=provider,
+        )
+        return payload
+
+    @classmethod
+    def decrypt_with_source(
+        cls,
+        encrypted: str,
+        *,
+        tenant_id: int,
+        provider: str,
+    ) -> tuple[dict[str, Any], DecryptedIntegrationCredential]:
         try:
-            raw = cls._fernet().decrypt(encrypted.encode("ascii"))
-            envelope = json.loads(raw)
-        except (InvalidToken, ValueError, TypeError, json.JSONDecodeError) as exc:
-            raise DocumentDriveConnectionError(
-                "credentials_unreadable",
-                "Подключение Google Диска нужно настроить заново",
-                status_code=503,
-            ) from exc
+            decrypted = settings.integration_credential_keyring.decrypt(
+                encrypted,
+                context=cls._ENCRYPTION_CONTEXT,
+                local_legacy_secret=str(settings.SECRET_KEY or ""),
+            )
+            envelope = json.loads(decrypted.plaintext)
+        except IntegrationCredentialUnavailable as exc:
+            raise cls._unavailable() from exc
+        except (
+            IntegrationCredentialUnreadable,
+            InvalidIntegrationCredentialKeyring,
+            UnicodeError,
+            ValueError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise cls._unreadable() from exc
         if (
             not isinstance(envelope, dict)
             or envelope.get("version") != 1
             or envelope.get("tenant_id") != int(tenant_id)
             or envelope.get("provider") != str(provider)
         ):
-            raise DocumentDriveConnectionError(
-                "credentials_unreadable",
-                "Подключение Google Диска нужно настроить заново",
-                status_code=503,
-            )
+            raise cls._unreadable()
         payload = envelope.get("credentials")
         if not isinstance(payload, dict) or not all(
             isinstance(key, str) for key in payload
         ):
-            raise DocumentDriveConnectionError(
-                "credentials_unreadable",
-                "Подключение Google Диска нужно настроить заново",
-                status_code=503,
-            )
-        return payload
+            raise cls._unreadable()
+        return payload, decrypted
 
     @classmethod
     def fingerprint(cls, payload: dict[str, Any]) -> str:
@@ -105,12 +124,36 @@ class DocumentDriveCredentialCipher:
             separators=(",", ":"),
             default=str,
         )
-        key = str(settings.SECRET_KEY or "").encode("utf-8")
-        return hmac.new(
-            key,
-            cls._FINGERPRINT_CONTEXT + serialized.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
+        keyring = settings.integration_credential_keyring
+        try:
+            if keyring.enabled and keyring.write_mode == "active":
+                return keyring.fingerprint(
+                    serialized.encode("utf-8"),
+                    context=cls._FINGERPRINT_CONTEXT,
+                )
+            return keyring.fingerprint_legacy(
+                serialized.encode("utf-8"),
+                context=cls._FINGERPRINT_CONTEXT,
+                local_legacy_secret=str(settings.SECRET_KEY or ""),
+            )
+        except (IntegrationCredentialUnavailable, InvalidIntegrationCredentialKeyring) as exc:
+            raise cls._unavailable() from exc
+
+    @staticmethod
+    def _unavailable() -> DocumentDriveConnectionError:
+        return DocumentDriveConnectionError(
+            "credential_encryption_unavailable",
+            "Хранилище подключений временно недоступно",
+            status_code=503,
+        )
+
+    @staticmethod
+    def _unreadable() -> DocumentDriveConnectionError:
+        return DocumentDriveConnectionError(
+            "credentials_unreadable",
+            "Подключение Google Диска сохранено, но временно недоступно",
+            status_code=503,
+        )
 
 
 @dataclass(frozen=True)
