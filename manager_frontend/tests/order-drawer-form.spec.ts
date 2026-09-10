@@ -1,4 +1,4 @@
-import { effectScope, ref, type EffectScope } from 'vue';
+import { effectScope, nextTick, ref, type EffectScope } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import { useOrderDrawerForm } from '../src/composables/useOrderDrawerForm';
@@ -72,6 +72,12 @@ const createForm = (validationError = '') => {
   return { form, buildLinesPayload };
 };
 
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
 beforeEach(() => {
   apiMock.getManagerInstallers.mockResolvedValue({ items: [] });
   apiMock.listManagerQuickTariffs.mockResolvedValue({ items: [] });
@@ -111,5 +117,78 @@ describe('useOrderDrawerForm', () => {
     expect(form.localServerErrors.value.products).toBe('Выберите товар из выпадающего списка');
     expect(form.localFormError.value).toBe('Исправьте ошибки в форме');
     expect(buildLinesPayload).not.toHaveBeenCalled();
+  });
+
+  it('keeps a saved EUR amount when the late FX lookup has no EUR rate', async () => {
+    const { form } = createForm();
+    form.hydrateOrder({
+      ...order,
+      target_currency: 'EUR',
+      target_currency_amount: 1_250.75,
+    });
+
+    await nextTick();
+    await Promise.resolve();
+
+    expect(form.targetCurrency.value).toBe('EUR');
+    expect(form.targetCurrencyAmount.value).toBe(1_250.75);
+    expect(form.enableCurrency.value).toBe(true);
+  });
+
+  it('does not recalculate a saved EUR amount from a cached rate during hydration', async () => {
+    const { form } = createForm();
+    form.currentFxRate.value = { usd_byn: 3.2, eur_byn: 3.5 };
+    form.hydrateOrder({
+      ...order,
+      target_currency: 'EUR',
+      target_currency_amount: 1_250.75,
+    });
+
+    await nextTick();
+
+    expect(form.targetCurrency.value).toBe('EUR');
+    expect(form.targetCurrencyAmount.value).toBe(1_250.75);
+  });
+
+  it('calculates the amount after a manager explicitly enables currency mode', async () => {
+    const { form } = createForm();
+    form.hydrateOrder(order);
+    await nextTick();
+
+    form.enableCurrency.value = true;
+    await nextTick();
+    await Promise.resolve();
+
+    expect(form.targetCurrency.value).toBe('USD');
+    expect(form.targetCurrencyAmount.value).toBe(1_093.75);
+  });
+
+  it('ignores an old FX response after hydrating another EUR order', async () => {
+    const oldFxRate = deferred<{ usd_byn: number; eur_byn: number | null }>();
+    settingsMock.getFxRate.mockReset();
+    settingsMock.getFxRate.mockReturnValueOnce(oldFxRate.promise);
+    const { form } = createForm();
+
+    form.hydrateOrder({
+      ...order,
+      id: 42,
+      target_currency: 'EUR',
+      target_currency_amount: 1_250.75,
+    });
+    form.currentFxRate.value = { usd_byn: 3.2, eur_byn: 3.5 };
+    form.hydrateOrder({
+      ...order,
+      id: 43,
+      target_currency: 'EUR',
+      target_currency_amount: 880.5,
+    });
+
+    oldFxRate.resolve({ usd_byn: 3.2, eur_byn: null });
+    await Promise.resolve();
+    await nextTick();
+
+    expect(form.currentFxRate.value).toEqual({ usd_byn: 3.2, eur_byn: 3.5 });
+    expect(form.targetCurrency.value).toBe('EUR');
+    expect(form.targetCurrencyAmount.value).toBe(880.5);
   });
 });

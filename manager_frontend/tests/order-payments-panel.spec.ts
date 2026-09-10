@@ -176,6 +176,10 @@ describe('OrderPaymentsPanel', () => {
     mountedWrappers.push(wrapper);
     await flushPromises();
 
+    const currencySelect = wrapper.findAll('select')[0]!;
+    expect((currencySelect.element as HTMLSelectElement).value).toBe('EUR');
+    expect((currencySelect.element.querySelector('option[value="EUR"]') as HTMLOptionElement).disabled).toBe(false);
+
     await wrapper.get('[data-testid="payment-amount"]').setValue('100');
     await wrapper.get('[data-testid="add-payment"]').trigger('click');
     await flushPromises();

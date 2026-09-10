@@ -5,8 +5,9 @@ import OrderEditDrawer from '../src/components/orders/OrderEditDrawer.vue';
 import OrderCustomerContext from '../src/components/orders/OrderCustomerContext.vue';
 import OrderProposalWorkspace from '../src/components/orders/OrderProposalWorkspace.vue';
 import OrderDocumentsWorkspace from '../src/components/orders/OrderDocumentsWorkspace.vue';
+import OrderPaymentsPanel from '../src/components/orders/OrderPaymentsPanel.vue';
 import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.vue';
-import { ManagerOrdersService, ManagerMailService } from '../src/client';
+import { ManagerOrdersService, ManagerMailService, ManagerSettingsService } from '../src/client';
 import type { ManagerOrderDetailResponse } from '../src/client';
 
 const apiMock = vi.hoisted(() => ({
@@ -45,6 +46,7 @@ const mountDrawer = async () => {
 };
 const customer = () => wrapper.findComponent(OrderCustomerContext);
 const header = () => wrapper.findComponent(OrderWorkspaceHeader);
+const payments = () => wrapper.findComponent(OrderPaymentsPanel);
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -81,6 +83,26 @@ describe('order drawer autosave integration', () => {
     }));
     expect(header().props('dirty')).toBe(false);
     expect(header().props('saveStatusText')).toBe('Сохранено');
+  });
+
+  it('does not autosave a saved EUR deal while the unavailable FX rate loads', async () => {
+    stored = {
+      ...stored,
+      target_currency: 'EUR',
+      target_currency_amount: 1_250.75,
+    };
+    vi.spyOn(ManagerSettingsService, 'getFxRate').mockResolvedValue({
+      usd_byn: 3.2,
+      eur_byn: null,
+    } as any);
+
+    await mountDrawer();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(payments().props('targetCurrency')).toBe('EUR');
+    expect(payments().props('targetCurrencyAmount')).toBe(1_250.75);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(header().props('dirty')).toBe(false);
   });
 
   it('keeps input typed during a slow save after the parent publishes the old response', async () => {

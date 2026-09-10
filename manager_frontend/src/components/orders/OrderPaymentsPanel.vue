@@ -254,7 +254,7 @@ const deletePayment = async (paymentId: number) => {
             Валюта
             <select v-model="targetCurrencyModel" class="field-input mt-1">
               <option value="USD">USD ($)</option>
-              <option value="EUR" :disabled="!hasManualEurRate">EUR (€)</option>
+              <option value="EUR" :disabled="!hasManualEurRate && targetCurrency !== 'EUR'">EUR (€)</option>
             </select>
           </label>
           <label class="field-label !mb-0 flex-1 text-xs">

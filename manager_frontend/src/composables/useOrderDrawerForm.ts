@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, ref, watch, type Ref } from 'vue';
 import { api } from '../api';
 import type {
   FxRateResponse,
@@ -89,7 +89,20 @@ export const useOrderDrawerForm = ({
     return installersList.value.filter((installer) => installer.is_active || selectedIds.has(installer.id));
   });
 
-  const hasManualEurRate = computed(() => Boolean(currentFxRate.value?.eur_byn));
+  let currencyHydrationEpoch = 0;
+  let currencyHydrationInProgress = false;
+  let fxRateRequestEpoch = 0;
+
+  const beginCurrencyHydration = () => {
+    currencyHydrationInProgress = true;
+    return ++currencyHydrationEpoch;
+  };
+
+  const releaseCurrencyWatcherAfterHydration = (epoch: number) => {
+    void nextTick(() => {
+      if (epoch === currencyHydrationEpoch) currencyHydrationInProgress = false;
+    });
+  };
   const getActiveFxRate = (currency: PaymentCurrency | null): number | null => {
     if (!currentFxRate.value || !currency) return null;
     if (currency === 'USD') return currentFxRate.value.usd_byn ?? null;
@@ -103,15 +116,20 @@ export const useOrderDrawerForm = ({
   };
 
   watch(enableCurrency, async (enabled) => {
+    if (currencyHydrationInProgress) return;
+    const fxRequestEpoch = ++fxRateRequestEpoch;
     if (!enabled) {
       targetCurrency.value = null;
       targetCurrencyAmount.value = null;
     } else if (!targetCurrency.value) {
       targetCurrency.value = 'USD';
       try {
-        currentFxRate.value = await ManagerSettingsService.getFxRate();
+        const rate = await ManagerSettingsService.getFxRate();
+        if (fxRequestEpoch !== fxRateRequestEpoch) return;
+        currentFxRate.value = rate;
         syncTargetCurrencyAmountFromRate();
       } catch (error) {
+        if (fxRequestEpoch !== fxRateRequestEpoch) return;
         console.warn('Failed to fetch FX rate', error);
         enableCurrency.value = false;
         setToast('Не удалось загрузить курс валют', 'error');
@@ -119,11 +137,8 @@ export const useOrderDrawerForm = ({
     }
   });
 
-  watch(targetCurrency, (currency) => {
-    if (currency === 'EUR' && !hasManualEurRate.value) {
-      targetCurrency.value = 'USD';
-      return;
-    }
+  watch(targetCurrency, () => {
+    if (currencyHydrationInProgress) return;
     syncTargetCurrencyAmountFromRate();
   });
 
@@ -191,15 +206,18 @@ export const useOrderDrawerForm = ({
     executionWithoutPaymentReason.value = order.execution_without_payment_reason || '';
     autoExecutionOnPayment.value = Boolean(order.auto_execution_on_payment);
     autoCloseOnPayment.value = Boolean(order.auto_close_on_payment);
+    const hydrationEpoch = beginCurrencyHydration();
+    const fxRequestEpoch = ++fxRateRequestEpoch;
     targetCurrency.value = order.target_currency || null;
-    targetCurrencyAmount.value = order.target_currency_amount || null;
+    targetCurrencyAmount.value = order.target_currency_amount ?? null;
     enableCurrency.value = Boolean(order.target_currency);
+    releaseCurrencyWatcherAfterHydration(hydrationEpoch);
     payments.value = [...(order.payments || [])];
 
     if (enableCurrency.value && !currentFxRate.value) {
       void ManagerSettingsService.getFxRate().then((rate) => {
+        if (fxRequestEpoch !== fxRateRequestEpoch) return;
         currentFxRate.value = rate;
-        if (targetCurrency.value === 'EUR' && !rate.eur_byn) targetCurrency.value = 'USD';
       }).catch((error) => console.warn('Failed to load fx rate on init', error));
     }
     if (!installersList.value.length) {

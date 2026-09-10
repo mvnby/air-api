@@ -1,4 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { computed, defineComponent, h, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import {
@@ -8,7 +9,8 @@ import {
 } from '../src/client';
 import OrderRepairEquipmentPanel from '../src/components/orders/OrderRepairEquipmentPanel.vue';
 import OrderRepairPanel from '../src/components/orders/OrderRepairPanel.vue';
-import { emptyRepairMeta } from '../src/components/orders/repair-meta';
+import { emptyRepairMeta, normalizeRepairMeta, type RepairMeta } from '../src/components/orders/repair-meta';
+import { useOrderDrawerSaving } from '../src/composables/useOrderDrawerSaving';
 
 vi.mock('../src/client', () => ({
   ManagerEquipmentService: {
@@ -103,9 +105,138 @@ beforeEach(() => {
 afterEach(() => {
   for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount();
   document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
 describe('OrderRepairPanel', () => {
+  it('does not classify or mutate a sparse saved repair while mounting', async () => {
+    const repairMeta = normalizeRepairMeta({
+      repair_status: 'new',
+      fault_type: null,
+      customer_complaint: null,
+    }, { defaultRepairStatus: true });
+    const beforeMount = structuredClone(repairMeta);
+    const wrapper = mount(OrderRepairPanel, {
+      props: {
+        order,
+        orderTitle: order.title || '',
+        measurementResult: '',
+        customerBranchId: null,
+        objectAddress: 'Минск',
+        expanded: true,
+        repairMeta,
+      },
+    });
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(repairMeta).toEqual(beforeMount);
+    expect(repairMeta.fault_type).toBeNull();
+    expect((wrapper.get('[data-testid="repair-defect-type"]').element as HTMLSelectElement).value).toBe('');
+    expect(wrapper.get('[data-testid="generate-repair-ai"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="generate-repair-ai"]').trigger('click');
+    expect(generateDraftMock).not.toHaveBeenCalled();
+    expect(patchOrderMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a known saved fault selected without writing repair meta on mount', async () => {
+    const repairMeta = normalizeRepairMeta({
+      repair_status: 'new',
+      fault_type: 'drainage_failure',
+    }, { defaultRepairStatus: true });
+    const wrapper = mount(OrderRepairPanel, {
+      props: {
+        order,
+        orderTitle: order.title || '',
+        measurementResult: '',
+        customerBranchId: null,
+        objectAddress: 'Минск',
+        expanded: true,
+        repairMeta,
+      },
+    });
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect((wrapper.get('[data-testid="repair-defect-type"]').element as HTMLSelectElement).value).toBe('drainage_failure');
+    expect(wrapper.get('[data-testid="generate-repair-ai"]').attributes('disabled')).toBeUndefined();
+    expect(repairMeta.fault_type).toBe('drainage_failure');
+    expect(patchOrderMock).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue autosave for sparse repair meta until a manager selects a defect', async () => {
+    vi.useFakeTimers();
+    const sparseRepairMeta = normalizeRepairMeta({
+      repair_status: 'new',
+      fault_type: null,
+      customer_complaint: null,
+      diagnostic_result: null,
+    }, { defaultRepairStatus: true });
+    const Host = defineComponent({
+      setup() {
+        const repairMeta = ref<RepairMeta>(sparseRepairMeta);
+        const orderRef = ref(order);
+        const activeProposalId = ref<number | null>(null);
+        const productLines = ref<any[]>([]);
+        const savedFormSnapshot = ref('');
+        const savedLinesSnapshot = ref('[]');
+        const currentFormSnapshot = () => JSON.stringify({ repair_meta: repairMeta.value });
+        const currentLinesSnapshot = () => '[]';
+        const hasUnsavedChanges = computed(() => (
+          currentFormSnapshot() !== savedFormSnapshot.value
+          || currentLinesSnapshot() !== savedLinesSnapshot.value
+        ));
+        const saving = useOrderDrawerSaving({
+          order: computed(() => orderRef.value),
+          ready: computed(() => true),
+          activeProposalId,
+          activeProposalLocked: computed(() => false),
+          productLines,
+          currentFormSnapshot,
+          currentLinesSnapshot,
+          savedFormSnapshot,
+          savedLinesSnapshot,
+          hasUnsavedChanges,
+          buildSavePayload: () => ({ repair_meta: repairMeta.value } as any),
+          hydrateOrder: () => {},
+          localFormError: ref(''),
+          localServerErrors: ref({}),
+          clearDraft: () => {},
+          onUpdated: () => {},
+        });
+        saving.resetBaseline();
+        return () => h(OrderRepairPanel, {
+          order: orderRef.value,
+          orderTitle: order.title || '',
+          measurementResult: '',
+          customerBranchId: null,
+          objectAddress: 'Минск',
+          expanded: true,
+          repairMeta: repairMeta.value,
+          'onUpdate:repairMeta': (value: RepairMeta) => { repairMeta.value = value; },
+        });
+      },
+    });
+    const wrapper = mount(Host);
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(750);
+
+    expect(patchOrderMock).not.toHaveBeenCalled();
+
+    await wrapper.get('[data-testid="repair-defect-type"]').setValue('drainage_failure');
+    await vi.advanceTimersByTimeAsync(750);
+    await flushPromises();
+
+    expect(patchOrderMock).toHaveBeenCalledOnce();
+    expect(patchOrderMock).toHaveBeenCalledWith(order.id, {
+      repair_meta: expect.objectContaining({
+        repair_status: 'new',
+        fault_type: 'drainage_failure',
+      }),
+    });
+  });
+
   it('loads the complaint library and applies a controlled preset to repair meta', async () => {
     const repairMeta = emptyRepairMeta();
     const wrapper = mount(OrderRepairPanel, {
@@ -147,6 +278,7 @@ describe('OrderRepairPanel', () => {
     mountedWrappers.push(wrapper);
     await flushPromises();
 
+    await wrapper.get('[data-testid="repair-defect-type"]').setValue('refrigerant_leak');
     await wrapper.get('[data-testid="generate-repair-ai"]').trigger('click');
     await flushPromises();
 
