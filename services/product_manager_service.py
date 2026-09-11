@@ -13,6 +13,7 @@ from models.product import Product, Tag
 from services.catalog_revision_service import CatalogRevisionService
 from services.product_serialization import sanitize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
+from services.product_catalog_category_service import catalog_category_from_tags
 
 # ---------------------------------------------------------------------------
 # BTU index → area (m²) and power_cooling (kW) ranges.
@@ -67,6 +68,8 @@ class ProductManagerService:
             "price": product.price,
             "old_price": product.old_price,
             "product_kind": product.product_kind,
+            "catalog_category_override": product.catalog_category_override,
+            "catalog_category": catalog_category_from_tags(product.tags or []),
             "is_inverter": product.is_inverter,
             "power_cooling": product.power_cooling,
             "main_image": product.main_image,
@@ -202,6 +205,8 @@ class ProductManagerService:
                 "price": p.price,
                 "old_price": p.old_price,
                 "product_kind": p.product_kind,
+                "catalog_category_override": p.catalog_category_override,
+                "catalog_category": catalog_category_from_tags(p.tags or []),
                 "is_inverter": p.is_inverter,
                 "power_cooling": p.power_cooling,
                 "main_image": p.main_image,

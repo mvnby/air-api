@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from sqlalchemy import Float, and_, case, cast, exists, func, or_
+from sqlalchemy import Float, String, and_, case, cast, exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -35,7 +35,8 @@ class CatalogDecisionFilters:
     area_min: float | None = None
     area_max: float | None = None
     category: Literal["household", "multi", "semi_industrial"] | None = None
-    indoor_form_factor: Literal["wall", "cassette", "duct", "floor_ceiling", "column"] | None = None
+    indoor_form_factor: Literal["wall", "cassette", "duct", "floor_ceiling", "column", "console"] | None = None
+    heating_min: int | None = None
     brand_ids: tuple[int, ...] = ()
     series_ids: tuple[int, ...] = ()
     is_inverter: bool | None = None
@@ -91,13 +92,28 @@ class CatalogDecisionQueryService:
     }
 
     @staticmethod
-    def _json_float(session: AsyncSession, key: str):
+    def _json_float_path(session: AsyncSession, *path: str):
         # The normalizer persists these canonical numeric keys.  The dialect
         # branch keeps unit tests on SQLite while production uses PostgreSQL.
         if session.bind is not None and session.bind.dialect.name == "sqlite":
-            return cast(func.json_extract(Product.specs, f"$.{key}"), Float)
+            raw_value = func.json_extract(Product.specs, "$." + ".".join(path))
+            normalized = func.replace(func.trim(cast(raw_value, String)), ",", ".")
+            # SQLite silently casts arbitrary text to 0.0; reject values with
+            # non-numeric characters before casting so malformed history never
+            # turns into a false match for a low-temperature filter.
+            numeric = case(
+                (
+                    and_(
+                        normalized.op("GLOB")("*[0-9]*"),
+                        normalized.op("NOT GLOB")("*[^0-9.+-]*"),
+                    ),
+                    normalized,
+                ),
+                else_=None,
+            )
+            return cast(numeric, Float)
         from sqlalchemy.dialects.postgresql import JSONB
-        raw_value = func.jsonb_extract_path_text(cast(Product.specs, JSONB), key)
+        raw_value = func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path)
         # Production catalog history includes values such as "0.88 кВт".  A
         # direct PostgreSQL cast makes one legacy value fail the whole page.
         # Cast only canonical numeric strings; malformed values stay NULL.
@@ -107,6 +123,10 @@ class CatalogDecisionQueryService:
             else_=None,
         )
         return cast(numeric, Float)
+
+    @classmethod
+    def _json_float(cls, session: AsyncSession, key: str):
+        return cls._json_float_path(session, key)
 
     @staticmethod
     def _json_text(session: AsyncSession, key: str):
@@ -161,7 +181,7 @@ class CatalogDecisionQueryService:
         )
 
     @classmethod
-    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, cooling_min, cooling_max, area):
+    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, cooling_nominal, cooling_min, cooling_max, area, heating_min):
         conditions = []
         search = (filters.search or "").strip()
         if search:
@@ -184,21 +204,30 @@ class CatalogDecisionQueryService:
             for btu in filters.cooling_btu_classes:
                 ranges = BTU_MAPPING.get(str(btu))
                 if ranges:
+                    power_min, power_max = ranges["power"]
+                    # Manager nominal pills identify equipment size. A product
+                    # with a known nominal must match the canonical kW band;
+                    # modulation range and digits in its title are not size.
+                    # Area is a data-completeness fallback only when nominal
+                    # cooling capacity is absent.
                     btu_conditions.append(or_(
-                        area.between(ranges["area"][0], ranges["area"][1]),
-                        and_(cooling_min <= ranges["power"][1], cooling_max >= ranges["power"][0]),
-                        Product.title.ilike(f"%{btu}%"),
+                        and_(cooling_nominal.is_not(None), cooling_nominal.between(power_min, power_max)),
+                        and_(cooling_nominal.is_(None), area.between(ranges["area"][0], ranges["area"][1])),
                     ))
             if btu_conditions:
                 conditions.append(or_(*btu_conditions))
         if filters.cooling_min_kw is not None:
-            conditions.append(cooling_max >= filters.cooling_min_kw)
+            conditions.append(cooling_nominal >= filters.cooling_min_kw)
         if filters.cooling_max_kw is not None:
-            conditions.append(cooling_min <= filters.cooling_max_kw)
+            conditions.append(cooling_nominal <= filters.cooling_max_kw)
         if filters.area_min is not None:
             conditions.append(area >= filters.area_min)
         if filters.area_max is not None:
             conditions.append(area <= filters.area_max)
+        if filters.heating_min is not None:
+            # "-25" means a model is specified to heat down to -25 C or
+            # colder, so -30 is included and absent/malformed values are not.
+            conditions.append(heating_min <= filters.heating_min)
         if filters.category:
             conditions.append(exists(select(ProductTagLink.product_id).join(Tag, Tag.id == ProductTagLink.tag_id).where(ProductTagLink.product_id == Product.id, Tag.slug == cls._CATEGORY_SLUGS[filters.category])))
         if filters.indoor_form_factor:
@@ -245,12 +274,16 @@ class CatalogDecisionQueryService:
         cooling_nominal = func.coalesce(Product.power_cooling, cls._json_float(session, "capacity_cooling_kw")).label("cooling_power_kw")
         cooling_min = func.coalesce(cls._json_float(session, "capacity_cooling_min_kw"), cooling_nominal).label("cooling_min_kw")
         cooling_max = func.coalesce(cls._json_float(session, "capacity_cooling_max_kw"), cooling_nominal).label("cooling_max_kw")
-        conditions = cls._conditions(session, filters, availability=availability, cooling_min=cooling_min, cooling_max=cooling_max, area=area)
+        heating_min = func.coalesce(
+            cls._json_float_path(session, "__typed_specs", "temp_range_heat", "min"),
+            cls._json_float(session, "__filter_min_heat"),
+        ).label("heating_min_c")
+        conditions = cls._conditions(session, filters, availability=availability, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min)
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
                 purchase, metrics.c.recommended_price_byn, metrics.c.supplier_name, metrics.c.supplier_qty,
-                margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max,
+                margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max, heating_min,
                 area.label("area_m2"),
                 cls._json_text(session, "__filter_indoor_type").label("indoor_form_factor"),
                 cls._json_text(session, "wifi_ready").label("wifi_raw"),
@@ -290,6 +323,7 @@ class CatalogDecisionQueryService:
                 "cooling_power_kw": float(row.cooling_power_kw) if row.cooling_power_kw is not None else None,
                 "cooling_min_kw": float(row.cooling_min_kw) if row.cooling_min_kw is not None else None,
                 "cooling_max_kw": float(row.cooling_max_kw) if row.cooling_max_kw is not None else None,
+                "heating_min_c": int(row.heating_min_c) if row.heating_min_c is not None else None,
                 "area_m2": float(row.area_m2) if row.area_m2 is not None else None, "category": category,
                 "indoor_form_factor": row.indoor_form_factor, "is_inverter": bool(product.is_inverter), "wifi": wifi,
                 "is_published": bool(product.is_published),

@@ -10,6 +10,31 @@ class CatalogDecisionOrderLineService:
     """Replace one proposal with authoritative catalog-decision snapshots."""
 
     @staticmethod
+    async def append(
+        session: AsyncSession,
+        *,
+        order_id: int,
+        proposal_id: int,
+        product_ids: list[int],
+        snapshots: dict[int, CatalogDecisionProductSnapshot],
+    ) -> None:
+        for product_id in product_ids:
+            snapshot = snapshots[product_id]
+            session.add(
+                OrderProductLink(
+                    order_id=order_id,
+                    proposal_id=proposal_id,
+                    product_id=product_id,
+                    quantity=1,
+                    price=snapshot.retail_price_byn,
+                    cost=snapshot.purchase_cost_byn,
+                    title_snapshot=snapshot.product.title,
+                    currency_snapshot="BYN",
+                )
+            )
+        await session.flush()
+
+    @staticmethod
     async def replace(
         session: AsyncSession,
         *,

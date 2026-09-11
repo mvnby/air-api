@@ -506,7 +506,7 @@ export class ApiService {
      * @param hasWifi
      * @param hasFreshAir
      * @param color Canonical indoor unit color family
-     * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
+     * @param indoorTypes Canonical indoor unit types (duct/cassette/floor_ceiling/column/console)
      * @param tagSlugs
      * @param brandSlugs Canonical brand slugs to include
      * @param isInverter
@@ -571,7 +571,7 @@ export class ApiService {
      * @param hasWifi
      * @param hasFreshAir
      * @param color Canonical indoor unit color family
-     * @param indoorTypes Indoor unit types for semi-industrial catalog (duct/cassette/floor_ceiling/column)
+     * @param indoorTypes Canonical indoor unit types (duct/cassette/floor_ceiling/column/console)
      * @param tagSlugs
      * @param brandSlugs Canonical brand slugs to include
      * @param isInverter

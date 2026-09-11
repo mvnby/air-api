@@ -8,6 +8,7 @@ export type ProductDuplicatePayload = {
     price?: (number | null);
     old_price?: (number | null);
     product_kind?: ('unknown' | 'complete_split_system' | 'indoor_unit' | 'outdoor_unit' | 'panel' | 'accessory' | 'consumable' | 'other' | null);
+    catalog_category_override?: ('cat-household' | 'cat-multi' | 'cat-industrial' | null);
     slug?: (string | null);
     description?: (string | null);
     is_inverter?: (boolean | null);

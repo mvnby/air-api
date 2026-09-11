@@ -17,6 +17,7 @@ from parsers.onliner import OnlinerParser
 from parsers.severcon import SeverconEnergoluxParser
 from parsers.tvoy_klimat import TvoyKlimatParser
 from core.database import async_session_maker
+from crud.product_catalog_category import get_category_group_tag_ids
 from models import Product, ProductImage, Tag, TagGroup
 from services.fx_rate_service import FxRateService
 from services.import_media_service import ImportMediaService
@@ -26,11 +27,13 @@ from services.product_import_match_service import find_existing_product_for_impo
 from services.spec_normalizer import normalize_specs
 from services.product_area import canonicalize_area_specs
 from services.tag_logic import (
-    CATEGORY_TAG_TITLES,
-    detect_category_slug,
     extract_brand_name,
     extract_brand_slug,
     get_auto_tags,
+)
+from services.product_catalog_category_service import (
+    CATALOG_CATEGORY_SLUGS,
+    sync_product_catalog_category,
 )
 from services.brand_series_service import sync_product_brand_series
 from services.catalog_invalidation_commit_service import (
@@ -38,7 +41,6 @@ from services.catalog_invalidation_commit_service import (
 )
 
 logger = logging.getLogger(__name__)
-_CATEGORY_TAG_SLUGS = {"cat-household", "cat-multi", "cat-industrial"}
 ImportProgressCallback = Callable[[Dict[str, object]], Awaitable[None]]
 
 
@@ -178,6 +180,7 @@ def _product_public_state(product: Product) -> tuple[object, ...]:
         product.source_url,
         product.brand_id,
         product.series_id,
+        product.catalog_category_override,
         tuple(sorted((tag.slug or "") for tag in (product.tags or []))),
     )
 
@@ -222,10 +225,29 @@ class ImporterService:
             existing = result.scalar_one_or_none()
             if existing and not update_existing:
                 await session.refresh(existing, attribute_names=["tags"])
-                has_category_tag = any(
-                    (getattr(tag, "slug", "") or "") in _CATEGORY_TAG_SLUGS
-                    for tag in (existing.tags or [])
+                category_group_tag_ids = await get_category_group_tag_ids(
+                    session,
+                    {tag.id for tag in (existing.tags or []) if tag.id is not None},
                 )
+                valid_category_tag_slugs = {
+                    tag.slug
+                    for tag in (existing.tags or [])
+                    if tag.id in category_group_tag_ids and tag.slug in CATALOG_CATEGORY_SLUGS
+                }
+                canonical_tag_slugs = {
+                    tag.slug
+                    for tag in (existing.tags or [])
+                    if tag.slug in CATALOG_CATEGORY_SLUGS
+                }
+                has_category_tag = (
+                    len(canonical_tag_slugs) == 1
+                    and canonical_tag_slugs == valid_category_tag_slugs
+                )
+                if existing.catalog_category_override:
+                    has_category_tag = (
+                        canonical_tag_slugs == {existing.catalog_category_override}
+                        and valid_category_tag_slugs == canonical_tag_slugs
+                    )
                 if has_category_tag:
                     # Keep fast path for already healthy records.
                     related_urls: List[str] = []
@@ -272,6 +294,9 @@ class ImporterService:
             metrics = data.get('metrics', {})
             raw_specs = data.get("specs", {}) or {}
             auto_slugs = get_auto_tags(metrics, specs=raw_specs, title=title)
+            # A product's category is applied once its persistent override is
+            # known. Do not let an inferred parser tag coexist with it.
+            auto_slugs = [slug for slug in auto_slugs if slug not in CATALOG_CATEGORY_SLUGS]
             # Derive Wi-Fi technical tags from parsed specs so import preserves
             # "builtin" vs "ready" even before any manual manager edits.
             auto_slugs = _augment_auto_slugs_with_wifi_specs(auto_slugs, raw_specs)
@@ -296,26 +321,8 @@ class ImporterService:
                     update_existing=update_existing,
                 )
 
-            # Ensure core filter tags exist for brand/category.
+            # Ensure core filter tags exist for brand.
             catalog_changed = False
-            category_slug = detect_category_slug(metrics=metrics, specs=normalized_specs, title=title)
-            if category_slug:
-                auto_slugs.append(category_slug)
-                category_group, group_changed = await _ensure_tag_group(
-                    session,
-                    slug="category",
-                    title="Категория",
-                    allow_multiple=False,
-                    sort_order=20,
-                )
-                _, tag_changed = await _ensure_tag(
-                    session,
-                    group=category_group,
-                    slug=category_slug,
-                    title=CATEGORY_TAG_TITLES.get(category_slug, category_slug),
-                )
-                catalog_changed = catalog_changed or group_changed or tag_changed
-
             brand_slug = extract_brand_slug(specs=normalized_specs, title=title)
             brand_title = extract_brand_name(specs=normalized_specs, title=title)
             if brand_slug and brand_title:
@@ -437,6 +444,15 @@ class ImporterService:
                 )
                 session.add(product)
                 catalog_changed = True
+
+            category_changed = await sync_product_catalog_category(
+                session,
+                product=product,
+                specs=normalized_specs,
+                title=product.title,
+                metrics=metrics,
+            )
+            catalog_changed = catalog_changed or category_changed
 
             brand_series_change_kinds: set[str] = set()
             brand_series_changed = await sync_product_brand_series(

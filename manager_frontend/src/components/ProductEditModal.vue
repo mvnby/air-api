@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { api, type Product, type ManagerBrand, type ProductCreate, type ProductDuplicatePayload, type ProductUpdate } from '../api';
-import { X, Save, Plus, Trash2, Edit3, Globe, Tag } from 'lucide-vue-next';
+import { X, Save, Plus, Trash2, Edit3, Tag } from 'lucide-vue-next';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import ProductSpecificationsEditor from './products/ProductSpecificationsEditor.vue';
 import ProductSuppliersEditor from './products/ProductSuppliersEditor.vue';
 import ProductSeriesSelector from './products/ProductSeriesSelector.vue';
+import ProductMainFields from './products/ProductMainFields.vue';
 import { useSpecRegistry } from '../composables/useSpecRegistry';
 import { collapseWifiSpecs } from '../utils/product-spec-safety';
 import type { ProductWorkspaceSection } from '../utils/product-workspace';
@@ -80,6 +81,7 @@ const form = ref<any>({
     old_price: null,
     is_published: true,
     product_kind: 'unknown',
+    catalog_category_override: null,
 });
 
 const specs = ref<{ key: string; value: string }[]>([]);
@@ -97,6 +99,7 @@ const selectedBrandEntityId = ref<number | null>(null);
 const selectedSeriesId = ref<number | null>(null);
 const selectedSeriesTitle = ref('');
 const seriesSelectionTouched = ref(false);
+const categorySelectionTouched = ref(false);
 const vitebskQty = ref(0);
 const supplierOffers = ref<SupplierOfferResponse[]>([]);
 const supplierOffersLoading = ref(false);
@@ -740,6 +743,8 @@ const onBrandSelectChange = (event: Event) => {
 
 const setCategoryTag = async (categorySlug: string) => {
     if (!categorySlug) return;
+    form.value.catalog_category_override = categorySlug;
+    categorySelectionTouched.value = true;
     if (tagGroups.value.length === 0) await fetchTags();
     const group = categoryGroup.value;
     if (!group) return;
@@ -900,9 +905,8 @@ const fetchBrands = async (force = false) => {
 };
 
 const filteredTagGroups = computed(() => {
-    const visibleGroups = effectiveExpertMode.value
-        ? tagGroups.value
-        : tagGroups.value.filter((group) => normalizeText(group.slug) !== 'brand');
+    const visibleGroups = tagGroups.value.filter(group => normalizeText(group.slug) !== 'category'
+        && (effectiveExpertMode.value || normalizeText(group.slug) !== 'brand'));
     if (!tagSearchQuery.value.trim()) return visibleGroups;
     const q = tagSearchQuery.value.toLowerCase().trim();
     return visibleGroups
@@ -916,7 +920,8 @@ const filteredTagGroups = computed(() => {
 const selectedTags = computed(() => tagGroups.value
     .flatMap((group) => group.tags.map((tag) => ({ ...tag, groupSlug: group.slug })))
     .filter((tag) => selectedTagIds.value.has(tag.id))
-    .filter((tag) => effectiveExpertMode.value || normalizeText(tag.groupSlug) !== 'brand'));
+    .filter((tag) => normalizeText(tag.groupSlug) !== 'category'
+        && (effectiveExpertMode.value || normalizeText(tag.groupSlug) !== 'brand')));
 
 const isTagSelected = (id: number) => selectedTagIds.value.has(id);
 
@@ -967,6 +972,7 @@ const currentProductRole = computed<'indoor' | 'outdoor' | 'unknown'>(() => {
 });
 
 const isCurrentProductMulti = computed<boolean>(() => {
+    if (form.value.catalog_category_override) return form.value.catalog_category_override === 'cat-multi';
     const category = categoryGroup.value;
     if (category) {
         const selectedMultiTag = category.tags.find((tag) => normalizeText(tag.slug) === 'cat-multi');
@@ -1009,6 +1015,7 @@ const resetEditorState = () => {
     selectedSeriesId.value = null;
     selectedSeriesTitle.value = '';
     seriesSelectionTouched.value = false;
+    categorySelectionTouched.value = false;
     vitebskQty.value = 0;
     supplierOffers.value = [];
     cleanFingerprint.value = '';
@@ -1021,6 +1028,7 @@ const editorFingerprint = () => JSON.stringify({
     tagIds: Array.from(selectedTagIds.value).sort((a, b) => a - b),
     brandId: selectedBrandEntityId.value,
     seriesId: selectedSeriesId.value,
+    categorySelectionTouched: categorySelectionTouched.value,
     indoorSlugs: compatibilityIndoorSlugs.value,
     outdoorSlugs: compatibilityOutdoorSlugs.value,
     logisticsComponents: logisticsComponents.value,
@@ -1049,7 +1057,8 @@ const initializeEditor = async () => {
         price: Number(source?.price || 0),
         old_price: source?.old_price ?? null,
         is_published: source?.is_published ?? true,
-        product_kind: (source as any)?.product_kind || 'unknown',
+        product_kind: source?.product_kind || 'unknown',
+        catalog_category_override: source?.catalog_category_override ?? null,
     };
     await loadSpecRegistry();
 
@@ -1242,6 +1251,9 @@ const save = async (): Promise<boolean> => {
             tag_ids: Array.from(selectedTagIds.value),
             manuals: validManuals,
         };
+        if (isPersistedProduct.value && !categorySelectionTouched.value) {
+            delete updateData.catalog_category_override;
+        }
         if (isCreateMode.value) {
             await api.createProduct(updateData as ProductCreate);
         } else if (isDuplicateMode.value) {
@@ -1256,6 +1268,7 @@ const save = async (): Promise<boolean> => {
         } else {
             await api.updateProduct(props.product!.id, updateData);
         }
+        categorySelectionTouched.value = false;
         cleanFingerprint.value = editorFingerprint();
         emit('success');
         if (!isWorkspace.value) close();
@@ -1268,6 +1281,7 @@ const save = async (): Promise<boolean> => {
             'old_price',
             'is_published',
             'product_kind',
+            'catalog_category_override',
             'brand_id',
             'specs',
             'tag_ids',
@@ -1347,90 +1361,13 @@ defineExpose({ save, isDirty, loading });
                 <div class="grid grid-cols-1 gap-6" :class="isWorkspace ? '' : 'lg:grid-cols-2'">
                     <!-- Column 1: Basic Info -->
                     <section v-if="showMainSection || showSuppliersSection || showRelationsSection" id="product-section-main" class="scroll-mt-28 space-y-5">
-                        <template v-if="showMainSection">
-                        <div class="border-b border-gray-100 pb-4 dark:border-slate-800">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-700 dark:text-teal-300">Основное</p>
-                            <h2 class="mt-1 text-xl font-bold text-gray-950 dark:text-white">Название, цена и публикация</h2>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Название модели</label>
-                            <input 
-                                v-model="form.title" 
-                                type="text"
-                                class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-900 dark:text-slate-100 font-medium text-sm"
-                                :class="formServerErrors.title ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
-                                placeholder="Напр: LG ARTCOOL Gallery"
-                            />
-                            <p v-if="formServerErrors.title" class="mt-1 text-xs text-red-600">{{ formServerErrors.title }}</p>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1 flex justify-between items-center">
-                                <span>Slug (URL путь)</span>
-                                <Globe class="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
-                            </label>
-                            <input 
-                                v-model="form.slug" 
-                                type="text"
-                                class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm font-mono text-gray-600 dark:text-slate-300"
-                                :class="formServerErrors.slug ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
-                                placeholder="lg-artcool-gallery"
-                            />
-                            <p v-if="formServerErrors.slug" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.slug }}</p>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Цена (BYN)</label>
-                                <div class="relative">
-                                    <input 
-                                        v-model.number="form.price" 
-                                        type="number"
-                                        class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-bold text-teal-700 dark:text-teal-400 text-sm"
-                                        :class="formServerErrors.price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
-                                    />
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
-                                </div>
-                                <p v-if="formServerErrors.price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.price }}</p>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1 line-through decoration-gray-400 dark:decoration-slate-600">Старая цена</label>
-                                <div class="relative">
-                                    <input 
-                                        v-model.number="form.old_price" 
-                                        type="number"
-                                        class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-500 dark:text-slate-400 text-sm"
-                                        :class="formServerErrors.old_price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
-                                    />
-                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
-                                </div>
-                                <p v-if="formServerErrors.old_price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formServerErrors.old_price }}</p>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-2 pt-1">
-                             <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" v-model="form.is_published" class="sr-only peer">
-                                <div class="w-11 h-6 bg-gray-200 dark:bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 dark:peer-focus:ring-teal-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 dark:after:border-slate-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                                <span class="ms-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Опубликовано</span>
-                            </label>
-                        </div>
-                        <label class="block space-y-1">
-                            <span class="text-sm font-semibold text-gray-700 dark:text-slate-300">Канонический тип товара</span>
-                            <select v-model="form.product_kind" class="w-full rounded-lg border border-gray-200 bg-slate-100 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
-                                <option value="unknown">Не задан</option>
-                                <option value="complete_split_system">Готовая сплит-система</option>
-                                <option value="indoor_unit">Внутренний блок</option>
-                                <option value="outdoor_unit">Наружный блок</option>
-                                <option value="panel">Панель</option>
-                                <option value="accessory">Аксессуар</option>
-                                <option value="consumable">Расходный материал</option>
-                                <option value="other">Другое</option>
-                            </select>
-                            <p class="text-[11px] text-gray-500 dark:text-slate-400">От этого поля зависит допуск товара в потребительские витрины.</p>
-                        </label>
-                        </template>
+                        <ProductMainFields
+                            v-if="showMainSection"
+                            v-model="form"
+                            :errors="formServerErrors"
+                            :current-category="product?.catalog_category"
+                            @category-change="categorySelectionTouched = true"
+                        />
 
                         <ProductSuppliersEditor
                             v-if="showSuppliersSection && isPersistedProduct"

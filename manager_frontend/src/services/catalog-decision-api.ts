@@ -15,7 +15,8 @@ export type CatalogDecisionFilters = {
   areaMin?: number;
   areaMax?: number;
   category?: 'household' | 'multi' | 'semi_industrial';
-  indoorFormFactor?: 'wall' | 'cassette' | 'duct' | 'floor_ceiling' | 'column';
+  indoorFormFactor?: 'wall' | 'cassette' | 'duct' | 'floor_ceiling' | 'column' | 'console';
+  heatingMin?: -20 | -25 | -30;
   brandIds?: number[];
   seriesIds?: number[];
   isInverter?: boolean;
@@ -28,7 +29,6 @@ export type CatalogDecisionFilters = {
 
 export const defaultCatalogDecisionFilters = (): CatalogDecisionFilters => ({
   isPublished: true,
-  category: 'household',
 });
 
 export const catalogDecisionApi = {
@@ -41,7 +41,7 @@ export const catalogDecisionApi = {
       filters.areaMin, filters.areaMax, filters.category, filters.indoorFormFactor,
       filters.brandIds, filters.seriesIds, filters.isInverter, filters.hasWifi, filters.wifi,
       filters.includeOrderable ? undefined : (filters.availability ?? 'in_stock'),
-      filters.isPublished, sort, direction,
+      filters.isPublished, sort, direction, filters.heatingMin,
     );
   },
 };

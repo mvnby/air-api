@@ -54,6 +54,9 @@ _TITLE_SKIP_TOKENS = {
     "напольно-потолочная",
     "колонный",
     "колонная",
+    "консольный",
+    "консольная",
+    "console",
     "мобильный",
     "мобильная",
     "оконный",
@@ -86,6 +89,9 @@ _INVALID_BRAND_EXACT = {
     "напольная",
     "колонный",
     "колонная",
+    "консольный",
+    "консольная",
+    "console",
     "мобильный",
     "мобильная",
     "моноблок",
@@ -217,9 +223,7 @@ def detect_category_slug(
     title: str = "",
 ) -> Optional[str]:
     specs = specs or {}
-    indoor_type = _normalized(_first_existing(specs, ("indoor_type", "Тип внутреннего блока")))
-    system_type = _normalized(_first_existing(specs, ("type", "Тип кондиционера", "Тип")))
-    title_text = _normalized(title)
+    indoor_type, system_type, title_text = category_detection_inputs(specs, title)
 
     combined_type = " ".join((indoor_type, system_type, title_text))
 
@@ -234,6 +238,17 @@ def detect_category_slug(
     if any(marker in combined_type for marker in multi_markers):
         return "cat-multi"
 
+    # Console is an indoor-unit form factor, not evidence of commercial
+    # placement. Treat a standalone console split as household unless its
+    # source explicitly calls the system semi-industrial. Multi components
+    # remain above this branch and therefore keep their cat-multi category.
+    console_markers = ("консол", "console")
+    explicit_industrial_system_markers = ("полупром", "полупромышлен", "промышлен")
+    if any(marker in system_type for marker in explicit_industrial_system_markers):
+        return "cat-industrial"
+    if any(marker in " ".join((indoor_type, system_type)) for marker in console_markers):
+        return "cat-household"
+
     industrial_markers = (
         "кассет",
         "каналь",
@@ -245,7 +260,6 @@ def detect_category_slug(
         "floor-ceiling",
         "floor ceiling",
         "колонн",
-        "console",
     )
     if any(marker in combined_type for marker in industrial_markers):
         return "cat-industrial"
@@ -267,6 +281,19 @@ def detect_category_slug(
         return "cat-household"
 
     return None
+
+
+def category_detection_inputs(
+    specs: Optional[Dict[str, Any]] = None,
+    title: str = "",
+) -> tuple[str, str, str]:
+    """The normalized inputs that determine automatic catalog category."""
+    source = specs or {}
+    return (
+        _normalized(_first_existing(source, ("indoor_type", "Тип внутреннего блока"))),
+        _normalized(_first_existing(source, ("type", "Тип кондиционера", "Тип"))),
+        _normalized(title),
+    )
 
 
 def get_auto_tags(metrics: Dict[str, Any], specs: Optional[Dict[str, Any]] = None, title: str = "") -> List[str]:

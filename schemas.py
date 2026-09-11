@@ -318,6 +318,7 @@ ProductKind = Literal[
     "consumable",
     "other",
 ]
+CatalogCategoryOverride = Literal["cat-household", "cat-multi", "cat-industrial"]
 PublicStockState = Literal[
     "local_stock",
     "supplier_stock",
@@ -813,6 +814,8 @@ class ManagerCatalogProductItemResponse(BaseModel):
     price: int
     old_price: Optional[int]
     product_kind: ProductKind = "unknown"
+    catalog_category_override: Optional[CatalogCategoryOverride] = None
+    catalog_category: Optional[CatalogCategoryOverride] = None
     is_inverter: bool
     power_cooling: Optional[float]
     main_image: Optional[str]
@@ -2096,6 +2099,7 @@ class ProductUpdate(BaseModel):
     price: Optional[int] = None
     old_price: Optional[int] = None
     product_kind: Optional[ProductKind] = None
+    catalog_category_override: Optional[CatalogCategoryOverride] = None
     slug: Optional[str] = None
     description: Optional[str] = None
     is_inverter: Optional[bool] = None
@@ -2115,6 +2119,7 @@ class ProductCreate(BaseModel):
     price: int = Field(default=0, ge=0)
     old_price: Optional[int] = None
     product_kind: ProductKind = "unknown"
+    catalog_category_override: Optional[CatalogCategoryOverride] = None
     slug: Optional[str] = None
     description: str = ""
     is_inverter: bool = False

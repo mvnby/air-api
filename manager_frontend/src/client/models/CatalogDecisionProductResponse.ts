@@ -20,6 +20,7 @@ export type CatalogDecisionProductResponse = {
     cooling_power_kw?: (number | null);
     cooling_min_kw?: (number | null);
     cooling_max_kw?: (number | null);
+    heating_min_c?: (number | null);
     area_m2?: (number | null);
     category?: (string | null);
     indoor_form_factor?: (string | null);

@@ -17,7 +17,7 @@ from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierO
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
-ALLOWED_INDOOR_TYPE_FILTERS = {"duct", "cassette", "floor_ceiling", "column"}
+ALLOWED_INDOOR_TYPE_FILTERS = {"duct", "cassette", "floor_ceiling", "column", "console"}
 BLACK_COLOR_PATTERNS = (
     "%черн%",
     "%чёрн%",

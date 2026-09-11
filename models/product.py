@@ -61,6 +61,11 @@ class Product(SQLModel, table=True):
             "series_assignment_source IN ('manual', 'derived')",
             name="ck_product_series_assignment_source",
         ),
+        CheckConstraint(
+            "catalog_category_override IS NULL OR catalog_category_override IN "
+            "('cat-household', 'cat-multi', 'cat-industrial')",
+            name="ck_product_catalog_category_override",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -74,6 +79,10 @@ class Product(SQLModel, table=True):
     product_kind: str = Field(
         default="unknown",
         sa_column=Column(String(40), nullable=False, index=True),
+    )
+    catalog_category_override: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(32), nullable=True),
     )
     is_inverter: bool = Field(default=False, index=True)
     power_cooling: Optional[float] = Field(default=None, index=True)
