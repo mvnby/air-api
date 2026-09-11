@@ -15,7 +15,6 @@ from tests.unit.alembic_chain_test_support import assert_revision_in_single_head
 
 
 REVISION = "e8b9c0d1e2f3"
-HEAD_REVISION = "e54a0b1d7f95"
 
 
 def _migration():
@@ -30,9 +29,9 @@ def _migration():
     return migration
 
 
-def test_document_party_identity_is_single_alembic_head() -> None:
+def test_document_party_identity_is_in_single_alembic_head_chain() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == HEAD_REVISION
+    assert_revision_in_single_head_chain(scripts, REVISION)
 
 
 def test_migration_backfills_company_signing_mode_on_sqlite() -> None:

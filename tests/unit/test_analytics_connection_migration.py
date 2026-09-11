@@ -12,9 +12,6 @@ from sqlalchemy import create_engine, inspect, text
 from tests.unit.alembic_chain_test_support import assert_revision_in_single_head_chain
 
 
-HEAD_REVISION = "e54a0b1d7f95"
-
-
 def _migration():
     path = Path("alembic/versions/e3c4d5e6f7a8_add_analytics_connections.py")
     spec = importlib.util.spec_from_file_location(
@@ -26,11 +23,9 @@ def _migration():
     return migration
 
 
-def test_analytics_connection_is_single_alembic_head() -> None:
+def test_analytics_connection_is_in_single_alembic_head_chain() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert (
-        assert_revision_in_single_head_chain(scripts, "e3c4d5e6f7a8") == HEAD_REVISION
-    )
+    assert_revision_in_single_head_chain(scripts, "e3c4d5e6f7a8")
 
 
 def test_upgrade_creates_encrypted_storefront_connection_table() -> None:

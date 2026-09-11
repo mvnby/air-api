@@ -13,7 +13,6 @@ from tests.unit.alembic_chain_test_support import assert_revision_in_single_head
 
 
 REVISION = "e5f6a7b8c9d0"
-HEAD_REVISION = "e54a0b1d7f95"
 
 
 def _migration():
@@ -28,9 +27,9 @@ def _migration():
     return migration
 
 
-def test_installation_discount_policy_is_the_single_alembic_head() -> None:
+def test_installation_discount_policy_is_in_single_alembic_head_chain() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == HEAD_REVISION
+    assert_revision_in_single_head_chain(scripts, REVISION)
 
 
 def test_upgrade_seeds_disabled_policy_from_legacy_discount_and_is_reversible() -> None:

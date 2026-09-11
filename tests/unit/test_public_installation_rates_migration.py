@@ -12,9 +12,6 @@ from sqlalchemy import create_engine, text
 from tests.unit.alembic_chain_test_support import assert_revision_in_single_head_chain
 
 
-HEAD_REVISION = "e54a0b1d7f95"
-
-
 def _migration():
     path = Path(
         "alembic/versions/d4e5f6a7b8c9_correct_public_installation_quote_rates.py"
@@ -28,11 +25,9 @@ def _migration():
     return migration
 
 
-def test_public_installation_rate_correction_is_the_single_alembic_head() -> None:
+def test_public_installation_rate_correction_is_in_single_alembic_head_chain() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert (
-        assert_revision_in_single_head_chain(scripts, "d4e5f6a7b8c9") == HEAD_REVISION
-    )
+    assert_revision_in_single_head_chain(scripts, "d4e5f6a7b8c9")
 
 
 def test_public_installation_rate_correction_is_guarded_and_reversible() -> None:

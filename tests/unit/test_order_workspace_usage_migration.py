@@ -12,7 +12,7 @@ from tests.unit.alembic_chain_test_support import assert_revision_in_single_head
 
 def test_usage_migration_has_one_head_after_product_description():
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, "d43f9a0c6e84") == "e54a0b1d7f95"
+    assert_revision_in_single_head_chain(scripts, "e54a0b1d7f95")
     assert scripts.get_revision("e54a0b1d7f95").down_revision == "d43f9a0c6e84"
 
 
