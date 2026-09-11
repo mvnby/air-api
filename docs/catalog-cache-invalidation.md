@@ -25,6 +25,8 @@ storefront also has a monotonic local revision keyed by
 - shared product, brand, series, media or feature changes increment the global
   revision and enqueue one event for every active storefront;
 - a real `TenantOffer` change increments only that exact storefront revision;
+- a warranty policy create or update increments the global revision because
+  supplier-independent rules change public product projections;
 - an identical offer upsert is a no-op and advances neither revision;
 - the public cache key is `g<global>-s<storefront>`.
 

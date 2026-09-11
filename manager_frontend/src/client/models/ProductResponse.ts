@@ -8,6 +8,7 @@ import type { ProductManualResponse } from './ProductManualResponse';
 import type { ProductSeriesResponse } from './ProductSeriesResponse';
 import type { ProductSiblingResponse } from './ProductSiblingResponse';
 import type { PublicFeatureResponse } from './PublicFeatureResponse';
+import type { PublicProductWarrantyResponse } from './PublicProductWarrantyResponse';
 import type { TagResponse } from './TagResponse';
 export type ProductResponse = {
     id: number;
@@ -37,6 +38,7 @@ export type ProductResponse = {
     images?: Array<string>;
     gallery_images?: Array<ProductImageResponse>;
     manuals?: Array<ProductManualResponse>;
+    warranty?: (PublicProductWarrantyResponse | null);
     series_siblings?: Array<ProductSiblingResponse>;
     features?: Array<PublicFeatureResponse>;
 };

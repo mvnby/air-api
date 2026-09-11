@@ -14,6 +14,7 @@ from crud.public_catalog import PublicCatalogDAO
 from crud.public_taxonomy import PublicTaxonomyDAO
 from models.tenancy import TenantScope
 from schemas import (
+    PublicProductWarrantyResponse,
     ProductSeriesNavigationItemResponse,
     ProductSeriesNavigationResponse,
     ProductSiblingResponse,
@@ -34,6 +35,7 @@ from services.public_catalog_visibility_service import (
 )
 from services.public_taxonomy_service import PublicTaxonomyService
 from services.tag_logic import is_invalid_brand_name, is_invalid_brand_slug
+from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 
 @dataclass(frozen=True)
@@ -343,10 +345,15 @@ class PublicCatalogService:
             projections,
             supply_metrics=supply_metrics,
         )
+        warranties = await WarrantyPolicyResolver.resolve_public(
+            session,
+            [projection.product for projection in projections],
+        )
         return [
             PublicCatalogService._to_public_search_item(
                 projection,
                 supply_metrics.get(int(projection.product.id or 0), {}),
+                warranties,
             )
             for projection in projections[:limit]
         ]
@@ -355,10 +362,12 @@ class PublicCatalogService:
     def _to_public_search_item(
         projection: PublicProductProjection,
         supply_metrics: dict[str, Any],
+        warranties: dict[int, PublicProductWarrantyResponse | None] | None = None,
     ) -> PublicProductSearchItemResponse:
         mapped = map_product_to_response(
             projection,
             supply_metrics=supply_metrics,
+            warranties=warranties,
         )
         response = PublicProductSearchItemResponse(
             id=mapped.id,
@@ -380,6 +389,7 @@ class PublicCatalogService:
             public_stock_state=mapped.public_stock_state,
             delivery_min_days=mapped.delivery_min_days,
             delivery_max_days=mapped.delivery_max_days,
+            warranty=mapped.warranty,
         )
         response._disclose_legacy_availability = (
             projection.disclosure_policy.expose_legacy_availability
@@ -547,6 +557,14 @@ class PublicCatalogService:
             product_group_keys[int(product.id)] = keys
             for key in keys:
                 groups.setdefault(key, []).append(projection)
+        warranties = await WarrantyPolicyResolver.resolve_public(
+            session,
+            [
+                product
+                for product in products
+                if product_group_keys.get(int(product.id or 0))
+            ],
+        )
 
         payload: dict[str, ProductSeriesNavigationItemResponse] = {}
         for projection in projections:
@@ -581,6 +599,7 @@ class PublicCatalogService:
                         specs=sanitize_specs(item.product.specs),
                         is_inverter=item.product.is_inverter,
                         main_image=item.product.main_image,
+                        warranty=warranties.get(int(item.product.id or 0)),
                     )
                     for item in siblings
                 ],

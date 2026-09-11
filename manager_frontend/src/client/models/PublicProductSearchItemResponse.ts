@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { PublicProductWarrantyResponse } from './PublicProductWarrantyResponse';
 /**
  * Small public projection; internal sourcing and margin data is excluded.
  */
@@ -25,5 +26,6 @@ export type PublicProductSearchItemResponse = {
     public_stock_state?: ('local_stock' | 'supplier_stock' | 'available_to_order' | 'out_of_stock' | null);
     delivery_min_days?: (number | null);
     delivery_max_days?: (number | null);
+    warranty?: (PublicProductWarrantyResponse | null);
 };
 

@@ -23,6 +23,7 @@ from services.product_response_mapper import map_product_to_response
 from services.product_service import ProductService
 from services.feature_resolver_service import FeatureResolverService
 from services.public_catalog_service import PublicCatalogService
+from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 router = APIRouter(tags=["api"])
 _PUBLIC_STOREFRONT_DEPENDENCIES = [Depends(verify_public_storefront_request)]
@@ -148,12 +149,14 @@ async def get_catalog(
     products = [projection.product for projection in payload["items"]]
     supply_metrics = await ProductService.get_supply_metrics_map(session, products)
     await FeatureResolverService.resolve_for_products(session, products)
+    warranties = await WarrantyPolicyResolver.resolve_public(session, products)
 
     return CatalogResponse(
         items=[
             map_product_to_response(
                 projection,
                 supply_metrics=supply_metrics.get(projection.product.id),
+                warranties=warranties,
             )
             for projection in payload["items"]
         ],
@@ -179,10 +182,12 @@ async def get_vitebsk_featured_products(
     products = [projection.product for projection in projections]
     supply_metrics = await ProductService.get_supply_metrics_map(session, products)
     await FeatureResolverService.resolve_for_products(session, products)
+    warranties = await WarrantyPolicyResolver.resolve_public(session, products)
     return [
         map_product_to_response(
             projection,
             supply_metrics=supply_metrics.get(projection.product.id),
+            warranties=warranties,
         )
         for projection in projections
     ]
@@ -224,10 +229,16 @@ async def get_product_by_identifier(
         raise HTTPException(status_code=404, detail=f"Product with identifier '{identifier}' not found")
     product = page.product.product
     siblings = [projection.product for projection in page.siblings]
+    visible_products = [product, *siblings]
     supply_metrics = await ProductService.get_supply_metrics_map(session, [product])
     await FeatureResolverService.resolve_for_products(session, [product])
+    warranties = await WarrantyPolicyResolver.resolve_public(
+        session,
+        visible_products,
+    )
     return map_product_to_response(
         page.product,
         series_siblings=page.siblings,
         supply_metrics=supply_metrics.get(product.id),
+        warranties=warranties,
     )

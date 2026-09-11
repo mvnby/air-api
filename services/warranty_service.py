@@ -20,7 +20,9 @@ from models import (
     WarrantyPolicy,
 )
 from models.tenancy import TenantScope
+from services.catalog_revision_service import CatalogRevisionService
 from services.warranty_coverage_service import WarrantyCoverageService
+from services.warranty_policy_resolver import WarrantyPolicyResolver
 from crud.warranty_policy import WarrantyPolicyStore
 
 
@@ -134,6 +136,10 @@ class WarrantyService(WarrantyPolicyStore):
             policy_id=int(policy.id or 0),
             series_ids=selected_series_ids,
         )
+        await CatalogRevisionService.stage_invalidation(
+            session,
+            reason="warranty_policy_created",
+        )
         await session.commit()
         await session.refresh(policy)
         series_ids_by_policy = await cls._policy_series_ids(session, [policy])
@@ -199,6 +205,10 @@ class WarrantyService(WarrantyPolicyStore):
                 policy_id=int(policy.id or 0),
                 series_ids=selected_series_ids,
             )
+        await CatalogRevisionService.stage_invalidation(
+            session,
+            reason="warranty_policy_updated",
+        )
         await session.commit()
         await session.refresh(policy)
         series_ids_by_policy = await cls._policy_series_ids(session, [policy])
@@ -297,38 +307,6 @@ class WarrantyService(WarrantyPolicyStore):
         value = int(match.group())
         return value if 0 < value <= 240 else None
 
-    @staticmethod
-    def _policy_matches(
-        policy: WarrantyPolicy,
-        *,
-        product: Product | None,
-        supplier_id: int | None,
-        selected_series_ids: list[int],
-    ) -> bool:
-        if policy.supplier_id is not None and int(policy.supplier_id) != int(supplier_id or 0):
-            return False
-        if policy.product_id is not None and (not product or int(policy.product_id) != int(product.id or 0)):
-            return False
-        if selected_series_ids and (
-            not product or int(product.series_id or 0) not in selected_series_ids
-        ):
-            return False
-        if policy.brand_id is not None and (not product or int(policy.brand_id) != int(product.brand_id or 0)):
-            return False
-        return True
-
-    @staticmethod
-    def _policy_score(policy: WarrantyPolicy) -> tuple[int, int]:
-        if policy.product_id is not None:
-            scope_specificity = 4
-        elif policy.series_id is not None:
-            scope_specificity = 3
-        elif policy.brand_id is not None:
-            scope_specificity = 2
-        else:
-            scope_specificity = 1
-        return scope_specificity, int(policy.supplier_id is not None)
-
     @classmethod
     async def resolve_policy(
         cls,
@@ -339,30 +317,13 @@ class WarrantyService(WarrantyPolicyStore):
         coverage_type: str = "supplier",
         at: datetime | None = None,
     ) -> WarrantyPolicy | None:
-        moment = cls._naive(at) or datetime.now()
-        result = await session.execute(
-            select(WarrantyPolicy).where(
-                WarrantyPolicy.is_active == True,
-                WarrantyPolicy.coverage_type == coverage_type,
-            )
+        return await WarrantyPolicyResolver.resolve_one(
+            session,
+            product=product,
+            supplier_id=supplier_id,
+            coverage_type=coverage_type,
+            at=at,
         )
-        policies = list(result.scalars().all())
-        series_ids_by_policy = await cls._policy_series_ids(session, policies)
-        candidates = []
-        for policy in policies:
-            if policy.effective_from and cls._naive(policy.effective_from) > moment:
-                continue
-            if policy.effective_until and cls._naive(policy.effective_until) < moment:
-                continue
-            if cls._policy_matches(
-                policy,
-                product=product,
-                supplier_id=supplier_id,
-                selected_series_ids=series_ids_by_policy.get(int(policy.id or 0), []),
-            ):
-                candidates.append(policy)
-        candidates.sort(key=lambda item: (cls._policy_score(item), item.created_at, item.id or 0), reverse=True)
-        return candidates[0] if candidates else None
 
     @staticmethod
     def _start_for_event(

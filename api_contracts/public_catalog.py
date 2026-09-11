@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
 
-from schemas import ProductKind, PublicStockState
+from schemas import ProductKind, PublicProductWarrantyResponse, PublicStockState
 
 
 class PublicProductSearchItemResponse(BaseModel):
@@ -33,6 +33,7 @@ class PublicProductSearchItemResponse(BaseModel):
     public_stock_state: PublicStockState | None = None
     delivery_min_days: int | None = None
     delivery_max_days: int | None = None
+    warranty: PublicProductWarrantyResponse | None = None
     _disclose_legacy_availability: bool = PrivateAttr(default=True)
 
     @model_serializer(mode="wrap")

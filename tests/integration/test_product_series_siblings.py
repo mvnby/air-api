@@ -1,6 +1,14 @@
 import pytest
 
-from models import Brand, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from models import (
+    Brand,
+    Product,
+    ProductSeries,
+    ProductTagLink,
+    Tag,
+    TagGroup,
+    WarrantyPolicy,
+)
 
 
 @pytest.mark.asyncio
@@ -43,6 +51,22 @@ async def test_product_detail_contains_series_siblings(async_client, db):
             ProductTagLink(product_id=sibling_same_brand.id, tag_id=series_x.id),
             ProductTagLink(product_id=sibling_other_brand.id, tag_id=brand_b.id),
             ProductTagLink(product_id=sibling_other_brand.id, tag_id=series_x.id),
+            WarrantyPolicy(
+                name="Main public warranty",
+                product_id=main.id,
+                duration_months=60,
+                maintenance_required=True,
+                maintenance_interval_months=12,
+                allowed_maintenance_provider="authorized",
+                grace_period_days=14,
+                start_event="sale",
+                terms="Authorized annual maintenance.",
+            ),
+            WarrantyPolicy(
+                name="Sibling public warranty",
+                product_id=sibling_same_brand.id,
+                duration_months=48,
+            ),
         ]
     )
     await db.commit()
@@ -55,6 +79,17 @@ async def test_product_detail_contains_series_siblings(async_client, db):
     assert len(siblings) == 2
     assert siblings[0]["slug"] == "sibling-a"
     assert siblings[1]["slug"] == "sibling-b"
+    assert data["warranty"] == {
+        "duration_months": 60,
+        "maintenance_required": True,
+        "maintenance_interval_months": 12,
+        "start_event": "sale",
+        "allowed_maintenance_provider": "authorized",
+        "grace_period_days": 14,
+        "terms": "Authorized annual maintenance.",
+    }
+    assert siblings[0]["warranty"]["duration_months"] == 48
+    assert siblings[1]["warranty"] is None
 
 
 @pytest.mark.asyncio
@@ -114,6 +149,14 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         is_published=True,
     )
     db.add_all([main, sibling_50, sibling_25, other_series])
+    db.add(
+        WarrantyPolicy(
+            name="Series navigation warranty",
+            brand_id=brand.id,
+            series_id=series.id,
+            duration_months=48,
+        )
+    )
     await db.commit()
     await db.refresh(main)
 
@@ -121,6 +164,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
 
     assert response.status_code == 200, response.text
     data = response.json()
+    assert data["warranty"]["duration_months"] == 48
     assert data["series"] == {
         "id": series.id,
         "title": "FreshIN",
@@ -144,3 +188,9 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
     sibling_slugs = [item["slug"] for item in data["series_siblings"]]
     assert sibling_slugs[:2] == ["tcl-freshin-25", "tcl-freshin-50"]
     assert "tcl-elite-25" not in sibling_slugs
+
+    navigation = await async_client.get("/api/v1/product-series/navigation")
+    assert navigation.status_code == 200, navigation.text
+    navigation_siblings = navigation.json()["products"][main.slug]["series_siblings"]
+    assert navigation_siblings
+    assert all(item["warranty"]["duration_months"] == 48 for item in navigation_siblings)
