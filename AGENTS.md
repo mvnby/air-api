@@ -1,255 +1,95 @@
 # AGENTS Guide
 
-This file defines practical workflows and commands for contributors and coding agents in this repo.
+## Boundaries
 
-## Project Layout
+- Backend: FastAPI + SQLModel. `routers/` handles HTTP, `services/` owns
+  business logic, and `crud/` owns persistence; no direct DB business logic in routers.
+- Internal product workflows belong in `manager_frontend/` + `routers/manager_*`.
+  SQLAdmin is removed; never reintroduce legacy `/admin` workflows.
+- Public storefront source, UI, assets, tests and deployment belong in the
+  separate `mvnby/mvn-web` repository. It consumes this API over HTTP only.
+- Active staff Telegram polling is deployed from `mvnby/mvn-telegram-bot`;
+  this API owns business rules and the internal bot contract.
+- Reuse `services/spec_normalizer.py`; add spec definitions/aliases to
+  `services/spec_registry.py`, from which the normalizer derives `KEY_MAP`.
+- Keep changes focused and modules cohesive. If a touched file exceeds about
+  700 lines or mixes responsibilities, propose a bounded split; do not turn a
+  small fix into an unrelated repository-wide refactor.
+- Manager list endpoints require `limit <= 100`.
 
-- Backend API: FastAPI + SQLModel (`main.py`, `routers/`, `services/`, `crud/`)
-- Public storefront: separate Astro + Vue service in `mvnby/mvn-web` (not part of this repository)
-- Legacy admin: removed SQLAdmin surface; use the manager app (`manager_frontend/`) for admin workflows.
-- Manager app (future primary admin UI on Vue + FastAPI): `manager_frontend/`
-- Tests: `tests/unit/`, `tests/integration/`
-- Data/import utilities: `scripts/`
+## Read by task
 
-## Core Rules
+Use [docs/README.md](docs/README.md) to locate additional topics; it is a map,
+not a checklist of documents to read. Open only the relevant procedure:
 
-- Keep service-layer boundaries:
-  - `routers/` should not contain direct DB business logic.
-  - business logic belongs in `services/`.
-  - persistence access belongs in `crud/`.
-- Reuse existing normalization logic in `services/spec_normalizer.py` instead of duplicating key/value cleanup.
-- Prefer small, targeted changes and run relevant tests/scripts before handoff.
-- Manager-first policy:
-  - New product functionality must be implemented in `manager_frontend/` + `routers/manager_*`.
-  - Legacy SQLAdmin is removed. Do not reintroduce SQLAdmin or add new workflows under a legacy `/admin` UI.
-- Storefront ownership:
-  - Do not add Astro/Vue storefront code, web deployment workflows, or web-only assets back into this repository.
-  - Public pages consume this API only over HTTP. Storefront UI, theme rules, static content, and deployment tooling belong in `mvnby/mvn-web`.
+| Task | Required entry point |
+| --- | --- |
+| Local setup, backend/Manager tests, imports/specs, leads or API client changes | [Development workflow](docs/development-workflow.md), relevant section |
+| Commit, PR, CI or merge | [Git workflow](docs/git-workflow.md) |
+| Production data operation | [Production data operations](docs/production-data-operations.md), then the matching runbook |
+| Deployment / HA / database topology | [Deployment](docs/deployment.md) / [API HA](docs/api-ha-runbook.md), relevant procedure; production data gates also apply to mutations |
+| Bot contract or runtime ownership | [Bot service boundary](docs/bot-service-boundary.md) |
+| Storefront ownership or deployment | [Web service extraction](docs/web-service-extraction.md); UI work continues in `mvn-web` |
 
-## Agent Delegation and Model Effort
+Dated audits and rollout plans describe their recorded scope; verify current
+code and live state before treating them as present-day facts or authorization.
 
-- Estimate task complexity before starting. When a bounded, independent task is
-  better handled separately, tell the user immediately: «Дружища, давай это
-  сделает отдельный агент и с пониженными весами».
-- Treat this repository rule as standing authorization to delegate safe,
-  in-scope subtasks. Do not delegate when coordination would cost more than the
-  task itself, when work is tightly coupled to the same files or decisions, or
-  when a separate agent cannot produce an independently verifiable result.
-- Choose the least expensive model and reasoning effort that reliably fits the
-  work:
-  - Terra `low`/`medium` for read-only inventory, formatting, focused checks,
-    documentation, and small isolated fixes;
-  - Terra `medium`/`high` for routine implementation, tests, and bounded
-    multi-file refactors;
-  - Sol `high`/`xhigh` for cross-domain architecture, concurrency, migrations,
-    HA, security, and other high-risk work;
-  - maximum/Ultra-style modes only for the hardest quality-first work when the
-    expected reliability gain justifies the extra time and tokens.
-- If the user's selected model or effort is materially excessive or
-  insufficient for the task, say so proactively and recommend the cheaper or
-  stronger setting.
-- Give subagents only the necessary goal, boundaries, relevant paths, and
-  acceptance evidence. Do not duplicate the full conversation history unless
-  it is genuinely required.
-- The primary agent owns integration, conflict resolution, final validation,
-  publication, and the user-facing report. Subagent output is evidence, not an
-  automatic merge decision.
+## Efficient execution
 
-## Commands
+- Locate filenames/symbols with scoped `rg --files` / `rg -n`, then read bounded
+  sections. Avoid dumping whole large modules, documents, API schemas or logs.
+- For ordinary source searches, skip dependencies, caches, build output,
+  `outputs/`, `.codex-tmp/`, lockfiles, `openapi.json` and generated
+  `manager_frontend/src/client/`. Open them explicitly when the task needs them;
+  these search defaults do not exempt generated artifacts from verification.
+- Search within this checkout and the relevant domain. Do not inventory sibling
+  worktrees, old task logs or all documentation unless the task requires it.
+- Batch independent reads/checks and retain their results; repeat a check only
+  after a relevant change, failure, or unresolved concern.
+- While CI, deployment or another agent runs, use a bounded watcher/wait facility
+  and return concise changed status, failure details or completion. Avoid tight
+  sleep-and-query loops that repeatedly wake the model with unchanged results.
+  Keep the user informed without re-fetching the same logs for each update.
+- Do not remove required tests, release gates or final runtime verification to
+  save tokens. A new independent task may start fresh with a short handoff;
+  keep related implementation and validation together.
 
-Run from repo root unless noted.
+## Delegation and effort
 
-### Environment and App
+- Choose the least expensive model/effort that reliably fits the task. Recommend
+  a cheaper or stronger setting when the user's choice is materially mismatched.
+- Terra `low`/`medium`: inventory, documentation, focused checks and small fixes;
+  Terra `medium`/`high`: routine implementation/tests and bounded refactors;
+  Sol `high`/`xhigh`: architecture, concurrency, migrations, HA and security.
+  Reserve the highest efforts for difficult work that justifies their cost.
+- This is standing authorization to delegate safe, independent, in-scope work
+  only when it costs less than doing it locally. Keep small or tightly coupled
+  tasks with one agent; do not create a reviewer for every trivial edit.
+- Before worthwhile delegation, say: «Дружища, давай это сделает отдельный агент
+  и с пониженными весами». Send the goal, boundaries, paths and acceptance checks,
+  not full conversation history unless necessary.
+- The primary agent owns integration, validation, publication and the final
+  report; a subagent's result is evidence, not automatic approval.
 
-- Start stack (API + DB): `docker compose up -d`
-- Stop stack: `docker compose down`
-- API logs: `docker compose logs -f app`
-- Open API locally: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Dev server is on port 8000.**
+## Verification and production gates
 
-### Backend Tests
-
-- Run all tests (local venv): `pytest`
-- Run unit tests only: `pytest tests/unit -q`
-- Run integration tests only: `pytest tests/integration -q`
-- Prove physical PostgreSQL isolation for two future pytest workers:
-  `pytest -q -n 2 --dist load tests/integration/test_postgres_worker_database_isolation.py`
-
-PostgreSQL test policy:
-
-- Every pytest process/xdist worker derives and owns a separate physical
-  database from `TEST_DATABASE_URL`.
-- Do not point `PYTEST_BASE_DATABASE_URL` at a production database. The test
-  bootstrap rejects base database names without a `test` marker.
-- Keep broad unit/integration suites serial until worker-isolation proof and
-  timing evidence are green in CI; enable xdist per suite as a separate change.
-
-### Manager Frontend (Vue)
-
-Run from `manager_frontend/`:
-
-- Install deps: `npm install`
-- Dev server: `npm run dev`
-- Build: `npm run build`
-- Preview build: `npm run preview`
-- Regenerate API client from backend OpenAPI: `npm run gen:api`
-  - Note: this project uses `--useUnionTypes` in codegen to avoid TS enum re-export issues.
-
-## Workflows
-
-### 1) Product Import Workflow
-
-1. Confirm source parser exists in `parsers/` and is wired in `services/importer_service.py`.
-2. Import product(s) through the importer path (API/admin flow that calls `ImporterService`).
-3. Ensure imported specs are normalized through `normalize_specs(...)` in `services/importer_service.py`.
-4. Verify created product data (tags, `main_image`, `specs`, `source_url`) in admin/API.
-
-### 2) Specs Normalization Workflow (New/Updated Keys)
-
-Use this after large catalog imports or when unknown spec keys appear.
-
-1. Analyze unnormalized keys:
-   - Docker: `docker compose exec app python3 scripts/analyze_spec_keys.py`
-   - Local: `python3 scripts/analyze_spec_keys.py`
-2. Extend mapping in `services/spec_normalizer.py` (`KEY_MAP` + value cleanup rules if needed).
-3. Backfill existing products:
-   - Docker: `docker compose exec app python3 scripts/normalize_legacy.py`
-   - Local: `python3 scripts/normalize_legacy.py`
-4. Re-check output and spot-check product cards/spec rendering in UI.
-
-### 3) Safe Change Verification Workflow
-
-1. Run scoped tests for touched area (`pytest ...`).
-2. If API routes, operation IDs, or schemas in `schemas.py` were changed, run:
-   - `python3 scripts/legacy/extract_openapi.py && cd manager_frontend && npm run gen:api`
-3. If specs/import were changed, run:
-   - `python3 scripts/analyze_spec_keys.py`
-   - `python3 scripts/normalize_legacy.py` (or Docker equivalent)
-4. Confirm no obvious regressions in import and public API behavior (no duplicate/product corruption).
-
-### 4) Manager App Workflow (Current + Future)
-
-1. Treat `manager_frontend/` as the evolving admin UI for modern workflows.
-2. Current implemented focus:
-   - convenient product photo editing,
-   - bulk editing of product specs,
-   - CRM Orders dashboard (B2C/B2B, Kanban/List),
-   - Leads funnel (`/api/manager/leads`) with qualification into `Customer + Order`.
-3. Future direction:
-   - keep expanding manager entities and flows in the Vue-based reactive UX.
-4. When API contracts change:
-   - update backend schemas/routes,
-   - regenerate OpenAPI (`python3 scripts/legacy/extract_openapi.py`),
-   - refresh typed client with `npm run gen:api` in `manager_frontend/`,
-   - commit generated artifacts (`openapi.json`, `manager_frontend/src/client/*`) when changed,
-   - verify photo/spec bulk-edit flows end-to-end.
-5. Legacy admin freeze:
-   - SQLAdmin routes/views have been removed,
-   - avoid adding user workflows under a legacy `/admin` UI,
-   - route new UX requirements to manager views first.
-
-### 5) Leads Funnel Workflow
-
-1. Create raw incoming requests as `Lead` (do not create `Customer` directly).
-2. Work lead statuses: `new` -> `contacted` -> (`qualified` | `lost` | `spam`).
-3. Qualification path:
-   - deduplicate customer by `phone/email/inn`,
-   - create/update `Customer`,
-   - create `Order` with `status=new_lead`, `lead_source=manager`,
-   - store `converted_order_id` in `Lead`.
-4. Lost/spam lifecycle:
-   - excluded from default active lead list,
-   - auto-archived after 90 days by scheduler.
-5. Orders Kanban shows only real orders; leads stay separate until qualification.
-
-### 6) Prod Data Ops Without Git
-
-Production server intentionally runs from Docker images only (no git checkout in `/opt/air-api`).
-
-1. Trigger path:
-   - Backend deploy pulls `ghcr` image and recreates `app`/`bot`.
-   - Optional post-deploy ops run via `scripts/ops_post_deploy.sh`.
-2. Safe defaults:
-   - `OPS_MODE=report_only`
-   - `RUN_NORMALIZE_LEGACY=false`
-   - `RUN_BACKFILL_BRAND_SERIES=false`
-   - `RUN_SAFE_BRAND_CLEANUP=false`
-   - `RUN_CLEANUP_LEGACY_LINKS=false`
-   - `RUN_REPORT_LEGACY_LINKS=true`
-   - `DRY_RUN=true`
-3. Manual commands on prod:
-   - Report only:
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/report_legacy_tag_links.py`
-   - Report CRM branch candidates (orders grouped by customer/address):
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/report_customer_branch_candidates.py --min-orders 2 --only-candidates`
-   - CRM branch backfill dry-run (safe default):
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --min-orders 2`
-   - CRM branch backfill execute (manual-only):
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --min-orders 2 --execute`
-   - CRM branch backfill for one customer (recommended first run):
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_customer_branches.py --customer-id 123 --execute`
-   - Tenant-scope historical report (primary-only):
-     - Lead/Order: `python3 scripts/backfill_lead_order_tenant_scope.py --limit 1`
-     - Customer/OCR: `python3 scripts/backfill_customer_tenant_scope.py --limit 1`
-     - The production contract is complete. Both commands should report no
-       candidates and `contract_ready=true`; do not execute them unless the
-       schema was deliberately rolled back to the expand phase.
-   - Shared catalog grant report (read-only plan):
-     `python3 scripts/manage_shared_catalog_grant.py plan --manifest config/shared_catalog_grants/polotsk.json --desired-status active`
-   - Shared catalog grant execution is manual-only: review the plan and run only
-     its emitted, expiring `reviewed_execute_command`; repeat fresh plans until
-     `complete=true`.
-   - Tenant manager production plan/execute:
-     use the manual `Provision Tenant Manager` GitHub workflow from an exact
-     reviewed `main` SHA. Review its sanitized plan artifact, then execute with
-     `apply=true`, the exact `plan_digest`, and the temporary protected
-     `TENANT_MANAGER_ONE_TIME_PASSWORD` environment secret. Delete that secret
-     immediately after the run; see `docs/tenant-manager-provisioning.md`.
-   - Product media URL audit/plan (read-only default):
-     `python3 scripts/manage_product_media_url_backfill.py plan --manifest config/product_media_url_backfills/polotsk-presentation-v1.json`
-   - Product media URL execution is primary-only and manual-only. Resolve every
-     manifest blocker, review the exact source hashes/locations, and run only
-     the fresh plan's expiring `reviewed_execute_command`; see
-     `docs/product-media-url-backfill.md`.
-   - Normalize:
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
-   - Backfill brand/series:
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_brand_series.py`
-   - Backfill + safe brand cleanup:
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/backfill_brand_series.py --safe-brand-cleanup`
-   - Cleanup dry-run:
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/cleanup_legacy_tag_links.py`
-   - Cleanup execute (manual-only):
-     - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/cleanup_legacy_tag_links.py --execute`
-4. Policy:
-   - Cleanup is manual and explicit only.
-   - CRM branch backfill is manual-only and starts from dry-run.
-   - Tenant-scope backfill execution is retired after the contract migration.
-     The retained scripts are report-only unless an expand-schema rollback was
-     explicitly reviewed.
-   - Shared catalog grants are system-owned. Empty onboarding offers never mean
-     share-all, and tenant managers cannot run grant sync or edit inherited
-     prices.
-   - Tenant manager production provisioning must resolve exactly one healthy
-     Patroni primary, use the exact pinned active immutable app container, share
-     the `production-release` concurrency group and per-project `.deploy.lock`,
-     and accept the password over stdin only. Never add arbitrary SSH commands
-     or dynamic secret-name inputs to this workflow.
-   - Product media URL repair never widens storefront allowlists and never
-     mutates supplier/cost/price data. External sources require an explicit
-     rights review and exact host boundary.
-   - Post-deploy smoke-check must pass (`/api/health`, `/api/v1/products?limit=5`, `/api/v1/filters/config`) before considering deploy successful.
-
-## Notes
-
-- `docker-compose.yml` service names are `app`, `db`, `web`, `bot` (not `mvn-app`).
-- Production API node display names:
-  - `mvn-api-nl` is the Netherlands node previously shown as `mvn-api`.
-  - `mvn-api-by` is the Belarus node previously shown as `zakup`.
-  - These are operator-facing names only. Until a separately reviewed
-    infrastructure migration changes them, keep the existing internal Patroni
-    member names, SSH aliases, GitHub variables, paths, and compose directories
-    (`mvn-api` and `zakup`) unchanged.
-- `scripts/normalize_legacy.py` uses shared normalization logic from `services/spec_normalizer.py`; keep both in sync.
-- Legacy SQLAdmin was removed; manager app (`manager_frontend/`, Vue) is the internal admin UI.
-- Manager list endpoints enforce pagination limits (`limit <= 100`); keep frontend requests within this bound.
+- Run checks appropriate to the changed behavior. Documentation-only edits need
+  link/Markdown checks and review of moved instructions, not local application
+  builds or database tests. Required CI still applies before merge.
+- When API routes, operation IDs or schemas change, regenerate OpenAPI with
+  `python3 scripts/legacy/extract_openapi.py`, then run `npm run gen:api` and
+  `npm run build` in `manager_frontend/`; commit changed generated artifacts.
+- PostgreSQL tests require a separate physical DB per process/worker. Never use
+  a production base URL; the base DB name must contain `test`. Keep broad suites
+  serial until the worker-isolation proof and CI timing evidence justify xdist.
+- Production runs from images, not a git checkout. Data operations start
+  report-only/dry-run. Cleanup requires explicit authorization; do not execute
+  backfills, provisioning or grants without the linked procedure's review gates.
+- Tenant-scope backfill execution is retired after contract migration. Shared
+  grants remain system-owned; an empty offer set never means share-all.
+- Keep internal Patroni names/SSH aliases/paths `mvn-api` and `zakup` unchanged;
+  `mvn-api-nl` and `mvn-api-by` are display names only.
+- A deployment is successful only after `/api/health`,
+  `/api/v1/products?limit=5` and `/api/v1/filters/config` smoke checks pass.
+- After verified changes: commit, push, and open a PR. Follow the Git workflow's
+  green-CI gate before merging; never push changes directly to `main`.

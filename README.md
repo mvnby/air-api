@@ -5,10 +5,10 @@
 ## Что входит в проект
 
 - Backend API: FastAPI + SQLModel
-- Storefront: Astro + Vue
+- HTTP API для отдельной витрины `mvnby/mvn-web` (Astro + Vue)
 - Manager CRM: Vue + FastAPI
 - Manager admin: Vue + FastAPI (`manager_frontend/`)
-- Telegram bot
+- Внутренний API для Telegram-бота (`mvnby/mvn-telegram-bot`)
 - Импортеры и парсеры товаров
 - Генерация документов, договоров, актов и счетов
 - Инструменты нормализации характеристик и продовых data-ops
@@ -40,7 +40,8 @@ FastAPI-приложение с разделением слоев:
 
 ### Storefront
 
-Публичная витрина на Astro + Vue:
+Публичная витрина на Astro + Vue живёт в отдельном репозитории
+[`mvnby/mvn-web`](https://github.com/mvnby/mvn-web) и получает данные через HTTP API:
 
 - SEO-страницы каталога
 - карточки товаров
@@ -62,3 +63,12 @@ Legacy SQLAdmin удален. Старый `/admin` редиректит в ме
 
 ```bash
 docker compose up -d
+```
+
+Локальный API: [http://localhost:8000/docs](http://localhost:8000/docs).
+Команды разработки и проверки: [docs/development-workflow.md](docs/development-workflow.md).
+
+## Документация
+
+Начните с [указателя по задачам](docs/README.md). Правила для агентов находятся в
+[AGENTS.md](AGENTS.md); подробные процедуры читаются только по теме изменения.
