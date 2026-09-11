@@ -16,7 +16,10 @@ from services.equipment_service import EquipmentService
 def test_warranty_status_uses_equipment_warranty_dates():
     now = datetime.now()
 
-    assert EquipmentService._warranty_status(CustomerEquipment(customer_id=1)) == "none"
+    assert EquipmentService._warranty_status(CustomerEquipment(customer_id=1)) == "unknown"
+    assert EquipmentService._warranty_status(
+        CustomerEquipment(customer_id=1, warranty_mode="none")
+    ) == "none"
     assert EquipmentService._warranty_status(
         CustomerEquipment(customer_id=1, warranty_started_at=now - timedelta(days=1))
     ) == "unknown"

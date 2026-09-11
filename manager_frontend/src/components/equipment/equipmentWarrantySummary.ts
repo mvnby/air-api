@@ -4,7 +4,7 @@ import type {
 } from '../../client';
 
 export type EquipmentWarrantySummary = {
-  status: 'active' | 'attention' | 'expired' | 'scheduled' | 'unknown';
+  status: 'active' | 'attention' | 'expired' | 'scheduled' | 'unknown' | 'none';
   label: string;
   expiresAt: string | null;
 };
@@ -14,9 +14,10 @@ const earliestDate = (values: Array<string | null | undefined>) => (
 );
 
 export const equipmentWarrantySummary = (
-  item: Pick<ManagerEquipmentItemResponse, 'warranty_status' | 'warranty_expires_at'>,
+  item: Pick<ManagerEquipmentItemResponse, 'warranty_status' | 'warranty_expires_at' | 'warranty_mode'>,
   coverages?: ManagerEquipmentWarrantyCoverageResponse[],
 ): EquipmentWarrantySummary => {
+  if (item.warranty_mode === 'none') return { status: 'none', label: 'Без гарантии', expiresAt: null };
   if (coverages !== undefined) {
     if (!coverages.length) return { status: 'unknown', label: 'Гарантию нужно уточнить', expiresAt: null };
 

@@ -12,10 +12,11 @@ import { sortAttentionReasons } from './registry';
 const props = defineProps<{
   reasons: string[];
   warrantyStatus?: string | null;
+  warrantyMode?: string | null;
 }>();
 
 const warrantyNeedsClarification = computed(() => (
-  !props.warrantyStatus || ['none', 'unknown'].includes(props.warrantyStatus)
+  props.warrantyMode !== 'none' && (!props.warrantyStatus || ['none', 'unknown'].includes(props.warrantyStatus))
 ));
 const visibleReasons = computed(() => sortAttentionReasons(props.reasons || []).filter((reason) => (
   !(warrantyNeedsClarification.value && reason === 'needs_decision')
@@ -60,12 +61,14 @@ const reasonIcon = (reason: string) => {
 <template>
   <div class="flex flex-wrap gap-1.5">
     <span
-      v-if="!visibleReasons.length && !warrantyNeedsClarification"
+      v-if="!visibleReasons.length && !warrantyNeedsClarification && warrantyMode !== 'none'"
       class="inline-flex min-h-6 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold leading-none text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
     >
       <CircleCheck class="h-3.5 w-3.5 shrink-0" />
       Без срочных действий
     </span>
+
+    <span v-if="warrantyMode === 'none'" class="inline-flex min-h-6 items-center rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-600 dark:border-slate-600 dark:text-slate-300">Без гарантии</span>
 
     <span
       v-if="warrantyNeedsClarification"

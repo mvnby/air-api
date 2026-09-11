@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, String, Text
+from sqlalchemy import CheckConstraint, Column, String, Text
 from sqlmodel import Field, Relationship, SQLModel
 
 from .common import EquipmentServiceEventType
@@ -9,6 +9,21 @@ from .common import EquipmentServiceEventType
 
 class CustomerEquipment(SQLModel, table=True):
     __tablename__ = "customer_equipment"
+    __table_args__ = (
+        CheckConstraint(
+            "warranty_mode IN ('auto', 'manual', 'none')",
+            name="ck_customer_equipment_warranty_mode",
+        ),
+        CheckConstraint(
+            "warranty_duration_months IS NULL OR "
+            "(warranty_duration_months >= 1 AND warranty_duration_months <= 240)",
+            name="ck_customer_equipment_warranty_duration_months",
+        ),
+        CheckConstraint(
+            "maintenance_interval_months >= 1 AND maintenance_interval_months <= 120",
+            name="ck_customer_equipment_maintenance_interval_months",
+        ),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     customer_id: int = Field(foreign_key="customer.id", index=True)
@@ -33,9 +48,17 @@ class CustomerEquipment(SQLModel, table=True):
     refrigerant_type: Optional[str] = Field(default=None, index=True)
     installed_at: Optional[datetime] = Field(default=None, index=True)
     commissioned_at: Optional[datetime] = Field(default=None, index=True)
+    warranty_mode: str = Field(
+        default="auto",
+        sa_column=Column(String(16), nullable=False, index=True),
+    )
+    warranty_duration_months: Optional[int] = Field(default=None)
     warranty_started_at: Optional[datetime] = Field(default=None, index=True)
     warranty_expires_at: Optional[datetime] = Field(default=None, index=True)
     warranty_terms: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    maintenance_enabled: bool = Field(default=False, index=True)
+    maintenance_interval_months: int = Field(default=12)
+    maintenance_anchor_at: Optional[datetime] = Field(default=None, index=True)
     notes: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
 
     is_archived: bool = Field(default=False, index=True)

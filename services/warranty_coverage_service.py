@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import EquipmentWarrantyCoverage, EquipmentWarrantyDecision
+from models import CustomerEquipment, EquipmentWarrantyCoverage, EquipmentWarrantyDecision
 from models.tenancy import TenantScope
 from services.tenant_entity_access_service import TenantEntityAccessService
 
@@ -156,6 +156,10 @@ class WarrantyCoverageService:
         cleaned_reason = " ".join(str(reason or "").split())
         if not cleaned_reason:
             raise ValueError("Warranty decision reason is required")
+        if normalized_action == "restored" and coverage.coverage_type in {"supplier", "legacy"}:
+            equipment = await session.get(CustomerEquipment, int(coverage.equipment_id))
+            if equipment is not None and equipment.warranty_mode == "none":
+                raise ValueError("Switch equipment warranty mode before restoring equipment coverage")
 
         coverage.decision_status = normalized_action
         coverage.decision_reason = cleaned_reason

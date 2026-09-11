@@ -10,7 +10,6 @@ from models import (
     Customer,
     CustomerBranch,
     CustomerEquipment,
-    EquipmentServiceHistory,
     EquipmentWarrantyCoverage,
 )
 from models.tenancy import TenantScope
@@ -91,6 +90,35 @@ class EquipmentRegistryService:
                         matching_ids.add(int(coverage.equipment_id))
                     elif normalized_attention == "needs_decision" and status["requires_manager_decision"]:
                         matching_ids.add(int(coverage.equipment_id))
+                if normalized_attention in {"maintenance_due_soon", "maintenance_overdue"}:
+                    from services.equipment_maintenance_plan_service import EquipmentMaintenancePlanService
+
+                    plan_result = await session.execute(
+                        select(CustomerEquipment)
+                        .join(Customer, Customer.id == CustomerEquipment.customer_id)
+                        .where(
+                            tenant_scope_clause(Customer, tenant_scope),
+                            CustomerEquipment.is_archived == False,
+                            CustomerEquipment.maintenance_enabled == True,
+                        )
+                    )
+                    plans = list(plan_result.scalars().all())
+                    latest = await EquipmentMaintenancePlanService.latest_maintenance_by_equipment(
+                        session,
+                        [int(item.id or 0) for item in plans],
+                    )
+                    for plan in plans:
+                        plan_id = int(plan.id or 0)
+                        due_at = EquipmentMaintenancePlanService.next_due_at(
+                            plan,
+                            latest_maintenance_at=latest.get(plan_id),
+                        )
+                        if due_at is None:
+                            continue
+                        if normalized_attention == "maintenance_overdue" and due_at < now:
+                            matching_ids.add(plan_id)
+                        elif normalized_attention == "maintenance_due_soon" and now <= due_at <= soon:
+                            matching_ids.add(plan_id)
                 selected_filter = CustomerEquipment.id.in_(matching_ids or {-1})
                 if normalized_attention == "needs_decision":
                     covered_equipment = select(EquipmentWarrantyCoverage.equipment_id).where(
@@ -98,7 +126,10 @@ class EquipmentRegistryService:
                     )
                     selected_filter = or_(
                         selected_filter,
-                        ~CustomerEquipment.id.in_(covered_equipment),
+                        (
+                            ~CustomerEquipment.id.in_(covered_equipment)
+                            & (CustomerEquipment.warranty_mode != "none")
+                        ),
                     )
                 filters.append(selected_filter)
             else:
@@ -117,7 +148,10 @@ class EquipmentRegistryService:
                 if selected_conditions is None:
                     raise ValueError("Unsupported equipment attention filter")
                 matching_equipment_ids = select(EquipmentWarrantyCoverage.equipment_id).where(*selected_conditions)
-                filters.append(CustomerEquipment.id.in_(matching_equipment_ids))
+                filters.append(
+                    CustomerEquipment.id.in_(matching_equipment_ids)
+                    & (CustomerEquipment.warranty_mode != "none")
+                )
 
         count_result = await session.execute(
             select(func.count(CustomerEquipment.id))
@@ -149,19 +183,12 @@ class EquipmentRegistryService:
             )
             for coverage in coverage_result.scalars().all():
                 coverages_by_equipment.setdefault(int(coverage.equipment_id), []).append(coverage)
-            history_result = await session.execute(
-                select(
-                    EquipmentServiceHistory.equipment_id,
-                    func.max(EquipmentServiceHistory.event_date),
-                )
-                .where(EquipmentServiceHistory.equipment_id.in_(equipment_ids))
-                .group_by(EquipmentServiceHistory.equipment_id)
+            from services.equipment_maintenance_plan_service import EquipmentMaintenancePlanService
+
+            last_service_by_equipment = await EquipmentMaintenancePlanService.latest_maintenance_by_equipment(
+                session,
+                equipment_ids,
             )
-            last_service_by_equipment = {
-                int(equipment_id): event_date
-                for equipment_id, event_date in history_result.all()
-                if event_date is not None
-            }
 
         from services.warranty_service import WarrantyService
 
@@ -189,29 +216,47 @@ class EquipmentRegistryService:
                     "last_service_at": last_service_by_equipment.get(equipment_id),
                 }
             )
-            next_due_values = []
             attention_reasons: set[str] = set()
-            if not equipment_coverages:
+            equipment_warranty_coverages = [
+                item
+                for item in equipment_coverages
+                if item.component_id is None
+                and item.coverage_type in {"supplier", "legacy"}
+                and item.decision_status != "voided"
+            ]
+            if equipment.warranty_mode != "none" and not equipment_warranty_coverages:
                 attention_reasons.add("needs_decision")
             for coverage in equipment_coverages:
+                if coverage.decision_status == "voided":
+                    continue
                 status = WarrantyService.coverage_status(coverage, now=now)
-                if coverage.next_maintenance_due_at is not None:
-                    next_due_values.append(EquipmentService._normalize_naive_datetime(coverage.next_maintenance_due_at))
                 if status["maintenance_status"] == "overdue":
                     attention_reasons.add("maintenance_overdue")
                 elif status["maintenance_status"] == "due_soon":
                     attention_reasons.add("maintenance_due_soon")
                 if status["requires_manager_decision"]:
                     attention_reasons.add("needs_decision")
-                if status["time_status"] == "expired":
+                if equipment.warranty_mode != "none" and coverage.coverage_type in {"supplier", "legacy"} and status["time_status"] == "expired":
                     attention_reasons.add("warranty_expired")
                 elif (
-                    status["time_status"] == "active"
+                    equipment.warranty_mode != "none"
+                    and coverage.coverage_type in {"supplier", "legacy"}
+                    and status["time_status"] == "active"
                     and coverage.expires_at is not None
                     and EquipmentService._normalize_naive_datetime(coverage.expires_at) <= now + timedelta(days=30)
                 ):
                     attention_reasons.add("warranty_expiring")
-            data["next_maintenance_due_at"] = min((value for value in next_due_values if value), default=None)
+            from services.equipment_maintenance_plan_service import EquipmentMaintenancePlanService
+
+            plan_due_at = EquipmentMaintenancePlanService.next_due_at(
+                equipment,
+                latest_maintenance_at=last_service_by_equipment.get(equipment_id),
+            )
+            data["next_maintenance_due_at"] = plan_due_at
+            if plan_due_at is not None and plan_due_at < now:
+                attention_reasons.add("maintenance_overdue")
+            elif plan_due_at is not None and plan_due_at <= now + timedelta(days=30):
+                attention_reasons.add("maintenance_due_soon")
             data["attention_reasons"] = sorted(attention_reasons)
             items.append(data)
         return {
@@ -266,6 +311,39 @@ class EquipmentRegistryService:
         coverage_models = list(coverage_result.scalars().all())
         data["coverages"] = [WarrantyService.to_item(item) for item in coverage_models]
         EquipmentService._apply_coverage_summary(data, coverage_models)
+        from services.equipment_maintenance_plan_service import EquipmentMaintenancePlanService
+
+        latest = await EquipmentMaintenancePlanService.latest_maintenance_by_equipment(
+            session,
+            [equipment_id],
+        )
+        data["last_service_at"] = latest.get(equipment_id)
+        data["next_maintenance_due_at"] = EquipmentMaintenancePlanService.next_due_at(
+            equipment,
+            latest_maintenance_at=latest.get(equipment_id),
+        )
+        customer = await EquipmentService._ensure_customer_exists(
+            session,
+            int(equipment.customer_id),
+            tenant_scope=tenant_scope,
+        )
+        branch = (
+            await session.get(CustomerBranch, int(equipment.customer_branch_id))
+            if equipment.customer_branch_id is not None
+            else None
+        )
+        data.update(
+            customer_name=customer.name if customer else None,
+            customer_phone=customer.phone if customer else None,
+            branch_name=branch.name if branch else None,
+            branch_address=branch.delivery_address if branch else equipment.location_hint,
+            service_contact_name=(
+                branch.contact_name if branch and branch.contact_name else (customer.name if customer else None)
+            ),
+            service_contact_phone=(
+                branch.contact_phone if branch and branch.contact_phone else (customer.phone if customer else None)
+            ),
+        )
         data["linked_orders"] = await EquipmentLinkService.list_linked_orders(
             session,
             equipment_id=equipment_id,

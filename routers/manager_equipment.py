@@ -237,7 +237,7 @@ async def get_manager_equipment(
 async def patch_manager_equipment(
     equipment_id: int,
     payload: ManagerEquipmentUpdatePayload,
-    _: str = Depends(get_current_username),
+    username: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
@@ -247,6 +247,7 @@ async def patch_manager_equipment(
             equipment_id=equipment_id,
             payload=payload.model_dump(exclude_unset=True),
             tenant_scope=tenant_scope,
+            actor=username,
         )
     except ValueError as exc:
         raise manager_http_error(

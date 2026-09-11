@@ -17,9 +17,14 @@ export type ManagerEquipmentUpdatePayload = {
     refrigerant_type?: (string | null);
     installed_at?: (string | null);
     commissioned_at?: (string | null);
+    warranty_mode?: ('auto' | 'manual' | 'none' | null);
+    warranty_duration_months?: (number | null);
     warranty_started_at?: (string | null);
     warranty_expires_at?: (string | null);
     warranty_terms?: (string | null);
+    maintenance_enabled?: (boolean | null);
+    maintenance_interval_months?: (number | null);
+    maintenance_anchor_at?: (string | null);
     notes?: (string | null);
     is_archived?: (boolean | null);
 };

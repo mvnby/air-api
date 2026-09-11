@@ -6,6 +6,7 @@ from pydantic import (
     Field,
     PrivateAttr,
     field_validator,
+    model_validator,
     model_serializer,
 )
 from datetime import datetime
@@ -1054,6 +1055,8 @@ class ManagerEquipmentItemResponse(BaseModel):
     refrigerant_type: Optional[str] = None
     installed_at: Optional[datetime] = None
     commissioned_at: Optional[datetime] = None
+    warranty_mode: Literal["auto", "manual", "none"] = "auto"
+    warranty_duration_months: Optional[int] = None
     warranty_started_at: Optional[datetime] = None
     warranty_expires_at: Optional[datetime] = None
     warranty_terms: Optional[str] = None
@@ -1069,6 +1072,9 @@ class ManagerEquipmentItemResponse(BaseModel):
     service_contact_name: Optional[str] = None
     service_contact_phone: Optional[str] = None
     last_service_at: Optional[datetime] = None
+    maintenance_enabled: bool = False
+    maintenance_interval_months: int = 12
+    maintenance_anchor_at: Optional[datetime] = None
     next_maintenance_due_at: Optional[datetime] = None
     attention_reasons: List[str] = Field(default_factory=list)
 
@@ -1241,9 +1247,14 @@ class ManagerEquipmentCreatePayload(BaseModel):
     refrigerant_type: Optional[str] = None
     installed_at: Optional[datetime] = None
     commissioned_at: Optional[datetime] = None
+    warranty_mode: Literal["auto", "manual", "none"] = "auto"
+    warranty_duration_months: Optional[int] = Field(default=None, ge=1, le=240)
     warranty_started_at: Optional[datetime] = None
     warranty_expires_at: Optional[datetime] = None
     warranty_terms: Optional[str] = None
+    maintenance_enabled: bool = False
+    maintenance_interval_months: int = Field(default=12, ge=1, le=120)
+    maintenance_anchor_at: Optional[datetime] = None
     notes: Optional[str] = None
     is_archived: bool = False
 
@@ -1267,6 +1278,24 @@ class ManagerEquipmentCreatePayload(BaseModel):
         cleaned = value.strip()
         return cleaned or None
 
+    @model_validator(mode="after")
+    def _validate_warranty_contract(self):
+        if self.warranty_mode == "manual":
+            if self.warranty_started_at is None or self.warranty_duration_months is None:
+                raise ValueError("Manual warranty requires warranty_started_at and warranty_duration_months")
+        elif self.warranty_mode == "none" and any(
+            value is not None
+            for value in (
+                self.warranty_duration_months,
+                self.warranty_started_at,
+                self.warranty_expires_at,
+            )
+        ):
+            raise ValueError("Equipment without warranty cannot include warranty dates or duration")
+        elif self.warranty_mode == "auto" and self.warranty_duration_months is not None:
+            raise ValueError("Automatic warranty cannot include manual warranty duration")
+        return self
+
 
 class ManagerEquipmentUpdatePayload(BaseModel):
     customer_branch_id: Optional[int] = None
@@ -1283,9 +1312,14 @@ class ManagerEquipmentUpdatePayload(BaseModel):
     refrigerant_type: Optional[str] = None
     installed_at: Optional[datetime] = None
     commissioned_at: Optional[datetime] = None
+    warranty_mode: Optional[Literal["auto", "manual", "none"]] = None
+    warranty_duration_months: Optional[int] = Field(default=None, ge=1, le=240)
     warranty_started_at: Optional[datetime] = None
     warranty_expires_at: Optional[datetime] = None
     warranty_terms: Optional[str] = None
+    maintenance_enabled: Optional[bool] = None
+    maintenance_interval_months: Optional[int] = Field(default=None, ge=1, le=120)
+    maintenance_anchor_at: Optional[datetime] = None
     notes: Optional[str] = None
     is_archived: Optional[bool] = None
 
@@ -1308,6 +1342,24 @@ class ManagerEquipmentUpdatePayload(BaseModel):
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    @model_validator(mode="after")
+    def _validate_explicit_warranty_mode(self):
+        fields_set = self.model_fields_set
+        if self.warranty_mode == "manual" and not {
+            "warranty_started_at",
+            "warranty_duration_months",
+        }.issubset(fields_set):
+            raise ValueError("Switching to manual warranty requires warranty_started_at and warranty_duration_months")
+        if self.warranty_mode == "none" and fields_set.intersection(
+            {"warranty_duration_months", "warranty_started_at", "warranty_expires_at"}
+        ):
+            raise ValueError("Equipment without warranty cannot include warranty dates or duration")
+        if self.warranty_mode == "auto" and fields_set.intersection(
+            {"warranty_duration_months", "warranty_started_at", "warranty_expires_at"}
+        ):
+            raise ValueError("Switching to automatic warranty cannot include manual warranty values")
+        return self
 
 
 class ManagerEquipmentServiceHistoryCreatePayload(BaseModel):

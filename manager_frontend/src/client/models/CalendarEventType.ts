@@ -2,4 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type CalendarEventType = 'measurement' | 'installation' | 'work_stage';
+export type CalendarEventType = 'measurement' | 'installation' | 'work_stage' | 'equipment_maintenance';

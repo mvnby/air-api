@@ -131,14 +131,9 @@ class EquipmentService:
 
     @staticmethod
     def _warranty_status(equipment: CustomerEquipment) -> str:
-        now = datetime.now()
-        starts_at = EquipmentService._normalize_naive_datetime(equipment.warranty_started_at)
-        expires_at = EquipmentService._normalize_naive_datetime(equipment.warranty_expires_at)
-        if expires_at is None:
-            return "unknown" if starts_at else "none"
-        if starts_at and starts_at > now:
-            return "scheduled"
-        return "active" if expires_at >= now else "expired"
+        from services.equipment_projection_service import EquipmentProjectionService
+
+        return EquipmentProjectionService.warranty_status(equipment)
 
     @staticmethod
     def _boolish(raw: Any) -> Optional[bool]:
@@ -238,32 +233,9 @@ class EquipmentService:
 
     @staticmethod
     def _to_equipment_item(equipment: CustomerEquipment) -> Dict[str, Any]:
-        return {
-            "id": int(equipment.id or 0),
-            "customer_id": int(equipment.customer_id),
-            "customer_branch_id": equipment.customer_branch_id,
-            "catalog_product_id": equipment.catalog_product_id,
-            "source_order_id": equipment.source_order_id,
-            "equipment_type": equipment.equipment_type,
-            "equipment_source": equipment.equipment_source or "unknown",
-            "display_name": equipment.display_name,
-            "brand": equipment.brand,
-            "model": equipment.model,
-            "serial": equipment.serial,
-            "inventory_number": equipment.inventory_number,
-            "location_hint": equipment.location_hint,
-            "refrigerant_type": equipment.refrigerant_type,
-            "installed_at": equipment.installed_at,
-            "commissioned_at": equipment.commissioned_at,
-            "warranty_started_at": equipment.warranty_started_at,
-            "warranty_expires_at": equipment.warranty_expires_at,
-            "warranty_terms": equipment.warranty_terms,
-            "warranty_status": EquipmentService._warranty_status(equipment),
-            "notes": equipment.notes,
-            "is_archived": bool(equipment.is_archived),
-            "created_at": equipment.created_at,
-            "updated_at": equipment.updated_at,
-        }
+        from services.equipment_projection_service import EquipmentProjectionService
+
+        return EquipmentProjectionService.to_equipment_item(equipment)
 
     @staticmethod
     def _apply_coverage_summary(
@@ -272,64 +244,15 @@ class EquipmentService:
         *,
         now: datetime | None = None,
     ) -> None:
-        """Keep compact registry fields aligned with immutable warranty coverages."""
+        from services.equipment_projection_service import EquipmentProjectionService
 
-        moment = EquipmentService._normalize_naive_datetime(now) or datetime.now()
-        available = [item for item in coverages if item.decision_status != "voided"]
-        if not available:
-            return
-        primary = [item for item in available if item.coverage_type in {"supplier", "legacy"}]
-        scoped = primary or available
-
-        def status(item: EquipmentWarrantyCoverage) -> str:
-            starts_at = EquipmentService._normalize_naive_datetime(item.starts_at)
-            expires_at = EquipmentService._normalize_naive_datetime(item.expires_at)
-            if starts_at and starts_at > moment:
-                return "scheduled"
-            if expires_at is None:
-                return "unknown"
-            return "active" if expires_at >= moment else "expired"
-
-        statuses = {status(item) for item in scoped}
-        for candidate in ("active", "scheduled", "unknown", "expired"):
-            if candidate in statuses:
-                data["warranty_status"] = candidate
-                break
-        starts = [
-            EquipmentService._normalize_naive_datetime(item.starts_at)
-            for item in scoped
-            if item.starts_at is not None
-        ]
-        expirations = [
-            EquipmentService._normalize_naive_datetime(item.expires_at)
-            for item in scoped
-            if item.expires_at is not None
-        ]
-        data["warranty_started_at"] = min((value for value in starts if value), default=None)
-        data["warranty_expires_at"] = max((value for value in expirations if value), default=None)
-        terms_item = next((item for item in scoped if item.terms_snapshot), None)
-        data["warranty_terms"] = terms_item.terms_snapshot if terms_item else None
+        EquipmentProjectionService.apply_coverage_summary(data, coverages, now=now)
 
     @staticmethod
     def _to_history_item(entry: EquipmentServiceHistory) -> Dict[str, Any]:
-        return {
-            "id": int(entry.id or 0),
-            "equipment_id": int(entry.equipment_id),
-            "order_id": entry.order_id,
-            "event_type": EquipmentService._enum_value(entry.event_type),
-            "event_date": entry.event_date,
-            "maintenance_provider": entry.maintenance_provider,
-            "complaint_snapshot": entry.complaint_snapshot,
-            "diagnostic_result": entry.diagnostic_result,
-            "repair_recommendation": entry.repair_recommendation,
-            "refrigerant_type": entry.refrigerant_type,
-            "refrigerant_amount": entry.refrigerant_amount,
-            "not_repairable": bool(entry.not_repairable),
-            "not_repairable_reason": entry.not_repairable_reason,
-            "notes": entry.notes,
-            "created_at": entry.created_at,
-            "updated_at": entry.updated_at,
-        }
+        from services.equipment_projection_service import EquipmentProjectionService
+
+        return EquipmentProjectionService.to_history_item(entry)
 
     @staticmethod
     def _to_component_item(
@@ -337,31 +260,9 @@ class EquipmentService:
         *,
         tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
-        supplier_id = component.supplier_id if tenant_scope.is_system else None
-        supplier_invoice_number = (
-            component.supplier_invoice_number if tenant_scope.is_system else None
-        )
-        supplier_invoice_date = (
-            component.supplier_invoice_date if tenant_scope.is_system else None
-        )
-        return {
-            "id": int(component.id or 0),
-            "equipment_id": int(component.equipment_id),
-            "catalog_product_id": component.catalog_product_id,
-            "supplier_id": supplier_id,
-            "component_type": component.component_type,
-            "title": component.title,
-            "brand": component.brand,
-            "model": component.model,
-            "serial": component.serial,
-            "inventory_number": component.inventory_number,
-            "supplier_invoice_number": supplier_invoice_number,
-            "supplier_invoice_date": supplier_invoice_date,
-            "notes": component.notes,
-            "is_archived": bool(component.is_archived),
-            "created_at": component.created_at,
-            "updated_at": component.updated_at,
-        }
+        from services.equipment_projection_service import EquipmentProjectionService
+
+        return EquipmentProjectionService.to_component_item(component, tenant_scope=tenant_scope)
 
     @staticmethod
     def _component_values_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -647,12 +548,12 @@ class EquipmentService:
     @staticmethod
     async def update_equipment(
         session: AsyncSession, *, equipment_id: int, payload: Dict[str, Any],
-        tenant_scope: TenantScope,
+        tenant_scope: TenantScope, actor: str = "manager",
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_workflow_service import EquipmentWorkflowService
         return await EquipmentWorkflowService.update_equipment(
             session, equipment_id=equipment_id, payload=payload,
-            tenant_scope=tenant_scope,
+            tenant_scope=tenant_scope, actor=actor,
         )
 
     @staticmethod

@@ -30003,8 +30003,26 @@
             "title": "Id"
           },
           "order_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Order Id"
+          },
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id"
           },
           "type": {
             "$ref": "#/components/schemas/CalendarEventType"
@@ -30028,6 +30046,17 @@
               }
             ],
             "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
           },
           "address": {
             "anyOf": [
@@ -30062,7 +30091,6 @@
         "type": "object",
         "required": [
           "id",
-          "order_id",
           "type",
           "date",
           "status",
@@ -30077,7 +30105,8 @@
         "enum": [
           "measurement",
           "installation",
-          "work_stage"
+          "work_stage",
+          "equipment_maintenance"
         ],
         "title": "CalendarEventType"
       },
@@ -42073,6 +42102,29 @@
             ],
             "title": "Commissioned At"
           },
+          "warranty_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual",
+              "none"
+            ],
+            "title": "Warranty Mode",
+            "default": "auto"
+          },
+          "warranty_duration_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Duration Months"
+          },
           "warranty_started_at": {
             "anyOf": [
               {
@@ -42107,6 +42159,30 @@
               }
             ],
             "title": "Warranty Terms"
+          },
+          "maintenance_enabled": {
+            "type": "boolean",
+            "title": "Maintenance Enabled",
+            "default": false
+          },
+          "maintenance_interval_months": {
+            "type": "integer",
+            "maximum": 120.0,
+            "minimum": 1.0,
+            "title": "Maintenance Interval Months",
+            "default": 12
+          },
+          "maintenance_anchor_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Anchor At"
           },
           "notes": {
             "anyOf": [
@@ -42285,6 +42361,27 @@
             ],
             "title": "Commissioned At"
           },
+          "warranty_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual",
+              "none"
+            ],
+            "title": "Warranty Mode",
+            "default": "auto"
+          },
+          "warranty_duration_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Duration Months"
+          },
           "warranty_started_at": {
             "anyOf": [
               {
@@ -42435,6 +42532,28 @@
               }
             ],
             "title": "Last Service At"
+          },
+          "maintenance_enabled": {
+            "type": "boolean",
+            "title": "Maintenance Enabled",
+            "default": false
+          },
+          "maintenance_interval_months": {
+            "type": "integer",
+            "title": "Maintenance Interval Months",
+            "default": 12
+          },
+          "maintenance_anchor_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Anchor At"
           },
           "next_maintenance_due_at": {
             "anyOf": [
@@ -42778,6 +42897,27 @@
             ],
             "title": "Commissioned At"
           },
+          "warranty_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual",
+              "none"
+            ],
+            "title": "Warranty Mode",
+            "default": "auto"
+          },
+          "warranty_duration_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Duration Months"
+          },
           "warranty_started_at": {
             "anyOf": [
               {
@@ -42928,6 +43068,28 @@
               }
             ],
             "title": "Last Service At"
+          },
+          "maintenance_enabled": {
+            "type": "boolean",
+            "title": "Maintenance Enabled",
+            "default": false
+          },
+          "maintenance_interval_months": {
+            "type": "integer",
+            "title": "Maintenance Interval Months",
+            "default": 12
+          },
+          "maintenance_anchor_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Anchor At"
           },
           "next_maintenance_due_at": {
             "anyOf": [
@@ -43475,6 +43637,35 @@
             ],
             "title": "Commissioned At"
           },
+          "warranty_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "manual",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Mode"
+          },
+          "warranty_duration_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Duration Months"
+          },
           "warranty_started_at": {
             "anyOf": [
               {
@@ -43509,6 +43700,42 @@
               }
             ],
             "title": "Warranty Terms"
+          },
+          "maintenance_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Enabled"
+          },
+          "maintenance_interval_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 120.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Interval Months"
+          },
+          "maintenance_anchor_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Anchor At"
           },
           "notes": {
             "anyOf": [

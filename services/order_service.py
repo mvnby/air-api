@@ -883,7 +883,16 @@ class OrderService:
                         start=stage.start_time,
                         color=color
                     ))
-                
+
+        from services.equipment_maintenance_plan_service import EquipmentMaintenancePlanService
+
+        equipment_events = await EquipmentMaintenancePlanService.calendar_events(
+            session,
+            start_date=start_date,
+            end_date=end_date,
+            tenant_scope=tenant_scope,
+        )
+        events.extend(CalendarEventResponse(**item) for item in equipment_events)
         return events
 
     @staticmethod
