@@ -14,7 +14,9 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 MAX_BUNDLE, MAX_ASSET = 2097152, 1048576
+LOCK_WAIT_SECONDS, LOCK_RETRY_SECONDS = 30.0, 0.25
 ROOT_UID = ROOT_GID = 0
 LOCK_PATH = "/run/lock/mvn-postgres-pitr-prerequisites.lock"
 STATE_ROOT = "/var/lib/mvn-postgres-pitr"

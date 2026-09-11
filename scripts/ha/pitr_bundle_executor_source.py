@@ -184,24 +184,33 @@ def decode_bundle(payload, project_dir, compose_file):
     if bundle["release_sha256"] != release:
         raise RuntimeError("release bundle digest is invalid")
     return release, decoded, sorted(descriptors, key=lambda item: item["path"])
-def open_lock(path):
+def open_lock(path, *, deadline=None):
     allowed = {LOCK_PATH, *(os.path.join(project, ".deploy.lock") for project in PROJECT_COMPOSE)}
     if path not in allowed:
         raise RuntimeError("unreviewed release lock path")
     validate_parent(path)
+    if deadline is None:
+        deadline = time.monotonic() + LOCK_WAIT_SECONDS
     descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-    metadata = os.fstat(descriptor)
-    if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != ROOT_UID
-            or metadata.st_gid != ROOT_GID or metadata.st_nlink != 1
-            or metadata.st_mode & 0o022):
-        os.close(descriptor)
-        raise RuntimeError("release lock metadata is unsafe")
-    os.fchmod(descriptor, 0o600)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError as exc:
+        metadata = os.fstat(descriptor)
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != ROOT_UID
+                or metadata.st_gid != ROOT_GID or metadata.st_nlink != 1
+                or metadata.st_mode & 0o022):
+            raise RuntimeError("release lock metadata is unsafe")
+        os.fchmod(descriptor, 0o600)
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError("another PITR or deploy operation is active") from exc
+                time.sleep(min(LOCK_RETRY_SECONDS, remaining))
+    except BaseException:
         os.close(descriptor)
-        raise RuntimeError("another PITR or deploy operation is active") from exc
+        raise
     return descriptor
 def reject_operation_records():
     try:
@@ -526,10 +535,11 @@ def execute(action, txid, project_dir, compose_file, payload):
         release, decoded, descriptors = decode_bundle(payload, project_dir, compose_file)
     elif action not in {"rollback", "finalize"}:
         raise RuntimeError("unsupported release transaction action")
-    global_fd = open_lock(LOCK_PATH)
+    lock_deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    global_fd = open_lock(LOCK_PATH, deadline=lock_deadline)
     deploy_fd = None
     try:
-        deploy_fd = open_lock(os.path.join(project_dir, ".deploy.lock"))
+        deploy_fd = open_lock(os.path.join(project_dir, ".deploy.lock"), deadline=lock_deadline)
         preflight_fenced = communications_cutover_receipt_valid(
             project_dir, txid
         )
