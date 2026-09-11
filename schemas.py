@@ -1406,10 +1406,12 @@ class ManagerWarrantyPolicyResponse(BaseModel):
     supplier_id: Optional[int] = None
     brand_id: Optional[int] = None
     series_id: Optional[int] = None
+    series_ids: List[int] = Field(default_factory=list)
     product_id: Optional[int] = None
     supplier_name: Optional[str] = None
     brand_title: Optional[str] = None
     series_title: Optional[str] = None
+    series_titles: List[str] = Field(default_factory=list)
     series_brand_id: Optional[int] = None
     product_title: Optional[str] = None
     duration_months: Optional[int] = None
@@ -1432,6 +1434,7 @@ class ManagerWarrantyPolicyPayload(BaseModel):
     supplier_id: Optional[int] = None
     brand_id: Optional[int] = None
     series_id: Optional[int] = None
+    series_ids: Optional[List[int]] = None
     product_id: Optional[int] = None
     duration_months: Optional[int] = None
     start_event: Optional[str] = None

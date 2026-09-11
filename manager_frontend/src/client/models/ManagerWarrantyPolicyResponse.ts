@@ -9,10 +9,12 @@ export type ManagerWarrantyPolicyResponse = {
     supplier_id?: (number | null);
     brand_id?: (number | null);
     series_id?: (number | null);
+    series_ids?: Array<number>;
     product_id?: (number | null);
     supplier_name?: (string | null);
     brand_title?: (string | null);
     series_title?: (string | null);
+    series_titles?: Array<string>;
     series_brand_id?: (number | null);
     product_title?: (string | null);
     duration_months?: (number | null);
