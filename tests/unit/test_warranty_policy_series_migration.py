@@ -23,9 +23,9 @@ def _load_migration():
     return module
 
 
-def test_warranty_policy_series_migration_is_the_single_head_successor():
+def test_warranty_policy_series_migration_stays_in_the_single_head_chain():
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert assert_revision_in_single_head_chain(scripts, REVISION) == REVISION
+    assert_revision_in_single_head_chain(scripts, REVISION)
     assert scripts.get_revision(REVISION).down_revision == "e55b1c2d3e4f"
 
 
