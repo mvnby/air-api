@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -39,7 +40,8 @@ class _FakeSessionContext:
 async def test_import_product_existing_collects_related_when_requested(monkeypatch):
     existing = SimpleNamespace(
         id=123,
-        tags=[SimpleNamespace(slug="cat-household")],
+        catalog_category_override=None,
+        tags=[SimpleNamespace(id=7, slug="cat-household")],
     )
     fake_session = _FakeSession(existing)
 
@@ -54,6 +56,10 @@ async def test_import_product_existing_collects_related_when_requested(monkeypat
         "services.importer_service.async_session_maker",
         lambda: _FakeSessionContext(fake_session),
     )
+    monkeypatch.setattr(
+        "services.importer_service.get_category_group_tag_ids",
+        AsyncMock(return_value={7}),
+    )
 
     service = ImporterService()
     service.get_parser = lambda url: _FakeParser()  # noqa: ARG005
@@ -67,4 +73,3 @@ async def test_import_product_existing_collects_related_when_requested(monkeypat
     assert result["product"] is existing
     assert result["related_urls"] == ["https://lg24.by/product/sibling/"]
     assert parser_calls["count"] == 1
-

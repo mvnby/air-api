@@ -39035,6 +39035,38 @@
             "title": "Product Kind",
             "default": "unknown"
           },
+          "catalog_category_override": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cat-household",
+                  "cat-multi",
+                  "cat-industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category Override"
+          },
+          "catalog_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cat-household",
+                  "cat-multi",
+                  "cat-industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category"
+          },
           "is_inverter": {
             "type": "boolean",
             "title": "Is Inverter"
@@ -58731,6 +58763,22 @@
             "title": "Product Kind",
             "default": "unknown"
           },
+          "catalog_category_override": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cat-household",
+                  "cat-multi",
+                  "cat-industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category Override"
+          },
           "slug": {
             "anyOf": [
               {
@@ -58893,6 +58941,22 @@
               }
             ],
             "title": "Product Kind"
+          },
+          "catalog_category_override": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cat-household",
+                  "cat-multi",
+                  "cat-industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category Override"
           },
           "slug": {
             "anyOf": [
@@ -61138,6 +61202,22 @@
               }
             ],
             "title": "Product Kind"
+          },
+          "catalog_category_override": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cat-household",
+                  "cat-multi",
+                  "cat-industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category Override"
           },
           "slug": {
             "anyOf": [

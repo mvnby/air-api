@@ -223,9 +223,7 @@ def detect_category_slug(
     title: str = "",
 ) -> Optional[str]:
     specs = specs or {}
-    indoor_type = _normalized(_first_existing(specs, ("indoor_type", "Тип внутреннего блока")))
-    system_type = _normalized(_first_existing(specs, ("type", "Тип кондиционера", "Тип")))
-    title_text = _normalized(title)
+    indoor_type, system_type, title_text = category_detection_inputs(specs, title)
 
     combined_type = " ".join((indoor_type, system_type, title_text))
 
@@ -283,6 +281,19 @@ def detect_category_slug(
         return "cat-household"
 
     return None
+
+
+def category_detection_inputs(
+    specs: Optional[Dict[str, Any]] = None,
+    title: str = "",
+) -> tuple[str, str, str]:
+    """The normalized inputs that determine automatic catalog category."""
+    source = specs or {}
+    return (
+        _normalized(_first_existing(source, ("indoor_type", "Тип внутреннего блока"))),
+        _normalized(_first_existing(source, ("type", "Тип кондиционера", "Тип"))),
+        _normalized(title),
+    )
 
 
 def get_auto_tags(metrics: Dict[str, Any], specs: Optional[Dict[str, Any]] = None, title: str = "") -> List[str]:

@@ -11,13 +11,9 @@ sys.path.append('.')
 from core.config import settings
 from models import Product, Tag, TagGroup
 from services.spec_normalizer import normalize_specs
-from services.tag_logic import (
-    CATEGORY_TAG_TITLES,
-    detect_category_slug,
-    extract_brand_name,
-    extract_brand_slug,
-)
+from services.tag_logic import extract_brand_name, extract_brand_slug
 from services.brand_series_service import sync_product_brand_series
+from services.product_catalog_category_service import sync_product_catalog_category
 
 # --- НАСТРОЙКИ ---
 KEEP_UNITS = True  # True = Оставляем "кВт", "мм". False = Чистим до числа.
@@ -134,25 +130,6 @@ async def run_normalize():
             allow_multiple=False,
             sort_order=10,
         )
-        category_group = await _ensure_group(
-            session,
-            group_cache,
-            slug="category",
-            title="Категория",
-            allow_multiple=False,
-            sort_order=20,
-        )
-
-        for idx, (slug, title) in enumerate(CATEGORY_TAG_TITLES.items()):
-            await _ensure_tag(
-                session,
-                tag_cache,
-                group=category_group,
-                slug=slug,
-                title=title,
-                sort_order=idx * 10,
-            )
-
         result = await session.execute(
             select(Product).options(selectinload(Product.tags).selectinload(Tag.group))
         )
@@ -203,18 +180,13 @@ async def run_normalize():
                     title=brand_title,
                 )
 
-            category_slug = detect_category_slug(metrics=metrics, specs=new_specs, title=p.title or "")
-            desired_category_tag = None
-            if category_slug:
-                desired_category_tag = await _ensure_tag(
-                    session,
-                    tag_cache,
-                    group=category_group,
-                    slug=category_slug,
-                    title=CATEGORY_TAG_TITLES.get(category_slug, category_slug),
-                )
-
-            category_changed = _replace_group_tag(p, "category", desired_category_tag)
+            category_changed = await sync_product_catalog_category(
+                session,
+                product=p,
+                specs=new_specs,
+                title=p.title or "",
+                metrics=metrics,
+            )
             brand_changed = _replace_group_tag(p, "brand", desired_brand_tag)
             if category_changed or brand_changed:
                 updated_tag_sets += 1

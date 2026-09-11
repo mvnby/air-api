@@ -17,6 +17,8 @@ from services.product_kind_service import ProductKindService
 from services.product_series_assignment_service import ProductSeriesAssignmentService
 from services.spec_normalizer import normalize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
+from services.product_catalog_category_service import sync_product_catalog_category
+from services.tag_logic import category_detection_inputs
 
 
 class ProductWriteService:
@@ -96,6 +98,7 @@ class ProductWriteService:
                 payload.get("product_kind"),
                 specs=specs,
             ),
+            catalog_category_override=payload.get("catalog_category_override"),
             is_inverter=bool(payload.get("is_inverter", False)),
             power_cooling=payload.get("power_cooling"),
             main_image=payload.get("main_image"),
@@ -108,6 +111,7 @@ class ProductWriteService:
         )
         session.add(product)
         await session.flush()
+        await sync_product_catalog_category(session, product=product, specs=specs, title=title)
 
         await replace_manuals(
             session,
@@ -193,6 +197,9 @@ class ProductWriteService:
                 specs=specs,
                 fallback=source.product_kind,
             ),
+            catalog_category_override=payload.get(
+                "catalog_category_override", source.catalog_category_override
+            ),
             is_inverter=bool(payload.get("is_inverter", source.is_inverter)),
             power_cooling=payload.get("power_cooling", source.power_cooling),
             main_image=payload.get("main_image", source.main_image),
@@ -207,6 +214,7 @@ class ProductWriteService:
         )
         session.add(product)
         await session.flush()
+        await sync_product_catalog_category(session, product=product, specs=specs, title=title)
 
         if copy_gallery:
             seen_urls: set[str] = set()
@@ -310,6 +318,10 @@ class ProductWriteService:
         if not existing_product:
             return None
         original_brand_id = existing_product.brand_id
+        original_category_inputs = (
+            category_detection_inputs(existing_product.specs, existing_product.title),
+            existing_product.product_kind,
+        )
         await ProductSeriesAssignmentService.validate_update_request(
             session,
             product=existing_product,
@@ -358,6 +370,22 @@ class ProductWriteService:
             product.product_kind = ProductKindService.derive_from_specs(product.specs)
             session.add(product)
             await session.flush()
+
+        category_inputs_changed = original_category_inputs != (
+            category_detection_inputs(product.specs, product.title),
+            product.product_kind,
+        )
+        if (
+            category_inputs_changed
+            or "catalog_category_override" in payload
+            or (tag_ids is not None and product.catalog_category_override is not None)
+        ):
+            await sync_product_catalog_category(
+                session,
+                product=product,
+                specs=product.specs,
+                title=product.title,
+            )
 
         if manuals_payload is not None:
             await replace_manuals(

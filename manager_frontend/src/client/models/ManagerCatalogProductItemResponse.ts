@@ -16,6 +16,8 @@ export type ManagerCatalogProductItemResponse = {
     price: number;
     old_price: (number | null);
     product_kind?: 'unknown' | 'complete_split_system' | 'indoor_unit' | 'outdoor_unit' | 'panel' | 'accessory' | 'consumable' | 'other';
+    catalog_category_override?: ('cat-household' | 'cat-multi' | 'cat-industrial' | null);
+    catalog_category?: ('cat-household' | 'cat-multi' | 'cat-industrial' | null);
     is_inverter: boolean;
     power_cooling: (number | null);
     main_image: (string | null);

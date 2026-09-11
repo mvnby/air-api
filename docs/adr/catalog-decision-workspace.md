@@ -41,6 +41,27 @@ qualifies when its minimum is at or below the requested threshold. Missing or
 malformed temperatures do not qualify. This states the operating temperature
 limit, not the available heating capacity at that temperature.
 
+## Explicit catalog group in the product editor
+
+Product kind (complete system/component), indoor form and storefront group are
+separate decisions. The main product editor exposes household, multi-split,
+semi-industrial and automatic category assignment next to product kind. An
+explicit choice is persisted in `Product.catalog_category_override`; null
+returns to automatic inference. Existing products start with a null override,
+and the additive migration does not move their category tags.
+
+One category service synchronizes the category tag used by existing catalog
+filters. A manual override wins over imported source classification and stale
+category IDs in a full editor payload, and survives reimport and normalization.
+Other tags, prices and the product's physical type are preserved. Duplicate
+cards inherit the override unless explicitly reset. Ordinary price-only edits
+do not silently recategorize automatic products; changing classification or
+explicitly choosing Auto requests inference again.
+
+Category controls are removed from the generic tag picker so there is one
+place to change the group. Source labels such as TCL's Light Commercial do not
+prevent a manager from assigning a residential console to the household group.
+
 ## Selection from an order
 
 The equipment button saves pending order edits before opening the catalog with

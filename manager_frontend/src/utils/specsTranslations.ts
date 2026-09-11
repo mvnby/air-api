@@ -61,7 +61,7 @@ export const specsTranslations: Record<string, SpecConfig> = {
     indoor_type: {
         label: 'Тип внутреннего блока',
         type: 'select',
-        options: ['настенный', 'кассетный', 'канальный', 'напольно-потолочный', 'колонный'],
+        options: ['настенный', 'консольный', 'кассетный', 'канальный', 'напольно-потолочный', 'колонный'],
     },
     multi_max_indoor_units: { label: 'Максимум внутренних блоков', type: 'number', unit: 'шт' },
     multi_max_total_pipe_length: { label: 'Максимальная суммарная длина трассы', type: 'number', unit: 'м' },
