@@ -119,6 +119,21 @@ class WarrantyPolicy(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.now, sa_column_kwargs={"onupdate": datetime.now})
 
 
+class WarrantyPolicySeriesLink(SQLModel, table=True):
+    """Selected product series for a warranty policy, kept in manager order."""
+
+    __tablename__ = "warranty_policy_series_link"
+    __table_args__ = (
+        UniqueConstraint("policy_id", "series_id", name="uq_warranty_policy_series_link"),
+        Index("ix_warranty_policy_series_link_series_policy", "series_id", "policy_id"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    policy_id: int = Field(foreign_key="warranty_policy.id", ondelete="CASCADE", index=True)
+    series_id: int = Field(foreign_key="product_series.id", ondelete="CASCADE", index=True)
+    sort_order: int = Field(default=0)
+
+
 class EquipmentWarrantyCoverage(SQLModel, table=True):
     __tablename__ = "equipment_warranty_coverage"
     __table_args__ = (

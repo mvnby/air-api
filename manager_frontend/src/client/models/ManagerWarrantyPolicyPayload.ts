@@ -8,6 +8,7 @@ export type ManagerWarrantyPolicyPayload = {
     supplier_id?: (number | null);
     brand_id?: (number | null);
     series_id?: (number | null);
+    series_ids?: (Array<number> | null);
     product_id?: (number | null);
     duration_months?: (number | null);
     start_event?: (string | null);

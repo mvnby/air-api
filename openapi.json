@@ -54661,6 +54661,20 @@
             ],
             "title": "Series Id"
           },
+          "series_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Ids"
+          },
           "product_id": {
             "anyOf": [
               {
@@ -54836,6 +54850,13 @@
             ],
             "title": "Series Id"
           },
+          "series_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Series Ids"
+          },
           "product_id": {
             "anyOf": [
               {
@@ -54879,6 +54900,13 @@
               }
             ],
             "title": "Series Title"
+          },
+          "series_titles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Series Titles"
           },
           "series_brand_id": {
             "anyOf": [

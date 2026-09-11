@@ -14,8 +14,10 @@ import {
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { useDialogA11y } from '../../composables/useDialogA11y';
+import WarrantySeriesPicker from './WarrantySeriesPicker.vue';
+import { warrantyDurationLabel, warrantySeriesIds } from './warrantyPolicyPresentation';
 
-type ScopeType = 'supplier' | 'brand' | 'series' | 'product';
+type ScopeType = 'supplier' | 'brand' | 'product';
 
 const props = defineProps<{
   open: boolean;
@@ -37,13 +39,14 @@ const form = reactive({
   scopeType: 'supplier' as ScopeType,
   supplierId: null as number | null,
   brandId: null as number | null,
-  seriesId: null as number | null,
+  seriesIds: [] as number[],
+  selectedSeriesOnly: false,
   productId: null as number | null,
   productLabel: '',
   durationMonths: '' as string | number,
   startEvent: 'commissioning',
   maintenanceRequired: false,
-  maintenanceIntervalMonths: '' as string | number,
+  maintenanceIntervalMonths: 12 as string | number,
   gracePeriodDays: 0 as string | number,
   allowedMaintenanceProvider: 'any',
   terms: '',
@@ -67,12 +70,12 @@ let resettingForm = false;
 
 const inferScope = (policy: ManagerWarrantyPolicyResponse | null): ScopeType => {
   if (policy?.product_id) return 'product';
-  if (policy?.series_id) return 'series';
+  if (warrantySeriesIds(policy).length) return 'brand';
   if (policy?.brand_id) return 'brand';
   return 'supplier';
 };
 
-const loadSeries = async (brandId: number | null, selectedSeriesId?: number | null) => {
+const loadSeries = async (brandId: number | null) => {
   const requestId = ++seriesRequestId;
   series.value = [];
   seriesError.value = '';
@@ -82,9 +85,6 @@ const loadSeries = async (brandId: number | null, selectedSeriesId?: number | nu
     const response = await ManagerBrandsService.listManagerBrandSeries(brandId);
     if (requestId !== seriesRequestId) return;
     series.value = response.items || [];
-    if (selectedSeriesId && series.value.some((item) => item.id === selectedSeriesId)) {
-      form.seriesId = selectedSeriesId;
-    }
   } catch (cause) {
     if (requestId !== seriesRequestId) return;
     seriesError.value = getApiErrorMessage(cause) || 'Не удалось загрузить серии';
@@ -112,13 +112,14 @@ const resetFromPolicy = async (policy: ManagerWarrantyPolicyResponse | null) => 
     scopeType,
     supplierId: policy?.supplier_id ?? null,
     brandId: policy?.brand_id ?? policy?.series_brand_id ?? null,
-    seriesId: policy?.series_id ?? null,
+    seriesIds: warrantySeriesIds(policy),
+    selectedSeriesOnly: warrantySeriesIds(policy).length > 0,
     productId: policy?.product_id ?? null,
     productLabel: policy?.product_title || (policy?.product_id ? `Товар #${policy.product_id}` : ''),
     durationMonths: policy?.duration_months ?? '',
     startEvent: policy?.start_event || 'commissioning',
     maintenanceRequired: Boolean(policy?.maintenance_required),
-    maintenanceIntervalMonths: policy?.maintenance_interval_months ?? '',
+    maintenanceIntervalMonths: policy?.maintenance_interval_months ?? 12,
     gracePeriodDays: policy?.grace_period_days ?? 0,
     allowedMaintenanceProvider: policy?.allowed_maintenance_provider || 'any',
     terms: policy?.terms || '',
@@ -126,7 +127,7 @@ const resetFromPolicy = async (policy: ManagerWarrantyPolicyResponse | null) => 
   });
   productQuery.value = form.productLabel;
   productResults.value = [];
-  if (scopeType === 'series' && form.brandId) void loadSeries(form.brandId, form.seriesId);
+  if (scopeType === 'brand' && form.brandId) void loadSeries(form.brandId);
   await nextTick();
   resettingForm = false;
 };
@@ -141,8 +142,7 @@ const canSave = computed(() => {
   if (!form.name.trim() || !numberOrNull(form.durationMonths)) return false;
   if (form.maintenanceRequired && !numberOrNull(form.maintenanceIntervalMonths)) return false;
   if (form.scopeType === 'supplier') return Boolean(form.supplierId);
-  if (form.scopeType === 'brand') return Boolean(form.brandId);
-  if (form.scopeType === 'series') return Boolean(form.seriesId);
+  if (form.scopeType === 'brand') return Boolean(form.brandId) && (!form.selectedSeriesOnly || (form.seriesIds.length > 0 && !seriesLoading.value && !seriesError.value));
   return Boolean(form.productId);
 });
 
@@ -184,7 +184,7 @@ const submit = () => {
     coverage_type: form.coverageType,
     supplier_id: form.supplierId,
     brand_id: form.scopeType === 'brand' ? form.brandId : null,
-    series_id: form.scopeType === 'series' ? form.seriesId : null,
+    series_ids: form.scopeType === 'brand' && form.selectedSeriesOnly ? [...form.seriesIds] : [],
     product_id: form.scopeType === 'product' ? form.productId : null,
     duration_months: numberOrNull(form.durationMonths),
     start_event: form.startEvent,
@@ -199,25 +199,33 @@ const submit = () => {
 
 watch(() => props.open, (open) => {
   if (open) void resetFromPolicy(props.policy);
-});
+}, { immediate: true });
 
-watch(() => form.scopeType, (scopeType) => {
+watch(() => form.scopeType, () => {
   if (resettingForm) return;
   form.brandId = null;
-  form.seriesId = null;
+  form.seriesIds = [];
   form.productId = null;
   form.productLabel = '';
   productQuery.value = '';
   productResults.value = [];
-  if (scopeType === 'supplier') form.supplierId = null;
+  form.selectedSeriesOnly = false;
 });
 
 watch(() => form.brandId, (brandId) => {
   if (resettingForm) return;
-  if (form.scopeType !== 'series') return;
-  form.seriesId = null;
+  if (form.scopeType !== 'brand') return;
+  form.seriesIds = [];
   void loadSeries(brandId);
 }, { flush: 'sync' });
+
+watch(() => form.maintenanceRequired, (required) => {
+  if (required && !numberOrNull(form.maintenanceIntervalMonths)) form.maintenanceIntervalMonths = 12;
+});
+
+const savedSeriesTitles = computed(() => Object.fromEntries(warrantySeriesIds(props.policy).map((id, index) => [
+  id, props.policy?.series_titles?.[index] || props.policy?.series_title || `Серия #${id}`,
+])));
 
 watch(productQuery, (query) => {
   productRequestId += 1;
@@ -270,24 +278,27 @@ useDialogA11y({
           <button ref="closeButtonRef" type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800" :disabled="saving" aria-label="Закрыть" @click="close"><X class="h-4 w-4" /></button>
         </header>
 
-        <form class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" @submit.prevent="submit">
+        <form id="warranty-policy-form" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" @submit.prevent="submit">
           <label class="field-label">Название правила<input v-model="form.name" class="field-input" placeholder="Например: MDV Integra Pro, 4 года" /></label>
 
           <div class="grid grid-cols-2 gap-2" aria-label="Тип гарантии">
-            <button type="button" class="min-h-10 rounded-md border px-3 text-sm font-semibold" :class="form.coverageType === 'supplier' ? 'border-teal-600 bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'" @click="form.coverageType = 'supplier'">Оборудование</button>
-            <button type="button" class="min-h-10 rounded-md border px-3 text-sm font-semibold" :class="form.coverageType === 'mvn_work' ? 'border-teal-600 bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'" @click="form.coverageType = 'mvn_work'">Работы MVN</button>
+            <button type="button" class="min-h-10 rounded-md border px-3 text-sm font-semibold" :class="form.coverageType === 'supplier' ? 'border-teal-600 bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'" :aria-pressed="form.coverageType === 'supplier'" @click="form.coverageType = 'supplier'">Оборудование</button>
+            <button type="button" class="min-h-10 rounded-md border px-3 text-sm font-semibold" :class="form.coverageType === 'mvn_work' ? 'border-teal-600 bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'" :aria-pressed="form.coverageType === 'mvn_work'" @click="form.coverageType = 'mvn_work'">Работы MVN</button>
           </div>
 
           <div class="grid gap-3 sm:grid-cols-2">
-            <label class="field-label">Применяется к<select v-model="form.scopeType" class="field-input"><option value="supplier">Поставщику</option><option value="brand">Бренду</option><option value="series">Серии</option><option value="product">Конкретному товару</option></select></label>
-            <label v-if="form.scopeType !== 'supplier'" class="field-label">Поставщик, если правило только для него<select v-model="form.supplierId" class="field-input"><option :value="null">Любой поставщик</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option></select></label>
+            <label class="field-label">Применяется к<select v-model="form.scopeType" class="field-input"><option value="supplier">Поставщику целиком</option><option value="brand">Бренду и сериям</option><option value="product">Конкретному товару</option></select></label>
+            <label v-if="form.scopeType !== 'supplier'" class="field-label">Поставщик<select v-model="form.supplierId" class="field-input"><option :value="null">Любой поставщик</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option></select></label>
             <label v-if="form.scopeType === 'supplier'" class="field-label">Поставщик<select v-model="form.supplierId" class="field-input" required><option :value="null" disabled>Выберите поставщика</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option></select></label>
-            <label v-if="form.scopeType === 'brand' || form.scopeType === 'series'" class="field-label">Бренд<select v-model="form.brandId" class="field-input" required><option :value="null" disabled>Выберите бренд</option><option v-for="brand in brands" :key="brand.id" :value="brand.id">{{ brand.title }}</option></select></label>
-            <label v-if="form.scopeType === 'series'" class="field-label">
-              Серия
-              <select v-model="form.seriesId" class="field-input" :disabled="!form.brandId || seriesLoading" required><option :value="null" disabled>{{ seriesLoading ? 'Загружаем серии...' : 'Выберите серию' }}</option><option v-for="item in series" :key="item.id" :value="item.id">{{ item.title }}</option></select>
-              <span v-if="seriesError" class="mt-1 block text-xs text-red-700 dark:text-red-300" role="alert">{{ seriesError }}</span>
-            </label>
+            <label v-if="form.scopeType === 'brand'" class="field-label sm:col-span-2">Бренд<select v-model="form.brandId" class="field-input" required><option :value="null" disabled>Выберите бренд</option><option v-for="brand in brands" :key="brand.id" :value="brand.id">{{ brand.title }}</option></select></label>
+            <div v-if="form.scopeType === 'brand' && form.brandId" class="sm:col-span-2">
+              <div class="flex gap-2" role="group" aria-label="Охват серий">
+                <button type="button" class="flex-1 rounded-md border px-3 py-2 text-sm font-semibold" :aria-pressed="!form.selectedSeriesOnly" :class="!form.selectedSeriesOnly ? 'border-teal-600 bg-teal-50 text-teal-800 dark:bg-teal-950 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'" @click="form.selectedSeriesOnly = false">Все серии</button>
+                <button type="button" class="flex-1 rounded-md border px-3 py-2 text-sm font-semibold" :aria-pressed="form.selectedSeriesOnly" :class="form.selectedSeriesOnly ? 'border-teal-600 bg-teal-50 text-teal-800 dark:bg-teal-950 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'" @click="form.selectedSeriesOnly = true">Выбранные серии</button>
+              </div>
+              <p v-if="!form.selectedSeriesOnly" class="mt-2 text-xs text-slate-500">Общее правило для бренда. Если для серии или товара задано отдельное правило, применится оно.</p>
+            </div>
+            <WarrantySeriesPicker v-if="form.scopeType === 'brand' && form.brandId && form.selectedSeriesOnly" :key="form.brandId" v-model="form.seriesIds" :series="series" :loading="seriesLoading" :error="seriesError" :saved-titles="savedSeriesTitles" />
             <label v-if="form.scopeType === 'product'" class="field-label relative sm:col-span-2">
               Товар
               <span class="relative mt-1 block">
@@ -325,20 +336,19 @@ useDialogA11y({
             </label>
           </div>
 
-          <div class="grid gap-3 sm:grid-cols-3">
-            <label class="field-label">Срок, месяцев<input v-model="form.durationMonths" class="field-input" type="number" min="1" max="240" required /></label>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="field-label">Срок гарантии, месяцев<input v-model="form.durationMonths" class="field-input" type="number" min="1" max="240" required /><span v-if="numberOrNull(form.durationMonths)" class="mt-1 block text-xs text-teal-700 dark:text-teal-300" aria-live="polite">{{ warrantyDurationLabel(numberOrNull(form.durationMonths)) }}</span></label>
             <label class="field-label">Начало срока<select v-model="form.startEvent" class="field-input"><option value="sale">Продажа</option><option value="installation">Монтаж</option><option value="commissioning">Ввод в эксплуатацию</option><option value="manual">Дата вручную</option></select></label>
-            <label class="field-label">Кто проводит ТО<select v-model="form.allowedMaintenanceProvider" class="field-input"><option value="any">Любой исполнитель</option><option value="mvn">Только MVN</option><option value="authorized">Авторизованный сервис</option></select></label>
           </div>
 
           <label class="flex items-center gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"><input v-model="form.maintenanceRequired" type="checkbox" class="h-4 w-4 accent-teal-600" /> Для сохранения гарантии обязательно регулярное ТО</label>
-          <div v-if="form.maintenanceRequired" class="grid gap-3 sm:grid-cols-2"><label class="field-label">Интервал ТО, месяцев<input v-model="form.maintenanceIntervalMonths" class="field-input" type="number" min="1" max="60" required /></label><label class="field-label">Льготный период, дней<input v-model="form.gracePeriodDays" class="field-input" type="number" min="0" max="365" /></label></div>
+          <div v-if="form.maintenanceRequired" class="grid gap-3 sm:grid-cols-2"><label class="field-label">Кто проводит ТО<select v-model="form.allowedMaintenanceProvider" class="field-input"><option value="any">Любой исполнитель</option><option value="mvn">Только MVN</option><option value="authorized">Авторизованный сервис</option></select></label><label class="field-label">Интервал ТО, месяцев<input v-model="form.maintenanceIntervalMonths" class="field-input" type="number" min="1" max="60" required /></label><label class="field-label">Допустимое опоздание с ТО, дней<input v-model="form.gracePeriodDays" class="field-input" type="number" min="0" max="365" /></label></div>
           <label class="field-label">Условия<textarea v-model="form.terms" class="field-input min-h-24" placeholder="Что покрывается, исключения и требования к обслуживанию" /></label>
           <label class="flex items-center gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200"><input v-model="form.isActive" type="checkbox" class="h-4 w-4 accent-teal-600" /> Правило активно</label>
           <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">{{ error }}</p>
 
-          <footer class="sticky bottom-0 z-20 -mx-4 -mb-4 flex justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900"><button type="button" class="btn-mini-outline" :disabled="saving" @click="close">Отмена</button><button type="submit" class="btn-mini" :disabled="saving || !canSave"><LoaderCircle v-if="saving" class="h-4 w-4 animate-spin" /><ShieldCheck v-else class="h-4 w-4" />{{ saving ? 'Сохраняем...' : 'Сохранить правило' }}</button></footer>
         </form>
+        <footer class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900"><button type="button" class="btn-mini-outline" :disabled="saving" @click="close">Отмена</button><button type="submit" form="warranty-policy-form" class="btn-mini" :disabled="saving || !canSave"><LoaderCircle v-if="saving" class="h-4 w-4 animate-spin" /><ShieldCheck v-else class="h-4 w-4" />{{ saving ? 'Сохраняем...' : 'Сохранить правило' }}</button></footer>
       </section>
     </div>
   </Teleport>

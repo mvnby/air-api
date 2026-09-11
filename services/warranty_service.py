@@ -21,76 +21,12 @@ from models import (
 )
 from models.tenancy import TenantScope
 from services.warranty_coverage_service import WarrantyCoverageService
+from crud.warranty_policy import WarrantyPolicyStore
 
 
-class WarrantyService:
+class WarrantyService(WarrantyPolicyStore):
     COVERAGE_TYPES = {"supplier", "mvn_work", "legacy"}
     DECISIONS = WarrantyCoverageService.DECISIONS
-
-    @staticmethod
-    def policy_to_item(
-        policy: WarrantyPolicy,
-        *,
-        scope_names: dict[str, dict[int, Any]] | None = None,
-    ) -> dict[str, Any]:
-        names = scope_names or {}
-        return {
-            "id": int(policy.id or 0),
-            "name": policy.name,
-            "coverage_type": policy.coverage_type,
-            "supplier_id": policy.supplier_id,
-            "brand_id": policy.brand_id,
-            "series_id": policy.series_id,
-            "product_id": policy.product_id,
-            "supplier_name": names.get("suppliers", {}).get(int(policy.supplier_id or 0)),
-            "brand_title": names.get("brands", {}).get(int(policy.brand_id or 0)),
-            "series_title": names.get("series", {}).get(int(policy.series_id or 0)),
-            "series_brand_id": names.get("series_brand_ids", {}).get(int(policy.series_id or 0)),
-            "product_title": names.get("products", {}).get(int(policy.product_id or 0)),
-            "duration_months": policy.duration_months,
-            "start_event": policy.start_event,
-            "maintenance_required": bool(policy.maintenance_required),
-            "maintenance_interval_months": policy.maintenance_interval_months,
-            "grace_period_days": int(policy.grace_period_days or 0),
-            "allowed_maintenance_provider": policy.allowed_maintenance_provider,
-            "terms": policy.terms,
-            "effective_from": policy.effective_from,
-            "effective_until": policy.effective_until,
-            "is_active": bool(policy.is_active),
-            "created_at": policy.created_at,
-            "updated_at": policy.updated_at,
-        }
-
-    @staticmethod
-    async def _policy_scope_names(
-        session: AsyncSession,
-        policies: list[WarrantyPolicy],
-    ) -> dict[str, dict[int, Any]]:
-        lookups: tuple[tuple[str, Any, Any, set[int]], ...] = (
-            ("suppliers", Supplier, Supplier.name, {int(item.supplier_id) for item in policies if item.supplier_id}),
-            ("brands", Brand, Brand.title, {int(item.brand_id) for item in policies if item.brand_id}),
-            ("products", Product, Product.title, {int(item.product_id) for item in policies if item.product_id}),
-        )
-        names: dict[str, dict[int, Any]] = {}
-        for key, model, title_field, ids in lookups:
-            if not ids:
-                names[key] = {}
-                continue
-            result = await session.execute(select(model.id, title_field).where(model.id.in_(ids)))
-            names[key] = {int(item_id): str(title) for item_id, title in result.all()}
-        series_ids = {int(item.series_id) for item in policies if item.series_id}
-        names["series"] = {}
-        names["series_brand_ids"] = {}
-        if series_ids:
-            result = await session.execute(
-                select(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id).where(
-                    ProductSeries.id.in_(series_ids)
-                )
-            )
-            for series_id, title, brand_id in result.all():
-                names["series"][int(series_id)] = str(title)
-                names["series_brand_ids"][int(series_id)] = int(brand_id)
-        return names
 
     @classmethod
     def _validated_policy_values(cls, payload: dict[str, Any], *, partial: bool) -> dict[str, Any]:
@@ -114,8 +50,6 @@ class WarrantyService:
             values["maintenance_interval_months"] = int(values["maintenance_interval_months"])
             if not 0 < values["maintenance_interval_months"] <= 60:
                 raise ValueError("Maintenance interval must be between 1 and 60 months")
-        if values.get("maintenance_required") is True and not values.get("maintenance_interval_months") and not partial:
-            raise ValueError("Maintenance interval is required when maintenance is mandatory")
         if "grace_period_days" in values:
             values["grace_period_days"] = int(values.get("grace_period_days") or 0)
             if not 0 <= values["grace_period_days"] <= 365:
@@ -146,8 +80,6 @@ class WarrantyService:
             filters.append(WarrantyPolicy.supplier_id == supplier_id)
         if brand_id is not None:
             filters.append(WarrantyPolicy.brand_id == brand_id)
-        if series_id is not None:
-            filters.append(WarrantyPolicy.series_id == series_id)
         if product_id is not None:
             filters.append(WarrantyPolicy.product_id == product_id)
         if not include_inactive:
@@ -158,21 +90,59 @@ class WarrantyService:
             .order_by(WarrantyPolicy.is_active.desc(), WarrantyPolicy.name, WarrantyPolicy.id)
         )
         policies = list(result.scalars().all())
-        scope_names = await cls._policy_scope_names(session, policies)
-        return [cls.policy_to_item(item, scope_names=scope_names) for item in policies]
+        series_ids_by_policy = await cls._policy_series_ids(session, policies)
+        if series_id is not None:
+            policies = [
+                policy
+                for policy in policies
+                if int(series_id) in series_ids_by_policy.get(int(policy.id or 0), [])
+            ]
+        scope_names = await cls._policy_scope_names(session, policies, series_ids_by_policy)
+        return [
+            cls.policy_to_item(
+                item,
+                scope_names=scope_names,
+                series_ids=series_ids_by_policy.get(int(item.id or 0), []),
+            )
+            for item in policies
+        ]
 
     @classmethod
     async def create_policy(cls, session: AsyncSession, *, payload: dict[str, Any]) -> dict[str, Any]:
         values = cls._validated_policy_values(payload, partial=False)
+        uses_series_ids = "series_ids" in values
+        selected_series_ids = cls._normalized_series_ids(values.pop("series_ids", None)) if uses_series_ids else (
+            [] if values.get("series_id") is None else [int(values["series_id"])]
+        )
+        if uses_series_ids:
+            values["series_id"] = selected_series_ids[0] if selected_series_ids else None
         if not any(values.get(key) is not None for key in ("supplier_id", "brand_id", "series_id", "product_id")):
             raise ValueError("Warranty policy must target a supplier, brand, series or product")
-        await cls._validate_policy_scope(session, values)
+        await cls._validate_policy_scope(
+            session,
+            values,
+            selected_series_ids=selected_series_ids,
+            infer_brand_from_series=uses_series_ids,
+        )
+        if values.get("maintenance_required") and values.get("maintenance_interval_months") is None:
+            values["maintenance_interval_months"] = 12
         policy = WarrantyPolicy(**values)
         session.add(policy)
+        await session.flush()
+        await cls._replace_policy_series(
+            session,
+            policy_id=int(policy.id or 0),
+            series_ids=selected_series_ids,
+        )
         await session.commit()
         await session.refresh(policy)
-        scope_names = await cls._policy_scope_names(session, [policy])
-        return cls.policy_to_item(policy, scope_names=scope_names)
+        series_ids_by_policy = await cls._policy_series_ids(session, [policy])
+        scope_names = await cls._policy_scope_names(session, [policy], series_ids_by_policy)
+        return cls.policy_to_item(
+            policy,
+            scope_names=scope_names,
+            series_ids=series_ids_by_policy[int(policy.id or 0)],
+        )
 
     @classmethod
     async def update_policy(
@@ -186,50 +156,100 @@ class WarrantyService:
         if not policy:
             return None
         values = cls._validated_policy_values(payload, partial=True)
-        for field, value in values.items():
-            setattr(policy, field, value)
-        if policy.maintenance_required and not policy.maintenance_interval_months:
-            raise ValueError("Maintenance interval is required when maintenance is mandatory")
-        if not any(getattr(policy, key) is not None for key in ("supplier_id", "brand_id", "series_id", "product_id")):
+        existing_series_ids = (await cls._policy_series_ids(session, [policy])).get(int(policy.id or 0), [])
+        uses_series_ids = "series_ids" in values
+        uses_legacy_series_id = "series_id" in values
+        if uses_series_ids:
+            selected_series_ids = cls._normalized_series_ids(values.pop("series_ids"))
+        elif uses_legacy_series_id:
+            selected_series_ids = [] if values.get("series_id") is None else [int(values["series_id"])]
+        else:
+            selected_series_ids = existing_series_ids
+
+        candidate = {
+            field: getattr(policy, field)
+            for field in (
+                "name", "coverage_type", "supplier_id", "brand_id", "series_id", "product_id",
+                "duration_months", "start_event", "maintenance_required", "maintenance_interval_months",
+                "grace_period_days", "allowed_maintenance_provider", "terms", "effective_from",
+                "effective_until", "is_active",
+            )
+        }
+        candidate.update(values)
+        if uses_series_ids or uses_legacy_series_id:
+            candidate["series_id"] = selected_series_ids[0] if selected_series_ids else None
+        if not any(candidate.get(key) is not None for key in ("supplier_id", "brand_id", "series_id", "product_id")):
             raise ValueError("Warranty policy must target a supplier, brand, series or product")
         await cls._validate_policy_scope(
             session,
-            {
-                "supplier_id": policy.supplier_id,
-                "brand_id": policy.brand_id,
-                "series_id": policy.series_id,
-                "product_id": policy.product_id,
-            },
+            candidate,
+            selected_series_ids=selected_series_ids,
+            infer_brand_from_series=uses_series_ids,
         )
+        if candidate.get("maintenance_required") and candidate.get("maintenance_interval_months") is None:
+            candidate["maintenance_interval_months"] = 12
+        for field, value in candidate.items():
+            if getattr(policy, field) != value:
+                setattr(policy, field, value)
         policy.updated_at = datetime.now()
         session.add(policy)
+        if uses_series_ids or uses_legacy_series_id:
+            await cls._replace_policy_series(
+                session,
+                policy_id=int(policy.id or 0),
+                series_ids=selected_series_ids,
+            )
         await session.commit()
         await session.refresh(policy)
-        scope_names = await cls._policy_scope_names(session, [policy])
-        return cls.policy_to_item(policy, scope_names=scope_names)
+        series_ids_by_policy = await cls._policy_series_ids(session, [policy])
+        scope_names = await cls._policy_scope_names(session, [policy], series_ids_by_policy)
+        return cls.policy_to_item(
+            policy,
+            scope_names=scope_names,
+            series_ids=series_ids_by_policy[int(policy.id or 0)],
+        )
 
     @staticmethod
-    async def _validate_policy_scope(session: AsyncSession, values: dict[str, Any]) -> None:
+    async def _validate_policy_scope(
+        session: AsyncSession,
+        values: dict[str, Any],
+        *,
+        selected_series_ids: list[int],
+        infer_brand_from_series: bool = False,
+    ) -> None:
         supplier_id = values.get("supplier_id")
         brand_id = values.get("brand_id")
-        series_id = values.get("series_id")
         product_id = values.get("product_id")
         if supplier_id is not None and not await session.get(Supplier, int(supplier_id)):
             raise ValueError("Warranty policy supplier not found")
         brand = await session.get(Brand, int(brand_id)) if brand_id is not None else None
         if brand_id is not None and not brand:
             raise ValueError("Warranty policy brand not found")
-        series = await session.get(ProductSeries, int(series_id)) if series_id is not None else None
-        if series_id is not None and not series:
-            raise ValueError("Warranty policy series not found")
+        series_rows: list[ProductSeries] = []
+        if selected_series_ids:
+            result = await session.execute(
+                select(ProductSeries).where(ProductSeries.id.in_(selected_series_ids))
+            )
+            series_by_id = {int(series.id): series for series in result.scalars().all() if series.id is not None}
+            missing = [series_id for series_id in selected_series_ids if series_id not in series_by_id]
+            if missing:
+                raise ValueError("Warranty policy series not found")
+            series_rows = [series_by_id[series_id] for series_id in selected_series_ids]
+            selected_brand_ids = {int(series.brand_id) for series in series_rows if series.brand_id is not None}
+            if len(selected_brand_ids) != 1 or any(series.brand_id is None for series in series_rows):
+                raise ValueError("Warranty policy series must belong to one brand")
+            selected_brand_id = next(iter(selected_brand_ids))
+            if brand_id is not None and int(brand_id) != selected_brand_id:
+                raise ValueError("Warranty policy series does not belong to the selected brand")
+            if infer_brand_from_series and brand_id is None:
+                values["brand_id"] = selected_brand_id
+                brand_id = selected_brand_id
         product = await session.get(Product, int(product_id)) if product_id is not None else None
         if product_id is not None and not product:
             raise ValueError("Warranty policy product not found")
-        if series and brand_id is not None and int(series.brand_id) != int(brand_id):
-            raise ValueError("Warranty policy series does not belong to the selected brand")
         if product and brand_id is not None and int(product.brand_id or 0) != int(brand_id):
             raise ValueError("Warranty policy product does not belong to the selected brand")
-        if product and series_id is not None and int(product.series_id or 0) != int(series_id):
+        if product and selected_series_ids and int(product.series_id or 0) not in selected_series_ids:
             raise ValueError("Warranty policy product does not belong to the selected series")
 
     @staticmethod
@@ -283,12 +303,15 @@ class WarrantyService:
         *,
         product: Product | None,
         supplier_id: int | None,
+        selected_series_ids: list[int],
     ) -> bool:
         if policy.supplier_id is not None and int(policy.supplier_id) != int(supplier_id or 0):
             return False
         if policy.product_id is not None and (not product or int(policy.product_id) != int(product.id or 0)):
             return False
-        if policy.series_id is not None and (not product or int(policy.series_id) != int(product.series_id or 0)):
+        if selected_series_ids and (
+            not product or int(product.series_id or 0) not in selected_series_ids
+        ):
             return False
         if policy.brand_id is not None and (not product or int(policy.brand_id) != int(product.brand_id or 0)):
             return False
@@ -323,13 +346,20 @@ class WarrantyService:
                 WarrantyPolicy.coverage_type == coverage_type,
             )
         )
+        policies = list(result.scalars().all())
+        series_ids_by_policy = await cls._policy_series_ids(session, policies)
         candidates = []
-        for policy in result.scalars().all():
+        for policy in policies:
             if policy.effective_from and cls._naive(policy.effective_from) > moment:
                 continue
             if policy.effective_until and cls._naive(policy.effective_until) < moment:
                 continue
-            if cls._policy_matches(policy, product=product, supplier_id=supplier_id):
+            if cls._policy_matches(
+                policy,
+                product=product,
+                supplier_id=supplier_id,
+                selected_series_ids=series_ids_by_policy.get(int(policy.id or 0), []),
+            ):
                 candidates.append(policy)
         candidates.sort(key=lambda item: (cls._policy_score(item), item.created_at, item.id or 0), reverse=True)
         return candidates[0] if candidates else None
@@ -382,6 +412,11 @@ class WarrantyService:
                 coverage_type="supplier",
                 at=policy_at,
             )
+        policy_series_ids = (
+            (await cls._policy_series_ids(session, [policy])).get(int(policy.id or 0), [])
+            if policy
+            else []
+        )
         if manual_expires_at is not None:
             duration_months = None
             start_event = "manual"
@@ -411,6 +446,7 @@ class WarrantyService:
                 "supplier_id": policy.supplier_id,
                 "brand_id": policy.brand_id,
                 "series_id": policy.series_id,
+                "series_ids": policy_series_ids,
                 "product_id": policy.product_id,
                 "duration_months": policy.duration_months,
                 "start_event": policy.start_event,
@@ -495,6 +531,11 @@ class WarrantyService:
             coverage_type="mvn_work",
             at=policy_at,
         )
+        policy_series_ids = (
+            (await cls._policy_series_ids(session, [policy])).get(int(policy.id or 0), [])
+            if policy
+            else []
+        )
         duration_months = duration_months if explicit_duration else (policy.duration_months if policy else None)
         if terms is None and policy:
             terms = policy.terms
@@ -531,6 +572,7 @@ class WarrantyService:
                     "supplier_id": policy.supplier_id,
                     "brand_id": policy.brand_id,
                     "series_id": policy.series_id,
+                    "series_ids": policy_series_ids,
                     "product_id": policy.product_id,
                     "duration_months": int(duration_months),
                     "start_event": policy.start_event,

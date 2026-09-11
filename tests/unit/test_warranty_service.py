@@ -19,6 +19,7 @@ from models import (
     ProductSeries,
     Supplier,
     WarrantyPolicy,
+    WarrantyPolicySeriesLink,
 )
 from models.tenancy import TenantScope
 from services.warranty_coverage_service import WarrantyCoverageService
@@ -183,6 +184,123 @@ async def test_product_policy_stays_more_specific_and_list_includes_scope_names(
     assert product_item["product_title"] == "MDV Integra Pro 09"
     assert series_item["series_title"] == "Integra Pro"
     assert series_item["series_brand_id"] == brand.id
+
+
+@pytest.mark.asyncio
+async def test_multi_series_policy_resolves_before_brand_fallback_and_defaults_maintenance_interval(warranty_session):
+    supplier = Supplier(name="Multi supplier", code="multi-series-supplier")
+    brand = Brand(title="Multi brand", slug="multi-series-brand")
+    warranty_session.add_all([supplier, brand])
+    await warranty_session.flush()
+    first = ProductSeries(brand_id=brand.id, title="First", slug="multi-series-first")
+    second = ProductSeries(brand_id=brand.id, title="Second", slug="multi-series-second")
+    warranty_session.add_all([first, second])
+    await warranty_session.flush()
+    covered_product = Product(
+        title="Covered", slug="multi-series-covered", price=1000, brand_id=brand.id, series_id=second.id
+    )
+    also_covered_product = Product(
+        title="Also covered", slug="multi-series-also-covered", price=1000, brand_id=brand.id, series_id=first.id
+    )
+    fallback_product = Product(
+        title="Fallback", slug="multi-series-fallback", price=1000, brand_id=brand.id
+    )
+    warranty_session.add_all([covered_product, also_covered_product, fallback_product])
+    await warranty_session.flush()
+
+    fallback = await WarrantyService.create_policy(
+        warranty_session,
+        payload={
+            "name": "Supplier and brand fallback",
+            "supplier_id": supplier.id,
+            "brand_id": brand.id,
+            "duration_months": 36,
+        },
+    )
+    selected = await WarrantyService.create_policy(
+        warranty_session,
+        payload={
+            "name": "Selected series",
+            "supplier_id": supplier.id,
+            "series_ids": [second.id, first.id],
+            "duration_months": 48,
+            "maintenance_required": True,
+        },
+    )
+
+    assert selected["brand_id"] == brand.id
+    assert selected["series_id"] == second.id
+    assert selected["series_ids"] == [second.id, first.id]
+    assert selected["series_titles"] == ["Second", "First"]
+    assert selected["maintenance_interval_months"] == 12
+    assert (await warranty_session.get(WarrantyPolicy, selected["id"])).maintenance_interval_months == 12
+    explicit_interval = await WarrantyService.update_policy(
+        warranty_session,
+        policy_id=selected["id"],
+        payload={"maintenance_interval_months": 18},
+    )
+    preserved_interval = await WarrantyService.update_policy(
+        warranty_session,
+        policy_id=selected["id"],
+        payload={"maintenance_required": True},
+    )
+    assert explicit_interval and explicit_interval["maintenance_interval_months"] == 18
+    assert preserved_interval and preserved_interval["maintenance_interval_months"] == 18
+    links = list(
+        (await warranty_session.execute(select(WarrantyPolicySeriesLink).where(
+            WarrantyPolicySeriesLink.policy_id == selected["id"]
+        ).order_by(WarrantyPolicySeriesLink.sort_order))).scalars()
+    )
+    assert [link.series_id for link in links] == [second.id, first.id]
+
+    resolved_selected = await WarrantyService.resolve_policy(
+        warranty_session, product=covered_product, supplier_id=supplier.id
+    )
+    resolved_second_selected_series = await WarrantyService.resolve_policy(
+        warranty_session, product=also_covered_product, supplier_id=supplier.id
+    )
+    resolved_fallback = await WarrantyService.resolve_policy(
+        warranty_session, product=fallback_product, supplier_id=supplier.id
+    )
+    assert resolved_selected and resolved_selected.id == selected["id"]
+    assert resolved_second_selected_series and resolved_second_selected_series.id == selected["id"]
+    assert resolved_fallback and resolved_fallback.id == fallback["id"]
+
+
+@pytest.mark.asyncio
+async def test_multi_series_update_retains_omitted_series_and_rejects_invalid_replacement(warranty_session):
+    first_brand = Brand(title="First brand", slug="multi-series-update-first-brand")
+    second_brand = Brand(title="Second brand", slug="multi-series-update-second-brand")
+    warranty_session.add_all([first_brand, second_brand])
+    await warranty_session.flush()
+    first = ProductSeries(brand_id=first_brand.id, title="First", slug="multi-series-update-first")
+    second = ProductSeries(brand_id=first_brand.id, title="Second", slug="multi-series-update-second")
+    foreign = ProductSeries(brand_id=second_brand.id, title="Foreign", slug="multi-series-update-foreign")
+    warranty_session.add_all([first, second, foreign])
+    await warranty_session.flush()
+    created = await WarrantyService.create_policy(
+        warranty_session,
+        payload={"name": "Keep series", "brand_id": first_brand.id, "series_ids": [first.id, second.id]},
+    )
+
+    renamed = await WarrantyService.update_policy(
+        warranty_session, policy_id=created["id"], payload={"name": "Renamed series policy"}
+    )
+    assert renamed and renamed["series_ids"] == [first.id, second.id]
+
+    with pytest.raises(ValueError, match="one brand"):
+        await WarrantyService.update_policy(
+            warranty_session, policy_id=created["id"], payload={"series_ids": [first.id, foreign.id]}
+        )
+    unchanged = await WarrantyService.list_policies(warranty_session, include_inactive=True)
+    item = next(item for item in unchanged if item["id"] == created["id"])
+    assert item["name"] == "Renamed series policy"
+    assert item["series_ids"] == [first.id, second.id]
+
+    cleared = await WarrantyService.update_policy(
+        warranty_session, policy_id=created["id"], payload={"series_ids": []}
+    )
+    assert cleared and cleared["series_id"] is None and cleared["series_ids"] == []
 
 
 @pytest.mark.asyncio

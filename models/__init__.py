@@ -72,6 +72,7 @@ from .service_asset import (
     OrderAttachmentLink,
     ServiceAttachment,
     WarrantyPolicy,
+    WarrantyPolicySeriesLink,
 )
 from .staff import StaffUser
 from .storage_maintenance import StorageReconciliationCursor
@@ -258,4 +259,5 @@ __all__ = [
     "SupplyRequest",
     "SupplyRequestLine",
     "WarrantyPolicy",
+    "WarrantyPolicySeriesLink",
 ]
