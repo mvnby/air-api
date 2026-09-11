@@ -4,13 +4,16 @@ import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
+import ruLocale from '@fullcalendar/core/locales/ru';
 import type { CalendarOptions, EventSourceFunc } from '@fullcalendar/core';
 import { ManagerCalendarService, ManagerOrdersService, type CalendarEventResponse, type ManagerOrderDetailResponse, type ManagerOrderUpdatePayload, type ManagerStaleWorkStageItem } from '../client';
 import { api } from '../api';
-import { Loader2, RefreshCw, Trash2, XCircle } from 'lucide-vue-next';
+import { CalendarDays, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-vue-next';
 import OrderEditDrawer from '../components/orders/OrderEditDrawer.vue';
+import EquipmentEditDialog from '../components/equipment/EquipmentEditDialog.vue';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
+import { mapCalendarEvent, resolveCalendarEventClick } from './calendar-event-presentation';
 
 const isLoading = ref(false);
 const error = ref<string | null>(null);
@@ -26,6 +29,7 @@ const staleStages = ref<ManagerStaleWorkStageItem[]>([]);
 const staleStagesTotal = ref(0);
 const staleStagesLoading = ref(false);
 const staleStagesError = ref('');
+const selectedEquipmentId = ref<number | null>(null);
 
 const setToast = (message: string) => {
   toast.value = message;
@@ -36,11 +40,18 @@ const setToast = (message: string) => {
 
 // Event Handling
 const handleEventClick = (info: any) => {
-  const orderId = info.event.extendedProps.order_id;
-  if (orderId) {
-    openOrder(orderId);
+  const target = resolveCalendarEventClick({
+    type: info.event.extendedProps.type,
+    orderId: info.event.extendedProps.order_id,
+    equipmentId: info.event.extendedProps.equipment_id,
+  });
+
+  if (target.kind === 'order') {
+    openOrder(target.orderId);
+  } else if (target.kind === 'equipment') {
+    selectedEquipmentId.value = target.equipmentId;
   } else {
-    console.warn('Event clicked without order_id', info.event);
+    setToast('Не удалось открыть данные этого события');
   }
 };
 
@@ -142,6 +153,15 @@ const applyOrderUpdate = (order: ManagerOrderDetailResponse) => {
   refreshCalendar();
 };
 
+const closeEquipmentDialog = () => {
+  selectedEquipmentId.value = null;
+};
+
+const handleEquipmentSaved = () => {
+  refreshCalendar();
+  closeEquipmentDialog();
+};
+
 const handleOrderDeleted = (orderId: number) => {
   drawerOpen.value = false;
   if (selectedOrder.value?.id === orderId) {
@@ -173,21 +193,7 @@ const fetchEvents: EventSourceFunc = async (fetchInfo, successCallback, failureC
       fetchInfo.end.toISOString()
     );
     
-    const mappedEvents = events.map(e => ({
-      id: e.id,
-      title: e.title,
-      start: e.start,
-      allDay: e.allDay,
-      backgroundColor: e.color,
-      borderColor: e.color,
-      extendedProps: {
-        order_id: e.order_id,
-        type: e.type,
-        customer_name: e.customer_name,
-        address: e.address,
-        status: e.status
-      }
-    }));
+    const mappedEvents = events.map(mapCalendarEvent);
     successCallback(mappedEvents);
   } catch (err: any) {
     console.error('Failed to fetch calendar events', err);
@@ -201,7 +207,7 @@ const fetchEvents: EventSourceFunc = async (fetchInfo, successCallback, failureC
 const calendarOptions = ref<CalendarOptions>({
   plugins: [ dayGridPlugin, timeGridPlugin, interactionPlugin ],
   initialView: 'dayGridMonth',
-  locale: 'ru',
+  locale: ruLocale,
   headerToolbar: {
     left: 'prev,next today',
     center: 'title',
@@ -230,12 +236,12 @@ const calendarOptions = ref<CalendarOptions>({
 
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-        <span class="material-icons-round text-teal-600 dark:text-teal-400">calendar_month</span>
-        Календарь монтажей и замеров
+        <CalendarDays class="h-6 w-6 shrink-0 text-teal-600 dark:text-teal-400" />
+        Календарь работ и обслуживания
       </h1>
       <div v-if="isLoading" class="text-teal-600 flex items-center gap-2">
         <Loader2 class="w-5 h-5 animate-spin" />
-        Loading...
+        Загрузка…
       </div>
     </div>
 
@@ -331,6 +337,10 @@ const calendarOptions = ref<CalendarOptions>({
     </section>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 calendar-wrapper">
+      <p class="mb-4 flex items-center gap-2 text-sm text-amber-800">
+        <span class="h-2.5 w-2.5 rounded-full bg-amber-500" aria-hidden="true"></span>
+        Янтарные напоминания об обслуживании — звонок клиенту, а не запланированная работа. Нажмите, чтобы открыть оборудование.
+      </p>
       <FullCalendar ref="calendarRef" :options="calendarOptions" />
     </div>
 
@@ -343,6 +353,13 @@ const calendarOptions = ref<CalendarOptions>({
       @updated="applyOrderUpdate"
       @deleted="handleOrderDeleted"
       @reload="openOrder($event)"
+    />
+
+    <EquipmentEditDialog
+      v-if="selectedEquipmentId !== null"
+      :equipment-id="selectedEquipmentId"
+      @close="closeEquipmentDialog"
+      @saved="handleEquipmentSaved"
     />
   </div>
 </template>

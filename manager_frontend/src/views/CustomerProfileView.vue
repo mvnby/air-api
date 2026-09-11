@@ -429,7 +429,7 @@ const equipmentFormTitle = computed(() => {
   return `Редактирование: ${equipmentTitle(equipment.value.find((item) => item.id === editingEquipmentId.value))}`;
 });
 
-const equipmentWarrantyView = (item: Pick<ManagerEquipmentItemResponse, 'id' | 'warranty_status' | 'warranty_expires_at'>) => (
+const equipmentWarrantyView = (item: Pick<ManagerEquipmentItemResponse, 'id' | 'warranty_status' | 'warranty_expires_at' | 'warranty_mode'>) => (
   equipmentWarrantySummary(item, equipmentCoverageCache.value[item.id])
 );
 
@@ -1849,6 +1849,7 @@ onMounted(() => {
                 </div>
 
                 <EquipmentWarrantyPanel
+                  :warranty-mode="selectedEquipmentDetail.warranty_mode"
                   :coverages="selectedEquipmentDetail.coverages || []"
                   :linked-orders="selectedEquipmentDetail.linked_orders || []"
                   @updated="updateSelectedCoverage"

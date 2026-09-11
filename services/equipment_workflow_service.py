@@ -51,6 +51,24 @@ class EquipmentWorkflowService:
             elif source_order.customer_branch_id is not None and int(customer_branch_id) != int(source_order.customer_branch_id):
                 raise ValueError("Source order branch does not match equipment branch")
 
+        warranty_mode = payload.get("warranty_mode")
+        if warranty_mode is None:
+            warranty_mode = "manual" if payload.get("warranty_expires_at") is not None else "auto"
+        warranty_started_at = EquipmentService._normalize_naive_datetime(payload.get("warranty_started_at"))
+        warranty_duration_months = payload.get("warranty_duration_months")
+        warranty_expires_at = EquipmentService._normalize_naive_datetime(payload.get("warranty_expires_at"))
+        if warranty_mode == "manual" and warranty_duration_months is not None:
+            if warranty_started_at is None:
+                raise ValueError("Manual warranty requires warranty_started_at")
+            computed_expiry = EquipmentService._add_months(warranty_started_at, int(warranty_duration_months))
+            if warranty_expires_at is not None and warranty_expires_at != computed_expiry:
+                raise ValueError("warranty_expires_at must match warranty_started_at plus warranty_duration_months")
+            warranty_expires_at = computed_expiry
+        if warranty_mode == "none":
+            warranty_started_at = None
+            warranty_duration_months = None
+            warranty_expires_at = None
+
         data = {
             "equipment_type": EquipmentService._clean_optional_text(payload.get("equipment_type")) or "hvac",
             "equipment_source": EquipmentService._normalize_equipment_source(payload.get("equipment_source")),
@@ -63,11 +81,20 @@ class EquipmentWorkflowService:
             "refrigerant_type": EquipmentService._clean_optional_text(payload.get("refrigerant_type")),
             "installed_at": EquipmentService._normalize_naive_datetime(payload.get("installed_at")),
             "commissioned_at": EquipmentService._normalize_naive_datetime(payload.get("commissioned_at")),
-            "warranty_started_at": EquipmentService._normalize_naive_datetime(payload.get("warranty_started_at")),
-            "warranty_expires_at": EquipmentService._normalize_naive_datetime(payload.get("warranty_expires_at")),
+            "warranty_mode": warranty_mode,
+            "warranty_duration_months": warranty_duration_months,
+            "warranty_started_at": warranty_started_at,
+            "warranty_expires_at": warranty_expires_at,
             "warranty_terms": EquipmentService._clean_optional_text(payload.get("warranty_terms")),
+            "maintenance_enabled": bool(payload.get("maintenance_enabled", False)),
+            "maintenance_interval_months": int(payload.get("maintenance_interval_months") or 12),
+            "maintenance_anchor_at": EquipmentService._normalize_naive_datetime(payload.get("maintenance_anchor_at")),
             "notes": EquipmentService._clean_optional_text(payload.get("notes")),
         }
+        if data["maintenance_enabled"] and not (
+            data["maintenance_anchor_at"] or data["commissioned_at"] or data["installed_at"]
+        ):
+            raise ValueError("Enabled maintenance plan requires an anchor, commissioning or installation date")
         data["display_name"] = EquipmentService._default_display_name(data)
         equipment = CustomerEquipment(
             customer_id=customer_id,
@@ -88,17 +115,30 @@ class EquipmentWorkflowService:
             )
         from services.warranty_service import WarrantyService
 
-        supplier_coverage = await WarrantyService.create_supplier_coverage(
-            session,
-            equipment=equipment,
-            product=product,
-            supplier_id=payload.get("supplier_id"),
-            explicit_start=payload.get("warranty_started_at"),
-            sale_at=getattr(source_order, "closed_at", None) or getattr(source_order, "created_at", None),
-            manual_expires_at=payload.get("warranty_expires_at"),
-            manual_terms=payload.get("warranty_terms"),
-        )
+        supplier_coverage = None
+        if warranty_mode != "none":
+            supplier_coverage = await WarrantyService.create_supplier_coverage(
+                session,
+                equipment=equipment,
+                product=product,
+                supplier_id=payload.get("supplier_id"),
+                explicit_start=warranty_started_at,
+                sale_at=getattr(source_order, "closed_at", None) or getattr(source_order, "created_at", None),
+                manual_expires_at=warranty_expires_at if warranty_mode == "manual" else None,
+                manual_terms=payload.get("warranty_terms"),
+            )
         if supplier_coverage:
+            if warranty_mode == "manual":
+                snapshot = dict(supplier_coverage.policy_snapshot or {})
+                snapshot.update(
+                    {
+                        "automatic_coverage_before_manual": {"exists": False},
+                        "manual_override_active": True,
+                        "manual_duration_months": warranty_duration_months,
+                    }
+                )
+                supplier_coverage.policy_snapshot = snapshot
+                session.add(supplier_coverage)
             equipment.warranty_started_at = supplier_coverage.starts_at
             equipment.warranty_expires_at = supplier_coverage.expires_at
             equipment.warranty_terms = supplier_coverage.terms_snapshot
@@ -115,7 +155,7 @@ class EquipmentWorkflowService:
         )
         await session.commit()
         await session.refresh(equipment)
-        return EquipmentService._to_equipment_item(equipment)
+        return await EquipmentWorkflowService._equipment_item_with_plan(session, equipment)
 
     @staticmethod
     async def update_equipment(
@@ -124,6 +164,7 @@ class EquipmentWorkflowService:
         equipment_id: int,
         payload: Dict[str, Any],
         tenant_scope: TenantScope,
+        actor: str = "manager",
     ) -> Optional[Dict[str, Any]]:
         equipment = await EquipmentService._get_equipment(
             session,
@@ -182,7 +223,6 @@ class EquipmentWorkflowService:
             "inventory_number",
             "location_hint",
             "refrigerant_type",
-            "warranty_terms",
             "notes",
         )
         for field in text_fields:
@@ -195,21 +235,53 @@ class EquipmentWorkflowService:
                 equipment.equipment_source = EquipmentService._normalize_equipment_source(value)
             else:
                 setattr(equipment, field, value)
+        prospective_maintenance_enabled = (
+            bool(payload["maintenance_enabled"])
+            if payload.get("maintenance_enabled") is not None
+            else bool(equipment.maintenance_enabled)
+        )
+        prospective_maintenance_anchor = (
+            EquipmentService._normalize_naive_datetime(payload.get("maintenance_anchor_at"))
+            if "maintenance_anchor_at" in payload
+            else equipment.maintenance_anchor_at
+        )
+        prospective_commissioned_at = (
+            EquipmentService._normalize_naive_datetime(payload.get("commissioned_at"))
+            if "commissioned_at" in payload
+            else equipment.commissioned_at
+        )
+        prospective_installed_at = (
+            EquipmentService._normalize_naive_datetime(payload.get("installed_at"))
+            if "installed_at" in payload
+            else equipment.installed_at
+        )
+        if prospective_maintenance_enabled and not (
+            prospective_maintenance_anchor or prospective_commissioned_at or prospective_installed_at
+        ):
+            raise ValueError("Enabled maintenance plan requires an anchor, commissioning or installation date")
+
         date_fields = (
             "installed_at",
             "commissioned_at",
-            "warranty_started_at",
-            "warranty_expires_at",
+            "maintenance_anchor_at",
         )
         for field in date_fields:
             if field in payload:
                 setattr(equipment, field, EquipmentService._normalize_naive_datetime(payload.get(field)))
         from services.equipment_warranty_bridge_service import EquipmentWarrantyBridgeService
 
-        await EquipmentWarrantyBridgeService.sync_manual_fields(
+        if "maintenance_enabled" in payload and payload["maintenance_enabled"] is not None:
+            equipment.maintenance_enabled = bool(payload["maintenance_enabled"])
+        if "maintenance_interval_months" in payload and payload["maintenance_interval_months"] is not None:
+            interval = int(payload["maintenance_interval_months"])
+            if not 1 <= interval <= 120:
+                raise ValueError("Maintenance interval must be between 1 and 120 months")
+            equipment.maintenance_interval_months = interval
+        await EquipmentWarrantyBridgeService.apply_update(
             session,
             equipment=equipment,
             payload=payload,
+            actor=actor,
         )
         if "is_archived" in payload and payload["is_archived"] is not None:
             equipment.is_archived = bool(payload["is_archived"])
@@ -218,7 +290,27 @@ class EquipmentWorkflowService:
         session.add(equipment)
         await session.commit()
         await session.refresh(equipment)
-        return EquipmentService._to_equipment_item(equipment)
+        return await EquipmentWorkflowService._equipment_item_with_plan(session, equipment)
+
+    @staticmethod
+    async def _equipment_item_with_plan(
+        session: AsyncSession,
+        equipment: CustomerEquipment,
+    ) -> Dict[str, Any]:
+        from services.equipment_maintenance_plan_service import EquipmentMaintenancePlanService
+
+        equipment_id = int(equipment.id or 0)
+        latest = await EquipmentMaintenancePlanService.latest_maintenance_by_equipment(
+            session,
+            [equipment_id],
+        )
+        data = EquipmentService._to_equipment_item(equipment)
+        data["last_service_at"] = latest.get(equipment_id)
+        data["next_maintenance_due_at"] = EquipmentMaintenancePlanService.next_due_at(
+            equipment,
+            latest_maintenance_at=latest.get(equipment_id),
+        )
+        return data
 
 
     @staticmethod

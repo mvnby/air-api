@@ -11,6 +11,7 @@ import { getApiErrorMessage } from '../../utils/api-errors';
 const props = defineProps<{
   coverages: ManagerEquipmentWarrantyCoverageResponse[];
   linkedOrders: ManagerEquipmentLinkedOrderResponse[];
+  warrantyMode?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -38,6 +39,7 @@ const orderRoleLabel = (role: string) => ({
   other: 'Связанный заказ',
 }[role] || role);
 const statusLabel = (coverage: ManagerEquipmentWarrantyCoverageResponse) => {
+  if (props.warrantyMode === 'none' && coverage.coverage_type !== 'mvn_work') return 'Без гарантии';
   if (coverage.decision_status === 'voided') return 'Снята решением менеджера';
   if (coverage.time_status === 'expired') return 'Срок истёк';
   if (coverage.maintenance_status === 'overdue') return 'ТО просрочено';
@@ -91,12 +93,14 @@ const saveDecision = async () => {
         <h3 class="text-sm font-semibold text-[var(--mv-text)]">Гарантийные покрытия</h3>
       </div>
 
-      <p v-if="!coverages.length" class="mt-3 text-sm text-amber-700 dark:text-amber-200">Гарантийные условия нужно уточнить.</p>
+      <p v-if="warrantyMode === 'none'" class="mt-3 text-sm text-[var(--mv-text-muted)]">Без гарантии на оборудование. Обслуживание можно планировать независимо от гарантии.</p>
+      <p v-else-if="!coverages.length" class="mt-3 text-sm text-amber-700 dark:text-amber-200">Гарантийные условия нужно уточнить.</p>
       <article v-for="coverage in coverages" :key="coverage.id" class="mt-3 rounded-lg border border-[var(--mv-border)] bg-[var(--mv-surface)] p-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="text-sm font-semibold text-[var(--mv-text)]">{{ coverageTitle(coverage.coverage_type) }}</p>
           <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="statusClass(coverage)">{{ statusLabel(coverage) }}</span>
         </div>
+        <template v-if="warrantyMode !== 'none' || coverage.coverage_type === 'mvn_work'">
         <p class="mt-2 text-xs text-[var(--mv-text-muted)]">
           {{ formatDate(coverage.starts_at) }} — {{ formatDate(coverage.expires_at) }}
         </p>
@@ -105,8 +109,9 @@ const saveDecision = async () => {
           <span v-if="coverage.next_maintenance_due_at"> · следующее {{ formatDate(coverage.next_maintenance_due_at) }}</span>
         </p>
         <p v-if="coverage.terms_snapshot" class="mt-2 break-words text-xs text-[var(--mv-text-muted)]">{{ coverage.terms_snapshot }}</p>
+        </template>
 
-        <div class="mt-2 flex flex-wrap gap-2">
+        <div v-if="warrantyMode !== 'none' || coverage.coverage_type === 'mvn_work'" class="mt-2 flex flex-wrap gap-2">
           <button v-if="coverage.decision_status !== 'voided'" type="button" class="btn-mini-outline text-xs text-red-700 dark:text-red-200" @click="beginDecision(coverage, 'voided')">Снять с гарантии</button>
           <button v-else type="button" class="btn-mini-outline text-xs" @click="beginDecision(coverage, 'restored')">Восстановить</button>
         </div>

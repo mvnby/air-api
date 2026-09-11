@@ -21,6 +21,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  edit: [item: EquipmentRegistryItem];
   createMaintenanceOrder: [item: EquipmentRegistryItem];
 }>();
 </script>
@@ -49,7 +50,7 @@ const emit = defineEmits<{
       <tbody class="divide-y divide-gray-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
         <tr v-for="item in items" :key="item.id" class="align-top transition hover:bg-gray-50 dark:hover:bg-slate-700/50">
           <td class="px-4 py-3">
-            <p class="break-words text-sm font-semibold text-gray-950 dark:text-white">{{ equipmentTitle(item) }}</p>
+            <button type="button" class="break-words text-left text-sm font-semibold text-gray-950 hover:text-teal-700 hover:underline dark:text-white" @click="emit('edit', item)">{{ equipmentTitle(item) }}</button>
             <p v-if="equipmentSubtitle(item)" class="mt-0.5 break-words text-xs text-gray-500 dark:text-slate-400">
               {{ equipmentSubtitle(item) }}
             </p>
@@ -109,10 +110,11 @@ const emit = defineEmits<{
           </td>
 
           <td class="px-4 py-3">
-            <EquipmentAttentionBadges :reasons="item.attention_reasons" :warranty-status="item.warranty_status" />
+            <EquipmentAttentionBadges :reasons="item.attention_reasons" :warranty-status="item.warranty_status" :warranty-mode="item.warranty_mode" />
           </td>
 
           <td class="px-4 py-3 text-right">
+            <button type="button" class="mb-2 min-h-9 w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700" :aria-label="`Изменить: ${equipmentTitle(item)}`" @click="emit('edit', item)">Изменить</button>
             <button
               type="button"
               class="ml-auto inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-md bg-teal-600 px-2.5 py-1.5 text-xs font-semibold leading-tight text-white transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:ring-offset-slate-800"

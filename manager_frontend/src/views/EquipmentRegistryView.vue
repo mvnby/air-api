@@ -10,6 +10,7 @@ import {
   RotateCcw,
 } from 'lucide-vue-next';
 import EquipmentMaintenanceOrderDialog from '../components/equipment/EquipmentMaintenanceOrderDialog.vue';
+import EquipmentEditDialog from '../components/equipment/EquipmentEditDialog.vue';
 import EquipmentRegistryCards from '../components/equipment/EquipmentRegistryCards.vue';
 import EquipmentRegistryFilters from '../components/equipment/EquipmentRegistryFilters.vue';
 import EquipmentRegistryTable from '../components/equipment/EquipmentRegistryTable.vue';
@@ -42,6 +43,11 @@ const hasLoaded = ref(false);
 const error = ref('');
 
 const selectedEquipment = ref<EquipmentRegistryItem | null>(null);
+const editingEquipmentId = ref<number | null>(null);
+const equipmentSaved = () => {
+  editingEquipmentId.value = null;
+  void loadEquipment();
+};
 const creatingOrder = ref(false);
 const orderError = ref('');
 
@@ -262,8 +268,8 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else :class="loading ? 'pointer-events-none opacity-60' : ''" class="transition-opacity">
-        <EquipmentRegistryTable :items="items" @create-maintenance-order="openMaintenanceOrderDialog" />
-        <EquipmentRegistryCards :items="items" @create-maintenance-order="openMaintenanceOrderDialog" />
+        <EquipmentRegistryTable :items="items" @edit="editingEquipmentId = $event.id" @create-maintenance-order="openMaintenanceOrderDialog" />
+        <EquipmentRegistryCards :items="items" @edit="editingEquipmentId = $event.id" @create-maintenance-order="openMaintenanceOrderDialog" />
       </div>
 
       <nav
@@ -297,6 +303,7 @@ onBeforeUnmount(() => {
       </nav>
     </div>
 
+    <EquipmentEditDialog :equipment-id="editingEquipmentId" @close="editingEquipmentId = null" @saved="equipmentSaved" />
     <EquipmentMaintenanceOrderDialog
       v-if="selectedEquipment"
       :equipment="selectedEquipment"

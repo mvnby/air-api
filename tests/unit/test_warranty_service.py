@@ -522,8 +522,12 @@ async def test_manual_warranty_fields_create_and_update_one_coverage(warranty_se
 
 
 @pytest.mark.asyncio
-async def test_policy_coverage_rejects_legacy_field_edit(warranty_session):
-    equipment = CustomerEquipment(customer_id=54, warranty_expires_at=datetime(2028, 1, 1))
+async def test_policy_coverage_manual_override_preserves_original_policy_snapshot(warranty_session):
+    equipment = CustomerEquipment(
+        customer_id=54,
+        warranty_started_at=datetime(2026, 1, 1),
+        warranty_expires_at=datetime(2028, 1, 1),
+    )
     warranty_session.add(equipment)
     await warranty_session.flush()
     warranty_session.add(
@@ -536,13 +540,58 @@ async def test_policy_coverage_rejects_legacy_field_edit(warranty_session):
     )
     await warranty_session.flush()
 
-    equipment.warranty_expires_at = datetime(2029, 1, 1)
-    with pytest.raises(ValueError, match="managed by the applied coverage"):
-        await EquipmentWarrantyBridgeService.sync_manual_fields(
-            warranty_session,
-            equipment=equipment,
-            payload={"warranty_expires_at": equipment.warranty_expires_at},
-        )
+    coverage = await EquipmentWarrantyBridgeService.apply_update(
+        warranty_session,
+        equipment=equipment,
+        payload={
+            "warranty_mode": "manual",
+            "warranty_started_at": datetime(2026, 1, 31),
+            "warranty_duration_months": 1,
+        },
+        actor="manager@example.test",
+    )
+
+    assert coverage is not None
+    assert coverage.source == "policy"
+    assert coverage.expires_at == datetime(2026, 2, 28)
+    assert coverage.policy_snapshot["automatic_coverage_before_manual"]["expires_at"] == "2028-01-01T00:00:00"
+
+
+@pytest.mark.asyncio
+async def test_manual_mode_reuses_root_legacy_coverage_instead_of_creating_competing_supplier(warranty_session):
+    equipment = CustomerEquipment(customer_id=55, warranty_mode="auto")
+    warranty_session.add(equipment)
+    await warranty_session.flush()
+    legacy = EquipmentWarrantyCoverage(
+        equipment_id=int(equipment.id),
+        coverage_type="legacy",
+        source="legacy",
+        starts_at=datetime(2025, 1, 1),
+        expires_at=datetime(2027, 1, 1),
+    )
+    warranty_session.add(legacy)
+    await warranty_session.flush()
+
+    updated = await EquipmentWarrantyBridgeService.apply_update(
+        warranty_session,
+        equipment=equipment,
+        payload={
+            "warranty_mode": "manual",
+            "warranty_started_at": datetime(2026, 1, 31),
+            "warranty_duration_months": 1,
+        },
+    )
+    coverages = list(
+        (await warranty_session.execute(
+            select(EquipmentWarrantyCoverage).where(
+                EquipmentWarrantyCoverage.equipment_id == int(equipment.id)
+            )
+        )).scalars().all()
+    )
+
+    assert updated is legacy
+    assert coverages == [legacy]
+    assert legacy.expires_at == datetime(2026, 2, 28)
 
 
 @pytest.mark.asyncio

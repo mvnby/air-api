@@ -15,15 +15,18 @@ class CalendarEventType(str, Enum):
     MEASUREMENT = "measurement"
     INSTALLATION = "installation"
     WORK_STAGE = "work_stage"
+    EQUIPMENT_MAINTENANCE = "equipment_maintenance"
 
 
 class CalendarEventResponse(BaseModel):
     id: str
-    order_id: int
+    order_id: Optional[int] = None
+    equipment_id: Optional[int] = None
     type: CalendarEventType
     date: datetime
     status: str
     customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
     address: Optional[str] = None
     title: str
     start: datetime

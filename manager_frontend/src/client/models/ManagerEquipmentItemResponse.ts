@@ -19,6 +19,8 @@ export type ManagerEquipmentItemResponse = {
     refrigerant_type?: (string | null);
     installed_at?: (string | null);
     commissioned_at?: (string | null);
+    warranty_mode?: 'auto' | 'manual' | 'none';
+    warranty_duration_months?: (number | null);
     warranty_started_at?: (string | null);
     warranty_expires_at?: (string | null);
     warranty_terms?: (string | null);
@@ -34,6 +36,9 @@ export type ManagerEquipmentItemResponse = {
     service_contact_name?: (string | null);
     service_contact_phone?: (string | null);
     last_service_at?: (string | null);
+    maintenance_enabled?: boolean;
+    maintenance_interval_months?: number;
+    maintenance_anchor_at?: (string | null);
     next_maintenance_due_at?: (string | null);
     attention_reasons?: Array<string>;
 };
