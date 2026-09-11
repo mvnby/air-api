@@ -17,6 +17,7 @@ from services.product_collection_rule_policy import ProductCollectionRulePolicy
 from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
+from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 
 def utc_now() -> datetime:
@@ -122,6 +123,7 @@ class ProductCollectionResolver:
             projections,
             supply_metrics=supply_metrics,
         )
+        warranties = await WarrantyPolicyResolver.resolve_public(session, products)
         product_map = {
             int(projection.product.id): projection
             for projection in projections
@@ -169,6 +171,7 @@ class ProductCollectionResolver:
                     "product": map_product_to_response(
                         projection,
                         supply_metrics=metrics,
+                        warranties=warranties,
                     ),
                 }
             )
@@ -235,6 +238,10 @@ class ProductCollectionResolver:
                     supply_metrics=automatic_metrics,
                 )
             )
+            automatic_warranties = await WarrantyPolicyResolver.resolve_public(
+                session,
+                automatic_products,
+            )
             selected_ids = {
                 int(item["product"].id)
                 for item in selected
@@ -282,6 +289,7 @@ class ProductCollectionResolver:
                         "product": map_product_to_response(
                             projection,
                             supply_metrics=metrics,
+                            warranties=automatic_warranties,
                         ),
                     }
                 )

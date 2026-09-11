@@ -12,11 +12,13 @@ from schemas import (
     ProductSeriesNavigationResponse,
     ProductSeriesResponse,
     ProductSiblingResponse,
+    PublicProductWarrantyResponse,
 )
 from services.product_series_payloads import build_product_series_response
 from services.product_area import area_from_specs
 from services.product_serialization import sanitize_specs
 from services.public_taxonomy_service import PublicTaxonomyService
+from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 
 class ProductSeriesService:
@@ -63,7 +65,10 @@ class ProductSeriesService:
         return sorted(candidates, key=score)
 
     @staticmethod
-    def _sibling_payload(item: Product) -> ProductSiblingResponse:
+    def _sibling_payload(
+        item: Product,
+        warranty: PublicProductWarrantyResponse | None = None,
+    ) -> ProductSiblingResponse:
         return ProductSiblingResponse(
             id=item.id,
             title=item.title,
@@ -73,6 +78,7 @@ class ProductSeriesService:
             specs=sanitize_specs(item.specs),
             is_inverter=item.is_inverter,
             main_image=item.main_image,
+            warranty=warranty,
         )
 
     @staticmethod
@@ -159,6 +165,7 @@ class ProductSeriesService:
         from services.feature_resolver_service import FeatureResolverService
 
         await FeatureResolverService.resolve_for_products(session, products)
+        warranties = await WarrantyPolicyResolver.resolve_public(session, products)
 
         product_group_keys: Dict[int, List[str]] = {}
         groups: Dict[str, List[Product]] = {}
@@ -193,7 +200,10 @@ class ProductSeriesService:
             products_payload[product.slug] = ProductSeriesNavigationItemResponse(
                 series=ProductSeriesService._series_payload(product),
                 series_siblings=[
-                    ProductSeriesService._sibling_payload(item)
+                    ProductSeriesService._sibling_payload(
+                        item,
+                        warranties.get(int(item.id or 0)),
+                    )
                     for item in siblings
                 ],
             )

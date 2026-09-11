@@ -13,6 +13,21 @@ from models import Brand, Product, ProductSeries, Supplier, WarrantyPolicy, Warr
 
 class WarrantyPolicyStore:
     @staticmethod
+    async def load_active_policies(
+        session: AsyncSession,
+        *,
+        coverage_type: str,
+        supplier_independent_only: bool = False,
+    ) -> list[WarrantyPolicy]:
+        statement = select(WarrantyPolicy).where(
+            WarrantyPolicy.is_active == True,
+            WarrantyPolicy.coverage_type == coverage_type,
+        )
+        if supplier_independent_only:
+            statement = statement.where(WarrantyPolicy.supplier_id.is_(None))
+        return list((await session.execute(statement)).scalars().all())
+
+    @staticmethod
     def policy_to_item(
         policy: WarrantyPolicy,
         *,

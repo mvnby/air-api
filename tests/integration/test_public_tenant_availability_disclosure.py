@@ -29,6 +29,7 @@ from models import (
     Tenant,
     TenantCatalogGrant,
     TenantOffer,
+    WarrantyPolicy,
 )
 from services.storefront_context_signature_service import (
     StorefrontContextSignatureService,
@@ -311,6 +312,27 @@ async def test_signed_polotsk_uses_one_deep_tenant_neutral_projection(
     supplier = Supplier(name="TOP SECRET SUPPLIER", code="top-secret-supplier")
     db.add(supplier)
     await db.flush()
+    db.add_all(
+        [
+            WarrantyPolicy(
+                name="Tenant-visible general warranty",
+                brand_id=int(brand.id),
+                duration_months=84,
+                maintenance_required=True,
+                maintenance_interval_months=12,
+                allowed_maintenance_provider="mvn",
+                grace_period_days=30,
+                terms="Annual maintenance is required.",
+            ),
+            WarrantyPolicy(
+                name="Supplier-only private warranty",
+                supplier_id=int(supplier.id),
+                product_id=int(supplier_product.id),
+                duration_months=120,
+                terms="TOP SECRET SUPPLIER warranty terms",
+            ),
+        ]
+    )
     source = SupplierPriceSource(
         supplier_id=int(supplier.id),
         city_bucket="minsk",
@@ -403,6 +425,8 @@ async def test_signed_polotsk_uses_one_deep_tenant_neutral_projection(
     )
     assert by_slug[supplier_product.slug]["delivery_min_days"] == 2
     assert by_slug[supplier_product.slug]["delivery_max_days"] == 3
+    assert by_slug[supplier_product.slug]["warranty"]["duration_months"] == 84
+    assert by_slug[supplier_product.slug]["warranty"]["allowed_maintenance_provider"] == "mvn"
     _assert_tenant_neutral_product(
         by_slug[out_product.slug],
         expected_status="out_of_stock",
@@ -421,6 +445,7 @@ async def test_signed_polotsk_uses_one_deep_tenant_neutral_projection(
     assert "source_url" not in detail.json()["series"]
     assert "source_url" not in detail.json()["series"]["brand_features"][0]
     assert "source" not in detail.json()["manuals"][0]
+    assert detail.json()["warranty"]["duration_months"] == 84
 
     search_path = "/api/products/search?q=Supplier%20Availability%20Marker"
     search = await async_client.get(
@@ -432,6 +457,7 @@ async def test_signed_polotsk_uses_one_deep_tenant_neutral_projection(
         search.json()["items"][0],
         expected_status="available_2_3_days",
     )
+    assert search.json()["items"][0]["warranty"]["duration_months"] == 84
 
     featured_path = "/api/v1/products/vitebsk-featured"
     featured = await async_client.get(
@@ -454,6 +480,7 @@ async def test_signed_polotsk_uses_one_deep_tenant_neutral_projection(
     )
     assert "source_url" not in collection_product["series"]
     assert "source_url" not in collection_product["series"]["brand_features"][0]
+    assert collection_product["warranty"]["duration_months"] == 84
 
     series_path = "/api/v1/content/brands/tenant-safe-brand/series/tenant-safe-series"
     series_response = await async_client.get(
@@ -465,6 +492,7 @@ async def test_signed_polotsk_uses_one_deep_tenant_neutral_projection(
     assert "source_url" not in series_response.json()["series"]["brand_features"][0]
     for product in series_response.json()["products"]:
         assert _PROHIBITED_PRODUCT_KEYS.isdisjoint(product)
+        assert product["warranty"]["duration_months"] == 84
 
     brand_path = "/api/v1/content/brands/tenant-safe-brand"
     brand_response = await async_client.get(

@@ -393,6 +393,16 @@ class ProductManualPayload(BaseModel):
         return validate_public_manual_url(value)
 
 
+class PublicProductWarrantyResponse(BaseModel):
+    duration_months: int
+    maintenance_required: bool
+    maintenance_interval_months: Optional[int] = None
+    start_event: Literal["sale", "installation", "commissioning", "manual"]
+    allowed_maintenance_provider: Literal["any", "mvn", "authorized"] = "any"
+    grace_period_days: int = 0
+    terms: Optional[str] = None
+
+
 class ProductSiblingResponse(BaseModel):
     id: int
     title: str
@@ -402,6 +412,7 @@ class ProductSiblingResponse(BaseModel):
     specs: Dict[str, Any] = Field(default_factory=dict)
     is_inverter: bool
     main_image: Optional[str]
+    warranty: Optional[PublicProductWarrantyResponse] = None
 
 
 class ProductBrandResponse(BaseModel):
@@ -463,6 +474,7 @@ class ProductResponse(ProductBase):
     images: List[str] = [] # Legacy
     gallery_images: List[ProductImageResponse] = [] # New
     manuals: List[ProductManualResponse] = []
+    warranty: Optional[PublicProductWarrantyResponse] = None
     series_siblings: List[ProductSiblingResponse] = []
     features: List[PublicFeatureResponse] = []
     _disclose_legacy_availability: bool = PrivateAttr(default=True)

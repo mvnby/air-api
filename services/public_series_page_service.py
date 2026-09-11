@@ -23,6 +23,7 @@ from services.public_catalog_disclosure import (
     TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
 )
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
+from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 
 class PublicSeriesPageService:
@@ -72,6 +73,7 @@ class PublicSeriesPageService:
         products = [projection.product for projection in projections]
         supply_metrics = await ProductReadService.get_supply_metrics_map(session, products)
         await FeatureResolverService.resolve_for_products(session, products)
+        warranties = await WarrantyPolicyResolver.resolve_public(session, products)
 
         disclosure_policy = (
             CANONICAL_PUBLIC_DISCLOSURE
@@ -97,6 +99,7 @@ class PublicSeriesPageService:
                 map_product_to_response(
                     projection,
                     supply_metrics=supply_metrics.get(int(projection.product.id)),
+                    warranties=warranties,
                 )
                 for projection in projections
             ],

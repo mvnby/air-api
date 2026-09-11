@@ -570,6 +570,7 @@ export type { PublicProductCollectionPlacementResponse } from './models/PublicPr
 export type { PublicProductCollectionResponse } from './models/PublicProductCollectionResponse';
 export type { PublicProductSearchItemResponse } from './models/PublicProductSearchItemResponse';
 export type { PublicProductSearchResponse } from './models/PublicProductSearchResponse';
+export type { PublicProductWarrantyResponse } from './models/PublicProductWarrantyResponse';
 export type { PublicRelatedSeriesResponse } from './models/PublicRelatedSeriesResponse';
 export type { PublicSeriesPageResponse } from './models/PublicSeriesPageResponse';
 export type { PublicStorefrontContextResponse } from './models/PublicStorefrontContextResponse';

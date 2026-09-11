@@ -8,6 +8,7 @@ from schemas import (
     ProductImageResponse,
     ProductManualResponse,
     ProductBrandResponse,
+    PublicProductWarrantyResponse,
     ProductResponse,
     ProductSiblingResponse,
     TagGroupResponse,
@@ -135,6 +136,7 @@ def map_product_to_response(
     projection: PublicProductProjection,
     series_siblings: Optional[List[PublicProductProjection]] = None,
     supply_metrics: Optional[Dict[str, Any]] = None,
+    warranties: Optional[Dict[int, PublicProductWarrantyResponse | None]] = None,
 ) -> ProductResponse:
     product = projection.product
     tags_payload = []
@@ -194,6 +196,7 @@ def map_product_to_response(
                 specs=sanitize_specs(item.specs),
                 is_inverter=item.is_inverter,
                 main_image=item.main_image,
+                warranty=(warranties or {}).get(int(item.id or 0)),
             )
         )
 
@@ -265,6 +268,7 @@ def map_product_to_response(
         images=_public_legacy_image_urls(product, images or []),
         gallery_images=gallery,
         manuals=manuals_payload,
+        warranty=(warranties or {}).get(int(product.id or 0)),
         series_siblings=siblings_payload,
         features=list(getattr(product, "__dict__", {}).get("_resolved_features") or []),
     )

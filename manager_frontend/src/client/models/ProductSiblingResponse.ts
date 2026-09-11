@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { PublicProductWarrantyResponse } from './PublicProductWarrantyResponse';
 export type ProductSiblingResponse = {
     id: number;
     title: string;
@@ -11,5 +12,6 @@ export type ProductSiblingResponse = {
     specs?: Record<string, any>;
     is_inverter: boolean;
     main_image: (string | null);
+    warranty?: (PublicProductWarrantyResponse | null);
 };
 

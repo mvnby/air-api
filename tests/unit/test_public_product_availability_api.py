@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 from httpx import ASGITransport, AsyncClient
 import pytest
 
@@ -11,6 +13,7 @@ from services.public_catalog_service import PublicCatalogService, PublicProductP
 from services.public_catalog_visibility_service import PublicProductProjection
 from services.public_catalog_disclosure import CANONICAL_PUBLIC_DISCLOSURE
 from services.product_service import ProductService
+from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 
 def _make_product(product_id: int = 1) -> Product:
@@ -111,6 +114,7 @@ async def test_public_catalog_includes_city_availability(monkeypatch):
     monkeypatch.setattr(PublicCatalogService, "get_catalog_page", fake_get_catalog_page)
     monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
     monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
+    monkeypatch.setattr(WarrantyPolicyResolver, "resolve_public", AsyncMock(return_value={}))
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_public_tenant_scope] = override_tenant_scope
 
@@ -126,6 +130,7 @@ async def test_public_catalog_includes_city_availability(monkeypatch):
     assert payload["items"][0]["vitebsk_qty"] == 0
     assert payload["items"][0]["minsk_qty"] == 3
     assert payload["items"][0]["availability_status"] == "available_2_3_days"
+    assert payload["items"][0]["warranty"] is None
     assert [tag["slug"] for tag in payload["items"][0]["tags"]] == [
         "visible-tag"
     ]
@@ -173,6 +178,7 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
     monkeypatch.setattr(PublicCatalogService, "get_product_page", fake_get_product_page)
     monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
     monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
+    monkeypatch.setattr(WarrantyPolicyResolver, "resolve_public", AsyncMock(return_value={}))
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_public_tenant_scope] = override_tenant_scope
 
@@ -188,4 +194,5 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
     assert payload["vitebsk_qty"] == 0
     assert payload["minsk_qty"] == 0
     assert payload["availability_status"] == "check_availability"
+    assert payload["warranty"] is None
     assert [tag["slug"] for tag in payload["tags"]] == ["visible-tag"]

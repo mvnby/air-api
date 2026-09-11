@@ -60772,6 +60772,16 @@
             "title": "Manuals",
             "default": []
           },
+          "warranty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProductWarrantyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "series_siblings": {
             "items": {
               "$ref": "#/components/schemas/ProductSiblingResponse"
@@ -61388,6 +61398,16 @@
               }
             ],
             "title": "Main Image"
+          },
+          "warranty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProductWarrantyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -62358,6 +62378,16 @@
               }
             ],
             "title": "Delivery Max Days"
+          },
+          "warranty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProductWarrantyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -62384,6 +62414,72 @@
         "additionalProperties": false,
         "type": "object",
         "title": "PublicProductSearchResponse"
+      },
+      "PublicProductWarrantyResponse": {
+        "properties": {
+          "duration_months": {
+            "type": "integer",
+            "title": "Duration Months"
+          },
+          "maintenance_required": {
+            "type": "boolean",
+            "title": "Maintenance Required"
+          },
+          "maintenance_interval_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Interval Months"
+          },
+          "start_event": {
+            "type": "string",
+            "enum": [
+              "sale",
+              "installation",
+              "commissioning",
+              "manual"
+            ],
+            "title": "Start Event"
+          },
+          "allowed_maintenance_provider": {
+            "type": "string",
+            "enum": [
+              "any",
+              "mvn",
+              "authorized"
+            ],
+            "title": "Allowed Maintenance Provider",
+            "default": "any"
+          },
+          "grace_period_days": {
+            "type": "integer",
+            "title": "Grace Period Days",
+            "default": 0
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "duration_months",
+          "maintenance_required",
+          "start_event"
+        ],
+        "title": "PublicProductWarrantyResponse"
       },
       "PublicRelatedSeriesResponse": {
         "properties": {
