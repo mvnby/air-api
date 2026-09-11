@@ -13,6 +13,7 @@ from models import Product, Tag, TagGroup
 from schemas import ProductUpdate
 from services.product_write_service import ProductWriteService
 from services.product_manager_service import ProductManagerService
+from services.product_catalog_category_service import sync_product_catalog_category
 
 
 @pytest.fixture
@@ -208,6 +209,51 @@ async def test_create_makes_missing_category_tag(sqlite_session):
     )
 
     assert await _category_slugs(sqlite_session, result["id"]) == {"cat-household"}
+
+
+@pytest.mark.asyncio
+async def test_category_sync_reports_metadata_repair_when_tag_id_is_unchanged(sqlite_session):
+    legacy_group = TagGroup(title="Legacy", slug="legacy", allow_multiple=True)
+    sqlite_session.add(legacy_group)
+    await sqlite_session.flush()
+    household = Tag(
+        title="Бытовые",
+        slug="cat-household",
+        group_id=legacy_group.id,
+        is_public=False,
+        is_filter=False,
+    )
+    product = Product(
+        title="Standalone console",
+        slug="console-metadata-repair",
+        price=900,
+        specs={"type": "сплит-система", "indoor_type": "консольный"},
+        tags=[household],
+    )
+    sqlite_session.add(product)
+    await sqlite_session.commit()
+    original_tag_id = household.id
+
+    changed = await sync_product_catalog_category(
+        sqlite_session,
+        product=product,
+        specs=product.specs,
+        title=product.title,
+    )
+
+    assert {tag.id for tag in product.tags} == {original_tag_id}
+    assert changed is True
+    refreshed_tag = (
+        await sqlite_session.execute(
+            select(Tag)
+            .where(Tag.id == original_tag_id)
+            .options(selectinload(Tag.group))
+        )
+    ).scalar_one()
+    assert refreshed_tag.group is not None
+    assert refreshed_tag.group.slug == "category"
+    assert refreshed_tag.is_public is True
+    assert refreshed_tag.is_filter is True
 
 
 @pytest.mark.asyncio

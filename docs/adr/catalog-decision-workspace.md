@@ -58,6 +58,11 @@ cards inherit the override unless explicitly reset. Ordinary price-only edits
 do not silently recategorize automatic products; changing classification or
 explicitly choosing Auto requests inference again.
 
+Generic tag payloads preserve the stored category, including after an Auto
+reset in a still-open editor; only the dedicated group choice or changed
+classification inputs move it. Repairing category tag metadata also invalidates
+the public catalog even when the product retains the same tag ID.
+
 Category controls are removed from the generic tag picker so there is one
 place to change the group. Source labels such as TCL's Light Commercial do not
 prevent a manager from assigning a residential console to the household group.

@@ -25,7 +25,9 @@ async def get_category_group_tag_ids(
     )
 
 
-async def ensure_catalog_category_tag(session: AsyncSession, slug: str) -> Tag:
+async def ensure_catalog_category_tag(session: AsyncSession, slug: str) -> tuple[Tag, bool]:
+    """Return the canonical category tag and whether its catalog metadata changed."""
+    changed = False
     group = (
         await session.execute(select(TagGroup).where(TagGroup.slug == "category"))
     ).scalar_one_or_none()
@@ -39,6 +41,7 @@ async def ensure_catalog_category_tag(session: AsyncSession, slug: str) -> Tag:
         )
         session.add(group)
         await session.flush()
+        changed = True
 
     tag = (await session.execute(select(Tag).where(Tag.slug == slug))).scalar_one_or_none()
     if tag is None:
@@ -53,8 +56,8 @@ async def ensure_catalog_category_tag(session: AsyncSession, slug: str) -> Tag:
         )
         session.add(tag)
         await session.flush()
+        changed = True
     else:
-        changed = False
         if tag.group_id != group.id:
             tag.group_id = group.id
             changed = True
@@ -70,4 +73,4 @@ async def ensure_catalog_category_tag(session: AsyncSession, slug: str) -> Tag:
         if changed:
             session.add(tag)
             await session.flush()
-    return tag
+    return tag, changed

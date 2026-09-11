@@ -57,7 +57,10 @@ async def sync_product_catalog_category(
         title=title,
         metrics=metrics,
     )
-    desired_tag = await ensure_catalog_category_tag(session, slug) if slug else None
+    desired_tag = None
+    metadata_changed = False
+    if slug:
+        desired_tag, metadata_changed = await ensure_catalog_category_tag(session, slug)
     previous_ids = {tag.id for tag in product.tags if tag.id is not None}
     category_tag_ids = await get_category_group_tag_ids(session, previous_ids)
     kept = [
@@ -69,4 +72,4 @@ async def sync_product_catalog_category(
         kept.append(desired_tag)
     product.tags = kept
     current_ids = {tag.id for tag in product.tags if tag.id is not None}
-    return previous_ids != current_ids
+    return metadata_changed or previous_ids != current_ids

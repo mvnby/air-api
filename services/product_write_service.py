@@ -17,7 +17,10 @@ from services.product_kind_service import ProductKindService
 from services.product_series_assignment_service import ProductSeriesAssignmentService
 from services.spec_normalizer import normalize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
-from services.product_catalog_category_service import sync_product_catalog_category
+from services.product_catalog_category_service import (
+    CATALOG_CATEGORY_SLUGS,
+    sync_product_catalog_category,
+)
 from services.tag_logic import category_detection_inputs
 
 
@@ -339,6 +342,16 @@ class ProductWriteService:
                 )
             ).scalars().all()
             selected_tags = list(tag_rows)
+            # Catalog groups have their own command. A form opened before a
+            # previous save may still submit old category tag IDs, including
+            # after switching back to Auto. Preserve the stored group here;
+            # changed classification inputs or an explicit choice sync below.
+            selected_tags = [
+                tag for tag in selected_tags if tag.slug not in CATALOG_CATEGORY_SLUGS
+            ] + [
+                tag for tag in existing_product.tags if tag.slug in CATALOG_CATEGORY_SLUGS
+            ]
+            tag_ids = [tag.id for tag in selected_tags]
             wifi_tag_slugs = [tag.slug for tag in selected_tags if tag.slug in {"wifi-builtin", "wifi-ready"}]
 
         if "specs" in payload and payload["specs"] is not None:

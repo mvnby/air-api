@@ -51,6 +51,9 @@ async def test_manual_category_round_trip_moves_manager_and_public_results(async
     assert detail.json()["specs"]["indoor_type"] == "консольный"
     assert detail.json()["price"] == 2222
     assert detail.json()["product_kind"] == "complete_split_system"
+    household_id = next(
+        tag["id"] for tag in detail.json()["tags"] if tag["slug"] == "cat-household"
+    )
 
     for category, expected_ids in (("cat-household", {product_id}), ("cat-industrial", set())):
         for path, params, authenticated in (
@@ -73,6 +76,18 @@ async def test_manual_category_round_trip_moves_manager_and_public_results(async
     detail = await async_client.get(f"/api/manager/products/{product_id}", headers=headers)
     assert detail.json()["catalog_category_override"] is None
     assert detail.json()["catalog_category"] == "cat-industrial"
+
+    # A second save from the still-open editor must also preserve Auto's
+    # resolved group even if the form retained its previous category tag IDs.
+    response = await async_client.patch(
+        f"/api/manager/products/{product_id}", headers=headers,
+        json={"price": 2333, "tag_ids": [household_id]},
+    )
+    assert response.status_code == 200, response.text
+    detail = await async_client.get(f"/api/manager/products/{product_id}", headers=headers)
+    assert detail.json()["catalog_category_override"] is None
+    assert detail.json()["catalog_category"] == "cat-industrial"
+    assert detail.json()["price"] == 2333
 
     response = await async_client.patch(
         f"/api/manager/products/{product_id}", headers=headers,
