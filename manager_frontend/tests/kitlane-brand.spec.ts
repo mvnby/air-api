@@ -54,7 +54,7 @@ describe('KitLane brand presentation', () => {
     expect(wrapper.attributes('aria-label')).toBe('На платформе KitLane');
     expect(wrapper.text()).toContain('KitLane');
     expect(wrapper.find('a').exists()).toBe(false);
-    expect(wrapper.get('img').attributes('src')).toContain('kitlane-mark.svg');
+    expect(wrapper.get('img').attributes('src')).toContain('/assets/kitlane-mark.svg');
   });
 
   it('keeps one compact theme control and the existing storefront host', async () => {

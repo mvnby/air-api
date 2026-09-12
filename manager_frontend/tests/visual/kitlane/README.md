@@ -50,7 +50,7 @@ contract is tracked separately in [#994](https://github.com/mvnby/air-api/issues
   failed to switch. The service itself and its authorization contract are unchanged.
 - `ManagerHome`, `components/dashboard`: tabs, cards, chart/action accents, responsive
   attention grid and KPI typography; semantic success/error/warning colors remain.
-- `index.html`, `public/kitlane-mark*.svg`: favicon and working vector assets v1.
+- `index.html`, `public/assets/kitlane-mark*.svg`: favicon and working vector assets v1.
 - Component and browser verification fixtures in `tests/`.
 
 ## Validation

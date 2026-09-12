@@ -1,6 +1,6 @@
 <script setup lang="ts">
 withDefaults(defineProps<{ attribution?: boolean }>(), { attribution: true });
-const markUrl = `${import.meta.env.BASE_URL}kitlane-mark.svg`;
+const markUrl = `${import.meta.env.BASE_URL}assets/kitlane-mark.svg`;
 </script>
 
 <template>
