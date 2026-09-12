@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
-import { Package, Zap, Loader2, Menu, X, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-vue-next';
+import { Zap, Loader2, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import type { TelegramLoginPayload } from './client';
@@ -8,7 +8,9 @@ import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
 import ManagerAccountMenu from './components/manager/ManagerAccountMenu.vue';
 import ManagerLoginModal from './components/manager/ManagerLoginModal.vue';
 import ManagerSessionRecoveryModal from './components/manager/ManagerSessionRecoveryModal.vue';
-import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
+import KitlaneShell from './components/kitlane/KitlaneShell.vue';
+import KitlaneNavigation from './components/kitlane/KitlaneNavigation.vue';
+import { useKitlaneIdentity } from './composables/useKitlaneIdentity';
 import { confirmDialog } from './services/ui-feedback';
 import {
   clearManagerSession,
@@ -65,6 +67,7 @@ const ProfileSecurityView = defineAsyncComponent(() => import('./views/ProfileSe
 const AnalyticsConnectionsView = defineAsyncComponent(() => import('./views/AnalyticsConnectionsView.vue'));
 const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
+const { name: partnerName, contextKey: partnerContextKey } = useKitlaneIdentity();
 const showLoginModal = ref(false);
 const loginUsername = ref('');
 const loginPassword = ref('');
@@ -250,12 +253,6 @@ const enforceAuthorizedLocation = () => {
     return true;
   }
   return false;
-};
-const toggleMobileNav = () => {
-  isMobileNavOpen.value = !isMobileNavOpen.value;
-};
-const closeMobileNav = () => {
-  isMobileNavOpen.value = false;
 };
 const applyTheme = (value: 'light' | 'dark') => {
   theme.value = value;
@@ -463,145 +460,12 @@ watch(currentPath, () => {
     data-testid="manager-root"
     class="manager-root min-h-screen flex"
   >
-    <button
-      class="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow md:hidden"
-      @click="toggleMobileNav"
-      :aria-expanded="isMobileNavOpen"
-      aria-controls="manager-mobile-navigation"
-      :aria-label="isMobileNavOpen ? 'Закрыть меню' : 'Открыть меню'"
-    >
-      <X v-if="isMobileNavOpen" class="h-5 w-5" />
-      <Menu v-else class="h-5 w-5" />
-    </button>
-
-    <div
-      v-if="isMobileNavOpen"
-      id="manager-mobile-navigation"
-      class="fixed inset-0 z-40 bg-black/40 md:hidden"
-      @click="closeMobileNav"
-    />
-
-    <aside
-      class="fixed inset-y-0 left-0 z-50 bg-white border-r border-gray-200 flex flex-col shrink-0 transition-all duration-300 md:static md:z-auto md:translate-x-0"
-      :class="[
-        isMobileNavOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72',
-        isDesktopNavCollapsed ? 'md:w-20' : 'md:w-60'
-      ]"
-    >
-      <div class="p-5 border-b border-gray-100 relative min-h-[76px] flex flex-col justify-center">
-        <div class="flex items-center gap-3" :class="isDesktopNavCollapsed ? 'md:justify-center' : ''">
-          <div class="w-9 h-9 shrink-0 bg-teal-600 rounded-lg flex items-center justify-center cursor-pointer" @click="navigate('/manager')">
-            <Package class="w-5 h-5 text-white" />
-          </div>
-          <div :class="isDesktopNavCollapsed ? 'md:hidden' : ''">
-            <div class="font-bold text-gray-900 text-sm leading-tight">Мастер Воздуха</div>
-            <div class="text-[11px] text-gray-400">Manager Panel</div>
-          </div>
-        </div>
-
-        <!-- Desktop Toggle -->
-        <button
-          class="hidden md:flex absolute -right-3 top-6 w-6 h-6 bg-white border border-gray-200 rounded-full items-center justify-center text-gray-400 hover:text-teal-600 transition-colors shadow-sm z-10"
-          @click="isDesktopNavCollapsed = !isDesktopNavCollapsed"
-        >
-          <ChevronRight v-if="isDesktopNavCollapsed" class="w-4 h-4" />
-          <ChevronLeft v-else class="w-4 h-4" />
-        </button>
-
-        <button
-          v-if="!isDesktopNavCollapsed"
-          class="mt-3 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          @click="toggleTheme"
-        >
-          <Moon v-if="theme === 'light'" class="h-3.5 w-3.5" />
-          <Sun v-else class="h-3.5 w-3.5" />
-          {{ theme === 'light' ? 'Тёмная тема' : 'Светлая тема' }}
-        </button>
-
-        <ManagerStorefrontSwitcherHost class="mt-3" :collapsed="isDesktopNavCollapsed" />
-      </div>
-
-      <nav class="flex-1 overflow-y-auto p-3 space-y-2">
-        <div class="space-y-1">
-          <button
-            v-for="item in visibleCoreNavItems"
-            :key="item.path"
-            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left relative"
-            :class="[
-              isNavItemActive(item)
-                ? 'bg-teal-50 text-teal-700'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-              isDesktopNavCollapsed ? 'md:justify-center md:px-0' : ''
-            ]"
-            @click="navigate(item.path)"
-            :title="isDesktopNavCollapsed ? item.label : ''"
-          >
-            <component :is="item.icon" class="w-5 h-5 shrink-0" />
-            <span class="flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ item.label }}</span>
-            <span
-              v-if="item.path === '/manager/leads' && leadsCount > 0"
-              data-testid="manager-leads-count"
-              class="inline-flex items-center justify-center font-bold bg-red-500 text-white shrink-0"
-              :class="isDesktopNavCollapsed ? 'md:absolute md:top-1 md:right-1 h-3 w-3 rounded-full text-[0px]' : 'min-w-[20px] h-5 px-1 rounded-full text-[11px]'"
-            >
-              {{ isDesktopNavCollapsed ? '' : leadsCount }}
-            </span>
-          </button>
-        </div>
-
-        <div
-          v-for="section in visibleNavSections"
-          :key="section.id"
-          class="border-t border-gray-100 pt-2"
-        >
-          <button
-            class="mb-1 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.16em] transition-colors"
-            :class="[
-              isNavSectionActive(section)
-                ? 'text-teal-700'
-                : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600',
-              isDesktopNavCollapsed ? 'md:justify-center md:px-0' : ''
-            ]"
-            @click="toggleNavSection(section.id)"
-            :title="isDesktopNavCollapsed ? section.label : ''"
-            :aria-expanded="expandedNavSections[section.id]"
-          >
-            <span class="min-w-0 flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ section.label }}</span>
-            <ChevronDown
-              class="h-3.5 w-3.5 shrink-0 transition-transform"
-              :class="[
-                expandedNavSections[section.id] ? 'rotate-0' : '-rotate-90',
-                isDesktopNavCollapsed ? 'md:h-4 md:w-4' : ''
-              ]"
-            />
-          </button>
-
-          <div
-            v-show="expandedNavSections[section.id]"
-            class="space-y-1 border-l border-gray-100 pl-3 ml-3 md:transition-all"
-            :class="isDesktopNavCollapsed ? 'md:ml-0 md:border-l-0 md:pl-0' : ''"
-          >
-            <button
-              v-for="item in section.items"
-              :key="item.path"
-              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left relative"
-              :class="[
-                isNavItemActive(item)
-                  ? 'bg-teal-50 text-teal-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-                isDesktopNavCollapsed ? 'md:justify-center md:px-0' : ''
-              ]"
-              @click="navigate(item.path)"
-              :title="isDesktopNavCollapsed ? item.label : ''"
-            >
-              <component :is="item.icon" class="w-5 h-5 shrink-0" />
-              <span class="flex-1 truncate" :class="isDesktopNavCollapsed ? 'md:hidden' : ''">{{ item.label }}</span>
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      <div v-if="canManagePlatform" class="p-3 border-t border-gray-100 mt-auto">
+    <KitlaneShell :name="partnerName" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
+      <template #navigation>
+        <KitlaneNavigation :items="visibleCoreNavItems" :sections="visibleNavSections" :collapsed="isDesktopNavCollapsed" :leads-count="leadsCount" :expanded="expandedNavSections" :is-nav-item-active="isNavItemActive" :is-nav-section-active="isNavSectionActive" @navigate="navigate" @toggle-section="toggleNavSection" />
+      </template>
+      <template #footer>
+      <div v-if="canManagePlatform" class="p-3 border-t border-[var(--kitlane-sidebar-border)] mt-auto">
         <div
           v-if="webRebuildNoticeVisible && !isDesktopNavCollapsed"
           class="mb-2 rounded-lg border px-3 py-2 text-xs leading-snug"
@@ -624,12 +488,12 @@ watch(currentPath, () => {
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : webRebuildNeedsAttention
                 ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-sm hover:shadow-md'
-                : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm hover:shadow-md',
+                : 'bg-[var(--kitlane-accent)] text-white hover:bg-[var(--kitlane-accent-hover)]',
             isDesktopNavCollapsed ? 'justify-center' : ''
           ]"
           :disabled="rebuildLoading"
           @click="handleRebuild"
-          :title="rebuildButtonTitle"
+          :title="rebuildButtonTitle" :aria-label="rebuildButtonLabel"
         >
           <span
             v-if="isDesktopNavCollapsed && webRebuildNeedsAttention"
@@ -640,11 +504,8 @@ watch(currentPath, () => {
           <span v-if="!isDesktopNavCollapsed">{{ rebuildButtonLabel }}</span>
         </button>
       </div>
-
-    </aside>
-
-    <main class="min-w-0 flex-1 overflow-auto pt-0 md:ml-0">
-      <header class="sticky top-0 z-30 flex h-16 items-center justify-end border-b border-gray-200 bg-white/95 px-4 pl-16 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 md:px-6">
+      </template>
+      <template #account>
         <ManagerAccountMenu
           v-if="auth"
           :auth="auth"
@@ -652,7 +513,7 @@ watch(currentPath, () => {
           @logged-out="handleLogoutSuccess"
           @error="handleLogoutError"
         />
-      </header>
+      </template>
 
       <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
       <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />
@@ -687,7 +548,7 @@ watch(currentPath, () => {
       <ProductWorkspaceView v-else-if="authorizedView === 'product-workspace' && canManagePlatform" :key="currentLocation" />
       <ProductsView v-else-if="canManagePlatform" :key="currentLocation" />
       <TenantCatalogView v-else :key="currentLocation" />
-    </main>
+    </KitlaneShell>
 
     <Transition name="fade">
       <div

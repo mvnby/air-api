@@ -12,13 +12,20 @@ const trend = () => getDashboardTrend(props.metric, props.kpi);
 </script>
 
 <template>
-  <article class="min-w-0 rounded-xl border p-3 sm:p-4" :class="emphasized ? 'border-teal-200 bg-teal-50/70 dark:border-teal-800 dark:bg-teal-950/20' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'">
-    <p class="text-sm font-medium text-slate-500 dark:text-slate-400">{{ dashboardKpiLabels[metric] }}</p>
-    <p class="mt-2 text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl">{{ formatDashboardKpi(metric, kpi) }}</p>
+  <article class="kitlane-kpi" :class="{ 'is-emphasized': emphasized }">
+    <p class="text-sm font-medium text-[var(--kitlane-muted)] dark:text-slate-400">{{ dashboardKpiLabels[metric] }}</p>
+    <p class="kitlane-kpi-value mt-2">{{ formatDashboardKpi(metric, kpi) }}</p>
     <p class="mt-2 text-xs font-medium" :class="{
       'text-emerald-700 dark:text-emerald-400': trend().tone === 'positive',
       'text-rose-700 dark:text-rose-400': trend().tone === 'negative',
-      'text-slate-500 dark:text-slate-400': trend().tone === 'neutral',
+      'text-[var(--kitlane-muted)] dark:text-slate-400': trend().tone === 'neutral',
     }">{{ trend().label }}</p>
   </article>
 </template>
+
+<style scoped>
+.kitlane-kpi { min-width: 0; border: 1px solid var(--kitlane-border); border-radius: var(--kitlane-card-radius); background: var(--kitlane-surface); padding: 20px; }
+.kitlane-kpi.is-emphasized { border-color: var(--kitlane-accent-text); background: var(--kitlane-accent-soft); }
+.kitlane-kpi-value { font-size: clamp(24px, 2.2vw, 32px); line-height: 1.25; font-weight: 700; letter-spacing: -.6px; color: var(--kitlane-text); overflow-wrap: anywhere; }
+@media (max-width: 767px) { .kitlane-kpi { padding: 16px; } }
+</style>

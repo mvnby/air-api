@@ -60,7 +60,7 @@ const selectFromKey = (event: KeyboardEvent) => {
     <div class="flex items-start justify-between gap-3">
       <div>
         <h2 class="font-semibold text-slate-900 dark:text-white">Продажи по дням</h2>
-        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Оплаты и закрытые продажи за текущий месяц</p>
+        <p class="mt-1 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Оплаты и закрытые продажи за текущий месяц</p>
       </div>
       <div v-if="activePoint" class="max-w-full text-xs text-slate-600 dark:text-slate-300 sm:text-right" aria-live="polite">
         <p class="font-semibold">{{ formatDate(activePoint.date) }}</p>
@@ -68,18 +68,18 @@ const selectFromKey = (event: KeyboardEvent) => {
       </div>
     </div>
     <div v-if="series.length" class="mt-4 overflow-hidden">
-      <svg class="h-auto w-full touch-pan-y outline-none focus-visible:ring-2 focus-visible:ring-teal-500" :viewBox="`0 0 ${width} ${height}`" role="img" tabindex="0" aria-label="График оплат по дням. Используйте стрелки для выбора дня." @mousemove="selectFromPointer" @touchstart.passive="selectFromTouch" @touchmove.passive="selectFromTouch" @mouseleave="activeIndex = null" @keydown="selectFromKey">
+      <svg class="h-auto w-full touch-pan-y outline-none focus-visible:ring-2 focus-visible:ring-blue-500" :viewBox="`0 0 ${width} ${height}`" role="img" tabindex="0" aria-label="График оплат по дням. Используйте стрелки для выбора дня." @mousemove="selectFromPointer" @touchstart.passive="selectFromTouch" @touchmove.passive="selectFromTouch" @mouseleave="activeIndex = null" @keydown="selectFromKey">
         <line v-for="fraction in [0, 0.5, 1]" :key="fraction" :x1="padding.left" :x2="width - padding.right" :y1="padding.top + chartHeight * fraction" :y2="padding.top + chartHeight * fraction" stroke="currentColor" class="text-slate-100 dark:text-slate-700" />
-        <path :d="areaPath" fill="rgba(13, 148, 136, 0.14)" />
-        <path :d="linePath" fill="none" stroke="#0d9488" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+        <path :d="areaPath" fill="var(--kitlane-accent-soft)" />
+        <path :d="linePath" fill="none" stroke="var(--kitlane-accent-text)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
         <g v-for="(point, index) in series" :key="point.date">
-          <circle :cx="pointPosition(point, index).x" :cy="pointPosition(point, index).y" :r="activeIndex === index ? 5 : 3" fill="#0d9488">
+          <circle :cx="pointPosition(point, index).x" :cy="pointPosition(point, index).y" :r="activeIndex === index ? 5 : 3" fill="var(--kitlane-accent-text)">
             <title>{{ `${formatDate(point.date)}: ${formatDashboardCurrency(point.revenue)}, ${point.sales} продаж` }}</title>
           </circle>
-          <text v-if="index === 0 || index === series.length - 1 || index === Math.floor(series.length / 2)" :x="pointPosition(point, index).x" :y="height - 10" :text-anchor="pointAnchor(index)" class="fill-slate-400 text-[11px]">{{ formatDate(point.date) }}</text>
+          <text v-if="index === 0 || index === series.length - 1 || index === Math.floor(series.length / 2)" :x="pointPosition(point, index).x" :y="height - 10" :text-anchor="pointAnchor(index)" class="fill-[var(--kitlane-muted)] text-[11px]">{{ formatDate(point.date) }}</text>
         </g>
       </svg>
     </div>
-    <div v-else class="mt-4 rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">За выбранный период пока нет оплат.</div>
+    <div v-else class="mt-4 rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-[var(--kitlane-muted)] dark:border-slate-700 dark:text-slate-400">За выбранный период пока нет оплат.</div>
   </section>
 </template>

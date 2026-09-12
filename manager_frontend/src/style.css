@@ -1,27 +1,29 @@
+@import "./styles/kitlane-tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --mv-teal: #007f80;
-  --mv-teal-dark: #0f6978;
-  --mv-bg: #f5f8f8;
-  --mv-surface: #ffffff;
-  --mv-text: #111827;
-  --mv-text-muted: #6b7280;
-  --mv-border: #e5e7eb;
-  --mv-gradient-start: #007f80;
-  --mv-gradient-end: #2dd4bf;
-  --mv-card-radius: 2rem;
-  --mv-btn-radius: 12px;
+  --mv-teal: var(--kitlane-accent);
+  --mv-teal-dark: var(--kitlane-accent-hover);
+  --mv-bg: var(--kitlane-bg);
+  --mv-surface: var(--kitlane-surface);
+  --mv-text: var(--kitlane-text);
+  --mv-text-muted: var(--kitlane-muted);
+  --mv-border: var(--kitlane-border);
+  --mv-gradient-start: var(--kitlane-accent);
+  --mv-gradient-end: var(--kitlane-accent);
+  --mv-card-radius: var(--kitlane-card-radius);
+  --mv-btn-radius: var(--kitlane-control-radius);
 }
 
-.dark {
-  --mv-bg: #0f172a;
-  --mv-surface: #1e293b;
-  --mv-text: #f9fafb;
-  --mv-text-muted: rgba(255, 255, 255, 0.6);
-  --mv-border: #334155;
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--kitlane-accent-text);
+  outline-offset: 3px;
+}
+.kitlane-sidebar :where(button, a):focus-visible {
+  outline-color: #b5d2ff;
 }
 
 body {
@@ -48,13 +50,13 @@ body {
   font-weight: 600;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 10px 15px -3px rgba(0, 127, 128, 0.25);
+  box-shadow: none;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .btn-mini:hover {
   background: var(--mv-teal-dark);
-  box-shadow: 0 20px 25px -5px rgba(0, 127, 128, 0.3);
+  box-shadow: none;
 }
 
 .btn-mini:disabled {
@@ -82,7 +84,7 @@ body {
 
 .field-input {
   width: 100%;
-  border: 1px solid var(--mv-border);
+  border: 1px solid var(--kitlane-control-border);
   border-radius: var(--mv-btn-radius);
   background: var(--mv-surface);
   padding: 0.6rem 0.75rem;
@@ -161,9 +163,9 @@ body {
 .dark textarea {
   background-color: #0f172a !important;
   color: #f1f5f9 !important;
-  border-color: #334155 !important;
+  border-color: var(--kitlane-control-border) !important;
 }
 
 .dark input::placeholder {
-  color: #64748b !important;
+  color: var(--kitlane-muted) !important;
 }

@@ -1,0 +1,10 @@
+<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>KitLane — synthetic fixtures</title></head><body><div id="app"></div><script type="module">
+import { createApp, h } from 'vue';
+import Identity from '/manager/src/components/kitlane/KitlanePartnerIdentity.vue';
+import '/manager/src/style.css';
+const svg = (w,h,content) => 'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}">${content}</svg>`);
+const wide = svg(250,40,'<text x="0" y="29" font-family="sans-serif" font-size="28" font-weight="bold" fill="#142235">ДЕМО КОМПАНИЯ</text>');
+const square = svg(40,40,'<rect width="40" height="40" rx="4" fill="#142235"/><path d="M10 10h20v20H10z" fill="#fff"/>');
+const cases=[['Без логотипа',{}],['Длинное название',{name:'Демонстрационная компания с очень длинным названием'}],['Широкий прозрачный логотип',{logoUrl:wide}],['Квадратный логотип',{logoUrl:square}],['Ошибка загрузки',{logoUrl:'/manager/missing-demo-logo.svg'}],['Компактный: инициалы',{logoUrl:wide,compact:true}],['Компактный: отдельный знак',{compactLogoUrl:square,compact:true}],['Неизвестный контекст',{name:null}]];
+createApp({render:()=>h('div',{style:'padding:32px;background:var(--kitlane-bg);min-height:100vh'},[h('h1',{style:'font-size:24px;margin-bottom:24px'},'Проверка брендов · только синтетические данные'),h('div',{style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(264px,1fr));gap:20px'},cases.map(([label,props])=>h('section',{},[h('p',{style:'margin-bottom:8px;font-size:14px'},label),h('div',{style:'width:264px;height:72px;display:flex;align-items:center;padding:0 20px;background:#142235;color:#e2e8f0'},[h(Identity,{name:'Демо компания',...props})])])) )])}).mount('#app');
+</script></body></html>

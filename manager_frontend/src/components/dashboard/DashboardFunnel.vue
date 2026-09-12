@@ -15,14 +15,14 @@ const barWidth = (value: number | null | undefined) => {
 <template>
   <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
     <h2 class="font-semibold text-slate-900 dark:text-white">Движение сделок</h2>
-    <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">События за период; сделки могли начаться раньше</p>
+    <p class="mt-1 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">События за период; сделки могли начаться раньше</p>
     <ol v-if="stages.length" class="mt-4 space-y-2">
       <li v-for="stage in stages" :key="stage.stage" class="rounded-lg border border-slate-100 px-3 py-2.5 dark:border-slate-700/70">
         <div class="flex items-baseline justify-between gap-3"><span class="text-sm font-medium text-slate-700 dark:text-slate-200">{{ stage.label }}</span><span class="font-semibold text-slate-950 dark:text-white">{{ formatDashboardNumber(stage.current) }}</span></div>
-        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700" :aria-label="`${stage.label}: ${formatDashboardNumber(stage.current)}`"><div class="h-full rounded-full bg-teal-500 transition-[width]" :style="{ width: barWidth(stage.current) }" /></div>
-        <div v-if="stage.avg_cycle_days != null" class="mt-1 text-xs text-slate-500 dark:text-slate-400">Средний цикл: {{ formatDays(stage.avg_cycle_days) }}</div>
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700" :aria-label="`${stage.label}: ${formatDashboardNumber(stage.current)}`"><div class="h-full rounded-full bg-[var(--kitlane-accent-text)] transition-[width]" :style="{ width: barWidth(stage.current) }" /></div>
+        <div v-if="stage.avg_cycle_days != null" class="mt-1 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Средний цикл: {{ formatDays(stage.avg_cycle_days) }}</div>
       </li>
     </ol>
-    <div v-else class="mt-4 rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">Движение появится после первых событий.</div>
+    <div v-else class="mt-4 rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-[var(--kitlane-muted)] dark:border-slate-700 dark:text-slate-400">Движение появится после первых событий.</div>
   </section>
 </template>

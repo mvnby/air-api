@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   ChevronDown,
   FileText,
@@ -28,6 +28,7 @@ const emit = defineEmits<{
 
 const root = ref<HTMLElement | null>(null);
 const open = ref(false);
+const trigger = ref<HTMLButtonElement | null>(null);
 const logoutLoading = ref(false);
 
 const accountName = computed(() => (
@@ -73,7 +74,22 @@ const onDocumentClick = (event: MouseEvent) => {
   if (!root.value?.contains(event.target as Node)) open.value = false;
 };
 const onEscape = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') open.value = false;
+  if (event.key === 'Escape' && open.value) {
+    open.value = false;
+    trigger.value?.focus();
+  }
+};
+
+const focusMenuItem = async (event: KeyboardEvent) => {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  open.value = true;
+  await nextTick();
+  const items = Array.from(root.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
+  const current = items.indexOf(document.activeElement as HTMLButtonElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+    : event.key === 'ArrowUp' ? (current <= 0 ? items.length - 1 : current - 1) : (current + 1) % items.length;
+  items[next]?.focus();
 };
 
 onMounted(() => {
@@ -87,28 +103,30 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" data-testid="manager-account-menu" class="relative">
+  <div ref="root" data-testid="manager-account-menu" class="relative" @keydown="focusMenuItem">
     <button
+      ref="trigger"
       type="button"
-      class="flex items-center gap-2 rounded-full border border-gray-200 bg-white py-1.5 pl-1.5 pr-3 text-left shadow-sm transition hover:border-teal-200 hover:shadow"
+      class="kitlane-account-trigger"
+      :aria-label="`Аккаунт: ${accountName}`"
       :aria-expanded="open"
       aria-haspopup="menu"
       @click="open = !open"
     >
-      <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 text-sm font-bold text-white">
+      <span class="kitlane-account-avatar">
         {{ avatarLetter }}
       </span>
       <span class="hidden min-w-0 sm:block">
         <span class="block max-w-44 truncate text-sm font-semibold text-gray-900">{{ accountName }}</span>
         <span class="block max-w-44 truncate text-[11px] text-gray-500">{{ currentStorefront }}</span>
       </span>
-      <ChevronDown class="h-4 w-4 text-gray-400 transition" :class="open ? 'rotate-180' : ''" />
+      <ChevronDown class="h-4 w-4 text-gray-500 transition" :class="open ? 'rotate-180' : ''" />
     </button>
 
     <div
       v-show="open"
       role="menu"
-      class="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white p-2 shadow-xl"
+      class="kitlane-account-popover absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white p-2 shadow-xl"
     >
       <div class="border-b border-gray-100 px-3 py-2.5">
         <p class="truncate text-sm font-semibold text-gray-900">{{ accountName }}</p>
@@ -171,4 +189,8 @@ onBeforeUnmount(() => {
   @apply mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60;
 }
 
+.kitlane-account-trigger { display: flex; align-items: center; gap: 8px; border-radius: 9px; padding: 4px; text-align: left; color: var(--kitlane-text); }
+.kitlane-account-trigger:hover { background: var(--kitlane-bg); }
+.kitlane-account-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--kitlane-accent-text); background: var(--kitlane-accent-soft); font-size: 14px; font-weight: 700; }
+@media (max-width: 639px) { .kitlane-account-popover { position: fixed; top: 64px; right: 12px; width: min(256px, calc(100vw - 24px)); } }
 </style>

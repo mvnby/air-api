@@ -7,7 +7,7 @@ const props = defineProps<{ kpis: DashboardKpis }>();
 </script>
 
 <template>
-  <section class="grid grid-cols-2 gap-3 lg:grid-cols-3">
+  <section class="grid grid-cols-1 min-[390px]:grid-cols-2 gap-3 lg:grid-cols-3">
     <DashboardKpiCard
     v-for="(metric, index) in dashboardKpiOrder"
       :key="metric"
