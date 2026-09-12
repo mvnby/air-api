@@ -542,7 +542,7 @@ watch(currentPath, () => {
       <FeatureSeriesMigrationView v-else-if="authorizedView === 'feature-series-migration'" :key="currentLocation" />
       <FeaturesView v-else-if="authorizedView === 'features'" :key="currentLocation" />
       <SupplyRequestsView v-else-if="authorizedView === 'supply'" :key="currentLocation" />
-      <SupplierFeedsView v-else-if="authorizedView === 'suppliers'" :key="currentLocation" />
+      <SupplierFeedsView v-else-if="authorizedView === 'suppliers'" :key="currentLocation" :initial-tab="currentPath.startsWith('/manager/suppliers/prices') ? 'prices' : 'profile'" />
       <SupplierMappingView v-else-if="authorizedView === 'supplier-mapping'" :key="currentLocation" />
       <ProductWorkspaceView v-else-if="authorizedView === 'product-workspace' && canManagePlatform" :key="currentLocation" />
       <ProductsView v-else-if="canManagePlatform" :key="currentLocation" />

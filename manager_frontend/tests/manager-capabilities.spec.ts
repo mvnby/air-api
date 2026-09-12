@@ -93,6 +93,7 @@ describe('tenant manager capabilities', () => {
       '/manager/products/1',
       '/manager/brands',
       '/manager/suppliers',
+      '/manager/suppliers/prices',
       '/manager/supply',
       '/manager/media',
       '/manager/staff',

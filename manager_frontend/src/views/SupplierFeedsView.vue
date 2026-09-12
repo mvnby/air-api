@@ -20,6 +20,8 @@ import {
 } from 'lucide-vue-next';
 
 type SupplierTab = 'profile' | 'contacts' | 'warehouses' | 'prices';
+const props = withDefaults(defineProps<{ initialTab?: SupplierTab }>(), { initialTab: 'profile' });
+
 type CurrencyMode = 'BYN' | 'USD' | 'EUR' | 'COLUMN';
 
 const loading = ref(false);
@@ -30,7 +32,7 @@ const sources = ref<any[]>([]);
 const contacts = ref<any[]>([]);
 const warehouses = ref<any[]>([]);
 const supplierSheets = ref<any[]>([]);
-const activeTab = ref<SupplierTab>('profile');
+const activeTab = ref<SupplierTab>(props.initialTab);
 const selectedSupplierId = ref<number | null>(null);
 
 const syncingSourceId = ref<number | null>(null);
